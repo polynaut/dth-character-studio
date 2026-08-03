@@ -4,6 +4,7 @@ import { ChevronRight, FolderOpen, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { pickCsvPath, pickDufPath } from '#/lib/desktop.ts'
+import { browseStart, parentDir } from '#/lib/path.ts'
 import { importPosesFromCsv } from '#/lib/rom/api.ts'
 
 import { Button, cn, InfoPopup, Input, Modal, OverrideMark, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch } from '@dth/ui'
@@ -81,6 +82,9 @@ interface RomSectionsProps {
   /** A blocked-save validation error: open its section, scroll the pose row into
    *  view and focus its first empty field. */
   revealPose?: { section: RomSection; poseId: string; nonce: number } | null
+  /** The settings' DTH releases folder — the custom-JCM Browse falls back to
+   *  it when no preset is chosen yet (the rest of the presets come from there). */
+  dthPosesFolder?: string
   /** Bone-rotation morph drives along the JCM ROM (character.jcmMorphMods) —
    *  both must be passed for the JCM section's "Modify JCM frames" grid. */
   jcmMorphMods?: Array<JcmMorphMod>
@@ -153,6 +157,7 @@ export const RomSections = memo(function RomSections({
   revealPose,
   morphIndex,
   boneIndex,
+  dthPosesFolder,
   jcmMorphMods,
   onJcmMorphModsChange,
   override,
@@ -160,6 +165,10 @@ export const RomSections = memo(function RomSections({
   onChange,
 }: RomSectionsProps) {
   const [open, setOpen] = useState<Partial<Record<RomSection, boolean>>>({})
+  // Folder of the last morph CSV picked in this editor — a second import is
+  // nearly always a sibling of the first, and a CSV path is not stored anywhere
+  // (it is consumed on import), so the session is the only memory there is.
+  const lastCsvDir = useRef('')
   // The section whose scan-CSV picker is open (null = no import in progress).
   const [pickerSection, setPickerSection] = useState<RomSection | null>(null)
   // A picked CSV awaiting its frame-range dialog (null = no import in progress).
@@ -543,8 +552,11 @@ export const RomSections = memo(function RomSections({
   }
 
   async function browseCsv(section: RomSection) {
-    const filePath = await pickCsvPath('Select a DAZ morph CSV')
+    // A second import for the same character almost always comes from the same
+    // export folder as the last one.
+    const filePath = await pickCsvPath('Select a DAZ morph CSV', browseStart(lastCsvDir.current))
     if (!filePath) return
+    lastCsvDir.current = parentDir(filePath)
     await loadCsv(section, filePath)
   }
 
@@ -969,7 +981,13 @@ export const RomSections = memo(function RomSections({
                         size="sm"
                         className="shrink-0"
                         onClick={async () => {
-                          const picked = await pickDufPath('Select a custom JCM pose preset (.duf)')
+                          // Re-browsing opens at the preset already chosen (the
+                          // file preselected), else in the DTH releases folder
+                          // the rest of the presets come from.
+                          const picked = await pickDufPath(
+                            'Select a custom JCM pose preset (.duf)',
+                            browseStart(mergedConfig.customAssetPath, dthPosesFolder),
+                          )
                           if (picked) patchSectionForScene(section, { customAssetPath: picked })
                         }}
                       >

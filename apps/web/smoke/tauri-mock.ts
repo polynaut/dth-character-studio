@@ -43,6 +43,19 @@ export interface TauriMockSeed {
   /** The base figure node a scene reports (`scene_wearables`) — the create
    *  dialog's Genesis/gender auto-select source. Default: null (none found). */
   sceneFigure?: { id: string; label: string } | null
+  /** Absolute paths whose fs commands are HELD — the invoke neither resolves
+   *  nor rejects until the spec calls `__tauriMock.releaseHeld()` (which also
+   *  stops holding future calls). Lets a spec freeze an async probe mid-flight
+   *  — e.g. hold the execute-stamps file to keep the DTH Export dialog's scene
+   *  probe from landing. Default: nothing held. */
+  holdPaths?: Array<string>
+  /** What `houdini_running` answers — the "Export too" liveness probe. Default
+   *  false. A spec driving a LIVE run seeds this true for its whole duration:
+   *  the app's 2.5s poll reads "no result + not running" as a dead run and
+   *  kills the watch, so leaving it false until the result write is a flake
+   *  window, not a neutral default. Exercising the dead path is what flipping
+   *  `__tauriMock.houdiniRunning` to false mid-run is for. */
+  houdiniRunning?: boolean
 }
 
 /** What the spec reads back via `page.evaluate` from `window.__tauriMock`. */
@@ -53,6 +66,10 @@ export interface TauriMockState {
   /** What `daz_studio_running` reports — false until a spec flips it (the way
    *  a spec keeps a claimed batch's Daz "alive" while driving its progress). */
   dazRunning?: boolean
+  /** Let every command held on a `holdPaths` path proceed, and stop holding. */
+  releaseHeld: () => void
+  /** Mutable: the answer `houdini_running` gives from now on. */
+  houdiniRunning: boolean
 }
 
 export function installTauriMock(seed: TauriMockSeed): void {
@@ -60,9 +77,33 @@ export function installTauriMock(seed: TauriMockSeed): void {
   const extraDirs = new Set<string>()
   const calls: Array<{ cmd: string; args: unknown }> = []
   const unhandled: Array<string> = []
+  // The single object both the command switch and the spec hold — mutating
+  // `state.houdiniRunning` from a spec is how a run goes live and then exits.
+  const state: TauriMockState = {
+    files,
+    calls,
+    unhandled,
+    houdiniRunning: seed.houdiniRunning ?? false,
+    releaseHeld: () => {
+      holdPaths.clear()
+      for (const resolve of held.splice(0)) resolve()
+    },
+  }
   let nextId = 1
 
-  const norm = (p: string) => p.replaceAll('\\', '/').replace(/\/+$/, '')
+  // Trailing slashes trimmed with string ops, not `/\/+$/` — the repo-wide rule
+  // (CodeQL js/polynomial-redos). Inlined rather than imported: this function is
+  // serialized into the page by addInitScript and must stay self-contained.
+  const norm = (p: string) => {
+    let s = p.replaceAll('\\', '/')
+    while (s.endsWith('/')) s = s.slice(0, -1)
+    return s
+  }
+  // Commands whose `args.path` is listed here PAUSE (before dispatch) until the
+  // spec calls releaseHeld() — which drains the queue AND clears the set, so
+  // later calls to the same path run normally.
+  const holdPaths = new Set((seed.holdPaths ?? []).map(norm))
+  const held: Array<() => void> = []
   const isFile = (p: string) => files.has(p)
   const isDir = (p: string) => {
     if (extraDirs.has(p)) return true
@@ -144,6 +185,10 @@ export function installTauriMock(seed: TauriMockSeed): void {
     const isWrite = cmd === 'plugin:fs|write_text_file' || cmd === 'plugin:fs|write_file'
     // Don't record write payloads (bytes) — just the target path.
     calls.push({ cmd, args: isWrite ? { path: headerPath(options) } : args })
+
+    if (typeof args?.path === 'string' && holdPaths.has(norm(args.path))) {
+      await new Promise<void>((resolve) => held.push(resolve))
+    }
 
     switch (cmd) {
       // --- filesystem (plugin-fs 2.5.x contract) ---------------------------
@@ -261,6 +306,20 @@ export function installTauriMock(seed: TauriMockSeed): void {
         return readBytes(norm(args.path))
       case 'probe_locked_files':
         return seed.lockedFiles ?? []
+      case 'create_junction': {
+        // The `dth-exports` shortcuts (one beside each linked .hip, one in the
+        // project folder). The real command repoints a stale link and reports
+        // "exists" for a correct one; here the link is just a directory that
+        // appears — enough for `exists`/`readDir` to behave, and a spec can
+        // assert the call's link/target. Every generate probes AND refreshes
+        // them (the $HIP emit decision doubles as the junction upkeep), so the
+        // mock has to know this command or `unhandled` fills up on ordinary
+        // saves.
+        const link = norm(args.request.linkPath)
+        const had = extraDirs.has(link)
+        extraDirs.add(link)
+        return had ? 'exists' : 'created'
+      }
       case 'open_project_window': // opens a separate OS window on the desktop —
         return null //              recorded (see `calls`), nothing to do here
       case 'scan_duf_files': {
@@ -303,10 +362,17 @@ export function installTauriMock(seed: TauriMockSeed): void {
         return (window as any).__tauriMock?.dazRunning === true
       case 'launch_daz_studio':
         // Nothing to start. The batch is claimed by the Runner INSIDE Daz,
-        // which this fake does not impersonate — a spec drives the pickup by
+        // which this fake does not impersonate — a spec plays that part by
         // renaming the job file to `running_…` and driving its progress, which
         // is exactly the contract the plugin follows.
         return ''
+      case 'launch_houdini_job':
+        // Same deal for Houdini: the launch is recorded in `calls` (the spec
+        // asserts the job path, the `;&` script path and the version-matched
+        // prefs dir), and the spec then plays 456.py by writing the result file.
+        return null
+      case 'houdini_running':
+        return state.houdiniRunning
       case 'unreal_dth_present':
         // The linked Unreal project in the docs fixture has no DTH content yet
         // (the footer card's install button is live, not dimmed).
@@ -339,6 +405,9 @@ export function installTauriMock(seed: TauriMockSeed): void {
   }
   // event.js unlisten() bypasses invoke and calls this global directly.
   w.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: () => {} }
-  // The spec's window into this fake (page.evaluate).
-  w.__tauriMock = { files, calls, unhandled } satisfies TauriMockState
+  // The spec's window into this fake (page.evaluate). `state` is the same
+  // object the command switch reads, so a spec flipping `houdiniRunning`
+  // changes what the next `houdini_running` poll answers — and its
+  // `releaseHeld` drains the `holdPaths` queue the invoke wrapper parks on.
+  w.__tauriMock = state
 }

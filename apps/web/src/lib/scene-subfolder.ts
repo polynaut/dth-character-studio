@@ -7,6 +7,8 @@
  * why a subfolder can no longer be empty.
  */
 
+import { stripTrailingDotsAndSpaces, stripTrailingSeparators, trimSeparators } from '#/lib/path.ts'
+
 /** The primary scene's fixed subfolder below the scenes root. */
 export const PRIMARY_SCENE_SUBFOLDER = 'primary'
 
@@ -66,9 +68,9 @@ export function sceneSubfolderConflict(subfolder: string): string {
  *  the shared spelling behind the two resolvers below (a project may configure
  *  no subdir at all, in which case the leaf sits directly in the folder). */
 function underSubdir(charFolderAbs: string, subdir: string | undefined, leaf: string): string {
-  const folder = charFolderAbs.replace(/\\/g, '/').replace(/\/+$/, '')
+  const folder = stripTrailingSeparators(charFolderAbs.replace(/\\/g, '/'))
   if (!folder) return ''
-  const sub = (subdir ?? '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '').trim()
+  const sub = trimSeparators((subdir ?? '').replace(/\\/g, '/')).trim()
   return [folder, sub, leaf].filter(Boolean).join('/')
 }
 
@@ -93,6 +95,37 @@ export function characterHoudiniDir(charFolderAbs: string, houdiniSubdir?: strin
  *  {@link HOUDINI_PROJECT_FOLDER}. */
 export function characterHoudiniProjectDir(charFolderAbs: string, houdiniSubdir?: string): string {
   return underSubdir(charFolderAbs, houdiniSubdir, HOUDINI_PROJECT_FOLDER)
+}
+
+/**
+ * Where `$HIP/dth-exports/…` can anchor: the distinct folders holding a linked
+ * `.hip` INSIDE the character folder. THE one predicate behind both halves of
+ * the `$HIP` reference-path story — the generate-time emit decision (a
+ * `dth-exports` junction is ensured in each of these folders before
+ * `$HIP`-relative reference-skeleton paths are written; `refreshExportJunctions`
+ * in `lib/rom/api/houdini.ts`) and the per-generation junction refresh — so the
+ * paths the delivered CSV carries and the junctions they resolve through can
+ * never disagree about where a junction belongs.
+ *
+ * A project linked OUTSIDE the character folder is the user's own tree: the
+ * studio puts no junction there, so it never anchors `$HIP` paths.
+ * Deduped case-insensitively (Windows paths); returned with forward slashes.
+ */
+export function hipAnchorDirs(
+  houdiniProjects: ReadonlyArray<string>,
+  charFolderAbs: string,
+): Array<string> {
+  const folder = stripTrailingSeparators(charFolderAbs.replace(/\\/g, '/'))
+  if (!folder) return []
+  const prefix = `${folder.toLowerCase()}/`
+  const dirs = new Map<string, string>()
+  for (const hip of houdiniProjects) {
+    const norm = stripTrailingSeparators(hip.trim().replace(/\\/g, '/'))
+    if (!norm.toLowerCase().startsWith(prefix)) continue
+    const dir = norm.slice(0, norm.lastIndexOf('/'))
+    if (!dirs.has(dir.toLowerCase())) dirs.set(dir.toLowerCase(), dir)
+  }
+  return [...dirs.values()]
 }
 
 /** Tokens that carry no scene identity — generation markers and the DTH preset
@@ -138,7 +171,7 @@ export function suggestSceneSubfolder(scenePath: string, characterName: string):
     .split(/[\s_\-.]+/)
     .filter(Boolean)
     .filter((word) => !NOISE_TOKENS.has(word.toLowerCase()) && !GENERATION_WORD.test(word))
-  const joined = words.join('_').replace(/[. ]+$/, '')
+  const joined = stripTrailingDotsAndSpaces(words.join('_'))
   return joined || 'scene'
 }
 

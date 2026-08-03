@@ -116,6 +116,7 @@ export {
   dismissExportRun,
   executeCharacterJobs,
   exporterJobsPending,
+  exporterJobsWorking,
   fetchExecuteScenes,
   fetchExportRunProgress,
   fetchRomAnimations,

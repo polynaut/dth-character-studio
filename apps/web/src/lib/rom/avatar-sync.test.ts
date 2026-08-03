@@ -14,7 +14,9 @@ const files = new Map<string, string | Uint8Array>()
 const dirs = new Set<string>()
 
 function norm(p: string): string {
-  return p.replace(/\\/g, '/').replace(/\/+$/g, '')
+  let s = p.replace(/\\/g, '/')
+  while (s.endsWith('/')) s = s.slice(0, -1)
+  return s
 }
 function addDir(p: string): void {
   let path = norm(p)

@@ -1,5 +1,8 @@
 import { exists, mkdir, readDir, remove, rename, stat, writeTextFile } from '@tauri-apps/plugin-fs'
 
+// The leaf trim module, NOT `#/lib/path.ts` — that one imports this file.
+import { stripTrailingSeparators } from '#/lib/path-trim.ts'
+
 // Shared path + filesystem primitives used across the storage modules.
 // THE single copy of join/basename/dirname — api/core.ts re-exports them
 // (joinPath/basename/dirname) and lib/path.ts re-exports dirname as dirOf, so
@@ -13,7 +16,7 @@ import { exists, mkdir, readDir, remove, rename, stat, writeTextFile } from '@ta
  */
 export function join(...parts: Array<string>): string {
   return parts
-    .map((p) => p.replace(/\\/g, '/').replace(/\/+$/g, ''))
+    .map((p) => stripTrailingSeparators(p.replace(/\\/g, '/')))
     .filter(Boolean)
     .join('/')
 }
@@ -36,7 +39,7 @@ export function relativeInside(parent: string, child: string): string | null {
 
 /** Last path segment (folder or file name). */
 export function basename(p: string): string {
-  return p.replace(/[\\/]+$/g, '').split(/[\\/]/).pop() ?? p
+  return stripTrailingSeparators(p).split(/[\\/]/).pop() ?? p
 }
 
 /** Everything but the last path segment ('/'-joined). The result is
@@ -45,7 +48,7 @@ export function basename(p: string): string {
  *  storage copy that kept backslashes was the one divergence between the three
  *  parallel dirname implementations. */
 export function dirname(p: string): string {
-  const norm = p.replace(/[\\/]+$/g, '')
+  const norm = stripTrailingSeparators(p)
   const idx = Math.max(norm.lastIndexOf('/'), norm.lastIndexOf('\\'))
   return idx >= 0 ? norm.slice(0, idx).replace(/\\/g, '/') : norm
 }

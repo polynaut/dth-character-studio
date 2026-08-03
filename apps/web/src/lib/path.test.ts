@@ -1,6 +1,53 @@
 import { describe, expect, it } from 'vitest'
 
-import { extrasWithoutPrimary, middleTruncatePath } from './path.ts'
+import { browseStart, extrasWithoutPrimary, middleTruncatePath, parentDir } from './path.ts'
+
+describe('browseStart — where a Browse dialog opens', () => {
+  it('uses the path the field already holds', () => {
+    expect(browseStart('D:\\DazToHue\\Releases')).toBe('D:/DazToHue/Releases')
+  })
+
+  it('falls through blanks to the closest thing the caller offered', () => {
+    // The whole point: an unset field is not a reason to dump the user at
+    // whatever folder the OS remembers.
+    expect(browseStart('', '   ', 'D:/Projects')).toBe('D:/Projects')
+    expect(browseStart(undefined, 'D:/Projects')).toBe('D:/Projects')
+  })
+
+  it('prefers the set value over every fallback', () => {
+    expect(browseStart('D:/Set', 'D:/Fallback')).toBe('D:/Set')
+  })
+
+  it('is undefined when nothing sensible is known — the OS decides', () => {
+    expect(browseStart('', undefined, '  ')).toBeUndefined()
+    expect(browseStart()).toBeUndefined()
+  })
+
+  it('preserves a leading UNC \\\\server\\share prefix (network paths)', () => {
+    // Collapsing the leading double separator would make the dialog plugin's
+    // PathBuf rebuild produce a drive-relative path whose SetFolder fails.
+    expect(browseStart('\\\\NAS\\share\\x')).toBe('//NAS/share/x')
+  })
+
+  it('preserves the UNC prefix on a fallback candidate too', () => {
+    expect(browseStart('', undefined, '\\\\NAS\\share\\proj')).toBe('//NAS/share/proj')
+    // …and a local first candidate still wins over a UNC fallback, un-prefixed.
+    expect(browseStart('D:\\Set', '\\\\NAS\\share\\proj')).toBe('D:/Set')
+  })
+})
+
+describe('parentDir', () => {
+  it('returns the normalized parent folder', () => {
+    expect(parentDir('D:\\Projects\\Scenes\\Beach.duf')).toBe('D:/Projects/Scenes')
+  })
+
+  it('returns the drive ROOT (not a drive-relative bare letter) at the top', () => {
+    // 'D:' alone means "the current directory on D:" on Windows — a dialog
+    // opened there lands wherever the process last was on that drive.
+    expect(parentDir('D:/Proj')).toBe('D:/')
+    expect(parentDir('D:\\Proj')).toBe('D:/')
+  })
+})
 
 describe('middleTruncatePath', () => {
   it('keeps short paths untouched', () => {

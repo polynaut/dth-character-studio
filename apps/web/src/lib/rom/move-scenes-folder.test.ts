@@ -15,7 +15,9 @@ const files = new Map<string, string | Uint8Array>()
 const dirs = new Set<string>()
 
 function norm(p: string): string {
-  return p.replace(/\\/g, '/').replace(/\/+$/g, '')
+  let s = p.replace(/\\/g, '/')
+  while (s.endsWith('/')) s = s.slice(0, -1)
+  return s
 }
 function addDir(p: string): void {
   let path = norm(p)
@@ -186,6 +188,24 @@ describe('moveCharacterScenesFolder', () => {
     expect(onDisk.extraScenes).toEqual(moved.extraScenes)
     expect(onDisk.sections.JCM.customAssetPath).toBe(moved.sections.JCM.customAssetPath)
     expect(onDisk.updatedAt).toBe(moved.updatedAt)
+  })
+
+  it('the EXPORT root follows the renamed folder — it lives inside it', async () => {
+    // Regression: the export root was re-derived from the PROJECT's dazSubdir on
+    // every save, so renaming daz3d → scenes physically moved `dth-exports`
+    // along with the folder and then pointed exportPath straight back at the
+    // vanished `daz3d/dth-exports`. The rename undid half of itself on its own
+    // save, and every later export targeted a resurrected daz3d.
+    await storage.createProjectManifest('/games/R', 'R')
+    const c = seedCharacter('/games/R')
+
+    const moved = await moveCharacterScenesFolder({
+      data: { projectId: '/games/R', character: c, newSubdir: 'scenes' },
+    })
+
+    expect(moved.exportPath).toBe('/games/R/Kira/scenes/dth-exports')
+    const onDisk = JSON.parse(files.get('/games/R/Kira/Kira.json') as string)
+    expect(onDisk.exportPath).toBe(moved.exportPath)
   })
 
   it('a same-subfolder no-op still SAVES the passed draft (baseline-settle contract)', async () => {

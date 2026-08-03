@@ -180,6 +180,81 @@ export function jobScriptForMode(mode: ExportMode): string {
 }
 
 /**
+ * THE "Export only" rule: the SELECTED scenes that have no saved ROM animation,
+ * and therefore nothing for an export-only run to export.
+ *
+ * Pure so it is testable without a browser, and shared by BOTH places the
+ * dialog applies it: the Start gate (non-empty ⇒ Start is disabled and the
+ * scenes are named) and the pre-handoff re-check in `onExport`, which re-probes
+ * the scenes at the decision point — the dialog's status is a snapshot from
+ * when it opened, and a ROM animation deleted since then would otherwise ride
+ * the stale go-ahead into Daz.
+ *
+ * Empty for every other mode, and empty while `scenes` is null — nothing is
+ * known before the probe lands, and "unknown" must not read as "missing" (the
+ * dialog's Start separately waits out that window as "Checking scenes…").
+ */
+export function scenesMissingRomAnimation<T extends { scenePath: string; romExists: boolean }>(
+  mode: ExportMode,
+  scenes: ReadonlyArray<T> | null,
+  checked: ReadonlySet<string>,
+): Array<T> {
+  if (mode !== 'export-only' || !scenes) return []
+  return scenes.filter((scene) => checked.has(scene.scenePath) && !scene.romExists)
+}
+
+/**
+ * Which scenes a mode PRE-CHECKS in the DTH Export dialog: the ones whose work
+ * is outstanding for THAT run — changed inputs for the ROM-building modes, an
+ * unexported saved ROM animation for the export-only pass. A scene whose
+ * `.duf` is missing is never pre-checked, whatever the mode: its row cannot
+ * run (the dialog disables it), and a saved ROM animation can well survive a
+ * deleted scene — pre-checking it would arm a selection whose handoff can only
+ * fail.
+ */
+export function preCheckedScenes(
+  mode: ExportMode,
+  scenes: ReadonlyArray<{
+    scenePath: string
+    affected: boolean
+    missing: boolean
+    romExists: boolean
+    romUnexported: boolean
+  }>,
+): Set<string> {
+  return new Set(
+    scenes
+      .filter(
+        (s) => !s.missing && (mode === 'export-only' ? s.romExists && s.romUnexported : s.affected),
+      )
+      .map((s) => s.scenePath),
+  )
+}
+
+/**
+ * Whether a `running_` batch can be handed back to a fresh Daz — i.e. it was
+ * CLAIMED but never worked.
+ *
+ * A closing Daz can rename the job file (the rename IS the claim) on a final
+ * poll tick and then exit before running a row. The Runner only ever polls for
+ * the PENDING name, so a file left that way is orphaned forever unless the
+ * studio renames it back.
+ *
+ * Deliberately narrow, which is the whole point of the helper: reclaiming a
+ * PARTIALLY worked batch would re-run scenes that already finished — minutes of
+ * ROM build and a re-export each. So the batch must be an untouched
+ * `bulk-export`: that type, progress 0 AND every row still `pending`. Anything
+ * else belongs to the export watch's "dead run" report, not here — including an
+ * orphaned `open-scene` handoff, which is not an export to requeue (renamed
+ * back to pending it would yank a scene open out of nowhere on the next Daz
+ * start). A torn or foreign read (null) is never reclaimable.
+ */
+export function isReclaimableBatch(parsed: ExporterJobFile | null): boolean {
+  if (!parsed || parsed.type !== 'bulk-export' || parsed.progress !== 0) return false
+  return parsed.jobs.every((job) => job.status === 'pending')
+}
+
+/**
  * The scene file a mode's job row OPENS for `scenePath`: the saved ROM
  * animation for `export-only` (that is where the built ROM lives — the
  * generated script maps it back to this scene for every scene-keyed lookup),

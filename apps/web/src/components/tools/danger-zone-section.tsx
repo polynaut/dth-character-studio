@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { Button, InfoPopup, Input } from '@dth/ui'
 import { defaultDazUninstallFolders } from '#/lib/rom/api.ts'
 import { pickFolder } from '#/lib/desktop.ts'
-import { displayPath } from '#/lib/path.ts'
+import { browseStart, displayPath } from '#/lib/path.ts'
 import { InstallReportList } from '#/components/install-controls.tsx'
 
 import type { InstallReport } from '#/lib/rom/api.ts'
@@ -47,7 +47,11 @@ export function DangerZoneSection({
     onFoldersChange(folders.filter((_, j) => j !== i))
   }
   async function browseUninstallFolder(i: number) {
-    const picked = await pickFolder('Folder to delete on uninstall')
+    // This row's own folder, else any sibling row already filled in.
+    const picked = await pickFolder(
+      'Folder to delete on uninstall',
+      browseStart(folders[i], folders.find(Boolean)),
+    )
     if (picked) updateUninstallFolder(i, picked)
   }
   // "Prefill folder paths" — add the standard Daz locations, merged with whatever's

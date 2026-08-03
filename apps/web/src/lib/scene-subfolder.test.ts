@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   deriveScenesRootRel,
+  hipAnchorDirs,
   sceneSubfolderConflict,
   suggestSceneSubfolder,
 } from './scene-subfolder'
@@ -50,6 +51,47 @@ describe('deriveScenesRootRel', () => {
   it('falls back to the primary dir itself (legacy custom root)', () => {
     expect(deriveScenesRootRel('scenes', 'daz3d')).toBe('scenes')
     expect(deriveScenesRootRel('', 'daz3d')).toBe('')
+  })
+})
+
+describe('hipAnchorDirs — where $HIP-relative reference paths can anchor', () => {
+  it('returns the distinct folders of linked .hips INSIDE the character folder', () => {
+    expect(
+      hipAnchorDirs(
+        [
+          'D:/lib/Electra/houdini/Electra.hiplc',
+          'D:\\lib\\Electra\\houdini\\Electra_v2.hiplc', // same folder, backslashes
+          'D:/lib/Electra/archive/Old.hip', // hand-linked, still inside → anchors too
+        ],
+        'D:\\lib\\Electra',
+      ),
+    ).toEqual(['D:/lib/Electra/houdini', 'D:/lib/Electra/archive'])
+  })
+
+  it('a project linked OUTSIDE the character folder never anchors — the studio puts no junction in a tree it does not own', () => {
+    expect(hipAnchorDirs(['E:/elsewhere/Electra.hip'], 'D:/lib/Electra')).toEqual([])
+    // A sibling folder sharing the prefix as a STRING is still outside.
+    expect(hipAnchorDirs(['D:/lib/Electra2/Electra.hip'], 'D:/lib/Electra')).toEqual([])
+  })
+
+  it('dedupes case-insensitively (Windows paths)', () => {
+    expect(
+      hipAnchorDirs(
+        ['D:/lib/Electra/houdini/A.hiplc', 'd:/lib/electra/HOUDINI/B.hiplc'],
+        'D:/lib/Electra',
+      ),
+    ).toEqual(['D:/lib/Electra/houdini'])
+  })
+
+  it('a .hip directly in the character folder anchors the folder itself', () => {
+    expect(hipAnchorDirs(['D:/lib/Electra/Electra.hip'], 'D:/lib/Electra/')).toEqual([
+      'D:/lib/Electra',
+    ])
+  })
+
+  it('no projects / no folder → nothing anchors', () => {
+    expect(hipAnchorDirs([], 'D:/lib/Electra')).toEqual([])
+    expect(hipAnchorDirs(['D:/lib/Electra/houdini/A.hiplc'], '')).toEqual([])
   })
 })
 

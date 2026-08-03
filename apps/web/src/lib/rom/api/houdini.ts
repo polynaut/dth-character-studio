@@ -8,17 +8,20 @@ import {
   EXPORTS_FOLDER,
   characterHoudiniDir,
   characterHoudiniProjectDir,
+  hipAnchorDirs,
 } from '#/lib/scene-subfolder.ts'
 import {
   HOUDINI_JOB_FILE,
   HOUDINI_RESULT_FILE,
   HOUDINI_SCRIPTS_FOLDER,
   buildHoudiniJob,
+  houdiniRunFilesToClear,
   houdiniRunStateFrom,
   houdiniScriptPathValue,
   parseHoudiniResult,
 } from '../houdini-jobs'
 import type { HoudiniResult, HoudiniRunState } from '../houdini-jobs'
+import type { Character } from '@dth/rom'
 // Houdini's half of the handoff, bundled as source and written into app-data
 // before each launch (see startHoudiniExport).
 import houdiniRunnerScript from '../houdini-runtime/456.py?raw'
@@ -37,8 +40,9 @@ import { charScopeInput, charsRoot, joinPath, locateCharacter, resolveProject } 
 // The project folder holds no exports (schema v29) — those live in the
 // character's fixed Daz-side export root. It gets a `dth-exports` JUNCTION
 // pointing there instead, so Houdini's file picker (which opens at $JOB) shows
-// the exports one click away rather than two levels up. Best-effort in every
-// sense: the junction is a shortcut, nothing resolves through it.
+// the exports one click away rather than two levels up. That one is a pure
+// shortcut; its twin BESIDE each `.hip` is load-bearing for `$HIP`-relative
+// reference paths — see linkExportsIntoProject / refreshExportJunctions below.
 
 const generateInput = charScopeInput.extend({
   /** The new scene's name (dialog input, prefilled `<Project>_<Character>`). */
@@ -68,17 +72,25 @@ export function generatedHoudiniScenePath(houdiniDir: string, sceneName: string)
 }
 
 /**
- * Put the `dth-exports` shortcut inside the project folder: a junction to the
- * character's real export root, so Houdini's file picker — which opens at $JOB
- * — lists the exports right there instead of making the user climb out to the
- * Daz subfolder. Returns whether the link is in place.
+ * Put a `dth-exports` junction into `projectDir`, pointing at the character's
+ * real export root. Returns whether the link is in place. ONE mechanism with
+ * TWO roles, depending on where the junction goes:
  *
- * BEST-EFFORT ON PURPOSE. Nothing resolves through it: the studio and the
- * generated Daz scripts write and read absolute paths, and Houdini only ever
- * sees it if the user browses. So every failure mode — a non-NTFS or network
- * export root (a junction can't target UNC), a real folder already sitting at
- * that name, a version-control client that deleted it — costs the shortcut and
- * nothing else. Re-running Generate project repairs it.
+ * - In the shared `houdini-project/` folder ($JOB) it is a pure file-picker
+ *   shortcut — Houdini's picker opens at $JOB, so the exports sit one click
+ *   away instead of two levels up in the Daz subfolder. Nothing resolves
+ *   through this one; a failure costs the shortcut and nothing else.
+ * - Beside a linked `.hip` (the {@link hipAnchorDirs} set) it is LOAD-BEARING:
+ *   `$HIP/dth-exports/...` reference-skeleton paths in the delivered PoseAsset
+ *   CSV resolve through it. That is why {@link refreshExportJunctions} probes
+ *   these at generation time and the emit falls back to absolute paths when
+ *   one cannot be created — a failure here may never ship a broken ref.
+ *
+ * Failure modes for both: a non-NTFS or network export root (a junction can't
+ * target UNC), a real folder already sitting at that name, a version-control
+ * client that deleted it. Idempotent and self-repairing (`create_junction`
+ * repoints a stale link and reports `"exists"` for a correct one), so every
+ * generation — and every Generate project — repairs them.
  */
 async function linkExportsIntoProject(projectDir: string, exportPath: string): Promise<boolean> {
   const target = exportPath.trim().replace(/\\/g, '/')
@@ -97,6 +109,58 @@ async function linkExportsIntoProject(projectDir: string, exportPath: string): P
   }
 }
 
+/**
+ * Ensure a `dth-exports` junction exists beside every linked `.hip` inside the
+ * character folder — the {@link hipAnchorDirs} set, the EXACT places a
+ * `$HIP/dth-exports/...` reference-skeleton path can resolve through — plus
+ * the file-picker shortcut in the shared `houdini-project/` folder. TWO jobs
+ * from the ONE funnel every generation path already goes through
+ * (`generateCharacterFiles`):
+ *
+ * - **The `$HIP` emit decision.** `hipRelativeRefs` reaches the pure core only
+ *   when this returns true — every anchor has its junction — so a delivered
+ *   CSV can never carry a `$HIP` path with nothing behind it. The probe IS the
+ *   repair (`create_junction` is idempotent: `"exists"` for a correct link, a
+ *   stale one repointed), so pre-existing projects gain their junction on the
+ *   next generation, and any failure — a network/non-NTFS export root, a real
+ *   folder in the way — makes that character fall back to absolute paths
+ *   instead of silently shipping refs that cannot resolve.
+ * - **Junction upkeep.** The junctions store an ABSOLUTE target, so anything
+ *   that changes the export root leaves them aiming at the old one — a
+ *   character rename or folder move, a scenes-folder rename (the export root
+ *   lives inside it), a `charactersSubdir` move, the v29 export-root
+ *   migration. Rather than teach each of those about Houdini, the one refresh
+ *   here re-points them all on the next save. The picker link refreshes only
+ *   while its `houdini-project/` folder already exists (Generate project
+ *   creates it; materializing it for a character that never generated a
+ *   project would be noise) and never affects the return value — nothing
+ *   resolves through it.
+ *
+ * Returns false when there is nothing to anchor (no linked `.hip` inside the
+ * character folder, or no export root). In a browser there is no filesystem to
+ * probe, so having anchors at all is the best available answer.
+ */
+export async function refreshExportJunctions(
+  character: Character,
+  charFolderAbs: string,
+  houdiniSubdir?: string,
+): Promise<boolean> {
+  const anchors = hipAnchorDirs(character.houdiniProjects, charFolderAbs)
+  const target = character.exportPath.trim()
+  if (!target || !charFolderAbs) return false
+  if (!isTauri()) return anchors.length > 0
+  // The $JOB picker shortcut rides along — refreshed whenever its folder is
+  // there, independent of the anchors (the folder outlives an unlinked hip;
+  // see removeGeneratedHoudiniProject).
+  const projectDir = characterHoudiniProjectDir(charFolderAbs, houdiniSubdir)
+  if (await exists(projectDir).catch(() => false)) {
+    await linkExportsIntoProject(projectDir, target)
+  }
+  if (anchors.length === 0) return false
+  const linked = await Promise.all(anchors.map((dir) => linkExportsIntoProject(dir, target)))
+  return linked.every(Boolean)
+}
+
 export interface GeneratedHoudiniProject {
   /** Absolute path of the saved `.hiplc` — the caller links it. */
   scenePath: string
@@ -105,7 +169,10 @@ export interface GeneratedHoudiniProject {
   projectDir: string
   /** Whether the `dth-exports` junction into the export root is in place —
    *  false just means the file-picker shortcut is missing (see
-   *  `linkExportsIntoProject`), never that the project is broken. */
+   *  `linkExportsIntoProject`), never that the project is broken. The
+   *  load-bearing junction BESIDE the `.hip` is not reported here: generation
+   *  probes it itself ({@link refreshExportJunctions}) and falls back to
+   *  absolute reference paths when it is missing. */
   exportsLink: boolean
   /** Whether the DazToHue network was created from the installed HDA (false =
    *  hython couldn't see the HDA — the scene saved empty, `$JOB` still baked;
@@ -142,8 +209,21 @@ export async function generateHoudiniProject({
   // Layout: the scene FILE lives in the character's houdini folder, NEXT TO the
   // one shared project folder every one of its scenes Set-Projects into:
   //   houdini/<name>.hiplc              ← the scene (one per generate)
+  //   houdini/dth-exports               → junction to the export root — THE
+  //                                       anchor $HIP-relative reference paths
+  //                                       resolve through (the emit decision is
+  //                                       refreshExportJunctions above; the
+  //                                       emitted swap is buildExportBlock in
+  //                                       @dth/rom dsa.ts)
   //   houdini/houdini-project/          ← $JOB, shared — created once
   //   houdini/houdini-project/dth-exports  → junction to the export root
+  //
+  // TWO junctions to the same target, with different jobs: the one in the
+  // project folder is the file-picker shortcut ($JOB), the one beside the .hip
+  // is what `$HIP/dth-exports/...` in a generated CSV resolves through. The
+  // second is load-bearing, which is why generation re-probes it every time
+  // (refreshExportJunctions) and falls back to absolute reference paths while
+  // it cannot exist.
   const charFolder = location?.folderAbs ?? ''
   if (!charFolder) throw new Error(`Character ${id} not found`)
   const houdiniDir = characterHoudiniDir(charFolder, project.houdiniSubdir)
@@ -160,6 +240,11 @@ export async function generateHoudiniProject({
   // reuses it, so all of a character's projects share one $JOB.
   await mkdir(projectDir, { recursive: true })
   const exportsLink = await linkExportsIntoProject(projectDir, character.exportPath)
+  // The $HIP-side twin: `$HIP` is the folder the .hip sits in, so a CSV path
+  // written as `$HIP/dth-exports/...` resolves through THIS one. Seeded here
+  // because the new .hip isn't linked to the character yet (the caller links
+  // it after), so the generation-time refresh can't know about it until then.
+  await linkExportsIntoProject(houdiniDir, character.exportPath)
 
   // The matching Houdini documents folder doubles as HOUDINI_USER_PREF_DIR
   // for hython — without it, hython inherits the studio's environment and can
@@ -263,6 +348,9 @@ const houdiniExportInput = charScopeInput.extend({
  */
 interface ActiveHoudiniRun {
   characterId: string
+  /** Absolute path of the job file handed to 456.py — kept so the run can
+   *  clear it when it ends (see `houdiniRunFilesToClear`). */
+  jobPath: string
   /** Absolute path of the result file 456.py writes. */
   resultPath: string
   /** Scenes that went into the job — the count shown until 456.py reports its
@@ -382,7 +470,12 @@ export async function startHoudiniExport({
     },
   })
 
-  activeHoudiniRun = { characterId: character.id, resultPath, scenes: job.scenes.length }
+  activeHoudiniRun = {
+    characterId: character.id,
+    jobPath: jobFile,
+    resultPath,
+    scenes: job.scenes.length,
+  }
   return { jobFile, scenes: job.scenes.length }
 }
 
@@ -407,6 +500,23 @@ export async function fetchHoudiniRunProgress(): Promise<
   const state = houdiniRunStateFrom(result, houdiniUp)
   if (state.state === 'finished' || state.state === 'dead') {
     if (activeHoudiniRun === run) activeHoudiniRun = null
+    // The run is over and this snapshot carries everything the caller reports
+    // (counts, summary, the HDA's problems) — so the handoff's own files go
+    // now instead of sitting in the character folder until some later run
+    // happens to overwrite them. Which files, and when, is the pure rule.
+    for (const path of houdiniRunFilesToClear({
+      state: state.state,
+      hasResult: result !== null,
+      jobPath: run.jobPath,
+      resultPath: run.resultPath,
+    })) {
+      try {
+        if (await exists(path)) await remove(path)
+      } catch {
+        // locked (scanner, an editor holding it) — the next run's start-of-run
+        // cleanup clears the result, and rewrites the job, either way
+      }
+    }
   }
   return { ...state, characterId: run.characterId, scenes: run.scenes }
 }

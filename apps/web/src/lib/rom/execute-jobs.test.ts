@@ -9,6 +9,7 @@ import {
   jobSceneForMode,
   jobScriptForMode,
   expectedSceneExportFolders,
+  isReclaimableBatch,
   migratedExportFolder,
   jobFileJson,
   normalizeSceneKey,
@@ -16,6 +17,8 @@ import {
   parseExecuteStamps,
   parseExportFoldersRecord,
   parseJobFileJson,
+  preCheckedScenes,
+  scenesMissingRomAnimation,
   staleExportFolders,
 } from './execute-jobs'
 
@@ -171,6 +174,66 @@ describe('open-scene jobs', () => {
   })
 })
 
+describe('isReclaimableBatch — a batch a CLOSING Daz claimed but never ran', () => {
+  const batch = (over: Record<string, unknown>) =>
+    parseJobFileJson(
+      JSON.stringify({
+        version: 1,
+        type: 'bulk-export',
+        progress: 0,
+        jobs: [
+          { scenePath: 'X:\\a.duf', scriptPath: 'X:\\s.dsa', status: 'pending' },
+          { scenePath: 'X:\\b.duf', scriptPath: 'X:\\s.dsa', status: 'pending' },
+        ],
+        ...over,
+      }),
+    )
+
+  it('reclaims an untouched batch — the whole point of the rescue', () => {
+    // The Runner renames the file to claim it and then Daz exits; nothing polls
+    // for the renamed name, so without this the batch is orphaned forever.
+    expect(isReclaimableBatch(batch({}))).toBe(true)
+  })
+
+  it('refuses one that already ran a row — re-running costs a ROM build each', () => {
+    expect(
+      isReclaimableBatch(
+        batch({
+          jobs: [
+            { scenePath: 'X:\\a.duf', scriptPath: 'X:\\s.dsa', status: 'done' },
+            { scenePath: 'X:\\b.duf', scriptPath: 'X:\\s.dsa', status: 'pending' },
+          ],
+        }),
+      ),
+    ).toBe(false)
+    // …including the row that was mid-flight when Daz died.
+    expect(
+      isReclaimableBatch(
+        batch({ jobs: [{ scenePath: 'X:\\a.duf', scriptPath: 'X:\\s.dsa', status: 'running' }] }),
+      ),
+    ).toBe(false)
+  })
+
+  it('refuses one with progress on the clock', () => {
+    expect(isReclaimableBatch(batch({ progress: 50 }))).toBe(false)
+  })
+
+  it('refuses a torn or foreign read outright', () => {
+    expect(isReclaimableBatch(null)).toBe(false)
+  })
+
+  it('refuses a non-export TYPE — an orphaned open-scene handoff is no batch to requeue', () => {
+    // parseJobFileJson happily returns an open-scene file; requeueing it as
+    // pending would make the next Daz start yank a scene open out of nowhere.
+    const openScene = batch({
+      type: 'open-scene',
+      jobs: [{ scenePath: 'X:\\a.duf', status: 'pending' }],
+    })
+    expect(openScene?.type).toBe('open-scene') // the parse itself is fine
+    expect(isReclaimableBatch(openScene)).toBe(false)
+  })
+})
+
 describe('job rows per export mode — which hidden script, on which scene file', () => {
   it('each mode runs its own hidden script (the visible toggles never matter)', () => {
     expect(jobScriptForMode('rom-export')).toBe('.Bulk_ROM_Export.dsa')
@@ -262,6 +325,87 @@ describe('export-folder housekeeping (the record + the delete set)', () => {
         '{"version":1,"exportDir":"X:/e","folders":["a",42,null,"b/c"]}',
       ),
     ).toEqual({ version: 1, exportDir: 'X:/e', folders: ['a', 'b/c'] })
+  })
+})
+
+describe('scenesMissingRomAnimation — the "Export only" gate', () => {
+  const scene = (scenePath: string, romExists: boolean) => ({ scenePath, romExists })
+  const A = 'X:/p/Kira/daz3d/primary/Kira.duf'
+  const B = 'X:/p/Kira/daz3d/summertide/KiraSummertide.duf'
+
+  it('names the SELECTED scenes that have no saved ROM animation', () => {
+    const rows = [scene(A, true), scene(B, false)]
+    expect(
+      scenesMissingRomAnimation('export-only', rows, new Set([A, B])).map((s) => s.scenePath),
+    ).toEqual([B])
+  })
+
+  it('ignores scenes that are not selected', () => {
+    // The unselected no-ROM scene is not this run's problem.
+    const rows = [scene(A, true), scene(B, false)]
+    expect(scenesMissingRomAnimation('export-only', rows, new Set([A]))).toEqual([])
+  })
+
+  it('is empty for the modes that BUILD the ROM', () => {
+    const rows = [scene(A, false), scene(B, false)]
+    expect(scenesMissingRomAnimation('rom-export', rows, new Set([A, B]))).toEqual([])
+    expect(scenesMissingRomAnimation('rom-only', rows, new Set([A, B]))).toEqual([])
+  })
+
+  it('is empty while the probe has not landed — unknown is not missing', () => {
+    // Nothing is measured yet, so the RULE stays quiet — the dialog covers the
+    // in-flight window itself by holding Start as "Checking scenes…" until the
+    // probe lands, rather than mislabeling unknown scenes as missing.
+    expect(scenesMissingRomAnimation('export-only', null, new Set([A, B]))).toEqual([])
+  })
+})
+
+describe('preCheckedScenes — the dialog pre-selection per mode', () => {
+  const A = 'X:/p/Kira/daz3d/primary/Kira.duf'
+  const B = 'X:/p/Kira/daz3d/summertide/KiraSummertide.duf'
+  const row = (
+    scenePath: string,
+    over: Partial<{
+      affected: boolean
+      missing: boolean
+      romExists: boolean
+      romUnexported: boolean
+    }> = {},
+  ) => ({
+    scenePath,
+    affected: false,
+    missing: false,
+    romExists: false,
+    romUnexported: false,
+    ...over,
+  })
+
+  it('the ROM-building modes pre-check the AFFECTED scenes', () => {
+    const rows = [row(A, { affected: true }), row(B)]
+    expect(preCheckedScenes('rom-export', rows)).toEqual(new Set([A]))
+    expect(preCheckedScenes('rom-only', rows)).toEqual(new Set([A]))
+  })
+
+  it('export-only pre-checks the scenes whose saved ROM is UNEXPORTED', () => {
+    const rows = [
+      row(A, { romExists: true, romUnexported: true }),
+      // Already exported as it stands — nothing outstanding.
+      row(B, { romExists: true, romUnexported: false }),
+    ]
+    expect(preCheckedScenes('export-only', rows)).toEqual(new Set([A]))
+  })
+
+  it('a missing .duf is never pre-checked — even with an unexported ROM sibling', () => {
+    // Regression: a deleted scene keeps its rom-animations sibling, so the
+    // probe still reports romExists/romUnexported for it. Pre-checking it
+    // would arm a DISABLED row whose handoff can only fail ("scene file could
+    // not be read").
+    const rows = [
+      row(A, { missing: true, romExists: true, romUnexported: true }),
+      row(B, { missing: true, affected: true }),
+    ]
+    expect(preCheckedScenes('export-only', rows)).toEqual(new Set())
+    expect(preCheckedScenes('rom-export', rows)).toEqual(new Set())
   })
 })
 
