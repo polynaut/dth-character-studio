@@ -591,6 +591,7 @@ function CharacterPage() {
           sceneOverride={sceneSel.sceneOverride}
           writeFrameZero={sceneSel.writeFrameZero}
           morphIndex={morphIndex}
+          scenePath={sceneSel.effectiveScene}
         />
       </section>
 
@@ -611,6 +612,7 @@ function CharacterPage() {
           sceneOverride={sceneSel.sceneOverride}
           writePreserve={sceneSel.writePreserve}
           morphIndex={morphIndex}
+          scenePath={sceneSel.effectiveScene}
         />
       </section>
 

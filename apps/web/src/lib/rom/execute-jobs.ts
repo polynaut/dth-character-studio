@@ -45,6 +45,64 @@ export const RUNNING_JOB_FILE = `${RUNNING_JOB_PREFIX}${EXPORTER_JOB_FILE}`
 export const EXECUTE_STAMPS_FILE = '.dth_execute_stamps.json'
 
 /**
+ * The bulk scan's sidecar config, written into the studio scripts root beside
+ * the job file (Tools → **Scan project**).
+ *
+ * The job-file contract has no room for per-row parameters — a row is
+ * `{ scenePath, scriptPath }` and nothing else — but a scene row needs to know
+ * WHICH scans it is due for and, for products, that character's DIM folder and
+ * output dir. So the studio writes this alongside the batch and the per-scene
+ * worker (`.Scan_Scene_Bulk.dsa`) looks the scene it was just handed up in it.
+ * The name is duplicated inside that `.dsa` (`DTH_SCAN_CONFIG_FILE`) — change
+ * both together.
+ */
+export const SCAN_CONFIG_FILE = 'dth_scan_config.json'
+
+/** The `DthScanProducts()` config for one character — the SAME shape the
+ *  generated `Scan_Products_<Name>.dsa` bakes in (`ScanProductsOptions` +
+ *  identity), passed through verbatim so the bulk and per-character paths
+ *  cannot drift. */
+export interface ScanProductsConfig {
+  characterId: string
+  characterName: string
+  genesis: string
+  dimManifestPath: string
+  outputDir: string
+  dazLibraryFolder: string
+}
+
+/** What ONE scene of a bulk scan is due for. At least one of the two is set —
+ *  a scene due for nothing never gets a row in the first place. */
+export interface ScanSceneWork {
+  /** Scan this scene for morphs the base index doesn't carry. */
+  morphs: boolean
+  /** Run the Daz Products scan for this scene, with this config. */
+  products?: ScanProductsConfig
+}
+
+/** The sidecar config file's shape: scene key → that scene's work. */
+export interface ScanConfigFile {
+  version: 1
+  scenes: Record<string, ScanSceneWork>
+}
+
+/**
+ * The sidecar's full text (pretty JSON + trailing newline). Scenes are keyed by
+ * {@link normalizeSceneKey} — the worker normalizes `Scene.getFilename()` the
+ * same way (`dthScanSceneKey`), which is what lets a scene the Runner opened
+ * find its own row regardless of separator or case.
+ */
+export function scanConfigJson(
+  scenes: ReadonlyArray<{ scenePath: string; work: ScanSceneWork }>,
+): string {
+  const file: ScanConfigFile = { version: 1, scenes: {} }
+  for (const { scenePath, work } of scenes) {
+    file.scenes[normalizeSceneKey(scenePath)] = work
+  }
+  return `${JSON.stringify(file, null, 2)}\n`
+}
+
+/**
  * What a batch does. The `type` field IS the capability handshake: a Runner
  * that predates a type rejects the whole file as foreign (logs, leaves it, never
  * renames), so the studio can write a newer type and detect non-pickup instead

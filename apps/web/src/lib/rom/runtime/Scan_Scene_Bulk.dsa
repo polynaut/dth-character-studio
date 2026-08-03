@@ -1,0 +1,117 @@
+// DAZ Studio version 4.0.0+ filetype DAZ Script
+
+// DTH Character Studio - the per-scene worker of Tools -> Scan project.
+//
+// The studio's bulk scan hands the Runner ONE ROW PER SCENE pointing at this
+// file, and writes a sidecar config (dth_scan_config.json, next to the job
+// file) saying what each scene is due for. The Runner opens the scene and runs
+// this; it looks the OPEN scene up in that config and does the selected work:
+//
+//   - morphs   -> DthScanSceneMorphs(): everything in the scene that the base
+//                 Genesis index doesn't already carry, filed under this scene
+//                 (fitted clothing, hair, third-party geografts and add-ons).
+//   - products -> DthScanProducts(): the same per-scene product CSV the visible
+//                 Scan_Products_<Name>.dsa writes, with that character's DIM
+//                 manifests folder and scan output folder passed in.
+//
+// One row per scene rather than one per scene-and-kind: opening a scene is by
+// far the slowest part of a batch, so both scans share the one open.
+//
+// Dialog-free by construction (the Runner's Daz may well be minimized, where a
+// modal is an invisible dead stop): everything reports through print(), and a
+// failure THROWS so the Runner marks the row failed and the studio says why.
+//
+// Installed hidden (dot-prefixed) at the scripts root. The output path is baked
+// in by the studio when it installs this script.
+
+// .DthUtils.dsa MUST come first: .DthProducts.dsa pulls it in itself when it
+// isn't loaded yet, and its include is rewritten for a character script two
+// folders down - from this root-level script that path would resolve outside
+// the library. Loading utils first makes that include a no-op (it guards on
+// `typeof verbose`).
+var sSelfDir = new DzFileInfo(getScriptFileName()).path();
+var dir_self = new DzDir(sSelfDir);
+include(dir_self.filePath(".DthUtils.dsa"));
+include(dir_self.filePath(".DthScanMorphs.dsa"));
+include(dir_self.filePath(".DthProducts.dsa"));
+
+/** The studio-written sidecar naming what each scene of the batch is due for. */
+var DTH_SCAN_CONFIG_FILE = "dth_scan_config.json";
+
+/** Read + parse a JSON file, or null when missing/unreadable/garbage. */
+function dthScanReadJson(sPath) {
+	try {
+		var oFile = new DzFile(sPath);
+		if (!oFile.open(oFile.ReadOnly)) return null;
+		var sText = String(oFile.read());
+		oFile.close();
+		return JSON.parse(sText);
+	} catch (e) {
+		return null;
+	}
+}
+
+/** The scene-path convention shared with the studio (normalizeSceneKey in
+ *  execute-jobs.ts): trimmed, '/'-separators, lowercased. */
+function dthScanSceneKey(sPath) {
+	return String(sPath).replace(/^\s+|\s+$/g, "").replace(/\\/g, "/").toLowerCase();
+}
+
+/** The whole job for one opened scene. */
+function DthScanSceneBulk(config) {
+	var sScenePath = "";
+	try {
+		sScenePath = String(Scene.getFilename());
+	} catch (e) {
+		/* unsaved - handled below */
+	}
+	if (!sScenePath) {
+		throw new Error("The Runner opened a scene that has no file name - nothing to scan.");
+	}
+
+	var sConfigPath = String(config["scriptDir"]).replace(/\\/g, "/").replace(/\/+$/, "") +
+		"/" + DTH_SCAN_CONFIG_FILE;
+	var oConfig = dthScanReadJson(sConfigPath);
+	if (!oConfig || !oConfig.scenes) {
+		throw new Error("The scan config is missing or unreadable: " + sConfigPath);
+	}
+
+	var sKey = dthScanSceneKey(sScenePath);
+	var oScene = oConfig.scenes[sKey];
+	if (!oScene) {
+		// The batch and its config are written together, so this means they got
+		// out of step (a stale config, a scene saved under a new name mid-run).
+		// Say which scene, so it is diagnosable from the Daz log alone.
+		throw new Error("This scene is not in the scan config: " + sScenePath);
+	}
+
+	print("DTH Scan project - scene:", sScenePath);
+	var aDone = [];
+
+	if (oScene.morphs === true) {
+		DthScanSceneMorphs({ outDir: config["outDir"], bulk: true });
+		aDone.push("morphs");
+	}
+
+	if (oScene.products) {
+		if (typeof DthScanProducts != "function") {
+			throw new Error("The product-scan runtime is not installed - run Tools -> Refresh assets.");
+		}
+		// The studio writes the whole DthScanProducts config per scene (character
+		// identity, DIM manifests folder, output folder, library root) - exactly
+		// what it bakes into the visible Scan_Products_<Name>.dsa. Passed through
+		// as-is so the two paths can never drift apart; only `bulk` is added here.
+		var oProducts = oScene.products;
+		oProducts["bulk"] = true;
+		DthScanProducts(oProducts);
+		aDone.push("products");
+	}
+
+	if (!aDone.length) print("Nothing selected for this scene - skipped.");
+	else print("DTH Scan project - done (" + aDone.join(", ") + "):", sScenePath);
+}
+
+DthScanSceneBulk({
+	outDir: "__DTH_APPDATA_DIR__",
+	scriptDir: String(sSelfDir)
+});

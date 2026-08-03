@@ -18,6 +18,7 @@ import dthScanFramesRuntime from '../runtime/DthScanFrames.dsa?raw'
 import dthShellSurfacesRuntime from '../runtime/DthShellSurfaces.dsa?raw'
 import buildGenesisIndexScript from '../runtime/Build_Genesis_Index.dsa?raw'
 import buildGenesisIndexBulkScript from '../runtime/Build_Genesis_Index_Bulk.dsa?raw'
+import scanSceneBulkScript from '../runtime/Scan_Scene_Bulk.dsa?raw'
 import scanFramesScript from '../runtime/Scan_Frames.dsa?raw'
 import fixGraftShellSurfacesScript from '../runtime/Fix_Graft_Shell_Surfaces.dsa?raw'
 // Content Library artwork for the visible scripts (Daz's own convention:
@@ -99,8 +100,17 @@ const VISIBLE_SCAN_SCRIPTS: Record<string, string> = {
 /** Root-level scripts installed like the visible ones (as-is + app-data path
  *  baked in) but under a HIDDEN name — automation entry points, not Content
  *  Library tiles, so they get no artwork and no un-prefixed copy. */
+/** The per-scene worker of Tools → **Scan project** — the bulk scan's job file
+ *  points one row per scene at this, and the sidecar config beside it
+ *  (`SCAN_CONFIG_FILE` in `../execute-jobs.ts`) says what each scene is due for
+ *  (scene morphs, products, or both — one open, both scans). Hidden at the same
+ *  root and for the same reason as the index builder's bulk twin: it is an
+ *  automation entry point, not a Content Library tile. */
+export const SCAN_SCENE_BULK_SCRIPT = '.Scan_Scene_Bulk.dsa'
+
 const HIDDEN_ROOT_SCRIPTS: Record<string, string> = {
   [GENESIS_INDEX_BULK_SCRIPT]: buildGenesisIndexBulkScript,
+  [SCAN_SCENE_BULK_SCRIPT]: scanSceneBulkScript,
 }
 
 /**

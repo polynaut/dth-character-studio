@@ -30,6 +30,7 @@ const RUNTIME_FILES = [
   'DthShellSurfaces.dsa',
   'Build_Genesis_Index.dsa',
   'Build_Genesis_Index_Bulk.dsa',
+  'Scan_Scene_Bulk.dsa',
   'Scan_Frames.dsa',
   'Fix_Graft_Shell_Surfaces.dsa',
 ]
@@ -49,7 +50,7 @@ const RUNTIME_ASSETS = [
 
 // Bump this together with RUNTIME_VERSION whenever a runtime file legitimately
 // changes (this run prints the new value in the failure message).
-const EXPECTED_RUNTIME_HASH = '6e83e528223600615e378a976e5d13071ded3f77686da7102a6672c99c143456'
+const EXPECTED_RUNTIME_HASH = '57066e17acb74af534329df5b0138efe3f1f14bf09e6f877f7088e7f0e79cf6c'
 
 function runtimeHash(): string {
   const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
@@ -439,6 +440,181 @@ describe('Build_Genesis_Index pre-flight', () => {
       'Genesis 8.1',
       'Genesis 9',
     ])
+  })
+})
+
+/**
+ * The SCENE morph scan (DthScanMorphs.dsa, runtime v53): what a saved scene adds
+ * on top of the stock-figure base index — clothing, hair, third-party grafts —
+ * filed under that scene so the studio's autocomplete can scope it.
+ *
+ * The merge is where the risk is, so it is driven here against a fake DzFile:
+ * a re-scan must REPLACE that scene's contribution (clothing removed from a
+ * scene has to disappear from its suggestions) while leaving every other
+ * scene's alone, and a dial found in two scenes has to carry both.
+ */
+interface SceneScanModule {
+  dthSceneKey: (path: string) => string
+  dthBaseIndexKeys: (outDir: string, genesis: string) => Record<string, boolean>
+  dthWriteSceneIndex: (
+    outDir: string,
+    genesis: string,
+    found: Array<{ node: string; nodeLabel: string; label: string; name: string }>,
+    scenePath: string,
+    sceneName: string,
+  ) => boolean
+}
+
+interface SceneIndexFile {
+  version: number
+  genesis: string
+  scenes: Array<{ path: string; name: string }>
+  morphs: Array<{ node: string; label: string; name: string; scenes: Array<string> }>
+}
+
+const SCENE_EXPORTS = 'dthSceneKey, dthBaseIndexKeys, dthWriteSceneIndex'
+
+/** Load DthScanMorphs.dsa over an in-memory filesystem, so the index reads and
+ *  writes are real code paths against fake files. */
+function loadSceneScan(files: Map<string, string>): SceneScanModule {
+  const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
+  const src = readFileSync(join(dir, 'DthScanMorphs.dsa'), 'utf8')
+  class DzFile {
+    static ReadOnly = 1
+    static WriteOnly = 2
+    static Truncate = 4
+    ReadOnly = 1
+    WriteOnly = 2
+    Truncate = 4
+    path: string
+    mode = 0
+    constructor(path: string) {
+      this.path = path
+    }
+    open(mode: number) {
+      // Write modes always succeed; a read only when the file is there.
+      if ((mode & 2) !== 0) {
+        this.mode = mode
+        return true
+      }
+      if (!files.has(this.path)) return false
+      this.mode = mode
+      return true
+    }
+    read() {
+      return files.get(this.path) ?? ''
+    }
+    write(text: string) {
+      files.set(this.path, text)
+    }
+    close() {}
+  }
+  return runInNewContext(`${src}\n;({ ${SCENE_EXPORTS} })`, {
+    print: () => {},
+    DzFile,
+    Date,
+    JSON,
+  }) as SceneScanModule
+}
+
+const OUT = 'C:/appdata'
+const SCENE_INDEX = `${OUT}/morphs_scenes_G9.json`
+const morph = (node: string, name: string) => ({ node, nodeLabel: node, label: name, name })
+
+describe('scene morph scan (DthScanMorphs.dsa)', () => {
+  it('keys scenes the way the studio does — separators and case folded', () => {
+    const scan = loadSceneScan(new Map())
+    // Must agree with normalizeSceneKey (execute-jobs.ts), or a scene could
+    // never find its own suggestions back.
+    expect(scan.dthSceneKey('D:\\Chars\\Kira\\Kira.duf')).toBe('d:/chars/kira/kira.duf')
+    expect(scan.dthSceneKey('  D:/Chars/Kira.duf  ')).toBe('d:/chars/kira.duf')
+  })
+
+  it('reads the base index as the filter set, and treats a missing one as empty', () => {
+    const files = new Map([
+      [
+        `${OUT}/morphs_G9.json`,
+        JSON.stringify({ morphs: [morph('Genesis9', 'body_bs_BodyTone')] }),
+      ],
+    ])
+    const scan = loadSceneScan(files)
+    expect(scan.dthBaseIndexKeys(OUT, 'G9')['Genesis9|body_bs_BodyTone']).toBe(true)
+    // No base index at all: every scanned morph counts as new (the studio's
+    // reader refuses to serve a scene index without a base one anyway).
+    expect(Object.keys(scan.dthBaseIndexKeys(OUT, 'G8'))).toEqual([])
+  })
+
+  it('files a scene’s finds under that scene', () => {
+    const files = new Map<string, string>()
+    const scan = loadSceneScan(files)
+    scan.dthWriteSceneIndex(OUT, 'G9', [morph('Jacket', 'ExpandAll')], 'D:/S/Kira.duf', 'Kira')
+    const out = JSON.parse(files.get(SCENE_INDEX) ?? '{}') as SceneIndexFile
+    expect(out.morphs).toHaveLength(1)
+    expect(out.morphs[0]).toMatchObject({ node: 'Jacket', name: 'ExpandAll' })
+    expect(out.morphs[0].scenes).toEqual(['D:/S/Kira.duf'])
+    expect(out.scenes.map((s) => s.name)).toEqual(['Kira'])
+  })
+
+  it('adds a second scene to a dial both scenes have, without duplicating it', () => {
+    const files = new Map<string, string>()
+    const scan = loadSceneScan(files)
+    scan.dthWriteSceneIndex(OUT, 'G9', [morph('Jacket', 'ExpandAll')], 'D:/S/A.duf', 'A')
+    scan.dthWriteSceneIndex(OUT, 'G9', [morph('Jacket', 'ExpandAll')], 'D:/S/B.duf', 'B')
+    const out = JSON.parse(files.get(SCENE_INDEX) ?? '{}') as SceneIndexFile
+    expect(out.morphs).toHaveLength(1)
+    expect(out.morphs[0].scenes).toEqual(['D:/S/A.duf', 'D:/S/B.duf'])
+    expect(out.scenes).toHaveLength(2)
+  })
+
+  it('REPLACES a scene’s contribution on a re-scan — removed clothing stops being suggested', () => {
+    const files = new Map<string, string>()
+    const scan = loadSceneScan(files)
+    scan.dthWriteSceneIndex(
+      OUT,
+      'G9',
+      [morph('Jacket', 'ExpandAll'), morph('Boots', 'Widen')],
+      'D:/S/A.duf',
+      'A',
+    )
+    // The jacket was taken off the scene and it was scanned again.
+    scan.dthWriteSceneIndex(OUT, 'G9', [morph('Boots', 'Widen')], 'D:/S/A.duf', 'A')
+    const out = JSON.parse(files.get(SCENE_INDEX) ?? '{}') as SceneIndexFile
+    expect(out.morphs.map((m) => m.node)).toEqual(['Boots'])
+    expect(out.scenes).toHaveLength(1) // the scene is re-recorded, not doubled
+  })
+
+  it('leaves OTHER scenes’ entries alone when one is re-scanned', () => {
+    const files = new Map<string, string>()
+    const scan = loadSceneScan(files)
+    scan.dthWriteSceneIndex(OUT, 'G9', [morph('Jacket', 'ExpandAll')], 'D:/S/A.duf', 'A')
+    scan.dthWriteSceneIndex(OUT, 'G9', [morph('Dress', 'Flare')], 'D:/S/B.duf', 'B')
+    // Re-scanning A empty must not touch B's dress.
+    scan.dthWriteSceneIndex(OUT, 'G9', [], 'D:/S/A.duf', 'A')
+    const out = JSON.parse(files.get(SCENE_INDEX) ?? '{}') as SceneIndexFile
+    expect(out.morphs.map((m) => m.node)).toEqual(['Dress'])
+    expect(out.morphs[0].scenes).toEqual(['D:/S/B.duf'])
+  })
+
+  it('drops a shared dial from only the re-scanned scene, keeping the other', () => {
+    const files = new Map<string, string>()
+    const scan = loadSceneScan(files)
+    scan.dthWriteSceneIndex(OUT, 'G9', [morph('Jacket', 'ExpandAll')], 'D:/S/A.duf', 'A')
+    scan.dthWriteSceneIndex(OUT, 'G9', [morph('Jacket', 'ExpandAll')], 'D:/S/B.duf', 'B')
+    scan.dthWriteSceneIndex(OUT, 'G9', [], 'D:/S/A.duf', 'A')
+    const out = JSON.parse(files.get(SCENE_INDEX) ?? '{}') as SceneIndexFile
+    expect(out.morphs).toHaveLength(1)
+    expect(out.morphs[0].scenes).toEqual(['D:/S/B.duf'])
+  })
+
+  it('matches a stored scene by KEY, so a re-scan under a different spelling still replaces', () => {
+    const files = new Map<string, string>()
+    const scan = loadSceneScan(files)
+    scan.dthWriteSceneIndex(OUT, 'G9', [morph('Jacket', 'ExpandAll')], 'D:/S/A.duf', 'A')
+    // Same file, backslashes + different case — must not become a second scene.
+    scan.dthWriteSceneIndex(OUT, 'G9', [morph('Boots', 'Widen')], 'D:\\s\\a.duf', 'A')
+    const out = JSON.parse(files.get(SCENE_INDEX) ?? '{}') as SceneIndexFile
+    expect(out.morphs.map((m) => m.node)).toEqual(['Boots'])
+    expect(out.scenes).toHaveLength(1)
   })
 })
 

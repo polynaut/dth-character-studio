@@ -109,26 +109,30 @@ export type { ProductScanFile } from './api/products'
 
 // --- execute: DTH Exporter job-file handoff + Daz launch ---------------------
 export {
-  GENESIS_INDEX_RUN,
+  PROJECT_SCAN_RUN,
   abortExporterJobs,
-  abortGenesisIndexRun,
-  buildGenesisIndex,
+  abortProjectScanRun,
   dismissExportRun,
   executeCharacterJobs,
   exporterJobsPending,
   exporterJobsWorking,
   fetchExecuteScenes,
   fetchExportRunProgress,
+  fetchProjectScanPlan,
   fetchRomAnimations,
   generateRomAnimation,
   launchDazForPendingJobs,
   openSceneInRunningDaz,
   romAnimationFresh,
+  startProjectScan,
 } from './api/execute'
 export type {
   ExecuteJobsSummary,
   ExecuteSceneStatus,
   ExportRunProgress,
+  ProjectScanCharacter,
+  ProjectScanPlan,
+  ProjectScanSummary,
   RomAnimationStatus,
 } from './api/execute'
 

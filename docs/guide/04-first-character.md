@@ -404,14 +404,29 @@ window gains focus.
 **Got a figure the stock build doesn't cover** — a third-party geograft, an
 add-on, fitted clothing whose morphs you dial? Load it in Daz, then run the
 script: with figures already in the scene it offers to **scan the open scene**
-instead of building fresh ones, and indexes exactly what's loaded (merged into
-that generation's index). That path never touches your scene — it's only the
-*build* that clears.
+instead of building fresh ones, and indexes exactly what's loaded. That path
+never touches your scene — it's only the *build* that clears.
+
+If that scene is **saved**, it then asks how to file what it finds:
+
+- **For this scene** — the finds are tagged with the scene, and the studio only
+  suggests them while that scene is selected in the editor. This is the mode for
+  outfit and look variants: two jackets in two scenes stop competing for the
+  same *Expand All*.
+- **Into the base index** — the finds join the generation's index and are
+  suggested everywhere. This is the mode for a figure or geograft the stock
+  build genuinely doesn't cover.
 
 From then on, every **Parameter name** field autocompletes after two typed
 characters — searchable by **internal name** *or* **Daz UI label** — and
 picking a suggestion fills in the exact internal name **and** the right node:
 no more mismatched node/morph pairs.
+
+> [!TIP]
+> The easier route for a whole project is **Tools → Scan & index → Scan
+> project**: it runs this base build *and* a per-scene scan for every character
+> in one unattended pass. See
+> [Scanning a whole project](./tools.md#tab-2--scan-amp-index).
 
   <p align="center">
     <img width="508" alt="Parameter name autocomplete suggestions" src="screenshots/detail-morph-autocomplete.png" />

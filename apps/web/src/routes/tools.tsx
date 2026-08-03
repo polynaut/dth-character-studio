@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@dth/ui'
 import { FormHeader } from '#/components/form-header.tsx'
 import {
   dedupDazAssets,
+  fetchActiveProject,
   fetchSettings,
   installDazAssets,
   installDazMorphs,
@@ -23,7 +24,7 @@ import { DazPresetsSection } from '#/components/tools/daz-presets-section.tsx'
 import { DedupSection } from '#/components/tools/dedup-section.tsx'
 import { HoudiniPresetsSection } from '#/components/tools/houdini-presets-section.tsx'
 import { RefreshAssetsTab } from '#/components/tools/refresh-assets-tab.tsx'
-import { GenesisIndexSection } from '#/components/tools/genesis-index-section.tsx'
+import { ProjectScanSection } from '#/components/tools/project-scan-section.tsx'
 import { useUnsavedChangesGuard } from '#/lib/use-unsaved-guard.ts'
 import { useSettingsActions } from '#/lib/use-settings-actions.ts'
 import { toast } from 'sonner'
@@ -34,12 +35,14 @@ export const Route = createFileRoute('/tools')({
   // Optional `?tab=` deep-link (e.g. `?tab=refresh` from the About page).
   validateSearch: (search: Record<string, unknown>): { tab?: string } =>
     typeof search.tab === 'string' ? { tab: search.tab } : {},
-  loader: () => fetchSettings(),
+  // The active project rides along: the Scan-project panel is per-project, and
+  // this route is global (reachable from Home, where there is no project).
+  loader: async () => ({ settings: await fetchSettings(), project: await fetchActiveProject() }),
   component: ToolsPage,
 })
 
 function ToolsPage() {
-  const initial = Route.useLoaderData()
+  const { settings: initial, project: activeProject } = Route.useLoaderData()
   const { tab } = Route.useSearch()
   const router = useRouter()
 
@@ -299,7 +302,9 @@ function ToolsPage() {
       >
         <TabsList>
           <TabsTrigger value="install">Daz Studio &amp; Houdini</TabsTrigger>
-          <TabsTrigger value="index">Build Genesis Index</TabsTrigger>
+          {/* The `index` value stays put — `?tab=index` deep links (and the
+              About page's) must keep working across the rename. */}
+          <TabsTrigger value="index">Scan &amp; index</TabsTrigger>
           <TabsTrigger value="refresh">Refresh assets</TabsTrigger>
         </TabsList>
 
@@ -394,10 +399,18 @@ function ToolsPage() {
 
         <TabsContent value="index" className="space-y-5">
           <p className="text-sm text-muted-foreground">
-            The morph and bone index behind the editor's autocompletes. Rebuild it after
-            installing new morph packs, geografts or figure add-ons.
+            The morph and bone index behind the editor's autocompletes, and the per-scene scans
+            that extend it. Rebuild after installing new morph packs, geografts or figure
+            add-ons — or after changing what your characters' scenes wear.
           </p>
-          <GenesisIndexSection dazLibraryConfigured={settings.dazLibraryFolder.trim() !== ''} />
+          <ProjectScanSection
+            // The route-param convention: a `projectId` IS the project FOLDER
+            // PATH (`resolveProject` reads the manifest from it). `project.id`
+            // is the manifest's own id and resolves to nothing. '' from Home,
+            // where the panel offers the base pass only.
+            projectId={activeProject?.path ?? ''}
+            dazLibraryConfigured={settings.dazLibraryFolder.trim() !== ''}
+          />
         </TabsContent>
 
         <TabsContent value="refresh" className="space-y-5">

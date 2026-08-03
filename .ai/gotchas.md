@@ -529,6 +529,41 @@ current code before relying on details, but assume the *lesson* still holds.
   clears between generations and again after the last one (v41), so a run ends
   empty; the "scan the open scene" branch must never clear, it is the user's own
   scene and the only way third-party grafts/clothing get indexed.
+- **The morph autocomplete reads TWO files per generation, and they must stay
+  separate.** Since runtime v53 `morphs_<G>.json` (the stock figures) has a
+  sibling `morphs_scenes_<G>.json` (what individual SCENES add: fitted clothing,
+  hair, third-party grafts), merged by `fetchMorphIndex` so callers still see one
+  index. They are separate FILES on purpose — the base build rewrites its file
+  wholesale per generation, so merging scene finds into it would lose them on
+  every rebuild. Consequences worth knowing:
+  - A scene entry carries `scenes: [<normalizeSceneKey>…]`; a base entry has NO
+    `scenes` field, and that absence IS the "always offer it" signal.
+    `MorphIndexProvider` drops every scene entry whose list doesn't hold the
+    SELECTED scene — including when no scene is selected at all.
+  - The reader dedups base-first, so a scene entry can never shadow a base one
+    (otherwise a dial the figure genuinely carries would vanish from the
+    autocomplete whenever its scene wasn't selected).
+  - `fetchMorphIndex` returns EMPTY when the base file is missing, even if a
+    scene index exists — a scene index alone means the generation was never
+    indexed, and offering only clothing dials would be worse than silence.
+  - The scan filters itself against the base index IN DAZ, so **the base row
+    must run before the scene rows** in a bulk batch (`startProjectScan`
+    enqueues it first). Run a scene scan on a machine with no base index and the
+    whole stock figure gets filed as "what this scene adds".
+  - A re-scan REPLACES that scene's contribution (`dthWriteSceneIndex` strips
+    the scene out of every stored entry first, dropping entries left with no
+    scene). Without that, clothing removed from a scene would haunt its
+    autocomplete forever. Pinned in `runtime.test.ts`.
+- **`projectId` is the project FOLDER PATH everywhere, never `ProjectInfo.id`.**
+  `resolveProject(projectDir)` takes the path and returns a record whose `id` is
+  the `.dcsp` manifest's own id — a different value that resolves to nothing.
+  The route param is the path, so route-scoped code gets this right by accident;
+  code reading the ACTIVE project (`fetchActiveProject()`, e.g. the Tools →
+  Scan project panel) must pass `project.path`. Measured: passing `.id` made the
+  panel's plan probe throw, which the `.catch` turned into a permanently
+  disabled button with no error anywhere — caught only by a smoke test.
+  `storage.productScanDir(project.id, …)` is the exception that proves it: that
+  one genuinely wants the manifest id.
 - **The shell.open scope regex is anchored by the PLUGIN, not the config.**
   `tauri-plugin-shell` wraps the configured `plugins.shell.open` validator as
   `^{validator}$` before compiling (see the plugin's `lib.rs`), so the app's

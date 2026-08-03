@@ -125,6 +125,7 @@ export { scanPoseAssets } from './storage/pose-assets'
 export {
   GENESIS_INDEX_BULK_SCRIPT,
   GENESIS_INDEX_SCRIPT,
+  SCAN_SCENE_BULK_SCRIPT,
   copyRuntimeFiles,
   readScriptRuntimeVersion,
   studioCharScriptsDir,

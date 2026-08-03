@@ -73,6 +73,9 @@ interface RomSectionsProps {
   /** Scanned bones for this generation — enables the bone-name autocomplete in
    *  the "Modify JCM frames" editor (same Build_Genesis_Index index). */
   boneIndex?: Array<BoneIndexEntry>
+  /** The selected Daz scene — scopes the Morph-name autocomplete's SCENE-scanned
+   *  suggestions (clothing/hair dials) to the ones that scene actually has. */
+  scenePath?: string
   /** Absolute frames whose morphs failed in the last ROM run (from the run log) —
    *  matching pose rows are marked red. */
   failedFrames?: Set<number>
@@ -157,6 +160,7 @@ export const RomSections = memo(function RomSections({
   revealPose,
   morphIndex,
   boneIndex,
+  scenePath,
   dthPosesFolder,
   jcmMorphMods,
   onJcmMorphModsChange,
@@ -616,7 +620,7 @@ export const RomSections = memo(function RomSections({
   const figureNode = useMemo(() => genesisFigureNode(genesis, gender), [genesis, gender])
 
   return (
-    <MorphIndexProvider morphIndex={morphIndex}>
+    <MorphIndexProvider morphIndex={morphIndex} scenePath={scenePath}>
     <FigureNodeContext.Provider value={figureNode}>
     <div className="space-y-2">
       {!presetFrames && (

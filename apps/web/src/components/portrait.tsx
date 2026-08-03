@@ -67,6 +67,68 @@ export function usePortraitSrc({
  * frame (e.g. `aspect-[3/4] w-16 rounded-md`); `imgClassName` overrides the
  * zoom/pan (twMerge wins on conflicts); `fallbackClassName` sizes the initial.
  */
+/**
+ * The LANDSCAPE scene-thumbnail framings, as name → (box, face lift).
+ *
+ * These two values are a PAIR and must never be mixed: the lift is a percentage
+ * of the box height while the zoom (`scale-[2.3]`, anchored `origin-top`) is
+ * fixed, so a taller box lands the crop higher and needs its own correction —
+ * measured at +4px for `md`. Picking `md`'s box with `sm`'s lift clips the head,
+ * which is exactly the bug this table exists to make unrepresentable. Add a size
+ * here (measured against a real preview) rather than hand-rolling the classes at
+ * a call site.
+ */
+const SCENE_TILE_SIZES = {
+  /** The compact chip — scene footer, inline scene labels. */
+  sm: { frame: 'h-8 w-[56px]', lift: '-translate-y-1/2' },
+  /** The roomier row tile — pickers and list rows. */
+  md: { frame: 'h-10 w-[64px]', lift: 'translate-y-[calc(-50%_+_4px)]' },
+} as const
+
+export type SceneTileSize = keyof typeof SCENE_TILE_SIZES
+
+/**
+ * A Daz scene's preview as a small LANDSCAPE tile — the framing used wherever a
+ * scene is shown compactly (the scene footer's chips, the Tools scan picker's
+ * rows). Fixed h/w rather than an aspect ratio, so the tile is a stable box
+ * whatever dimensions the source `.tip.png` has.
+ *
+ * Use THIS instead of reaching for {@link Portrait} with hand-written classes:
+ * the box and its face lift are paired in {@link SCENE_TILE_SIZES}, and getting
+ * that pairing wrong is the one way this framing breaks. {@link Portrait}'s
+ * default 3/4 portrait frame stays right for the bigger media slot of a card
+ * (asset grid, export rows, the scene cards on the character page).
+ */
+export function SceneTile({
+  scenePath,
+  name,
+  size = 'sm',
+  muted = false,
+  className,
+}: {
+  scenePath: string
+  /** Fallback initial when the scene has no preview yet. */
+  name: string
+  size?: SceneTileSize
+  /** Greyscale + the dimmed treatment (an inactive/primary-marked scene). */
+  muted?: boolean
+  className?: string
+}) {
+  const { frame, lift } = SCENE_TILE_SIZES[size]
+  return (
+    <Portrait
+      scenePath={scenePath}
+      name={name}
+      // The lift MUST be a quoted `cn(...)` util, not a leading
+      // `-translate-y-[…]` in a template literal — Tailwind doesn't scan a
+      // leading arbitrary token, so the rule wouldn't generate (see PR #468).
+      imgClassName={cn(lift, muted && 'grayscale')}
+      className={cn(frame, 'shrink-0 rounded', muted && 'scene-label-tile', className)}
+      fallbackClassName="text-[8px]"
+    />
+  )
+}
+
 export function Portrait({
   image,
   scenePath,

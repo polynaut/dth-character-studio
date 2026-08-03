@@ -8,6 +8,7 @@ import {
   EXPORTER_JOB_FILE,
   EXPORT_MODES,
   RUNNING_JOB_FILE,
+  SCAN_CONFIG_FILE,
   executeSceneSignature,
   jobFileJson,
   isReclaimableBatch,
@@ -18,15 +19,30 @@ import {
   parseExecuteStamps,
   parseJobFileJson,
   romAnimationPath,
+  scanConfigJson,
   sceneExportFolderRel,
 } from '../execute-jobs'
 import { BUILD_ROM_ANIMATION_SCRIPT, sceneExportName } from '@dth/rom'
 import { normalizePathLower } from '#/lib/path.ts'
 import { deriveScenesRootRel } from '#/lib/scene-subfolder.ts'
 import { relativeInside } from '../storage/fs'
-import { charScopeInput, charsRoot, dirname, joinPath, locateCharacter, resolveProject } from './core'
+import {
+  charScopeInput,
+  charsRoot,
+  dirname,
+  joinPath,
+  locateCharacter,
+  projectIdInput,
+  resolveProject,
+} from './core'
 
-import type { ExecuteStamp, ExecuteStamps, ExporterJob } from '../execute-jobs'
+import type {
+  ExecuteStamp,
+  ExecuteStamps,
+  ExporterJob,
+  ScanProductsConfig,
+  ScanSceneWork,
+} from '../execute-jobs'
 import type { CharacterLocation } from '../storage'
 import type { Character } from '@dth/rom'
 
@@ -344,12 +360,16 @@ export async function fetchExportRunProgress(watcher?: string): Promise<ExportRu
   const run = activeRun
   const paths = await exporterJobFilePaths()
   if (!paths) return null
-  // Sentinel runs belong to their own panel — see the doc comment above.
+  // Sentinel runs belong to their own panel — see the doc comment above. Every
+  // no-character run carries a '#'-prefixed sentinel id ({@link GENESIS_INDEX_RUN},
+  // {@link PROJECT_SCAN_RUN}), so the rule is stated once for all of them rather
+  // than re-cased per feature: a sentinel run is consumed ONLY by the watcher
+  // passing that same sentinel, and a sentinel watcher never consumes a
+  // character's run. Everything else is served the display-only adoption below.
+  const isSentinel = (id: string | undefined): boolean => id !== undefined && id.startsWith('#')
   const foreignToWatcher =
     run !== null &&
-    (run.characterId === GENESIS_INDEX_RUN
-      ? watcher !== GENESIS_INDEX_RUN
-      : watcher === GENESIS_INDEX_RUN)
+    (isSentinel(run.characterId) ? watcher !== run.characterId : isSentinel(watcher))
   if (!run || foreignToWatcher) {
     // No in-memory watch — a scene-card ROM-animation generate (which arms
     // none), another window's run, or a reloaded window — or a live watch
@@ -945,52 +965,233 @@ export async function generateRomAnimation({
 }
 
 /**
- * The Genesis-index run's `characterId` on the shared export watch — a sentinel,
- * because this batch belongs to no character. Only the caller passing it as its
- * `watcher` to {@link fetchExportRunProgress} (the Tools panel) may consume the
- * run's outcome; character editors are served the display-only `''` adoption
+ * The project-scan run's `characterId` on the shared export watch — a
+ * **sentinel**, because the batch spans every character of a project (or none
+ * at all, on a base-only run) and so belongs to no single one. Consumed only by
+ * the caller passing it as its `watcher` to {@link fetchExportRunProgress} (the
+ * Tools panel); character editors are served the display-only `''` adoption
  * instead, so no editor's mount/focus refresh can eat (or clobber) the run.
  */
-export const GENESIS_INDEX_RUN = '#genesis-index'
+export const PROJECT_SCAN_RUN = '#project-scan'
+
+/** One character's scannable scenes, as the Tools panel lists them. */
+export interface ProjectScanCharacter {
+  id: string
+  name: string
+  /** Linked scenes whose `.duf` is readable — the ones that can get a row. */
+  scenes: Array<string>
+  /** Linked scenes whose `.duf` is missing — named in the panel, never enqueued. */
+  missing: Array<string>
+}
+
+export interface ProjectScanPlan {
+  characters: Array<ProjectScanCharacter>
+  /** Total scannable scenes across the project (the row count for a scene pass). */
+  totalScenes: number
+  /** The project has the Daz Products feature switched on. */
+  productsEnabled: boolean
+  /** A DIM `ManifestFiles` folder is configured — without one a product scan
+   *  reports every asset as unmatched, so the panel's Products option says so. */
+  dimConfigured: boolean
+}
 
 /**
- * Hand a **Build Genesis Index** run to the Runner: a one-row bulk-export batch
- * on the hidden root-level `.Build_Genesis_Index_Bulk.dsa` — the dialog-free
- * twin of the visible script (a Runner batch runs inside a possibly minimized
- * Daz, where a modal is an invisible dead stop; the visible script keeps its
- * dialogs for Content Library double-clicks) — with an **empty `scenePath`**:
- * the contract's "run this script in a NEW EMPTY scene the plugin creates"
- * (docs/exporter-plugin-job-file.md), which is exactly right here: the script
- * builds every generation's stock figures itself and needs no scene, and an
- * empty one is what keeps whatever the user had open out of the scan.
+ * What a bulk scan of this project WOULD cover: every character, its readable
+ * linked scenes, and whether the product pass is available at all. Read-only
+ * and tolerant — a character whose `.duf` files are missing still appears (with
+ * them listed as missing) rather than failing the whole plan, so the panel can
+ * show the user exactly what is about to run before they start it.
+ */
+export async function fetchProjectScanPlan({ data }: { data: unknown }): Promise<ProjectScanPlan> {
+  const { projectId } = projectIdInput.parse(data)
+  if (!isTauri()) {
+    return { characters: [], totalScenes: 0, productsEnabled: false, dimConfigured: false }
+  }
+  const project = await resolveProject(projectId)
+  const settings = await storage.getSettings()
+  const characters = await storage.listCharacters(charsRoot(project))
+  const out: Array<ProjectScanCharacter> = []
+  let totalScenes = 0
+  for (const character of characters) {
+    const linked = [character.scenePath, ...character.extraScenes].filter(Boolean)
+    const scenes: Array<string> = []
+    const missing: Array<string> = []
+    for (const scene of linked) {
+      if (await exists(scene).catch(() => false)) scenes.push(scene)
+      else missing.push(scene)
+    }
+    if (scenes.length === 0 && missing.length === 0) continue
+    totalScenes += scenes.length
+    out.push({ id: character.id, name: character.name, scenes, missing })
+  }
+  return {
+    characters: out,
+    totalScenes,
+    productsEnabled: project.dazProductsEnabled === true,
+    dimConfigured: settings.dimManifestsFolder.trim() !== '',
+  }
+}
+
+const projectScanInput = z.object({
+  /** The project folder to scan. Empty is legal for a BASE-ONLY run: the stock
+   *  figures belong to no project, so the Tools panel offers that pass from the
+   *  Home window too (where no project is open). */
+  projectId: z.string().default(''),
+  /** Rebuild the BASE morph + bone index from the stock figures first — row one
+   *  of the batch, and the only row a project-less run can produce. */
+  base: z.boolean().default(false),
+  /** Scan every linked scene for the morphs the base index doesn't carry. */
+  morphs: z.boolean().default(false),
+  /** Run the Daz Products scan for every linked scene. */
+  products: z.boolean().default(false),
+  /**
+   * Restrict the scene passes to these scenes (absolute paths, matched by
+   * {@link normalizeSceneKey}). Omitted = every linked scene of every
+   * character — a project can hold dozens, and re-scanning all of them to
+   * refresh one outfit is minutes of Daz time per scene.
+   *
+   * Only ever NARROWS: a path that isn't a linked scene of this project can't
+   * add a row, so a stale selection (a scene unlinked between the panel's plan
+   * probe and the click) silently drops out instead of enqueueing a row that
+   * could only fail. All of them dropping out is caught below as "nothing to
+   * run" rather than handed to Daz as an empty batch.
+   */
+  scenes: z.array(z.string()).optional(),
+})
+
+export interface ProjectScanSummary {
+  /** Rows enqueued (the base row, if any, plus one per scene). */
+  rows: number
+  /** Scenes that got a row. */
+  scenes: number
+  /** Characters contributing at least one row. */
+  characters: number
+  /** Linked scenes skipped because their `.duf` is missing. */
+  skipped: Array<string>
+  dazWasRunning: boolean
+}
+
+/**
+ * Hand a WHOLE-PROJECT scan to the Runner — Tools → **Scan project**, the
+ * one-click "start it and wait" pass over everything a project can be scanned
+ * for. One `bulk-export` batch:
+ *
+ *   row 0 (optional)  `.Build_Genesis_Index_Bulk.dsa` on an EMPTY scene — the
+ *                     base morph + bone index. It runs FIRST on purpose: the
+ *                     scene scans filter themselves against that index, so a
+ *                     rebuild has to land before they read it, or the first
+ *                     scan of a fresh install files the whole stock figure as
+ *                     "what this scene adds".
+ *   rows 1..n         `.Scan_Scene_Bulk.dsa`, one per linked scene, with the
+ *                     sidecar ({@link SCAN_CONFIG_FILE}) saying whether that
+ *                     scene is due for morphs, products, or both. One row per
+ *                     SCENE rather than per scene-and-kind: opening a scene is
+ *                     the slow part, so both scans share the one open.
  *
  * Same handoff mechanics as every other batch — one global job file, refuse
- * while another is live, clear a finished-but-unswept `running_`, start Daz when
- * it's closed. The watch is armed so the panel can show progress and report the
- * outcome once. When Daz was already "running", the same ~10s claim-wait as
- * {@link executeCharacterJobs} guards against handing the batch to nobody: a
- * running process whose Runner never renames the file is most likely SHUTTING
- * DOWN (or running without the Runner plugin) — the handoff is taken back
- * (file deleted, watch dropped) and reported as an error rather than left as a
- * forever-pending spinner.
+ * while another is live, clear a finished-but-unswept `running_`, self-heal the
+ * runtime install, start Daz when it's closed, and the same ~10s claim-wait so
+ * a batch is never handed to a shutting-down Daz.
+ *
+ * Throws with a user-facing message when the selection can produce no rows at
+ * all — a batch of nothing would otherwise "succeed" without scanning anything.
  */
-export async function buildGenesisIndex(): Promise<{ dazWasRunning: boolean }> {
-  if (!isTauri()) throw new Error('Building the Genesis index needs the desktop app.')
+export async function startProjectScan({ data }: { data: unknown }): Promise<ProjectScanSummary> {
+  const { projectId, base, morphs, products, scenes: chosenScenes } = projectScanInput.parse(data)
+  if (!isTauri()) throw new Error('Scanning a project needs the desktop app (Daz Studio is launched natively).')
+  if (!base && !morphs && !products) throw new Error('Pick at least one thing to scan.')
+  // The scene passes are per project; the base pass is not. With no project
+  // open (the Home window) only the base pass can run.
+  if ((morphs || products) && !projectId) {
+    throw new Error('Open a project to scan its characters — only the base index can be rebuilt from here.')
+  }
+
   const settings = await storage.getSettings()
   if (!settings.dazLibraryFolder) {
-    throw new Error('Set “My DAZ 3D Library” in Settings first — the job file and the script live there.')
+    throw new Error('Set “My DAZ 3D Library” in Settings first — the job file and the scripts live there.')
   }
+  const project = projectId ? await resolveProject(projectId) : null
+  if (products && project?.dazProductsEnabled !== true) {
+    throw new Error('Daz Products is switched off for this project — enable it in Settings → Project first.')
+  }
+
   const scriptsRoot = storage.studioScriptsDir(settings.dazLibraryFolder)
   // Self-heal before checking: an app updated since the last save has the new
-  // runtime bundled but not yet installed — the marker makes this a no-op
-  // whenever the install is already current.
+  // runtime bundled but not yet installed (the marker makes this a no-op when
+  // the install is already current) — the same guard the index build uses, and
+  // this batch needs a script that only exists from runtime v53 on.
   await storage.copyRuntimeFiles(scriptsRoot).catch(() => {})
-  const scriptPath = joinPath(scriptsRoot, storage.GENESIS_INDEX_BULK_SCRIPT)
-  if (!(await exists(scriptPath))) {
+
+  const jobs: Array<ExporterJob> = []
+  if (base) {
+    const indexScript = joinPath(scriptsRoot, storage.GENESIS_INDEX_BULK_SCRIPT)
+    if (!(await exists(indexScript))) {
+      throw new Error(
+        `The index script is not installed:\n${indexScript}\nRun Tools → Refresh assets to install it, then try again.`,
+      )
+    }
+    jobs.push({ scenePath: '', scriptPath: indexScript })
+  }
+
+  const sceneWork: Array<{ scenePath: string; work: ScanSceneWork }> = []
+  const skipped: Array<string> = []
+  let charactersWithRows = 0
+  // The user's scene pick, as match keys (undefined = every linked scene).
+  const chosen = chosenScenes ? new Set(chosenScenes.map(normalizeSceneKey)) : undefined
+  // `project` is non-null here: the guard above refuses a scene pass without one.
+  if ((morphs || products) && project) {
+    const sceneScript = joinPath(scriptsRoot, storage.SCAN_SCENE_BULK_SCRIPT)
+    if (!(await exists(sceneScript))) {
+      throw new Error(
+        `The scene-scan script is not installed:\n${sceneScript}\nRun Tools → Refresh assets to install it, then try again.`,
+      )
+    }
+    const characters = await storage.listCharacters(charsRoot(project))
+    for (const character of characters) {
+      // Per character, because the product scan's config is per character (its
+      // identity and its own output folder) — the morph scan is global.
+      const productsConfig: ScanProductsConfig | undefined = products
+        ? {
+            characterId: character.id,
+            characterName: character.name,
+            genesis: character.genesis,
+            dimManifestPath: settings.dimManifestsFolder.replace(/\\/g, '/'),
+            outputDir: (await storage.productScanDir(project.id, character.id)).replace(/\\/g, '/'),
+            dazLibraryFolder: settings.dazLibraryFolder.replace(/\\/g, '/'),
+          }
+        : undefined
+      let any = false
+      for (const scene of [character.scenePath, ...character.extraScenes].filter(Boolean)) {
+        // Outside the user's pick — not skipped work, just not asked for, so it
+        // stays out of the summary's `skipped` list too.
+        if (chosen && !chosen.has(normalizeSceneKey(scene))) continue
+        // A missing `.duf` can only produce a failed row — name it in the
+        // summary instead of enqueueing work that cannot run.
+        if (!(await exists(scene).catch(() => false))) {
+          skipped.push(scene)
+          continue
+        }
+        sceneWork.push({
+          scenePath: scene,
+          work: { morphs, ...(productsConfig ? { products: productsConfig } : {}) },
+        })
+        jobs.push({ scenePath: scene, scriptPath: sceneScript })
+        any = true
+      }
+      if (any) charactersWithRows++
+    }
+  }
+
+  if (jobs.length === 0) {
     throw new Error(
-      `The index script is not installed:\n${scriptPath}\nRun Tools → Refresh assets to install it, then try again.`,
+      skipped.length > 0
+        ? 'Every selected Daz scene is missing on disk — nothing could be scanned.'
+        : chosen
+          ? 'None of the selected scenes are linked to this project anymore — reopen Tools and pick again.'
+          : 'This project has no linked Daz scenes to scan yet.',
     )
   }
+
   const paths = await exporterJobFilePaths()
   if (!paths) throw new Error('Set “My DAZ 3D Library” in Settings first.')
   if (await exists(paths.pending)) {
@@ -1006,34 +1207,43 @@ export async function buildGenesisIndex(): Promise<{ dazWasRunning: boolean }> {
     }
     await remove(paths.running).catch(() => {})
   }
-  await storage.writeTextFileAtomic(paths.pending, jobFileJson([{ scenePath: '', scriptPath }]))
+
+  // The sidecar goes down BEFORE the job file: the Runner can claim the batch
+  // the moment the job file appears, and a row that beat its own config would
+  // fail with "not in the scan config" for no reason.
+  await storage.writeTextFileAtomic(joinPath(scriptsRoot, SCAN_CONFIG_FILE), scanConfigJson(sceneWork))
+  await storage.writeTextFileAtomic(paths.pending, jobFileJson(jobs))
   activeRun = {
-    characterId: GENESIS_INDEX_RUN,
-    total: 1,
+    characterId: PROJECT_SCAN_RUN,
+    total: jobs.length,
     openHoudiniProject: '',
     houdiniExport: false,
-    scenes: [],
+    scenes: sceneWork.map((s) => s.scenePath),
   }
+
   const dazWasRunning = await invoke<boolean>('daz_studio_running').catch(() => false)
-  if (!dazWasRunning) {
-    // A fresh launch claims the file on startup — no wait (Daz can take long
-    // to come up; the panel's pending state covers it, with Abort as the out).
-    await invoke<string>('launch_daz_studio')
-    return { dazWasRunning }
+  const summary: ProjectScanSummary = {
+    rows: jobs.length,
+    scenes: sceneWork.length,
+    characters: charactersWithRows,
+    skipped,
+    dazWasRunning,
   }
-  // A "running" Daz may be SHUTTING DOWN (the process lingers, its Runner
-  // poller is already gone) — or running without the Runner. A live Runner
-  // claims (renames) the file within one poll interval; when the claim never
-  // comes, take the handoff back so it can't sit pending forever (or fire
-  // minutes later out of nowhere) and say what to do instead.
+  if (!dazWasRunning) {
+    // A fresh launch claims the file on startup — no wait (Daz can take long to
+    // come up; the panel's pending state covers it, with Abort as the out).
+    await invoke<string>('launch_daz_studio')
+    return summary
+  }
+  // A "running" Daz may be SHUTTING DOWN (the process lingers, its Runner poller
+  // is already gone) — or running without the Runner. Same claim-wait as every
+  // other handoff: take the batch back rather than leave it pending forever.
   const deadline = Date.now() + OPEN_SCENE_PICKUP_TIMEOUT_MS
   while (Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, OPEN_SCENE_POLL_MS))
-    if (!(await exists(paths.pending).catch(() => true))) return { dazWasRunning }
+    if (!(await exists(paths.pending).catch(() => true))) return summary
   }
-  // Take back only OUR handoff: a replacement batch written meanwhile owns
-  // both the pending file and the watch (activeRun) — leave those alone.
-  if (activeRun?.characterId === GENESIS_INDEX_RUN) {
+  if (activeRun?.characterId === PROJECT_SCAN_RUN) {
     activeRun = null
     await remove(paths.pending).catch(() => {})
   }
@@ -1043,16 +1253,14 @@ export async function buildGenesisIndex(): Promise<{ dazWasRunning: boolean }> {
 }
 
 /**
- * Abort a genesis-index handoff still WAITING for Daz Studio (the un-renamed
- * job file): delete the file and drop the watch — the Tools panel's way out of
- * the pending state. No handoff stamps to roll back ({@link abortExporterJobs}
- * does that for character runs) — this batch belongs to no character. A file
- * the Runner already claimed (renamed) is left alone; the watch still ends,
- * the same "stop watching, the run in Daz is unaffected" promise as
- * {@link dismissExportRun}.
+ * Abort a project-scan handoff still WAITING for Daz Studio (the un-renamed job
+ * file): delete it and drop the watch — the Tools panel's way out of the pending
+ * state. The sidecar is left in place: it is inert without a batch pointing at
+ * it, and the next scan overwrites it. A file the Runner already claimed is left
+ * alone; the watch still ends ({@link dismissExportRun}'s promise).
  */
-export async function abortGenesisIndexRun(): Promise<void> {
-  if (activeRun?.characterId !== GENESIS_INDEX_RUN) return
+export async function abortProjectScanRun(): Promise<void> {
+  if (activeRun?.characterId !== PROJECT_SCAN_RUN) return
   const paths = await exporterJobFilePaths()
   if (paths) await remove(paths.pending).catch(() => {})
   activeRun = null

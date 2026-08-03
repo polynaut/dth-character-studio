@@ -12,6 +12,12 @@ import type { MorphIndexEntry } from '#/lib/rom/api.ts'
 export interface IndexedMorphEntry extends MorphIndexEntry {
   nameLower: string
   labelLower: string
+  /** This dial came from the SCENE scan, not the stock-figure base index — it
+   *  belongs to something worn or parented in (clothing, hair, a third-party
+   *  graft). The provider only ever admits these for the SELECTED scene, so the
+   *  flag is purely for the suggestion's badge: it says WHY an entry only shows
+   *  up here. */
+  fromScene: boolean
 }
 
 export const EMPTY_MORPH_INDEX: Array<IndexedMorphEntry> = []

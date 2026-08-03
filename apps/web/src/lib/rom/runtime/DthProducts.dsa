@@ -1958,9 +1958,15 @@ function writeUnmatchedDiagnostic(diagPath, matchResults, usedAssets) {
 //   dimManifestPath   — DAZ Install Manager ManifestFiles folder (may be '')
 //   outputDir         — folder the per-scene CSV is written into
 //   dazLibraryFolder  — DAZ content library root, for artist/version metadata (may be '')
+//   bulk              — true when running unattended under the Runner (Tools → Scan
+//                       project): no dialogs (a modal in a minimized Daz is an
+//                       invisible dead stop for the whole batch), the summary goes
+//                       to the log, and a failed write THROWS so the Runner marks
+//                       the row failed instead of the batch reporting success.
 // Analyses the scene CURRENTLY OPEN in Daz and names its CSV after that scene, so a
 // character's outfit/look variants each keep their own result instead of overwriting.
 function DthScanProducts(config) {
+  var bulk = config.bulk === true;
   print("=== DTH Product Scan: " + config.characterName + " ===");
 
   // Which scene/outfit is open? Names the output CSV and is recorded in it so the
@@ -2026,6 +2032,20 @@ function DthScanProducts(config) {
   writeUnmatchedDiagnostic(diagPath, matchResults, usedAssets);
 
   var ok = writeProductsCsv(outputCsvPath, matchResults, sceneName, scenePath);
+  // Under the Runner the studio's panel owns the outcome: log it, and let a
+  // failed write fail the ROW rather than passing as a silent success.
+  if (bulk) {
+    if (!ok) throw new Error("Could not write the product scan CSV: " + outputCsvPath);
+    print(
+      "DTH Product Scan: wrote " +
+        matchResults.matches.length +
+        " matched product(s) and " +
+        matchResults.unmatched.length +
+        " unmatched asset(s) to " +
+        outputCsvPath
+    );
+    return;
+  }
   if (ok) {
     MessageBox.information(
       "Product scan complete for " +

@@ -57,6 +57,26 @@ offsets byte-identically — if a generation change moves them, the change is wr
   **`Build_Genesis_Index.dsa`** (builds the stock figures of every generation and
   scans them into the per-generation morph + bone index behind the autocompletes)
   and **`Scan_Frames.dsa`** (open scene's keyed frames → CSV for Import from CSV).
+  Two HIDDEN automation twins sit beside them for the Runner:
+  `.Build_Genesis_Index_Bulk.dsa` and — runtime v53 — `.Scan_Scene_Bulk.dsa`,
+  the per-scene worker of Tools → **Scan project**.
+- **The morph index has two halves** (v53): the BASE scan above, and a **scene
+  scan** (`DthScanSceneMorphs()` in `DthScanMorphs.dsa`) that indexes what one
+  saved scene adds on top — fitted clothing, hair, third-party grafts — into
+  `morphs_scenes_<G>.json`, each entry tagged with the scene(s) it was found in.
+  The studio merges both at read time and the Morph-name autocomplete offers a
+  scene entry only while THAT scene is selected, so two outfits linked to two
+  scenes no longer both suggest their "Expand All". Full rules (including why
+  the two files must stay separate and why the base row runs first) in
+  `.ai/gotchas.md` § the morph autocomplete reads TWO files.
+- **Tools → Scan project** is the one-click bulk pass: a selection of base
+  morphs / character morphs / products, turned into ONE `bulk-export` batch —
+  the base row first, then one row per linked scene of every character, with a
+  sidecar (`dth_scan_config.json`, `scanConfigJson` in `execute-jobs.ts`) naming
+  what each scene is due for. One row per SCENE, not per scene-and-kind: opening
+  a scene is the slow part, so the morph and product scans share the one open.
+  The job-file contract has no per-row parameters — the sidecar IS how a row is
+  parameterized, and the worker looks itself up in it by `normalizeSceneKey`.
 - `<name>_pose_asset.csv` — the Houdini PoseAsset CSV, written next to the
   character JSON and copied into the export dir by the ROM script's export block.
 - Optional: `Export_<Name>_<Genesis>.dsa` (split export), `Export_Hair_…` (one
@@ -460,23 +480,29 @@ older runtimes as stale.
   toasts it; everyone else only displays). Character editors adopt
   `characterId: ''` — "someone's batch is live: show busy, never toast". A run
   that belongs to NO character carries a **sentinel** characterId —
-  `GENESIS_INDEX_RUN` (`'#genesis-index'`, Tools → Build Genesis Index) — and
-  is consumed ONLY by the caller passing that sentinel as its `watcher`; every
+  `PROJECT_SCAN_RUN` (`'#project-scan'`, Tools → Scan project; it absorbed the
+  retired `'#genesis-index'` run when the two panels merged) — and is
+  consumed ONLY by the caller passing that sentinel as its `watcher`; every
   mismatched watcher/run pairing (an editor's mount/focus refresh during an
   index build, the Tools panel polling during a character export) is served
   the display-only `''` adoption instead, so no stray refresh can eat another
-  feature's outcome. A new no-character batch = a new sentinel + exactly one
-  owning panel that passes it. Handoff writers never clobber a LIVE batch
+  feature's outcome. The rule is stated ONCE for all of them — any
+  `'#'`-prefixed characterId is a sentinel — so a new no-character batch is a
+  new sentinel constant + exactly one owning panel that passes it, with no
+  further casing in `fetchExportRunProgress`. Handoff writers never clobber a LIVE batch
   either: all four (executeCharacterJobs, generateRomAnimation,
-  openSceneInRunningDaz, buildGenesisIndex) refuse while a sub-100 `running_`
+  openSceneInRunningDaz, startProjectScan) refuse while a sub-100 `running_`
   file exists and Daz is up, and sweep only a finished (100) one —
   executeCharacterJobs additionally recovers a DEAD one (sub-100, Daz gone),
-  same as the watch. buildGenesisIndex reuses the ~10s claim-wait when Daz was
+  same as the watch. startProjectScan reuses the ~10s claim-wait when Daz was
   already "running": an unclaimed handoff (Daz shutting down, or no Runner
   polling) is taken back — file deleted, watch dropped, error reported — never
   left pending forever; while a handoff waits un-renamed the Tools panel
-  offers Abort (`abortGenesisIndexRun` — no stamps to roll back), and the
-  panel gates on `fetchExportRunnerGate` exactly like the export dialog.
+  offers Abort (`abortProjectScanRun` — no stamps to roll back), and the
+  panel gates on `fetchExportRunnerGate` exactly like the export dialog. It
+  also writes its sidecar BEFORE the job file: the Runner can claim the batch
+  the moment the job file appears, and a row that beat its own config would
+  fail for nothing.
 - **Runner gate**: the export dialog blocks Start while the installed Runner
   DLL is missing or OLDER than the bundled one (`runnerGate` in
   storage/releases.ts, `fetchExportRunnerGate`), deep-linking to Settings →
