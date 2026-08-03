@@ -47,7 +47,7 @@ import {
   sceneSubfolderConflict,
   suggestSceneSubfolder,
 } from '#/lib/scene-subfolder.ts'
-import { displayPath, extrasWithoutPrimary, normalizePath, parentDir } from '#/lib/path.ts'
+import { browseStart, displayPath, extrasWithoutPrimary, normalizePath, parentDir } from '#/lib/path.ts'
 import { seedSceneHair } from '#/lib/groom-detect.ts'
 import { genesisFromFigureNode } from '@dth/rom'
 
@@ -592,8 +592,14 @@ export function DazSceneField({
       })
   }
 
+  /** Where the scene pickers open: the folder the primary scene lives in (an
+   *  outfit variant is nearly always saved beside it), else the character
+   *  folder. Not the primary FILE — preselecting the scene you are replacing or
+   *  adding a sibling to is noise. */
+  const scenePickFrom = browseStart(primaryDir, charFolder)
+
   async function onAddPick() {
-    const picked = await pickDufPath('Select another Daz scene (.duf)')
+    const picked = await pickDufPath('Select another Daz scene (.duf)', scenePickFrom)
     if (!picked) return
     startAdd(picked)
   }
@@ -629,7 +635,7 @@ export function DazSceneField({
       toast.error(replaceReason ?? 'Unlink the character’s other scenes first.')
       return
     }
-    const picked = await pickDufPath('Select the NEW primary Daz scene (.duf)')
+    const picked = await pickDufPath('Select the NEW primary Daz scene (.duf)', scenePickFrom)
     if (!picked) return
     startAdd(picked, true)
   }
@@ -703,6 +709,15 @@ export function DazSceneField({
             )
           }
         }
+        // …and pre-selects its own hair, the one shared rule (`seedSceneHair`),
+        // exactly like creation, the first primary link and an added scene. A
+        // REPLACEMENT is a different scene with different hair: without this the
+        // new primary arrived with an empty hair list, and hair the studio is
+        // meant to keep out rode straight into the FBX. The old primary's record
+        // is left alone — it is inert once its scene is gone
+        // (`activeSceneOverrides`), and a curated list is never clobbered.
+        const seeded = seedSceneHair(finalScene, scan, character.sceneOverrides)
+        if (seeded) patch.sceneOverrides = seeded
         return patch
       },
       {
@@ -802,7 +817,9 @@ export function DazSceneField({
   }
 
   async function onPick() {
-    const picked = await pickDufPath('Select the Daz character scene (.duf)')
+    // Relinking a MISSING primary: its old folder is still the best guess (the
+    // file usually moved within the character), then the character folder.
+    const picked = await pickDufPath('Select the Daz character scene (.duf)', scenePickFrom)
     if (!picked) return
     if (!insideProject(picked)) {
       setSubfolder(`${defaultSubdir}/${PRIMARY_SCENE_SUBFOLDER}`)
@@ -871,6 +888,34 @@ export function DazSceneField({
           }
           // Pre-select the scene's detected hair, the one shared rule.
           const seeded = seedSceneHair(finalScene, scan, character.sceneOverrides)
+          if (seeded) patch.sceneOverrides = seeded
+        } else {
+          // RELINK of a MISSING primary: the per-scene hair record keys on the
+          // scene PATH, and a relink targets the SAME scene at a new path
+          // (moved/renamed outside the app) — so the old primary's record
+          // FOLLOWS the file, exactly like an in-app move/rename
+          // (`repointLinkedScene`); a curated hair list must not strand on the
+          // dead path, where the export would never match it again. When the
+          // target already has a record of its own (relinking ONTO an existing
+          // extra), that record wins and nothing repoints. A target with no
+          // record either way gets its detected hair seeded — the one shared
+          // rule (`seedSceneHair`), like every other scene-linking path.
+          const oldKey = normalizePath(character.scenePath).toLowerCase()
+          const newKey = normalizePath(finalScene).toLowerCase()
+          const targetHasRecord = character.sceneOverrides.some(
+            (o) => normalizePath(o.scenePath).toLowerCase() === newKey,
+          )
+          const repointed = targetHasRecord
+            ? character.sceneOverrides
+            : character.sceneOverrides.map((o) =>
+                normalizePath(o.scenePath).toLowerCase() === oldKey
+                  ? { ...o, scenePath: finalScene }
+                  : o,
+              )
+          if (repointed.some((o, i) => o !== character.sceneOverrides[i])) {
+            patch.sceneOverrides = repointed
+          }
+          const seeded = seedSceneHair(finalScene, scan, repointed)
           if (seeded) patch.sceneOverrides = seeded
         }
         return patch

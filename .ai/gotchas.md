@@ -245,6 +245,17 @@ current code before relying on details, but assume the *lesson* still holds.
   the scene copy from a Rust command to plugin-fs `copyFile` and left copy dead until a
   rebuild grants the permission. When you add a plugin-fs verb, add the matching
   permission in the SAME change.
+- **tauri-plugin-dialog 2.7.2 `set_default_path` semantics (measured — the
+  browse-start UX contract rests on them):** an EXISTING file path opens the
+  dialog at its parent with the filename preselected; a NON-existent path is
+  still split into parent + filename, so a stale path opens at the nearest
+  thing to where it pointed instead of being ignored. Forward slashes are fine
+  on Windows — the plugin rebuilds the path via `PathBuf::components().collect()`
+  (their issue #8074 fix). But that same rebuild breaks UNC paths whose
+  separator runs were collapsed: `//NAS/share` fed as `/NAS/share` re-emerges
+  as drive-relative `\NAS\share`, whose SetFolder silently fails — a start-path
+  helper must preserve the leading double separator (`browseStart` in
+  `lib/path.ts` does; `displayPath` follows the same rule).
 - **I/O-heavy commands must be `#[tauri::command(async)]`** or they freeze the
   window during long scans/installs.
 - **NTFS is case-insensitive; byte-exact rel-path keys never converge.** Any
@@ -429,6 +440,17 @@ current code before relying on details, but assume the *lesson* still holds.
 - **`Number('') === 0`, not `NaN`** — a numeric input that commits on blur via
   `Number(draft)` silently commits 0 when the user clears the field; an
   empty/whitespace draft must revert instead (NumberField, test-pinned).
+- **A map keyed by `normalizeSceneKey` must normalize AT THE ACCESSOR — never
+  trust callers to.** `sceneDthPath` looked up `sceneExportFolderRel`'s
+  lowercase-keyed map with the caller's raw scene path; the export dialog passes
+  the character's STORED paths, and every real Windows path has a capital letter
+  in it, so every lookup missed — "Export too" built an empty job and died on
+  "none of these scenes has an export path" on every real run. The pure tests
+  stayed green the whole time because they fed themselves pre-normalized keys,
+  the one spelling no real caller ever uses — which is exactly how it shipped
+  broken (#637, fixed in #641). Apply the fold inside the accessor
+  (`sceneDthPath`/`buildHoudiniJob` do now) and give any normalized-key lookup
+  at least one RAW-spelling test case (`houdini-jobs.test.ts` pins both).
 - **`readManifest` throws on a CORRUPT `.dcsp`** (an existing file that won't
   parse) rather than returning defaults — else the next save writes defaults over
   the real settings, and `fetchProject` can never 404. It also throws a typed

@@ -14,6 +14,7 @@ import {
   HOUDINI_RESULT_FILE,
   HOUDINI_SCRIPTS_FOLDER,
   buildHoudiniJob,
+  houdiniRunFilesToClear,
   houdiniRunStateFrom,
   houdiniScriptPathValue,
   parseHoudiniResult,
@@ -263,6 +264,9 @@ const houdiniExportInput = charScopeInput.extend({
  */
 interface ActiveHoudiniRun {
   characterId: string
+  /** Absolute path of the job file handed to 456.py — kept so the run can
+   *  clear it when it ends (see `houdiniRunFilesToClear`). */
+  jobPath: string
   /** Absolute path of the result file 456.py writes. */
   resultPath: string
   /** Scenes that went into the job — the count shown until 456.py reports its
@@ -382,7 +386,12 @@ export async function startHoudiniExport({
     },
   })
 
-  activeHoudiniRun = { characterId: character.id, resultPath, scenes: job.scenes.length }
+  activeHoudiniRun = {
+    characterId: character.id,
+    jobPath: jobFile,
+    resultPath,
+    scenes: job.scenes.length,
+  }
   return { jobFile, scenes: job.scenes.length }
 }
 
@@ -407,6 +416,23 @@ export async function fetchHoudiniRunProgress(): Promise<
   const state = houdiniRunStateFrom(result, houdiniUp)
   if (state.state === 'finished' || state.state === 'dead') {
     if (activeHoudiniRun === run) activeHoudiniRun = null
+    // The run is over and this snapshot carries everything the caller reports
+    // (counts, summary, the HDA's problems) — so the handoff's own files go
+    // now instead of sitting in the character folder until some later run
+    // happens to overwrite them. Which files, and when, is the pure rule.
+    for (const path of houdiniRunFilesToClear({
+      state: state.state,
+      hasResult: result !== null,
+      jobPath: run.jobPath,
+      resultPath: run.resultPath,
+    })) {
+      try {
+        if (await exists(path)) await remove(path)
+      } catch {
+        // locked (scanner, an editor holding it) — the next run's start-of-run
+        // cleanup clears the result, and rewrites the job, either way
+      }
+    }
   }
   return { ...state, characterId: run.characterId, scenes: run.scenes }
 }

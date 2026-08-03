@@ -15,7 +15,7 @@ import {
 } from '#/lib/rom/api.ts'
 import { pickUprojectPath } from '#/lib/desktop.ts'
 import { PathCode } from '#/components/path-code.tsx'
-import { displayPath, middleTruncatePath, normalizePath } from '#/lib/path.ts'
+import { browseStart, displayPath, middleTruncatePath, normalizePath, parentDir } from '#/lib/path.ts'
 
 import type { ProjectInfo } from '#/lib/rom/api.ts'
 
@@ -296,7 +296,12 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
   }
 
   async function onPick() {
-    const picked = await pickUprojectPath('Select the Unreal project (.uproject)')
+    // Unreal projects live wherever the user keeps them — the only thing we
+    // know is where the ones already linked live.
+    const picked = await pickUprojectPath(
+      'Select the Unreal project (.uproject)',
+      browseStart(parentDir(latestPaths.current[0] ?? '')),
+    )
     if (picked) add([picked])
   }
 
