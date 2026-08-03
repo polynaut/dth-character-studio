@@ -10,6 +10,9 @@ import type { Page } from '@playwright/test'
 // `scenePath`, re-derives GEN from the new scene, and (toggle, default on for
 // an in-folder old primary) deletes the old scene's files.
 //
+// It is offered ONLY while the primary is the character's only scene — see the
+// gate test for why.
+//
 // Also here: the missing-primary RELINK flow (the "Primary scene missing"
 // panel) — a relink targets the SAME scene at a new path, so the hair record
 // REPOINTS to the final path (a curated list follows the file) and a
@@ -83,6 +86,35 @@ test('replace primary: validates, swaps, derives GEN, seeds hair, deletes the ol
   expect(keys).toContain(COPIED_SCENE)
   expect(keys).not.toContain(P.scene)
   expect(keys).not.toContain(`${P.scene}.tip.png`)
+
+  expect(await unhandledCommands(page)).toEqual([])
+})
+
+test('replace primary is refused while the character has other scenes', async ({ page }) => {
+  // Every extra scene was validated against the CURRENT primary — same Genesis,
+  // one figure, empty timeline, and the same GP/DK geograft, because every
+  // scene must produce the primary's skeleton. Swapping the primary re-decides
+  // that reference: a replacement without Golden Palace would leave a set of
+  // validated extras silently mismatched, and nothing re-checks them. So the
+  // user unlinks first and re-adds against the new primary, which runs the real
+  // validation for each one.
+  const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true, extraScene: true })
+  seed.files[NEW_SCENE] = 'duf-fixture-new'
+  seed.dialogPath = NEW_SCENE
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+
+  // The button is still THERE — a control that vanishes reads as a missing
+  // feature — but it refuses, and its tooltip says what to do about it.
+  const replace = page.getByRole('button', { name: /Unlink the other scene/ })
+  await expect(replace).toBeVisible()
+  await expect(replace).toBeDisabled()
+  // …and no replace dialog can be reached.
+  await expect(
+    page.getByRole('dialog', { name: 'Replace the primary Daz scene?' }),
+  ).toHaveCount(0)
 
   expect(await unhandledCommands(page)).toEqual([])
 })

@@ -32,6 +32,15 @@ Genitalia section re-derives from the new scene's geograft, its detected
 the avatar follows, and an old in-folder copy can be deleted right there (a
 linked-in-place original is always kept).
 
+Replacing is only offered while the primary is the character's **only** scene.
+Every extra scene was checked against the primary when it was added — above all
+for the **same GP/DK geograft**, since every scene has to produce the primary's
+skeleton. A new primary re-decides that reference, so one without Golden Palace
+would leave a set of already-validated scenes quietly mismatched. Unlink the
+others first — leave **Delete file on disk** unticked (it starts off), so the
+files stay where they are — replace, then add each scene back: it is validated
+properly against the new primary on the way in.
+
 <p align="center">
   <img width="900" alt="Daz scene cards — primary plus an outfit scene (selected), with the per-scene hair items beside them" src="screenshots/character-daz-scenes.png" />
   <br>
