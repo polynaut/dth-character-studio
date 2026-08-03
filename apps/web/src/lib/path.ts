@@ -1,6 +1,8 @@
 import { isTauri } from '@tauri-apps/api/core'
 import { sep } from '@tauri-apps/api/path'
 
+import { stripTrailingSeparators } from './path-trim.ts'
+
 // Resolved once, lazily: the OS path separator (`\` on Windows, `/` elsewhere).
 // `sep()` reads Tauri's injected metadata synchronously — but outside the Tauri
 // runtime (e.g. `pnpm dev:web` in a plain browser) it isn't available, so we
@@ -20,8 +22,13 @@ export function pathSeparator(): string {
  * separators freely). Not for display — use {@link displayPath} for that.
  */
 export function normalizePath(path: string): string {
-  return path.replace(/[\\/]+/g, '/').replace(/\/+$/, '')
+  return stripTrailingSeparators(path.replace(/[\\/]+/g, '/'))
 }
+
+// The linear trims live in a LEAF module (no imports) so the storage layer can
+// use them too — this file imports storage, so re-homing them here would be a
+// cycle. Re-exported for the many callers that already reach for `lib/path.ts`.
+export { stripTrailingDotsAndSpaces, stripTrailingSeparators, trimSeparators } from './path-trim.ts'
 
 /** {@link normalizePath} plus lower-casing, for case-insensitive path compares
  *  (Windows semantics). */

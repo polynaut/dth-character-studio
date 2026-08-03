@@ -7,6 +7,8 @@
  * why a subfolder can no longer be empty.
  */
 
+import { stripTrailingDotsAndSpaces, stripTrailingSeparators, trimSeparators } from '#/lib/path.ts'
+
 /** The primary scene's fixed subfolder below the scenes root. */
 export const PRIMARY_SCENE_SUBFOLDER = 'primary'
 
@@ -66,9 +68,9 @@ export function sceneSubfolderConflict(subfolder: string): string {
  *  the shared spelling behind the two resolvers below (a project may configure
  *  no subdir at all, in which case the leaf sits directly in the folder). */
 function underSubdir(charFolderAbs: string, subdir: string | undefined, leaf: string): string {
-  const folder = charFolderAbs.replace(/\\/g, '/').replace(/\/+$/, '')
+  const folder = stripTrailingSeparators(charFolderAbs.replace(/\\/g, '/'))
   if (!folder) return ''
-  const sub = (subdir ?? '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '').trim()
+  const sub = trimSeparators((subdir ?? '').replace(/\\/g, '/')).trim()
   return [folder, sub, leaf].filter(Boolean).join('/')
 }
 
@@ -138,7 +140,7 @@ export function suggestSceneSubfolder(scenePath: string, characterName: string):
     .split(/[\s_\-.]+/)
     .filter(Boolean)
     .filter((word) => !NOISE_TOKENS.has(word.toLowerCase()) && !GENERATION_WORD.test(word))
-  const joined = words.join('_').replace(/[. ]+$/, '')
+  const joined = stripTrailingDotsAndSpaces(words.join('_'))
   return joined || 'scene'
 }
 

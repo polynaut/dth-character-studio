@@ -15,6 +15,7 @@ import {
   type DcspManifest,
 } from './storage'
 import { isExternalImage } from './image'
+import { stripTrailingSeparators } from '#/lib/path.ts'
 
 /**
  * Move each of a project's character avatars from the legacy `app-data/images`
@@ -91,7 +92,7 @@ export async function migrateProjects(): Promise<void> {
   let allOk = true
 
   for (const project of projects) {
-    const dir = project.path.replace(/\\/g, '/').replace(/\/+$/g, '')
+    const dir = stripTrailingSeparators(project.path.replace(/\\/g, '/'))
     try {
       if (!dir || !(await exists(dir))) {
         allOk = false // unreachable — leave it for a later run

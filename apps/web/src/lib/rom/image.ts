@@ -12,6 +12,8 @@
  * (no Tauri imports) so they can be unit-tested and reused on both sides.
  */
 
+import { stripTrailingSeparators } from '#/lib/path.ts'
+
 /** True for a reference the webview can load directly, with no local-file lookup. */
 export function isExternalImage(image: string): boolean {
   // Genuine remote images and inline data URLs — but NOT the asset protocol,
@@ -36,5 +38,5 @@ export function canonicalImage(image: unknown): string {
   } catch {
     // malformed percent-escapes — fall back to the raw string
   }
-  return decoded.replace(/[\\/]+$/g, '').split(/[\\/]/).pop() ?? ''
+  return stripTrailingSeparators(decoded).split(/[\\/]/).pop() ?? ''
 }

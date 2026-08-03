@@ -153,6 +153,25 @@ import type { ArtDirectionFrame, Character } from './types'
  * resolution lives in resolve.ts; reusable DzScript text in dz-snippets.ts.
  */
 
+/**
+ * Drop trailing '/' separators — the LINEAR form, and the only one this repo
+ * uses.
+ *
+ * The obvious `p.replace(/\/+$/, '')` is a polynomial-backtracking regex
+ * (CodeQL `js/polynomial-redos`, high): on a string of many slashes the engine
+ * retries every split of the `+` against the anchor. These paths come from
+ * stored character/settings data rather than literals, which is what makes it
+ * an alert rather than a curiosity. `endsWith`/`slice` needs no backtracking.
+ *
+ * Written once here because the regex form has now been reintroduced twice
+ * after being fixed — see `.ai/gotchas.md`.
+ */
+export function stripTrailingSlashes(path: string): string {
+  let out = path
+  while (out.endsWith('/')) out = out.slice(0, -1)
+  return out
+}
+
 function morphJson(morph: { node: string; prop: string; value: number; base?: number; autoBase?: boolean }) {
   return {
     node: morph.node,
@@ -371,15 +390,8 @@ function buildExportBlock(
   // absolute root prefix for `$HIP/dth-exports` yields a path Houdini resolves
   // no matter where the character tree moves. Guarded at run time too: an
   // export dir that isn't under the root keeps the absolute path.
-  // Trailing slashes are trimmed with string ops, NOT `/\/+$/`: that pattern is
-  // polynomial-backtracking on a path of many slashes (CodeQL js/polynomial-redos),
-  // and these strings come from stored character data. The trim itself is
-  // load-bearing — the compare below appends its own '/'.
-  const fwd = (p: string) => {
-    let s = p.replace(/\\/g, '/').toLowerCase()
-    while (s.endsWith('/')) s = s.slice(0, -1)
-    return s
-  }
+  // The trim is load-bearing — the compare below appends its own '/'.
+  const fwd = (p: string) => stripTrailingSlashes(p.replace(/\\/g, '/').toLowerCase())
   const hipAnchored =
     hipRelativeRefs &&
     Boolean(charFolderAbs) &&
@@ -692,10 +704,7 @@ export function sceneExportSubfolders(
   scenesRootAbs?: string,
 ): Record<string, string> {
   const norm = (p: string) => p.trim().replace(/\\/g, '/')
-  // Trailing-slash strip as a loop, not a `/\/+$/` regex — CodeQL flags the
-  // regex form as polynomial-time on hostile all-slash inputs (js/polynomial-redos).
-  let rootClean = scenesRootAbs ? norm(scenesRootAbs) : ''
-  while (rootClean.endsWith('/')) rootClean = rootClean.slice(0, -1)
+  const rootClean = scenesRootAbs ? stripTrailingSlashes(norm(scenesRootAbs)) : ''
   const rootPrefix = rootClean ? `${rootClean.toLowerCase()}/` : ''
   const linked = [character.scenePath, ...character.extraScenes].map(norm).filter(Boolean)
   // A scene's below-root FOLDER path ('' = directly in the root / outside it).

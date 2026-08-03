@@ -59,7 +59,14 @@ export function installTauriMock(seed: TauriMockSeed): void {
   const unhandled: Array<string> = []
   let nextId = 1
 
-  const norm = (p: string) => p.replaceAll('\\', '/').replace(/\/+$/, '')
+  // Trailing slashes trimmed with string ops, not `/\/+$/` — the repo-wide rule
+  // (CodeQL js/polynomial-redos). Inlined rather than imported: this function is
+  // serialized into the page by addInitScript and must stay self-contained.
+  const norm = (p: string) => {
+    let s = p.replaceAll('\\', '/')
+    while (s.endsWith('/')) s = s.slice(0, -1)
+    return s
+  }
   const isFile = (p: string) => files.has(p)
   const isDir = (p: string) => {
     if (extraDirs.has(p)) return true

@@ -9,6 +9,8 @@
  * location simply *is* the character's location.
  */
 
+import { stripTrailingDotsAndSpaces } from '#/lib/path.ts'
+
 // Characters Windows forbids in a path segment, plus control chars.
 const ILLEGAL_SEGMENT_CHARS = /[\\/:*?"<>|\x00-\x1f]/
 // Same set minus the slash, for stripping when deriving a name from free text.
@@ -24,12 +26,12 @@ const WIN_RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i
  * files).
  */
 export function characterFolderName(name: string): string {
-  let base = (name ?? '')
-    .replace(ILLEGAL_NAME_CHARS, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/[. ]+$/, '') // no trailing dot/space
-    .trim()
+  // Trailing dot/space stripped linearly — `/[. ]+$/` is the polynomial
+  // backtracking shape CodeQL flags (js/polynomial-redos), and this runs on a
+  // user-typed name.
+  let base = stripTrailingDotsAndSpaces(
+    (name ?? '').replace(ILLEGAL_NAME_CHARS, ' ').replace(/\s+/g, ' ').trim(),
+  ).trim()
   if (!base) return 'Character'
   if (WIN_RESERVED.test(base)) base = `${base}_`
   return base

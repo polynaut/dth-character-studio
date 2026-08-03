@@ -3,6 +3,7 @@ import { appLocalDataDir } from '@tauri-apps/api/path'
 import { getVersion } from '@tauri-apps/api/app'
 
 import { join } from './fs'
+import { stripTrailingSeparators } from '#/lib/path.ts'
 
 // The per-user app-local data dir (volatile / machine-specific state) and the
 // studio's own version — shared plumbing for the other storage modules.
@@ -10,7 +11,7 @@ import { join } from './fs'
 let dataDirPromise: Promise<string> | null = null
 export async function dataDir(): Promise<string> {
   if (!dataDirPromise) {
-    dataDirPromise = appLocalDataDir().then((d) => d.replace(/[\\/]+$/g, ''))
+    dataDirPromise = appLocalDataDir().then(stripTrailingSeparators)
   }
   return dataDirPromise
 }

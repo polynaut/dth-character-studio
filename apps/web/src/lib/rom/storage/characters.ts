@@ -34,6 +34,7 @@ import {
 } from './fs'
 import { studioVersion } from './app-data'
 import { listRecents, readManifest } from './projects'
+import { stripTrailingSeparators, trimSeparators } from '#/lib/path.ts'
 import type { Project } from './projects'
 
 // The character library: scanning a project's folder for definitions and the
@@ -686,7 +687,7 @@ export async function deleteCharacter(
   // matching kept a top-level `daz` (which didn't exist) and deleted all of
   // `scenes`, taking the supposedly-kept Daz files with it.
   const keep = (opts.keepFolders ?? [])
-    .map((f) => f.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '').toLowerCase())
+    .map((f) => trimSeparators(f.replace(/\\/g, '/')).toLowerCase())
     .filter(Boolean)
   if (keep.length === 0) {
     await remove(entry.folderAbs, { recursive: true })
@@ -759,7 +760,7 @@ export async function moveCharactersRoot(
   oldRoot: string,
   newRoot: string,
 ): Promise<MoveCharactersRootResult> {
-  const norm = (s: string) => s.replace(/\\/g, '/').replace(/\/+$/g, '')
+  const norm = (s: string) => stripTrailingSeparators(s.replace(/\\/g, '/'))
   const from = norm(oldRoot)
   const to = norm(newRoot)
   const empty: MoveCharactersRootResult = {

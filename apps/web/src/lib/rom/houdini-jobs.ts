@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { sceneExportName, sceneExportSubfolders } from '@dth/rom'
 
 import { sceneExportFolderRel } from './execute-jobs.ts'
+import { stripTrailingSeparators } from '#/lib/path.ts'
 
 import type { Character } from '@dth/rom'
 
@@ -43,7 +44,7 @@ export const HOUDINI_SCRIPTS_FOLDER = 'houdini-scripts'
  * separates entries with `;`.
  */
 export function houdiniScriptPathValue(scriptsDir: string): string {
-  const dir = scriptsDir.trim().replace(/\\/g, '/').replace(/\/+$/, '')
+  const dir = stripTrailingSeparators(scriptsDir.trim().replace(/\\/g, '/'))
   return dir ? `${dir};&` : '&'
 }
 
@@ -123,7 +124,7 @@ export function sceneDthPath(
   sceneKey: string,
   scenesRootAbs?: string,
 ): string {
-  const root = character.exportPath.trim().replace(/\\/g, '/').replace(/\/+$/, '')
+  const root = stripTrailingSeparators(character.exportPath.trim().replace(/\\/g, '/'))
   if (!root) return ''
   const folders = sceneExportFolderRel(character, scenesRootAbs)
   const entry = folders[sceneKey]
