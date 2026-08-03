@@ -21,7 +21,14 @@
  */
 
 // --- App-data paths + studio version ---------------------------------------
-export { dataPath, productScanDir, scanFramesDir, studioVersion } from './storage/app-data'
+export {
+  dataPath,
+  houdiniIntroShown,
+  markHoudiniIntroShown,
+  productScanDir,
+  scanFramesDir,
+  studioVersion,
+} from './storage/app-data'
 
 // --- Generic folder file ops (Generate writes through these) ----------------
 export { removeFilesFromFolder, writeFilesToFolder, writeTextFileAtomic } from './storage/fs'

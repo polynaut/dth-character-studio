@@ -239,7 +239,9 @@ export async function generateHoudiniProject({
   // Created by whichever generate runs first; every later one finds it and
   // reuses it, so all of a character's projects share one $JOB.
   await mkdir(projectDir, { recursive: true })
-  const exportsLink = await linkExportsIntoProject(projectDir, character.exportPath)
+  const exportsLink = project.createExportJunctions
+    ? await linkExportsIntoProject(projectDir, character.exportPath)
+    : false
   // The $HIP-side twin: `$HIP` is the folder the .hip sits in, so a CSV path
   // written as `$HIP/dth-exports/...` resolves through THIS one. Seeded here
   // because the new .hip isn't linked to the character yet (the caller links

@@ -113,6 +113,8 @@ export async function migrateProjects(): Promise<void> {
         schemaVersion: DCSP_SCHEMA_VERSION,
         id: project.id,
         name: project.name,
+        houdiniPathStyle: PROJECT_BEHAVIOR_DEFAULTS.houdiniPathStyle,
+        createExportJunctions: PROJECT_BEHAVIOR_DEFAULTS.createExportJunctions,
         createdAt: project.createdAt ?? new Date().toISOString(),
         ...oldSubs,
         // New per-project fields (defaults preserve today's behaviour): the assets

@@ -131,6 +131,47 @@ beforeEach(() => {
   failRenameSrcs.clear()
 })
 
+describe('houdini path settings (.dcsp) + the first-generate intro flag', () => {
+  it('defaults: junctions on, $HIP paths — the pre-setting behaviour', async () => {
+    await storage.createProjectManifest('/games/Nova', 'Nova')
+    const m = await storage.readManifest('/games/Nova')
+    expect(m.createExportJunctions).toBe(true)
+    expect(m.houdiniPathStyle).toBe('hip')
+  })
+
+  it('round-trips the two settings and tolerates garbage values', async () => {
+    await storage.createProjectManifest('/games/Nova', 'Nova')
+    const m = await storage.readManifest('/games/Nova')
+    await storage.writeManifest('/games/Nova', {
+      ...m,
+      houdiniPathStyle: 'absolute',
+      createExportJunctions: false,
+    })
+    const back = await storage.readManifest('/games/Nova')
+    expect(back.houdiniPathStyle).toBe('absolute')
+    expect(back.createExportJunctions).toBe(false)
+    // A hand-edited manifest with nonsense falls back to the safe defaults.
+    files.set(
+      '/games/Nova/Nova.dcsp',
+      JSON.stringify({ ...m, houdiniPathStyle: 'sideways', createExportJunctions: 'yes' }),
+    )
+    const junk = await storage.readManifest('/games/Nova')
+    expect(junk.houdiniPathStyle).toBe('hip')
+    expect(junk.createExportJunctions).toBe(true)
+  })
+
+  it('tracks the intro per MANIFEST id in appdata, so it survives a folder move', async () => {
+    await storage.createProjectManifest('/games/Nova', 'Nova')
+    const { id } = await storage.readManifest('/games/Nova')
+    expect(await storage.houdiniIntroShown(id)).toBe(false)
+    await storage.markHoudiniIntroShown(id)
+    expect(await storage.houdiniIntroShown(id)).toBe(true)
+    // Idempotent, and other projects stay unaffected.
+    await storage.markHoudiniIntroShown(id)
+    expect(await storage.houdiniIntroShown('other-project')).toBe(false)
+  })
+})
+
 describe('project manifest (.dcsp)', () => {
   it('creates a manifest + .dcsmeta and reads it back', async () => {
     const dcsp = await storage.createProjectManifest('/games/Nova', 'Nova')
