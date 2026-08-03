@@ -6,11 +6,17 @@ import { installTauriMock } from './tauri-mock.ts'
 import type { Page } from '@playwright/test'
 
 // "Export only" runs the exporter over each scene's SAVED ROM animation, so a
-// scene without one has nothing to export. The row controls refuse those rows,
-// but the rule also has to hold at the decision point — the selection outlives
-// the controls (rows are checkable while the affected-probe runs, and a failed
-// probe leaves every row reading "no ROM" without re-seeding). Without the gate
-// the run reaches the api layer, which throws AFTER the dialog has closed.
+// scene without one has nothing to export. Once the dialog's scene probe has
+// landed, the row controls keep such scenes out of the selection — so the gate
+// exists for the two windows the controls cannot cover, and that is what these
+// specs demonstrate:
+//
+// 1. The probe is STILL RUNNING: rows are checkable while nothing is known, so
+//    Start waits as a disabled "Checking scenes…" until the probe lands.
+// 2. The landed status has gone STALE under the selection (the ROM animation
+//    deleted after the check): Start re-verifies at the decision point and
+//    refuses IN the dialog — fresh row states, the notice naming the scene,
+//    and no handoff written.
 
 const DAZ_INSTALL = 'C:/Program Files/DAZ 3D/DAZStudio4'
 /** Where a scene's saved ROM animation lives: `<dir>/rom-animations/<stem>_ROM.duf`. */
@@ -20,42 +26,64 @@ const romAnimation = (scene: string) => {
   const stem = scene.slice(slash + 1).replace(/\.duf$/i, '')
   return `${dir}/rom-animations/${stem}_ROM.duf`
 }
+/** The handoff-stamps file the scene probe (fetchExecuteScenes) reads FIRST —
+ *  holding it holds the whole probe with the dialog's status un-landed. */
+const STAMPS = `${P.charFolder}/.dth_execute_stamps.json`
 
 const unhandledCommands = (page: Page) =>
   page.evaluate(() => (window as any).__tauriMock.unhandled as Array<string>)
+/** Every path in the fake filesystem — for "no job file was written" checks. */
+const mockFiles = (page: Page) =>
+  page.evaluate(() => [...((window as any).__tauriMock.files as Map<string, string>).keys()])
 
-async function openExportDialog(page: Page) {
+async function openExportOnly(page: Page) {
   await page.getByRole('link', { name: /Kira/ }).click()
   await page.getByText(/custom ROM frames/).waitFor()
   await page.getByRole('button', { name: 'DTH Export' }).click()
+  await page.getByRole('button', { name: /Export only/ }).click()
 }
 
-test('export only: refuses to start while a selected scene has no ROM animation', async ({
+test('start waits out the scene probe — a row checked mid-flight cannot slip through', async ({
   page,
 }) => {
-  // Two linked scenes, and a saved ROM animation for NEITHER.
   const seed = buildSeed({
     activeProjectFile: P.dcsp,
     demo: true,
     extraScene: true,
     dazInstallFolder: DAZ_INSTALL,
   })
+  // Only the PRIMARY has a saved ROM animation…
+  seed.files[romAnimation(P.scene)] = 'duf-rom-animation'
+  // …and the scene probe is frozen mid-flight, on its very first read.
+  seed.holdPaths = [STAMPS]
   await page.addInitScript(installTauriMock, seed)
   await page.goto('/')
-  await openExportDialog(page)
-  await page.getByRole('button', { name: /Export only/ }).click()
+  await openExportOnly(page)
 
-  // Nothing is pre-checked (no scene has an unexported ROM), so tick one by
-  // hand — its checkbox is disabled, which is the FIRST line of defence.
-  const row = page.getByRole('checkbox', { name: /Export KiraDefault/ })
-  await expect(row).toBeDisabled()
-  // …and with nothing selectable, Start stays off for the plain reason.
-  await expect(page.getByRole('button', { name: 'Start' })).toBeDisabled()
+  // While nothing is known every row is checkable — tick the no-ROM outfit.
+  const outfit = page.getByRole('checkbox', { name: /Export KiraSummertide/ })
+  await expect(outfit).toBeEnabled()
+  await outfit.check()
 
+  // The gate: no Start while the probe is in flight — the button says why.
+  await expect(page.getByRole('button', { name: 'Checking scenes…' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Start' })).toHaveCount(0)
+
+  // The probe lands: the pre-selection re-seeds (primary only — its saved ROM
+  // is unexported), the no-ROM row is refused, and Start opens for the VALID
+  // selection — the gate blocks the unknown window, not the feature.
+  await page.evaluate(() => (window as any).__tauriMock.releaseHeld())
+  await expect(page.getByRole('checkbox', { name: /Export KiraDefault/ })).toBeChecked()
+  await expect(outfit).not.toBeChecked()
+  await expect(outfit).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Start' })).toBeEnabled()
+
+  // Nothing was handed to Daz while the gate held.
+  expect((await mockFiles(page)).filter((p) => p.endsWith('dth_exporter_jobs.json'))).toEqual([])
   expect(await unhandledCommands(page)).toEqual([])
 })
 
-test('export only: one scene with a ROM animation, one without — the run is gated on the pair', async ({
+test('start re-verifies the ROM animations — one deleted after the probe refuses in the dialog', async ({
   page,
 }) => {
   const seed = buildSeed({
@@ -64,25 +92,39 @@ test('export only: one scene with a ROM animation, one without — the run is ga
     extraScene: true,
     dazInstallFolder: DAZ_INSTALL,
   })
-  // Only the PRIMARY has a saved ROM animation; the outfit scene does not.
+  // Only the PRIMARY has a saved ROM animation; the probe pre-checks it (never
+  // exported ⇒ outstanding) and Start opens.
   seed.files[romAnimation(P.scene)] = 'duf-rom-animation'
   await page.addInitScript(installTauriMock, seed)
   await page.goto('/')
-  await openExportDialog(page)
-  await page.getByRole('button', { name: /Export only/ }).click()
+  await openExportOnly(page)
 
-  // The scene WITH a ROM animation is selectable and pre-checked (it has never
-  // been exported, so its ROM is outstanding); the one without is refused.
   const primary = page.getByRole('checkbox', { name: /Export KiraDefault/ })
-  const outfit = page.getByRole('checkbox', { name: /Export KiraSummertide/ })
-  await expect(primary).toBeEnabled()
   await expect(primary).toBeChecked()
-  await expect(outfit).toBeDisabled()
+  const start = page.getByRole('button', { name: 'Start' })
+  await expect(start).toBeEnabled()
 
-  // Start is available for the valid selection — the gate blocks a bad pair,
-  // not the feature.
-  await expect(page.getByRole('button', { name: 'Start' })).toBeEnabled()
-  await expect(page.getByText(/exports the saved ROM animation/)).toHaveCount(0)
+  // The ROM animation vanishes AFTER the check (deleted or moved in Daz) — the
+  // dialog's status is now stale under a checked row.
+  await page.evaluate((path) => {
+    ;((window as any).__tauriMock.files as Map<string, string>).delete(path)
+  }, romAnimation(P.scene))
+
+  // Start re-probes at the decision point and refuses IN the dialog: fresh row
+  // states, the gate's notice naming the scene, Start off — and no handoff.
+  await start.click()
+  await expect(page.getByText(/No saved ROM animation for KiraDefault/)).toBeVisible()
+  await expect(page.getByText(/one selected scene has none/)).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Start' })).toBeDisabled()
+  expect((await mockFiles(page)).filter((p) => p.endsWith('dth_exporter_jobs.json'))).toEqual([])
+
+  // The refused row is checked-but-refused — UNCHECKING must still work (the
+  // notice says "unselect it"), and doing so clears the gate's notice.
+  await expect(primary).toBeEnabled()
+  await primary.uncheck()
+  await expect(page.getByText(/one selected scene has none/)).toHaveCount(0)
+  // Start stays off now for the plain reason: nothing is selected anymore.
+  await expect(page.getByRole('button', { name: 'Start' })).toBeDisabled()
 
   expect(await unhandledCommands(page)).toEqual([])
 })

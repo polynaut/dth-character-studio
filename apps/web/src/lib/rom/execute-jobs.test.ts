@@ -16,6 +16,7 @@ import {
   parseExecuteStamps,
   parseExportFoldersRecord,
   parseJobFileJson,
+  preCheckedScenes,
   scenesMissingRomAnimation,
   staleExportFolders,
 } from './execute-jobs'
@@ -291,9 +292,59 @@ describe('scenesMissingRomAnimation — the "Export only" gate', () => {
   })
 
   it('is empty while the probe has not landed — unknown is not missing', () => {
-    // The dialog renders rows before detection finishes; blocking Start on a
-    // list nobody has measured yet would refuse a perfectly good run.
+    // Nothing is measured yet, so the RULE stays quiet — the dialog covers the
+    // in-flight window itself by holding Start as "Checking scenes…" until the
+    // probe lands, rather than mislabeling unknown scenes as missing.
     expect(scenesMissingRomAnimation('export-only', null, new Set([A, B]))).toEqual([])
+  })
+})
+
+describe('preCheckedScenes — the dialog pre-selection per mode', () => {
+  const A = 'X:/p/Kira/daz3d/primary/Kira.duf'
+  const B = 'X:/p/Kira/daz3d/summertide/KiraSummertide.duf'
+  const row = (
+    scenePath: string,
+    over: Partial<{
+      affected: boolean
+      missing: boolean
+      romExists: boolean
+      romUnexported: boolean
+    }> = {},
+  ) => ({
+    scenePath,
+    affected: false,
+    missing: false,
+    romExists: false,
+    romUnexported: false,
+    ...over,
+  })
+
+  it('the ROM-building modes pre-check the AFFECTED scenes', () => {
+    const rows = [row(A, { affected: true }), row(B)]
+    expect(preCheckedScenes('rom-export', rows)).toEqual(new Set([A]))
+    expect(preCheckedScenes('rom-only', rows)).toEqual(new Set([A]))
+  })
+
+  it('export-only pre-checks the scenes whose saved ROM is UNEXPORTED', () => {
+    const rows = [
+      row(A, { romExists: true, romUnexported: true }),
+      // Already exported as it stands — nothing outstanding.
+      row(B, { romExists: true, romUnexported: false }),
+    ]
+    expect(preCheckedScenes('export-only', rows)).toEqual(new Set([A]))
+  })
+
+  it('a missing .duf is never pre-checked — even with an unexported ROM sibling', () => {
+    // Regression: a deleted scene keeps its rom-animations sibling, so the
+    // probe still reports romExists/romUnexported for it. Pre-checking it
+    // would arm a DISABLED row whose handoff can only fail ("scene file could
+    // not be read").
+    const rows = [
+      row(A, { missing: true, romExists: true, romUnexported: true }),
+      row(B, { missing: true, affected: true }),
+    ]
+    expect(preCheckedScenes('export-only', rows)).toEqual(new Set())
+    expect(preCheckedScenes('rom-export', rows)).toEqual(new Set())
   })
 })
 
