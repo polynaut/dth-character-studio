@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Ban, Loader2, ScanSearch } from 'lucide-react'
+import { Ban, ChevronDown, ChevronRight, Loader2, ScanSearch } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button, InfoPopup, Label, useRefetchOnFocus } from '@dth/ui'
@@ -12,8 +12,17 @@ import {
   fetchProjectScanPlan,
   startProjectScan,
 } from '#/lib/rom/api.ts'
+import { normalizeSceneKey } from '#/lib/rom/execute-jobs.ts'
 
 import type { ProjectScanPlan, RunnerGate } from '#/lib/rom/api.ts'
+
+/** Scene paths are compared by the ONE key convention the whole handoff uses. */
+const sceneKey = normalizeSceneKey
+
+/** A scene's `.duf` stem — what the picker lists (the full path is the title). */
+function sceneName(scenePath: string): string {
+  return scenePath.split(/[\\/]/).pop()?.replace(/\.duf$/i, '') ?? scenePath
+}
 
 /** The three things a project can be scanned for — the panel's selection, and
  *  the shape {@link startProjectScan} takes. */
@@ -67,6 +76,18 @@ export function ProjectScanSection({
     morphs: true,
     products: false,
   })
+  /**
+   * Which scenes the two scene passes cover, as {@link normalizeSceneKey} keys.
+   * ONE selection for both passes: a row opens a scene once and runs whichever
+   * scans it is due for, so splitting the pick per pass would buy nothing but a
+   * second list to keep in sync.
+   *
+   * `null` = "everything", the state a freshly-loaded plan starts in — kept
+   * distinct from an explicit full set so a project gaining a scene in another
+   * window is covered by default rather than silently left out of the run.
+   */
+  const [pickedScenes, setPickedScenes] = useState<Set<string> | null>(null)
+  const [picking, setPicking] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -157,6 +178,9 @@ export function ProjectScanSection({
           base: selection.base,
           morphs: selection.morphs && !noProject,
           products: selection.products && !productsOff,
+          // Omitted while the pick is "everything", so a scene added in another
+          // window between the plan probe and this click is still covered.
+          ...(pickedScenes === null ? {} : { scenes: allScenes.filter(isPicked) }),
         },
       })
       toast.success(
@@ -195,15 +219,41 @@ export function ProjectScanSection({
   // count towards the batch however the ticks stand.
   const noProject = !projectId
   const wantsScenes = !noProject && (selection.morphs || selection.products)
-  const sceneRows = wantsScenes ? (plan?.totalScenes ?? 0) : 0
+  const allScenes = plan ? plan.characters.flatMap((c) => c.scenes) : []
+  const isPicked = (scene: string) => pickedScenes === null || pickedScenes.has(sceneKey(scene))
+  const pickedCount = pickedScenes === null ? allScenes.length : allScenes.filter(isPicked).length
+  const sceneRows = wantsScenes ? pickedCount : 0
   const rowCount = (selection.base ? 1 : 0) + sceneRows
   const nothingPicked = !selection.base && !wantsScenes
-  // A scene pass with no scenes to run it on would hand Daz an empty batch.
-  const noScenes = wantsScenes && (plan?.totalScenes ?? 0) === 0
+  // A scene pass with nothing selected would hand Daz an empty batch.
+  const noScenes = wantsScenes && pickedCount === 0
   const blocked = !dazLibraryConfigured
   const productsOff = noProject || (plan !== null && !plan.productsEnabled)
   const scenes = plan?.totalScenes ?? 0
   const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
+
+  /** Set membership for one scene, switching off "everything" on the first
+   *  explicit exclusion (the null state can't represent a gap). */
+  function toggleScene(scene: string, on: boolean) {
+    setPickedScenes((prev) => {
+      const next = new Set(prev === null ? allScenes.map(sceneKey) : prev)
+      if (on) next.add(sceneKey(scene))
+      else next.delete(sceneKey(scene))
+      return next
+    })
+  }
+
+  /** Tick or clear a whole character's scenes in one go. */
+  function toggleCharacter(charScenes: Array<string>, on: boolean) {
+    setPickedScenes((prev) => {
+      const next = new Set(prev === null ? allScenes.map(sceneKey) : prev)
+      for (const scene of charScenes) {
+        if (on) next.add(sceneKey(scene))
+        else next.delete(sceneKey(scene))
+      }
+      return next
+    })
+  }
 
   return (
     <section className="space-y-4 rounded-lg border bg-card p-5">
@@ -241,7 +291,7 @@ export function ProjectScanSection({
             noProject
               ? 'Needs a project open — this scans the linked scenes of its characters.'
               : plan
-                ? `Scans each linked scene for the dials the base index doesn't have — clothing, hair, third-party grafts — and files them under that scene. ${plural(scenes, 'job')}.`
+                ? `Scans the selected scenes for the dials the base index doesn't have — clothing, hair, third-party grafts — and files them under that scene. ${plural(pickedCount, 'job')}.`
                 : 'Scans each linked scene for the dials the base index doesn’t have.'
           }
         />
@@ -257,10 +307,104 @@ export function ProjectScanSection({
                 ? 'Daz Products is switched off for this project — enable it in Settings → Project.'
                 : plan && !plan.dimConfigured
                   ? 'No DAZ Install Manager manifests folder is set — the scan would report every asset as unmatched. Set one in Settings.'
-                  : 'Matches each scene’s used assets against your installed Daz products. Shares the scene opens with the morph scan.'
+                  : 'Matches the selected scenes’ used assets against your installed Daz products. Shares the scene opens with the morph scan.'
           }
         />
       </div>
+
+      {/* The scene picker. A project can hold dozens of scenes and each one is
+          a full Daz open, so "re-scan just this outfit" has to be one click
+          away — but the common case is still "all of them", so the list stays
+          collapsed until asked for. */}
+      {wantsScenes && plan && plan.characters.length > 0 && (
+        <div className="rounded-md border">
+          <div className="flex flex-wrap items-center gap-2 px-3 py-2">
+            <button
+              type="button"
+              className="flex items-center gap-1 text-sm font-medium"
+              aria-expanded={picking}
+              onClick={() => setPicking((p) => !p)}
+            >
+              {picking ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+              Scenes to scan
+            </button>
+            <span className="text-xs text-muted-foreground">
+              {pickedCount === allScenes.length
+                ? `all ${plural(allScenes.length, 'scene')}`
+                : `${pickedCount} of ${allScenes.length}`}
+            </span>
+            <span className="ml-auto flex gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={busy || pickedCount === allScenes.length}
+                onClick={() => setPickedScenes(null)}
+              >
+                All
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={busy || pickedCount === 0}
+                onClick={() => setPickedScenes(new Set())}
+              >
+                None
+              </Button>
+            </span>
+          </div>
+          {picking && (
+            <div className="max-h-72 space-y-3 overflow-y-auto border-t px-3 py-2">
+              {plan.characters.map((character) => {
+                const allOn =
+                  character.scenes.length > 0 && character.scenes.every((s) => isPicked(s))
+                return (
+                  <div key={character.id}>
+                    <label className="flex items-center gap-2 text-sm font-medium">
+                      <input
+                        type="checkbox"
+                        className="size-4 shrink-0 accent-daz-green"
+                        checked={allOn}
+                        disabled={busy || character.scenes.length === 0}
+                        onChange={(e) => toggleCharacter(character.scenes, e.target.checked)}
+                      />
+                      {character.name}
+                    </label>
+                    <div className="mt-1 ml-6 space-y-1">
+                      {character.scenes.map((scene) => (
+                        <label key={scene} className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            className="size-4 shrink-0 accent-daz-green"
+                            checked={isPicked(scene)}
+                            disabled={busy}
+                            onChange={(e) => toggleScene(scene, e.target.checked)}
+                          />
+                          <span className="truncate" title={scene}>
+                            {sceneName(scene)}
+                          </span>
+                        </label>
+                      ))}
+                      {/* Named, never selectable: a missing `.duf` can only
+                          produce a failed row, and silence would read as the
+                          scene never having been linked. */}
+                      {character.missing.map((scene) => (
+                        <p
+                          key={scene}
+                          className="flex items-center gap-2 text-sm text-muted-foreground line-through"
+                          title={scene}
+                        >
+                          <span className="size-4 shrink-0" />
+                          <span className="truncate">{sceneName(scene)}</span>
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {noProject ? (
         <p className="text-sm text-muted-foreground">
@@ -321,7 +465,9 @@ export function ProjectScanSection({
       )}
       {noScenes && !busy && (
         <p className="text-sm text-muted-foreground">
-          No linked Daz scenes in this project yet — the scene passes have nothing to run on.
+          {allScenes.length === 0
+            ? 'No linked Daz scenes in this project yet — the scene passes have nothing to run on.'
+            : 'No scenes selected — pick at least one, or untick the scene passes.'}
         </p>
       )}
       {runner?.blocked && <RunnerGateNotice gate={runner} subject="The project scan runs" />}

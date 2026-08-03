@@ -1044,6 +1044,19 @@ const projectScanInput = z.object({
   morphs: z.boolean().default(false),
   /** Run the Daz Products scan for every linked scene. */
   products: z.boolean().default(false),
+  /**
+   * Restrict the scene passes to these scenes (absolute paths, matched by
+   * {@link normalizeSceneKey}). Omitted = every linked scene of every
+   * character — a project can hold dozens, and re-scanning all of them to
+   * refresh one outfit is minutes of Daz time per scene.
+   *
+   * Only ever NARROWS: a path that isn't a linked scene of this project can't
+   * add a row, so a stale selection (a scene unlinked between the panel's plan
+   * probe and the click) silently drops out instead of enqueueing a row that
+   * could only fail. All of them dropping out is caught below as "nothing to
+   * run" rather than handed to Daz as an empty batch.
+   */
+  scenes: z.array(z.string()).optional(),
 })
 
 export interface ProjectScanSummary {
@@ -1084,7 +1097,7 @@ export interface ProjectScanSummary {
  * all — a batch of nothing would otherwise "succeed" without scanning anything.
  */
 export async function startProjectScan({ data }: { data: unknown }): Promise<ProjectScanSummary> {
-  const { projectId, base, morphs, products } = projectScanInput.parse(data)
+  const { projectId, base, morphs, products, scenes: chosenScenes } = projectScanInput.parse(data)
   if (!isTauri()) throw new Error('Scanning a project needs the desktop app (Daz Studio is launched natively).')
   if (!base && !morphs && !products) throw new Error('Pick at least one thing to scan.')
   // The scene passes are per project; the base pass is not. With no project
@@ -1123,6 +1136,8 @@ export async function startProjectScan({ data }: { data: unknown }): Promise<Pro
   const sceneWork: Array<{ scenePath: string; work: ScanSceneWork }> = []
   const skipped: Array<string> = []
   let charactersWithRows = 0
+  // The user's scene pick, as match keys (undefined = every linked scene).
+  const chosen = chosenScenes ? new Set(chosenScenes.map(normalizeSceneKey)) : undefined
   // `project` is non-null here: the guard above refuses a scene pass without one.
   if ((morphs || products) && project) {
     const sceneScript = joinPath(scriptsRoot, storage.SCAN_SCENE_BULK_SCRIPT)
@@ -1147,6 +1162,9 @@ export async function startProjectScan({ data }: { data: unknown }): Promise<Pro
         : undefined
       let any = false
       for (const scene of [character.scenePath, ...character.extraScenes].filter(Boolean)) {
+        // Outside the user's pick — not skipped work, just not asked for, so it
+        // stays out of the summary's `skipped` list too.
+        if (chosen && !chosen.has(normalizeSceneKey(scene))) continue
         // A missing `.duf` can only produce a failed row — name it in the
         // summary instead of enqueueing work that cannot run.
         if (!(await exists(scene).catch(() => false))) {
@@ -1167,8 +1185,10 @@ export async function startProjectScan({ data }: { data: unknown }): Promise<Pro
   if (jobs.length === 0) {
     throw new Error(
       skipped.length > 0
-        ? 'Every linked Daz scene in this project is missing on disk — nothing could be scanned.'
-        : 'This project has no linked Daz scenes to scan yet.',
+        ? 'Every selected Daz scene is missing on disk — nothing could be scanned.'
+        : chosen
+          ? 'None of the selected scenes are linked to this project anymore — reopen Tools and pick again.'
+          : 'This project has no linked Daz scenes to scan yet.',
     )
   }
 

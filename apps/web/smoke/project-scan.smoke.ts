@@ -145,6 +145,70 @@ test('scan project: the products tick adds the per-character product config to e
   expect(await unhandledCommands(page)).toEqual([])
 })
 
+test('scan project: the scene picker narrows the batch to the chosen scene', async ({ page }) => {
+  // Each scene row is a full Daz open, so "re-scan just this one outfit" has to
+  // be reachable — a project with dozens of scenes must not force an all-or-
+  // nothing run.
+  const seed = buildSeed({
+    activeProjectFile: P.dcsp,
+    demo: true,
+    extraScene: true,
+    dazInstallFolder: DAZ_INSTALL,
+  })
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await openScanTab(page)
+
+  // Collapsed by default, and covering everything until told otherwise.
+  const panel = page.getByRole('tabpanel')
+  await expect(panel.getByText('all 2 scenes')).toBeVisible()
+  await panel.getByRole('button', { name: 'Scenes to scan' }).click()
+
+  // Drop the outfit variant, keep the primary.
+  const sceneStem = (p: string) => p.split('/').pop()!.replace(/\.duf$/i, '')
+  await panel.getByRole('checkbox', { name: sceneStem(P.scene2) }).uncheck()
+  await expect(panel.getByText('1 of 2')).toBeVisible()
+  // The job count follows the pick, not the project's scene total.
+  await expect(panel.getByText(/2 jobs to run/)).toBeVisible()
+
+  await startButton(page).click()
+  await expect(page.getByRole('button', { name: /Waiting for Daz Studio/ })).toBeVisible()
+
+  const job = JSON.parse((await fileContent(page, PENDING_JOB))!) as JobFile
+  expect(job.jobs).toEqual([
+    { scenePath: '', scriptPath: INDEX_SCRIPT, status: 'pending' },
+    { scenePath: P.scene, scriptPath: SCENE_SCRIPT, status: 'pending' },
+  ])
+  // The deselected scene is absent from the sidecar too — no orphan config.
+  const config = JSON.parse((await fileContent(page, SCAN_CONFIG))!) as ScanConfig
+  expect(Object.keys(config.scenes)).toEqual([P.scene.toLowerCase()])
+
+  expect(await unhandledCommands(page)).toEqual([])
+})
+
+test('scan project: deselecting every scene blocks Start instead of sending an empty batch', async ({
+  page,
+}) => {
+  const seed = buildSeed({
+    activeProjectFile: P.dcsp,
+    demo: true,
+    extraScene: true,
+    dazInstallFolder: DAZ_INSTALL,
+  })
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await openScanTab(page)
+
+  const panel = page.getByRole('tabpanel')
+  // Untick the base pass so the batch would be scenes-only, then clear them.
+  await panel.getByRole('checkbox', { name: /Base morphs/ }).uncheck()
+  await panel.getByRole('button', { name: 'None' }).click()
+  await expect(panel.getByText(/No scenes selected/)).toBeVisible()
+  await expect(startButton(page)).toBeDisabled()
+  // Nothing was handed over.
+  expect(await fileContent(page, PENDING_JOB)).toBeNull()
+})
+
 test('scan project: from Home the base pass still runs, the scene passes are off', async ({
   page,
 }) => {

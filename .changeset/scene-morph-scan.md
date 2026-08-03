@@ -24,6 +24,10 @@ studio hands Daz Studio a single unattended batch — the base index first, then
 every linked scene of every character in the project — opening each scene once
 however many scans it is due for.
 
+Since each scene is a full Daz open, the scene passes come with a **scene
+picker**: expand *Scenes to scan* to run just one outfit (or one character)
+instead of the whole project, with the job count updating as you pick.
+
 This replaces the separate **Build Genesis Index** panel, which is now the
 *base morphs* tick. Reached from the Home window with no project open, the two
 scene passes are disabled and the base rebuild runs on its own, exactly as that

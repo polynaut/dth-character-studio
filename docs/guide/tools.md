@@ -122,6 +122,15 @@ and works through it unattended, reporting progress on the button.
   (**Settings → Project**); it shares the scene opens with the morph scan, so
   ticking both costs no extra time.
 
+**Scenes to scan** — the two scene passes default to every linked scene, but
+each one is a full Daz open, so a big project is a long run. Expand the list to
+tick exactly what you want (per scene, or a whole character at once); **All** /
+**None** are there for the extremes. The job count updates as you pick, so you
+can see what you're committing to before you press Start. The picker governs
+both scene passes together — a scene is opened once and runs whichever scans it
+is due for. Scenes whose `.duf` is missing on disk are listed struck through and
+never enqueued.
+
 Because each scene has to be opened in Daz, a project with many scenes takes a
 while — that's the point of it being one unattended run. While the batch is
 still waiting for Daz to pick it up you can **Abort** it; once Daz has claimed
