@@ -43,6 +43,37 @@ export function extrasWithoutPrimary(extraScenes: Array<string>, primary: string
 }
 
 /**
+ * Where a native Browse dialog should OPEN — the one rule every picker in the
+ * app uses: the folder (or file) the field ALREADY holds, and failing that the
+ * closest thing that makes sense, which each caller supplies in preference
+ * order. `undefined` means "nothing sensible", leaving it to the OS — which is
+ * what every dialog did unconditionally before: browsing for the Houdini
+ * documents folder opened at nowhere even though the field named the exact
+ * path, and re-picking a linked scene started from scratch every time.
+ *
+ * Pass a FILE path where one is known (`pickHipPath` and friends): the native
+ * dialog opens at its folder with that file preselected, which beats the folder
+ * alone.
+ *
+ * Candidates are tried in order and blanks are skipped, so a call reads as its
+ * own fallback chain: `browseStart(value, characterFolder, dazLibrary)`.
+ */
+export function browseStart(...candidates: Array<string | undefined>): string | undefined {
+  for (const candidate of candidates) {
+    const value = (candidate ?? '').trim()
+    if (!value) continue
+    // normalizePath collapses separator runs, which would strip a UNC
+    // `\\server\share` prefix down to rootless `/server/share` — the dialog
+    // plugin rebuilds the path via PathBuf components, turning that into a
+    // drive-relative `\server\share` whose SetFolder silently fails. Same
+    // preservation rule as displayPath: keep the leading double separator.
+    const normalized = normalizePath(value)
+    return /^[\\/]{2}/.test(value) ? `/${normalized}` : normalized
+  }
+  return undefined
+}
+
+/**
  * The parent directory of a path, {@link normalizePath}-normalized ('/'-joined,
  * runs collapsed, no trailing separator) — THE one copy of the
  * `normalizePath(p).replace(/\/[^/]*$/, '')` idiom that used to be inlined
@@ -51,7 +82,10 @@ export function extrasWithoutPrimary(extraScenes: Array<string>, primary: string
  * whenever the result is compared against other normalized paths.
  */
 export function parentDir(path: string): string {
-  return normalizePath(path).replace(/\/[^/]*$/, '')
+  const parent = normalizePath(path).replace(/\/[^/]*$/, '')
+  // A bare drive letter is DRIVE-RELATIVE on Windows (`D:` = "the current
+  // directory on D:", wherever that is) — hand back the actual root instead.
+  return /^[A-Za-z]:$/.test(parent) ? `${parent}/` : parent
 }
 
 /** Everything but the last path segment ('/'-joined) — e.g. the folder of a

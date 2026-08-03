@@ -1,4 +1,4 @@
-import { exists, readTextFile, remove, stat } from '@tauri-apps/plugin-fs'
+import { exists, readTextFile, remove, rename, stat } from '@tauri-apps/plugin-fs'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
@@ -10,6 +10,7 @@ import {
   RUNNING_JOB_FILE,
   executeSceneSignature,
   jobFileJson,
+  isReclaimableBatch,
   jobSceneForMode,
   jobScriptForMode,
   normalizeSceneKey,
@@ -116,6 +117,29 @@ export async function exporterJobsPending(): Promise<boolean> {
   if (!paths) return false
   try {
     return await exists(paths.pending)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Whether the claimed (`running_`) batch shows REAL work — it parses and is
+ * past the untouched state ({@link isReclaimableBatch}). The wait-for-close
+ * modal uses it to stand down when a live Daz claims LATE (stuck on a modal
+ * Save prompt past the pickup window, or restarted by hand): a batch being
+ * worked belongs to the export watch, and a modal inviting the user to kill
+ * Daz over it would cost finished scenes. A claimed-but-untouched batch
+ * deliberately reads false — from the outside it is indistinguishable from
+ * the closing-Daz claim the modal exists to rescue, so the modal keeps
+ * waiting; the first row mark flips it. Best-effort false on any read problem.
+ */
+export async function exporterJobsWorking(): Promise<boolean> {
+  const paths = await exporterJobFilePaths()
+  if (!paths) return false
+  try {
+    if (!(await exists(paths.running))) return false
+    const parsed = parseJobFileJson(await readTextFile(paths.running))
+    return parsed !== null && !isReclaimableBatch(parsed)
   } catch {
     return false
   }
@@ -254,7 +278,10 @@ interface ActiveExportRun {
 let activeRun: ActiveExportRun | null = null
 
 export type ExportRunProgress =
-  /** Daz hasn't picked the file up yet (it can still be aborted). */
+  /** Daz hasn't picked the file up yet (it can still be aborted) — or a
+   *  closing Daz claimed it and died before running a row: the batch is then
+   *  UNTOUCHED and parked for {@link launchDazForPendingJobs}' reclaim, which
+   *  is still "waiting to run", not a dead run. */
   | { state: 'pending'; characterId: string; total: number }
   /** The Runner renamed the file and is working. `processed` = rows already
    *  worked (done + failed; the Runner-written `jobsDone` when present) — what
@@ -292,8 +319,14 @@ export type ExportRunProgress =
  * its Runner-owned progress — at 100 the studio deletes the file and returns
  * the one 'finished' snapshot (the caller toasts the outcome). A running file
  * whose Daz has EXITED below 100 is a dead run: deleted + reported 'dead'
- * once. A torn read (the Runner rewrites the file between rows) just reports
- * the last state again — the next poll gets a clean parse.
+ * once — UNLESS the batch is still untouched ({@link isReclaimableBatch}: a
+ * closing Daz claimed it and died before running a row). That one is reported
+ * 'pending' and the file left in place: `launchDazForPendingJobs` (the
+ * wait-for-close modal's finish) owns the rename back to pending, and this
+ * watch must neither delete the file out from under it nor disarm the run —
+ * the armed run still carries the finish toast and the "Export too"
+ * continuation. A torn read (the Runner rewrites the file between rows) just
+ * reports the last state again — the next poll gets a clean parse.
  */
 export async function fetchExportRunProgress(): Promise<ExportRunProgress | null> {
   const run = activeRun
@@ -365,9 +398,22 @@ export async function fetchExportRunProgress(): Promise<ExportRunProgress | null
         }
       }
       // Below 100 with Daz gone = the run died (crash / user quit) — it will
-      // never finish; clean up and report once.
+      // never finish; clean up and report once. EXCEPT when the batch is still
+      // untouched: a closing Daz claimed it on a final poll tick and exited
+      // before running a row. That batch isn't dead, it's waiting to be handed
+      // back — and exactly ONE code path does the handing back
+      // (launchDazForPendingJobs' reclaim, driven by the wait-for-close
+      // modal). Deleting here would race that modal's tick and strand the very
+      // batch this rescue exists for; reporting 'dead' would disarm the run
+      // and silently drop its finish toast + "Export too" continuation. So
+      // this watch only DETECTS and defers: report 'pending', touch nothing.
+      // (Without a modal — Daz died claimed-but-idle on its own — the parked
+      // file waits for the next handoff's stale cleanup instead.)
       const dazRunning = await invoke<boolean>('daz_studio_running').catch(() => true)
       if (!dazRunning) {
+        if (isReclaimableBatch(parsed)) {
+          return { state: 'pending', characterId: run.characterId, total: run.total }
+        }
         try {
           await remove(paths.running)
         } catch {
@@ -757,10 +803,46 @@ export async function launchDazForPendingJobs(): Promise<boolean> {
   if (!isTauri()) return false
   const paths = await exporterJobFilePaths()
   if (!paths) return false
-  if (!(await exists(paths.pending).catch(() => false))) return false
+  if (!(await exists(paths.pending).catch(() => false))) {
+    // No pending file — but that is not necessarily "nothing to do". A Daz that
+    // was CLOSING can claim the batch on a final poll tick (the rename IS the
+    // claim) and then exit before running a single row, and the Runner only
+    // ever polls for the PENDING name — so a `running_` file left that way is
+    // orphaned forever. Take it back.
+    if (!(await reclaimOrphanedBatch(paths))) return false
+  }
   if (await invoke<boolean>('daz_studio_running').catch(() => false)) return true
   await invoke<string>('launch_daz_studio')
   return true
+}
+
+/**
+ * Rename an orphaned `running_` batch back to pending so a fresh Daz's Runner
+ * can claim it. True when one was reclaimed.
+ *
+ * Deliberately narrow — only an untouched `bulk-export` batch on which
+ * **nothing has run yet** ({@link isReclaimableBatch}: progress 0, every row
+ * still `pending`). A partially worked batch is a different story: re-running
+ * it would redo finished scenes, and the export watch already reports that
+ * case as a dead run. Callers must have established that Daz is gone; a live
+ * Daz owns its running file. This is the ONE place that performs the rename —
+ * the export watch only detects the state and defers to it
+ * (fetchExportRunProgress).
+ */
+async function reclaimOrphanedBatch(paths: { pending: string; running: string }): Promise<boolean> {
+  try {
+    if (!(await exists(paths.running))) return false
+    // Parsed ONLY to gate on the untouched state — the file itself moves as-is.
+    const parsed = parseJobFileJson(await readTextFile(paths.running))
+    if (!isReclaimableBatch(parsed)) return false
+    // One atomic rename, no rewrite: no window where both files (or neither)
+    // exist, and the pending file keeps the claimed file's exact bytes instead
+    // of a re-serialization that could reshape what it never parsed.
+    await rename(paths.running, paths.pending)
+    return true
+  } catch {
+    return false
+  }
 }
 
 const generateRomInput = charScopeInput.extend({

@@ -7,7 +7,7 @@ import { PathCode, tallPathChipClass } from '#/components/path-code.tsx'
 import { ScenePreview } from '#/components/scene-preview.tsx'
 import { createAsset } from '#/lib/rom/api.ts'
 import { pickDufPath } from '#/lib/desktop.ts'
-import { displayPath } from '#/lib/path.ts'
+import { browseStart, displayPath } from '#/lib/path.ts'
 
 /** Scene file name without folder or `.duf`, e.g. "X:\…\Kira.duf" → "Kira". */
 function sceneStem(path: string): string {
@@ -52,7 +52,9 @@ export function AssetForm({
   }, [scenePath])
 
   async function pick() {
-    const picked = await pickDufPath('Choose a Daz scene')
+    // Re-picking opens at the scene already chosen (preselected), not at
+    // wherever the OS last happened to be.
+    const picked = await pickDufPath('Choose a Daz scene', browseStart(scenePath))
     if (picked) onScenePathChange(picked)
   }
 

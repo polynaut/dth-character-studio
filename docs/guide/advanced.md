@@ -27,9 +27,19 @@ nests under it) or left in place. The **primary** scene can't be unlinked;
 extras can. Every card has **Open in Daz**. The primary can be **replaced**
 instead: its card's folder button browses for a new scene, runs the same
 validation and copy-vs-link decision as Add scene, then swaps it in — the
-Genitalia section re-derives from the new scene's geograft, the avatar
-follows, and an old in-folder copy can be deleted right there (a
+Genitalia section re-derives from the new scene's geograft, its detected
+[hair items](#hair-items--per-scene-kept-out-of-the-export) are pre-selected,
+the avatar follows, and an old in-folder copy can be deleted right there (a
 linked-in-place original is always kept).
+
+Replacing is only offered while the primary is the character's **only** scene.
+Every extra scene was checked against the primary when it was added — above all
+for the **same GP/DK geograft**, since every scene has to produce the primary's
+skeleton. A new primary re-decides that reference, so one without Golden Palace
+would leave a set of already-validated scenes quietly mismatched. Unlink the
+others first — leave **Delete file on disk** unticked (it starts off), so the
+files stay where they are — replace, then add each scene back: it is validated
+properly against the new primary on the way in.
 
 <p align="center">
   <img width="900" alt="Daz scene cards — primary plus an outfit scene (selected), with the per-scene hair items beside them" src="screenshots/character-daz-scenes.png" />
