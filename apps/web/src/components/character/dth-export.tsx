@@ -854,8 +854,10 @@ const HOUDINI_MODE_OPTIONS: ReadonlyArray<{ mode: HoudiniRunMode; title: string;
 ]
 
 /** One selectable Houdini project — the scene rows' sibling card: checkbox,
- *  the Houdini mark as its tile, the project stem over its hint, and the
- *  houdini-orange accent bar the linked-project cards wear elsewhere. The hint
+ *  the Houdini mark as its tile, the project stem over its hint, and the full
+ *  `houdini-card` look (orange tint + border + accent bar) the linked-project
+ *  card wears on the character page — in orange what the Daz rows are in
+ *  green, selected ring included. The hint
  *  is a status line like the scene rows': normally the project's short
  *  location (the tail of the path — the stem already carries the name), and a
  *  loud "missing on disk" when the `.hip` is gone — a run started on one of
@@ -881,7 +883,7 @@ function HipRow({
   return (
     <div className="group/card relative w-full">
       <div
-        className={`daz-card relative flex items-center gap-3 rounded-lg border p-3 pl-4${missing ? ' opacity-50' : ''}`}
+        className={`houdini-card relative flex items-center gap-3 rounded-lg border p-3 pl-4${missing ? ' opacity-50' : ''}`}
         data-selected={checked ? 'true' : undefined}
       >
         <input

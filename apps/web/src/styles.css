@@ -475,14 +475,22 @@ a {
 }
 
 /* The linked-project "Houdini card": mirrors `daz-card` with a Houdini-orange
-   LEFT ACCENT BAR + faint orange tint / border. Houdini projects are NOT
-   selectable, so there's no selected state. */
+   LEFT ACCENT BAR + faint orange tint / border. The DTH Export dialog's
+   project rows are selectable (checkbox + cover button, like the Daz rows),
+   so the card carries the same group-hover and `data-selected` states as
+   `daz-card`, in orange — the character page's card simply never sets them. */
 @utility houdini-card {
   background-color: color-mix(in oklab, var(--houdini-orange) 6%, var(--card));
   border-color: color-mix(in oklab, var(--houdini-orange) 26%, var(--border));
-  &:hover {
+  &:hover,
+  .group\/card:hover & {
     background-color: color-mix(in oklab, var(--houdini-orange) 11%, var(--card));
     border-color: color-mix(in oklab, var(--houdini-orange) 55%, var(--border));
+  }
+  &[data-selected='true'] {
+    background-color: color-mix(in oklab, var(--houdini-orange) 20%, var(--card));
+    border-color: var(--houdini-orange);
+    box-shadow: 0 0 0 2px color-mix(in oklab, var(--houdini-orange) 65%, transparent);
   }
 }
 
