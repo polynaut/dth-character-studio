@@ -371,7 +371,15 @@ function buildExportBlock(
   // absolute root prefix for `$HIP/dth-exports` yields a path Houdini resolves
   // no matter where the character tree moves. Guarded at run time too: an
   // export dir that isn't under the root keeps the absolute path.
-  const fwd = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+  // Trailing slashes are trimmed with string ops, NOT `/\/+$/`: that pattern is
+  // polynomial-backtracking on a path of many slashes (CodeQL js/polynomial-redos),
+  // and these strings come from stored character data. The trim itself is
+  // load-bearing — the compare below appends its own '/'.
+  const fwd = (p: string) => {
+    let s = p.replace(/\\/g, '/').toLowerCase()
+    while (s.endsWith('/')) s = s.slice(0, -1)
+    return s
+  }
   const hipAnchored =
     hipRelativeRefs &&
     Boolean(charFolderAbs) &&
