@@ -301,10 +301,19 @@ older runtimes as stale.
   studio writes MUST end in a slash; `do_export` bails via `exit()` on an empty
   directory (SystemExit would kill the whole batch, so such a node is skipped
   before triggering); it shows a "Continue anyway?" dialog on pre-flight
-  problems, which the studio answers YES and RECORDS (never swallows); and there
-  is NO PDG anywhere, so `do_export` is synchronous and sequential is just one
-  call after another. A node's existing `export_directory` is respected — only a
-  blank one is filled from the job — and the scene is never saved.
+  problems, which the studio answers YES and RECORDS (never swallows) — those
+  recorded problems ride the `finished` state out to the toast, which is their
+  ONLY surface; and there is NO PDG anywhere, so `do_export` is synchronous and
+  sequential is just one call after another. A node's existing
+  `export_directory` is respected — only a blank one is filled from the job —
+  and the scene is never saved.
+  **The handoff clears its own files** (`houdiniRunFilesToClear`, pure): job +
+  result both go the moment the poll reaches `finished`/`dead`, since the state
+  snapshot already carries everything reported. The one condition is on the JOB
+  file — it may only go once a result exists, which PROVES 456.py read it; a
+  `dead` verdict with no result can be a Houdini the liveness probe hasn't seen
+  yet, and deleting the job under it would break the run it is about to pick up
+  (an unconsumed job is simply overwritten by the next run).
 - **`$DAZ3D_LIB` houdini.env wiring**: with a Daz library + Houdini docs
   folder(s) configured, `DAZ3D_LIB = "<library>"` is upserted into each
   folder's `houdini.env` (`storage/houdini-env.ts` — pure `upsertHoudiniEnvVar`
