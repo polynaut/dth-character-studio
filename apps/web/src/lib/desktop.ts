@@ -81,7 +81,7 @@ function notePick(path: string): string {
  * Native .duf pose-preset picker via the Tauri dialog plugin. Returns the
  * picked absolute path, or '' if the user cancelled.
  */
-export async function pickDufPath(title: string): Promise<string> {
+export async function pickDufPath(title: string, defaultPath?: string): Promise<string> {
   // Every pick* helper no-ops in a plain browser, like the rest of this file —
   // without the guard each Browse button was an unhandled rejection there.
   if (!isTauri()) return ''
@@ -89,6 +89,7 @@ export async function pickDufPath(title: string): Promise<string> {
     multiple: false,
     directory: false,
     title,
+    defaultPath,
     filters: [{ name: 'DAZ pose presets', extensions: ['duf'] }],
   })
   return notePick(typeof selected === 'string' ? selected : '')
@@ -98,12 +99,13 @@ export async function pickDufPath(title: string): Promise<string> {
  * Native CSV picker (DAZ morph export) via the Tauri dialog plugin. Returns the
  * picked absolute path, or '' if the user cancelled.
  */
-export async function pickCsvPath(title: string): Promise<string> {
+export async function pickCsvPath(title: string, defaultPath?: string): Promise<string> {
   if (!isTauri()) return ''
   const selected = await open({
     multiple: false,
     directory: false,
     title,
+    defaultPath,
     filters: [{ name: 'CSV files', extensions: ['csv'] }],
   })
   return notePick(typeof selected === 'string' ? selected : '')
@@ -113,12 +115,13 @@ export async function pickCsvPath(title: string): Promise<string> {
  * Native Unreal project picker via the Tauri dialog plugin. Returns the picked
  * absolute path, or '' if the user cancelled.
  */
-export async function pickUprojectPath(title: string): Promise<string> {
+export async function pickUprojectPath(title: string, defaultPath?: string): Promise<string> {
   if (!isTauri()) return ''
   const selected = await open({
     multiple: false,
     directory: false,
     title,
+    defaultPath,
     filters: [{ name: 'Unreal projects', extensions: ['uproject'] }],
   })
   return notePick(typeof selected === 'string' ? selected : '')
@@ -128,12 +131,13 @@ export async function pickUprojectPath(title: string): Promise<string> {
  * Native Houdini project picker via the Tauri dialog plugin. Returns the picked
  * absolute path, or '' if the user cancelled.
  */
-export async function pickHipPath(title: string): Promise<string> {
+export async function pickHipPath(title: string, defaultPath?: string): Promise<string> {
   if (!isTauri()) return ''
   const selected = await open({
     multiple: false,
     directory: false,
     title,
+    defaultPath,
     filters: [{ name: 'Houdini projects', extensions: ['hip', 'hipnc', 'hiplc'] }],
   })
   return notePick(typeof selected === 'string' ? selected : '')
@@ -153,12 +157,13 @@ export async function pickFolder(title: string, defaultPath?: string): Promise<s
  * Native `.dcsp` project-file picker via the Tauri dialog plugin. Returns the
  * picked absolute path, or '' if the user cancelled.
  */
-export async function pickDcspPath(title: string): Promise<string> {
+export async function pickDcspPath(title: string, defaultPath?: string): Promise<string> {
   if (!isTauri()) return ''
   const selected = await open({
     multiple: false,
     directory: false,
     title,
+    defaultPath,
     filters: [{ name: 'DTH Character Studio projects', extensions: ['dcsp'] }],
   })
   return notePick(typeof selected === 'string' ? selected : '')

@@ -26,7 +26,7 @@ import {
   revealPath,
 } from '#/lib/rom/api.ts'
 import { pickHipPath } from '#/lib/desktop.ts'
-import { displayPath, normalizePath, parentDir } from '#/lib/path.ts'
+import { browseStart, displayPath, normalizePath, parentDir } from '#/lib/path.ts'
 import { characterHoudiniDir } from '#/lib/scene-subfolder.ts'
 
 /** Folder/file-name-safe `<Project>_<Character>` — the Generate dialog's
@@ -224,7 +224,13 @@ export function HoudiniProjectsField({
   }
 
   async function onAddPick() {
-    const picked = await pickHipPath('Select a Houdini project (.hip)')
+    // Start beside the projects already linked (a second `.hiplc` for the same
+    // character is nearly always a sibling), else the character's own Houdini
+    // folder — where Generate project puts them.
+    const picked = await pickHipPath(
+      'Select a Houdini project (.hip)',
+      browseStart(parentDir(character.houdiniProjects[0] ?? ''), houdiniDir),
+    )
     if (picked) await addProjects([picked])
   }
 

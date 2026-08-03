@@ -2,7 +2,7 @@ import { Download, FolderOpen, Plus, X } from 'lucide-react'
 
 import { Button, Input } from '@dth/ui'
 import { pickFolder } from '#/lib/desktop.ts'
-import { displayPath } from '#/lib/path.ts'
+import { browseStart, displayPath } from '#/lib/path.ts'
 import { InstallReportList } from '#/components/install-controls.tsx'
 
 import type { InstallReport } from '#/lib/rom/api.ts'
@@ -44,7 +44,12 @@ export function DazAssetsSection({
     onFoldersChange(folders.filter((_, j) => j !== i))
   }
   async function browseAssetFolder(i: number) {
-    const picked = await pickFolder('Daz assets folder')
+    // This row's own folder, else any sibling row already filled in — asset
+    // libraries are usually siblings under one drive.
+    const picked = await pickFolder(
+      'Daz assets folder',
+      browseStart(folders[i], folders.find(Boolean)),
+    )
     if (picked) updateAssetFolder(i, picked)
   }
 
