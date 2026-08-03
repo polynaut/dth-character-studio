@@ -631,6 +631,21 @@ current code before relying on details, but assume the *lesson* still holds.
 - **GitHub releases are immutable** (since v0.44.7): a published release and its
   `latest.json` cannot be edited afterward. Never hand-publish without being sure
   `latest.json` is right — a broken one can't be fixed in place.
+- **The version PR's checks sat `action_required` until manually approved — and
+  bulk-approving stale runs cancels the current head's run** (measured
+  2026-08-03, the v0.61 train). Two separate mechanisms:
+  the changesets action pushes `changeset-release/main` with the credentials
+  `actions/checkout` persists, and `CHANGESETS_TOKEN` only reached the action's
+  env (PR create/update API) — so the PR's AUTHOR was the PAT owner while every
+  push was `github-actions[bot]`, and a bot-pushed head trips the public-repo
+  first-time-contributor approval gate on each refresh (fixed: the checkout now
+  gets `token:` too). Separately, ALL of a PR's validation runs share one
+  concurrency group (`validate-refs/pull/<n>/merge`, cancel-in-progress), so
+  approving/re-running several held runs in one sweep lets the LAST click
+  cancel the in-flight ones — the survivor can green-light a STALE head while
+  the current head keeps red "cancelled" required checks. Only ever approve or
+  re-run the NEWEST run; for a cancelled current head,
+  `gh run rerun <run-id> --failed` re-runs just the killed jobs.
 - **`github-actions[bot]` cannot create releases on this repo** (403 "Resource
   not accessible by integration" despite `contents: write`). The publish job runs
   on the `RELEASE_PAT` secret — if publishing ever 403s/401s again, **check the
