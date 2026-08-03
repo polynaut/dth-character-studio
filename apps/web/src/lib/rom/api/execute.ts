@@ -10,6 +10,7 @@ import {
   RUNNING_JOB_FILE,
   executeSceneSignature,
   jobFileJson,
+  isReclaimableBatch,
   jobSceneForMode,
   jobScriptForMode,
   normalizeSceneKey,
@@ -757,10 +758,41 @@ export async function launchDazForPendingJobs(): Promise<boolean> {
   if (!isTauri()) return false
   const paths = await exporterJobFilePaths()
   if (!paths) return false
-  if (!(await exists(paths.pending).catch(() => false))) return false
+  if (!(await exists(paths.pending).catch(() => false))) {
+    // No pending file — but that is not necessarily "nothing to do". A Daz that
+    // was CLOSING can claim the batch on a final poll tick (the rename IS the
+    // claim) and then exit before running a single row, and the Runner only
+    // ever polls for the PENDING name — so a `running_` file left that way is
+    // orphaned forever. Take it back.
+    if (!(await reclaimOrphanedBatch(paths))) return false
+  }
   if (await invoke<boolean>('daz_studio_running').catch(() => false)) return true
   await invoke<string>('launch_daz_studio')
   return true
+}
+
+/**
+ * Rename an orphaned `running_` batch back to pending so a fresh Daz's Runner
+ * can claim it. True when one was reclaimed.
+ *
+ * Deliberately narrow — only a batch on which **nothing has run yet** (progress
+ * 0, every row still `pending`). A partially worked batch is a different story:
+ * re-running it would redo finished scenes, and the export watch already reports
+ * that case as a dead run. Callers must have established that Daz is gone; a
+ * live Daz owns its running file.
+ */
+async function reclaimOrphanedBatch(paths: { pending: string; running: string }): Promise<boolean> {
+  try {
+    if (!(await exists(paths.running))) return false
+    const parsed = parseJobFileJson(await readTextFile(paths.running))
+    // Unreadable/torn, or already worked → leave it alone (see the rule).
+    if (!isReclaimableBatch(parsed) || !parsed) return false
+    await storage.writeTextFileAtomic(paths.pending, jobFileJson(parsed.jobs))
+    await remove(paths.running).catch(() => {})
+    return true
+  } catch {
+    return false
+  }
 }
 
 const generateRomInput = charScopeInput.extend({

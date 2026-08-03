@@ -180,6 +180,26 @@ export function jobScriptForMode(mode: ExportMode): string {
 }
 
 /**
+ * Whether a `running_` batch can be handed back to a fresh Daz — i.e. it was
+ * CLAIMED but never worked.
+ *
+ * A closing Daz can rename the job file (the rename IS the claim) on a final
+ * poll tick and then exit before running a row. The Runner only ever polls for
+ * the PENDING name, so a file left that way is orphaned forever unless the
+ * studio renames it back.
+ *
+ * Deliberately narrow, which is the whole point of the helper: reclaiming a
+ * PARTIALLY worked batch would re-run scenes that already finished — minutes of
+ * ROM build and a re-export each. So the batch must be untouched: progress 0 AND
+ * every row still `pending`. Anything else belongs to the export watch's "dead
+ * run" report, not here. A torn or foreign read (null) is never reclaimable.
+ */
+export function isReclaimableBatch(parsed: ExporterJobFile | null): boolean {
+  if (!parsed || parsed.progress !== 0) return false
+  return parsed.jobs.every((job) => job.status === 'pending')
+}
+
+/**
  * The scene file a mode's job row OPENS for `scenePath`: the saved ROM
  * animation for `export-only` (that is where the built ROM lives — the
  * generated script maps it back to this scene for every scene-keyed lookup),

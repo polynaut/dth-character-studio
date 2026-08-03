@@ -387,13 +387,16 @@ function WaitForDazCloseModal({
     let settled = false
     const id = window.setInterval(() => {
       void (async () => {
-        const pendingExists = await exporterJobsPending()
-        if (!active || settled) return
-        if (!pendingExists) {
-          settled = true
-          onDone(false)
-          return
-        }
+        // Wait for the process to actually be gone, then hand the decision to
+        // `launchDazForPendingJobs` — it is the one that knows whether there is
+        // anything left to run.
+        //
+        // It used to bail the moment the PENDING file disappeared, on the
+        // assumption that "claimed or aborted" both mean "not my problem". But
+        // a Daz that is closing can claim the batch (the rename) and exit
+        // before running a row, which looks identical from here — so the dialog
+        // closed, nothing launched, and the batch sat orphaned in a `running_`
+        // file the Runner never polls for. That is now reclaimed instead.
         const running = await dazStudioRunning()
         if (!active || settled || running) return
         settled = true
