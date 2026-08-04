@@ -103,68 +103,8 @@ and how they relate to the per-character generated scripts.
 
 ## Code improvements
 
-### Bulk operations & scanning
-
-**C3. Scan-on-export keeps the morph index in sync**
-
-```text
-Make every export directly scan the current scene's morphs, so the morph index is
-always in sync and up to date through the app's core functionality alone (this only
-works reliably when the user has a full morph scan: base figures + all Daz scenes of
-the project — only then are all clothing morphs known). Consequences to implement:
-- No dedicated "scan all scenes of my project" action is needed.
-- Show a warning (alert) on character detail when the character has Daz scenes not yet
-  scanned for morphs — so after creating a character or adding scenes, the user
-  immediately sees a scan is due.
-- The scan dynamically selects only the scenes in need (e.g. the primary was already
-  scanned earlier -> it is skipped when the two later-added scenes get scanned). The
-  bulk job is transported over the DTH Exporter plugin.
-```
-
-**C5. Central-scripts UI: selective scene scanning + product scanning**
-
-```text
-In the central scripts UI, always allow running the base script, and additionally let
-the user choose from known project -> character -> scenes to include specific ones —
-"scan morphs of these clothing assets too". Offer explicit Daz product scanning in the
-same place.
-```
-*(Raw note started with "———", i.e. it continued an earlier thought — double-check the intent before building.)*
-
-**C6. Bulk-export error handling** `[verify]`
-
-```text
-Test what happens when multiple script runs error in various scenes during one bulk
-export run: are ALL errors visible in the UI? Does the UI jump correctly around to
-focus the errored fields and select the matching Daz scene for each error? Fix whatever
-falls short.
-```
 
 ### Houdini integration
-
-**C7. Pose-node prefills on project generation** `[external]`
-
-```text
-Once the Houdini DTH pose node can be driven from a CSV file path (instead of a
-one-time import), extend Houdini project generation to prefill:
-- the CSV pose-asset file path (always build paths with $HIP by default),
-- the export file path,
-- the import file paths (we may need to prefill the character name too, since this may
-  bypass DTH's auto-fill feature),
-- the Skinning setting ("Linear" / "Dual Quaternion") set correctly from the start,
-- and possibly the skin node too, by intelligently selecting all clothing assets vs.
-  the rest (the body).
-```
-
-**C8. CSV reload on every project start** `[external]`
-
-```text
-When the pose node is driven from a CSV file path, ensure the file is reloaded and the
-pose-asset node updated on every project start — not just imported once. This is a
-prerequisite for bulk auto-export of all found export nodes in an opened Houdini
-project: we must be able to count on the pose-asset nodes being up to date before
-exporting.
-```
 
 **C9. Track DTH version per generated Houdini project + Refresh-Assets warning**
 
@@ -178,15 +118,6 @@ acknowledged and then goes away — we have no way to detect whether Refresh Ass
 actually executed.
 ```
 
-**C10. Automated version-control setup for the project folder**
-
-```text
-The guide already answers the ignore question (docs/guide/05-rom-in-daz.md: add the
-"dth-exports" link to P4IGNORE / .gitignore, or delete the link). Build the remaining
-part: have the studio do the version-control setup for the user automatically — detect
-the VCS in use and write the right ignore entries, for Perforce, Git, and whatever else
-makes sense.
-```
 
 **C11. Houdini presets as an asset type**
 
