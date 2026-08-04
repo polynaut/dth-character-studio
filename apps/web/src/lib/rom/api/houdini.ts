@@ -444,6 +444,9 @@ export async function startHoudiniExport({
     // and restores whatever the user had set (their project, their choice).
     exportDirectory: character.exportPath,
     scenesRootAbs,
+    // This Houdini instance exists to carry the batch — 456.py closes it again
+    // after the final result lands ("Open only" never reaches this code path).
+    closeWhenDone: true,
   })
   if (job.scenes.length === 0) {
     throw new Error(

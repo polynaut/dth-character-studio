@@ -72,6 +72,14 @@ export interface HoudiniJobFile {
   exportDirectory: string
   /** Where 456.py writes progress + results for the studio to poll. */
   resultPath: string
+  /**
+   * Close Houdini again once the batch has written its final result. The DTH
+   * Export flow always sets this: its Houdini instance exists only to carry
+   * the batch, and a queue of projects would otherwise stack open windows.
+   * 456.py exits from INSIDE that instance (never by killing processes), so a
+   * Houdini session the user had open on their own is untouched.
+   */
+  closeWhenDone: boolean
 }
 
 /** One export node's outcome, as 456.py reports it. */
@@ -151,7 +159,12 @@ export function sceneDthPath(
 export function buildHoudiniJob(
   character: Character,
   sceneKeys: ReadonlyArray<string>,
-  options: { resultPath: string; exportDirectory?: string; scenesRootAbs?: string },
+  options: {
+    resultPath: string
+    exportDirectory?: string
+    scenesRootAbs?: string
+    closeWhenDone?: boolean
+  },
 ): HoudiniJobFile {
   // Scene KEYS are normalized (lowercased) for matching, so a label taken from
   // one would read "kirasummertide". Recover the original spelling from the
@@ -179,6 +192,7 @@ export function buildHoudiniJob(
     scenes,
     exportDirectory: (options.exportDirectory ?? '').replace(/\\/g, '/'),
     resultPath: options.resultPath.replace(/\\/g, '/'),
+    closeWhenDone: options.closeWhenDone ?? false,
   }
 }
 

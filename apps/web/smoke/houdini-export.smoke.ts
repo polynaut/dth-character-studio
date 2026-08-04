@@ -145,6 +145,7 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
     scenes: Array<{ dth: string; label: string }>
     exportDirectory: string
     resultPath: string
+    closeWhenDone: boolean
   }
   // Networks are matched by the `.dth` PATH — the studio wrote that file, so it
   // identifies the scene even after the user renames the network.
@@ -157,6 +158,8 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
   ])
   expect(job.resultPath).toBe(HOUDINI_RESULT)
   expect(job.exportDirectory).toBe(P.exportDir)
+  // The batch's Houdini instance closes itself again when the exports are done.
+  expect(job.closeWhenDone).toBe(true)
 
   const [launch] = await callsNamed(page, 'launch_houdini_job')
   expect(launch.request.scenePath).toBe(P.houdini)

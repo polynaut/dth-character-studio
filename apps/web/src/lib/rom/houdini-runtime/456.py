@@ -35,7 +35,10 @@ What it drives (all of it measured off the installed HDA, not assumed):
     bottom — the batch waits for the first event-loop idle, so Houdini is
     visibly open and interactive before the first export starts.
 
-The scene is never saved. Any parm this touches is restored afterwards.
+The scene is never saved. Any parm this touches is restored afterwards. With
+`closeWhenDone` in the job (the DTH Export flow always sets it), the instance
+closes itself again once the final result is on disk — it existed to carry
+the batch, and a queue of projects must not stack open windows.
 """
 
 import json
@@ -278,6 +281,21 @@ def run(job):
     report.finish("done")
 
 
+def close_houdini():
+    """Close the instance the batch ran in — from INSIDE it, so a Houdini the
+    user had open on their own is never touched. `suppress_save_prompt` is
+    mandatory: the scene is deliberately never saved, and an unattended exit
+    must not hang on the save dialog (every touched parm was restored, but a
+    cook alone can mark the scene dirty). Runs strictly AFTER the final result
+    flush — the studio's poll reads the file from disk, so a finished result
+    survives the exit."""
+    print("DTH Character Studio: batch finished - closing Houdini")
+    try:
+        hou.exit(exit_code=0, suppress_save_prompt=True)
+    except Exception:
+        print("DTH Character Studio: could not close Houdini\n" + traceback.format_exc())
+
+
 def main():
     job_path = os.environ.get(JOB_ENV, "")
     if not job_path or not os.path.isfile(job_path):
@@ -302,6 +320,12 @@ def main():
             Report(job.get("resultPath", ""), 0).finish("failed", traceback.format_exc())
         except Exception:
             pass
+    # Close on EVERY completed run, crashed included: the report carries the
+    # traceback, the run is unattended, and a queue of projects must not stack
+    # windows. A run that never got here (Houdini itself died) can't close —
+    # the studio's liveness poll covers that side.
+    if job.get("closeWhenDone"):
+        close_houdini()
 
 
 # Once the UI is up, the batch waits this much longer before starting:

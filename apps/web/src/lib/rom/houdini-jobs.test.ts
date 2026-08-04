@@ -106,6 +106,19 @@ describe('buildHoudiniJob', () => {
     const job = buildHoudiniJob(kira(), [PRIMARY, PRIMARY], { resultPath: 'r.json' })
     expect(job.scenes).toHaveLength(1)
   })
+
+  it('carries closeWhenDone when asked, and defaults it to false', () => {
+    // The DTH Export flow always sets it — its Houdini instance exists to
+    // carry the batch, and 456.py closes it again after the final result.
+    const closing = buildHoudiniJob(kira(), [PRIMARY], {
+      resultPath: 'r.json',
+      scenesRootAbs: ROOT,
+      closeWhenDone: true,
+    })
+    expect(closing.closeWhenDone).toBe(true)
+    const plain = buildHoudiniJob(kira(), [PRIMARY], { resultPath: 'r.json', scenesRootAbs: ROOT })
+    expect(plain.closeWhenDone).toBe(false)
+  })
 })
 
 describe('parseHoudiniResult — read while it is being written', () => {

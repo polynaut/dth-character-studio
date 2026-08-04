@@ -14,7 +14,9 @@ use serde::Deserialize;
 ///
 /// Fire-and-forget — `spawn`, never `wait`. The export takes minutes and the
 /// studio's window must stay live to poll the result file; the process outlives
-/// the command and Houdini stays open afterwards for the user to work in.
+/// the command. Whether Houdini stays open afterwards is the JOB's decision:
+/// with `closeWhenDone` set (the DTH Export flow always sets it), 456.py exits
+/// the instance from inside once the final result is written.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LaunchHoudiniJobRequest {
