@@ -24,8 +24,9 @@ In your DazToHue network, point the **PoseAsset** import at the character's
 
 Wire the network once — from then on the studio can run it for you: pick the
 project in [**DTH Export**](./05-rom-in-daz.md#batch-export--dth-export) and it
-opens Houdini and runs the DazToHue exports for the scenes in scope, with
-**Skip Daz — use last exports** for a Houdini-only pass.
+opens Houdini, runs the DazToHue exports for the scenes in scope, and closes
+Houdini again when they're done — with **Skip Daz — use last exports** for a
+Houdini-only pass.
 
 > [!TIP]
 > Use Houdini's **File → Set Project** on the character's

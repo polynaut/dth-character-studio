@@ -307,7 +307,9 @@ What happens:
 4. After the last project, **one report** names every leg — *"Daz: 2/2 scenes
    exported in 3m 10s"*, then a line per Houdini project (*"Kira_Look: 2
    exported, 1 skipped"*) — under a single *DTH Export finished in …* headline
-   with the total time. Houdini stays open with the project ready to work in.
+   with the total time. Each project's Houdini **closes itself again** once its
+   exports are done — the instance existed to carry the batch. Want a project
+   left open to work in? That's the **Open only** mode.
 
 Two things it deliberately won't do:
 

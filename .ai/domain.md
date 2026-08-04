@@ -418,6 +418,15 @@ older runtimes as stale.
   sequential is just one call after another. A node's existing
   `export_directory` is respected — only a blank one is filled from the job —
   and the scene is never saved.
+  **The instance closes itself when the batch is done** (`closeWhenDone` in the
+  job, always set by `startHoudiniExport` — never by "Open only", which takes a
+  different path entirely): after the FINAL result flush, 456.py calls
+  `hou.exit(suppress_save_prompt=True)` from inside the instance it ran in — a
+  user's own Houdini session is never touched, and the save prompt must be
+  suppressed or an unattended exit hangs on a dirty scene (a cook alone can
+  mark it dirty). The poll is exit-safe by construction: a result whose state
+  is `done`/`failed` maps to `finished` in `houdiniRunStateFrom` regardless of
+  liveness, so reading the file after Houdini exited reports normally.
   **The handoff clears its own files** (`houdiniRunFilesToClear`, pure): job +
   result both go the moment the poll reaches `finished`/`dead`, since the state
   snapshot already carries everything reported. The one condition is on the JOB
