@@ -41,7 +41,7 @@ plain browser JS; keep them dependency-free.
   - **An `&` in a heading slugifies to `-amp-`, not `-`.** `slugify` runs on the
     RENDERED inline HTML, where markdown-it has already escaped `&` to `&amp;`;
     stripping the non-alphanumerics then leaves the literal word `amp`. So
-    `## Tab 2 — Scan & index` is `#tab-2--scan-amp-index` (and the em dash, being
+    `## Tab 1 — Scan & index` is `#tab-1--scan-amp-index` (and the em dash, being
     stripped between two spaces, is why the doubled `--` is there at all). The
     existing `advanced.html#multiple-daz-scenes--outfits-amp-hair-variants` is
     the same shape. Guessing the "obvious" slug for a heading with an `&` fails

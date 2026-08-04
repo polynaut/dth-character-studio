@@ -67,7 +67,7 @@ automatic direct export.
 The **Runner plugin** ships **inside the app** — nothing to download. It lets
 the studio drive Daz Studio: the
 [**DTH Export** batch](./05-rom-in-daz.md#batch-export--dth-export),
-[**Tools → Scan & index → Scan project**](./tools.md#tab-2--scan-amp-index),
+[**Tools → Scan & index → Scan project**](./tools.md#tab-1--scan-amp-index),
 and opening scenes in an already-running Daz all go through it. With the Daz Studio install
 folder set (above), press **Install** — the panel shows the bundled version,
 the exact version installed in Daz, and says when an update is pending. The

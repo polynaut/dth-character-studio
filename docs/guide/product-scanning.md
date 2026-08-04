@@ -56,7 +56,7 @@ Settings → "Download/Install"). The scan reads it to resolve used assets to re
 
 Most of the time you never run one by hand: **every ROM/export run scans the
 scene it just built**, and
-[**Tools → Scan & index → Scan project**](./tools.md#tab-2--scan-amp-index)
+[**Tools → Scan & index → Scan project**](./tools.md#tab-1--scan-amp-index)
 covers every scene of every character in one unattended batch. The manual run
 below stays for a one-off scene:
 

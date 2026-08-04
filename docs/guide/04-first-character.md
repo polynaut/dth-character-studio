@@ -381,7 +381,7 @@ single name.
 
 The index behind the autocomplete is something the studio builds **for you**
 — there is no script to hunt down: open
-[**Tools → Scan & index → Scan project**](./tools.md#tab-2--scan-amp-index),
+[**Tools → Scan & index → Scan project**](./tools.md#tab-1--scan-amp-index),
 tick what you want and press **Start scan**. The studio hands Daz Studio one
 batch and works through it unattended, reporting progress on the button.
 

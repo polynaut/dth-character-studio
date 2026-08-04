@@ -55,7 +55,7 @@ supplies it in `apps/web/src/routes/__root.tsx`. Single public entry
 | `projects.$projectId.index.tsx` | Project overview: character grid/list, create character, attachments + notes tabs, Unreal footer. |
 | `projects.$projectId.characters.$characterId.tsx` | **The character editor** — draft/save/generate. Decomposed: the route (~640 lines) composes `components/character/*` sections (editor-header — which hosts the DTH Export dialog, `dth-export.tsx` — identity, scripts, export-settings, rom-editor, operations-section, rom-run-log-report, scene-footer, frame-zero/preserve/groom fields) + `components/houdini-projects-field.tsx` + `lib/use-scene-selection` / `use-rom-run-log` / `character-paths`. The ROM subtree (`RomSections`/`PoseGroupsEditor`/`GroupCard`) is `React.memo`d with latest-ref, id-routed callbacks — new props into it must keep stable identities or the memo chain silently dies. |
 | `settings.tsx` | Project tab (`.dcsp` manifest) + General (machine tool paths) + App Data. |
-| `tools.tsx` | Three tabs: install (Daz/Houdini content install sections, dedup, danger zone), **Scan & index** (`ProjectScanSection`, `components/tools/project-scan-section.tsx`), Refresh assets. |
+| `tools.tsx` | Three tabs, **Scan & index** first and the default (`ProjectScanSection`, `components/tools/project-scan-section.tsx`; a plain `/tools` lands here, `?tab=install` / `?tab=refresh` address the others), then install (Daz/Houdini content install sections, dedup, danger zone), then Refresh assets. |
 | `about.tsx` | Version, asset staleness summary, links. |
 
 **Key fact: the `$projectId` route param IS the project folder path.** One

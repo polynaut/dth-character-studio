@@ -182,22 +182,24 @@ test('home', async ({ page }) => {
 // else → '/') that a hard goto/reload would re-trigger, bouncing the shot back
 // to the home screen. A client-side Link click doesn't reload, so the route sticks.
 test('tools-page', async ({ page }) => {
-  await openTools(page)
+  // The page's intro shot shows the DEFAULT tab — Scan & index — which only
+  // shows its full panel inside a project window, so open Tools there.
+  await openScanTab(page)
   await shoot(page, join(OUT, 'tools-page.png'))
 })
 
 test('tools-daz-assets', async ({ page }) => {
-  await openTools(page)
+  await openInstallTab(page)
   await shoot(page, join(OUT, 'tools-daz-assets.png'), card(page, 'Daz assets'))
 })
 
 test('tools-deduplicate', async ({ page }) => {
-  await openTools(page)
+  await openInstallTab(page)
   await shoot(page, join(OUT, 'tools-deduplicate.png'), card(page, 'Deduplicate'))
 })
 
 test('tools-danger-zone', async ({ page }) => {
-  await openTools(page)
+  await openInstallTab(page)
   await shoot(page, join(OUT, 'tools-danger-zone.png'), card(page, 'Danger zone'))
 })
 
@@ -244,7 +246,7 @@ async function openScanTab(page: Page) {
   await page.goto('/')
   await page.getByRole('link', { name: /Kira/ }).waitFor()
   await page.getByRole('link', { name: 'Tools' }).click()
-  await page.getByRole('tab', { name: 'Scan & index' }).click()
+  // Scan & index is the default tab — just wait for the panel to be ready.
   await page.getByRole('button', { name: 'Start scan' }).waitFor()
 }
 
@@ -254,12 +256,20 @@ function card(page: Page, heading: string): Locator {
   return page.locator('section').filter({ has: page.getByRole('heading', { name: heading }) })
 }
 
-/** Open the Tools page (Home window → header "Tools" link). */
+/** Open the Tools page (Home window → header "Tools" link). Lands on the
+ *  default Scan & index tab. */
 async function openTools(page: Page) {
   await prime(page, buildSeed())
   await page.goto('/')
   await page.getByRole('heading', { name: 'DTH Character Studio' }).waitFor()
   await page.getByRole('link', { name: 'Tools' }).click()
+}
+
+/** Tools → the Daz Studio & Houdini installers tab (no longer the default). */
+async function openInstallTab(page: Page) {
+  await openTools(page)
+  await page.getByRole('tab', { name: 'Daz Studio & Houdini' }).click()
+  await page.getByRole('heading', { name: 'Daz assets' }).waitFor()
 }
 
 /** Open the demo character's editor in a project window. Extra seed options tune
