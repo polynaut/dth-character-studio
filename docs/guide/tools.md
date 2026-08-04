@@ -112,6 +112,12 @@ goes through the
 so Start stays off until the Runner is installed and **My DAZ 3D Library** is
 set in [Settings](./02-setup.md).
 
+<p align="center">
+  <img width="900" alt="The Scan project panel on the Scan &amp; index tab" src="screenshots/tools-scan-index.png" />
+  <br>
+  <sub><em>The Scan project panel: tick the passes, press Start scan, leave it.</em></sub>
+</p>
+
 - **Base morphs** — builds each generation's stock figures and indexes their
   morphs and bones (exactly what
   [`Build_Genesis_Index`](./04-first-character.md#the-rom-definition) does). One
@@ -134,6 +140,12 @@ can see what you're committing to before you press Start. The picker governs
 both scene passes together — a scene is opened once and runs whichever scans it
 is due for. Scenes whose `.duf` is missing on disk are listed struck through and
 never enqueued.
+
+<p align="center">
+  <img width="900" alt="The Scenes to scan picker expanded — per-character tri-state and one card per scene" src="screenshots/tools-scan-scenes.png" />
+  <br>
+  <sub><em>The expanded scene picker: a tri-state box per character, a card per scene.</em></sub>
+</p>
 
 Because each scene has to be opened in Daz, a project with many scenes takes a
 while — that's the point of it being one unattended run. While the batch is

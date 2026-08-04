@@ -207,6 +207,47 @@ test('tools-refresh', async ({ page }) => {
   await shoot(page, join(OUT, 'tools-refresh.png'))
 })
 
+test('tools-scan-index', async ({ page }) => {
+  await openScanTab(page)
+  await shoot(page, join(OUT, 'tools-scan-index.png'), scanCard(page))
+})
+
+test('tools-scan-scenes', async ({ page }) => {
+  await openScanTab(page)
+  await page.getByRole('button', { name: 'Scenes to scan' }).click()
+  // Expanded: Kira's tri-state row + one green scene card per linked scene.
+  await page.getByRole('checkbox').first().waitFor()
+  await shoot(page, join(OUT, 'tools-scan-scenes.png'), scanCard(page))
+})
+
+/** The Scan project card — its title is a `<label>` (not a heading), so locate
+ *  it by the Start-scan button it uniquely contains. */
+function scanCard(page: Page): Locator {
+  return page.locator('section').filter({ has: page.getByRole('button', { name: 'Start scan' }) })
+}
+
+/** Tools → Scan & index in the PROJECT window (from Home the scene passes are
+ *  disabled). Both demo scenes linked; Daz Products + DIM on so all three scan
+ *  options render live; a Daz install folder so the Runner gate doesn't block. */
+async function openScanTab(page: Page) {
+  await prime(
+    page,
+    buildSeed({
+      demo: true,
+      activeProjectFile: P.dcsp,
+      extraScene: true,
+      dazProductsEnabled: true,
+      dimManifestsFolder: DIM_FOLDER,
+      dazInstallFolder: 'C:/Program Files/DAZ 3D/DAZStudio4 64-bit',
+    }),
+  )
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).waitFor()
+  await page.getByRole('link', { name: 'Tools' }).click()
+  await page.getByRole('tab', { name: 'Scan & index' }).click()
+  await page.getByRole('button', { name: 'Start scan' }).waitFor()
+}
+
 /** The `<section>` card that contains a given heading — the app's consistent
  *  card wrapper, so a feature crops to exactly its card. */
 function card(page: Page, heading: string): Locator {
