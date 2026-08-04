@@ -12,8 +12,8 @@ import type { AssetVersionReport, RefreshSummary } from '#/lib/rom/api.ts'
 
 /**
  * "Refresh assets" tab — re-generate the Daz scripts + PoseAsset CSVs (e.g. after a
- * studio update or a DTH-release switch). Scope follows the window: the current
- * project in a project window, every known (recent) project from the Home window.
+ * studio update or a DTH-release switch). Scope is every known (recent) project
+ * plus the active one, whatever window the button is pressed in (`sweepTargets`).
  * Shows a compact local-vs-app version table (DTH release, character schema, script
  * runtime), then offers the one-click Refresh with a per-run summary. Refresh
  * migrates stale definitions (re-stamping the schema version) and regenerates them.
@@ -143,7 +143,7 @@ export function RefreshAssetsTab() {
           <InfoPopup label="Refresh assets — more information">
             Re-generates every project's Daz scripts and PoseAsset CSVs to the current version —
             character definitions aren't changed.{' '}
-            <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/tools.html#tab-2--refresh-assets">
+            <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/tools.html#tab-3--refresh-assets">
               Open guide
             </GuideLink>
           </InfoPopup>

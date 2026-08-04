@@ -106,7 +106,11 @@ scans that extend it.
 
 One pass over everything a project can be scanned for. Tick what you want,
 press **Start scan**, and leave it — the studio hands Daz Studio a single batch
-and works through it unattended, reporting progress on the button.
+and works through it unattended, reporting progress on the button. The batch
+goes through the
+[**Runner plugin**](./02-setup.md#install-the-dth-character-studio-runner-plugin),
+so Start stays off until the Runner is installed and **My DAZ 3D Library** is
+set in [Settings](./02-setup.md).
 
 - **Base morphs** — builds each generation's stock figures and indexes their
   morphs and bones (exactly what
@@ -146,7 +150,9 @@ disabled and **Base morphs** runs on its own — that pass belongs to no project
 > suggested while **that** scene is the one selected in the character editor,
 > marked with a small **this scene** badge. Morphs the base figure carries are
 > always offered. Re-scanning a scene *replaces* what it contributed, so
-> clothing you removed stops being suggested.
+> clothing you removed stops being suggested. You rarely have to re-run this
+> by hand: every ROM/export run re-scans the scene it just built, so a scene's
+> suggestions follow what it actually wears.
 
 ---
 

@@ -164,8 +164,8 @@ current code before relying on details, but assume the *lesson* still holds.
   installed" instead of loading the wrong graft. Ties break on shorter file name then
   shorter path, never on directory-listing order. The ranking is CI-pinned against
   that measured candidate set in `runtime.test.ts`, which loads the `.dsa` itself via
-  `new Function` (the runtime is plain ECMAScript — it only touches Daz APIs from
-  inside functions, which makes its pure logic directly unit-testable).
+  `node:vm` `runInNewContext` (the runtime is plain ECMAScript — it only touches Daz
+  APIs from inside functions, which makes its pure logic directly unit-testable).
 - **Load the geograft's SMART preset, not its `00-Manual Setup` graft — only the
   Smart one brings the geoshells.** Measured by reading the DSON (2026-07-29):
   `00-Manual Setup/2-Golden Palace Graft.duf` and `00-Manual Setup/1-Dicktator.duf`
@@ -426,12 +426,20 @@ current code before relying on details, but assume the *lesson* still holds.
   the rest re-read from disk (multi-window safety). A new settings field must be
   added to `studioSettingsSchema` AND covered by the page's `dirty` flag, or its
   value never reaches disk.
-- **Character page sticky stack:** the character header (`sticky top-0`), ROM
-  section titles (`top-[128px]`) and pose-table column headers (`top-[176px]`)
-  overlap screenshots/crops — the guide-screenshot suite compensates per shot.
+- **Character page sticky stack:** the character header (`sticky top-0`) has a
+  DYNAMIC height (it collapses on scroll), published live as
+  `--sticky-header-h` on `:root` by `useStickyHeaderInset`
+  (`packages/ui/src/hooks/use-sticky-header-inset.ts`, called from
+  `editor-header.tsx` / `form-header.tsx`). ROM section titles pin at
+  `calc(var(--sticky-header-h, 128px) + var(--override-bar-h, 0px))`
+  (`rom-sections.tsx`), pose-table column headers at that `+ 48px`
+  (`group-card.tsx`). Any new fixed-top element must READ the var — a
+  hardcoded px silently drifts as the design changes. The guide-screenshot
+  suite no longer compensates per shot: it un-sticks all sticky/fixed chrome
+  before shooting.
 - **The guide SITE build (`scripts/build-guide-site.mjs`) is a separate pipeline
   from the screenshot suite's coverage guard.** Each guide asset dir
-  (`screenshots/`, `clips/`, `gifs/`) must be BOTH `cpSync`'d into `site/guide/`
+  (`screenshots/`, `clips/`) must be BOTH `cpSync`'d into `site/guide/`
   AND reference-guarded. This shipped broken: `clips/` (animated `.webp`
   interaction clips) was referenced and coverage-checked but never copied, so
   `path-chip-copy.webp` 404'd **only on the deployed Pages site** — `pnpm build:guide`
@@ -549,7 +557,15 @@ current code before relying on details, but assume the *lesson* still holds.
   - The scan filters itself against the base index IN DAZ, so **the base row
     must run before the scene rows** in a bulk batch (`startProjectScan`
     enqueues it first). Run a scene scan on a machine with no base index and the
-    whole stock figure gets filed as "what this scene adds".
+    whole stock figure gets filed as "what this scene adds". And this is no
+    longer a Tools-only concern: since runtime v55 EVERY generated ROM/export
+    script calls `DthScanSceneMorphsQuiet` right after the wrong-scene guard
+    (`indexSyncSnippet` in `packages/rom/src/dsa.ts`, pinned by
+    `index-sync.test.ts`), best-effort and never-throwing — and
+    `dthBaseIndexKeys` (`DthScanMorphs.dsa`) has NO missing-base guard, it
+    just logs "every scanned morph counts as new". So on a machine that never
+    built the base index, a plain export silently files the whole stock
+    figure under that scene.
   - A re-scan REPLACES that scene's contribution (`dthWriteSceneIndex` strips
     the scene out of every stored entry first, dropping entries left with no
     scene). Without that, clothing removed from a scene would haunt its
@@ -605,11 +621,13 @@ current code before relying on details, but assume the *lesson* still holds.
   bug under real (Windows/WebView2) scrollbars — measure both states before trusting a fix.
 - **A CSS `scale`/`transform: scale()` rasterises the element at its LAYOUT size,
   then GPU-upscales that texture** — so an image shown via an up-scale is soft /
-  aliased even from a high-res source. The header avatar rested at `scale: 1.55`
-  (204px laid out → a 204px texture stretched to ~316px). Fix: lay the element out
-  at the painted size (316px) and rest at `scale: 1` so the browser resamples the
-  768px source straight to size; animate the zoom FROM 1 (see `editor-header.tsx`
-  + `dth-avatar-zoom`). Two traps when sizing an `<img>` up: Tailwind preflight's
+  aliased even from a high-res source. The header avatar once rested at
+  `scale: 1.55` (204px laid out → a 204px texture stretched to ~316px). Fix: lay
+  the element out at the painted size and rest at `scale: 1` so the browser
+  resamples the 768px source straight to size; animate the zoom FROM 1
+  (currently a 168×224 portrait wrapper clipping a 254×254 image at
+  `-ml-[45px] -mt-[45px]` — see `editor-header.tsx` + `dth-avatar-zoom`). Two
+  traps when sizing an `<img>` up: Tailwind preflight's
   `img { max-width: 100% }` silently CAPS an explicit width back to the container
   (needs `max-w-none`), and a `%` width on the replaced `<img>` was ignored
   outright — use fixed px. Verify with computed `getBoundingClientRect`, not the eye.
@@ -621,7 +639,7 @@ current code before relying on details, but assume the *lesson* still holds.
   low-pass and paint 1:1: a Rust `image`-crate **Lanczos3** pass (`downscale_avatar_png`
   in `avatar.rs`) returning raw PNG bytes (`tauri::ipc::Response` → an ArrayBuffer, not
   a JSON number array), resolved by `resolveImageSrcAtSize` and requested via
-  `Avatar renderPx`. A canvas `imageSmoothingQuality:'high'` pass is NOT good enough
+  `Avatar renderPx` (currently 254 in the character header). A canvas `imageSmoothingQuality:'high'` pass is NOT good enough
   here — it came out mushy; Lanczos was the one that read crisp. Diagnostic tell: if a
   static side-by-side shows the browser downsample ≈ a hand pass, the defect is
   aliasing (missing low-pass), not the resample quality.

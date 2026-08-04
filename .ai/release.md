@@ -8,9 +8,10 @@ needs.
 
 ```
 feature PR (with changeset) ──merge──▶ main
-  └─ Version workflow opens/updates the "chore: version packages" PR
+  └─ Version workflow opens/updates the "🚢 chore: version packages" PR
+     (the commit subject stays plain "chore: version packages")
        └─ merging THAT PR bumps the fixed group + consumes changesets
-            └─ Release workflow: check → build-win (+build-mac) → sign → publish
+            └─ Release workflow: check → build-win (+build-mac) → sign-win + sign-mac → publish
 ```
 
 - **Product version** = `apps/desktop/package.json` (tauri.conf.json:
@@ -26,6 +27,13 @@ feature PR (with changeset) ──merge──▶ main
     its changes just ship in the next version.
 - **Release notes** are built from the four CHANGELOGs by
   `scripts/release-notes.mjs`, not from commit subjects.
+- **The Version workflow needs `CHANGESETS_TOKEN` in TWO places** (version.yml):
+  on `actions/checkout`'s `token:` AND in the changesets action's `env`. The
+  action pushes `changeset-release/main` with the credentials checkout persists;
+  the env token only reaches its PR API calls. Env-only ⇒ the push author is
+  github-actions[bot] and every validation run on the version PR sits
+  `action_required` until manually approved (measured 2026-08-03; fixed in
+  #666). Falls back to `GITHUB_TOKEN` — expect that babysitting.
 - **build-mac** is opt-in via the `ENABLE_MAC_RELEASE` repo variable
   (arm64-only, Developer-ID-signed + notarized).
 - **Bundled Runner plugin**: `beforeBuildCommand` (tauri.conf.json) runs
@@ -48,13 +56,15 @@ feature PR (with changeset) ──merge──▶ main
 
 ## Signing (the human gate)
 
-The `sign` job runs on a self-hosted runner (labels
-`self-hosted, linux, certum-signer`) inside the **`release-signing` protected
-environment — every release pauses for a manual approval** by the repo owner
-before the Certum/SimplySign signing happens. Only this job sees the real updater
-private key; the hosted build jobs sign with a throwaway key. Updater `.sig` and
-`latest.json` are regenerated **after** Authenticode signing (signing changes the
-installer bytes). Details, session keepalive, and troubleshooting:
+The train's sign step is TWO parallel jobs: **`sign-win`** on the self-hosted
+NAS runner (labels `self-hosted, linux, certum-signer`; Certum/SimplySign
+Authenticode) and **`sign-mac`** on `macos-latest` (Developer-ID sign +
+notarize/staple). Both run inside the **`release-signing` protected
+environment — every release pauses for a manual approval of each** by the repo
+owner. Only these two jobs see the real updater private key
+(`TAURI_SIGNING_PRIVATE_KEY`); the hosted build jobs sign with a throwaway key.
+Updater `.sig` and `latest.json` are regenerated **after** signing (signing
+changes the artifact bytes). Details, session keepalive, and troubleshooting:
 `docs/devops.md` § Code signing.
 
 ## Publishing

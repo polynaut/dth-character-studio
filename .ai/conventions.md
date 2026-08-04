@@ -184,8 +184,11 @@ The persisted `Character` shape is versioned (`CHARACTER_SCHEMA_VERSION` in
    AND `moveCharacterScenesFolder` — including the character route's post-move
    DRAFT merge (`onScenesFolderMoved`), which must never keep a hand-picked
    field list (a list that misses a path field writes the dead old path back on
-   the next Save). Add the field to that ONE helper. Still separate: only the
-   prefill field list `romFields` (`api/characters.ts`). `sceneOverrides` (which
+   the next Save). Add the field to that ONE helper. Still separate: the
+   create-flow prefill — `fillSectionsFrom` (`apps/web/src/lib/fill-sections.ts`)
+   plus the `prefillExtras` copy in `api/characters.ts`, which copies only
+   `jcmMorphMods`/`preserveMorphs`/`preserveNodeTransforms` (no path
+   fields). `sceneOverrides` (which
    carries each scene's hair since schema v24) is the existing example — grep it to find every site. (Regression fixed: `moveCharacter`
    used to repoint only `scenePath`, orphaning extra scenes/grooms/overrides on a
    folder move.)
@@ -246,10 +249,11 @@ The persisted `Character` shape is versioned (`CHARACTER_SCHEMA_VERSION` in
 in `apps/web/src/styles.css` — kit-only utility classes break without it.
 Export only what the app consumes (`packages/ui/src/index.ts` is the sole entry).
 
-Modal footers: the Cancel button is always `variant="ghost"` and LEFT-aligned —
-first child of the `flex justify-end gap-2` footer row with `className="mr-auto"`;
-the affirmative/primary action sits right. Inline (non-modal) cancels — path
-chips, the Tools danger-zone confirm strip — keep their own styling.
+Modal footers: the Cancel button is always `variant="ghost"`, first child of
+the right-aligned `flex justify-end gap-2` footer row — immediately left of the
+affirmative/primary action (e.g. `bulk-delete-dialog.tsx`,
+`character/dth-export.tsx`). Inline (non-modal) cancels — path chips, the Tools
+danger-zone confirm strip — keep their own styling.
 
 ## Writing conventions
 
@@ -260,5 +264,13 @@ chips, the Tools danger-zone confirm strip — keep their own styling.
   `apps/web/src/lib/rom/storage/settings.ts`) is the single source of app-global
   fields/defaults/validation. New field = schema + Settings UI + the `dirty` flag.
 - Per-project settings live in the `.dcsp` manifest (`DcspManifest`,
-  `readManifest`/`writeManifest` in storage.ts) — edited via Settings → Project
-  tab. Changing `charactersSubdir` is destructive (physically moves folders).
+  `readManifest`/`writeManifest` in `storage/projects.ts`), defaults
+  centralized in `PROJECT_BEHAVIOR_DEFAULTS` (same file — THE single copy: a
+  fresh manifest and the api's project-settings save input both read it). A
+  new per-project field = the interface + `PROJECT_BEHAVIOR_DEFAULTS` + the
+  Settings → Project tab + (when it's a first-run decision) the
+  first-Generate-project intro. `houdiniPathStyle` + `createExportJunctions`
+  live here since v0.61; the app-global `studioSettingsSchema.houdiniPathStyle`
+  is LEGACY (`storage/settings.ts`), kept only so old settings.json files
+  still parse and read in exactly ONE place — seeding the intro's default.
+  Changing `charactersSubdir` is destructive (physically moves folders).

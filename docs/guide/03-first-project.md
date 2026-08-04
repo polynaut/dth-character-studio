@@ -40,9 +40,16 @@ list:
 - Every character you create becomes a **subfolder of the project** —
   definition, scenes, and generated files live together, so the project folder
   is fully self-contained and portable.
+- The project page has more tabs beside **Characters**: **Notes** (freeform
+  markdown for the whole project — images can be dropped straight in) and
+  **Operations** (the project-level danger zone: deleting the project, which
+  refuses while its files are open in Daz or Houdini). Enabling
+  [Assets](./attachments.md) adds an **Attachments** tab.
 - Per-project options (folder layout, the optional [Assets](./attachments.md)
   and [Daz Products](./product-scanning.md) features) live in
-  **Settings → Project** — the defaults are fine for a first run.
+  **Settings → Project** — the defaults are fine for a first run. One is
+  destructive: changing **Characters subfolder** later *moves* the existing
+  character folders (their scene and Houdini links are repointed).
 
 - **Path chips** — the monospace path badges all over the app — **copy the
   full path on click**; **Alt+click opens the location in Explorer** (for a

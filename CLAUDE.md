@@ -26,6 +26,10 @@ pnpm -r typecheck        # tsc --noEmit across packages
 pnpm lint                # oxlint (type-aware) — the CI lint gate; `pnpm lint:fix` autofixes
 pnpm generate-routes     # regenerate apps/web/src/routeTree.gen.ts (tsr generate)
 pnpm changeset           # add a changeset (required on every feature PR; see Releases)
+pnpm screenshots         # guide screenshots (Playwright, apps/web)
+pnpm clips               # guide webp clips (Playwright, apps/web)
+pnpm build:guide         # render docs/guide → site/guide + validate guide links/assets
+pnpm fetch:runner        # stage the bundled Runner DLLs (a fresh checkout needs it once)
 ```
 
 Per-package / single test (vitest):
@@ -36,8 +40,9 @@ pnpm --filter @dth/rom test src/daz-csv.test.ts     # a single test file
 pnpm --filter @dth/rom test -t "<test name>"        # filter by test name
 ```
 
-Rust (desktop crate, `apps/desktop`): `cargo check`, `cargo test`. The shell here is **PowerShell**
-(a Bash tool is also available); use the right syntax for each.
+Rust (desktop crate, `apps/desktop`): `cargo check`, `cargo test`. CI also gates
+`cargo clippy --locked --all-targets -- -D warnings`; tests run `--locked`. The shell here is
+**PowerShell** (a Bash tool is also available); use the right syntax for each.
 
 ## Architecture
 
@@ -49,7 +54,9 @@ inline — no build step, no stale `dist`).
 - **`packages/rom` (`@dth/rom`)** — framework-agnostic, **no I/O**. The full pipeline: a `Character`
   definition (`types.ts`, zod-validated) → `generateAll()` (`generate.ts`) → the Daz `.dsa` script
   text + the Houdini PoseAsset CSV. The frame math + ROM walks (the core invariant's computation)
-  live in `frames.ts`; ground-truth CSV/`.dsa` templates in `src/templates`. Also parses
+  live in `frames.ts`; ground-truth CSV templates in `src/templates`; the emitted `.dsa` text is
+  built in `dsa.ts` (the shipped DTH `.dsa` runtime lives in `apps/web/src/lib/rom/runtime/`,
+  installed by the web layer's `storage/runtime-install.ts`). Also parses
   DAZ-exported morph CSVs into poses (`daz-csv.ts`).
 - **`packages/ui` (`@dth/ui`)** — app-agnostic React UI kit: primitives (button, input, select…),
   presentational components (`LinkedAssetCard`, `KeyedListEditor`, `Tag`, `Field`…), and hooks
@@ -74,18 +81,19 @@ two artifacts are derived from the same source and stay frame-aligned.
 ### The native boundary
 
 Native access lives in the **`lib/` layer**, not in routes/components: primarily
-**`apps/web/src/lib/rom/{api,storage}.ts`** + **`lib/desktop.ts`** (the bulk of it), plus a few
+**`apps/web/src/lib/rom/{api,storage}.ts`** — barrels over the focused modules in `lib/rom/api/*`
+and `lib/rom/storage/*` — + **`lib/desktop.ts`** (the bulk of it), plus a few
 focused helpers that legitimately touch Tauri APIs — `lib/updater.ts`, `lib/file-drop.ts`,
 `lib/path.ts`, `lib/rom/migrate-projects.ts`, and the app shell (`routes/__root.tsx`, `main.tsx`).
 Each is `isTauri()`-guarded so the SPA still runs in a plain browser (native features no-op there —
 which is also what a future online deployment or a web-only e2e mock of this layer would rely on).
 UI code opens external links via `desktop.openExternal`, never `@tauri-apps/plugin-shell` directly.
-`api.ts` is the primary bridge between the React UI and the filesystem; it keeps the `{ data }` call
-convention the routes use, validates input with zod, and `invoke()`s Rust commands. When adding a
+The `api/` modules are the primary bridge between the React UI and the filesystem; they keep the
+`{ data }` call convention the routes use, validate input with zod, and `invoke()` Rust commands. When adding a
 native capability, follow the existing pattern: **resolve paths in TS, do heavy file work in Rust**.
 
-Rust commands (`apps/desktop/src/lib.rs`) take camelCase serde structs (`#[serde(rename_all = "camelCase")]`),
-must be registered in the `generate_handler!` list, and are gated `#[cfg(desktop)]` when they use
+Rust commands (per-feature modules under `apps/desktop/src/`) take camelCase serde structs (`#[serde(rename_all = "camelCase")]`),
+must be registered in `lib.rs`'s `generate_handler!` list, and are gated `#[cfg(desktop)]` when they use
 desktop-only deps (updater/process/reqwest live under the non-android/ios target block in `Cargo.toml`).
 Structured command RETURNS are parsed through the zod schemas in `api/native-types.ts` (never a bare
 `invoke<T>()` cast), and their wire format is pinned by shared fixtures in `contracts/` (repo root):
@@ -94,11 +102,13 @@ A new structured return = a schema + a fixture + a test case on both sides.
 
 ### Projects are `.dcsp` files (one active project per window)
 
-A **project** is a user-chosen folder marked by a single **`.dcsp`** manifest (JSON: id, name,
-created, + per-project behaviour defaults `dazSubdir`/`houdiniSubdir`/`createHoudiniSubdir`, and the
-opt-in `assetsEnabled` flag + `charactersSubdir` root — see below). There is
+A **project** is a user-chosen folder marked by a single **`.dcsp`** manifest (JSON: schemaVersion,
+id, name, created, + per-project behaviour: `dazSubdir`/`houdiniSubdir`/`createHoudiniSubdir`/
+`exportSubdir` + `charactersSubdir` root, the opt-ins `assetsEnabled`/`dazProductsEnabled`, the
+Houdini path knobs `houdiniPathStyle`/`createExportJunctions`, and linked `unrealProjects` — see
+below). There is
 **no global registry** — a folder's location *is* the project. The OS file association opens a `.dcsp`
-in its **own window** (single-instance routes a second launch into a new window; see `lib.rs`
+in its **own window** (single-instance routes a second launch into a new window; see `windows.rs`
 `open_project_window`/`active_project_file`). Routes still use `/projects/$projectId`, but `projectId`
 is now the **project folder path** (the route param), resolved to a record via `storage.readManifest`.
 The active folder for a window is pinned by the project/character route loaders via
@@ -106,11 +116,12 @@ The active folder for a window is pinned by the project/character route loaders 
 
 - **Project folder** (backed up by the user): the `.dcsp`, the character folders (under
   `charactersSubdir` when set, e.g. `<dir>/assets/characters/<Name>/`, else directly `<dir>/<Name>/` →
-  `<Name>.json` + generated artifacts), a hidden **`.dcsmeta/images`** for avatars, and `.assets/` for
-  project-scoped Daz-scene assets (only when `assetsEnabled`).
+  `<Name>.json` + generated artifacts), a hidden **`.dcsmeta/`** (`images/` avatars, `media/` notes
+  media), and `.assets/` for project-scoped Daz-scene assets (only when `assetsEnabled`).
 - **App-data folder** (`appLocalDataDir()`, volatile/machine-only): `settings.json` (machine/tool
-  paths), `recents.json` (recently-opened `.dcsp` list, the Home screen's source), and
-  `network-drives.json`. No project registry, no avatars, no global assets — assets are per-project only.
+  paths), `recents.json` (recently-opened `.dcsp` list, the Home screen's source),
+  `network-drives.json`, `houdini-intro.json`, and the scan outputs `product-scans/` +
+  `scan-frames/`. No project registry, no avatars, no global assets — assets are per-project only.
 
 A character's generated Daz script still goes to
 `<My DAZ 3D Library>/Scripts/DTH-Character-Studio/<project>/<character>/`; the shared DTH runtime is
@@ -127,9 +138,10 @@ Two scopes now:
   defaults (`parse({})` = fresh install) and the validation on BOTH the settings.json read and the
   save input. Adding one = add the schema field + its UI in the Settings route. Settings/Tools gate
   "save before action" on a `dirty` flag — include a new field there or its value never reaches disk.
-- **Per-project** (the `.dcsp` manifest: `dazSubdir`/`houdiniSubdir`/`createHoudiniSubdir` +
-  `assetsEnabled`/`charactersSubdir`) → the `DcspManifest` type + `readManifest`/`writeManifest` in
-  `storage.ts`, saved via `api.saveProjectSettings` and edited from the **Settings → Project tab**
+- **Per-project** (the `.dcsp` manifest: the subdirs + `charactersSubdir`, the
+  `assetsEnabled`/`dazProductsEnabled` opt-ins, `houdiniPathStyle`/`createExportJunctions`,
+  `unrealProjects`) → the `DcspManifest` type + `readManifest`/`writeManifest` in
+  `storage/projects.ts`, saved via `api.saveProjectSettings` and edited from the **Settings → Project tab**
   (shown only inside a project window). `assetsEnabled` is opt-in (default off → characters only).
   Changing `charactersSubdir` is **destructive**: `saveProjectSettings` calls
   `storage.moveCharactersRoot` to physically move existing character folders to the new root (and

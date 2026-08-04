@@ -31,6 +31,8 @@ format the studio's PoseAsset CSV generator must emit.
 | `MIS` | frame, name, file |
 | `CURVEGROUP` | type, bone |
 | `CURVE` | name |
+| `CTLGROUP` | bone |
+| `CTL` | name |
 
 Notes:
 
@@ -44,11 +46,14 @@ Notes:
   token path, and the generated Daz script resolves both tokens — the export
   dir and the scene-suffixed figure name handed to `doExport` — when it copies
   the CSV next to the exporter output. The resolved dir is an **absolute
-  path**, or — with the app-global *Settings → Houdini path style* on `hip`,
-  the default — **`$HIP/dth-exports/<scene subfolder>`**, resolving through a
-  `dth-exports` junction the studio keeps beside each generated `.hip` in the
-  character folder (created by Generate project, re-checked on every
-  generation; a character whose junction can't exist falls back to absolute).
+  path**, or — with the project's *Settings → Project → Houdini path style* on
+  `hip` (the default) **and** export junctions enabled (`houdiniPathStyle` /
+  `createExportJunctions`, both `.dcsp` manifest fields) —
+  **`$HIP/dth-exports/<scene subfolder>`**, resolving through a `dth-exports`
+  junction the studio keeps beside each generated `.hip` in the character
+  folder (created by Generate project, re-checked on every generation; a
+  character whose junction can't exist falls back to absolute, and with
+  junctions disabled none is created or repaired — absolute is forced).
 - **`MIS` rows must leave `file` empty.** The parser reads the column, but the
   node has no matching parameter for Misc mappings, so a non-empty value makes
   the whole import fail (`AttributeError: 'NoneType' object has no attribute
@@ -56,6 +61,12 @@ Notes:
 - The section keyword for Miscellaneous is **`MIS`**, not `MISC`.
 - `CURVEGROUP`/`CURVE` is an additional category (animation/material curves)
   the studio does not model yet.
+- `CTLGROUP`/`CTL` are the **pre-2.0 era** control rows — the old pipeline's
+  equivalent of `CURVEGROUP`/`CURVE`. Columns are observed from the
+  ground-truth G8.1 template
+  (`packages/rom/src/templates/poseasset-g8.1-dqs-jcmfac-ue5.csv`), not from
+  the 2.4.3 parser. The studio models neither — both pass through verbatim in
+  the template splice (`packages/rom/src/csv.ts`).
 
 ## Menu index mappings
 
@@ -109,7 +120,7 @@ JCM,4,BallBU60
 | 34–42 | stomach | left 34–35 → up 35–37 → right 37–39 → down 39–41 → left 41, hang 42 |
 
 **RESOLVED (June 13 2026)** from a PHY-filled node export — stored verbatim as
-`src/lib/rom/templates/poseasset-physics-g9.csv` and emitted as a fixed preset
+`packages/rom/src/templates/poseasset-physics-g9.csv` and emitted as a fixed preset
 block. 5 groups / 43 poses, all `PHYGROUP,0,<suffix>,<bone>,5.0,5.0`:
 
 | `PHYGROUP` bone | suffix | poses |
@@ -125,14 +136,13 @@ Down, …) plus `HangForward` (`…,0,-5`). Left/right groups mirror X. The glut
 
 ## Consequences for the studio model
 
-- The studio's `suffix: none` has no CSV equivalent — map to Centre (index 1)
-  or require a suffix in group-based sections.
-- The studio's method enum lacks `Default` and `Advanced Additive`.
+- Suffix has no *none* in the node, and none in the studio either:
+  `groupSuffixSchema` is `left`/`centre`/`right` (default Centre), mapping
+  directly onto the menu indices.
 - Generation method applies to JCM/FAC/EXP/GEN groups — not PHY, not
-  FBM/MIS (flat). The studio currently shows the select on all groups.
+  FBM/MIS (flat). The studio matches (`METHOD_SECTIONS`).
 - Reference FBX applies to GEN and FBM only (`REFERENCE_FBX_SECTIONS`), matching
   DTH's Custom ROM Guide. The parser also reads a `file` column on MIS rows, but
   a non-empty value there fails the import (see the note above) — never emit it.
 - PHY offset/radius group fields and per-pose XYZ offsets are now mapped from a
   node export (`poseasset-physics-g9.csv`) and emitted as a fixed preset block.
-- EXP is group-based in the node (studio currently treats it as flat).

@@ -33,7 +33,8 @@ the project's `.dcsp`). With it on:
 
 ## Set the DIM manifests folder (for names, SKUs, artists)
 
-Right below the toggle, set the **DAZ Install Manager manifests folder** — the
+At the bottom of the same **Settings → Project** tab, set the
+**DAZ Install Manager manifests folder** — the
 `ManifestFiles` folder DIM writes (a folder of `.dsx` files; see DIM → Advanced
 Settings → "Download/Install"). The scan reads it to resolve used assets to real
 **product names, SKUs and artists**. **Detect installed location** auto-finds it.
@@ -53,6 +54,12 @@ Settings → "Download/Install"). The scan reads it to resolve used assets to re
 
 ## Run a scan
 
+Most of the time you never run one by hand: **every ROM/export run scans the
+scene it just built**, and
+[**Tools → Scan & index → Scan project**](./tools.md#tab-2--scan-amp-index)
+covers every scene of every character in one unattended batch. The manual run
+below stays for a one-off scene:
+
 1. In the studio, **Save** the character (generates/updates its scan script).
 2. Open the character's **scene in Daz Studio**.
 3. In Daz's Content Library, run **`Scan_Products_<Name>`** (installed beside the ROM
@@ -70,9 +77,10 @@ Settings → "Download/Install"). The scan reads it to resolve used assets to re
 &nbsp;
 
 > [!NOTE]
-> **Per-scene by design** — each scene's scan writes its own CSV. Run the
-> script once per scene you want covered; the studio merges them, attributing
-> each product to the scene(s) it appeared in.
+> **Per-scene by design** — each scene's scan writes its own CSV; the studio
+> merges them, attributing each product to the scene(s) it appeared in. Every
+> ROM/export run (and the Tools batch) covers its own scene, so a scene only
+> needs the manual script when you want it scanned without building anything.
 
 &nbsp;
 
@@ -81,7 +89,8 @@ textures, SKU, product keywords — falling back to a content-library match for
 manual installs without a DIM manifest (that's the **Match** column on the
 Products tab). Scans are stored under the app's data folder, keyed to
 project + character, and **age out after 30 days** (they're also removed when
-you delete the character) — see [Storage & housekeeping](./tools.md).
+you delete the character) — see
+[Storage & housekeeping](./02-setup.md#the-app-data-tab).
 
 ---
 

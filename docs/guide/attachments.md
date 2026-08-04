@@ -28,9 +28,9 @@ wants it.
   <sub><em>Enable attachments in Settings → Project.</em></sub>
 </p>
 
-With it **off**, the project shows characters only. With it **on**, the project page
-grows a **Characters / Attachments** tab bar, and the "Add" panel gains a **Character
-/ Attachment** choice.
+With it **off**, the project's tab bar is just Characters / Notes / Operations.
+With it **on**, an **Attachments** tab appears beside Characters, and the "Add"
+panel gains a **Character / Attachment** choice.
 
 ---
 
