@@ -1,7 +1,16 @@
 # @dth/rom
 
-## 0.63.0
+## 0.63.1
 
+### Patch Changes
+
+- [#685](https://github.com/polynaut/dth-character-studio/pull/685) [`81e5bde`](https://github.com/polynaut/dth-character-studio/commit/81e5bde6635ac714dbc2ac00d72dcd50b3cdef29) Thanks [@polynaut](https://github.com/polynaut)! - Runtime v57: the version bump the junction removal should have shipped with —
+  generated scripts now read as stale, so **Tools → Refresh assets pulses** and
+  one refresh regenerates every character with the new relative reference paths
+  while sweeping leftover junctions. (On v0.63.0 the same migration is one
+  manual click: Refresh assets with nothing stale runs the forced full refresh.)
+
+## 0.63.0
 
 ## 0.62.2
 
