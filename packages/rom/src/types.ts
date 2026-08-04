@@ -1374,8 +1374,16 @@ export const CHARACTER_SCHEMA_VERSION = 29
  *       rig, a camera mount) walked straight past the root-level guard, and
  *       its float dials (focal length, intensity, falloff) landed in the
  *       scene index as morph suggestions. The node's children still scan.
+ * v57 — no script-API change: the bump the junction removal (v0.63) should
+ *       have shipped with. Bone-scale reference paths swapped from
+ *       `$HIP/dth-exports/…` (junction-resolved) to plain-relative
+ *       `$HIP/../<dazSubdir>/dth-exports/…` — emitted CONTENT changed, so
+ *       every character's scripts must regenerate (which also runs the
+ *       junction-leftover sweep). Without the bump nothing read as stale and
+ *       no refresh was forced. Lesson: a change to what the generators EMIT
+ *       bumps this version even when the runtime files' API is untouched.
  */
-export const RUNTIME_VERSION = 56
+export const RUNTIME_VERSION = 57
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a
