@@ -23,3 +23,6 @@ site/guide/
 
 # Staged at build time by scripts/fetch-runner.mjs (bundled Runner plugin DLLs)
 apps/desktop/resources/dth-runner/
+
+# Python bytecode (a stray py_compile of 456.py)
+__pycache__/
