@@ -51,15 +51,10 @@ export interface DcspManifest {
   dazProductsEnabled: boolean
   /**
    * How the generated PoseAsset CSV writes reference-skeleton paths: `'hip'` =
-   * `$HIP`-relative through the `dth-exports` junction (portable across moves/
-   * machines), `'absolute'` = the real path baked in. Decided in the FIRST
-   * Generate-project dialog of the project; editable in Settings → Project.
+   * relative to the scene file (`$HIP/../…`, portable across moves/machines),
+   * `'absolute'` = the real path baked in. Editable in Settings → Project.
    */
   houdiniPathStyle: 'hip' | 'absolute'
-  /** Whether the studio creates/maintains the `dth-exports` junctions at all.
-   *  Off for source-control setups that dislike reparse points (Perforce, some
-   *  backup clients) — `$HIP` paths are then impossible, so absolute is forced. */
-  createExportJunctions: boolean
   /** Relative folder the character folders live in, under the project root. '' = the
    *  project root itself (e.g. 'assets/characters' → <project>/assets/characters/<char>). */
   charactersSubdir: string
@@ -82,7 +77,6 @@ export const PROJECT_BEHAVIOR_DEFAULTS = {
   dazProductsEnabled: false,
   charactersSubdir: '',
   houdiniPathStyle: 'hip' as 'hip' | 'absolute',
-  createExportJunctions: true,
 } as const
 
 function manifestDefaults(dir: string): DcspManifest {
@@ -183,10 +177,6 @@ export async function readManifest(dir: string): Promise<DcspManifest> {
           : defaults.dazProductsEnabled,
       charactersSubdir: safeRelSubdir(raw.charactersSubdir, ''),
       houdiniPathStyle: raw.houdiniPathStyle === 'absolute' ? 'absolute' : 'hip',
-      createExportJunctions:
-        typeof raw.createExportJunctions === 'boolean'
-          ? raw.createExportJunctions
-          : defaults.createExportJunctions,
       unrealProjects: Array.isArray(raw.unrealProjects)
         ? raw.unrealProjects.filter((p: unknown): p is string => typeof p === 'string' && p !== '')
         : [],

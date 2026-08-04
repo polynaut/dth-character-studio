@@ -39,8 +39,6 @@ export interface ProjectInfo extends storage.Project {
   charactersSubdir: string
   /** Reference-skeleton path style — see `DcspManifest.houdiniPathStyle`. */
   houdiniPathStyle: 'hip' | 'absolute'
-  /** Whether the studio creates/maintains the `dth-exports` junctions. */
-  createExportJunctions: boolean
   /** Absolute paths of linked Unreal project files (.uproject). */
   unrealProjects: Array<string>
 }
@@ -61,7 +59,6 @@ export async function resolveProject(projectDir: string): Promise<ProjectInfo> {
     dazProductsEnabled: m.dazProductsEnabled,
     charactersSubdir: m.charactersSubdir,
     houdiniPathStyle: m.houdiniPathStyle,
-    createExportJunctions: m.createExportJunctions,
     unrealProjects: m.unrealProjects,
     ...(m.createdAt ? { createdAt: m.createdAt } : {}),
   }

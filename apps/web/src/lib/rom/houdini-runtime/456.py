@@ -54,13 +54,13 @@ EXPORT_TYPES = ("daztohueexport", "daztohuegroomexport")
 
 def normalize(path):
     """Compare paths the way the studio does: slashes forward, case-folded —
-    on the PHYSICAL path. The studio plants a `dth-exports` junction inside
-    the Houdini project folder precisely so users pick `.dth` files through
-    it, and a node whose import was picked that way stores the junction
-    spelling (`<houdini-project>/dth-exports/...`), which never string-matches
-    the job's canonical export path. `os.path.realpath` resolves the junction
-    on both sides. Measured on Windows: it also folds a mapped drive letter
-    to its UNC target — safe, both sides of every compare get the same
+    on the PHYSICAL path. `os.path.realpath` earns its keep three ways: it
+    collapses the `..` hops in the `$HIP/../...`-style import paths the
+    studio writes, it folds a mapped drive letter to its UNC target, and it
+    resolves the junction spellings (`<houdini-project>/dth-exports/...`)
+    that nodes in old .hip files still store from the retired junction era —
+    none of which would string-match the job's canonical export path raw.
+    Measured on Windows: safe, both sides of every compare get the same
     treatment — and it never raises on a path that does not exist."""
     cleaned = (path or "").strip()
     if not cleaned:

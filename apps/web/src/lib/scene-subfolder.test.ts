@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   deriveScenesRootRel,
   hipAnchorDirs,
+  hipRefPrefixFor,
   sceneSubfolderConflict,
   suggestSceneSubfolder,
 } from './scene-subfolder'
@@ -92,6 +93,52 @@ describe('hipAnchorDirs — where $HIP-relative reference paths can anchor', () 
   it('no projects / no folder → nothing anchors', () => {
     expect(hipAnchorDirs([], 'D:/lib/Electra')).toEqual([])
     expect(hipAnchorDirs(['D:/lib/Electra/houdini/A.hiplc'], '')).toEqual([])
+  })
+})
+
+describe('hipRefPrefixFor — the $HIP prefix that replaces the export root', () => {
+  it('standard layout: hips in the houdini folder reach the export root by one ..', () => {
+    expect(
+      hipRefPrefixFor(
+        ['X:/p/Kira/houdini/K.hiplc'],
+        'X:/p/Kira',
+        'X:/p/Kira/daz3d/dth-exports',
+      ),
+    ).toBe('$HIP/../daz3d/dth-exports')
+    // Backslash inputs (the stored Windows paths) resolve identically.
+    expect(
+      hipRefPrefixFor(
+        ['X:\\p\\Kira\\houdini\\K.hiplc'],
+        'X:\\p\\Kira',
+        'X:\\p\\Kira\\daz3d\\dth-exports',
+      ),
+    ).toBe('$HIP/../daz3d/dth-exports')
+  })
+
+  it('no linked projects → absolute (there is no $HIP to anchor at)', () => {
+    expect(hipRefPrefixFor([], 'X:/p/Kira', 'X:/p/Kira/daz3d/dth-exports')).toBe('')
+  })
+
+  it('a hip outside the character folder → absolute (no fixed relative path exists)', () => {
+    expect(
+      hipRefPrefixFor(['E:/elsewhere/K.hiplc'], 'X:/p/Kira', 'X:/p/Kira/daz3d/dth-exports'),
+    ).toBe('')
+  })
+
+  it('two hips in different folders → absolute (one prefix cannot be right for both)', () => {
+    expect(
+      hipRefPrefixFor(
+        ['X:/p/Kira/houdini/A.hiplc', 'X:/p/Kira/archive/B.hiplc'],
+        'X:/p/Kira',
+        'X:/p/Kira/daz3d/dth-exports',
+      ),
+    ).toBe('')
+  })
+
+  it('a cross-drive export root → absolute (no .. walk crosses a drive letter)', () => {
+    expect(
+      hipRefPrefixFor(['X:/p/Kira/houdini/K.hiplc'], 'X:/p/Kira', 'Y:/exports/Kira'),
+    ).toBe('')
   })
 })
 

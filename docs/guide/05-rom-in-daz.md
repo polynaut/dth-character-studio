@@ -97,19 +97,18 @@ character.
 The exports deliberately live **outside** the Houdini project — a Houdini
 project folder is something you back up, sync or put in version control, and
 `.abc`/`.dth` files are large and fully regenerable. So the studio keeps them
-on the Daz side and gives Houdini a **shortcut** instead:
+on the Daz side, one `..` away from your `.hip`:
 
 ```
 <character>/
   daz3d/
     Kira.duf
-    dth-exports/          ← the real files
+    dth-exports/          ← the exports
       primary/  Kira.abc  Kira.dth  Kira_pose_asset.csv
       summertide/
   houdini/
-    Kira.hiplc
+    Kira.hiplc            ← imports read ../daz3d/dth-exports/…
     houdini-project/      ← $JOB (File → Set Project)
-      dth-exports  ──►  ../../daz3d/dth-exports
   export/                 ← the FINAL files, for Unreal
 ```
 
@@ -120,83 +119,39 @@ inside the Daz folder, which holds the Daz→Houdini intermediate the DTH
 Exporter writes. All three names can be changed per project in
 **Settings → Project**.
 
-That last entry is a **junction**: a folder-shaped shortcut Windows resolves
-transparently. Houdini's file picker opens at `$JOB`, so `dth-exports/` is
-right there — one click instead of climbing two levels into the Daz folder —
-and imports read `$JOB/dth-exports/primary/Kira.dth`
-([Into Houdini](./06-into-houdini.md)).
+There is no plumbing between the two sides: from a `.hip` in the houdini
+folder, the exports are plain `..` navigation away (`../daz3d/dth-exports/…`),
+and ticking Houdini's **Make path relative to current directory** in the file
+picker gives you the portable `$HIP/../…` form. Everything the studio writes
+is an ordinary file or folder — nothing needs special treatment from Perforce,
+Git or backup tools.
 
-**Generate project** creates it, along with the `houdini-project` folder
-itself. That folder is shared: the first generated project creates it, every
-later one reuses it, so all of a character's projects open with the same
-`$JOB`. A **second** `dth-exports` shortcut lives next to the `.hip` itself,
-so `$HIP/dth-exports/…` resolves — that's what the reference-skeleton paths
-below use. The studio checks and repairs that one **every time it generates**,
-so a deleted or stale shortcut heals on the next save.
+**Generate project** creates the `houdini-project` folder. It is shared: the
+first generated project creates it, every later one reuses it, so all of a
+character's projects open with the same `$JOB`.
 
 ### Reference-skeleton paths — `$HIP` by default
 
 Every **Bone scale** frame gets a reference-skeleton FBX, and the PoseAsset CSV
 has to point Houdini at it. Those paths are written relative to **`$HIP`** (the
-folder holding the `.hip`):
+folder holding the `.hip`), climbing over to the Daz side:
 
 ```
-$HIP/dth-exports/primary/Kira_frame_432.fbx
+$HIP/../daz3d/dth-exports/primary/Kira_frame_432.fbx
 ```
 
 so the project keeps resolving after you move, rename or copy the character
-tree — including onto another machine. Both this and whether the junctions are
-created at all are **per-project settings**: the first **Generate project** in
-a project asks right in the dialog, and **Settings → Project** changes them
-anytime later.
+tree — including onto another machine. **Settings → Project → Houdini path
+style** controls it: `hip` (the default) writes these relative paths,
+`absolute` forces absolute ones.
 
-A character with **no Houdini project inside its folder** has no `$HIP` to be
-relative to, so its reference paths are always absolute — regardless of the
-setting. The same fallback protects a character whose shortcut can't be created
-at all (an export folder on a network drive, say): the studio only writes
-`$HIP` paths it has verified the shortcut for. Generate a project (or hand-link
-one inside the character folder) and save again to switch it over.
-
-### The dth-exports junction & source control
-
-The junction is a convenience, not plumbing — the export pipeline itself never
-goes through it, and imports work with the real path just as well. But tools
-that scan your project folder can trip over reparse points: **Perforce** and
-some backup clients follow them (pulling the whole export tree into the depot
-view) or delete them. You have three outs, from lightest to heaviest:
-
-**1. Ignore it.** Keep the convenience, hide it from the tool.
-
-For **Git**, add to the project's `.gitignore`:
-
-```gitignore
-# DTH Character Studio: junctions into the export folder (recreated on save)
-dth-exports/
-```
-
-For **Perforce**, add to the file your `P4IGNORE` variable points at
-(e.g. `.p4ignore` in the workspace root — `p4 set P4IGNORE=.p4ignore` once, if
-it isn't set):
-
-```text
-# DTH Character Studio: junctions into the export folder (recreated on save)
-dth-exports/
-```
-
-> [!WARNING]
-> Perforce ignores only apply to files being **added** — a junction already
-> added to the depot stays tracked. Ignore it before the first `p4 add`, or
-> remove it from the depot once.
-
-**2. Switch junctions off for the project.** **Settings → Project → Create
-dth-exports shortcuts** (also offered in the first Generate-project dialog).
-No junctions are created or repaired from then on; existing ones can be
-deleted freely. `$HIP` paths resolve *through* the junction, so this forces
-absolute reference paths — the trade-off is a project tree that's fully
-source-control-inert.
-
-**3. Delete the link ad hoc.** With junctions ON, a deleted link simply comes
-back on the next save — fine for a one-off scan, wrong as a permanent fix.
+Relative paths are only written when one prefix is provably right for **every**
+linked `.hip`: all of the character's Houdini projects sit in the same folder
+inside the character's own layout, with the export folder reachable on the same
+drive. Anything else — no linked project yet, a hand-linked `.hip` somewhere in
+your own tree, projects spread over two folders — falls back to absolute paths,
+so the CSV never carries a reference that can't resolve. Generate a project (or
+link one in the character's houdini folder) and save again to switch it over.
 
 **Old folders clean themselves up**: the studio remembers which export folders
 the current layout uses, and when a scene's subfolder is renamed or moved, the
@@ -210,6 +165,10 @@ previous run's folders are removed from the export directory on the next save.
 > their already-exported files come along, so nothing is left behind (**Tools →
 > Refresh assets** migrates every character in one go). Only the folders the
 > studio wrote are moved; anything else you kept in that directory stays put.
+> Older versions also kept `dth-exports` **shortcut links** (NTFS junctions)
+> beside Houdini projects; any leftovers are removed automatically on the next
+> save — Refresh assets reports them as *removed N leftover dth-exports
+> junction(s)*. Your real `dth-exports` folders are never touched.
 
 Two switches (in the **Daz scripts generated** box on the character page)
 tune this:

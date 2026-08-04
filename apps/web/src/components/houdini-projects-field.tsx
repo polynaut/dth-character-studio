@@ -3,7 +3,6 @@ import { Plus, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { DirPathChip, displayDirOf } from '#/components/dir-path-chip.tsx'
-import { GuideLink } from '#/components/guide-link.tsx'
 import { Portrait } from '#/components/portrait.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import {
@@ -21,12 +20,7 @@ import houdiniLogo from '#/assets/houdini-logo.svg'
 import {
   fileExists,
   generatedHoudiniScenePath,
-  fetchProject,
-  fetchSettings,
   generateHoudiniProject,
-  houdiniIntroDue,
-  markHoudiniIntroSeen,
-  saveProjectSettings,
   openScene,
   removeGeneratedHoudiniProject,
   revealPath,
@@ -452,38 +446,6 @@ function GenerateProjectDialog({
 }) {
   const [name, setName] = useState(defaultProjectName(projectName, character.name))
   const [busy, setBusy] = useState(false)
-  // The project's FIRST Generate on this machine explains $HIP + the
-  // dth-exports junction right here and asks how the project wants them —
-  // the decisions land in the .dcsp (Settings → Project edits them later).
-  // null = the probe hasn't answered; the section only renders when due.
-  const [introDue, setIntroDue] = useState<boolean | null>(null)
-  const [makeJunctions, setMakeJunctions] = useState(true)
-  const [hipPaths, setHipPaths] = useState(true)
-  useEffect(() => {
-    let active = true
-    void houdiniIntroDue({ data: { projectId } }).then((due) => {
-      if (!active) return
-      setIntroDue(due)
-      if (!due) return
-      // Seed the choices from what the project already has — plus the LEGACY
-      // app-global path style (one Settings knob before v0.61): a user who had
-      // deliberately switched it to `absolute` (the escape hatch when `$HIP`
-      // expansion misbehaves in Houdini) must not find the intro pre-ticked
-      // back to `$HIP` by the fresh per-project default.
-      void Promise.all([fetchProject({ data: { projectId } }), fetchSettings()]).then(
-        ([p, settings]) => {
-          if (!active || !p) return
-          setMakeJunctions(p.createExportJunctions)
-          setHipPaths(
-            p.houdiniPathStyle !== 'absolute' && settings.houdiniPathStyle !== 'absolute',
-          )
-        },
-      )
-    })
-    return () => {
-      active = false
-    }
-  }, [projectId])
   // The houdini folder shown relative (".\houdini") — the dialog only needs the
   // WHERE in one word.
   const houdiniDirName = houdiniDir.replace(/\\/g, '/').split('/').filter(Boolean).pop() ?? ''
@@ -524,30 +486,6 @@ function GenerateProjectDialog({
         setDiskTaken(true)
         return
       }
-      if (introDue) {
-        // Persist the intro's choices FIRST — this very generate must respect
-        // them (a "no junctions" pick must not create one and then apologize).
-        // The save input defaults every omitted field, so pass the project's
-        // current values through.
-        const p = await fetchProject({ data: { projectId } })
-        if (p) {
-          await saveProjectSettings({
-            data: {
-              projectId,
-              dazSubdir: p.dazSubdir,
-              houdiniSubdir: p.houdiniSubdir,
-              exportSubdir: p.exportSubdir,
-              createHoudiniSubdir: p.createHoudiniSubdir,
-              assetsEnabled: p.assetsEnabled,
-              dazProductsEnabled: p.dazProductsEnabled,
-              charactersSubdir: p.charactersSubdir,
-              houdiniPathStyle: makeJunctions && hipPaths ? 'hip' : 'absolute',
-              createExportJunctions: makeJunctions,
-            },
-          })
-        }
-        await markHoudiniIntroSeen({ data: { projectId } })
-      }
       const result = await generateHoudiniProject({
         data: { projectId, id: character.id, sceneName: name },
       })
@@ -571,9 +509,9 @@ function GenerateProjectDialog({
             Creates a new Houdini scene with the DazToHue network — built by running your
             installed DazToHue <em>shelf tool</em>, so it always matches the current plugin —
             and <em>Set Project</em> baked to the character&apos;s Houdini project folder:
-            every import resolves as <code>$JOB/dth-exports/…</code>, so the project stays
-            moveable. Runs Houdini&apos;s <code>hython</code>; the first start can take a
-            moment.
+            every import resolves relative to the scene file (<code>$HIP/../…</code>), so the
+            project stays moveable. Runs Houdini&apos;s <code>hython</code>; the first start
+            can take a moment.
           </InfoPopup>
         </span>
       }
@@ -606,60 +544,6 @@ function GenerateProjectDialog({
           </p>
         )}
       </div>
-      {/* First Generate for this project (on this machine): explain the two
-          things it is about to set up, and let the project decide them. Short
-          on purpose — the guide carries the depth. */}
-      {introDue && (
-        <div className="space-y-3 rounded-md border bg-muted/30 p-3 text-sm">
-          <p>
-            <strong>First Houdini project here — two things to know.</strong> The studio keeps
-            a <code>dth-exports</code> shortcut (an NTFS junction) beside the <code>.hip</code>,
-            so Houdini reaches the export folder; some source control dislikes junctions
-            (Perforce follows or deletes reparse points). And reference-skeleton paths can be
-            written <code>$HIP</code>-relative through it — portable across moves and machines —
-            or absolute.{' '}
-            <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/05-rom-in-daz.html#the-dth-exports-junction-amp-source-control">
-              Open guide
-            </GuideLink>
-          </p>
-          <label className="flex items-start gap-2">
-            <input
-              type="checkbox"
-              className="mt-0.5 size-4 shrink-0 accent-daz-green"
-              checked={makeJunctions}
-              disabled={busy}
-              onChange={(e) => setMakeJunctions(e.target.checked)}
-            />
-            <span>
-              Create the <code>dth-exports</code> shortcuts
-              <span className="block text-xs text-muted-foreground">
-                Untick for Perforce or junction-hostile backup tools — you browse to the export
-                folder yourself instead.
-              </span>
-            </span>
-          </label>
-          <label className={`flex items-start gap-2${makeJunctions ? '' : ' opacity-50'}`}>
-            <input
-              type="checkbox"
-              className="mt-0.5 size-4 shrink-0 accent-daz-green"
-              checked={makeJunctions && hipPaths}
-              disabled={busy || !makeJunctions}
-              onChange={(e) => setHipPaths(e.target.checked)}
-            />
-            <span>
-              Write reference paths relative to <code>$HIP</code> (recommended)
-              <span className="block text-xs text-muted-foreground">
-                {makeJunctions
-                  ? 'Unticked, the real absolute path is baked into the CSV instead.'
-                  : 'Needs the shortcut — absolute paths are used without it.'}
-              </span>
-            </span>
-          </label>
-          <p className="text-xs text-muted-foreground">
-            Saved as project settings — change them anytime in Settings → Project.
-          </p>
-        </div>
-      )}
       <div className="flex justify-end gap-2">
         <Button variant="ghost" disabled={busy} onClick={onClose}>
           Cancel

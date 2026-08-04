@@ -41,7 +41,8 @@ import { relativeInside } from '../storage/fs'
 import { copyDazScene } from './attachments'
 import { clearImageSrcCache, rebuildAvatarMaster, upscaleStoredAvatar } from './avatars'
 import { poseAssetFramesSchema, sceneWearablesSchema } from './native-types'
-import { refreshExportJunctions } from './houdini'
+import { hipRefPrefixFor } from '#/lib/scene-subfolder.ts'
+import { sweepExportJunctions } from './houdini'
 import { CHARACTER_SCHEMA_VERSION, poseAssetCsvEra, RUNTIME_VERSION } from '@dth/rom'
 import {
   basename,
@@ -236,6 +237,9 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   files: ReturnType<typeof generateAll>
   scriptsDir: string | null
   scriptsError: string | null
+  /** Leftover `dth-exports` junctions removed by this generation's sweep (the
+   *  retired junction feature) — Refresh assets reports them per character. */
+  sweptJunctions: Array<string>
 }> {
   const { projectId, id, previousName, targets } = generateInput.parse(data)
   // Which artifact groups to (re)write. The editor's Generate writes both; a
@@ -266,7 +270,13 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   // an empty scene. Every generation path funnels through here (save, create,
   // Refresh assets), so this one guard keeps them all quiet.
   if (!character.scenePath) {
-    return { outDir: location.folderAbs, files: [], scriptsDir: null, scriptsError: null }
+    return {
+      outDir: location.folderAbs,
+      files: [],
+      scriptsDir: null,
+      scriptsError: null,
+      sweptJunctions: [],
+    }
   }
   // Exact ROM paths from the active release's pose scan; {} when the folder is
   // unavailable — the script then falls back to DthOptions resolution. The
@@ -352,21 +362,25 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   // scenes-folder rename, a charactersSubdir move, the v29 migration — would
   // otherwise leave them aimed at the old one. They all funnel through here,
   // so ONE refresh covers the lot instead of each flow having to remember
-  // Houdini exists — and it doubles as the $HIP emit decision: bone-scale
-  // reference-skeleton paths are written `$HIP`-relative (the Settings
-  // default) only when every junction they would resolve through is verified
-  // in place. Any failure — no linked `.hip` inside the character folder, a
-  // network/non-NTFS export root, a real folder in the way — falls back to
-  // absolute paths for this character rather than shipping refs that cannot
-  // resolve, and never fails the save (the probe swallows its own errors).
-  // Both knobs are PER PROJECT now (the `.dcsp`, decided in the first
-  // Generate-project dialog, editable in Settings → Project). With junctions
-  // off, none are created OR repaired — and `$HIP` paths are impossible (they
-  // resolve THROUGH the junction), so absolute is forced whatever the style.
-  const junctionsOk = project.createExportJunctions
-    ? await refreshExportJunctions(versioned, outDir, project.houdiniSubdir).catch(() => false)
-    : false
-  const hipRelativeRefs = project.houdiniPathStyle !== 'absolute' && junctionsOk
+  // The $HIP emit decision: bone-scale reference-skeleton paths are written
+  // `$HIP`-anchored (`$HIP/../<dazSubdir>/dth-exports/…` — plain relative
+  // navigation, no junctions since v0.63) only when ONE prefix is provably
+  // right for every linked `.hip`: all in the character's layout, one anchor
+  // folder, export root on the same drive (`hipRefPrefixFor`). Anything else
+  // falls back to absolute paths for this character rather than shipping refs
+  // that cannot resolve. The style knob stays PER PROJECT (the `.dcsp`,
+  // Settings → Project).
+  const hipRefPrefix =
+    project.houdiniPathStyle !== 'absolute'
+      ? hipRefPrefixFor(versioned.houdiniProjects, outDir, versioned.exportPath)
+      : ''
+  // Leftover sweep from the retired junction feature: every generation removes
+  // the `dth-exports` reparse points the old code planted (reparse-point-safe;
+  // real folders are never touched). Best-effort — a locked link waits for the
+  // next save — and reported per character by Tools → Refresh assets.
+  const sweptJunctions = await sweepExportJunctions(versioned, outDir, project.houdiniSubdir).catch(
+    () => [] as Array<string>,
+  )
   // The ONE character script embeds every linked scene's overrides and selects
   // the open scene at run time; generateAll also mints a per-scene PoseAsset CSV
   // for each ROM-override scene (Houdini has no runtime to select frames). Both
@@ -381,7 +395,7 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
     sceneRomPaths,
     sceneFrames,
     scenesRootAbs,
-    hipRelativeRefs,
+    hipRefPrefix,
     indexSync,
   )
   // Scene-suffixed artifact names of EVERY stored override (active or not) at a
@@ -545,7 +559,7 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   await migrateRomAnimationFolders(versioned)
   await housekeepRomAnimations(versioned)
   await housekeepExportFolders(versioned, outDir, scenesRootAbs)
-  return { outDir, files, scriptsDir, scriptsError }
+  return { outDir, files, scriptsDir, scriptsError, sweptJunctions }
 }
 
 /**
@@ -1119,11 +1133,18 @@ async function refreshAllAssetsInner(refreshOpts: {
       // scriptsError, nothing on disk); the CSV always writes to the project folder.
       if (regenDaz && !res.scriptsError) counts.scripts += 1
       if (regenHoudini) counts.csv += 1
+      const junctionNote =
+        res.sweptJunctions.length > 0
+          ? `removed ${res.sweptJunctions.length} leftover dth-exports junction${
+              res.sweptJunctions.length === 1 ? '' : 's'
+            }`
+          : undefined
       results.push({
         project: project.name,
         character: character.name,
         ok: true,
-        detail: [sceneMoveNote, res.scriptsError].filter(Boolean).join(' — ') || undefined,
+        detail:
+          [sceneMoveNote, junctionNote, res.scriptsError].filter(Boolean).join(' — ') || undefined,
       })
     } catch (e) {
       results.push({

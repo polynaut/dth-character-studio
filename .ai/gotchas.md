@@ -315,6 +315,10 @@ current code before relying on details, but assume the *lesson* still holds.
   operation's root: `is_dir()` FOLLOWS links, so a mover must check
   `symlink_metadata` first and move the reparse point itself (cross-volume:
   refuse) — or it deep-copies the target's gigabytes and deletes the link.
+  This symlink report is also how the leftover-junction sweep tells a link
+  from a real folder: `remove_junction` (junction.rs) treats
+  `symlink_metadata().file_type().is_symlink()` as THE junction test and
+  refuses everything else.
 - **The DTH Exporter is only scriptable in Daz Studio 6.** Driving it needs
   `MainWindow.getActionMgr().findAction("DazToHueExporterAction")` →
   `doExport(dir, name, referenceFrames, saveSettings)` — introduced with the DS6
@@ -330,23 +334,28 @@ current code before relying on details, but assume the *lesson* still holds.
   build has no version resource at all; (3) automated export — the ROM script's
   export block and the whole bulk DTH Export flow — is DS6-only, even though the
   Runner plugin itself does load in DS4.
-- **Creating a directory link on Windows: junction, not symlink.** A junction
+- **Creating a directory link on Windows: junction, not symlink** (HISTORICAL
+  since v0.63 — the studio no longer creates junctions, but the measured facts
+  keep the sweep's test honest). A junction
   (`IO_REPARSE_TAG_MOUNT_POINT`) needs NO elevation; a directory SYMLINK needs
   `SeCreateSymbolicLinkPrivilege` (admin) or Developer Mode plus
   `SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE`, so `std::os::windows::fs::
   symlink_dir` simply fails for an unelevated studio. std has no junction API at
-  all — `junction.rs` writes the reparse point itself via
+  all — the reparse point is written via
   `FSCTL_SET_REPARSE_POINT` (substitute name wants the NT `\??\` prefix; the
-  declared name lengths EXCLUDE their NUL terminators). The price: a junction
+  declared name lengths EXCLUDE their NUL terminators), and a junction
   can only target a LOCAL absolute path — never UNC or a mapped network drive.
+  That writer survives only as `junction.rs`'s test helper: the sweep's test
+  builds a real junction to prove `remove_junction` never eats its target.
 - **`fs::remove_dir_all` on a folder CONTAINING a junction removes the link, not
-  the target's files** (measured on this repo's Windows, Rust std). That is what
-  makes the `dth-exports` junction safe to place inside a Houdini project folder
-  the user may delete. Do NOT assume the same of other tools: PowerShell's
+  the target's files** (measured on this repo's Windows, Rust std). It kept the
+  retired `dth-exports` junctions safe inside Houdini project folders users
+  might delete, and it still matters: leftover junctions from pre-v0.63
+  versions sit in user trees until the sweep clears them (`remove_junction` —
+  itself a plain `fs::remove_dir` on the symlink-verified link). Do NOT assume
+  the same of other tools: PowerShell's
   `Remove-Item -Recurse` has historically recursed through reparse points, and
-  `p4 clean` / `reconcile -d` may treat the junction as an untracked extra. The
-  studio's answer is not to trust any of them — the junction carries no data and
-  is recreated on the next Generate project.
+  `p4 clean` / `reconcile -d` may treat a junction as an untracked extra.
 - **Dedup's containment rails must cover source ↔ source, not just
   quarantine ↔ source** — the same folder listed twice (case variant) makes
   every asset an exact dup of ITSELF, and a source nested in another source is
@@ -700,14 +709,14 @@ current code before relying on details, but assume the *lesson* still holds.
 - **An NTFS junction stores an ABSOLUTE target — anything that moves the
   target leaves the junction pointing at the old path**, silently (Windows
   happily keeps a dangling reparse point, and re-creating the old folder makes
-  writes land in a resurrected tree instead of erroring). The `dth-exports`
-  junctions therefore get refreshed on EVERY generation through the one funnel
-  (`refreshExportJunctions` in api/houdini.ts, called from
-  `generateCharacterFiles`), not just when Generate project runs — a
-  character/folder rename, a scenes-folder rename, a `charactersSubdir` move
-  and the v29 export-root migration all change the export root the junctions
-  target. Corollary for DERIVED path fields: being re-derived on save does not
+  writes land in a resurrected tree instead of erroring). This is why the
+  retired junction feature (pre-v0.63) had to refresh its links on EVERY
+  generation, and one more reason the links are gone — a relative
+  `$HIP/../…` path has no stored target to go stale; the same generation
+  funnel now runs the leftover sweep instead (`sweepExportJunctions`,
+  api/houdini.ts). The corollary OUTLIVES the feature, for DERIVED path
+  fields: being re-derived on save does not
   exempt a field from `repointCharacterPaths` — `moveCharactersRoot` rewrites
   each moved definition directly (no `saveCharacter`, no re-derive), and
   `exportPath` staying stale until "some later save" was enough for a
-  same-batch regenerate to aim junctions at the old location (#647).
+  same-batch regenerate to aim reference paths at the old location (#647).

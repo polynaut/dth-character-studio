@@ -47,13 +47,13 @@ Notes:
   dir and the scene-suffixed figure name handed to `doExport` — when it copies
   the CSV next to the exporter output. The resolved dir is an **absolute
   path**, or — with the project's *Settings → Project → Houdini path style* on
-  `hip` (the default) **and** export junctions enabled (`houdiniPathStyle` /
-  `createExportJunctions`, both `.dcsp` manifest fields) —
-  **`$HIP/dth-exports/<scene subfolder>`**, resolving through a `dth-exports`
-  junction the studio keeps beside each generated `.hip` in the character
-  folder (created by Generate project, re-checked on every generation; a
-  character whose junction can't exist falls back to absolute, and with
-  junctions disabled none is created or repaired — absolute is forced).
+  `hip` (the default; the `houdiniPathStyle` `.dcsp` manifest field) —
+  **`$HIP/../<dazSubdir>/dth-exports/<scene subfolder>`**, plain relative
+  navigation from the linked `.hip`s to the export root beside the scenes.
+  One prefix must be right for **every** linked `.hip` (`hipRefPrefixFor` in
+  `apps/web/src/lib/scene-subfolder.ts`); a character whose layout allows none
+  — no linked project, a `.hip` outside the character folder, projects spread
+  over two folders, a cross-drive export root — falls back to absolute.
 - **`MIS` rows must leave `file` empty.** The parser reads the column, but the
   node has no matching parameter for Misc mappings, so a non-empty value makes
   the whole import fail (`AttributeError: 'NoneType' object has no attribute

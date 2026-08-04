@@ -59,7 +59,8 @@ Tauri plugins instead of a Node backend:
   **project's folder**, marked by its `.dcsp` file. There is no global project
   registry: a `.dcsp`'s location *is* the project.
 - **Custom Rust commands** — heavy work beyond the plugins (asset install/dedup,
-  avatar upscaling, launching Daz Studio and Houdini/hython, NTFS junctions,
+  avatar upscaling, launching Daz Studio and Houdini/hython, sweeping leftover
+  NTFS junctions,
   multi-window projects) is `#[tauri::command]`s in per-feature modules under
   `apps/desktop/src/`, registered in `lib.rs`. Paths are resolved in TS, file
   work happens in Rust; structured returns are zod-parsed

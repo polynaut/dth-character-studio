@@ -76,7 +76,7 @@ a plain browser with native features as no-ops):
   (artifact generation + `resolvePresetFrames` + staleness sweep), `execute.ts`
   (the DTH Exporter job-file handoff + Daz launch — pure parts in
   `lib/rom/execute-jobs.ts`, contract in `docs/exporter-plugin-job-file.md`),
-  `houdini.ts` (Generate project via hython + the `dth-exports` junction),
+  `houdini.ts` (Generate project via hython + the leftover-junction sweep),
   `install.ts`, `maintenance.ts`, `avatars.ts`, `attachments.ts`, `notes.ts`,
   `products.ts`, `move.ts` (the shared folder-move lock gate: `assertMovable`
   throws `LockedFilesError` off `probeLockedFiles`), `data-url.ts`,
@@ -143,8 +143,9 @@ inherits the pristine user-session environment, not the studio's),
 drive remap), `foreground.rs`, `github.rs` (server-side GitHub API — webview CSP
 blocks it), `archive.rs` (zip-bomb bounds), `content.rs`, `fsutil.rs`
 (recursive-delete rails + `move_tree`, the one mover shared by dedup's
-quarantine and the export-root migration), `junction.rs` (NTFS directory
-junctions — std has none), `exports.rs` (moving a character's exported files to
+quarantine and the export-root migration), `junction.rs` (the removal sweep for
+the retired junction feature — reparse-point-verified, creation survives only
+as a test helper), `exports.rs` (moving a character's exported files to
 the fixed export root), `report.rs`, `testutil.rs`, `contract_tests.rs`.
 
 A project window's **native title is `"<.dcsp stem> — DTH Character Studio"`** —
@@ -176,8 +177,9 @@ see `docs/exporter-plugin-job-file.md`), drives
 (`upscale_avatar_file`/`downscale_avatar_png`), `shell_open_file`,
 `housekeeping_sweep`,
 `app_release_tags`, `unreal_dth_present`, `probe_locked_files`, and the Houdini
-side (`create_houdini_project`, `create_junction` — the `dth-exports` shortcut,
-best-effort and never load-bearing — `launch_houdini_job`/`houdini_running` for
+side (`create_houdini_project`, `remove_junction` — the best-effort sweep of
+leftover `dth-exports` junctions from the retired feature —
+`launch_houdini_job`/`houdini_running` for
 the "Export too" handoff, plus `move_exports` for the v29 migration).
 Nearly all are
 `#[tauri::command(async)]`; structured returns are camelCase serde structs pinned
@@ -203,8 +205,7 @@ window (single-instance routes a second launch). Project folder holds the
 character folders (under `charactersSubdir` when set), `.dcsmeta/` (avatars,
 media), and `.assets/` (opt-in). App-data (`appLocalDataDir()`) holds only
 machine state: `settings.json`, `recents.json`, `network-drives.json`,
-`houdini-intro.json` (which projects saw the first-Generate-project intro —
-`storage/app-data.ts`), the morph/bone index (`morphs_<G>.json` +
+the morph/bone index (`morphs_<G>.json` +
 `morphs_scenes_<G>.json`, read by `api/characters.ts`), scan output
 (`product-scans/`, `scan-frames/`), and `houdini-scripts/` — where `456.py` is
 rewritten before every Houdini run (`houdini-jobs.ts`). Generated Daz scripts install to

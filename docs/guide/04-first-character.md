@@ -114,8 +114,8 @@ detailed in [Build the ROM in Daz](./05-rom-in-daz.md#direct-export-optional-rec
 
 The **Export directory** section shows where [direct export](./05-rom-in-daz.md#direct-export-optional-recommended)
 lands. It's fixed and read-only: `dth-exports` inside the character's Daz
-folder, created with the character. A Houdini project reaches those files
-through a shortcut rather than containing them — see
+folder, created with the character. A Houdini project reaches those files by a
+relative path (`../daz3d/dth-exports/…`) rather than containing them — see
 [where the Houdini project fits](./05-rom-in-daz.md#where-the-houdini-project-fits).
 
 <details>
