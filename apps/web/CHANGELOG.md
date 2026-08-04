@@ -1,5 +1,30 @@
 # @dth/web
 
+## 0.62.2
+
+### Patch Changes
+
+- [#676](https://github.com/polynaut/dth-character-studio/pull/676) [`adb0b1e`](https://github.com/polynaut/dth-character-studio/commit/adb0b1e56a0439241127f59e5fc8d31b4dad451e) Thanks [@polynaut](https://github.com/polynaut)! - True up in-app copy that had drifted from the code: the Houdini remove dialog
+  no longer claims it deletes the shared `houdini-project` folder (only the
+  scene file is deleted), the Generate-project popup resolves imports as
+  `$JOB/dth-exports`, and the two "Open guide" links follow the guide's renamed
+  headings (Tab 3 — Refresh assets; the Scan & index accordion).
+
+- [#680](https://github.com/polynaut/dth-character-studio/pull/680) [`73f9372`](https://github.com/polynaut/dth-character-studio/commit/73f93724595532bdc1e1e18af7c7908db8301366) Thanks [@polynaut](https://github.com/polynaut)! - A DTH Export Houdini leg now **closes Houdini again** once its exports are
+  done: the job carries a `closeWhenDone` flag and `456.py` exits the instance
+  from inside (save prompt suppressed — the scene is deliberately never saved)
+  right after writing its final result. A queue of projects no longer stacks
+  open Houdini windows, and a session you opened yourself is never touched.
+  **Open only** still leaves the project open to work in.
+
+- [#679](https://github.com/polynaut/dth-character-studio/pull/679) [`9773c4c`](https://github.com/polynaut/dth-character-studio/commit/9773c4c50f7dbf463db514a587f009246ef12cb1) Thanks [@polynaut](https://github.com/polynaut)! - Tools now opens on **Scan & index** — the tab order is Scan & index, Daz
+  Studio & Houdini, Refresh assets. A plain `/tools` lands on the scan panel;
+  `?tab=install` addresses the installers, and existing `?tab=index` /
+  `?tab=refresh` deep links keep working unchanged.
+- Updated dependencies []:
+  - @dth/rom@0.62.2
+  - @dth/ui@0.62.2
+
 ## 0.62.1
 
 ### Patch Changes
