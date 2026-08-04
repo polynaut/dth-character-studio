@@ -209,7 +209,8 @@ The persisted `Character` shape is versioned (`CHARACTER_SCHEMA_VERSION` in
 - A **primitive** return (a `String`, a `Vec<String>`) needs no fixture — parse it
   with a plain `z.string()` / `z.enum([...])` / `z.array(z.string())` at the call
   site and it is still not a bare cast. `create_houdini_project` (a `"a|b"`
-  report), `create_junction` (`"created"`/`"exists"`) and `move_exports` (one
+  report), `remove_junction` (`"removed"`/`"absent"`/`"not-a-junction"`) and
+  `move_exports` (one
   line per failure, empty = all moved) are the examples. Reach for a struct when
   the caller needs fields, not when it needs an answer.
 - Pattern: **resolve paths in TS, do heavy file work in Rust.** Native access
@@ -268,9 +269,9 @@ danger-zone confirm strip — keep their own styling.
   centralized in `PROJECT_BEHAVIOR_DEFAULTS` (same file — THE single copy: a
   fresh manifest and the api's project-settings save input both read it). A
   new per-project field = the interface + `PROJECT_BEHAVIOR_DEFAULTS` + the
-  Settings → Project tab + (when it's a first-run decision) the
-  first-Generate-project intro. `houdiniPathStyle` + `createExportJunctions`
-  live here since v0.61; the app-global `studioSettingsSchema.houdiniPathStyle`
-  is LEGACY (`storage/settings.ts`), kept only so old settings.json files
-  still parse and read in exactly ONE place — seeding the intro's default.
+  Settings → Project tab. `houdiniPathStyle` lives here since v0.61
+  (`createExportJunctions` arrived with it and was retired with the junction
+  feature in v0.63 — old manifests carrying it still parse, the key is
+  ignored); the app-global `studioSettingsSchema.houdiniPathStyle` is LEGACY
+  (`storage/settings.ts`), kept only so old settings.json files still parse.
   Changing `charactersSubdir` is destructive (physically moves folders).

@@ -34,8 +34,6 @@ export {
   fetchActiveProject,
   fetchProject,
   fetchRecents,
-  houdiniIntroDue,
-  markHoudiniIntroSeen,
   forgetRecent,
   isDirectory,
   openProject,

@@ -1,4 +1,4 @@
-import { mkdir, readTextFile, writeTextFile } from '@tauri-apps/plugin-fs'
+import { mkdir } from '@tauri-apps/plugin-fs'
 import { appLocalDataDir } from '@tauri-apps/api/path'
 import { getVersion } from '@tauri-apps/api/app'
 
@@ -59,38 +59,4 @@ export async function studioVersion(): Promise<string> {
 /** Ensure the app-data folder exists (it holds settings.json and images/). */
 export async function ensureAppDir(): Promise<void> {
   await mkdir(await dataDir(), { recursive: true })
-}
-
-/**
- * Which projects (by MANIFEST id, not folder path — the flag must survive a
- * project folder move) have already seen the first-Generate-project intro:
- * the dialog section explaining `$HIP` paths + the `dth-exports` junction and
- * asking how this project wants them. Machine-local on purpose (appdata):
- * the DECISIONS live in the `.dcsp`; only "was it explained here" is volatile.
- */
-const HOUDINI_INTRO_FILE = 'houdini-intro.json'
-
-export async function houdiniIntroShown(projectManifestId: string): Promise<boolean> {
-  try {
-    const raw = JSON.parse(await readTextFile(await dataPath(HOUDINI_INTRO_FILE))) as {
-      shown?: Array<string>
-    }
-    return Array.isArray(raw.shown) && raw.shown.includes(projectManifestId)
-  } catch {
-    return false // missing/broken file = never shown
-  }
-}
-
-export async function markHoudiniIntroShown(projectManifestId: string): Promise<void> {
-  let shown: Array<string> = []
-  try {
-    const raw = JSON.parse(await readTextFile(await dataPath(HOUDINI_INTRO_FILE))) as {
-      shown?: Array<string>
-    }
-    if (Array.isArray(raw.shown)) shown = raw.shown.filter((s) => typeof s === 'string')
-  } catch {
-    // fresh file
-  }
-  if (!shown.includes(projectManifestId)) shown.push(projectManifestId)
-  await writeTextFile(await dataPath(HOUDINI_INTRO_FILE), JSON.stringify({ shown }, null, 2))
 }

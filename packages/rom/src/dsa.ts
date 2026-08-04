@@ -374,15 +374,13 @@ function buildExportBlock(
    */
   unattended = false,
   /**
-   * Write bone-scale reference-skeleton paths **`$HIP`-relative** instead of
-   * absolute (Settings → "Houdini path style"). The HOST decides this flag —
-   * it knows where the linked `.hip`s live and has probed/ensured the
-   * `dth-exports` junctions those paths resolve through
-   * (`refreshExportJunctions`, web `lib/rom/api/houdini.ts`); this pure core
-   * can't see the filesystem, so it obeys. Default false = absolute, the
-   * always-safe form.
+   * `$HIP`-anchored replacement for the export ROOT in bone-scale
+   * reference-skeleton paths (e.g. `$HIP/../daz3d/dth-exports`) — the HOST
+   * computes it from where the linked `.hip`s live relative to the export
+   * root (project "Houdini path style"); this pure core can't see the
+   * filesystem, so it obeys. Empty = absolute paths, the always-safe form.
    */
-  hipRelativeRefs = false,
+  hipRefPrefix = '',
 ): string {
   const exportDir = character.exportPath.trim()
   if (!exportDir) return ''
@@ -412,17 +410,17 @@ function buildExportBlock(
       ? `    var dthCsvName = ${dazJson(poseAssetFileName(character))};`
       : indentLines(sceneCsvLookupSnippet(poseAssetFileName(character), sceneCsvMap).trimEnd())
   // Bone-scale reference paths are written either absolute (dthExportDir as
-  // resolved at run time) or anchored at $HIP — the folder the `.hip` sits in,
-  // where the host keeps a `dth-exports` junction pointing at the export root.
-  // The swap is a prefix exchange on the export ROOT, so whatever scene
-  // subfolder this run resolved rides along untouched; an export dir that
-  // somehow isn't under the root keeps the absolute path rather than producing
-  // a wrong one.
-  const refDirBlock = hipRelativeRefs
+  // resolved at run time) or anchored at $HIP via the host-computed prefix —
+  // e.g. `$HIP/../daz3d/dth-exports`, valid because the linked `.hip`s sit in
+  // the character's houdini folder and the layout is fixed. The swap is a
+  // prefix exchange on the export ROOT, so whatever scene subfolder this run
+  // resolved rides along untouched; an export dir that somehow isn't under
+  // the root keeps the absolute path rather than producing a wrong one.
+  const refDirBlock = hipRefPrefix
     ? `    var dthRefRootAbs = ${dazJson(exportDir.replace(/\\/g, '/'))};
     var dthRefDir = dthExportDir;
     if (dthExportDir.indexOf(dthRefRootAbs) === 0) {
-        dthRefDir = "$HIP/dth-exports" + dthExportDir.substr(dthRefRootAbs.length);
+        dthRefDir = ${dazJson(hipRefPrefix)} + dthExportDir.substr(dthRefRootAbs.length);
     }`
     : `    var dthRefDir = dthExportDir;`
   const csvCopyBlock = charFolderAbs
@@ -950,9 +948,9 @@ export function toCharacterScriptDsa(
   sceneRomPaths: Record<string, RomPaths> = {},
   sceneFrames: Record<string, PresetFrames> = {},
   scenesRootAbs?: string,
-  /** Write bone-scale reference paths `$HIP`-relative — see
-   *  {@link buildExportBlock}. */
-  hipRelativeRefs = false,
+  /** `$HIP`-anchored prefix for bone-scale reference paths ('' = absolute) —
+   *  see {@link buildExportBlock}. */
+  hipRefPrefix = '',
   /** Scan-sync settings — see {@link IndexSyncOptions}. */
   indexSync?: IndexSyncOptions,
 ): GeneratedFile {
@@ -965,7 +963,7 @@ export function toCharacterScriptDsa(
     sceneRomPaths,
     sceneFrames,
     scenesRootAbs,
-    hipRelativeRefs,
+    hipRefPrefix,
     indexSync,
   )
 }
@@ -989,9 +987,9 @@ export function toBulkRomExportScriptDsa(
   sceneRomPaths: Record<string, RomPaths> = {},
   sceneFrames: Record<string, PresetFrames> = {},
   scenesRootAbs?: string,
-  /** Write bone-scale reference paths `$HIP`-relative — see
-   *  {@link buildExportBlock}. */
-  hipRelativeRefs = false,
+  /** `$HIP`-anchored prefix for bone-scale reference paths ('' = absolute) —
+   *  see {@link buildExportBlock}. */
+  hipRefPrefix = '',
   /** Scan-sync settings — see {@link IndexSyncOptions}. */
   indexSync?: IndexSyncOptions,
 ): GeneratedFile {
@@ -1004,7 +1002,7 @@ export function toBulkRomExportScriptDsa(
     sceneRomPaths,
     sceneFrames,
     scenesRootAbs,
-    hipRelativeRefs,
+    hipRefPrefix,
     indexSync,
   )
 }
@@ -1037,7 +1035,7 @@ export function toBuildRomAnimationScriptDsa(
     sceneRomPaths,
     sceneFrames,
     scenesRootAbs,
-    false,
+    '', // export forced off — there are no reference paths to anchor
     indexSync,
   )
   // Hidden (dot-prefixed) → no Content Library tile, no icon artwork.
@@ -1135,9 +1133,9 @@ function buildRomScriptDsa(
   /** The character's scenes-root folder (host-resolved) — sizes each scene's
    *  export subfolder; see {@link sceneExportSubfolders}. */
   scenesRootAbs?: string,
-  /** Write bone-scale reference paths `$HIP`-relative — see
-   *  {@link buildExportBlock}. */
-  hipRelativeRefs = false,
+  /** `$HIP`-anchored prefix for bone-scale reference paths ('' = absolute) —
+   *  see {@link buildExportBlock}. */
+  hipRefPrefix = '',
   /** Scan-sync settings — see {@link IndexSyncOptions}. */
   indexSync?: IndexSyncOptions,
 ): GeneratedFile {
@@ -1172,7 +1170,7 @@ function buildRomScriptDsa(
   const exportBlock =
     exportDir && character.exportWithRomScript !== false
       ? `            // Export to the DTH pipeline via the Exporter Plugin (v1.8.1+).
-${buildExportBlock(character, frames, charFolderAbs, sceneCsvMap, scenesRootAbs, bulk, hipRelativeRefs)
+${buildExportBlock(character, frames, charFolderAbs, sceneCsvMap, scenesRootAbs, bulk, hipRefPrefix)
   .split('\n')
   .map((line) => (line ? `            ${line}` : line))
   .join('\n')}`
@@ -1390,9 +1388,9 @@ export function toExportScriptDsa(
   /** Emitted for the Runner's unattended export-only carrier — suppresses the
    *  modal alerts, which would block a batch (see {@link buildExportBlock}). */
   unattended = false,
-  /** Write bone-scale reference paths `$HIP`-relative — see
-   *  {@link buildExportBlock}. */
-  hipRelativeRefs = false,
+  /** `$HIP`-anchored prefix for bone-scale reference paths ('' = absolute) —
+   *  see {@link buildExportBlock}. */
+  hipRefPrefix = '',
   /** Scan-sync settings — see {@link IndexSyncOptions}. */
   indexSync?: IndexSyncOptions,
 ): GeneratedFile {
@@ -1417,7 +1415,7 @@ if (dthSceneLinkErr) {
 } else if (!dthFig) {
     MessageBox.critical("No ${character.genesis} figure found in the scene - load the character's scene and re-run.", "DTH Character Studio", "&OK");
 } else {
-${indentLines(indexSyncSnippet(indexSync))}${buildExportBlock(character, frames, charFolderAbs, buildSceneCsvMap(character), scenesRootAbs, unattended, hipRelativeRefs)
+${indentLines(indexSyncSnippet(indexSync))}${buildExportBlock(character, frames, charFolderAbs, buildSceneCsvMap(character), scenesRootAbs, unattended, hipRefPrefix)
   .split('\n')
   .map((line) => (line ? `    ${line}` : line))
   .join('\n')}}
@@ -1448,9 +1446,9 @@ export function toBulkExportOnlyScriptDsa(
   frames?: PresetFrames,
   charFolderAbs?: string,
   scenesRootAbs?: string,
-  /** Write bone-scale reference paths `$HIP`-relative — see
-   *  {@link buildExportBlock}. */
-  hipRelativeRefs = false,
+  /** `$HIP`-anchored prefix for bone-scale reference paths ('' = absolute) —
+   *  see {@link buildExportBlock}. */
+  hipRefPrefix = '',
   /** Scan-sync settings — see {@link IndexSyncOptions}. */
   indexSync?: IndexSyncOptions,
 ): GeneratedFile {
@@ -1461,7 +1459,7 @@ export function toBulkExportOnlyScriptDsa(
     scenesRootAbs,
     // The Runner executes this one — no modals.
     true,
-    hipRelativeRefs,
+    hipRefPrefix,
     indexSync,
   )
   // Hidden (dot-prefixed) → the Content Library never shows it: no tile.
@@ -1640,9 +1638,9 @@ export function generateAll(
    *  subfolder below this root; see {@link sceneExportSubfolders}. Omitted ⇒
    *  every scene falls back to stem-named export subfolders. */
   scenesRootAbs?: string,
-  /** Write bone-scale reference paths `$HIP`-relative instead of absolute
-   *  (Settings → Houdini path style). See {@link buildExportBlock}. */
-  hipRelativeRefs = false,
+  /** `$HIP`-anchored prefix for bone-scale reference paths ('' = absolute,
+   *  project "Houdini path style"). See {@link buildExportBlock}. */
+  hipRefPrefix = '',
   /** Scan-sync settings for the generated ROM/export scripts — see
    *  {@link IndexSyncOptions}. Omitted = the scripts scan nothing. */
   indexSync?: IndexSyncOptions,
@@ -1679,11 +1677,11 @@ export function generateAll(
       sceneRomPaths,
       sceneFrames,
       scenesRootAbs,
-      hipRelativeRefs,
+      hipRefPrefix,
       indexSync,
     ),
     ...(split
-      ? [toExportScriptDsa(character, frames, charFolderAbs, scenesRootAbs, false, hipRelativeRefs)]
+      ? [toExportScriptDsa(character, frames, charFolderAbs, scenesRootAbs, false, hipRefPrefix)]
       : []),
     // The hidden bulk script the Runner executes on DTH Export runs — always
     // ROM + always full export, so it only exists WITH an export dir.
@@ -1697,7 +1695,7 @@ export function generateAll(
             sceneRomPaths,
             sceneFrames,
             scenesRootAbs,
-            hipRelativeRefs,
+            hipRefPrefix,
             indexSync,
           ),
           // …and its export-only twin (DTH Export's "Export only" mode): the
@@ -1707,7 +1705,7 @@ export function generateAll(
             frames,
             charFolderAbs,
             scenesRootAbs,
-            hipRelativeRefs,
+            hipRefPrefix,
             indexSync,
           ),
         ]

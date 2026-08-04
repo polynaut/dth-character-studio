@@ -28,12 +28,12 @@ export const EXPORTS_FOLDER = 'dth-exports'
  * all of a character's `.hiplc` files Set-Project to the same folder, so
  * `$JOB` means one thing for the character.
  *
- * It holds no exports. A {@link EXPORTS_FOLDER}-named JUNCTION inside it points
- * at the real export root, purely so Houdini's file picker — which opens at
- * `$JOB` — shows `dth-exports/` right there instead of making the user climb
- * two levels into the Daz subfolder. Nothing depends on it: delete it and only
- * that shortcut is lost (which is also the escape hatch if a tool that scans
- * the project folder, Perforce included, dislikes reparse points).
+ * It holds no exports — the real export root lives beside the scenes
+ * (`<char>/<dazSubdir>/dth-exports`), reached from a `.hip` by plain `..`
+ * navigation. (Earlier versions planted `dth-exports` JUNCTIONS here and
+ * beside the `.hip`s; killed in favor of relative paths — reparse points and
+ * Perforce/backup tooling never got along, and the doubled folder confused
+ * every file picker. The junction sweep in Refresh assets removes leftovers.)
  */
 export const HOUDINI_PROJECT_FOLDER = 'houdini-project'
 
@@ -98,18 +98,12 @@ export function characterHoudiniProjectDir(charFolderAbs: string, houdiniSubdir?
 }
 
 /**
- * Where `$HIP/dth-exports/…` can anchor: the distinct folders holding a linked
- * `.hip` INSIDE the character folder. THE one predicate behind both halves of
- * the `$HIP` reference-path story — the generate-time emit decision (a
- * `dth-exports` junction is ensured in each of these folders before
- * `$HIP`-relative reference-skeleton paths are written; `refreshExportJunctions`
- * in `lib/rom/api/houdini.ts`) and the per-generation junction refresh — so the
- * paths the delivered CSV carries and the junctions they resolve through can
- * never disagree about where a junction belongs.
- *
- * A project linked OUTSIDE the character folder is the user's own tree: the
- * studio puts no junction there, so it never anchors `$HIP` paths.
- * Deduped case-insensitively (Windows paths); returned with forward slashes.
+ * Where `$HIP`-anchored reference paths can anchor: the distinct folders
+ * holding a linked `.hip` INSIDE the character folder. A project linked
+ * OUTSIDE the character folder is the user's own tree — no fixed relative
+ * path can reach the export root from an arbitrary location, so it never
+ * anchors `$HIP` paths. Deduped case-insensitively (Windows paths); returned
+ * with forward slashes.
  */
 export function hipAnchorDirs(
   houdiniProjects: ReadonlyArray<string>,
@@ -126,6 +120,49 @@ export function hipAnchorDirs(
     if (!dirs.has(dir.toLowerCase())) dirs.set(dir.toLowerCase(), dir)
   }
   return [...dirs.values()]
+}
+
+/**
+ * The `$HIP`-anchored prefix that replaces the export ROOT in generated
+ * reference-skeleton paths — e.g. `$HIP/../daz3d/dth-exports` for the
+ * standard layout — or '' when only absolute paths are safe.
+ *
+ * One prefix must be right for EVERY linked `.hip`, so relative emission
+ * requires: at least one linked project, all of them inside the character
+ * folder, all in the SAME folder, and the export root reachable from it on
+ * the same drive. Anything else — no projects yet, a hand-linked `.hip` in
+ * the user's own tree, projects spread over two folders — falls back to
+ * absolute. (This replaced the `dth-exports` junctions: same gate shape,
+ * no reparse points.)
+ */
+export function hipRefPrefixFor(
+  houdiniProjects: ReadonlyArray<string>,
+  charFolderAbs: string,
+  exportRootAbs: string,
+): string {
+  const folder = stripTrailingSeparators(charFolderAbs.replace(/\\/g, '/'))
+  const exportRoot = stripTrailingSeparators(exportRootAbs.trim().replace(/\\/g, '/'))
+  if (!folder || !exportRoot || houdiniProjects.length === 0) return ''
+  const prefix = `${folder.toLowerCase()}/`
+  const inside = (hip: string) =>
+    hip.trim().replace(/\\/g, '/').toLowerCase().startsWith(prefix)
+  if (!houdiniProjects.every(inside)) return ''
+  const anchors = hipAnchorDirs(houdiniProjects, charFolderAbs)
+  if (anchors.length !== 1) return ''
+  // `..` up from the anchor to the common ancestor, then down to the root.
+  const from = anchors[0].split('/')
+  const to = exportRoot.split('/')
+  if (from[0].toLowerCase() !== to[0].toLowerCase()) return '' // cross-drive
+  let common = 0
+  while (
+    common < from.length &&
+    common < to.length &&
+    from[common].toLowerCase() === to[common].toLowerCase()
+  ) {
+    common++
+  }
+  const parts = [...Array.from({ length: from.length - common }, () => '..'), ...to.slice(common)]
+  return parts.length === 0 ? '' : `$HIP/${parts.join('/')}`
 }
 
 /** Tokens that carry no scene identity — generation markers and the DTH preset

@@ -149,7 +149,7 @@ pub fn run() {
             houdini::create_houdini_project,
             houdini::launch_houdini_job,
             houdini::houdini_running,
-            junction::create_junction,
+            junction::remove_junction,
             exports::move_exports,
             shellopen::shell_open_file,
             install::install_daz_merge,

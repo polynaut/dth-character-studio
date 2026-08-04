@@ -55,7 +55,7 @@ test('project window: character editor measures, edits and saves both artifacts'
   // This "window" was opened with the project's .dcsp — main.tsx reads it via
   // active_project_file and navigates into the project route on its own.
   // `houdiniProject` links the .hip + export root so the save exercises the
-  // junction refresh (asserted below).
+  // $HIP-relative reference-path emission (asserted below).
   await page.addInitScript(
     installTauriMock,
     buildSeed({ activeProjectFile: P.dcsp, houdiniProject: true }),
@@ -122,14 +122,20 @@ test('project window: character editor measures, edits and saves both artifacts'
   // The definition's provenance was re-stamped by the save.
   const definition = await fileContent(page, `${P.charFolder}/Kira.json`)
   expect(JSON.parse(definition!).generatedDthVersion).toBe('2.4.3')
-  // The save's generation funnel refreshed the `dth-exports` junction beside
-  // the linked .hip — the one `$HIP/dth-exports/...` reference-skeleton paths
-  // resolve through — pointing at the CURRENT export root. This pins the
-  // refresh-on-every-generation contract (refreshExportJunctions): the emit
-  // decision and the junction can't drift, and an export-root move is chased
-  // on the next save.
-  expect(await commandCalls(page, 'create_junction')).toContainEqual({
-    request: { linkPath: `${P.houdiniDir}/dth-exports`, targetPath: P.exportDir },
+  // The save's generation emitted the bone-scale reference-skeleton paths
+  // RELATIVE to the linked .hip: the script swaps the export root for
+  // `$HIP/../daz3d/dth-exports` — plain `..` navigation from `<char>/houdini/`
+  // to the export root beside the scenes (hipRefPrefixFor's rule; no junctions
+  // since v0.63). This pins the emit decision end-to-end: the manifest's
+  // default 'hip' style + the fixture's linked .hip inside the character
+  // folder reach the emitted script.
+  expect(dsa).toContain('"$HIP/../daz3d/dth-exports"')
+  // …and the same funnel swept the retired junction feature's leftovers,
+  // probing exactly where the old versions planted them (beside the linked
+  // .hip here) — nothing to remove in the fixture world, but the sweep-on-
+  // every-generation contract is what must not drift.
+  expect(await commandCalls(page, 'remove_junction')).toContainEqual({
+    request: { linkPath: `${P.houdiniDir}/dth-exports` },
   })
 
   // The completeness guard: every native call the flow made was one this mock
@@ -164,16 +170,17 @@ test('project window: inline rename moves the folder and regenerates the script'
   expect(written).toContain(`${novaFolder}/Nova.json`)
   expect(written).toContain(`${P.dazLib}/Scripts/DTH-Character-Studio/Demo/Nova/ROM_Nova_G9.dsa`)
   expect(JSON.parse((await fileContent(page, `${novaFolder}/Nova.json`))!).name).toBe('Nova')
-  // The junctions chased the rename: the regenerate's refresh aimed the
-  // .hip-side link at the NEW folder's (re-derived) export root — the exact
-  // failure #647 fixes (a junction stores an absolute target, so without the
-  // refresh it would still point into the old "Kira" tree).
-  expect(await commandCalls(page, 'create_junction')).toContainEqual({
-    request: {
-      linkPath: `${novaFolder}/houdini/dth-exports`,
-      targetPath: `${novaFolder}/daz3d/dth-exports`,
-    },
-  })
+  // The relative emission chased the rename: the regenerated script anchors
+  // its prefix swap at the NEW folder's (re-derived) export root. The drift
+  // class #647 fixed for junctions (an absolute link target still pointing
+  // into the old "Kira" tree) structurally can't recur with relative paths —
+  // but the ROOT the prefix replaces must still track the move.
+  const novaDsa = await fileContent(
+    page,
+    `${P.dazLib}/Scripts/DTH-Character-Studio/Demo/Nova/ROM_Nova_G9.dsa`,
+  )
+  expect(novaDsa).toContain(`var dthRefRootAbs = "${novaFolder}/daz3d/dth-exports";`)
+  expect(novaDsa).toContain('"$HIP/../daz3d/dth-exports"')
 
   expect(await unhandledCommands(page)).toEqual([])
 })

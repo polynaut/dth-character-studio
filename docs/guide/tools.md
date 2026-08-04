@@ -176,7 +176,10 @@ the **current** studio/runtime version, migrating definitions saved by an older
 studio first (your ROM content is preserved). Run it after **updating the app**
 or **switching DTH release**. It covers **every known (recent) project**, no
 matter which window you run it from; problems per character are listed inline,
-and the button pulses orange when a refresh is due. **Ctrl+click Refresh** also
+and the button pulses orange when a refresh is due. It also cleans up after
+older versions — e.g. the `dth-exports` shortcut links (NTFS junctions) they
+kept beside Houdini projects are removed, reported as *removed N leftover
+dth-exports junction(s)*; real folders are never touched. **Ctrl+click Refresh** also
 rebuilds every character's stored **avatar** from its pristine source — needed
 once after an update that changes the avatar pipeline.
 

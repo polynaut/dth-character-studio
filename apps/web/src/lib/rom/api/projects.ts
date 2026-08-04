@@ -219,9 +219,6 @@ const projectSettingsInput = z.object({
   houdiniPathStyle: z
     .enum(['hip', 'absolute'])
     .default(storage.PROJECT_BEHAVIOR_DEFAULTS.houdiniPathStyle),
-  createExportJunctions: z
-    .boolean()
-    .default(storage.PROJECT_BEHAVIOR_DEFAULTS.createExportJunctions),
 })
 export async function saveProjectSettings({ data }: { data: unknown }): Promise<ProjectInfo> {
   const {
@@ -234,7 +231,6 @@ export async function saveProjectSettings({ data }: { data: unknown }): Promise<
     dazProductsEnabled,
     charactersSubdir,
     houdiniPathStyle,
-    createExportJunctions,
   } = projectSettingsInput.parse(data)
   const dir = await projectPath(projectId)
   const manifest = await storage.readManifest(dir)
@@ -299,7 +295,6 @@ export async function saveProjectSettings({ data }: { data: unknown }): Promise<
     dazProductsEnabled,
     charactersSubdir: manifestCharactersSubdir,
     houdiniPathStyle,
-    createExportJunctions,
   })
   if (moveError) throw new Error(moveError)
   // Folders moved and the manifest is consistent, but N characters kept stale
@@ -370,33 +365,4 @@ export async function setUnrealProjects({ data }: { data: unknown }): Promise<Pr
   const unique = [...new Set(paths.map((p) => p.trim()).filter(Boolean))]
   await storage.writeManifest(dir, { ...manifest, unrealProjects: unique })
   return resolveProject(dir)
-}
-
-/**
- * Whether this project's first-Generate-project INTRO is still due — the dialog
- * section explaining `$HIP` paths + the `dth-exports` junction and asking how
- * the project wants them. Keyed by MANIFEST id (survives a folder move) and
- * stored machine-locally in appdata: the decisions live in the `.dcsp`, only
- * "was it explained on this machine" is volatile. Best-effort false on errors —
- * a broken flag file must not block generating.
- */
-export async function houdiniIntroDue({ data }: { data: unknown }): Promise<boolean> {
-  const { projectId } = projectIdInput.parse(data)
-  try {
-    const project = await resolveProject(projectId)
-    return !(await storage.houdiniIntroShown(project.id))
-  } catch {
-    return false
-  }
-}
-
-/** Mark the intro as seen for this project (after its first Generate). */
-export async function markHoudiniIntroSeen({ data }: { data: unknown }): Promise<void> {
-  const { projectId } = projectIdInput.parse(data)
-  try {
-    const project = await resolveProject(projectId)
-    await storage.markHoudiniIntroShown(project.id)
-  } catch {
-    // best effort — worst case the intro shows once more
-  }
 }

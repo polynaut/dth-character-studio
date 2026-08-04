@@ -105,7 +105,7 @@ A new structured return = a schema + a fixture + a test case on both sides.
 A **project** is a user-chosen folder marked by a single **`.dcsp`** manifest (JSON: schemaVersion,
 id, name, created, + per-project behaviour: `dazSubdir`/`houdiniSubdir`/`createHoudiniSubdir`/
 `exportSubdir` + `charactersSubdir` root, the opt-ins `assetsEnabled`/`dazProductsEnabled`, the
-Houdini path knobs `houdiniPathStyle`/`createExportJunctions`, and linked `unrealProjects` — see
+Houdini path knob `houdiniPathStyle`, and linked `unrealProjects` — see
 below). There is
 **no global registry** — a folder's location *is* the project. The OS file association opens a `.dcsp`
 in its **own window** (single-instance routes a second launch into a new window; see `windows.rs`
@@ -120,7 +120,7 @@ The active folder for a window is pinned by the project/character route loaders 
   media), and `.assets/` for project-scoped Daz-scene assets (only when `assetsEnabled`).
 - **App-data folder** (`appLocalDataDir()`, volatile/machine-only): `settings.json` (machine/tool
   paths), `recents.json` (recently-opened `.dcsp` list, the Home screen's source),
-  `network-drives.json`, `houdini-intro.json`, and the scan outputs `product-scans/` +
+  `network-drives.json`, and the scan outputs `product-scans/` +
   `scan-frames/`. No project registry, no avatars, no global assets — assets are per-project only.
 
 A character's generated Daz script still goes to
@@ -139,7 +139,7 @@ Two scopes now:
   save input. Adding one = add the schema field + its UI in the Settings route. Settings/Tools gate
   "save before action" on a `dirty` flag — include a new field there or its value never reaches disk.
 - **Per-project** (the `.dcsp` manifest: the subdirs + `charactersSubdir`, the
-  `assetsEnabled`/`dazProductsEnabled` opt-ins, `houdiniPathStyle`/`createExportJunctions`,
+  `assetsEnabled`/`dazProductsEnabled` opt-ins, `houdiniPathStyle`,
   `unrealProjects`) → the `DcspManifest` type + `readManifest`/`writeManifest` in
   `storage/projects.ts`, saved via `api.saveProjectSettings` and edited from the **Settings → Project tab**
   (shown only inside a project window). `assetsEnabled` is opt-in (default off → characters only).

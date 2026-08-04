@@ -1667,14 +1667,14 @@ describe('exporter integration', () => {
     // which is the run-time export dir unless $HIP-relative refs are on.
     expect(content).toContain('dthCsvText.split("{{DTH_EXPORT_DIR}}").join(dthRefDir)')
     expect(content).toContain('var dthRefDir = dthExportDir;')
-    expect(content).not.toContain('$HIP/dth-exports')
+    expect(content).not.toContain('$HIP')
     expect(content).not.toContain('.move(')
-    // …and with `hipRelativeRefs` on, the emitted script swaps the absolute
-    // export ROOT for the junction the host keeps beside the .hip, keeping
-    // whatever scene subfolder the run resolved. WHETHER the flag is on is the
-    // HOST's call — it probes/ensures the junctions the paths resolve through
-    // (refreshExportJunctions + hipAnchorDirs, tested in @dth/web) — so the
-    // pure core simply obeys it here.
+    // …and with a `hipRefPrefix`, the emitted script swaps the absolute export
+    // ROOT for that `$HIP`-anchored prefix, keeping whatever scene subfolder
+    // the run resolved. WHAT prefix (if any) is the HOST's call — it derives
+    // it from where the linked `.hip`s live relative to the export root
+    // (hipRefPrefixFor, tested in @dth/web) — so the pure core simply obeys
+    // it here.
     const hipContent = toCharacterScriptDsa(
       {
         ...character,
@@ -1687,11 +1687,11 @@ describe('exporter integration', () => {
       {},
       {},
       undefined,
-      true,
+      '$HIP/../daz3d/dth-exports',
     ).content
     expect(hipContent).toContain('var dthRefRootAbs = "X:/exports/electra";')
     expect(hipContent).toContain(
-      'dthRefDir = "$HIP/dth-exports" + dthExportDir.substr(dthRefRootAbs.length);',
+      'dthRefDir = "$HIP/../daz3d/dth-exports" + dthExportDir.substr(dthRefRootAbs.length);',
     )
     // Delivered under the export set's own scene-suffixed base name, into the
     // resolved export dir (scene subfolder included).

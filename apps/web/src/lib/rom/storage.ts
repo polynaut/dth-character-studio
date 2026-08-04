@@ -24,8 +24,6 @@
 export {
   dataDir,
   dataPath,
-  houdiniIntroShown,
-  markHoudiniIntroShown,
   productScanDir,
   scanFramesDir,
   studioVersion,

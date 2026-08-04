@@ -114,7 +114,6 @@ export async function migrateProjects(): Promise<void> {
         id: project.id,
         name: project.name,
         houdiniPathStyle: PROJECT_BEHAVIOR_DEFAULTS.houdiniPathStyle,
-        createExportJunctions: PROJECT_BEHAVIOR_DEFAULTS.createExportJunctions,
         createdAt: project.createdAt ?? new Date().toISOString(),
         ...oldSubs,
         // New per-project fields (defaults preserve today's behaviour): the assets

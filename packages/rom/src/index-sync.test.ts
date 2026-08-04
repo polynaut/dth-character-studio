@@ -50,7 +50,7 @@ function scripts(sync?: IndexSyncOptions): Record<string, string> {
     {},
     {},
     undefined,
-    false,
+    '',
     sync,
   )
   const out: Record<string, string> = {}
@@ -140,7 +140,7 @@ describe('scan-on-export (indexSync)', () => {
       {},
       {},
       undefined,
-      false,
+      '',
       SYNC_WITH_PRODUCTS,
     )
     expect(files.some((f) => f.fileName.startsWith('Scan_Products_'))).toBe(true)

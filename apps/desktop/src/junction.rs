@@ -1,82 +1,45 @@
 use serde::Deserialize;
 use std::path::Path;
 
-// Directory JUNCTIONS — the one native primitive behind the `dth-exports`
-// shortcut inside a character's Houdini project folder (see EXPORTS_FOLDER /
-// HOUDINI_PROJECT_FOLDER in the web layer).
-//
-// Why a junction and not a symlink: a junction needs NO elevation, ever, while
-// a directory symlink needs SeCreateSymbolicLinkPrivilege (admin) or Developer
-// Mode plus SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE. The studio runs
-// unelevated, so a symlink would simply fail for most users. The price is that
-// a junction can only target a LOCAL absolute path — no UNC, no mapped network
-// drive — which is fine here: the target is always inside the project folder.
-//
-// Why hand-rolled: std has `symlink_dir` (a symlink, see above) but no junction
-// at all, so the reparse point is written directly with FSCTL_SET_REPARSE_POINT.
-//
-// The junction is a CONVENIENCE and every caller must treat it as best-effort:
-// nothing in the export pipeline resolves through it (the studio and the
-// generated Daz scripts use real absolute paths), so a failure here costs the
-// user a Houdini file-picker shortcut and nothing else.
+// Directory JUNCTIONS — RETIRED as a feature (v0.63). The studio used to plant
+// `dth-exports` junctions beside every linked `.hip` and inside the shared
+// `houdini-project` folder so `$HIP/dth-exports/…` paths could resolve;
+// generated paths are plain-relative now (`$HIP/../<dazSubdir>/dth-exports/…`),
+// which needs no reparse points and upsets no Perforce/backup tooling. What
+// remains here is the SWEEP: `remove_junction` deletes the leftovers the old
+// versions created — strictly reparse-point-verified, so a real folder (the
+// actual export root is itself named `dth-exports`!) can never be touched.
+// The creation code survives only as a test helper: the sweep's test has to
+// build a junction to prove removing one never eats its target.
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct JunctionRequest {
-    /// Where the junction itself goes. Must not already exist as a REAL folder.
+pub struct RemoveJunctionRequest {
+    /// The suspected junction. Removed only when it IS a reparse point.
     pub link_path: String,
-    /// The existing directory it points at.
-    pub target_path: String,
 }
 
-/// Create — or repair — a directory junction at `linkPath` pointing at
-/// `targetPath`. Returns `"created"`, or `"exists"` when a correct junction was
-/// already there (both are success; the caller shows nothing either way).
-///
-/// Self-healing by design: anything that scans a Houdini project folder may
-/// delete the junction (`p4 clean` and friends treat it as an untracked extra),
-/// and a junction left pointing at a stale target is repointed rather than
-/// trusted. Removing a link never touches its target — verified against
-/// `std::fs::remove_dir_all`, which deletes the reparse point itself.
-///
-/// It REFUSES to touch a real directory at `linkPath`: that would mean deleting
-/// whatever the user put there.
+/// Remove a leftover junction at `linkPath`. Returns `"removed"`, `"absent"`
+/// (nothing there), or `"not-a-junction"` (a REAL folder or file sits at that
+/// path — left alone, deliberately not an error: the sweep treats it as
+/// none of its business). Removing a junction deletes the reparse point only,
+/// never its target's contents.
 #[tauri::command]
-pub fn create_junction(request: JunctionRequest) -> Result<String, String> {
+pub fn remove_junction(request: RemoveJunctionRequest) -> Result<String, String> {
     let link = Path::new(&request.link_path);
-    let target = Path::new(&request.target_path);
-    if !target.is_dir() {
-        return Err(format!(
-            "The junction target is not a folder: {}",
-            target.display()
-        ));
-    }
     match std::fs::symlink_metadata(link) {
         // std reports a junction as a symlink (see .ai/gotchas.md).
         Ok(meta) if meta.file_type().is_symlink() => {
-            let same = match (std::fs::canonicalize(link), std::fs::canonicalize(target)) {
-                (Ok(a), Ok(b)) => a == b,
-                _ => false,
-            };
-            if same {
-                return Ok("exists".into());
-            }
             std::fs::remove_dir(link)
-                .map_err(|e| format!("Could not replace the stale junction: {e}"))?;
+                .map_err(|e| format!("Could not remove the junction: {e}"))?;
+            Ok("removed".into())
         }
-        Ok(_) => {
-            return Err(format!(
-                "A real folder is already at {} — refusing to replace it with a junction.",
-                link.display()
-            ))
-        }
-        Err(_) => {}
+        Ok(_) => Ok("not-a-junction".into()),
+        Err(_) => Ok("absent".into()),
     }
-    create_junction_impl(link, target)?;
-    Ok("created".into())
 }
 
-#[cfg(windows)]
+#[cfg(all(test, windows))]
 fn create_junction_impl(link: &Path, target: &Path) -> Result<(), String> {
     use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
@@ -168,22 +131,17 @@ fn create_junction_impl(link: &Path, target: &Path) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(not(windows))]
-fn create_junction_impl(_link: &Path, _target: &Path) -> Result<(), String> {
-    Err("Directory junctions are a Windows feature.".into())
-}
-
 #[cfg(all(test, windows))]
 mod tests {
     use super::*;
 
-    /// The whole contract in one pass: a junction is created unelevated, reads
-    /// through to the target's contents, is reported as already present on a
-    /// second call, and — the property the caller depends on — removing the
-    /// folder that CONTAINS it leaves the target's files untouched.
+    /// The sweep's whole contract in one pass: removing a junction reports
+    /// `"removed"` and leaves the TARGET's files untouched, a second call says
+    /// `"absent"`, and a REAL folder at the path is left alone
+    /// (`"not-a-junction"`) with its contents intact.
     #[test]
-    fn creates_reports_and_never_eats_the_target() {
-        let base = std::env::temp_dir().join("dth_junction_test");
+    fn removes_junctions_only_and_never_eats_the_target() {
+        let base = std::env::temp_dir().join("dth_junction_sweep_test");
         let _ = std::fs::remove_dir_all(&base);
         let real = base.join("real");
         std::fs::create_dir_all(real.join("primary")).unwrap();
@@ -191,35 +149,33 @@ mod tests {
         let project = base.join("project");
         std::fs::create_dir_all(&project).unwrap();
         let link = project.join("dth-exports");
-
-        let request = JunctionRequest {
-            link_path: link.to_string_lossy().into_owned(),
-            target_path: real.to_string_lossy().into_owned(),
-        };
-        assert_eq!(create_junction(request).unwrap(), "created");
+        create_junction_impl(&link, &real).unwrap();
         assert_eq!(
             std::fs::read_to_string(link.join("primary/Kira.dth")).unwrap(),
             "payload"
         );
 
-        let again = JunctionRequest {
+        let request = RemoveJunctionRequest {
             link_path: link.to_string_lossy().into_owned(),
-            target_path: real.to_string_lossy().into_owned(),
         };
-        assert_eq!(create_junction(again).unwrap(), "exists");
-
-        std::fs::remove_dir_all(&project).unwrap();
-        assert!(!project.exists());
+        assert_eq!(remove_junction(request).unwrap(), "removed");
+        assert!(!link.exists());
         assert!(real.join("primary/Kira.dth").exists());
 
-        // A real folder in the way is never replaced.
-        let occupied = base.join("occupied");
-        std::fs::create_dir_all(occupied.join("dth-exports")).unwrap();
-        let refused = JunctionRequest {
-            link_path: occupied.join("dth-exports").to_string_lossy().into_owned(),
-            target_path: real.to_string_lossy().into_owned(),
+        let again = RemoveJunctionRequest {
+            link_path: link.to_string_lossy().into_owned(),
         };
-        assert!(create_junction(refused).is_err());
+        assert_eq!(remove_junction(again).unwrap(), "absent");
+
+        // A real folder of the same name is none of the sweep's business.
+        let occupied = base.join("occupied").join("dth-exports");
+        std::fs::create_dir_all(&occupied).unwrap();
+        std::fs::write(occupied.join("keep.txt"), b"mine").unwrap();
+        let refused = RemoveJunctionRequest {
+            link_path: occupied.to_string_lossy().into_owned(),
+        };
+        assert_eq!(remove_junction(refused).unwrap(), "not-a-junction");
+        assert!(occupied.join("keep.txt").exists());
 
         let _ = std::fs::remove_dir_all(&base);
     }

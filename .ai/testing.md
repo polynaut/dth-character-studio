@@ -52,7 +52,8 @@ every structured Rust return:
 
 A new structured return = fixture + schema + a case on both sides. `cargo test`
 also runs ~77 Rust module unit tests (zip-bomb bounds, content detection, dedup
-quarantine, delete rails, `.duf` parsing, junction reparse points, window-lock
+quarantine, delete rails, `.duf` parsing, the junction-leftover sweep's
+reparse-point rails, window-lock
 ordering).
 
 ## 3. Playwright smoke (`pnpm --filter @dth/web smoke`)

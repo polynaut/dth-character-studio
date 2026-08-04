@@ -31,10 +31,11 @@ Houdini-only pass.
 > [!TIP]
 > Use Houdini's **File → Set Project** on the character's
 > **[`houdini-project` folder](./05-rom-in-daz.md#where-the-houdini-project-fits)**
-> — then every import is project-relative:
-> `$JOB/dth-exports/primary/<Name>.dth`, and the `.hip` stays portable. The
-> exports themselves live on the Daz side; `dth-exports` inside the project is
-> a shortcut to them.
+> so `$JOB` means one thing per character. The exports live on the Daz side,
+> one `..` up from the scene: in the file picker, navigate to
+> `../daz3d/dth-exports/` and tick **Make path relative to current directory**
+> — the import reads `$HIP/../daz3d/dth-exports/primary/<Name>.dth` and the
+> `.hip` stays portable.
 
 ## Generate the Houdini project automatically
 
@@ -54,9 +55,8 @@ open with the same `$JOB`.
 
 ```
 houdini/
-├─ PlaygroundAssets_Ita.hiplc   ← the generated scene
+├─ PlaygroundAssets_Ita.hiplc   ← the generated scene (imports ../daz3d/dth-exports/…)
 └─ houdini-project/             ← $JOB (Set Project), shared by every project
-   └─ dth-exports  ──►  ../../daz3d/dth-exports
 ```
 
 Removing a **generated** project asks about its files: with **Keep houdini

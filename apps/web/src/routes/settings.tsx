@@ -79,7 +79,6 @@ interface ProjectSettings {
   dazProductsEnabled: boolean
   charactersSubdir: string
   houdiniPathStyle: 'hip' | 'absolute'
-  createExportJunctions: boolean
 }
 
 /** The project's saved values — defaults from THE single copy in
@@ -95,8 +94,6 @@ function projectSettingsFrom(project: Partial<ProjectSettings> | null | undefine
     dazProductsEnabled: project?.dazProductsEnabled ?? PROJECT_BEHAVIOR_DEFAULTS.dazProductsEnabled,
     charactersSubdir: project?.charactersSubdir ?? PROJECT_BEHAVIOR_DEFAULTS.charactersSubdir,
     houdiniPathStyle: project?.houdiniPathStyle ?? PROJECT_BEHAVIOR_DEFAULTS.houdiniPathStyle,
-    createExportJunctions:
-      project?.createExportJunctions ?? PROJECT_BEHAVIOR_DEFAULTS.createExportJunctions,
   }
 }
 
@@ -1326,50 +1323,22 @@ function SettingsPage() {
                   onCheckedChange={(v) => patchProject({ dazProductsEnabled: v })}
                 />
               </div>
-              <div className="flex items-center justify-between gap-3 border-t pt-4 text-sm">
-                <span className="flex items-center gap-1 font-medium">
-                  Create dth-exports shortcuts
-                  <InfoPopup
-                    label="Create dth-exports shortcuts — more information"
-                    className="-translate-y-px"
-                  >
-                    Generate project keeps a <code>dth-exports</code> shortcut (an NTFS
-                    junction) beside each linked <code>.hip</code>, so Houdini file pickers and{' '}
-                    <code>$HIP</code> paths reach the export folder. Some source-control setups
-                    dislike junctions (Perforce and some backup clients follow or delete reparse
-                    points) — switch this off there. Off also forces absolute paths below.{' '}
-                    <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/05-rom-in-daz.html#the-dth-exports-junction-amp-source-control">
-                      Open guide
-                    </GuideLink>
-                  </InfoPopup>
-                </span>
-                <Switch
-                  checked={projectSettings.createExportJunctions}
-                  onCheckedChange={(v) => patchProject({ createExportJunctions: v })}
-                />
-              </div>
               <div className="border-t pt-4">
                 <Label className="mb-1 flex w-fit items-center gap-1">
                   Houdini path style
                   <InfoPopup label="Houdini path style — more information">
                     Bone-scale <strong>reference-skeleton</strong> paths in the PoseAsset CSV are
-                    written relative to <code>$HIP</code> through the shortcut above — the project
-                    then keeps resolving after the character tree is moved, renamed, or opened on
+                    written relative to the scene file — <code>$HIP/../…</code> — so the project
+                    keeps resolving after the character tree is moved, renamed, or opened on
                     another machine. Characters with <em>no</em> Houdini project inside their
-                    folder — or whose shortcut can&apos;t be created — get absolute paths
-                    regardless.{' '}
+                    folder get absolute paths regardless.{' '}
                     <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/05-rom-in-daz.html#reference-skeleton-paths--hip-by-default">
                       Open guide
                     </GuideLink>
                   </InfoPopup>
                 </Label>
                 <Select
-                  value={
-                    projectSettings.createExportJunctions
-                      ? projectSettings.houdiniPathStyle
-                      : 'absolute'
-                  }
-                  disabled={!projectSettings.createExportJunctions}
+                  value={projectSettings.houdiniPathStyle}
                   onValueChange={(value) =>
                     patchProject({ houdiniPathStyle: value === 'absolute' ? 'absolute' : 'hip' })
                   }
@@ -1378,15 +1347,10 @@ function SettingsPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="hip">Relative to $HIP (recommended)</SelectItem>
+                    <SelectItem value="hip">Relative to the scene file ($HIP) (recommended)</SelectItem>
                     <SelectItem value="absolute">Absolute paths</SelectItem>
                   </SelectContent>
                 </Select>
-                {!projectSettings.createExportJunctions && (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Absolute — $HIP paths resolve through the shortcut, which is switched off.
-                  </p>
-                )}
               </div>
               <div>
                 <FolderField
