@@ -20,7 +20,7 @@ the product**.
 | **Group / suffix / method** | Custom poses live in groups; a group has a Houdini suffix scope (`centre`/`left`/`right`), a generation method and a calculate-from source (menu indices in the CSV). |
 | **Art direction** | Named override frames inside the GP/DK preset blocks (e.g. `VaginaOpen` @ GP frame 96) carrying their own morph values (`ART_DIRECTION_CATALOG`). |
 | **JCM morph mods** | Rules riding custom morphs along the shipped joint-corrective bends: per bone/axis, a signed `drives[]` list (angle range → value range; the **sign of the angle extreme picks the bend direction**). Split into runtime `positive[]`/`negative[]` by `jcmMorphModForRuntime` at generation. |
-| **Bone scale** | Per-pose flag (`boneScaleRef`) marking a morph that scales bones. Only meaningful in **GEN and FBM** (`REFERENCE_FBX_SECTIONS`) — a reference path on a MIS row breaks the HDA import. The CSV carries `{{DTH_EXPORT_DIR}}/Reference Skeletons/{{DTH_EXPORT_NAME}}_frame_<N>.fbx`; the generated `.dsa` resolves both tokens at CSV-copy time, `{{DTH_EXPORT_DIR}}` via **`dthRefDir`** — the run-time export dir, or (Settings `houdiniPathStyle`, default `hip`) **`$HIP/dth-exports/<scene subfolder>`**, a prefix swap on the absolute export ROOT so the resolved scene subfolder rides along. `$HIP` is the folder the `.hip` sits in, where the studio keeps a SECOND `dth-exports` junction for exactly this (the first one, in `houdini-project/`, is the `$JOB` file-picker shortcut). Whether `$HIP` paths are emitted is **HOST-decided** (the pure core just obeys the `hipRelativeRefs` flag): `generateCharacterFiles` calls `refreshExportJunctions` (api/houdini.ts), which ensures a junction in every **`hipAnchorDirs`** anchor — ONE predicate (`lib/scene-subfolder.ts`): the distinct folders holding a linked `.hip` inside the character folder — and the flag is true only when each junction is actually in place (idempotent `create_junction`, so the probe doubles as the repair for pre-existing projects). Any failure — no project inside the folder, a network/non-NTFS export root, a real folder in the way — falls back to absolute paths for that character, so a CSV never carries a `$HIP` path with nothing behind it. **`$JOB` is deliberately NOT used**: it is a session-global variable Houdini seeds from the environment, unrelated to the open scene, and whether `create_houdini_project`'s `hou.putenv('JOB', …)` survives the save is unverified. |
+| **Bone scale** | Per-pose flag (`boneScaleRef`) marking a morph that scales bones. Only meaningful in **GEN and FBM** (`REFERENCE_FBX_SECTIONS`) — a reference path on a MIS row breaks the HDA import. The CSV carries `{{DTH_EXPORT_DIR}}/Reference Skeletons/{{DTH_EXPORT_NAME}}_frame_<N>.fbx`; the generated `.dsa` resolves both tokens at CSV-copy time, `{{DTH_EXPORT_DIR}}` via **`dthRefDir`** — the run-time export dir, or (the `.dcsp`'s per-project `houdiniPathStyle`, default `hip` — the app-global Settings key of the same name is LEGACY pre-v0.61 and only seeds the first-Generate intro's default, `storage/settings.ts`) **`$HIP/dth-exports/<scene subfolder>`**, a prefix swap on the absolute export ROOT so the resolved scene subfolder rides along. `$HIP` is the folder the `.hip` sits in, where the studio keeps a SECOND `dth-exports` junction for exactly this (the first one, in `houdini-project/`, is the `$JOB` file-picker shortcut). Whether `$HIP` paths are emitted is **HOST-decided** (the pure core just obeys the `hipRelativeRefs` flag): `generateCharacterFiles` calls `refreshExportJunctions` (api/houdini.ts), which ensures a junction in every **`hipAnchorDirs`** anchor — ONE predicate (`lib/scene-subfolder.ts`): the distinct folders holding a linked `.hip` inside the character folder — and the flag is true only when each junction is actually in place (idempotent `create_junction`, so the probe doubles as the repair for pre-existing projects). Any failure — no project inside the folder, a network/non-NTFS export root, a real folder in the way — falls back to absolute paths for that character, so a CSV never carries a `$HIP` path with nothing behind it. With the project's `createExportJunctions` opt-out off (`storage/projects.ts`, default true), `refreshExportJunctions` is not called at all — `junctionsOk` is forced false and absolute paths are forced whatever the style (api/generate.ts). **`$JOB` is deliberately NOT used**: it is a session-global variable Houdini seeds from the environment, unrelated to the open scene, and whether `create_houdini_project`'s `hou.putenv('JOB', …)` survives the save is unverified. |
 | **Frame-0 morphs** | "Add morphs on frame 0" (schema v28, runtime v44): a name+value list (`frameZeroMorphs` → `config.frameZeroMorphs`) the runtime sets + keys at frame 0 on EVERY figure-tree node carrying the name (figure, geografts, fitted clothing — one clothing "Expand All" row reaches every outfit piece of the open scene; with no other keys the value holds across the whole ROM). Deliberately UNVALIDATED — no morph scan needed, a scene without the morph skips it with a Daz-log warning, never a run-log failure. Per-scene `sceneOverride.frameZero` = presence-armed full replacement like `preserve`. |
 | **Groom / hair** | Daz-side it's "hair", Houdini-side "groom". Hair is ALWAYS per scene by presence (no more `groomMode` — removed in schema v20): a scene's `groomScenes` items ARE its hair, none listed → nothing excluded. The generated script hides them for the ROM export (hide-only, needs Exporter Plugin ≥ 2.0.1 = `MIN_GROOM_EXPORTER_VERSION`), and a separate `Export_Hair_…` script exports EACH hair item of the open scene ON ITS OWN (runtime v33) as `<Name>_Hair_<item>_grooms.abc` — for every item it hides the other wearables (incl. the other hair items) and exports just that one, so Houdini gets one alembic per hair asset. A newly linked scene gets its detected hair PRE-SELECTED by one shared rule — `seedSceneHair` (`lib/groom-detect.ts`) — at all five places a scene reaches a character: creation, the first primary link, Add scene, REPLACE primary, and the missing-primary RELINK. The relink is the SAME scene at a new path, so it first REPOINTS an existing record to the final path (like a move/rename — `repointLinkedScene`) and seeds only a record-less target; a record keyed on the dead old path would never match the scene again. Any new scene-linking path must call it. |
 | **Figure detection** | The native `scene_wearables` (`poses.rs`) also returns the scene's base **`figure`** node (the non-conformed node whose id/name starts with "Genesis"). The pure inverse `genesisFromFigureNode(id)` (`types.ts`, the reverse of `genesisFigureNode`) maps `Genesis9` / `Genesis8_1Female` → generation (+ gender for the gendered gens; null for G9). The **create-character dialog** uses it to auto-select Genesis + gender from the picked scene's contents (best-effort, both fields stay editable) — reading what's IN the scene, not guessing from its filename. The **add-scene dialog** validates a candidate EXTRA scene from the same read (`scene-compat.tsx`, "Validation" table): same generation (+ gender where the figure id carries it), exactly ONE figure root (`figures`), an EMPTY animation timeline (`animationFrames` ≤ 1 — the ROM script fills the timeline itself), and the same GP/DK geograft set as the primary scene (gender's closest proxy, matched over the conformed items' id/label). A definite fail blocks Add behind an explicit "Add anyway" switch; an unreadable scene degrades to unchecked and never blocks. The **create-character dialog** runs the character-independent subset (`sceneCreateRows`: one figure root + empty timeline) behind a "Create anyway" switch. The same read also DRIVES two character fields via `primarySceneDerivation` (never continuously): the **GEN section's `enabled`** (on ⟺ the scene carries a GP/DK geograft; its editor toggle is permanently disabled; re-derived by the missing-primary relink flow) and the **gender** (figure id for the gendered gens, geograft for the neutral G9 — DK → male, GP → female; a G9 BOTH-grafts scene also sets `presetAssets` to GP+DK explicitly, since the gender-based auto default would include only one block). Gender is applied by `createCharacter` ONLY — **baked at creation, nothing changes it afterwards** (the relink flow deliberately applies just the GEN part). The manual Gender fields are gone — the create dialog shows it read-only and the Identity row is display-only. **REPLACING the primary is gated on the character having NO extra scenes** (`daz-scene-field.tsx`: the card's replace button is rendered-but-disabled with the reason as its tooltip, and `onReplacePick`/`applyReplace` both re-check). Every extra was validated against the CURRENT primary — above all `geograftRow`, since each scene must produce the primary's skeleton — so swapping the primary re-decides that reference and a GP-less replacement would leave validated extras silently mismatched. Re-validating and unlinking failures automatically is worse than making the user unlink and re-add, which runs the real per-scene validation. The missing-primary RELINK flow (`onPick`/`applyLink`, offered only when the primary FILE is gone) deliberately bypasses this gate: there is no primary left to compare a replacement against and the character must become openable again, so it swaps `scenePath` and re-derives GEN while the extras stay linked unchecked — the accepted escape hatch for the mismatch the replace gate forbids. |
@@ -52,11 +52,15 @@ offsets byte-identically — if a generation change moves them, the change is wr
   → `include('../../.DthWorkflow.dsa')` → `ApplyDTHCharacter(config)`. Installed to
   `<Daz library>/Scripts/DTH-Character-Studio/<project>/<character>/`; the shared
   **DTH runtime** (`.DthWorkflow.dsa`, `.DthUtils.dsa`, …) is co-installed once at
-  that root (`copyRuntimeFiles` in `apps/web/src/lib/rom/storage.ts`), along with
-  the two VISIBLE user-run scripts + their Content Library artwork:
+  that root (`copyRuntimeFiles` in `apps/web/src/lib/rom/storage/runtime-install.ts`;
+  `storage.ts` only re-exports it), along with
+  the three VISIBLE user-run scripts + their Content Library artwork
+  (`VISIBLE_SCAN_SCRIPTS`, same file):
   **`Build_Genesis_Index.dsa`** (builds the stock figures of every generation and
-  scans them into the per-generation morph + bone index behind the autocompletes)
-  and **`Scan_Frames.dsa`** (open scene's keyed frames → CSV for Import from CSV).
+  scans them into the per-generation morph + bone index behind the autocompletes),
+  **`Scan_Frames.dsa`** (open scene's keyed frames → CSV for Import from CSV) and
+  **`Fix_Graft_Shell_Surfaces.dsa`** (switches off the surfaces a foreign geograft
+  added — switched ON — to an existing GP/DK geoshell; module `DthShellSurfaces.dsa`).
   Two HIDDEN automation twins sit beside them for the Runner:
   `.Build_Genesis_Index_Bulk.dsa` and — runtime v53 — `.Scan_Scene_Bulk.dsa`,
   the per-scene worker of Tools → **Scan project**.
@@ -68,7 +72,11 @@ offsets byte-identically — if a generation change moves them, the change is wr
   scene entry only while THAT scene is selected, so two outfits linked to two
   scenes no longer both suggest their "Expand All". Full rules (including why
   the two files must stay separate and why the base row runs first) in
-  `.ai/gotchas.md` § the morph autocomplete reads TWO files.
+  `.ai/gotchas.md` § the morph autocomplete reads TWO files. Since runtime v56
+  the morph scans skip cameras and lights ANYWHERE in the hierarchy, not only
+  at scene root — a light/camera parented into a figure or prop used to land
+  its float dials in the index as morph suggestions (the node's children still
+  scan).
 - **Every ROM/export run SCANS its scene** (runtime v55) — how the index stays
   current through the app's CORE flow, with no Tools pass to remember. The
   generated scripts call `DthScanSceneMorphsQuiet` (and `DthScanProductsQuiet`
@@ -335,7 +343,12 @@ older runtimes as stale.
   through it, which is why the emit decision (bone-scale row above) requires it
   verified. Lifecycle: created by Generate project, then **refreshed on EVERY
   generation** through the one funnel (`refreshExportJunctions` from
-  `generateCharacterFiles`) — NOT only when Generate project runs. That refresh
+  `generateCharacterFiles`) — NOT only when Generate project runs. All gated on
+  the project's **`createExportJunctions`** (`.dcsp`, default true — the opt-out
+  for source-control setups that dislike reparse points): with it off nothing is
+  created or repaired, `junctionsOk` is forced false so reference paths go
+  absolute whatever the path style (api/generate.ts), and Generate project skips
+  its `houdini-project/` picker junction too (api/houdini.ts). That refresh
   is what chases moves: **a junction stores an ABSOLUTE target** (gotchas.md),
   so a character/folder rename, a scenes-folder rename, a `charactersSubdir`
   move or the v29 migration all leave it stale until the next generation
@@ -346,6 +359,17 @@ older runtimes as stale.
   Idempotent + self-repairing: a correct link reports `"exists"`, a stale one
   is repointed, a real directory is REFUSED. Junctions need no elevation
   (symlinks would — that's why it's a junction).
+- **The first-Generate-project intro** (#664): a project's FIRST Generate
+  project shows an intro section in the dialog explaining `$HIP` paths + the
+  `dth-exports` junction and asking for both. The answers are persisted into
+  the `.dcsp` (`saveProjectSettings`) and the flag marked (`markHoudiniIntroSeen`,
+  api/projects.ts) BEFORE that generate runs — a "no junctions" pick must not
+  create one and then apologize (`houdini-projects-field.tsx`). The choices are
+  seeded from the project's current values PLUS the legacy app-global
+  `houdiniPathStyle`, so a deliberate pre-v0.61 `absolute` isn't flipped back to
+  `$HIP`. The "was it explained" flag is machine-local — `houdini-intro.json`
+  in app-data, keyed by MANIFEST id so it survives a folder move
+  (`storage/app-data.ts`); the decisions themselves live in the `.dcsp`.
 - **The Houdini export handoff — "Export too" (COMPLETE).** After a Daz bulk
   export, the DazToHue export nodes in a Houdini project run for the scenes the
   user ticked. The toggle sits beside the dialog's Houdini project select,
@@ -517,7 +541,9 @@ older runtimes as stale.
   only the visible per-character scripts. The v38 `bulk-export` script
   argument is RETIRED — arguments passed through `DzScript::execute` never
   reached `getArguments()` (measured; the Runner now executes plainly). The
-  job file (contract v2) is JSON — `{version, type, progress, jobs[]}` — with
+  job file (contract v2) is JSON — `{version, type, progress, jobs[]}`, plus a
+  Runner-written `jobsDone` (Runner v1.1.1+; the reader derives it from the row
+  statuses when absent) — with
   ONE bulk-script row per scene (docs/exporter-plugin-job-file.md). Lifecycle:
   the Runner RENAMES it (`running_` prefix) on pickup — the "started" signal;
   only an un-renamed file is abortable (deletion) — then OWNS `progress` +

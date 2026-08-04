@@ -76,10 +76,13 @@ function pickAssets(assets) {
   return { win, mac };
 }
 
+// "Apple Silicon only": the label describes the FILE, not the visitor's
+// machine — arch isn't detectable from JS, and an Intel Mac offered the
+// aarch64 dmg as "Apple Silicon" read like a match for their hardware.
 function macArchLabel(name) {
   if (name.includes('universal')) return 'Universal';
-  if (name.includes('aarch64')) return 'Apple Silicon';
-  if (name.includes('x64')) return 'Intel';
+  if (name.includes('aarch64')) return 'Apple Silicon only';
+  if (name.includes('x64')) return 'Intel only';
   return '';
 }
 

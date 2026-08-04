@@ -12,7 +12,9 @@
 2. **Choose Daz scene…** — pick the character's scene file. The studio reads
    it, fills in **Genesis** and **Gender**, and validates that the scene holds
    exactly **one character** with an **empty animation timeline** (the ROM
-   script fills the timeline itself). *Create anyway* overrides a failed check.
+   script fills the timeline itself). *Create anyway* overrides a failed check —
+   except one: a scene that already belongs to another character of the
+   project is refused outright.
 3. Name it — the name becomes its folder in the project.
 4. **Fill from character** *(optional)* — copies a working ROM definition from
    any existing character across your projects: pick the source and check
@@ -48,7 +50,8 @@ All four generations are selectable, but the deeply validated path is **G9**
 (and G8.1 on the old pipeline); for the others, the studio offers whatever
 pose assets the active DTH release ships.
 
-G9 characters also get the **Genesis 9 specific** dials in the sidebar:
+The sidebar's three Genesis 9 dials sit under the hair items (on any other
+generation they are shown greyed out):
 
 - **Set UE5 tear UV** — the ROM script switches the **Genesis 9 Tear**
   figure's **UV Set** to **UE5** during the build, so DTH's **Lacrimal Fluid**
@@ -68,8 +71,13 @@ G9 characters also get the **Genesis 9 specific** dials in the sidebar:
   scenes pass the same checks as at creation — plus the **same GP/DK geograft
   as the primary**, so every scene produces the primary's skeleton — and are
   copied into the character's folder or left in place. The original scene
-  can't be unlinked; extras can. Each scene has **Open in Daz** — a running
-  Daz Studio opens it right away (handed over via the bundled
+  can't be unlinked; extras can. Each scene's open icon is a menu: **Open
+  Original**, and — for the saved
+  [ROM animation](./05-rom-in-daz.md#direct-export-optional-recommended) —
+  **Open ROM Animation** when a current one exists, or **Open and Generate ROM
+  Animation**, which builds it in Daz and opens the result (Ctrl forces a
+  rebuild; Alt+click reveals the folder). A running Daz Studio opens the scene
+  right away (handed over via the bundled
   [Runner plugin](./02-setup.md#install-the-dth-character-studio-runner-plugin)),
   otherwise Daz is started with it.
 - **Houdini projects** — drop `.hip`/`.hiplc` files to link the character's
@@ -109,6 +117,19 @@ lands. It's fixed and read-only: `dth-exports` inside the character's Daz
 folder, created with the character. A Houdini project reaches those files
 through a shortcut rather than containing them — see
 [where the Houdini project fits](./05-rom-in-daz.md#where-the-houdini-project-fits).
+
+<details>
+<summary><strong>Add morphs on frame 0</strong></summary>
+<table><tr><td>
+
+Morphs dialed once at **frame 0** of the ROM, on *every* node that carries
+them — the figure and every fitted item. One row like a clothing **Expand All**
+reaches whichever outfit pieces the open scene wears, and a scene without the
+morph simply skips it. Overridable
+[per Daz scene](./advanced.md#per-scene-overrides--edit-to-override).
+
+</td></tr></table>
+</details>
 
 <details>
 <summary><strong>Advanced options — preserve morphs &amp; node transforms</strong></summary>
@@ -315,8 +336,8 @@ describes the feature in depth.
 
 Each section header has its **Enable** switch and **Mode** (Preset / Custom)
 select. In Preset mode you can **pick the exact DTH release asset** (when
-several match); a red **no preset asset** chip appears when the active release
-ships nothing for the character's generation. The **JCM** section's Custom mode
+several match); a red **no G9 asset** chip (naming the character's generation)
+appears when the active release ships nothing for it. The **JCM** section's Custom mode
 takes a **path to your own pose preset** (`.duf`), loaded as the base ROM
 exactly like a DTH asset.
 
@@ -445,8 +466,9 @@ Two more scripts appear alongside the ROM one **only when their feature is on**:
   export runs inline at the tail of the ROM script (no separate file).
 - **`Export_Hair_<Name>_G9.dsa`** — generated when the character lists
   **[hair items](./advanced.md#hair-items--per-scene-kept-out-of-the-export)**:
-  it exports the `_grooms.abc` for Houdini's **DazToHueGroom Import** node (the
-  groom worn, everything else hidden).
+  it exports **one `<Name>_Hair_<item>_grooms.abc` per listed hair item** for
+  Houdini's **DazToHueGroom Import** node — each item worn, every other
+  wearable hidden.
 
 Each of them gets its own **Content Library icon**, so you can tell them apart at
 a glance in Daz — the ROM script's icon even says whether the export runs with it
@@ -476,8 +498,9 @@ Everything above covered the ROM. The page around it, box by box:
   <sub><em>The character page's header: avatar, name, path chip, Save/Discard.</em></sub>
 </p>
 
-- **Avatar** — click the portrait to pick one of the linked Daz scenes'
-  thumbnails, drop an image file, or paste an image URL. Applied immediately
+- **Avatar** — click the portrait to use the **primary** Daz scene's
+  thumbnail, drop an image file (cropped square in the built-in editor), or
+  paste an image URL; earlier uploads stay one click away. Applied immediately
   (no Save needed); stored in the project's hidden `.dcsmeta/images` folder, so
   it travels with the project.
 - **Name** — click it to rename. The character folder, notes and generated
@@ -517,9 +540,10 @@ A **Products** tab appears when the project enables Daz Products — see
 
 After a ROM run in Daz had problems (a missing morph, a failed preset), a
 **report banner** appears the moment you switch back to the studio: every
-failed frame with its reason. Clicking an entry **jumps to and highlights the
-pose row** (failed rows are also tinted red in the tables). **Dismiss** clears
-it; a clean run clears it automatically.
+failed frame with its reason, grouped under the scene it came from (a batch
+keeps *all* scenes' problems). Clicking an entry **switches to that scene and
+jumps to the pose row**; the selected scene's failed rows are also tinted red
+in the tables. **Dismiss** clears it; a clean run clears it automatically.
 
 </td></tr></table>
 </details>
@@ -544,8 +568,9 @@ keeps this character's own scene-derived Golden Palace / Dicktator setup.
 <table><tr><td>
 
 **Operations → Delete** removes the character's folder and generated files,
-with a confirmation that lets you **keep the Daz files folder** (your scenes)
-and **keep the Houdini files folder** (your exports) — for when the assets
+with a confirmation that lets you **keep the Daz files folder** (your scenes
+*and* their `dth-exports`) and **keep the Houdini files folder** (your `.hip`
+projects — offered only when the character has one) — for when the assets
 should outlive the definition. This can't be undone.
 
 </td></tr></table>

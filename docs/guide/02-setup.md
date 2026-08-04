@@ -26,6 +26,9 @@ extract the downloaded archives somewhere permanent first.
    (e.g. `…\Documents\houdini20.5`). Press its **Install** to merge the
    release's Houdini assets (otls, presets, toolbar) into it. Skip this if
    Houdini isn't on this machine.
+4. **Add another Houdini folder** *(optional)* repeats step 3 for a second
+   Houdini version: each extra folder installs its release independently, so
+   an older Houdini can keep an older DTH release.
 
 ## Setup DTH Exporter Plugin
 
@@ -63,8 +66,9 @@ automatic direct export.
 
 The **Runner plugin** ships **inside the app** — nothing to download. It lets
 the studio drive Daz Studio: the
-[**DTH Export** batch](./05-rom-in-daz.md#batch-export--dth-export) and opening
-scenes in an already-running Daz go through it. With the Daz Studio install
+[**DTH Export** batch](./05-rom-in-daz.md#batch-export--dth-export),
+[**Tools → Scan & index → Scan project**](./tools.md#tab-2--scan-amp-index),
+and opening scenes in an already-running Daz all go through it. With the Daz Studio install
 folder set (above), press **Install** — the panel shows the bundled version,
 the exact version installed in Daz, and says when an update is pending. The
 same admin note as above applies, and Daz must be closed (a running Daz locks
@@ -85,7 +89,8 @@ Settings also has an **App Data** tab — the app's own on-disk state:
 - **Storage & housekeeping** — the studio ages out **its own** generated data
   so it can't fill your disk: **Clean up now** deletes per-scene
   [product-scan](./product-scanning.md) files and `Scan_Frames` keyframe CSVs
-  older than 30 days (also swept automatically on every launch).
+  older than 30 days, plus **note media no note references anymore** after
+  7 days (all three also swept automatically on every launch).
 
 (Mapped **network drives** the app remembers show as their own pane at the
 bottom of the **General** tab, with a "Re-map missing now" action.)

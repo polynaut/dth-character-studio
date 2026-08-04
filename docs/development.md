@@ -26,9 +26,12 @@ pnpm install
 pnpm dev          # http://localhost:4330  (also bound on the LAN)
 ```
 
-Other scripts: `pnpm build`, `pnpm preview`, `pnpm -r test`, `pnpm -r typecheck`,
-`pnpm generate-routes`. Run as a plain web build, the native file features no-op —
-they require the Tauri desktop app.
+Other scripts: `pnpm build`, `pnpm --filter @dth/web preview`, `pnpm -r test`,
+`pnpm -r typecheck`, `pnpm lint`, `pnpm --filter @dth/web smoke` (Playwright browser
+smoke), `pnpm generate-routes`, `pnpm screenshots` / `pnpm clips` (user-guide
+screenshots and webp clips), `pnpm build:guide` (renders `docs/guide` → `site/guide`
+and validates guide links/assets). Run as a plain web build, the native file
+features no-op — they require the Tauri desktop app.
 
 ## Run — desktop
 
@@ -55,9 +58,17 @@ Tauri plugins instead of a Node backend:
   generated artifacts, and avatars (under the hidden `.dcsmeta/`) — lives in each
   **project's folder**, marked by its `.dcsp` file. There is no global project
   registry: a `.dcsp`'s location *is* the project.
+- **Custom Rust commands** — heavy work beyond the plugins (asset install/dedup,
+  avatar upscaling, launching Daz Studio and Houdini/hython, NTFS junctions,
+  multi-window projects) is `#[tauri::command]`s in per-feature modules under
+  `apps/desktop/src/`, registered in `lib.rs`. Paths are resolved in TS, file
+  work happens in Rust; structured returns are zod-parsed
+  (`apps/web/src/lib/rom/api/native-types.ts`) and their wire format is pinned
+  by the shared fixtures in `contracts/`.
 
-The native boundary is concentrated in `apps/web/src/lib/rom/{api,storage}.ts`
-and `lib/desktop.ts`, each `isTauri()`-guarded so the SPA still runs in a plain
+The native boundary is concentrated in `apps/web/src/lib/rom/api/*` + `storage/*`
+(re-exported through the `api.ts` / `storage.ts` barrels) and `lib/desktop.ts`,
+each `isTauri()`-guarded so the SPA still runs in a plain
 browser (native features no-op there). That boundary is also what makes a future
 online deployment — or web-only e2e that mocks the native layer — possible.
 
@@ -74,5 +85,8 @@ Full pipeline, signing-key, and branch-policy setup live in
 ## More docs
 
 - [devops.md](./devops.md) — release pipeline, signing keys, branch policy
+- [release-checklist.md](./release-checklist.md) — the release checklist
+- [exporter-plugin-job-file.md](./exporter-plugin-job-file.md) — the DTH Exporter job-file contract
+- [guide/README.md](./guide/README.md) — the user guide source (rendered by `pnpm build:guide`)
 - [poseasset-csv-spec.md](../apps/web/docs/poseasset-csv-spec.md) — the DazToHue PoseAsset import-CSV format, reverse-engineered from the HDA
 - [CONTRIBUTING.md](../CONTRIBUTING.md) — how to contribute

@@ -18,7 +18,7 @@ export function ImportCsvButton({ onImport }: { onImport: () => void }) {
       <InfoPopup size="sm" label="Import from CSV — how to produce the CSV">
         Import a DAZ morph CSV — each row becomes a pose; produce it with the bundled{' '}
         <strong>Scan_Frames</strong> script in Daz Studio.{' '}
-        <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/04-first-character.html#recommended-scan-your-morphs-once-then-autocomplete--scanmorphsgenesisdsa">
+        <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/04-first-character.html#recommended-scan-once-then-autocomplete--tools--scan--index">
           Open guide
         </GuideLink>
       </InfoPopup>

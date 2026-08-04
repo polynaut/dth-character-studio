@@ -64,13 +64,14 @@ scrollable rail. Click a pill to switch, exactly like its card.
 
 ### Hair items — per scene, kept out of the export
 
-With **Hair items live in the Daz scenes** on (the default), each scene
-carries its full look — hair included — and the hair items you pick per scene
-stay out of the DTH export: hidden right before the DTH Exporter runs, shown
-again after. The DTH Exporter Plugin **2.0.1+** also unparents them, keeping
-them out of **both** the FBX and the Alembic (the character page warns when
-your plugin is older and would leak hair into the FBX). Turned **off**,
-nothing is excluded — the classic workflow with hair in separate Daz scenes.
+Hair is per scene **by presence**: each scene carries its full look — hair
+included — and whatever a scene lists as hair items stays out of the DTH
+export: hidden right before the DTH Exporter runs, shown again after. The DTH
+Exporter Plugin **2.0.1+** also unparents them, keeping them out of **both**
+the FBX and the Alembic (the character page warns when your plugin is older
+and would leak hair into the FBX). A scene that lists nothing excludes
+nothing — the classic workflow with hair in separate Daz scenes needs no
+setting.
 
 The picker edits the **selected** card's list — lists are per scene, since
 outfit scenes carry different hair. The one generated script bakes every
@@ -83,9 +84,9 @@ scene's list and applies the right one for whichever scene is open in Daz.
 - A listed label that isn't found in the open scene turns amber — the export
   stops loudly rather than silently shipping a hair-polluted export.
 
-Characters with hair items also get an `Export_Hair_…` script — it exports the
-`_grooms.abc` for Houdini's **DazToHueGroom Import** node (the groom itself,
-worn, with everything else hidden).
+Characters with hair items also get an `Export_Hair_…` script — it exports
+**one `<Name>_Hair_<item>_grooms.abc` per listed hair item** for Houdini's
+**DazToHueGroom Import** node (each item worn, every other wearable hidden).
 
 ### Per-scene overrides — edit to override
 

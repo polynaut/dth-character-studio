@@ -417,7 +417,7 @@ async function reserveImageSpace(html) {
 }
 
 // ── Search index ─────────────────────────────────────────────────────────────
-// The guide's client-side search (guide.js) runs on search-index.json: one
+// The guide's client-side search (search.js) runs on search-index.json: one
 // entry per heading section, cut from the SAME rendered HTML the pages ship
 // with, so every entry deep-links to an anchor id that actually exists.
 // Regenerated on every build — a new page or section needs no extra step.

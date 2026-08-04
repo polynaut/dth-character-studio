@@ -2,8 +2,9 @@
 
 Four layers, cheapest first. Run everything: `pnpm -r test && pnpm -r typecheck
 && pnpm lint` (lint from the repo root). CI (`validate-pull-request.yml`) runs
-lint → typecheck → per-package tests → web build, plus `smoke` and `rust`
-(clippy `-D warnings` + `cargo test`) as separate jobs.
+lint → typecheck → per-package tests → web build → `pnpm build:guide` (the
+guide-site guards fail the PR), plus `smoke`, `rust` (clippy `-D warnings` +
+`cargo test`) and `changeset` as separate jobs — all four are required checks.
 
 ## 1. Unit tests (vitest, per package)
 
@@ -13,11 +14,18 @@ lint → typecheck → per-package tests → web build, plus `smoke` and `rust`
   `include()` regression, the exporter↔CSV reference-frame 1:1 mapping, and a
   frame-alignment property test (CSV ↔ Daz config can never drift).
   `migrate.test.ts` has a case per schema version; `types.test.ts` pins schema
-  behavior (healing, bounds, section modes); plus timeline/validation/daz-csv/
-  product-scan tests. **If you change generation, these tests are the spec.**
+  behavior (healing, bounds, section modes); `index-sync.test.ts` pins that
+  every generated ROM/export script emits `DthScanSceneMorphsQuiet` (and
+  `DthScanProductsQuiet` with Daz Products on) and their ORDER relative to the
+  wrong-scene guard; plus timeline/validation/daz-csv/product-scan/
+  scene-override tests. **If you change generation, these tests are the spec.**
 - **`apps/web`** — storage/CRUD over an in-memory fs mock, pure helpers,
   `runtime.test.ts` (hash-pins the bundled `.dsa` runtime — intentional runtime
   edits must update it), `preset-frames.test.ts` (frame-alignment invariant),
+  `execute-jobs.test.ts` (the DTH Export job-file contract v2) +
+  `houdini-jobs.test.ts`, `run-log-multi-scene.test.ts` (executes the shipped
+  `DthUtils.dsa` `writeRunLog` under `node:vm`), `morph-index-provider.test.tsx`
+  (the scene-scoped autocomplete filter),
   staleness sweep, the character-draft save/settle machinery
   (`use-character-draft.test.tsx` — extend it for any new settle semantics), a
   few component tests (jsdom + Testing Library), and FFI integration tests
@@ -26,8 +34,9 @@ lint → typecheck → per-package tests → web build, plus `smoke` and `rust`
   helper landed; **poison sets** (`failRenameSrcs`, `unreadableDirs`) are the
   established pattern for exercising partial-failure paths (move rollback, GC
   abort).
-- **`packages/ui`** — TooltipHost, MultiSelect (full keyboard model),
-  NumberField.
+- **`packages/ui`** — ~10 suites: TooltipHost, MultiSelect (full keyboard
+  model), NumberField, the overlay semantics (Modal / SidePanel / InfoPopup),
+  KeyedListEditor, EditableTitle, useStickyHeaderInset.
 
 Single file: `pnpm --filter @dth/rom test src/daz-csv.test.ts`; by name:
 `pnpm --filter @dth/rom test -t "<name>"`.
@@ -42,8 +51,9 @@ every structured Rust return:
   same bytes, `parse(wire)` must deep-equal `wire`.
 
 A new structured return = fixture + schema + a case on both sides. `cargo test`
-also runs ~50 Rust module unit tests (zip-bomb bounds, content detection, dedup
-quarantine, delete rails, `.duf` parsing).
+also runs ~77 Rust module unit tests (zip-bomb bounds, content detection, dedup
+quarantine, delete rails, `.duf` parsing, junction reparse points, window-lock
+ordering).
 
 ## 3. Playwright smoke (`pnpm --filter @dth/web smoke`)
 
@@ -68,10 +78,13 @@ The **real SPA in a real browser** against an in-memory fake of the native layer
 - `apps/web/smoke/fixtures.ts` — `buildSeed(opts)` builds the world (project
   "Demo", character "Kira", DTH release tree). The character goes through the
   **real `characterSchema`**, so schema bumps fail here loudly.
-- `smoke/*.smoke.ts` — `studio.smoke.ts` (one test per window kind) +
-  `override.smoke.ts` (the per-scene ROM override flow end to end); both assert
-  through the whole api→storage stack by reading back
-  `__tauriMock.files`/`calls`.
+- `smoke/*.smoke.ts` — 17 spec files. The core families: `studio.smoke.ts`
+  (one test per window kind), `override.smoke.ts` (the per-scene ROM override
+  flow end to end), `houdini-export.smoke.ts` / `houdini-only.smoke.ts` /
+  `export-only-gate.smoke.ts` (the DTH Export modes), and
+  `project-scan.smoke.ts` (the Tools scan batch; absorbed the deleted
+  `genesis-index.smoke.ts` in #657). Specs assert through the whole
+  api→storage stack by reading back `__tauriMock.files`/`calls`.
 - **This layer is where browser-only bugs reproduce.** A window-freezing React
   render loop passed every jsdom test and only showed here — when a UI
   interaction "works in tests" but misbehaves in the app, write the repro as a
@@ -100,23 +113,26 @@ are generated, not hand-shot. **The full runbook lives in the header comment of
   when a guide page references a PNG nothing generated, or a PNG in
   `screenshots/` is referenced by no guide page (orphans in either direction).
 - **After a full restyle:** run it once, review the diff visually (every PNG
-  changing is expected), commit the lot. The only hand-tuned knobs are the crop
-  constants in `guide.screenshots.ts` (`HEADER` + a few per-shot
-  `headerOffset`/`hideHeader`) — they mirror the app's sticky-chrome heights
-  (page header / pinned ROM section title / pinned column headers), so adjust
-  them once if the restyle changes those heights.
+  changing is expected), commit the lot. There are NO hand-tuned crop
+  constants: `shoot`/`shootStrip` drop the app's sticky chrome, scroll the
+  feature to the top and clip tight to it, so a changed header/section-title
+  height can't tuck a feature under the chrome. Only the constant app width
+  (`VW = 1280`) is fixed.
 - **Not covered:** the guide's Daz-/Houdini-side photos (the
   `user-attachments` CDN links in `docs/guide/*.md`) are manual captures inside
   Daz/Houdini — an app restyle doesn't affect them.
 - Navigate by clicking header links, not `page.goto` (a goto re-runs `main.tsx`
   startup navigation).
-- **Interaction GIFs** (`pnpm gifs` → `docs/guide/gifs/*.gif`) are the moving
-  siblings: `smoke/guide.gifs.ts` scripts each interaction as a FIXED frame
-  sequence — a fake cursor overlay glides between UI states (headless Chromium
-  draws no OS pointer), every frame is a screenshot, `gifenc` encodes them
-  byte-reproducibly (no video capture, no ffmpeg). Same fixtures/frozen clock;
-  transitions are pinned to 0ms while recording; the coverage test guards
-  gifs/ ↔ guide references too. Machinery: `smoke/gif-recorder.ts`.
+- **Interaction clips** (`pnpm clips` → `docs/guide/clips/*.webp`, currently
+  just `path-chip-copy.webp`) are the moving siblings: `smoke/guide.clips.ts`
+  scripts each interaction as a FIXED frame sequence — a fake cursor overlay
+  glides between UI states (headless Chromium draws no OS pointer), every
+  frame is a screenshot, `sharp` (libwebp) encodes them into a lossless
+  animated WebP (no video capture, no ffmpeg). Same fixtures/frozen clock;
+  transitions are pinned to 0ms while recording; the screenshot suite's
+  coverage test guards clips/ ↔ guide references too. Machinery:
+  `smoke/webp-recorder.ts`; own config `playwright.clips.config.ts` (port
+  4333, @1x — lossless WebP needs no 2x raster).
 
 ## 5. Full-codebase audits (measured method, 2026-07)
 

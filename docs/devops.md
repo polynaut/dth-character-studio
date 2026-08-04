@@ -77,11 +77,14 @@ gh api -X POST repos/polynaut/dth-character-studio/rulesets \
 ```
 
 (Require a PR before merging + block force-pushes/deletion.) The PR CI
-(`validate-pull-request.yml`) runs the JS **validate** job (typecheck / tests /
-web build) and a **rust** job (cargo test `--locked` + a guard that fails if the
-brotli `alloc-*` pins were reverted). Both are set as **required status checks**
-on `main`, so a red PR — including a broken Rust build or a reverted pin — can't
-merge and trigger a signed release.
+(`validate-pull-request.yml`) runs four jobs: **validate** (oxlint / typecheck /
+tests / web build / `pnpm build:guide`), **smoke** (the Playwright browser smoke
+suite), **changeset** (every feature PR needs one; waived for
+`changeset-release/main` and Dependabot), and **rust** (a guard that fails if
+the brotli `alloc-*` pins were reverted + `cargo clippy --locked --all-targets
+-- -D warnings` + `cargo test --locked`). All four are **required status
+checks** on `main`, so a red PR — including a broken Rust build or a reverted
+pin — can't merge and trigger a signed release.
 
 ## Cutting a release
 
@@ -150,8 +153,10 @@ The NAS runs two containers:
 
 The `build-mac` job adds an **Apple Silicon (arm64)** macOS build — a
 `.dmg` for fresh installs and a notarized `.app.tar.gz` the updater consumes —
-alongside the Windows installer. It's **off by default**; turn it on by setting
-the repo **variable** `ENABLE_MAC_RELEASE=true` once these secrets exist (one
+alongside the Windows installer. The repo **variable** `ENABLE_MAC_RELEASE` is
+**set** (`true`), so every release ships the arm64 macOS build (e.g. v0.62.1's
+`DTH.Character.Studio_0.62.1_aarch64.dmg` + `.app.tar.gz` + `.sig`); unset it
+to fall back to Windows-only releases. It relies on these secrets (one
 Developer ID covers every app under the Apple team):
 
 | secret | what |
@@ -201,6 +206,7 @@ valid signature.
 | Kind | Name | Holds |
 |---|---|---|
 | variable | `CERTUM_P11_SOCKET` | socket path in the runner (set: `/run/p11-kit/p11kit.sock`) |
+| variable | `ENABLE_MAC_RELEASE` | mac release gate (set: `true` — every release ships the arm64 macOS build; unset to fall back to Windows-only) |
 
 **No PIN anywhere:** the SimplySign virtual card takes an empty PIN — the
 (automated) SimplySign login *is* the auth. A `Key handle invalid` signing
@@ -284,9 +290,10 @@ Two residual softnesses to keep in mind (both accepted, documented from the
 
 ## macOS
 
-Implemented as an opt-in — see [macOS builds (opt-in)](#macos-builds-opt-in)
-above. `release.yml` already carries the `build-mac` and `sign-mac` jobs
+Implemented and **on** — see [macOS builds (opt-in)](#macos-builds-opt-in)
+above. `release.yml` carries the `build-mac` and `sign-mac` jobs
 (Developer-ID signing, notarization + stapling, the `darwin-aarch64` updater
-entry); the repo **variable** `ENABLE_MAC_RELEASE=true` switches the mac side on
-once the Apple secrets are in place. Until then it's skipped and Windows
-releases normally — no extra matrix leg is needed.
+entry), and the repo **variable** `ENABLE_MAC_RELEASE` is set (`true`), so
+every release ships the arm64 macOS build alongside the Windows installer.
+Unset the variable to fall back to Windows-only releases — no other change is
+needed.

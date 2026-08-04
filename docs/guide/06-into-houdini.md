@@ -22,6 +22,11 @@ covers the network in depth; this page is just the hand-off.
 In your DazToHue network, point the **PoseAsset** import at the character's
 `_pose_asset.csv` and the geometry import at the exported `.abc`/`.dth`.
 
+Wire the network once — from then on the studio can run it for you: pick the
+project in [**DTH Export**](./05-rom-in-daz.md#batch-export--dth-export) and it
+opens Houdini and runs the DazToHue exports for the scenes in scope, with
+**Skip Daz — use last exports** for a Houdini-only pass.
+
 > [!TIP]
 > Use Houdini's **File → Set Project** on the character's
 > **[`houdini-project` folder](./05-rom-in-daz.md#where-the-houdini-project-fits)**

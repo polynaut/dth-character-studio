@@ -8,7 +8,7 @@ to Houdini.
 ## What you need
 
 - **Windows 10/11** and [DTH Character Studio](https://github.com/polynaut/dth-character-studio/releases/latest) — a Mac version of DTH Character Studio is available too, but the Daz **DTH Exporter Plugin** is Windows-only
-- **[Daz Studio](https://www.daz3d.com/technology/)** with a **Genesis 9** character (G9 is fully supported, G8 only partially)
+- **[Daz Studio](https://www.daz3d.com/technology/)** with a **Genesis 9** character (G3, G8, G8.1 and G9 are all selectable; G9 is the deeply validated path)
 - The **[DazToHue](https://www.artstation.com/marketplace/p/BLM5K/daztohue)** package by mrpdean —
   it contains the **DTH release** (Daz + Houdini content) and the **DTH Exporter Plugin**
 - **[SideFX Houdini](https://www.sidefx.com/products/houdini/)** — needed for the far side of the pipeline
@@ -30,8 +30,9 @@ None of these are needed to generate a ROM:
 - [Advanced character options](./advanced.md) — multiple Daz scenes on one
   character (outfits, per-scene hair, per-scene overrides), and driving extra
   morphs off bone rotations (Modify JCM frames).
-- [The Tools page](./tools.md) — install/maintain your own Daz & Houdini
-  content, deduplicate downloads, storage housekeeping, refresh generated
+- [The Tools page](./tools.md) — one-click **Scan & index** of a project (the
+  morph/bone index behind the autocompletes), installing/maintaining your own
+  Daz & Houdini content, deduplicating downloads, and refreshing generated
   files.
 - [Attachments](./attachments.md) — reusable Daz scenes (not full characters),
   organized in a project alongside its characters. *(Opt-in per project.)*

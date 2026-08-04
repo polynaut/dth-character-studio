@@ -39,7 +39,7 @@ InfoPopup, NumberField…), presentational components (LinkedAssetCard,
 KeyedListEditor, MultiSelect, Field, Tag, EditableTitle…), and hooks
 (`useModifierHeld`, `installAltMenuGuard`, `useRefetchOnFocus`).
 **No Tauri / router / filesystem imports** — host behavior is injected via
-`UiConfigProvider` (`config.tsx`: `onNavigate`, `onOpenExternal`); the app
+`UiConfigProvider` (`config.tsx`: `onNavigate`, `onOpenExternal`, `onError`); the app
 supplies it in `apps/web/src/routes/__root.tsx`. Single public entry
 `src/index.ts` (export only what the app consumes). Tailwind reaches the kit via
 `@source` in `apps/web/src/styles.css`.
@@ -53,9 +53,9 @@ supplies it in `apps/web/src/routes/__root.tsx`. Single public entry
 | `__root.tsx` | App shell: UiConfigProvider, ConfirmProvider, Toaster, TooltipHost, update-prompt host, native menu wiring, startup effects. |
 | `index.tsx` | Home/launcher: recent `.dcsp` projects, create/open project (each opens its own native window). |
 | `projects.$projectId.index.tsx` | Project overview: character grid/list, create character, attachments + notes tabs, Unreal footer. |
-| `projects.$projectId.characters.$characterId.tsx` | **The character editor** — draft/save/generate. Decomposed: the route (~400 lines) composes `components/character/*` sections (editor-header, identity, scripts, export-settings, rom-editor, delete) + `lib/use-scene-selection` / `use-rom-run-log` / `character-paths`. The ROM subtree (`RomSections`/`PoseGroupsEditor`/`GroupCard`) is `React.memo`d with latest-ref, id-routed callbacks — new props into it must keep stable identities or the memo chain silently dies. |
+| `projects.$projectId.characters.$characterId.tsx` | **The character editor** — draft/save/generate. Decomposed: the route (~640 lines) composes `components/character/*` sections (editor-header — which hosts the DTH Export dialog, `dth-export.tsx` — identity, scripts, export-settings, rom-editor, operations-section, rom-run-log-report, scene-footer, frame-zero/preserve/groom fields) + `components/houdini-projects-field.tsx` + `lib/use-scene-selection` / `use-rom-run-log` / `character-paths`. The ROM subtree (`RomSections`/`PoseGroupsEditor`/`GroupCard`) is `React.memo`d with latest-ref, id-routed callbacks — new props into it must keep stable identities or the memo chain silently dies. |
 | `settings.tsx` | Project tab (`.dcsp` manifest) + General (machine tool paths) + App Data. |
-| `tools.tsx` | Daz/Houdini content install sections, dedup, danger zone, Refresh assets. |
+| `tools.tsx` | Three tabs: install (Daz/Houdini content install sections, dedup, danger zone), **Scan & index** (`ProjectScanSection`, `components/tools/project-scan-section.tsx`), Refresh assets. |
 | `about.tsx` | Version, asset staleness summary, links. |
 
 **Key fact: the `$projectId` route param IS the project folder path.** One
@@ -78,27 +78,40 @@ a plain browser with native features as no-ops):
   `lib/rom/execute-jobs.ts`, contract in `docs/exporter-plugin-job-file.md`),
   `houdini.ts` (Generate project via hython + the `dth-exports` junction),
   `install.ts`, `maintenance.ts`, `avatars.ts`, `attachments.ts`, `notes.ts`,
-  `products.ts`, `native-types.ts` (the FFI zod schemas).
+  `products.ts`, `move.ts` (the shared folder-move lock gate: `assertMovable`
+  throws `LockedFilesError` off `probeLockedFiles`), `data-url.ts`,
+  `native-types.ts` (the FFI zod schemas).
 - **Two job-file handoffs, deliberately the same shape** — the studio writes a
   JSON job, the other side works through it and writes results back, the studio
   polls. Daz's is `execute.ts` + `execute-jobs.ts` (the Runner plugin). Houdini's
   is `lib/rom/houdini-jobs.ts` + `lib/rom/houdini-runtime/456.py`, which Houdini
   runs after a scene loads when the studio's folder is on `HOUDINI_SCRIPT_PATH`
-  and `DTH_HOUDINI_JOB` points at a job. **The Houdini half is inert as of
-  v0.57.0** — the script and contract shipped, but nothing launches or polls
-  them yet (see `.ai/domain.md` § the Houdini export handoff).
+  and `DTH_HOUDINI_JOB` points at a job — driven by `api/houdini.ts`
+  (`startHoudiniExport` / `fetchHoudiniRunProgress`) and Rust
+  `launch_houdini_job`/`houdini_running`. **Live since v0.59** — the DTH Export
+  dialog's Houdini list continues a Daz batch straight into Houdini (sequential
+  multi-project queue: `startHoudiniQueue` in `components/character/dth-export.tsx`;
+  see `.ai/domain.md` § the Houdini export handoff).
+- `lib/rom/run-log.ts` — pure per-scene run-log parsing/merge (log v2:
+  `parseRomRunLogText`, `mergeRomRunLogs`, `unreadableRomRunLog`), consumed by
+  `api/characters.ts`; tested in `lib/rom/run-log-multi-scene.test.ts`.
 - `lib/rom/storage/` — filesystem persistence (plugin-fs): `settings.ts`
   (**`studioSettingsSchema`** — THE app-global settings definition),
   `projects.ts` (**`DcspManifest`** + recents), `characters.ts` (scan/CRUD +
   `moveCharactersRoot`), `runtime-install.ts` (`studioScriptsDir`,
-  `copyRuntimeFiles` — installs the bundled `.dsa` runtime), `releases.ts`,
-  `pose-assets.ts`, `network-drives.ts`, `assets.ts`, `fs.ts`, `app-data.ts`.
+  `copyRuntimeFiles` — installs the bundled `.dsa` runtime), `script-icons.ts`
+  (Content Library artwork written beside each generated script),
+  `houdini-env.ts` (the `DAZ3D_LIB` upsert into each Houdini docs folder's
+  `houdini.env`), `releases.ts`, `pose-assets.ts`, `network-drives.ts`,
+  `assets.ts`, `fs.ts`, `app-data.ts`.
 - `lib/updater.ts`, `lib/file-drop.ts` (Tauri drag-drop hit-testing),
   `lib/path.ts`, `lib/rom/migrate-projects.ts` (one-time pre-`.dcsp` upgrade).
 - Editor machinery: `lib/use-character-draft.ts` (draft/baseline/dirty +
   save→generate→settle, single-flight `patchAndRegenerate`),
   `lib/use-unsaved-guard.ts` (router blocker + beforeunload + native ✕),
-  `lib/use-confirm.tsx` (app-styled promise confirm).
+  `lib/use-confirm.tsx` (app-styled promise confirm), `lib/use-folder-move.tsx`
+  (the locked-files dialog + retry loop wrapping every folder move, catching
+  `LockedFilesError` from `api/move.ts`).
 
 ### Data flow
 
@@ -110,7 +123,10 @@ ROM-override scene's merged sections — `sceneOverrideBuildsRom`) → `saveChar
 background. The editor's page-local **selected scene** (the Daz scene cards)
 drives every per-scene feature: the hair list, the implicit per-scene overrides
 (edit-to-override — ROM frames, the G9 identity dials, preserve items), and — with
-more than one scene linked — the header's scene tag.
+more than one scene linked — the header's scene tag. It also scopes the run-log
+report's red frame markers (clicking a failure selects its scene first —
+`revealFailure` in the route) and filters the Morph-name autocomplete to entries
+scanned from that scene (`components/rom/morph-index-provider.tsx`).
 
 ## apps/desktop — the Tauri shell
 
@@ -118,13 +134,18 @@ Rust modules (`src/*.rs`): `lib.rs` (builder + `generate_handler!`), `windows.rs
 (multi-window: label→`.dcsp` map, single-instance routing, async window
 creation), `install.rs`/`assets.rs`/`dedup.rs`/`uninstall.rs` (content install +
 dedup + guarded cleanup), `poses.rs` (`.duf` frame counting/wearables + base-figure detection),
-`housekeeping.rs`, `daz.rs` (process probe/script bridge), `drives.rs` (network
+`housekeeping.rs`, `daz.rs` (process probe/script bridge), `houdini.rs` (hython
+project generation + the Houdini job launcher), `avatar.rs` (avatar image
+up/downscale), `shellopen.rs` (Explorer-delegated file open — the launched app
+inherits the pristine user-session environment, not the studio's),
+`elevation.rs` (elevated-session detection + the title prefix below),
+`drives.rs` (network
 drive remap), `foreground.rs`, `github.rs` (server-side GitHub API — webview CSP
 blocks it), `archive.rs` (zip-bomb bounds), `content.rs`, `fsutil.rs`
 (recursive-delete rails + `move_tree`, the one mover shared by dedup's
 quarantine and the export-root migration), `junction.rs` (NTFS directory
 junctions — std has none), `exports.rs` (moving a character's exported files to
-the fixed export root), `report.rs`, `contract_tests.rs`.
+the fixed export root), `report.rs`, `testutil.rs`, `contract_tests.rs`.
 
 A project window's **native title is `"<.dcsp stem> — DTH Character Studio"`** —
 derived from the `.dcsp` *filename*, set at creation. An **elevated** session
@@ -140,7 +161,7 @@ the builders), and a rename re-titles an already-marked window. Renaming a proje
 (`storage.renameManifestFile`) and calls `sync_renamed_project_window` to
 live-re-title + re-pin every open window on the old file (no close/reopen).
 
-**FFI surface: 33 commands** registered in `generate_handler!` — installs
+**FFI surface: 35 commands** registered in `generate_handler!` — installs
 (`install_dth_release/plugin/daz_assets/daz_merge/houdini_presets/unreal_dth`),
 scans (`list_daz_assets`, `scan_duf_files`, `pose_asset_frames`,
 `scene_wearables`), dedup/uninstall, windows
@@ -151,7 +172,9 @@ Rust-side `open_home_window_impl`, no command), Daz bridge
 (`daz_studio_running`/`run_daz_script`/`launch_daz_studio`/`focus_app_window` —
 `launch_daz_studio` starts a scene-less Daz for the Execute job-file handoff,
 see `docs/exporter-plugin-job-file.md`), drives
-(`unc_for_path`/`ensure_network_drives`), `housekeeping_sweep`,
+(`unc_for_path`/`ensure_network_drives`), avatars
+(`upscale_avatar_file`/`downscale_avatar_png`), `shell_open_file`,
+`housekeeping_sweep`,
 `app_release_tags`, `unreal_dth_present`, `probe_locked_files`, and the Houdini
 side (`create_houdini_project`, `create_junction` — the `dth-exports` shortcut,
 best-effort and never load-bearing — `launch_houdini_job`/`houdini_running` for
@@ -179,6 +202,10 @@ folder's location is the project; the Home screen lists recents
 window (single-instance routes a second launch). Project folder holds the
 character folders (under `charactersSubdir` when set), `.dcsmeta/` (avatars,
 media), and `.assets/` (opt-in). App-data (`appLocalDataDir()`) holds only
-machine state: `settings.json`, `recents.json`, `network-drives.json`, scan
-output. Generated Daz scripts install to
+machine state: `settings.json`, `recents.json`, `network-drives.json`,
+`houdini-intro.json` (which projects saw the first-Generate-project intro —
+`storage/app-data.ts`), the morph/bone index (`morphs_<G>.json` +
+`morphs_scenes_<G>.json`, read by `api/characters.ts`), scan output
+(`product-scans/`, `scan-frames/`), and `houdini-scripts/` — where `456.py` is
+rewritten before every Houdini run (`houdini-jobs.ts`). Generated Daz scripts install to
 `<Daz library>/Scripts/DTH-Character-Studio/<project>/<character>/`.

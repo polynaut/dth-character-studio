@@ -2,8 +2,9 @@
 
 ## Run the script
 
-1. Open the character's scene in Daz Studio — the scene chip on the character page
-   has an **Open in Daz** button.
+1. Open the character's scene in Daz Studio — each scene card on the character
+   page has an open menu (**Open Original**, or the saved
+   [ROM animation](#direct-export-optional-recommended) once one exists).
 2. In Daz's **Content Library** pane, browse your library:
    **Scripts → DTH-Character-Studio → \<Project\> → \<Character\>**.
 3. Double-click **`ROM_<Name>_G9`**.
@@ -16,7 +17,11 @@
 
 The script builds the entire ROM on the timeline — every section you enabled,
 every morph on its exact frame. This takes a moment on a big ROM; the script
-reports what it did when it finishes.
+reports what it did when it finishes. Before it builds, it also quietly scans
+the open scene into the studio's
+[morph index](./04-first-character.md#custom-morphs) (and, with Daz Products on, refreshes
+that scene's product scan) — the Parameter-name autocomplete stays current
+through normal use, and a scan problem never fails the run.
 
 &nbsp;
 
@@ -261,8 +266,8 @@ trip; untick them and the run ends with Daz. Their own **Mode**:
   exports for the checked Daz scenes.
 - **Export all** — run them for every linked scene, whatever is checked.
 
-Several selected projects run **one after another**: each opens, exports,
-reports — then the next starts.
+Several selected projects run **one after another**: each opens and exports,
+then the next starts — the outcome waits for the single report at the end.
 
 **ROM only** is the exception: it builds no fresh export, so there is nothing
 for a Houdini export to pick up — the projects don't pre-select there, and a
@@ -292,14 +297,17 @@ scenes in scope, right after the Daz batch delivers (or immediately, with
 
 What happens:
 
-1. Daz finishes the batch and the studio reports it, as always.
+1. Daz finishes the batch — a short notice hands over to Houdini; the full
+   report waits until the *whole* round trip is done.
 2. Houdini opens the project — visibly, so you can watch it work. The button
    reads **Houdini opening…** while the scene loads (a big project takes a
    while; nothing is wrong), then **Houdini 1/3** as nodes finish.
 3. Only the networks importing **the scenes you ticked** export. A project
    holding networks for other scenes — or other characters — is left alone.
-4. The studio reports the outcome: *"Houdini export finished — 2 exported,
-   1 skipped."* Houdini stays open with the project ready to work in.
+4. After the last project, **one report** names every leg — *"Daz: 2/2 scenes
+   exported in 3m 10s"*, then a line per Houdini project (*"Kira_Look: 2
+   exported, 1 skipped"*) — under a single *DTH Export finished in …* headline
+   with the total time. Houdini stays open with the project ready to work in.
 
 Two things it deliberately won't do:
 
@@ -311,8 +319,9 @@ Two things it deliberately won't do:
 If the DazToHue pre-flight check reports problems, the studio answers its
 *"Continue anyway?"* prompt for you and **keeps the message**, so those
 problems reach the report instead of vanishing behind an unattended dialog.
-Closing Houdini mid-run ends the watch with a notice — the exports that already
-finished are on disk.
+Closing Houdini mid-run ends the watch with a notice, and any projects still
+waiting their turn are dropped — the notice lists the legs that did finish,
+and those exports are on disk.
 
 &nbsp;
 
