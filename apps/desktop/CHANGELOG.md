@@ -1,5 +1,21 @@
 # @dth/desktop
 
+## 0.63.0
+
+### Minor Changes
+
+- [#683](https://github.com/polynaut/dth-character-studio/pull/683) [`5b334df`](https://github.com/polynaut/dth-character-studio/commit/5b334df8c3f34ccb7baeb0c267e8b924a6cd3fa6) Thanks [@polynaut](https://github.com/polynaut)! - **The export-junction feature is gone** — generated reference paths are plain
+  relative now. PoseAsset CSVs (and Generate-project prefills) write
+  `$HIP/../<daz folder>/dth-exports/…` whenever every linked `.hip` sits in the
+  character's houdini folder, absolute otherwise; projects stay fully moveable,
+  and no reparse points ever land in your tree again (Perforce, gitignore and
+  backup tooling see plain folders). The per-project **Create dth-exports
+  shortcuts** toggle and the first-Generate-project intro are removed — the
+  **Houdini path style** choice (relative / absolute) stays in Settings →
+  Project. Every generation now sweeps leftover junctions from earlier versions
+  (strictly reparse-point-safe — a real folder is never touched), and Tools →
+  Refresh assets reports what it removed.
+
 ## 0.62.2
 
 ## 0.62.1
