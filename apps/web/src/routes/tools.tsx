@@ -291,22 +291,40 @@ function ToolsPage() {
           /tools — an uncontrolled Tabs ignored the URL change (same route match,
           no remount). onValueChange keeps the URL in sync when the user clicks. */}
       <Tabs
-        value={tab === 'refresh' || tab === 'index' ? tab : 'install'}
+        value={tab === 'refresh' || tab === 'install' ? tab : 'index'}
         onValueChange={(value) =>
           void router.navigate({
             to: '/tools',
-            search: value === 'install' ? {} : { tab: value },
+            search: value === 'index' ? {} : { tab: value },
           })
         }
         className="max-w-3xl"
       >
         <TabsList>
-          <TabsTrigger value="install">Daz Studio &amp; Houdini</TabsTrigger>
-          {/* The `index` value stays put — `?tab=index` deep links (and the
-              About page's) must keep working across the rename. */}
+          {/* Scan & index leads — it's the tab a project's daily flow needs;
+              the installers are one-time setup. The `index` value stays put so
+              `?tab=index` deep links keep working; a plain /tools now lands
+              here, and `?tab=install` addresses the installers. */}
           <TabsTrigger value="index">Scan &amp; index</TabsTrigger>
+          <TabsTrigger value="install">Daz Studio &amp; Houdini</TabsTrigger>
           <TabsTrigger value="refresh">Refresh assets</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="index" className="space-y-5">
+          <p className="text-sm text-muted-foreground">
+            The morph and bone index behind the editor's autocompletes, and the per-scene scans
+            that extend it. Rebuild after installing new morph packs, geografts or figure
+            add-ons — or after changing what your characters' scenes wear.
+          </p>
+          <ProjectScanSection
+            // The route-param convention: a `projectId` IS the project FOLDER
+            // PATH (`resolveProject` reads the manifest from it). `project.id`
+            // is the manifest's own id and resolves to nothing. '' from Home,
+            // where the panel offers the base pass only.
+            projectId={activeProject?.path ?? ''}
+            dazLibraryConfigured={settings.dazLibraryFolder.trim() !== ''}
+          />
+        </TabsContent>
 
         <TabsContent value="install" className="space-y-5">
           <p className="text-sm text-muted-foreground">
@@ -394,22 +412,6 @@ function ToolsPage() {
             onConfirmChange={setUninstallConfirm}
             onDryRun={() => void runUninstall(true)}
             onDelete={() => void runUninstall(false)}
-          />
-        </TabsContent>
-
-        <TabsContent value="index" className="space-y-5">
-          <p className="text-sm text-muted-foreground">
-            The morph and bone index behind the editor's autocompletes, and the per-scene scans
-            that extend it. Rebuild after installing new morph packs, geografts or figure
-            add-ons — or after changing what your characters' scenes wear.
-          </p>
-          <ProjectScanSection
-            // The route-param convention: a `projectId` IS the project FOLDER
-            // PATH (`resolveProject` reads the manifest from it). `project.id`
-            // is the manifest's own id and resolves to nothing. '' from Home,
-            // where the panel offers the base pass only.
-            projectId={activeProject?.path ?? ''}
-            dazLibraryConfigured={settings.dazLibraryFolder.trim() !== ''}
           />
         </TabsContent>
 
