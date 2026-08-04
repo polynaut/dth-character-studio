@@ -9,12 +9,14 @@ import {
   characterHoudiniDir,
   characterHoudiniProjectDir,
   hipAnchorDirs,
+  hipRefPrefixFor,
 } from '#/lib/scene-subfolder.ts'
 import {
   HOUDINI_JOB_FILE,
   HOUDINI_RESULT_FILE,
   HOUDINI_SCRIPTS_FOLDER,
   buildHoudiniJob,
+  buildHoudiniPrefill,
   houdiniRunFilesToClear,
   houdiniRunStateFrom,
   houdiniScriptPathValue,
@@ -128,6 +130,11 @@ export interface GeneratedHoudiniProject {
    *  diagnosis when `networkAdded` is false: empty means the otls didn't load
    *  at all; SOP-only entries mean the main asset isn't an Object-level HDA. */
   visibleTypes: Array<string>
+  /** `node.parm` entries the generation prefilled on the new network (import
+   *  paths, PoseAsset CSV, skinning, export directory) — empty when the
+   *  installed HDA predates a parm (each is skipped when absent) or the
+   *  network wasn't built. */
+  prefilled: Array<string>
 }
 
 export async function generateHoudiniProject({
@@ -151,7 +158,7 @@ export async function generateHoudiniProject({
   const lib = charsRoot(project)
   const location = await locateCharacter(lib, id)
   const character = location ? await storage.getCharacter(lib, id, location.definitionAbs) : null
-  if (!character) throw new Error(`Character ${id} not found`)
+  if (!location || !character) throw new Error(`Character ${id} not found`)
   // Layout: the scene FILE lives in the character's houdini folder, NEXT TO the
   // one shared project folder every one of its scenes Set-Projects into:
   //   houdini/<name>.hiplc              ← the scene (one per generate)
@@ -197,19 +204,39 @@ export async function generateHoudiniProject({
     )
   }
 
-  // zod-parsed, not a bare invoke<T>() cast (primitive "<created>|<visible>"
-  // report — no fixture needed).
+  // Everything the studio already knows, prefilled onto the fresh network so
+  // it comes out wired end-to-end: import/CSV/export paths (`$HIP/../…`
+  // relative when the project's path style allows — computed for THE hip being
+  // generated, which by construction sits in the houdini folder — else
+  // absolute), the character name (prefilled paths may bypass the HDA's
+  // auto-fill) and the skinning the ROM targets.
+  const scenesRootAbs = characterScenesRoot(character, location, project.dazSubdir ?? 'daz3d')
+  const hipRefPrefix =
+    project.houdiniPathStyle !== 'absolute'
+      ? hipRefPrefixFor([scenePath], charFolder, character.exportPath)
+      : ''
+  const prefill = buildHoudiniPrefill(character, { hipRefPrefix, scenesRootAbs })
+
+  // zod-parsed, not a bare invoke<T>() cast (primitive
+  // "<created>|<visible>|<prefilled>" report — no fixture needed).
   const report = z.string().parse(
     await invoke('create_houdini_project', {
-      request: { hythonPath, projectDir, scenePath, houdiniPrefDir },
+      request: {
+        hythonPath,
+        projectDir,
+        scenePath,
+        houdiniPrefDir,
+        prefillJson: JSON.stringify(prefill),
+      },
     }),
   )
-  const [created = 'none', visible = 'none'] = report.split('|')
+  const [created = 'none', visible = 'none', prefilledRaw = 'none'] = report.split('|')
   return {
     scenePath,
     projectDir,
     networkAdded: created !== 'none',
     visibleTypes: visible === 'none' ? [] : visible.split(',').filter(Boolean),
+    prefilled: prefilledRaw === 'none' ? [] : prefilledRaw.split(',').filter(Boolean),
   }
 }
 

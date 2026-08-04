@@ -362,11 +362,13 @@ export function HoudiniProjectsField({
           projectName={projectName}
           houdiniDir={houdiniDir}
           onClose={() => setGenerateOpen(false)}
-          onGenerated={async (scenePath, networkAdded, visibleTypes) => {
+          onGenerated={async (scenePath, networkAdded, visibleTypes, prefilled) => {
             await addProjects(
               [scenePath],
               networkAdded
-                ? 'Houdini project generated — DazToHue network and Set Project are baked in'
+                ? prefilled.length > 0
+                  ? 'Houdini project generated — DazToHue network, Set Project and the import/export paths are baked in'
+                  : 'Houdini project generated — DazToHue network and Set Project are baked in'
                 : 'Houdini project generated (Set Project baked in) — add the DazToHue network from the shelf',
             )
             if (!networkAdded) {
@@ -442,6 +444,7 @@ function GenerateProjectDialog({
     scenePath: string,
     networkAdded: boolean,
     visibleTypes: Array<string>,
+    prefilled: Array<string>,
   ) => Promise<void>
 }) {
   const [name, setName] = useState(defaultProjectName(projectName, character.name))
@@ -489,7 +492,7 @@ function GenerateProjectDialog({
       const result = await generateHoudiniProject({
         data: { projectId, id: character.id, sceneName: name },
       })
-      await onGenerated(result.scenePath, result.networkAdded, result.visibleTypes)
+      await onGenerated(result.scenePath, result.networkAdded, result.visibleTypes, result.prefilled)
       onClose()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))

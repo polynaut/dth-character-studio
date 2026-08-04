@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { sceneExportName, sceneExportSubfolders } from '@dth/rom'
+import { characterSkinning, characterSlug, sceneExportName, sceneExportSubfolders } from '@dth/rom'
 
 import { sceneExportFolderRel } from './execute-jobs.ts'
 import { stripTrailingSeparators } from '#/lib/path.ts'
@@ -193,6 +193,86 @@ export function buildHoudiniJob(
     exportDirectory: (options.exportDirectory ?? '').replace(/\\/g, '/'),
     resultPath: options.resultPath.replace(/\\/g, '/'),
     closeWhenDone: options.closeWhenDone ?? false,
+  }
+}
+
+/**
+ * Generation-time parameter prefill for the network the shelf tool just built —
+ * everything the studio already knows, handed over so a generated project is
+ * wired end-to-end instead of waiting for hand-typed paths. Every parm name is
+ * MEASURED off the installed HDAs (hython parmTemplateGroup probe, 2026-08-04),
+ * never guessed; `pose_asset_csv_file_path` ("Auto CSV File Path") comes from
+ * mrpdean's CSV-path-driven PoseAsset build of the same day. On an older HDA
+ * the unknown parms simply don't exist and the generation script skips them —
+ * prefilling degrades, generation never fails.
+ */
+export interface HoudiniPrefill {
+  /** `import_character_name` — set explicitly because prefilling the file
+   *  paths may bypass the HDA's own auto-fill. */
+  characterName: string
+  /** `import_skinning_method` menu tokens (measured): studio `dqs` maps to
+   *  `dualquat`, `linear` stays `linear`. */
+  skinning: 'linear' | 'dualquat'
+  /** `pose_asset_csv_file_path` on the PoseAsset node. '' anywhere below means
+   *  "leave that parm untouched" (no export directory configured, or the
+   *  primary scene resolves to no export folder). */
+  csv: string
+  /** `import_character_dtu_file` — also "Export too"'s network match key. */
+  dth: string
+  /** `import_character_fbx_file`. */
+  fbx: string
+  /** `import_character_alembic_file`. */
+  abc: string
+  /** `import_character_rom_fbx_file` — the exporter delivers it as
+   *  `<name>_experimental_rom.fbx` (measured on a real DTH Exporter 2.x
+   *  export folder; the name is the plugin's to change). */
+  romFbx: string
+  /** `export_directory` — trailing slash REQUIRED: the HDA concatenates
+   *  `export_directory + character_name` naively (456.py's measured facts). */
+  exportDirectory: string
+}
+
+/**
+ * Build the prefill for a character's PRIMARY scene — the shelf tool creates
+ * ONE network, and the primary is the scene every character has. With a
+ * `hipRefPrefix` (e.g. `$HIP/../daz3d/dth-exports`, computed by
+ * `hipRefPrefixFor` for the hip being generated) the paths ride it; absolute
+ * otherwise — the same style split the generated CSVs use. Name + skinning
+ * are always filled; the path fields are '' when the character has no export
+ * directory to point into.
+ */
+export function buildHoudiniPrefill(
+  character: Character,
+  options: { hipRefPrefix: string; scenesRootAbs?: string },
+): HoudiniPrefill {
+  const base: HoudiniPrefill = {
+    characterName: characterSlug(character),
+    skinning: characterSkinning(character) === 'dqs' ? 'dualquat' : 'linear',
+    csv: '',
+    dth: '',
+    fbx: '',
+    abc: '',
+    romFbx: '',
+    exportDirectory: '',
+  }
+  const exportRoot = stripTrailingSeparators(character.exportPath.trim().replace(/\\/g, '/'))
+  const key = character.scenePath.trim().replace(/\\/g, '/').toLowerCase()
+  if (!exportRoot || !key) return base
+  const entry = sceneExportFolderRel(character, options.scenesRootAbs)[key]
+  if (!entry) return base
+  const subfolders = sceneExportSubfolders(character, options.scenesRootAbs)
+  const stem = (key.split('/').pop() ?? '').replace(/\.[^.]+$/, '')
+  const name = sceneExportName(character, key, subfolders[key] ?? stem)
+  const root = options.hipRefPrefix || exportRoot
+  const dir = [root, entry.folder].filter(Boolean).join('/')
+  return {
+    ...base,
+    csv: `${dir}/${name}_pose_asset.csv`,
+    dth: `${dir}/${name}.dth`,
+    fbx: `${dir}/${name}.fbx`,
+    abc: `${dir}/${name}.abc`,
+    romFbx: `${dir}/${name}_experimental_rom.fbx`,
+    exportDirectory: `${root}/`,
   }
 }
 

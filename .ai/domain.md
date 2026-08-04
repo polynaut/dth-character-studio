@@ -319,6 +319,24 @@ older runtimes as stale.
   the UI (houdini-projects-field "Generate project" dialog, name prefilled
   `<Project>_<Character>`) links the result as a Houdini card. Fails loud
   when the scene name already exists or a prerequisite is missing.
+  **The fresh network is PREFILLED** (`buildHoudiniPrefill`, houdini-jobs.ts —
+  pure, unit-tested; applied by the hython script off the `DTH_PREFILL` env
+  JSON, per-parm best-effort so an older HDA just skips what it lacks and
+  generation can never fail on it): the primary scene's import paths
+  (`import_character_{dtu,fbx,alembic,rom_fbx}_file` — the ROM FBX is the
+  exporter's `<name>_experimental_rom.fbx`, measured on a real export), the
+  PoseAsset CSV (`pose_asset_csv_file_path` — needs the CSV-path-driven
+  PoseAsset release, measured on mrpdean's 2026-08-04 test build),
+  `export_directory` (TRAILING SLASH — the HDA concatenates it with the
+  character name), `import_character_name` (prefilled paths may bypass the
+  HDA's auto-fill), and `import_skinning_method` (`characterSkinning`'s
+  dqs→`dualquat` / linear→`linear`). Paths ride the same `hipRefPrefixFor`
+  prefix as the CSVs (`$HIP/../<dazSubdir>/dth-exports/...` when the gate
+  passes and the project's path style is `hip`), absolute otherwise. The Skin node's clothing-vs-body shape lists are NOT
+  prefilled: they are black-boxed multiparms, the export files may not exist
+  at generation time, and the node ships its own "Auto-Populate Skinned
+  Shapes" button for exactly that job. Applied parms come back as the
+  report's third segment (`prefilled` on `GeneratedHoudiniProject`).
 - **The project folder is DELIBERATELY empty**, and that is
   not an oversight to fix. `hou.putenv` sets the `$JOB` VARIABLE and nothing
   else; Houdini's File → Set Project additionally materializes the standard
