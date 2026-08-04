@@ -185,7 +185,8 @@ the shipped knee-bend poses.
 The **bone** field autocompletes from the same one-run index as every morph
 field — that scan records the figure's whole **skeleton** alongside its morphs,
 so bones are searchable by Daz label *or* internal name. Build it once with
-`Build_Genesis_Index.dsa`; see *Finding a morph's internal Daz name* in
+**Tools → Scan & index** (the manual `Build_Genesis_Index.dsa` script does the
+same); see *Finding a morph's internal Daz name* in
 [Your first character](./04-first-character.md).
 
 Each drive is one row:

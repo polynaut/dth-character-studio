@@ -343,9 +343,10 @@ before or after it.
 The **Parameter name** the studio asks for is the parameter's internal name,
 which usually differs from the slider's label (label *Body Tone* → internal
 `body_bs_BodyTone`). The comfortable way is the studio's **autocomplete** —
-one scan in Daz covers every generation, and from then on each Parameter name
-field suggests matches as you type. The manual route via *Parameter Settings*
-(right screenshot) still works for a single name.
+one unattended scan (**Tools → Scan & index**) covers every generation, and
+from then on each Parameter name field suggests matches as you type. The
+manual route via *Parameter Settings* (right screenshot) still works for a
+single name.
 
 <p align="center">
   <img width="440" align="top" alt="A morph's internal Daz name" src="https://github.com/user-attachments/assets/9ca14a2a-f871-4a10-80dc-7713942dac49" />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<img width="355" align="top" alt="Looking up a morph's internal name in Daz" src="https://github.com/user-attachments/assets/703690ca-78a1-4a45-9c9a-c7d91be49a86" />
@@ -354,85 +355,76 @@ field suggests matches as you type. The manual route via *Parameter Settings*
 </p>
 
 <details>
-<summary><strong>Recommended: build the index once, then autocomplete</strong> — <code>Build_Genesis_Index.dsa</code></summary>
+<summary><strong>Recommended: scan once, then autocomplete</strong> — <code>Tools → Scan &amp; index</code></summary>
 <table><tr><td>
 
-The runtime installation (see [Tools](./tools.md)) puts **one** visible index
-script into your Daz library at `Scripts/DTH-Character-Studio/`:
-**`Build_Genesis_Index.dsa`**. One run covers **every** generation and builds
-both halves of the index the studio autocompletes from — the **morphs** (every
-dialable parameter) and the **skeleton** (every bone) — so it feeds the
-**Parameter name** fields *and* the bone field of
-[Modify JCM frames](./advanced.md#modify-jcm-frames).
-There is nothing to load or select first:
+The index behind the autocomplete is something the studio builds **for you**
+— there is no script to hunt down: open
+[**Tools → Scan & index → Scan project**](./tools.md#tab-2--scan-amp-index),
+tick what you want and press **Start scan**. The studio hands Daz Studio one
+batch and works through it unattended, reporting progress on the button.
 
-1. In Daz Studio, **save your open scene** (the build clears it), then run
-   `Scripts/DTH-Character-Studio/Build_Genesis_Index` from the Content Library.
-
-   <p align="center">
-     <img width="564" alt="Build_Genesis_Index in the Daz Content Library" src="https://github.com/user-attachments/assets/b0ad36d5-7983-4632-b842-3df0b6a8e531" />
-     <br>
-     <sub><em>The index script in Daz's Content Library, under Scripts/DTH-Character-Studio.</em></sub>
-   </p>
-
-2. Confirm the prompt — it lists exactly which generations it found installed
-   and what it will skip. It then creates the stock figures itself, one generation
-   at a time — *Genesis 3*, *8* and *8.1* female **and** male, and *Genesis 9*
-   twice: it's gender-neutral, so that pair is differentiated by geograft
-   instead (**Golden Palace** on one, **Dicktator** on the other, when you have
-   them installed — loaded via their *Smart* preset, so the geoshells are
-   indexed too). It scans each figure plus everything fitted to it, and writes
-   one index per generation. Takes a few minutes, and finishes on an **empty
-   scene** — nothing it built is left behind for you to clean up.
-3. A summary reports what was indexed per generation, which geograft file it
-   picked, and anything it couldn't find — so a missing product, or an
-   unexpected pick after a product update, is never silent.
-
-   <p align="center">
-     <img width="508" alt="Build_Genesis_Index run summary dialog" src="https://github.com/user-attachments/assets/7dd80317-3cbc-4a3e-b33d-ae398e81882c" />
-     <br>
-     <sub><em>The run summary: morphs and bones indexed per generation, and the geograft file each pick settled on.</em></sub>
-   </p>
-
-The scan indexes **everything dialable** each figure carries — classic morphs
-*and* controller dials, across all products installed for that generation —
-plus every **bone** of the figure and its geografts, which is what the JCM bone
-field autocompletes from. Installed new morph products later? Just run it
-again. Either way the studio picks the index up by itself the next time its
-window gains focus.
-
-**Got a figure the stock build doesn't cover** — a third-party geograft, an
-add-on, fitted clothing whose morphs you dial? Load it in Daz, then run the
-script: with figures already in the scene it offers to **scan the open scene**
-instead of building fresh ones, and indexes exactly what's loaded. That path
-never touches your scene — it's only the *build* that clears.
-
-If that scene is **saved**, it then asks how to file what it finds:
-
-- **For this scene** — the finds are tagged with the scene, and the studio only
-  suggests them while that scene is selected in the editor. This is the mode for
-  outfit and look variants: two jackets in two scenes stop competing for the
-  same *Expand All*.
-- **Into the base index** — the finds join the generation's index and are
-  suggested everywhere. This is the mode for a figure or geograft the stock
-  build genuinely doesn't cover.
+- **Base morphs** builds each generation's stock figures and indexes both
+  halves the studio autocompletes from — the **morphs** (everything dialable:
+  classic morphs *and* controller dials, across every product installed for
+  that generation) and the **skeleton** (every bone) — so it feeds the
+  **Parameter name** fields *and* the bone field of
+  [Modify JCM frames](./advanced.md#modify-jcm-frames). It covers *Genesis 3*,
+  *8* and *8.1* female **and** male, and *Genesis 9* twice: it's
+  gender-neutral, so that pair is differentiated by geograft instead
+  (**Golden Palace** on one, **Dicktator** on the other, when you have them
+  installed). Installed new morph products later? Just scan again — the
+  studio picks the fresh index up by itself the next time its window gains
+  focus.
+- **Character morphs** opens every linked Daz scene and indexes the dials the
+  base index *doesn't* have — fitted clothing, hair, third-party geografts
+  and add-ons. Each find is filed under the scene it was found in and only
+  suggested while that scene is selected in the editor, so two jackets in two
+  scenes stop competing for the same *Expand All*.
 
 From then on, every **Parameter name** field autocompletes after two typed
 characters — searchable by **internal name** *or* **Daz UI label** — and
 picking a suggestion fills in the exact internal name **and** the right node:
 no more mismatched node/morph pairs.
 
-> [!TIP]
-> The easier route for a whole project is **Tools → Scan & index → Scan
-> project**: it runs this base build *and* a per-scene scan for every character
-> in one unattended pass. See
-> [Scanning a whole project](./tools.md#tab-2--scan-amp-index).
-
   <p align="center">
     <img width="508" alt="Parameter name autocomplete suggestions" src="screenshots/detail-morph-autocomplete.png" />
     <br>
     <sub><em>Each Parameter name field autocompletes from the scanned index.</em></sub>
   </p>
+
+**Manual execution — the same build as a Daz script.** The runtime
+installation also puts the base build into your Daz library as a visible
+script — `Scripts/DTH-Character-Studio/Build_Genesis_Index.dsa`. It is
+exactly what the scan batch runs for you, so running it by hand isn't the
+way to go anymore; it stays useful for one thing — **indexing a scene that
+isn't linked to any character**. **Save your open scene first** (the stock
+build clears it), then run the script from the Content Library:
+
+   <p align="center">
+     <img width="564" alt="Build_Genesis_Index in the Daz Content Library" src="https://github.com/user-attachments/assets/b0ad36d5-7983-4632-b842-3df0b6a8e531" />
+     <br>
+     <sub><em>Manual execution: the index script in Daz's Content Library, under Scripts/DTH-Character-Studio.</em></sub>
+   </p>
+
+Run by hand it behaves exactly like the batch — it confirms which generations
+it found installed, builds the stock figures one generation at a time,
+finishes on an **empty scene**, and a summary reports what was indexed per
+generation, which geograft file it picked, and anything it couldn't find — so
+a missing product, or an unexpected pick after a product update, is never
+silent. With figures **already loaded** it offers to **scan the open scene**
+instead of building fresh ones (that path never touches your scene — it's
+only the *build* that clears), and if that scene is saved it asks how to file
+the finds: **For this scene** (suggested only while that scene is selected —
+what the *Character morphs* pass does for linked scenes) or **into the base
+index** (suggested everywhere — for a figure or geograft the stock build
+genuinely doesn't cover).
+
+   <p align="center">
+     <img width="508" alt="Build_Genesis_Index run summary dialog" src="https://github.com/user-attachments/assets/7dd80317-3cbc-4a3e-b33d-ae398e81882c" />
+     <br>
+     <sub><em>The run summary: morphs and bones indexed per generation, and the geograft file each pick settled on.</em></sub>
+   </p>
 
 </td></tr></table>
 </details>
