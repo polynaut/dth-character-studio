@@ -35,7 +35,8 @@ import type {
   NodeKind,
   SkeletonSection,
 } from '#/lib/rom/api.ts'
-import { fetchAllCharacters } from '#/lib/rom/api.ts'
+import { fetchAllCharacters, listAssets } from '#/lib/rom/api.ts'
+import type { DazAsset } from '#/lib/rom/storage.ts'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import houdiniLogo from '#/assets/houdini-logo.svg'
 import { pickHipPath } from '#/lib/desktop.ts'
@@ -155,11 +156,14 @@ export function HoudiniUtilsPanel({
   character,
   /** The card the panel was opened from — its nodes start selected. */
   initialHipPath,
+  /** The owning project — used to offer its Houdini template attachments. */
+  projectId,
 }: {
   open: boolean
   onClose: () => void
   character: Character
   initialHipPath?: string
+  projectId?: string
 }) {
   // --- target side: this character's own projects ---------------------------
   const targets = character.houdiniProjects
@@ -168,6 +172,9 @@ export function HoudiniUtilsPanel({
 
   // --- source side ---------------------------------------------------------
   const [sourceMode, setSourceMode] = useState<'studio' | 'browse'>('studio')
+  /** The project's Houdini TEMPLATE attachments — the whole point of keeping
+   *  them: "copy from G9 Skin Base" instead of locating a file. */
+  const [templates, setTemplates] = useState<Array<DazAsset>>([])
   const [others, setOthers] = useState<Array<CharacterWithProject>>([])
   const [sourceCharacterId, setSourceCharacterId] = useState('')
   const [sourceHip, setSourceHip] = useState('')
@@ -248,6 +255,15 @@ export function HoudiniUtilsPanel({
   // Candidate source characters: everything the studio can reach that actually
   // HAS a Houdini project, minus this character (copying onto itself is refused
   // by the api anyway, and offering it invites the mistake).
+  // Templates are per project and only exist when attachments are enabled — an
+  // empty list simply means the picker doesn't offer that route.
+  useEffect(() => {
+    if (!open || !projectId) return
+    void listAssets({ data: { projectId } })
+      .then((all) => setTemplates(all.filter((a) => a.kind === 'houdini-project')))
+      .catch(() => setTemplates([]))
+  }, [open, projectId])
+
   useEffect(() => {
     if (!open) return
     void fetchAllCharacters()
@@ -418,10 +434,19 @@ export function HoudiniUtilsPanel({
       <SidePanel
         open={open}
         onClose={busy ? () => {} : onClose}
+        // Names the KIND of thing being worked on, not just the character: the
+        // drawer acts on Houdini projects, and "Utils — Ita" gave no clue which
+        // of the character's many facets it touches.
         title={
-          <span className="flex items-center gap-1.5">
-            <Wrench className="size-4 shrink-0" />
-            Utils — {character.name}
+          <span className="flex items-center gap-2">
+            <img src={houdiniLogo} alt="" aria-hidden className="size-5 shrink-0 object-contain" />
+            <span className="truncate">
+              Houdini project utils
+              <span className="ml-2 text-sm font-normal text-muted-foreground">
+                {character.name}
+                {initialHipPath ? ` · opened from ${fileName(initialHipPath)}` : ''}
+              </span>
+            </span>
           </span>
         }
       >
@@ -496,6 +521,41 @@ export function HoudiniUtilsPanel({
                   project on disk. Exactly one material node can be the source.
                 </InfoPopup>
               </Label>
+
+              {templates.length > 0 && (
+                <div className="mb-3">
+                  <p className="mb-1 text-xs text-muted-foreground">
+                    Templates in this project
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {templates.map((template) => (
+                      <button
+                        key={template.id}
+                        type="button"
+                        title={template.description || template.scenePath}
+                        onClick={() => {
+                          setSourceMode('browse')
+                          setBrowsedHip(template.scenePath)
+                        }}
+                        className={`flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-sm ${
+                          normalizePath(activeSourceHip).toLowerCase() ===
+                          normalizePath(template.scenePath).toLowerCase()
+                            ? 'border-houdini-orange bg-houdini-orange/15 font-medium'
+                            : 'text-muted-foreground hover:bg-accent/50'
+                        }`}
+                      >
+                        <img
+                          src={houdiniLogo}
+                          alt=""
+                          aria-hidden
+                          className="size-4 shrink-0 object-contain"
+                        />
+                        {template.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="mb-3 flex flex-wrap items-center gap-2">
                 <Select

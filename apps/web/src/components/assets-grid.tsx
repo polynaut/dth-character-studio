@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { Button } from '@dth/ui'
 import { Portrait } from '#/components/portrait.tsx'
 import { BulkDeleteDialog } from '#/components/bulk-delete-dialog.tsx'
+import houdiniLogo from '#/assets/houdini-logo.svg'
 import { deleteAsset, listAssets, openScene } from '#/lib/rom/api.ts'
 import type { DazAsset } from '#/lib/rom/storage.ts'
 
@@ -81,12 +82,20 @@ export function AssetsGrid({
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {assets.map((asset) => (
             <div key={asset.id} className="flex gap-3 rounded-lg border bg-card p-3">
-              <Portrait
-                scenePath={asset.scenePath}
-                name={asset.name}
-                className="aspect-[3/4] w-16 shrink-0 rounded-md"
-                fallbackClassName="text-2xl"
-              />
+              {/* A Houdini template has no scene thumbnail to derive — the
+                  brand mark says what kind of attachment this is at a glance. */}
+              {asset.kind === 'houdini-project' ? (
+                <span className="flex aspect-[3/4] w-16 shrink-0 items-center justify-center rounded-md bg-[#262626]">
+                  <img src={houdiniLogo} alt="" aria-hidden className="size-7 object-contain" />
+                </span>
+              ) : (
+                <Portrait
+                  scenePath={asset.scenePath}
+                  name={asset.name}
+                  className="aspect-[3/4] w-16 shrink-0 rounded-md"
+                  fallbackClassName="text-2xl"
+                />
+              )}
               <div className="flex min-w-0 flex-1 flex-col">
                 <div className="truncate font-semibold">{asset.name}</div>
                 {asset.description && (
@@ -102,7 +111,11 @@ export function AssetsGrid({
                     variant="ghost"
                     size="icon"
                     className="ml-auto size-7"
-                    title="Open scene in Daz"
+                    title={
+                      asset.kind === 'houdini-project'
+                        ? 'Open project in Houdini'
+                        : 'Open scene in Daz'
+                    }
                     onClick={() =>
                       void openScene({ data: { scenePath: asset.scenePath } }).catch((e) =>
                         // Surface a failed open (missing app association, scope) —

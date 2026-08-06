@@ -412,6 +412,7 @@ export function HoudiniProjectsField({
           open
           character={character}
           initialHipPath={utilsFor}
+          projectId={projectId}
           onClose={() => setUtilsFor('')}
         />
       )}

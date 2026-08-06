@@ -9,8 +9,21 @@ import { basename, join, writeTextFileAtomic } from './fs'
 // `assets.json` registry plus, for copied assets, the scene files themselves. A
 // linked asset keeps its scene where it is and just records the path.
 
+/**
+ * What an attachment points at.
+ *
+ * `houdini-project` is a TEMPLATE `.hip` — a ready-made skeleton or material +
+ * texture-baker setup the Utils drawer copies from. It is always LINKED, never
+ * copied: moving a Houdini project safely needs every reference relative AND its
+ * `$JOB` folder travelling with it, and neither can be verified here.
+ */
+export type AssetKind = 'daz-scene' | 'houdini-project'
+
 export interface DazAsset {
   id: string
+  /** Which kind of file `scenePath` points at. Older registries have no `kind`
+   *  and read as `daz-scene`, which is what they all were. */
+  kind: AssetKind
   /** Display name (defaults to the scene's file name; user-editable). */
   name: string
   /** Absolute path to the asset's Daz scene (.duf) — inside `.assets` when copied,
@@ -42,6 +55,9 @@ async function readAssetRegistry(base: string): Promise<Array<DazAsset>> {
       )
       .map((a) => ({
         id: a.id,
+        // Unknown/absent kinds read as a Daz scene — every registry written
+        // before Houdini templates existed held only those.
+        kind: a.kind === 'houdini-project' ? ('houdini-project' as const) : ('daz-scene' as const),
         name: a.name ?? '',
         scenePath: a.scenePath,
         description: a.description ?? '',

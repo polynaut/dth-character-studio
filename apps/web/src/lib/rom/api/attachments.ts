@@ -163,7 +163,10 @@ export async function listAssets({ data }: { data: unknown }): Promise<Array<sto
 const createAssetInput = z.object({
   /** The project the asset belongs to (its folder path). */
   projectId: z.string().min(1),
-  /** Absolute path to the picked Daz scene (.duf). */
+  /** What this attachment is. A `houdini-project` is a TEMPLATE `.hip` the
+   *  Utils drawer copies setups from; it is always linked (see below). */
+  kind: z.enum(['daz-scene', 'houdini-project']).default('daz-scene'),
+  /** Absolute path to the picked file — a `.duf`, or a `.hip` for a template. */
   scenePath: z.string().min(1),
   /** Display name; defaults to the scene's file name. */
   name: z.string().optional(),
@@ -179,7 +182,12 @@ const createAssetInput = z.object({
 export async function createAsset({ data }: { data: unknown }): Promise<storage.DazAsset> {
   const input = createAssetInput.parse(data)
   const base = await assetsBase(input.projectId)
-  const copy = input.copy ?? true
+  // A Houdini template is ALWAYS linked, whatever the caller asked for: moving a
+  // `.hip` safely needs every reference relative AND its `$JOB` folder to travel
+  // with it, and neither can be verified here — a copy that silently breaks half
+  // a project's references is worse than not copying. Enforced at the api, not
+  // just hidden in the form, so no caller can produce a broken copy.
+  const copy = input.kind === 'houdini-project' ? false : (input.copy ?? true)
   const now = new Date().toISOString()
   let scenePath = input.scenePath
   let linked = true
@@ -191,9 +199,13 @@ export async function createAsset({ data }: { data: unknown }): Promise<storage.
     linked = false
     subfolder = sub
   }
-  const name = input.name?.trim() || basename(input.scenePath).replace(/\.duf$/i, '') || 'Asset'
+  const name =
+    input.name?.trim() ||
+    basename(input.scenePath).replace(/\.(duf|hip|hipnc|hiplc)$/i, '') ||
+    'Asset'
   return storage.addAsset(base, {
     id: newId(),
+    kind: input.kind,
     name,
     scenePath,
     description: input.description?.trim() ?? '',
