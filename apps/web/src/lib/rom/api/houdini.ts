@@ -152,8 +152,19 @@ export async function generateHoudiniProject({
   const location = await locateCharacter(lib, id)
   const character = location ? await storage.getCharacter(lib, id, location.definitionAbs) : null
   if (!character) throw new Error(`Character ${id} not found`)
+  // `$JOB` is the CHARACTER folder (v0.64), not the shared project folder.
+  // Measured with `hou.text.collapseCommonVars` — the call Houdini's file picker
+  // uses to turn a chosen path back into a variable: a path ABOVE `$HIP`
+  // collapses only when it sits under `$JOB`. With `$JOB` on
+  // `houdini/houdini-project`, picking an export by hand produced an ABSOLUTE
+  // path, so the project stopped being movable — a property the retired
+  // `dth-exports` junction had been providing invisibly by making exports look
+  // like they were below `$HIP`. With `$JOB` on the character folder the same
+  // pick yields `$JOB/daz3d/dth-exports/…`, while `$HIP` still wins for paths
+  // inside the houdini folder.
+  //
   // Layout: the scene FILE lives in the character's houdini folder, NEXT TO the
-  // one shared project folder every one of its scenes Set-Projects into:
+  // one shared project folder Houdini writes its own caches/backups into:
   //   houdini/<name>.hiplc              ← the scene (one per generate)
   //   houdini/houdini-project/          ← $JOB, shared — created once
   // The export root is reached from the scene by plain relative navigation
@@ -201,7 +212,7 @@ export async function generateHoudiniProject({
   // report — no fixture needed).
   const report = z.string().parse(
     await invoke('create_houdini_project', {
-      request: { hythonPath, projectDir, scenePath, houdiniPrefDir },
+      request: { hythonPath, projectDir, jobDir: charFolder, scenePath, houdiniPrefDir },
     }),
   )
   const [created = 'none', visible = 'none'] = report.split('|')
