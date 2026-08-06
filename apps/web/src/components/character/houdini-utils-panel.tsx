@@ -32,6 +32,7 @@ import type {
   MaterialUtilReport,
 } from '#/lib/rom/api.ts'
 import { fetchAllCharacters } from '#/lib/rom/api.ts'
+import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import houdiniLogo from '#/assets/houdini-logo.svg'
 import { pickHipPath } from '#/lib/desktop.ts'
 import { displayPath, normalizePath, parentDir } from '#/lib/path.ts'
@@ -475,9 +476,22 @@ export function HoudiniUtilsPanel({
                   </Select>
                 )}
 
-                <Button variant="outline" size="sm" onClick={() => void onBrowse()}>
-                  <FolderOpen /> Browse…
-                </Button>
+                {/* Same action as the picker: drag a `.hip` out of Explorer
+                    straight onto the button. */}
+                <FileDropZone
+                  accept={['hip', 'hipnc', 'hiplc']}
+                  label="Drop a Houdini project"
+                  onDrop={(paths) => {
+                    const dropped = paths[0]
+                    if (!dropped) return
+                    setSourceMode('browse')
+                    setBrowsedHip(dropped)
+                  }}
+                >
+                  <Button variant="outline" size="sm" onClick={() => void onBrowse()}>
+                    <FolderOpen /> Browse…
+                  </Button>
+                </FileDropZone>
               </div>
 
               {activeSourceHip && (

@@ -1,9 +1,11 @@
 import { open } from '@tauri-apps/plugin-dialog'
 import { open as shellOpen } from '@tauri-apps/plugin-shell'
+import { stat } from '@tauri-apps/plugin-fs'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 
+import { parentDir } from './path.ts'
 import { rememberNetworkPath } from './rom/api.ts'
 
 /**
@@ -151,6 +153,29 @@ export async function pickFolder(title: string, defaultPath?: string): Promise<s
   if (!isTauri()) return ''
   const selected = await open({ multiple: false, directory: true, title, defaultPath })
   return notePick(typeof selected === 'string' ? selected : '')
+}
+
+/**
+ * The FOLDER a dropped path stands for: the path itself when it is a directory,
+ * otherwise its parent.
+ *
+ * OS drag-and-drop hands over whatever the user grabbed, and grabbing a file out
+ * of Explorer is easier than grabbing its folder — so a file dropped on a folder
+ * field means "the folder it lives in". Decided by a real `stat`, never by
+ * looking for a dot: plenty of folders have one (`Genesis 8.1`), and plenty of
+ * files don't.
+ *
+ * Returns '' when the path can't be read (vanished, permission) so the caller
+ * leaves the field alone rather than writing a guess into it.
+ */
+export async function folderFromDrop(path: string): Promise<string> {
+  if (!isTauri() || !path) return ''
+  try {
+    const info = await stat(path)
+    return info.isDirectory ? path : parentDir(path)
+  } catch {
+    return ''
+  }
 }
 
 /**

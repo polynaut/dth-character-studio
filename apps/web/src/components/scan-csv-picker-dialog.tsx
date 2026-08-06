@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { ChevronDown, ChevronRight, FileText, FolderOpen } from 'lucide-react'
 
 import { Button, Modal } from '@dth/ui'
+import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import { PathCode } from '#/components/path-code.tsx'
 import { listScanFrameCsvs } from '#/lib/rom/api.ts'
 
@@ -115,9 +116,21 @@ export function ScanCsvPickerDialog({
         <Button variant="ghost" onClick={onClose}>
           Cancel
         </Button>
-        <Button variant="outline" onClick={onBrowse}>
-          <FolderOpen /> Browse…
-        </Button>
+        {/* Same action as the picker: drop a hand-curated CSV straight on it. */}
+        <FileDropZone
+          accept={['csv']}
+          label="Drop a CSV"
+          onDrop={(paths) => {
+            // Identical to choosing a listed scan — the path just came from
+            // Explorer instead of the list.
+            const dropped = paths[0]
+            if (dropped) onPick(dropped)
+          }}
+        >
+          <Button variant="outline" onClick={onBrowse}>
+            <FolderOpen /> Browse…
+          </Button>
+        </FileDropZone>
       </div>
     </Modal>
   )
