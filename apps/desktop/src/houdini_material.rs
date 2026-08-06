@@ -168,21 +168,39 @@ pub fn run_houdini_material_util(
     // process failure itself become the error.
     let report = std::fs::read_to_string(&request.result_path).ok();
     let Some(text) = report else {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let lines: Vec<&str> = stderr.lines().filter(|l| !l.trim().is_empty()).collect();
-        let tail = lines
-            .iter()
-            .rev()
-            .take(8)
-            .rev()
-            .cloned()
-            .collect::<Vec<_>>()
-            .join("\n");
-        return Err(if tail.is_empty() {
-            format!("hython wrote no result (exited with {})", output.status)
-        } else {
-            tail
-        });
+        // Report BOTH streams: a script that fails loudly leaves a traceback on
+        // stderr, but the nastier case is a process that exits 0 having written
+        // nothing — there the only clue is whatever it printed, and an error
+        // saying just "exited with exit code: 0" sends the reader nowhere.
+        let tail = |bytes: &[u8]| {
+            let text = String::from_utf8_lossy(bytes).into_owned();
+            let lines: Vec<String> = text
+                .lines()
+                .filter(|l| !l.trim().is_empty())
+                .map(str::to_string)
+                .collect();
+            lines
+                .iter()
+                .rev()
+                .take(8)
+                .rev()
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+        let err_tail = tail(&output.stderr);
+        let out_tail = tail(&output.stdout);
+        let mut message = format!(
+            "hython exited with {} but wrote no report:\n{}",
+            output.status, request.result_path
+        );
+        if !err_tail.is_empty() {
+            message.push_str(&format!("\n\nstderr:\n{err_tail}"));
+        }
+        if !out_tail.is_empty() {
+            message.push_str(&format!("\n\nstdout:\n{out_tail}"));
+        }
+        return Err(message);
     };
 
     serde_json::from_str::<MaterialUtilReport>(&text)

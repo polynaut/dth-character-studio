@@ -1,4 +1,4 @@
-import { exists, mkdir, remove } from '@tauri-apps/plugin-fs'
+import { exists, mkdir, readDir, remove, stat } from '@tauri-apps/plugin-fs'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
@@ -28,9 +28,25 @@ import materialUtilsScript from '../houdini-runtime/material_utils.py?raw'
 // The second is why every transfer reports `missingMaterials` and why the dry
 // run exists at all.
 
-/** The material-utility request files live beside `456.py` in app-data. */
-const REQUEST_FILE = 'material-util-request.json'
-const RESULT_FILE = 'material-util-report.json'
+/**
+ * The material-utility request/result files live beside `456.py` in app-data,
+ * and every run gets its OWN pair.
+ *
+ * Fixed names looked tidier and were a race: two runs overlap easily (React
+ * StrictMode double-fires the panel's scan effect in dev, and Rescan can be
+ * clicked while a scan is in flight), and then the first run's cleanup deletes
+ * the result the second run's hython had just written — which surfaces as the
+ * baffling "hython wrote no result (exited with exit code: 0)", a process that
+ * did everything right and left nothing behind.
+ */
+function runFiles(): { requestPath: string; resultPath: string; id: string } {
+  const id = crypto.randomUUID()
+  return {
+    id,
+    requestPath: `material-util-${id}-request.json`,
+    resultPath: `material-util-${id}-report.json`,
+  }
+}
 
 const nodeRef = z.object({
   hipPath: z.string().min(1),
@@ -98,31 +114,71 @@ async function runMaterialUtil(request: unknown): Promise<MaterialUtilReport> {
   const dir = await storage.dataPath(HOUDINI_SCRIPTS_FOLDER)
   await mkdir(dir, { recursive: true })
   const scriptPath = joinPath(dir, 'material_utils.py')
-  const requestPath = joinPath(dir, REQUEST_FILE)
-  const resultPath = joinPath(dir, RESULT_FILE)
+  const files = runFiles()
+  const requestPath = joinPath(dir, files.requestPath)
+  const resultPath = joinPath(dir, files.resultPath)
   await storage.writeTextFileAtomic(scriptPath, materialUtilsScript)
   await storage.writeTextFileAtomic(requestPath, JSON.stringify(request, null, 2))
 
-  // Never a bare invoke<T>() cast — the report crosses Python → serde → here,
-  // and the shared fixture (contracts/material-util-report.json) pins all three.
-  const report = materialUtilReportSchema.parse(
-    await invoke('run_houdini_material_util', {
-      request: { hythonPath, scriptPath, requestPath, resultPath, houdiniPrefDir },
-    }),
-  )
-  // The request names the user's projects and the report can be large; neither
-  // is worth keeping in app-data between runs.
-  await Promise.all(
-    [requestPath, resultPath].map(async (path) => {
-      try {
-        if (await exists(path)) await remove(path)
-      } catch {
-        // locked — the next run overwrites the request and clears the result
-      }
-    }),
-  )
-  if (!report.ok) throw new Error(report.error || 'The material utility failed.')
-  return report
+  await sweepStaleRunFiles(dir)
+
+  try {
+    // Never a bare invoke<T>() cast — the report crosses Python → serde → here,
+    // and the shared fixture (contracts/material-util-report.json) pins all three.
+    const report = materialUtilReportSchema.parse(
+      await invoke('run_houdini_material_util', {
+        request: { hythonPath, scriptPath, requestPath, resultPath, houdiniPrefDir },
+      }),
+    )
+    if (!report.ok) throw new Error(report.error || 'The material utility failed.')
+    return report
+  } finally {
+    // In a `finally`, not on the success path: a failed run's files are exactly
+    // the ones nobody will ever look at again, and per-run names mean a leak
+    // here accumulates instead of being overwritten.
+    await Promise.all(
+      [requestPath, resultPath].map(async (path) => {
+        try {
+          if (await exists(path)) await remove(path)
+        } catch {
+          // locked — the age sweep above collects it on a later run
+        }
+      }),
+    )
+  }
+}
+
+/**
+ * Drop material-utility run files left behind by a crash.
+ *
+ * ONLY files older than {@link STALE_RUN_MS}: a run still in flight owns files
+ * that are seconds old, and deleting those would recreate the very race the
+ * per-run names removed. An app-generated file that nothing collects is how a
+ * disk fills, so this is the bound.
+ */
+const STALE_RUN_MS = 60 * 60 * 1000
+
+async function sweepStaleRunFiles(dir: string): Promise<void> {
+  try {
+    const entries = await readDir(dir)
+    const cutoff = Date.now() - STALE_RUN_MS
+    await Promise.all(
+      entries
+        .filter((entry) => entry.isFile && /^material-util-.*\.json$/.test(entry.name))
+        .map(async (entry) => {
+          const path = joinPath(dir, entry.name)
+          try {
+            const info = await stat(path)
+            const changed = info.mtime?.getTime() ?? info.birthtime?.getTime() ?? 0
+            if (changed && changed < cutoff) await remove(path)
+          } catch {
+            // vanished or locked — nothing to do
+          }
+        }),
+    )
+  } catch {
+    // the folder may not exist yet on a first run
+  }
 }
 
 /**
@@ -143,9 +199,25 @@ export async function scanHoudiniMaterials({
   if (!isTauri()) {
     throw new Error('Scanning Houdini projects needs the desktop app (it runs hython).')
   }
-  const report = await runMaterialUtil({ op: 'scan', hipPaths })
-  return report.projects
+  // Identical scans already in flight are SHARED rather than started again: a
+  // scan costs a whole hython start plus seconds per `.hip`, and the panel can
+  // easily ask twice (React StrictMode double-fires its effect in dev, and
+  // Rescan is clickable while one is running). Deliberately scans only —
+  // a transfer is not idempotent and must never be coalesced.
+  const key = JSON.stringify(hipPaths)
+  const running = inFlightScans.get(key)
+  if (running) return running
+  const pending = runMaterialUtil({ op: 'scan', hipPaths })
+    .then((report) => report.projects)
+    .finally(() => {
+      inFlightScans.delete(key)
+    })
+  inFlightScans.set(key, pending)
+  return pending
 }
+
+/** Scans in flight, keyed by their file list — see {@link scanHoudiniMaterials}. */
+const inFlightScans = new Map<string, Promise<Array<MaterialScanProject>>>()
 
 /**
  * Whether two node references point at the SAME material node.
