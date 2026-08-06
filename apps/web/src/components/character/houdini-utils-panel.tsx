@@ -32,6 +32,7 @@ import type {
   MaterialUtilReport,
 } from '#/lib/rom/api.ts'
 import { fetchAllCharacters } from '#/lib/rom/api.ts'
+import houdiniLogo from '#/assets/houdini-logo.svg'
 import { pickHipPath } from '#/lib/desktop.ts'
 import { displayPath, normalizePath, parentDir } from '#/lib/path.ts'
 import type { Character } from '@dth/rom'
@@ -768,37 +769,18 @@ function NodePicker({
               No DazToHue material nodes in this project.
             </p>
           ) : (
-            <ul className="mt-2 space-y-1">
+            <ul className="mt-2 space-y-2">
               {project.nodes.map((node) => {
                 const key = nodeKey(project.hipPath, node.path)
-                const isDisabled = disabledKey === key
                 return (
                   <li key={key}>
-                    <label
-                      className={`flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-xs hover:bg-accent/50 ${
-                        isDisabled ? 'cursor-not-allowed opacity-40' : ''
-                      }`}
-                    >
-                      <input
-                        type={mode === 'multi' ? 'checkbox' : 'radio'}
-                        name={mode === 'single' ? 'material-source' : undefined}
-                        checked={selected.has(key)}
-                        disabled={isDisabled}
-                        onChange={() => onToggle(project.hipPath, node.path)}
-                      />
-                      <span className="font-medium">{nodeLabel(node).primary}</span>
-                      {nodeLabel(node).secondary && (
-                        <span className="text-muted-foreground/70">
-                          {nodeLabel(node).secondary}
-                        </span>
-                      )}
-                      <span className="text-muted-foreground">
-                        {node.bakers} baker{node.bakers === 1 ? '' : 's'} · {node.layers} layer
-                        {node.layers === 1 ? '' : 's'} · {node.materials} material
-                        {node.materials === 1 ? '' : 's'}
-                      </span>
-                      {isDisabled && <span className="text-muted-foreground">(source)</span>}
-                    </label>
+                    <MaterialNodeRow
+                      node={node}
+                      mode={mode}
+                      checked={selected.has(key)}
+                      disabled={disabledKey === key}
+                      onToggle={() => onToggle(project.hipPath, node.path)}
+                    />
                   </li>
                 )
               })}
@@ -806,6 +788,86 @@ function NodePicker({
           )}
         </div>
       ))}
+    </div>
+  )
+}
+
+/**
+ * One selectable material node — the linked-project card's sibling.
+ *
+ * Same anatomy as the DTH Export dialog's project rows (`HipRow`): the
+ * `houdini-card` tint/border with its orange left accent bar, a Houdini mark as
+ * the tile, a checkbox, and a transparent cover button so the whole row toggles.
+ * The heading is the network-box title when the node has one, since that is the
+ * name the user gave this network.
+ */
+function MaterialNodeRow({
+  node,
+  mode,
+  checked,
+  disabled,
+  onToggle,
+}: {
+  node: MaterialNodeInfo
+  /** Multi = a target (checkbox); single = the one source (radio). */
+  mode: 'single' | 'multi'
+  checked: boolean
+  /** Already chosen as the source — offered but refused, so the reason is
+   *  visible rather than the row silently vanishing from the target list. */
+  disabled: boolean
+  onToggle: () => void
+}) {
+  const { primary, secondary } = nodeLabel(node)
+  return (
+    <div className="group/card relative w-full">
+      <div
+        className={`houdini-card relative flex items-center gap-3 rounded-lg border p-3 pl-4${
+          disabled ? ' opacity-50' : ''
+        }`}
+        data-selected={checked ? 'true' : undefined}
+      >
+        <input
+          type={mode === 'multi' ? 'checkbox' : 'radio'}
+          name={mode === 'single' ? 'material-source' : undefined}
+          className="relative z-10 size-4 shrink-0 accent-houdini-orange"
+          aria-label={primary}
+          checked={checked}
+          disabled={disabled}
+          onChange={onToggle}
+        />
+        <span className="flex aspect-[3/4] h-[56px] shrink-0 items-center justify-center rounded-md bg-[#262626]">
+          <img src={houdiniLogo} alt="" aria-hidden className="size-8 object-contain" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <span className="block truncate text-base font-medium">
+            {primary}
+            {secondary && (
+              <span className="ml-1.5 text-xs font-normal text-muted-foreground/70">
+                {secondary}
+              </span>
+            )}
+          </span>
+          <p className="mt-0.5 truncate text-xs text-muted-foreground" title={node.path}>
+            {node.materials} material{node.materials === 1 ? '' : 's'} · {node.uvChannels} UV
+            channel{node.uvChannels === 1 ? '' : 's'} · {node.bakers} baker
+            {node.bakers === 1 ? '' : 's'} · {node.layers} layer{node.layers === 1 ? '' : 's'}
+          </p>
+          {disabled && <p className="mt-0.5 text-xs text-muted-foreground">Chosen as the source</p>}
+        </div>
+      </div>
+      {!disabled && (
+        <button
+          type="button"
+          aria-hidden
+          tabIndex={-1}
+          onClick={onToggle}
+          className="absolute inset-0 rounded-lg"
+        />
+      )}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 left-0 w-1.5 rounded-l-lg bg-houdini-orange"
+      />
     </div>
   )
 }
