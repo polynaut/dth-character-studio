@@ -11,6 +11,7 @@
         {
           "path": "/obj/DazToHue/DazToHueMaterial",
           "name": "DazToHueMaterial",
+          "nodeType": "material",
           "networkBox": "KiraDefault",
           "materials": 7,
           "uvChannels": 3,
@@ -35,6 +36,25 @@
               "layers": 4,
               "channelUvs": []
             }
+          ],
+          "sectionCounts": []
+        },
+        {
+          "path": "/obj/DazToHue/DazToHueSkeleton",
+          "name": "DazToHueSkeleton",
+          "nodeType": "skeleton",
+          "networkBox": "KiraDefault",
+          "materials": 0,
+          "uvChannels": 0,
+          "bakers": 0,
+          "layers": 0,
+          "bakerNames": [],
+          "materialNames": [],
+          "slots": [],
+          "sectionCounts": [
+            { "key": "general", "label": "General", "count": 2 },
+            { "key": "skeleton", "label": "Skeleton", "count": 48 },
+            { "key": "skinWeights", "label": "Skin Weights", "count": 3 }
           ]
         }
       ]

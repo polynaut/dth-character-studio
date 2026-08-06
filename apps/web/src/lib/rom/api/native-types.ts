@@ -215,11 +215,23 @@ export const materialSlotInfoSchema = z.object({
   channelUvs: z.array(z.string()),
 })
 
-/** One DazToHueMaterial node found by a scan. */
+/** How much is configured in one section of a node (the skeleton node's tabs). */
+export const sectionCountInfoSchema = z.object({
+  key: z.string(),
+  /** Human label as the HDA spells it ("Skin Weights"). */
+  label: z.string(),
+  /** Non-default settings plus list entries — what the user changed. */
+  count: z.number(),
+})
+
+/** One DazToHue node found by a scan (a material or a skeleton node). */
 export const materialNodeInfoSchema = z.object({
   /** Node path in the scene, e.g. `/obj/DazToHue/DazToHueMaterial`. */
   path: z.string(),
   name: z.string(),
+  /** Which panel tab owns this node: `material` or `skeleton`. One scan
+   *  returns both kinds, so switching tab costs no second hython run. */
+  nodeType: z.string(),
   /** Title of the network box wrapping this node ('' when there is none) —
    *  what users actually name their DTH networks (`KiraDefault`, `KiraYoga`),
    *  since the nodes are only ever `DazToHueMaterial`, `…1`, `…2`. */
@@ -233,8 +245,10 @@ export const materialNodeInfoSchema = z.object({
   /** Slot names with AND without the node's prefix, so a baker's material
    *  (`MI_Skin`) can be matched however the target spells it. */
   materialNames: z.array(z.string()),
-  /** The node's material slots, each with its bakers — the panel's pick list. */
+  /** The node's material slots, each with its bakers — empty for a skeleton. */
   slots: z.array(materialSlotInfoSchema),
+  /** Per-section counts for the skeleton node's tabs — empty for a material. */
+  sectionCounts: z.array(sectionCountInfoSchema),
 })
 
 /** One scanned `.hip` (`ok: false` = unreadable; the scan itself still succeeds). */

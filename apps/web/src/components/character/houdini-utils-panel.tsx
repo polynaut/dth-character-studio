@@ -22,6 +22,7 @@ import {
 } from '@dth/ui'
 import {
   MATERIAL_SECTIONS,
+  SKELETON_SECTIONS,
   scanHoudiniMaterials,
   transferHoudiniMaterials,
 } from '#/lib/rom/api.ts'
@@ -31,8 +32,11 @@ import type {
   MaterialScanProject,
   MaterialSection,
   MaterialUtilReport,
+  NodeKind,
+  SkeletonSection,
 } from '#/lib/rom/api.ts'
-import { fetchAllCharacters } from '#/lib/rom/api.ts'
+import { fetchAllCharacters, listAssets } from '#/lib/rom/api.ts'
+import type { DazAsset } from '#/lib/rom/storage.ts'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import houdiniLogo from '#/assets/houdini-logo.svg'
 import { pickHipPath } from '#/lib/desktop.ts'
@@ -53,6 +57,23 @@ import type { Character } from '@dth/rom'
  * seven adjustments. Reproducing that by hand for every character is the tedium
  * this replaces.
  */
+
+/** Label + rationale for each transferable part of a skeleton setup. The
+ *  sections are the node's own tabs, so they read the same here as in Houdini. */
+const SKELETON_LABELS: Record<SkeletonSection, { label: string; hint: string }> = {
+  general: {
+    label: 'General',
+    hint: 'Source/target skeleton, reference frame and the root/neck/twist options.',
+  },
+  skeleton: {
+    label: 'Skeleton',
+    hint: 'Bone simplification, procedural physics bones, and the manual rename / reparent / delete rules.',
+  },
+  skinWeights: {
+    label: 'Skin Weights',
+    hint: 'The skin-weight operations and their settings.',
+  },
+}
 
 /** Label + rationale for each transferable part of a material setup. */
 const SECTION_LABELS: Record<MaterialSection, { label: string; hint: string }> = {
@@ -135,11 +156,14 @@ export function HoudiniUtilsPanel({
   character,
   /** The card the panel was opened from — its nodes start selected. */
   initialHipPath,
+  /** The owning project — used to offer its Houdini template attachments. */
+  projectId,
 }: {
   open: boolean
   onClose: () => void
   character: Character
   initialHipPath?: string
+  projectId?: string
 }) {
   // --- target side: this character's own projects ---------------------------
   const targets = character.houdiniProjects
@@ -148,6 +172,9 @@ export function HoudiniUtilsPanel({
 
   // --- source side ---------------------------------------------------------
   const [sourceMode, setSourceMode] = useState<'studio' | 'browse'>('studio')
+  /** The project's Houdini TEMPLATE attachments — the whole point of keeping
+   *  them: "copy from G9 Skin Base" instead of locating a file. */
+  const [templates, setTemplates] = useState<Array<DazAsset>>([])
   const [others, setOthers] = useState<Array<CharacterWithProject>>([])
   const [sourceCharacterId, setSourceCharacterId] = useState('')
   const [sourceHip, setSourceHip] = useState('')
@@ -160,6 +187,11 @@ export function HoudiniUtilsPanel({
   // material and UV-channel names that would not exist at the target.
   const [sections, setSections] = useState<ReadonlySet<MaterialSection>>(
     new Set(MATERIAL_SECTIONS),
+  )
+  /** Which tab (and therefore which node kind) the drawer is working on. */
+  const [kind, setKind] = useState<NodeKind>('material')
+  const [skelSections, setSkelSections] = useState<ReadonlySet<SkeletonSection>>(
+    new Set(SKELETON_SECTIONS),
   )
   // Which of the source's material slots to copy. Empty = all; reset whenever
   // the source node changes, since slot names belong to that node.
@@ -223,6 +255,15 @@ export function HoudiniUtilsPanel({
   // Candidate source characters: everything the studio can reach that actually
   // HAS a Houdini project, minus this character (copying onto itself is refused
   // by the api anyway, and offering it invites the mistake).
+  // Templates are per project and only exist when attachments are enabled — an
+  // empty list simply means the picker doesn't offer that route.
+  useEffect(() => {
+    if (!open || !projectId) return
+    void listAssets({ data: { projectId } })
+      .then((all) => setTemplates(all.filter((a) => a.kind === 'houdini-project')))
+      .catch(() => setTemplates([]))
+  }, [open, projectId])
+
   useEffect(() => {
     if (!open) return
     void fetchAllCharacters()
@@ -329,8 +370,14 @@ export function HoudiniUtilsPanel({
     }
   }, [targetScan, sourceScan])
 
+  /** The sections the active tab will actually send. */
+  const activeSections: Array<string> =
+    kind === 'skeleton'
+      ? SKELETON_SECTIONS.filter((key) => skelSections.has(key))
+      : MATERIAL_SECTIONS.filter((key) => sections.has(key))
+
   const canTransfer =
-    sourceNode !== null && targetRefs.length > 0 && sections.size > 0 && !busy
+    sourceNode !== null && targetRefs.length > 0 && activeSections.length > 0 && !busy
   const sourceHasBakers = (sourceNode?.node.bakers ?? 0) > 0
 
   async function run(dryRun: boolean) {
@@ -340,12 +387,15 @@ export function HoudiniUtilsPanel({
     try {
       const result = await transferHoudiniMaterials({
         data: {
+          nodeType: kind,
           source: { hipPath: sourceNode.project.hipPath, nodePath: sourceNode.node.path },
           targets: targetRefs,
-          sections: MATERIAL_SECTIONS.filter((key) => sections.has(key)),
-          materials: [...pickedMaterials],
-          useLibVar,
-          replace,
+          sections: activeSections,
+          // Material-only knobs; the skeleton transfer copies wholesale and has
+          // no texture paths of its own to make portable.
+          materials: kind === 'material' ? [...pickedMaterials] : [],
+          useLibVar: kind === 'material' ? useLibVar : false,
+          replace: kind === 'material' ? replace : true,
           dryRun,
         },
       })
@@ -384,19 +434,43 @@ export function HoudiniUtilsPanel({
       <SidePanel
         open={open}
         onClose={busy ? () => {} : onClose}
+        // Names the KIND of thing being worked on, not just the character: the
+        // drawer acts on Houdini projects, and "Utils — Ita" gave no clue which
+        // of the character's many facets it touches.
         title={
-          <span className="flex items-center gap-1.5">
-            <Wrench className="size-4 shrink-0" />
-            Utils — {character.name}
+          <span className="flex items-center gap-2">
+            <img src={houdiniLogo} alt="" aria-hidden className="size-5 shrink-0 object-contain" />
+            <span className="truncate">
+              Houdini project utils
+              <span className="ml-2 text-sm font-normal text-muted-foreground">
+                {character.name}
+                {initialHipPath ? ` · opened from ${fileName(initialHipPath)}` : ''}
+              </span>
+            </span>
           </span>
         }
       >
-        <Tabs defaultValue="copy-from">
+        <Tabs
+          value={kind}
+          onValueChange={(next) => {
+            // Node lists, sections and selections are all per-kind — carrying a
+            // material selection into the skeleton tab would offer a target the
+            // run can't use.
+            setKind(next as NodeKind)
+            setSelectedTargets(new Set())
+            setSelectedSource('')
+            setReport(null)
+          }}
+        >
           <TabsList>
-            <TabsTrigger value="copy-from">Copy from</TabsTrigger>
+            <TabsTrigger value="material">Material</TabsTrigger>
+            <TabsTrigger value="skeleton">Skeleton</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="copy-from" className="space-y-6">
+          {/* One body for both tabs: the flow is identical and only the section
+              list and the material picker differ, so `value={kind}` keeps the
+              single content always mounted for whichever tab is active. */}
+          <TabsContent value={kind} className="space-y-6">
             <p className="text-xs text-muted-foreground">
               Copy the texture-baker setup of one material node onto this character&apos;s
               material nodes. Bakers name their material and geometry groups as text, so a
@@ -430,6 +504,7 @@ export function HoudiniUtilsPanel({
               </div>
               <NodePicker
                 scan={targetScan}
+                kind={kind}
                 mode="multi"
                 selected={selectedTargets}
                 disabledKey={selectedSource}
@@ -446,6 +521,41 @@ export function HoudiniUtilsPanel({
                   project on disk. Exactly one material node can be the source.
                 </InfoPopup>
               </Label>
+
+              {templates.length > 0 && (
+                <div className="mb-3">
+                  <p className="mb-1 text-xs text-muted-foreground">
+                    Templates in this project
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {templates.map((template) => (
+                      <button
+                        key={template.id}
+                        type="button"
+                        title={template.description || template.scenePath}
+                        onClick={() => {
+                          setSourceMode('browse')
+                          setBrowsedHip(template.scenePath)
+                        }}
+                        className={`flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-sm ${
+                          normalizePath(activeSourceHip).toLowerCase() ===
+                          normalizePath(template.scenePath).toLowerCase()
+                            ? 'border-houdini-orange bg-houdini-orange/15 font-medium'
+                            : 'text-muted-foreground hover:bg-accent/50'
+                        }`}
+                      >
+                        <img
+                          src={houdiniLogo}
+                          alt=""
+                          aria-hidden
+                          className="size-4 shrink-0 object-contain"
+                        />
+                        {template.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="mb-3 flex flex-wrap items-center gap-2">
                 <Select
@@ -516,6 +626,7 @@ export function HoudiniUtilsPanel({
 
               <NodePicker
                 scan={sourceScan}
+                kind={kind}
                 mode="single"
                 selected={new Set(selectedSource ? [selectedSource] : [])}
                 onToggle={(hipPath, nodePath) => setSelectedSource(nodeKey(hipPath, nodePath))}
@@ -528,7 +639,7 @@ export function HoudiniUtilsPanel({
             </section>
 
             {/* --------------------------------------------------------- materials */}
-            {sourceNode && sourceNode.node.slots.length > 0 && (
+            {kind === 'material' && sourceNode && sourceNode.node.slots.length > 0 && (
               <section>
                 <Label className="mb-1 flex w-fit items-center gap-1 text-base font-semibold">
                   Materials
@@ -598,37 +709,77 @@ export function HoudiniUtilsPanel({
                 </InfoPopup>
               </Label>
               <div className="space-y-1">
-                {MATERIAL_SECTIONS.map((key) => (
-                  <label key={key} className="flex cursor-pointer items-start gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      className="mt-1"
-                      checked={sections.has(key)}
-                      onChange={() =>
-                        setSections((prev) => {
-                          const next = new Set(prev)
-                          if (next.has(key)) next.delete(key)
-                          else next.add(key)
-                          return next
-                        })
-                      }
-                    />
-                    <span>
-                      <span className="font-medium">{SECTION_LABELS[key].label}</span>
-                      {sourceNode && (
-                        <span className="ml-1 text-muted-foreground">
-                          ({sectionCountOf(sourceNode.node, key, pickedMaterials)})
+                {kind === 'skeleton'
+                  ? SKELETON_SECTIONS.map((key) => {
+                      const count = sourceNode?.node.sectionCounts.find((s) => s.key === key)?.count
+                      return (
+                        <label key={key} className="flex cursor-pointer items-start gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            className="mt-1"
+                            checked={skelSections.has(key)}
+                            onChange={() =>
+                              setSkelSections((prev) => {
+                                const next = new Set(prev)
+                                if (next.has(key)) next.delete(key)
+                                else next.add(key)
+                                return next
+                              })
+                            }
+                          />
+                          <span>
+                            <span className="font-medium">{SKELETON_LABELS[key].label}</span>
+                            {count !== undefined && (
+                              <span className="ml-1 text-muted-foreground">
+                                ({count} setting{count === 1 ? '' : 's'})
+                              </span>
+                            )}
+                            <br />
+                            <span className="text-xs text-muted-foreground">
+                              {SKELETON_LABELS[key].hint}
+                            </span>
+                          </span>
+                        </label>
+                      )
+                    })
+                  : MATERIAL_SECTIONS.map((key) => (
+                      <label key={key} className="flex cursor-pointer items-start gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          className="mt-1"
+                          checked={sections.has(key)}
+                          onChange={() =>
+                            setSections((prev) => {
+                              const next = new Set(prev)
+                              if (next.has(key)) next.delete(key)
+                              else next.add(key)
+                              return next
+                            })
+                          }
+                        />
+                        <span>
+                          <span className="font-medium">{SECTION_LABELS[key].label}</span>
+                          {sourceNode && (
+                            <span className="ml-1 text-muted-foreground">
+                              ({sectionCountOf(sourceNode.node, key, pickedMaterials)})
+                            </span>
+                          )}
+                          <br />
+                          <span className="text-xs text-muted-foreground">
+                            {SECTION_LABELS[key].hint}
+                          </span>
                         </span>
-                      )}
-                      <br />
-                      <span className="text-xs text-muted-foreground">
-                        {SECTION_LABELS[key].hint}
-                      </span>
-                    </span>
-                  </label>
-                ))}
+                      </label>
+                    ))}
               </div>
-              {!sections.has('materials') && sections.has('bakers') && (
+              {kind === 'skeleton' && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  A skeleton section is copied <strong>wholesale</strong> — its settings and its
+                  lists replace the target&apos;s. Appending 22 bone renames onto 22 existing ones
+                  would make 44 rules, not a merged setup.
+                </p>
+              )}
+              {kind === 'material' && !sections.has('materials') && sections.has('bakers') && (
                 <p className="mt-2 flex items-start gap-1.5 text-xs text-amber-500">
                   <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
                   <span>
@@ -661,7 +812,7 @@ export function HoudiniUtilsPanel({
                 ? 'Select a source material node first'
                 : targetRefs.length === 0
                   ? 'Select at least one target material node'
-                  : sections.size === 0
+                  : activeSections.length === 0
                     ? 'Select at least one thing to copy'
                     : undefined
             }
@@ -683,15 +834,19 @@ export function HoudiniUtilsPanel({
           // Not "Copy texture bakers?": the run also carries material slots and
           // UV channels, and a title narrower than what the dialog's own report
           // lists is a title the user has to distrust.
-          title="Copy material setup?"
+          title={kind === 'skeleton' ? 'Copy skeleton setup?' : 'Copy material setup?'}
         >
           <div className="space-y-2 text-sm">
             <p>
               Copy{' '}
               <strong>
-                {MATERIAL_SECTIONS.filter((key) => sections.has(key))
-                  .map((key) => sectionCountOf(sourceNode.node, key, pickedMaterials))
-                  .join(', ')}
+                {kind === 'skeleton'
+                  ? SKELETON_SECTIONS.filter((key) => skelSections.has(key))
+                      .map((key) => SKELETON_LABELS[key].label)
+                      .join(', ')
+                  : MATERIAL_SECTIONS.filter((key) => sections.has(key))
+                      .map((key) => sectionCountOf(sourceNode.node, key, pickedMaterials))
+                      .join(', ')}
               </strong>{' '}
               from <strong>{labelFor(sourceNode.project.hipPath, sourceNode.node.path)}</strong> in{' '}
               <code>{fileName(sourceNode.project.hipPath)}</code> to{' '}
@@ -707,6 +862,12 @@ export function HoudiniUtilsPanel({
             </ul>
           </div>
 
+          {kind === 'skeleton' ? (
+            <p className="rounded-md border p-3 text-xs text-muted-foreground">
+              Each selected section replaces the target&apos;s — a configuration block is copied
+              wholesale, so there is no append mode here.
+            </p>
+          ) : (
           <div className="flex items-start gap-3 rounded-md border p-3">
             <Switch
               id="replace-at-target"
@@ -725,7 +886,9 @@ export function HoudiniUtilsPanel({
               </p>
             </div>
           </div>
+          )}
 
+          {kind === 'material' && (
           <div className="flex items-start gap-3 rounded-md border p-3">
             <Switch
               id="use-lib-var"
@@ -744,6 +907,7 @@ export function HoudiniUtilsPanel({
               </p>
             </div>
           </div>
+          )}
 
           <p className="text-xs text-muted-foreground">
             A real run saves each target project. Close them in Houdini first — Houdini writes the
@@ -773,6 +937,7 @@ export function HoudiniUtilsPanel({
 /** The project → material-node list both sides share. */
 function NodePicker({
   scan,
+  kind,
   mode,
   selected,
   onToggle,
@@ -780,6 +945,8 @@ function NodePicker({
   empty,
 }: {
   scan: ScanState
+  /** Only this kind's nodes are listed — one scan carries both. */
+  kind: NodeKind
   mode: 'single' | 'multi'
   selected: ReadonlySet<string>
   onToggle: (hipPath: string, nodePath: string) => void
@@ -811,26 +978,28 @@ function NodePicker({
         <ProjectCard key={project.hipPath} project={project}>
           {!project.ok ? (
             <p className="text-xs text-destructive">{project.error}</p>
-          ) : project.nodes.length === 0 ? (
+          ) : project.nodes.filter((n) => n.nodeType === kind).length === 0 ? (
             <p className="text-xs text-muted-foreground">
-              No DazToHue material nodes in this project.
+              No DazToHue {kind} nodes in this project.
             </p>
           ) : (
             <ul>
-              {project.nodes.map((node) => {
-                const key = nodeKey(project.hipPath, node.path)
-                return (
-                  <li key={key}>
-                    <MaterialNodeRow
-                      node={node}
-                      mode={mode}
-                      checked={selected.has(key)}
-                      disabled={disabledKey === key}
-                      onToggle={() => onToggle(project.hipPath, node.path)}
-                    />
-                  </li>
-                )
-              })}
+              {project.nodes
+                .filter((n) => n.nodeType === kind)
+                .map((node) => {
+                  const key = nodeKey(project.hipPath, node.path)
+                  return (
+                    <li key={key}>
+                      <MaterialNodeRow
+                        node={node}
+                        mode={mode}
+                        checked={selected.has(key)}
+                        disabled={disabledKey === key}
+                        onToggle={() => onToggle(project.hipPath, node.path)}
+                      />
+                    </li>
+                  )
+                })}
             </ul>
           )}
         </ProjectCard>
@@ -928,9 +1097,13 @@ function MaterialNodeRow({
           )}
         </span>
         <span className="mt-0.5 block truncate text-xs text-muted-foreground" title={node.path}>
-          {node.materials} material{node.materials === 1 ? '' : 's'} · {node.uvChannels} UV channel
-          {node.uvChannels === 1 ? '' : 's'} · {node.bakers} baker{node.bakers === 1 ? '' : 's'} ·{' '}
-          {node.layers} layer{node.layers === 1 ? '' : 's'}
+          {node.nodeType === 'skeleton'
+            ? node.sectionCounts.map((s) => `${s.label} ${s.count}`).join(' · ')
+            : `${node.materials} material${node.materials === 1 ? '' : 's'} · ${node.uvChannels} UV channel${
+                node.uvChannels === 1 ? '' : 's'
+              } · ${node.bakers} baker${node.bakers === 1 ? '' : 's'} · ${node.layers} layer${
+                node.layers === 1 ? '' : 's'
+              }`}
           {disabled && ' — chosen as the source'}
         </span>
       </span>

@@ -41,7 +41,20 @@ pub struct MaterialSlotInfo {
     pub channel_uvs: Vec<String>,
 }
 
-/// One DazToHueMaterial node found by a scan.
+/// How much is configured in one section of a node (the skeleton node's tabs).
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SectionCountInfo {
+    pub key: String,
+    /// Human label as the HDA spells it ("Skin Weights").
+    pub label: String,
+    /// Non-default settings plus list entries — "how much was changed here",
+    /// which is what a user recognises; a raw parm count reads the same for an
+    /// untouched node and a heavily configured one.
+    pub count: u32,
+}
+
+/// One DazToHue node found by a scan (a material or a skeleton node).
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MaterialNodeInfo {
@@ -49,6 +62,10 @@ pub struct MaterialNodeInfo {
     pub path: String,
     /// The node's own name (`DazToHueMaterial`, `DazToHueMaterial1`, …).
     pub name: String,
+    /// Which panel tab owns this node: `material` or `skeleton`. ONE scan
+    /// returns both kinds — opening a `.hip` costs tens of seconds, so
+    /// switching tab must not pay it again.
+    pub node_type: String,
     /// Title of the network box the node sits in, or empty.
     ///
     /// A project with several DTH networks wraps each in a titled box
@@ -71,7 +88,11 @@ pub struct MaterialNodeInfo {
     /// tell whether a transferred baker's material exists here.
     pub material_names: Vec<String>,
     /// The node's material slots, each with its bakers — the panel's pick list.
+    /// Empty for a skeleton node.
     pub slots: Vec<MaterialSlotInfo>,
+    /// Per-section "how much is set here" — the skeleton node's tabs. Empty for
+    /// a material node, which reports its own counts in the fields above.
+    pub section_counts: Vec<SectionCountInfo>,
 }
 
 /// One scanned `.hip` file.

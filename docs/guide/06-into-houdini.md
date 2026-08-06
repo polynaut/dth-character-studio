@@ -180,10 +180,25 @@ kept as `backup/<name>_dthbak.hiplc` (one rolling backup, beside Houdini's own).
 **Close the target projects in Houdini first** — Houdini writes the entire scene
 when you save, so an open copy would overwrite the transfer.
 
+### The Skeleton tab
+
+The same transfer for the **DazToHueSkeleton** node, which carries just as much
+hand-work — a real setup here holds 22 bone renames, 10 reparents, 3 deletes,
+the breast/glute physics-bone offsets and the skin-weight operations. Daz bone
+names are fixed per generation, so that whole block moves between characters of
+that generation.
+
+Sections are the node's own three tabs — **General**, **Skeleton** and **Skin
+Weights** — and each one is copied **wholesale**: a configuration block isn't a
+list you append to (22 renames onto 22 existing ones would be 44 rules, not a
+merged setup), so this tab has no *Replace at target* toggle. The counts beside
+each section are how much is actually set there, not how many parameters exist.
+
 Like Generate project, this runs Houdini's `hython`, so it needs the **Houdini
 installation folder** and its matching documents folder in Settings. Opening a
 `.hip` takes a few seconds per file — the drawer scans when it opens and after a
-run, and there's a **Rescan** button.
+run, and there's a **Rescan** button. One scan serves both tabs, so switching
+between Material and Skeleton is instant.
 
 ## `$DAZ3D_LIB` — your Daz library, as a variable
 

@@ -69,12 +69,31 @@ const scanInput = z.object({
 export const MATERIAL_SECTIONS = ['materials', 'uvChannels', 'bakers'] as const
 export type MaterialSection = (typeof MATERIAL_SECTIONS)[number]
 
+/**
+ * The skeleton node's three top-level tabs, transferred as whole subtrees.
+ *
+ * Unlike a material section (one multiparm list), each of these mixes flat
+ * settings with nested lists — bone renames, reparents, physics-bone offsets —
+ * so they copy WHOLESALE: appending 22 bone renames onto 22 existing ones would
+ * make 44 rules, not a merged setup. Daz bone names are fixed per generation,
+ * which is what makes the block reusable across characters at all.
+ */
+export const SKELETON_SECTIONS = ['general', 'skeleton', 'skinWeights'] as const
+export type SkeletonSection = (typeof SKELETON_SECTIONS)[number]
+
+/** Which node kind a transfer targets — one panel tab each. */
+export const NODE_KINDS = ['material', 'skeleton'] as const
+export type NodeKind = (typeof NODE_KINDS)[number]
+
 const transferInput = z.object({
+  /** Which node kind this transfer is for — decides the valid `sections`. */
+  nodeType: z.enum(NODE_KINDS).default('material'),
   source: nodeRef,
   /** One or more target nodes; several may live in the same project. */
   targets: z.array(nodeRef).min(1),
-  /** Which parts of the setup to copy — at least one. */
-  sections: z.array(z.enum(MATERIAL_SECTIONS)).min(1),
+  /** Which parts of the setup to copy — at least one. Validated against the
+   *  node kind below, so a skeleton section can never reach a material run. */
+  sections: z.array(z.enum([...MATERIAL_SECTIONS, ...SKELETON_SECTIONS])).min(1),
   /** Restrict the material slots (and the bakers naming them) to these slot
    *  names. Empty = every material. This is the selection that matters in
    *  practice: a user reuses "the same skin" or "that one dress", not a whole
@@ -284,6 +303,15 @@ export async function transferHoudiniMaterials({
   // still rewrites the file.
   if (input.targets.some((t) => isSameNode(t, input.source))) {
     throw new Error('The source node is also a target — deselect it and run again.')
+  }
+  // A section belonging to the other node kind would be silently dropped by the
+  // Python (it filters to the ones it knows), so a run could report success
+  // having copied nothing. Refuse at the boundary instead.
+  const valid: ReadonlyArray<string> =
+    input.nodeType === 'skeleton' ? SKELETON_SECTIONS : MATERIAL_SECTIONS
+  const stray = input.sections.filter((s) => !valid.includes(s))
+  if (stray.length > 0) {
+    throw new Error(`Not a ${input.nodeType} section: ${stray.join(', ')}`)
   }
   if (!isTauri()) {
     throw new Error('Transferring material setups needs the desktop app (it runs hython).')

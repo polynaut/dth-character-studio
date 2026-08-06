@@ -1,8 +1,14 @@
 # Attachments
 
-An **attachment** is a reusable Daz scene (`.duf`) that **isn't a full character** — a
-base figure, a prop, an outfit, a look you start from — that you keep organized
-inside a project alongside its characters. It's an **opt-in, per-project** feature.
+An **attachment** is a reusable file that **isn't a character** but that you keep
+organized inside a project alongside its characters. Two kinds:
+
+- a **Daz scene** (`.duf`) — a base figure, a prop, an outfit, a look you start from
+- a **Houdini template** (`.hip`) — a ready-made skeleton or material + texture-baker
+  setup that the [Utils drawer](06-into-houdini.md#utils--copy-a-texture-baker-setup-between-projects)
+  copies from
+
+It's an **opt-in, per-project** feature.
 
 &nbsp;
 
@@ -33,6 +39,18 @@ With it **on**, an **Attachments** tab appears beside Characters, and the "Add"
 panel gains a **Character / Attachment** choice.
 
 ---
+
+## Houdini templates
+
+Pick **Houdini template** in the Add panel and choose (or drop) a `.hip`. Give it
+a name and a description — "G9 skeleton, UE5 twist bones" — and it becomes a
+one-click source in the Utils drawer: the **Source** section lists this project's
+templates by name, so copying a setup never starts with hunting for a file.
+
+A Houdini template is **always linked, never copied**. Moving a Houdini project
+safely needs every reference to be relative *and* its `$JOB` project folder to
+travel with it, and neither can be verified from here — so the copy options
+don't appear for a `.hip`.
 
 ## Add an attachment
 

@@ -160,10 +160,12 @@ export type { GeneratedHoudiniProject, HoudiniExportStarted } from './api/houdin
 // --- node's texture-baker setup onto others (hython) ------------------------
 export {
   MATERIAL_SECTIONS,
+  NODE_KINDS,
+  SKELETON_SECTIONS,
   scanHoudiniMaterials,
   transferHoudiniMaterials,
 } from './api/houdini-material'
-export type { MaterialSection } from './api/houdini-material'
+export type { MaterialSection, NodeKind, SkeletonSection } from './api/houdini-material'
 export type {
   MaterialNodeInfo,
   MaterialSectionResult,

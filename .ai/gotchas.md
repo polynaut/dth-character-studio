@@ -249,6 +249,16 @@ current code before relying on details, but assume the *lesson* still holds.
   "missing" trailing baker) rather than an error. ALWAYS read the offset from
   the parm; never count from 1. Same 0-based convention as the ROM frame math,
   by coincidence rather than by contract, so don't infer one from the other.
+- **"A `.hip` always holds absolute paths" is FALSE — the real constraint is
+  `$JOB`.** A Houdini project can be authored entirely relative, and the
+  studio's own Generate project does exactly that (`$HIP/../<dazSubdir>/
+  dth-exports/…`). Moving one safely needs BOTH: every reference relative, AND
+  its `$JOB` project folder travelling with it. The studio links Houdini
+  projects in place rather than copying them because it can guarantee neither
+  property for a `.hip` authored elsewhere — not because relative authoring is
+  impossible. Corrected 2026-08-06 (the earlier wording came from a workflow
+  that happened to use absolute refs); state the reason this way, or the next
+  reader concludes movable Houdini projects can't exist.
 - **A Houdini network box's visible title is its `comment()`, not its
   `name()`.** Measured 2026-08-06: `name()` is an internal id (`__netbox1`,
   `__netbox3`, …) that no user ever sees or sets; the text drawn in the box
