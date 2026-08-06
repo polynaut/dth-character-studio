@@ -243,11 +243,65 @@ def _material_names(node):
     return names
 
 
+def _network_box_label(node):
+    """The title of the network box the node sits in, or ''.
+
+    When a project holds several DTH networks, users wrap each one in a network
+    box and title it (`KiraDefault`, `KiraYoga`, `KiraNaked`) — that title is the
+    only human-meaningful name the setup has, since the nodes themselves are
+    just `DazToHueMaterial`, `…1`, `…2`.
+
+    Measured on Houdini 22.0: the visible title is the box's **comment()**;
+    `name()` is an internal id (`__netbox1`) and is never what the user typed.
+    Boxes live in the node's PARENT network and may nest, so this searches
+    nested boxes too and prefers the INNERMOST match — the closest box is the
+    one whose label describes this network.
+    """
+
+    def search(container, depth=0):
+        try:
+            boxes = container.networkBoxes()
+        except (AttributeError, hou.OperationFailed, hou.PermissionError):
+            return None
+        best = None
+        for box in boxes:
+            try:
+                members = box.nodes()
+            except (hou.OperationFailed, hou.PermissionError):
+                continue
+            deeper = search(box, depth + 1)
+            if deeper is not None:
+                # A nested box wins: it is the more specific label.
+                if best is None or deeper[1] > best[1]:
+                    best = deeper
+            elif node in members and (best is None or depth > best[1]):
+                best = (box, depth)
+        return best
+
+    parent = node.parent()
+    if parent is None:
+        return ""
+    found = search(parent)
+    if found is None:
+        return ""
+    box = found[0]
+    try:
+        comment = (box.comment() or "").strip()
+    except (hou.OperationFailed, hou.PermissionError):
+        comment = ""
+    if comment:
+        # Only the first line: a box comment can be a multi-line note.
+        return comment.splitlines()[0].strip()
+    # An untitled box has an internal name only — worthless as a label.
+    return ""
+
+
 def _node_info(node):
     bakers = export_bakers(node)
     return {
         "path": node.path(),
         "name": node.name(),
+        "networkBox": _network_box_label(node),
         "materials": _count(node, MATERIAL_MULTI),
         "uvChannels": _count(node, UV_MULTI),
         "bakers": len(bakers),

@@ -91,6 +91,15 @@ definition** from one project into another.
 - **Target** — this character's linked Houdini projects, with every DazToHue
   material node found in each. Tick as many as you want; the card you opened
   Utils from starts selected.
+
+  **Network boxes are picked up if you use them.** Once a project holds more
+  than one DTH network, the usual way to keep them apart is to wrap each in a
+  network box and give it a title — and then the nodes inside are all called
+  `DazToHueMaterial`, `DazToHueMaterial1`, `DazToHueMaterial2`, which says
+  nothing about which network you're picking. The scan reads the box title and
+  lists those as `KiraDefault`, `KiraYoga`, `KiraNaked`, keeping the node name
+  beside it. Boxes are entirely optional: with one network — or an untitled
+  box — the list simply shows the node name, exactly as before.
 - **Source** — the node to copy *from*: pick another character from the studio,
   or **Browse…** for any Houdini project on disk. Exactly one node can be the
   source.

@@ -203,6 +203,10 @@ export const materialNodeInfoSchema = z.object({
   /** Node path in the scene, e.g. `/obj/DazToHue/DazToHueMaterial`. */
   path: z.string(),
   name: z.string(),
+  /** Title of the network box wrapping this node ('' when there is none) —
+   *  what users actually name their DTH networks (`KiraDefault`, `KiraYoga`),
+   *  since the nodes are only ever `DazToHueMaterial`, `…1`, `…2`. */
+  networkBox: z.string(),
   materials: z.number(),
   uvChannels: z.number(),
   bakers: z.number(),

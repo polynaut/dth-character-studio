@@ -11,6 +11,7 @@
         {
           "path": "/obj/DazToHue/DazToHueMaterial",
           "name": "DazToHueMaterial",
+          "networkBox": "KiraDefault",
           "materials": 7,
           "uvChannels": 3,
           "bakers": 11,

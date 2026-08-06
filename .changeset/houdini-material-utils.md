@@ -14,6 +14,10 @@ that copies the whole baking definition from one material node onto any number o
 this character's nodes: source from another studio character or any `.hip` via
 Browse, append or **Replace at target**, with a dry run that writes nothing.
 
+Material nodes are labelled by the **network box** around them when there is one
+(`KiraDefault`, `KiraYoga`, `KiraNaked`) instead of `DazToHueMaterial`, `…1`,
+`…2` — boxes stay optional, and an unboxed network just shows the node name.
+
 Bakers reference their material and geometry groups by name, so the report names
 every material a target is missing — a baker with no matching material slot
 imports cleanly and then bakes nothing. Each written project is saved once, after

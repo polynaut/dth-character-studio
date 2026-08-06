@@ -249,6 +249,17 @@ current code before relying on details, but assume the *lesson* still holds.
   "missing" trailing baker) rather than an error. ALWAYS read the offset from
   the parm; never count from 1. Same 0-based convention as the ROM frame math,
   by coincidence rather than by contract, so don't infer one from the other.
+- **A Houdini network box's visible title is its `comment()`, not its
+  `name()`.** Measured 2026-08-06: `name()` is an internal id (`__netbox1`,
+  `__netbox3`, …) that no user ever sees or sets; the text drawn in the box
+  header — and the only human-meaningful label a DTH network has — is the
+  comment. Boxes live in the node's PARENT network (`parent.networkBoxes()`,
+  membership via `box.nodes()`) and can nest, so a lookup should prefer the
+  INNERMOST containing box. This is what lets a scan report `KiraDefault` /
+  `KiraYoga` / `KiraNaked` instead of `DazToHueMaterial`, `…1`, `…2`.
+  Related trap: recursing `node.children()` across a project can raise
+  `hou.PermissionError` on locked assets — wrap network walks in try/except
+  rather than assuming every node is enumerable.
 - **A DazToHue texture baker references its material and geometry groups BY
   NAME** (`MI_Skin`, `Head`, `GP*`, geoshell `..._Shape`) — measured on the
   same pass. Copying bakers into a node that lacks those names SUCCEEDS and

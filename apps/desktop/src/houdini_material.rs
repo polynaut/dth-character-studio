@@ -25,8 +25,15 @@ use serde::{Deserialize, Serialize};
 pub struct MaterialNodeInfo {
     /// Full node path inside the scene, e.g. `/obj/DazToHue/DazToHueMaterial`.
     pub path: String,
-    /// The node's own name — what the panel lists.
+    /// The node's own name (`DazToHueMaterial`, `DazToHueMaterial1`, …).
     pub name: String,
+    /// Title of the network box the node sits in, or empty.
+    ///
+    /// A project with several DTH networks wraps each in a titled box
+    /// (`KiraDefault`, `KiraYoga`, `KiraNaked`) — the only human-meaningful
+    /// name the setup has, so the panel labels nodes by this when present.
+    /// Measured: the visible title is the box's COMMENT, not its name.
+    pub network_box: String,
     /// Material slots defined on the node (the Materials tab).
     pub materials: u32,
     /// UV channels defined (the UVs tab).

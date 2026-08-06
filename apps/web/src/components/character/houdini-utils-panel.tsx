@@ -22,6 +22,7 @@ import {
 import { scanHoudiniMaterials, transferHoudiniMaterials } from '#/lib/rom/api.ts'
 import type {
   CharacterWithProject,
+  MaterialNodeInfo,
   MaterialScanProject,
   MaterialUtilReport,
 } from '#/lib/rom/api.ts'
@@ -52,6 +53,22 @@ function nodeKey(hipPath: string, nodePath: string): string {
 
 function fileName(path: string): string {
   return path.split(/[\\/]/).pop() ?? path
+}
+
+/**
+ * How a material node is labelled in the picker.
+ *
+ * A project with several DTH networks names them with a NETWORK BOX around each
+ * (`KiraDefault`, `KiraYoga`, `KiraNaked`); the nodes inside are only ever
+ * `DazToHueMaterial`, `…1`, `…2`, which tells the user nothing about which
+ * network they're picking. So the box title leads when there is one, with the
+ * node name kept beside it — the node name is still what the report and any
+ * Houdini-side lookup use.
+ */
+function nodeLabel(node: MaterialNodeInfo): { primary: string; secondary: string } {
+  return node.networkBox
+    ? { primary: node.networkBox, secondary: node.name }
+    : { primary: node.name, secondary: '' }
 }
 
 /** A scan result plus the request that produced it, so a stale list is never
@@ -223,6 +240,24 @@ export function HoudiniUtilsPanel({
     }
     return refs
   }, [targetScan, selectedTargets, selectedSource])
+
+  // Friendly name for any node the panel has scanned — the confirm dialog and
+  // the report both name nodes, and a bare `/obj/DazToHue/DazToHueMaterial1`
+  // reads as noise next to "KiraYoga".
+  const labelFor = useMemo(() => {
+    const byKey = new Map<string, MaterialNodeInfo>()
+    for (const scan of [targetScan, sourceScan]) {
+      for (const project of scan.projects) {
+        for (const node of project.nodes) byKey.set(nodeKey(project.hipPath, node.path), node)
+      }
+    }
+    return (hipPath: string, nodePath: string): string => {
+      const node = byKey.get(nodeKey(hipPath, nodePath))
+      if (!node) return nodePath
+      const { primary, secondary } = nodeLabel(node)
+      return secondary ? `${primary} (${secondary})` : primary
+    }
+  }, [targetScan, sourceScan])
 
   const canTransfer = sourceNode !== null && targetRefs.length > 0 && !busy
   const sourceHasBakers = (sourceNode?.node.bakers ?? 0) > 0
@@ -397,7 +432,7 @@ export function HoudiniUtilsPanel({
               />
             </section>
 
-            {report && <TransferReport report={report} />}
+            {report && <TransferReport report={report} labelFor={labelFor} />}
           </TabsContent>
         </Tabs>
 
@@ -442,14 +477,15 @@ export function HoudiniUtilsPanel({
               Copy <strong>{sourceNode.node.bakers}</strong> texture baker
               {sourceNode.node.bakers === 1 ? '' : 's'} ({sourceNode.node.layers} layer
               {sourceNode.node.layers === 1 ? '' : 's'}) from{' '}
-              <code>{sourceNode.node.name}</code> in <code>{fileName(sourceNode.project.hipPath)}</code>{' '}
-              to <strong>{targetRefs.length}</strong> material node
+              <strong>{labelFor(sourceNode.project.hipPath, sourceNode.node.path)}</strong> in{' '}
+              <code>{fileName(sourceNode.project.hipPath)}</code> to{' '}
+              <strong>{targetRefs.length}</strong> material node
               {targetRefs.length === 1 ? '' : 's'}.
             </p>
             <ul className="max-h-32 list-inside list-disc overflow-y-auto text-xs text-muted-foreground">
               {targetRefs.map((t) => (
                 <li key={nodeKey(t.hipPath, t.nodePath)}>
-                  <code>{fileName(t.hipPath)}</code> — {t.nodePath}
+                  {labelFor(t.hipPath, t.nodePath)} — <code>{fileName(t.hipPath)}</code>
                 </li>
               ))}
             </ul>
@@ -480,7 +516,7 @@ export function HoudiniUtilsPanel({
             <code>backup/&lt;name&gt;_dthbak.hiplc</code>.
           </p>
 
-          {report && <TransferReport report={report} />}
+          {report && <TransferReport report={report} labelFor={labelFor} />}
 
           <div className="flex justify-end gap-2">
             <Button variant="ghost" disabled={busy} onClick={() => setConfirmOpen(false)}>
@@ -566,7 +602,12 @@ function NodePicker({
                         disabled={isDisabled}
                         onChange={() => onToggle(project.hipPath, node.path)}
                       />
-                      <span className="font-medium">{node.name}</span>
+                      <span className="font-medium">{nodeLabel(node).primary}</span>
+                      {nodeLabel(node).secondary && (
+                        <span className="text-muted-foreground/70">
+                          {nodeLabel(node).secondary}
+                        </span>
+                      )}
                       <span className="text-muted-foreground">
                         {node.bakers} baker{node.bakers === 1 ? '' : 's'} · {node.layers} layer
                         {node.layers === 1 ? '' : 's'} · {node.materials} material
@@ -586,7 +627,14 @@ function NodePicker({
 }
 
 /** What a run (or dry run) did, per target. */
-function TransferReport({ report }: { report: MaterialUtilReport }) {
+function TransferReport({
+  report,
+  labelFor,
+}: {
+  report: MaterialUtilReport
+  /** Network-box name for a node — falls back to the node path when unscanned. */
+  labelFor: (hipPath: string, nodePath: string) => string
+}) {
   return (
     <div className="rounded-md border p-3">
       <p className="mb-2 text-sm font-medium">
@@ -595,8 +643,9 @@ function TransferReport({ report }: { report: MaterialUtilReport }) {
       <ul className="space-y-2 text-xs">
         {report.targets.map((target) => (
           <li key={`${target.hipPath}|${target.nodePath}`}>
-            <p className="truncate" title={target.hipPath}>
-              <code>{fileName(target.hipPath)}</code> — {target.nodePath}
+            <p className="truncate" title={`${target.hipPath} — ${target.nodePath}`}>
+              <strong>{labelFor(target.hipPath, target.nodePath)}</strong> —{' '}
+              <code>{fileName(target.hipPath)}</code>
             </p>
             {target.ok ? (
               <p className="text-muted-foreground">
