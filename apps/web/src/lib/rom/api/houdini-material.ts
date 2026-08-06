@@ -5,6 +5,7 @@ import { z } from 'zod'
 import * as storage from '../storage'
 import { houdiniVersionFromInstall, matchingHoudiniDocsFolder } from '#/lib/houdini-version.ts'
 import { HOUDINI_SCRIPTS_FOLDER } from '../houdini-jobs'
+import { normalizePath } from '#/lib/path.ts'
 import { materialUtilReportSchema } from './native-types.ts'
 import type { MaterialScanProject, MaterialUtilReport } from './native-types.ts'
 import { joinPath } from './core'
@@ -244,25 +245,93 @@ export async function scanHoudiniMaterials({
   if (!isTauri()) {
     throw new Error('Scanning Houdini projects needs the desktop app (it runs hython).')
   }
+  // Serve unchanged files from cache and only send the rest to hython. When
+  // everything is cached this returns without starting a process at all —
+  // reopening the drawer on projects nobody touched is then instant.
+  const keys = await Promise.all(hipPaths.map(scanKey))
+  const cached = new Map<string, MaterialScanProject>()
+  const stale: Array<string> = []
+  hipPaths.forEach((hipPath, i) => {
+    const key = keys[i]
+    const hit = key ? scanCache.get(key) : undefined
+    if (hit) cached.set(hipPath, hit)
+    else stale.push(hipPath)
+  })
+  if (stale.length === 0) {
+    return hipPaths.map((p) => cached.get(p)).filter((p): p is MaterialScanProject => Boolean(p))
+  }
+
   // Identical scans already in flight are SHARED rather than started again: a
   // scan costs a whole hython start plus seconds per `.hip`, and the panel can
   // easily ask twice (React StrictMode double-fires its effect in dev, and
   // Rescan is clickable while one is running). Deliberately scans only —
   // a transfer is not idempotent and must never be coalesced.
-  const key = JSON.stringify(hipPaths)
+  const key = JSON.stringify(stale)
   const running = inFlightScans.get(key)
-  if (running) return running
-  const pending = runMaterialUtil({ op: 'scan', hipPaths })
-    .then((report) => report.projects)
-    .finally(() => {
-      inFlightScans.delete(key)
-    })
-  inFlightScans.set(key, pending)
-  return pending
+  const pending =
+    running ??
+    runMaterialUtil({ op: 'scan', hipPaths: stale })
+      .then((report) => report.projects)
+      .finally(() => {
+        inFlightScans.delete(key)
+      })
+  if (!running) inFlightScans.set(key, pending)
+  const fresh = await pending
+
+  // Re-key AFTER the scan: hython read the file at that moment, so the mtime
+  // taken before it is the one this result describes. Only ok results are
+  // cached — a failure is a reason to look again, not a fact to remember.
+  fresh.forEach((project) => {
+    const i = hipPaths.findIndex((p) => normalizePath(p) === normalizePath(project.hipPath))
+    const cacheAt = i >= 0 ? keys[i] : ''
+    if (cacheAt && project.ok) cacheScan(cacheAt, project)
+  })
+
+  const byPath = new Map(fresh.map((p) => [normalizePath(p.hipPath).toLowerCase(), p]))
+  return hipPaths
+    .map((p) => cached.get(p) ?? byPath.get(normalizePath(p).toLowerCase()))
+    .filter((p): p is MaterialScanProject => Boolean(p))
 }
 
 /** Scans in flight, keyed by their file list — see {@link scanHoudiniMaterials}. */
 const inFlightScans = new Map<string, Promise<Array<MaterialScanProject>>>()
+
+/**
+ * Scanned projects, keyed by path + mtime.
+ *
+ * Opening a `.hip` costs tens of seconds, and the drawer is built for REPEATED
+ * use — pick a template, transfer, come back. Re-reading a file that hasn't
+ * changed since the last look is the single most wasteful thing this feature
+ * did. The mtime IS the invalidation: a transfer rewrites the target, so its
+ * next scan misses and re-reads exactly the file that changed while its
+ * neighbours stay cached.
+ */
+const scanCache = new Map<string, MaterialScanProject>()
+
+/** Bounded so a long session can't grow it without limit (app-generated state
+ *  needs a ceiling). Oldest-inserted goes first — Map preserves insertion order. */
+const SCAN_CACHE_MAX = 64
+
+function cacheScan(key: string, project: MaterialScanProject): void {
+  scanCache.set(key, project)
+  while (scanCache.size > SCAN_CACHE_MAX) {
+    const oldest = scanCache.keys().next().value
+    if (oldest === undefined) break
+    scanCache.delete(oldest)
+  }
+}
+
+/** `<path>|<mtime>` — '' when the file can't be stat'd, which means "don't
+ *  cache": an unreadable path must be re-attempted, not remembered as broken. */
+async function scanKey(hipPath: string): Promise<string> {
+  try {
+    const info = await stat(hipPath)
+    const mtime = info.mtime?.getTime()
+    return mtime ? `${normalizePath(hipPath).toLowerCase()}|${mtime}` : ''
+  } catch {
+    return ''
+  }
+}
 
 /**
  * Whether two node references point at the SAME material node.
