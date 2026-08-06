@@ -268,6 +268,21 @@ current code before relying on details, but assume the *lesson* still holds.
   impossible. Corrected 2026-08-06 (the earlier wording came from a workflow
   that happened to use absolute refs); state the reason this way, or the next
   reader concludes movable Houdini projects can't exist.
+- **The DazToHue HDA has its own "Linking" feature, and it is a LIVE MIRROR —
+  not a copy.** `DazToHueShared.do_link_to_source` rewrites every linkable parm
+  of the target to `ch("<source>/<parm>")` / `chs(...)` (plus `opmultiparm` for
+  multiparm children), so the target follows the source. Measured limits: it
+  refuses unless both nodes are **on the same network level** (same parent, same
+  file) and the **same type**, and it calls `hou.ui.displayMessage`, so it
+  cannot run headless. It therefore does NOT overlap the studio's Utils
+  transfer, which is a one-time selective copy ACROSS files.
+  **The trap it creates:** copying *from* a linked node must not carry those
+  expressions. DTH node names are identical across projects, so
+  `ch("/obj/DazToHue/DazToHueMaterial/…")` landing in another project silently
+  REBINDS to that project's own node — wrong values, no error.
+  `material_utils.py` therefore flattens any node-referencing expression to its
+  evaluated value at export (`_portable_expr`) and carries only expressions with
+  no node reference.
 - **A Houdini network box's visible title is its `comment()`, not its
   `name()`.** Measured 2026-08-06: `name()` is an internal id (`__netbox1`,
   `__netbox3`, …) that no user ever sees or sets; the text drawn in the box
