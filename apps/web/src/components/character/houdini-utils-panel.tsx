@@ -438,9 +438,22 @@ export function HoudiniUtilsPanel({
                 .map((key) => sectionCountOf(sourceNode.node, key, pickedMaterials))
                 .join(', ')
             : ''
-          toast.success(
-            `Copied ${moved} to ${result.targets.length} node${result.targets.length === 1 ? '' : 's'}.`,
+          const warnings = result.targets.reduce(
+            (n, t) => n + t.missingMaterials.length + t.missingUvSources.length,
+            0,
           )
+          toast.success(
+            `Copied ${moved} to ${result.targets.length} node${result.targets.length === 1 ? '' : 's'}.` +
+              // The modal closes below, so anything the user still has to act on
+              // must be said here — the report stays in the panel, but a toast
+              // that omitted this would read as "nothing to do".
+              (warnings > 0 ? ' See the report — some names still need setting up.' : ''),
+          )
+          // The work is done and the confirm dialog has nothing left to confirm;
+          // its report lives on in the panel behind it, so nothing is lost by
+          // closing. Only on a clean run — a failure keeps the dialog up with
+          // its error, where the user is already looking.
+          setConfirmOpen(false)
         }
         // The targets changed on disk — their counts are now stale.
         void runScan(targets, setTargetScan)
