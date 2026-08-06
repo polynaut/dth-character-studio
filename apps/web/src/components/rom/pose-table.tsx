@@ -198,7 +198,7 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
           <strong>Must exactly match the parameter's internal name in Daz Studio</strong>{' '}
           (e.g. <code>body_bs_BodyTone</code>) — that's how the ROM script finds and
           dials it.{' '}
-          <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/04-first-character.html#finding-a-morph39s-internal-daz-name">
+          <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/custom-morphs.html#finding-a-morph39s-internal-daz-name">
             Open guide
           </GuideLink>
         </InfoPopup>

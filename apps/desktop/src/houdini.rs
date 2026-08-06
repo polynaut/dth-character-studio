@@ -111,8 +111,20 @@ pub fn launch_houdini_job(request: LaunchHoudiniJobRequest) -> Result<(), String
 pub struct CreateHoudiniProjectRequest {
     /// Absolute path of `hython.exe` (from the Houdini install folder).
     pub hython_path: String,
-    /// The project folder `$JOB` is baked to (created if missing).
+    /// The shared project folder Houdini writes its own files into (created if
+    /// missing) — backups, geo caches. NOT `$JOB` since v0.64; see `job_dir`.
     pub project_dir: String,
+    /// The folder `$JOB` is baked to: the CHARACTER folder.
+    ///
+    /// Measured with `hou.text.collapseCommonVars` (what the file picker uses to
+    /// turn a chosen path back into a variable): a path above `$HIP` collapses
+    /// only if it is under `$JOB`. With `$JOB` at the old
+    /// `houdini/houdini-project`, picking an export gave an ABSOLUTE path and
+    /// the project stopped being movable — the retired `dth-exports` junction
+    /// had been hiding that by making exports appear below `$HIP`. With `$JOB`
+    /// at the character folder, the same pick yields
+    /// `$JOB/daz3d/dth-exports/…`, and `$HIP` still wins for paths inside it.
+    pub job_dir: String,
     /// The new scene file to save.
     pub scene_path: String,
     /// The Houdini user-prefs folder (Settings' Houdini documents folder,
@@ -235,7 +247,7 @@ pub fn create_houdini_project(request: CreateHoudiniProjectRequest) -> Result<St
             "print('DTH_TYPES=' + (','.join(visible) or 'none'))\n",
             "print('DTH_PREFILL=' + (','.join(prefilled) or 'none'))\n",
         ),
-        job = escape(&request.project_dir),
+        job = escape(&request.job_dir),
         scene = escape(&request.scene_path),
     );
     let mut command = std::process::Command::new(&request.hython_path);

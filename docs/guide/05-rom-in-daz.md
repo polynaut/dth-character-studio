@@ -19,7 +19,7 @@ The script builds the entire ROM on the timeline — every section you enabled,
 every morph on its exact frame. This takes a moment on a big ROM; the script
 reports what it did when it finishes. Before it builds, it also quietly scans
 the open scene into the studio's
-[morph index](./04-first-character.md#custom-morphs) (and, with Daz Products on, refreshes
+[morph index](./custom-morphs.md) (and, with Daz Products on, refreshes
 that scene's product scan) — the Parameter-name autocomplete stays current
 through normal use, and a scan problem never fails the run.
 

@@ -47,7 +47,13 @@ const NAV = [
   },
   {
     group: 'Deep dives',
-    pages: ['advanced.md', 'tools.md', 'attachments.md', 'product-scanning.md'],
+    pages: [
+      'custom-morphs.md',
+      'advanced.md',
+      'tools.md',
+      'attachments.md',
+      'product-scanning.md',
+    ],
   },
 ]
 

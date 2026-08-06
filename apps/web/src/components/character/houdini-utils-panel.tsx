@@ -376,8 +376,31 @@ export function HoudiniUtilsPanel({
       ? SKELETON_SECTIONS.filter((key) => skelSections.has(key))
       : MATERIAL_SECTIONS.filter((key) => sections.has(key))
 
+  /**
+   * Materials whose bakers read a UV that only a UV CHANNEL produces
+   * (`uv_geoshell`), while the channels are NOT being copied.
+   *
+   * This combination cannot work: those bakers would land pointing at a UV name
+   * nothing at the target creates. It was previously an advisory note, which
+   * let the user run a transfer already known to be broken — so it now blocks
+   * the run instead. Only when bakers travel: without them there is no UV
+   * dependency to satisfy.
+   */
+  const uvStarvedMaterials =
+    kind === 'material' && sections.has('bakers') && !sections.has('uvChannels') && sourceNode
+      ? sourceNode.node.slots.filter(
+          (slot) =>
+            slot.channelUvs.length > 0 &&
+            (pickedMaterials.size === 0 || pickedMaterials.has(slot.name)),
+        )
+      : []
+
   const canTransfer =
-    sourceNode !== null && targetRefs.length > 0 && activeSections.length > 0 && !busy
+    sourceNode !== null &&
+    targetRefs.length > 0 &&
+    activeSections.length > 0 &&
+    uvStarvedMaterials.length === 0 &&
+    !busy
   const sourceHasBakers = (sourceNode?.node.bakers ?? 0) > 0
 
   async function run(dryRun: boolean) {
@@ -415,9 +438,22 @@ export function HoudiniUtilsPanel({
                 .map((key) => sectionCountOf(sourceNode.node, key, pickedMaterials))
                 .join(', ')
             : ''
-          toast.success(
-            `Copied ${moved} to ${result.targets.length} node${result.targets.length === 1 ? '' : 's'}.`,
+          const warnings = result.targets.reduce(
+            (n, t) => n + t.missingMaterials.length + t.missingUvSources.length,
+            0,
           )
+          toast.success(
+            `Copied ${moved} to ${result.targets.length} node${result.targets.length === 1 ? '' : 's'}.` +
+              // The modal closes below, so anything the user still has to act on
+              // must be said here — the report stays in the panel, but a toast
+              // that omitted this would read as "nothing to do".
+              (warnings > 0 ? ' See the report — some names still need setting up.' : ''),
+          )
+          // The work is done and the confirm dialog has nothing left to confirm;
+          // its report lives on in the panel behind it, so nothing is lost by
+          // closing. Only on a clean run — a failure keeps the dialog up with
+          // its error, where the user is already looking.
+          setConfirmOpen(false)
         }
         // The targets changed on disk — their counts are now stale.
         void runScan(targets, setTargetScan)
@@ -779,6 +815,24 @@ export function HoudiniUtilsPanel({
                   would make 44 rules, not a merged setup.
                 </p>
               )}
+              {/* The blocking reason, stated where the checkbox that causes it
+                  lives — a disabled button whose cause is only in a tooltip is
+                  a dead end. */}
+              {uvStarvedMaterials.length > 0 && (
+                <p className="mt-2 flex items-start gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-500">
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                  <span>
+                    <strong>
+                      {uvStarvedMaterials.map((s) => s.displayName).join(', ')}
+                    </strong>{' '}
+                    {uvStarvedMaterials.length === 1 ? 'reads' : 'read'}{' '}
+                    {[...new Set(uvStarvedMaterials.flatMap((s) => s.channelUvs))].join(', ')},
+                    which only a UV channel produces. Without <strong>UV channels</strong> those
+                    bakers would land pointing at a UV nothing at the target creates — tick it, or
+                    deselect the material. Transfer stays disabled until then.
+                  </span>
+                </p>
+              )}
               {kind === 'material' && !sections.has('materials') && sections.has('bakers') && (
                 <p className="mt-2 flex items-start gap-1.5 text-xs text-amber-500">
                   <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
@@ -814,7 +868,9 @@ export function HoudiniUtilsPanel({
                   ? 'Select at least one target material node'
                   : activeSections.length === 0
                     ? 'Select at least one thing to copy'
-                    : undefined
+                    : uvStarvedMaterials.length > 0
+                      ? `${uvStarvedMaterials.map((s) => s.displayName).join(', ')} needs the UV channels — tick "UV channels", or deselect that material`
+                      : undefined
             }
             onClick={() => {
               setReport(null)

@@ -98,6 +98,12 @@ The **Utils** button on a Houdini project card (the 🔧 that appears on hover)
 opens a drawer that copies a material node's **complete setup** — material
 slots, UV channels and texture bakers — from one project into another.
 
+<p align="center">
+  <img width="900" alt="the Utils drawer: target projects, source project and what to copy" src="screenshots/houdini-utils-drawer.png" />
+  <br>
+  <sub><em>The Utils drawer: the character's own projects as targets, a browsed project as the source, and what travels.</em></sub>
+</p>
+
 - **Target** — this character's linked Houdini projects, with every DazToHue
   material node found in each. Tick as many as you want; the card you opened
   Utils from starts selected.
@@ -111,8 +117,10 @@ slots, UV channels and texture bakers — from one project into another.
   beside it. Boxes are entirely optional: with one network — or an untitled
   box — the list simply shows the node name, exactly as before.
 - **Source** — the node to copy *from*: pick another character from the studio,
-  or **Browse…** for any Houdini project on disk. Exactly one node can be the
-  source.
+  or **Browse…** for any Houdini project on disk (dragging a `.hip` out of
+  Explorer onto that button does the same). A project that keeps
+  **[Houdini templates](./attachments.md#houdini-templates)** lists them here by
+  name as one-click sources. Exactly one node can be the source.
 - **Transfer** asks for confirmation, then offers **Dry run** (changes nothing,
   reports exactly what a real run would do) and **Run**.
 
@@ -125,12 +133,11 @@ removed first and only the copied ones remain.
 The thing you actually reuse is a **material**. The drawer lists the source
 node's material slots with what each one costs by hand:
 
-```
-MI_Skin        15 surfaces · 4 bakers · 30 layers   needs UV channels
-MI_Dress        1 surface  · 4 bakers ·  4 layers
-MI_YogaPants    2 surfaces · 2 bakers ·  2 layers
-MI_HighBoots    7 surfaces · 1 baker  ·  7 layers
-```
+<p align="center">
+  <img width="900" alt="the Materials list: each slot with its surfaces, bakers and layers" src="screenshots/houdini-utils-materials.png" />
+  <br>
+  <sub><em>Each slot with what it costs by hand — and which one needs the UV channels.</em></sub>
+</p>
 
 Tick one and only that material travels — its slot definition *and* the bakers
 that name it. Tick nothing and everything is copied.
@@ -151,9 +158,10 @@ the target wears the same asset.
 | **Texture bakers** | the bakers of the picked materials, and every layer |
 
 > **Bakers reference everything by name.** A baker copied into a node that has no
-> material called `MI_Skin` imports fine and then bakes nothing. Untick a part
-> and the report names exactly what's then missing — the material, or the UV
-> source — so you know what to set up by hand first.
+> material called `MI_Skin` imports fine and then bakes nothing. Untick
+> **Material slots** and the report names exactly which materials are then
+> missing, so you know what to set up by hand first — unticking **UV channels**
+> is refused outright when it would strand a baker (below).
 
 **Do you need the UV channels?** The drawer tells you: a material shows
 **needs UV channels** when its bakers read a UV that only a channel produces.
@@ -161,6 +169,27 @@ Measured on a real setup — a skin reads `uv_geoshell` (built by the
 Copy-From-Geoshell channels), while clothing reads only `uv_original`, which
 every DTH import already has. So a skin copy wants the channels and a clothing
 copy doesn't, and you don't have to remember which.
+
+It isn't only advice. Untick **UV channels** while such a material is selected
+and **Transfer is disabled**, with the reason stated beside the checkbox that
+caused it: those bakers would land pointing at a UV name nothing at the target
+creates. Tick the channels, or deselect that material — either clears it. The
+block applies only while **Texture bakers** travel; without them there is no UV
+dependency to satisfy.
+
+This also blocks a target that *already* has matching channels. UV channels
+carry no name — they are positional — so the studio cannot verify that a
+target's channels produce `uv_geoshell`, and it refuses rather than let a copy
+through on an assumption it can't check.
+
+**A parameter linked to another node arrives as its value.** The DazToHue HDA's
+own **Linking** rewrites a node's parameters into references at its source
+(`ch("…/DazToHueMaterial/…")`) so it live-mirrors another node inside the same
+network. A reference like that cannot cross into another file: DTH node names
+are identical in every project, so the copy would silently rebind to the
+*target* project's own node and read wrong values without erroring. Such a
+parameter is copied as the value it had in the source — which is what you meant
+to reuse. Expressions naming no node travel as written.
 
 With **Replace at target** off, material slots **merge by name**: slots the
 target already defines are kept, so dropping a skin setup onto a dressed
@@ -204,10 +233,13 @@ merged setup), so this tab has no *Replace at target* toggle. The counts beside
 each section are how much is actually set there, not how many parameters exist.
 
 Like Generate project, this runs Houdini's `hython`, so it needs the **Houdini
-installation folder** and its matching documents folder in Settings. Opening a
-`.hip` takes a few seconds per file — the drawer scans when it opens and after a
-run, and there's a **Rescan** button. One scan serves both tabs, so switching
-between Material and Skeleton is instant.
+installation folder** and its matching documents folder in Settings. The drawer
+scans when it opens, after a run, and when you press **Rescan** — but a project
+is only re-read when its file changed since the last look, so coming back to
+projects nobody touched costs nothing. Reading a `.hip` the first time takes a
+few seconds; a transfer rewrites its targets, so exactly those are read again
+and their neighbours aren't. One scan serves both tabs, so switching between
+Material and Skeleton is instant.
 
 ## `$DAZ3D_LIB` — your Daz library, as a variable
 
