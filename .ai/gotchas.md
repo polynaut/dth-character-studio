@@ -249,6 +249,15 @@ current code before relying on details, but assume the *lesson* still holds.
   "missing" trailing baker) rather than an error. ALWAYS read the offset from
   the parm; never count from 1. Same 0-based convention as the ROM frame math,
   by coincidence rather than by contract, so don't infer one from the other.
+- **The repo's ~250 lint warnings are DECISIONS, not debt** — `.oxlintrc.json`
+  documents why each rule is advisory (sequential awaits are deliberate fs
+  ordering, `__TAURI_*` globals are the Tauri contract, the react-markdown
+  component maps are nested by design). Don't "clean them up". What that volume
+  *does* break is noticing a NEW one, so `pnpm lint:budget` pins the count PER
+  RULE in `.lint-baseline.json` and CI fails when it grows. Adding an
+  intentional instance = bump the baseline in the SAME commit
+  (`pnpm lint:budget:update`), which forces the judgement to be made rather than
+  absorbed.
 - **"A `.hip` always holds absolute paths" is FALSE — the real constraint is
   `$JOB`.** A Houdini project can be authored entirely relative, and the
   studio's own Generate project does exactly that (`$HIP/../<dazSubdir>/

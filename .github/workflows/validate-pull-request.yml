@@ -46,6 +46,13 @@ jobs:
       # component maps, promise-in-handler) stay advisory warnings on purpose.
       - name: Lint (oxlint, type-aware — fails on correctness + promoted real-bug rules)
         run: pnpm lint
+      # Those advisory warnings are decisions, not debt — but a few hundred of
+      # them make a NEW one invisible. The ratchet pins the count PER RULE
+      # (.lint-baseline.json), so an added instance fails here and gets a
+      # deliberate answer: intentional → bump the baseline in the same commit,
+      # otherwise fix it.
+      - name: Lint budget (no new advisory warnings)
+        run: pnpm lint:budget
       - name: Typecheck
         run: pnpm -r typecheck
       - name: Test
