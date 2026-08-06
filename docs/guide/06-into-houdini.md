@@ -158,6 +158,23 @@ target already defines are kept, so dropping a skin setup onto a dressed
 character doesn't throw away its clothing materials. Turned on, the selected
 sections are wiped first.
 
+### Portable texture paths
+
+Texture layers store **absolute** paths into your Daz library
+(`D:\DAZ 3D\My DAZ 3D Library\Runtime\Textures\…`), so a copied setup breaks the
+day that library moves — or the day the project opens on a machine where it sits
+on another drive.
+
+**Portable texture paths** (on by default) rewrites those to
+`$DAZ3D_LIB/Runtime/Textures/…`, the variable the studio already wires into
+every configured `houdini.env`. Houdini expands it at load, so the setup keeps
+working wherever the library lives. Turn it off to copy the paths exactly as the
+source stored them.
+
+Only paths **under** your Daz library are rewritten. A texture living somewhere
+else can't be made portable, so it stays absolute and the report lists it — the
+copy is only as movable as those paths.
+
 Every project the transfer writes is saved once, after its previous state is
 kept as `backup/<name>_dthbak.hiplc` (one rolling backup, beside Houdini's own).
 **Close the target projects in Houdini first** — Houdini writes the entire scene

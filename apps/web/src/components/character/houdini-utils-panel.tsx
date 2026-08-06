@@ -168,6 +168,10 @@ export function HoudiniUtilsPanel({
   // --- the confirm modal ---------------------------------------------------
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [replace, setReplace] = useState(false)
+  // ON by default: texture layers store absolute paths into the Daz library, and
+  // a copy that keeps them pinned breaks the moment the library moves or the
+  // project opens on another machine. Off reproduces the source verbatim.
+  const [useLibVar, setUseLibVar] = useState(true)
   // WHICH action is running, not merely that one is: with a shared flag both
   // buttons spin, so a dry run looks exactly like the destructive one.
   const [running, setRunning] = useState<'' | 'dry' | 'run'>('')
@@ -340,6 +344,7 @@ export function HoudiniUtilsPanel({
           targets: targetRefs,
           sections: MATERIAL_SECTIONS.filter((key) => sections.has(key)),
           materials: [...pickedMaterials],
+          useLibVar,
           replace,
           dryRun,
         },
@@ -721,6 +726,25 @@ export function HoudiniUtilsPanel({
             </div>
           </div>
 
+          <div className="flex items-start gap-3 rounded-md border p-3">
+            <Switch
+              id="use-lib-var"
+              checked={useLibVar}
+              disabled={busy}
+              onCheckedChange={setUseLibVar}
+            />
+            <div className="text-sm">
+              <Label htmlFor="use-lib-var" className="font-medium">
+                Portable texture paths (<code>$DAZ3D_LIB</code>)
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                {useLibVar
+                  ? 'Texture paths under your Daz library are stored as $DAZ3D_LIB/… — the copy keeps working if the library moves, or on a machine whose library is on another drive. Textures outside the library stay absolute and are listed in the report.'
+                  : 'Texture paths are copied exactly as the source stored them — absolute into the Daz library, so they break if it ever moves.'}
+              </p>
+            </div>
+          </div>
+
           <p className="text-xs text-muted-foreground">
             A real run saves each target project. Close them in Houdini first — Houdini writes the
             whole scene on save and would overwrite this. The previous state is kept as{' '}
@@ -928,6 +952,24 @@ function TransferReport({
       <p className="mb-2 text-sm font-medium">
         {report.dryRun ? 'Dry run — nothing was written' : 'Transfer complete'}
       </p>
+      {report.useLibVar && (
+        <p className="mb-2 text-xs text-muted-foreground">
+          {report.rewrittenPaths} texture path{report.rewrittenPaths === 1 ? '' : 's'} pointed at{' '}
+          <code>$DAZ3D_LIB</code>.
+        </p>
+      )}
+      {report.foreignPaths.length > 0 && (
+        <p className="mb-2 flex items-start gap-1 text-xs text-amber-500">
+          <AlertTriangle className="mt-0.5 size-3 shrink-0" />
+          <span>
+            {report.foreignPaths.length} texture
+            {report.foreignPaths.length === 1 ? '' : 's'} live outside your Daz library and stay
+            absolute — the copy is only as movable as those paths:{' '}
+            {report.foreignPaths.slice(0, 3).join(', ')}
+            {report.foreignPaths.length > 3 ? ` (+${report.foreignPaths.length - 3} more)` : ''}
+          </span>
+        </p>
+      )}
       <ul className="space-y-2 text-xs">
         {report.targets.map((target) => (
           <li key={`${target.hipPath}|${target.nodePath}`}>

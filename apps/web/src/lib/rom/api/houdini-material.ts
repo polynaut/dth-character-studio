@@ -81,6 +81,12 @@ const transferInput = z.object({
    *  node — and skin slots merge identically across a Daz generation, while
    *  clothing only matches when the same asset is worn. */
   materials: z.array(z.string()).default([]),
+  /** Point Daz-library texture paths at `$DAZ3D_LIB` instead of copying them
+   *  absolute. The variable is the one the studio upserts into every configured
+   *  `houdini.env` (storage/houdini-env.ts), so a rewritten setup keeps working
+   *  when the library moves — or on a machine whose library is on another
+   *  drive. Off copies the paths exactly as the source stored them. */
+  useLibVar: z.boolean().default(true),
   /** true = the selected sections are wiped at the target first; false =
    *  append (material slots merge by name rather than duplicating). */
   replace: z.boolean(),
@@ -282,5 +288,14 @@ export async function transferHoudiniMaterials({
   if (!isTauri()) {
     throw new Error('Transferring material setups needs the desktop app (it runs hython).')
   }
-  return runMaterialUtil({ op: 'transfer', ...input })
+  // The library root is Settings' Daz library — the SAME value the studio
+  // upserts as DAZ3D_LIB, so a rewritten path resolves to what Houdini has.
+  // Reading it here (not in the Python) keeps settings access on this side.
+  const dazLibRoot = input.useLibVar ? (await storage.getSettings()).dazLibraryFolder.trim() : ''
+  if (input.useLibVar && !dazLibRoot) {
+    throw new Error(
+      'No Daz library folder is set in Settings, so texture paths cannot be pointed at $DAZ3D_LIB — set it, or turn the option off to copy the paths as they are.',
+    )
+  }
+  return runMaterialUtil({ op: 'transfer', ...input, dazLibRoot })
 }

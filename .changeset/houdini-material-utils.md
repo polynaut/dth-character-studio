@@ -36,4 +36,10 @@ Material nodes are labelled by the **network box** around them when there is one
 (`KiraDefault`, `KiraYoga`, `KiraNaked`) instead of `DazToHueMaterial`, `…1`,
 `…2` — boxes stay optional, and an unboxed network just shows the node name.
 
+**Portable texture paths** (on by default) rewrites the absolute Daz-library
+paths in texture layers to `$DAZ3D_LIB/…` — the variable the studio already wires
+into every configured `houdini.env` — so a copied setup survives the library
+moving or opening on a machine where it sits on another drive. Textures outside
+the library can't be made portable, stay absolute, and are named in the report.
+
 Each written project is saved once, after a rolling `backup/<name>_dthbak.hiplc`.

@@ -296,6 +296,11 @@ export const materialUtilReportSchema = z.object({
   sections: z.array(z.string()),
   /** Material slot names it was restricted to (empty = all). */
   materials: z.array(z.string()),
+  /** Whether Daz-library texture paths were pointed at `$DAZ3D_LIB`. */
+  useLibVar: z.boolean(),
+  rewrittenPaths: z.number(),
+  /** Absolute paths left alone because they live outside the Daz library. */
+  foreignPaths: z.array(z.string()),
   dryRun: z.boolean(),
   replace: z.boolean(),
 })

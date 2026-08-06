@@ -155,6 +155,13 @@ pub struct MaterialUtilReport {
     pub sections: Vec<String>,
     /// The material slot names it was restricted to (empty = all).
     pub materials: Vec<String>,
+    /// Whether Daz-library texture paths were pointed at `$DAZ3D_LIB`.
+    pub use_lib_var: bool,
+    /// How many paths that rewrite touched.
+    pub rewritten_paths: u32,
+    /// Absolute paths left alone because they live OUTSIDE the Daz library —
+    /// they cannot be made portable, so the user is told which stayed pinned.
+    pub foreign_paths: Vec<String>,
     pub dry_run: bool,
     pub replace: bool,
 }

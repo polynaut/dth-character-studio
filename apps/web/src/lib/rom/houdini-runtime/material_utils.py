@@ -95,6 +95,75 @@ LAYER_GROUP_FIELDS = (
 # material that they do NOT need the channels, instead of leaving them to guess.
 INTRINSIC_UV_NAMES = frozenset(("", "uv", "uv_original"))
 
+# The Houdini variable the studio upserts into every configured houdini.env
+# (`DAZ3D_LIB = "<library>"`, storage/houdini-env.ts). Texture layers store
+# ABSOLUTE paths into the Daz library, so swapping that prefix for the variable
+# is what makes a copied setup survive a moved library — or a second machine
+# whose library sits on another drive.
+LIB_VAR = "$DAZ3D_LIB"
+
+
+def _norm_path(value):
+    return value.replace("\\", "/").rstrip("/")
+
+
+def _looks_absolute(value):
+    """A Windows drive path or a UNC share — the only shapes worth rewriting."""
+    return len(value) > 2 and (value[1] == ":" or value.startswith(("//", "\\\\")))
+
+
+def _rewrite_lib_paths(payloads, lib_root):
+    """Point every Daz-library path at $DAZ3D_LIB, in place.
+
+    Walks EVERY string value rather than a list of known texture fields: layers
+    hold a texture and an alpha texture, UV operations can hold a
+    copy-from-external path, and a future DazToHue field would be missed by any
+    hand-kept list. Only values under the library root match, so nothing else
+    can be caught by accident.
+
+    Values driven by an EXPRESSION are skipped — the expression is what Houdini
+    writes back, so rewriting the evaluated string would be discarded.
+
+    Returns (rewritten count, sorted absolute paths left alone) — the second is
+    reported, since a texture outside the Daz library cannot be made portable
+    and the user should know which ones stayed pinned.
+    """
+    root = _norm_path(lib_root).lower()
+    rewritten = [0]
+    foreign = set()
+
+    def visit(rec):
+        if not rec or rec.get("expr"):
+            return
+        value = rec.get("v")
+        if not isinstance(value, str) or not value:
+            return
+        if value.startswith(LIB_VAR):
+            return  # already portable
+        if not _looks_absolute(value):
+            return
+        norm = _norm_path(value)
+        if root and norm.lower().startswith(root + "/"):
+            rec["v"] = LIB_VAR + norm[len(root) :]
+            rewritten[0] += 1
+        else:
+            foreign.add(norm)
+
+    def walk(instances):
+        for instance in instances:
+            for rec in instance["f"].values():
+                visit(rec)
+            for sub in instance["b"].values():
+                walk(sub)
+
+    for payload in payloads.values():
+        if payload is None:
+            continue
+        walk(payload["instances"])
+        for rec in payload["extras"].values():
+            visit(rec)
+    return (rewritten[0], sorted(foreign))
+
 
 # --- generic multiparm copying ----------------------------------------------
 #
@@ -599,6 +668,15 @@ def op_transfer(request):
     selected_materials = [m for m in request.get("materials", []) if m]
     payloads = _filter_payloads(payloads, selected_materials, prefix)
 
+    # Texture paths: absolute into the Daz library as the source stored them,
+    # or pointed at $DAZ3D_LIB so the copy survives a moved library. Done on the
+    # exported payload, so every target gets the same rewritten values.
+    rewritten_paths, foreign_paths = (0, [])
+    if request.get("useLibVar"):
+        rewritten_paths, foreign_paths = _rewrite_lib_paths(
+            payloads, request.get("dazLibRoot", "")
+        )
+
     (
         baker_names,
         needed_materials,
@@ -749,6 +827,9 @@ def op_transfer(request):
         "sourceBakerNames": baker_names,
         "sections": keys,
         "materials": selected_materials,
+        "useLibVar": bool(request.get("useLibVar")),
+        "rewrittenPaths": rewritten_paths,
+        "foreignPaths": foreign_paths,
         "dryRun": dry_run,
         "replace": replace,
     }
@@ -791,6 +872,9 @@ def main():
     payload.setdefault("sourceBakerNames", [])
     payload.setdefault("sections", [])
     payload.setdefault("materials", [])
+    payload.setdefault("useLibVar", False)
+    payload.setdefault("rewrittenPaths", 0)
+    payload.setdefault("foreignPaths", [])
     payload.setdefault("dryRun", False)
     payload.setdefault("replace", False)
 

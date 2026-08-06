@@ -70,6 +70,9 @@
   "sourceBakerNames": ["T_Skin_Colour", "T_Skin_Normal"],
   "sections": ["materials", "uvChannels", "bakers"],
   "materials": ["Skin"],
+  "useLibVar": true,
+  "rewrittenPaths": 38,
+  "foreignPaths": ["X:/shared/textures/custom_skin.png"],
   "dryRun": false,
   "replace": false
 }
