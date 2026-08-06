@@ -1,5 +1,83 @@
 # @dth/desktop
 
+## 0.64.0
+
+### Minor Changes
+
+- [#690](https://github.com/polynaut/dth-character-studio/pull/690) [`fdbc310`](https://github.com/polynaut/dth-character-studio/commit/fdbc31045e924e23ea6ecfec3029755e2b319538) Thanks [@polynaut](https://github.com/polynaut)! - Houdini card **Utils**: copy a DazToHueMaterial node's setup between projects
+
+  A skin material is easily 4 bakers of 30 layers — each naming a texture, a group,
+  a blend mode and seven adjustments — on top of the slots merging fifteen Daz
+  surfaces into one `Skin`. Reusing it on a new character meant rebuilding all of
+  it by hand. The 🔧 on a Houdini project card now opens a drawer that copies that
+  setup from one material node onto any number of this character's nodes: source
+  from another studio character or any `.hip` via Browse, append or **Replace at
+  target**, with a dry run that writes nothing.
+
+  The unit you pick is a **material** — the drawer lists the source's slots with
+  what each costs by hand (`MI_Skin` 15 surfaces · 4 bakers · 30 layers) and copies
+  the slot together with the bakers naming it. A Genesis 9 skin merges the same
+  surfaces on every character of that generation, so it transfers as-is; clothing
+  transfers when the target wears the same asset.
+
+  **What to copy** then picks which parts travel — material slots, UV channels,
+  texture bakers — all on by default, because a baker names its material
+  (`MI_Skin`) and its layers name UV sources as plain text, so bakers alone import
+  cleanly and bake nothing. Untick a part and the report names exactly what is then
+  missing. A material is flagged **needs UV channels** when its bakers read a UV
+  only a channel produces (a skin reads `uv_geoshell`; clothing reads only
+  `uv_original`, which every DTH import has) — so the answer to "do I need the UV
+  channels too?" is shown rather than guessed. On append, material slots merge by
+  name, so a skin setup copied onto a dressed character keeps its clothing
+  materials.
+
+  Material nodes are labelled by the **network box** around them when there is one
+  (`KiraDefault`, `KiraYoga`, `KiraNaked`) instead of `DazToHueMaterial`, `…1`,
+  `…2` — boxes stay optional, and an unboxed network just shows the node name.
+
+  **Portable texture paths** (on by default) rewrites the absolute Daz-library
+  paths in texture layers to `$DAZ3D_LIB/…` — the variable the studio already wires
+  into every configured `houdini.env` — so a copied setup survives the library
+  moving or opening on a machine where it sits on another drive. Textures outside
+  the library can't be made portable, stay absolute, and are named in the report.
+
+  Each written project is saved once, after a rolling `backup/<name>_dthbak.hiplc`.
+
+- [#691](https://github.com/polynaut/dth-character-studio/pull/691) [`e4fbe79`](https://github.com/polynaut/dth-character-studio/commit/e4fbe79cc080ed5d866da4db2fffb5ce50557645) Thanks [@polynaut](https://github.com/polynaut)! - Utils drawer: a **Skeleton** tab that transfers a DazToHueSkeleton setup
+
+  The skeleton node carries as much hand-work as the material one — measured on a
+  real project: 22 bone renames, 10 reparents, 3 deletes, breast/glute physics-bone
+  offsets and two skin-weight operations — and because Daz bone names are fixed per
+  generation, the whole block transfers between characters of that generation.
+
+  Sections are the node's own three tabs (General, Skeleton, Skin Weights), so they
+  read here the way they read in Houdini. Each is copied **wholesale**: a
+  configuration block is not a list you append to, since adding 22 renames onto 22
+  existing ones would make 44 rules rather than a merged setup — so the skeleton
+  tab has no append mode, and no texture paths to make portable.
+
+  One scan serves both tabs. Opening a `.hip` costs tens of seconds, so switching
+  tab must not pay it again.
+
+- [#691](https://github.com/polynaut/dth-character-studio/pull/691) [`e4fbe79`](https://github.com/polynaut/dth-character-studio/commit/e4fbe79cc080ed5d866da4db2fffb5ce50557645) Thanks [@polynaut](https://github.com/polynaut)! - Attachments can hold **Houdini templates**, and the Utils drawer copies from them
+
+  A template `.hip` — the skeleton setup you always use, the skin + texture-baker
+  setup you always use — now lives in the project beside its characters, with a
+  name and a description. The Utils drawer's **Source** section lists this
+  project's templates by name, so reusing a setup no longer starts with locating a
+  file.
+
+  Attachments gained a `kind` (`daz-scene` | `houdini-project`); registries written
+  before this read unchanged, since every one of them held Daz scenes. A Houdini
+  template is **always linked, never copied** — enforced in the api, not just
+  hidden in the form — because moving a Houdini project safely needs every
+  reference relative AND its `$JOB` folder travelling with it, and neither can be
+  verified from the studio.
+
+  The Utils side panel is also retitled: it now says which kind of thing it acts on
+  (**Houdini project utils**, with the project it was opened from) rather than just
+  the character name.
+
 ## 0.63.1
 
 ## 0.63.0
