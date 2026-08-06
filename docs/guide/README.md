@@ -27,6 +27,9 @@ to Houdini.
 
 None of these are needed to generate a ROM:
 
+- [Custom morphs](./custom-morphs.md) — listing the morphs of a section
+  yourself: pose rows, combining several Daz morphs into one output, bone-scale
+  reference frames, and finding a morph's internal Daz name.
 - [Advanced character options](./advanced.md) — multiple Daz scenes on one
   character (outfits, per-scene hair, per-scene overrides), and driving extra
   morphs off bone rotations (Modify JCM frames).
