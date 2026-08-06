@@ -352,8 +352,16 @@ export function HoudiniUtilsPanel({
             `${failed.length} of ${result.targets.length} target${result.targets.length === 1 ? '' : 's'} failed — see the report.`,
           )
         } else {
+          // Report what actually travelled, not just the bakers — the run may
+          // have carried material slots and UV channels too, and a toast that
+          // names one part reads as "only that part was copied".
+          const moved = sourceNode
+            ? MATERIAL_SECTIONS.filter((key) => sections.has(key))
+                .map((key) => sectionCountOf(sourceNode.node, key, pickedMaterials))
+                .join(', ')
+            : ''
           toast.success(
-            `Copied ${result.sourceBakers} texture baker${result.sourceBakers === 1 ? '' : 's'} to ${result.targets.length} node${result.targets.length === 1 ? '' : 's'}.`,
+            `Copied ${moved} to ${result.targets.length} node${result.targets.length === 1 ? '' : 's'}.`,
           )
         }
         // The targets changed on disk — their counts are now stale.
@@ -667,7 +675,10 @@ export function HoudiniUtilsPanel({
           open
           onClose={() => setConfirmOpen(false)}
           dismissible={!busy}
-          title="Copy texture bakers?"
+          // Not "Copy texture bakers?": the run also carries material slots and
+          // UV channels, and a title narrower than what the dialog's own report
+          // lists is a title the user has to distrust.
+          title="Copy material setup?"
         >
           <div className="space-y-2 text-sm">
             <p>
