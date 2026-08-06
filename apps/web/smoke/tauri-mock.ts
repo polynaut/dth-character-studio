@@ -56,6 +56,13 @@ export interface TauriMockSeed {
    *  window, not a neutral default. Exercising the dead path is what flipping
    *  `__tauriMock.houdiniRunning` to false mid-run is for. */
   houdiniRunning?: boolean
+  /** DazToHue nodes the fake material-utility SCAN reports, per `.hip` path —
+   *  what the Utils drawer lists as targets and sources. Node objects are
+   *  passed through verbatim and must satisfy `materialNodeInfoSchema` (the
+   *  app parses them); `contracts/material-util-report.json` is the shape.
+   *  A path with no entry scans as a readable project with NO nodes, which is
+   *  exactly what a scene that never got a DTH network looks like. */
+  materialScan?: Record<string, Array<Record<string, unknown>>>
 }
 
 /** What the spec reads back via `page.evaluate` from `window.__tauriMock`. */
@@ -371,6 +378,60 @@ export function installTauriMock(seed: TauriMockSeed): void {
         return null
       case 'houdini_running':
         return state.houdiniRunning
+      case 'run_houdini_material_util': {
+        // The studio writes its request to disk and hands hython the two paths,
+        // so this fake reads the SAME request file the real Python parses —
+        // the op and its arguments come from there, never from a second source
+        // of truth that could drift from what the app actually asked for.
+        const request = JSON.parse(mustRead(norm(args.request.requestPath)))
+        const base = {
+          op: request.op,
+          ok: true,
+          error: '',
+          projects: [],
+          targets: [],
+          sourceBakers: 0,
+          sourceLayers: 0,
+          sourceBakerNames: [],
+          sections: request.sections ?? [],
+          materials: request.materials ?? [],
+          useLibVar: request.useLibVar ?? false,
+          rewrittenPaths: 0,
+          foreignPaths: [],
+          dryRun: request.dryRun ?? false,
+          replace: request.replace ?? false,
+        }
+        if (request.op === 'scan') {
+          return {
+            ...base,
+            projects: (request.hipPaths as Array<string>).map((hipPath) => ({
+              hipPath,
+              ok: true,
+              error: '',
+              nodes: seed.materialScan?.[norm(hipPath)] ?? [],
+            })),
+          }
+        }
+        // No hython here, so no transfer really happens: each target reports
+        // ok with NOTHING moved. Deliberately not a fabricated success — a spec
+        // asserts the call and the request file, never a copy this made up.
+        return {
+          ...base,
+          targets: (request.targets as Array<{ hipPath: string; nodePath: string }>).map((t) => ({
+            hipPath: t.hipPath,
+            nodePath: t.nodePath,
+            ok: true,
+            error: '',
+            sections: [],
+            added: [],
+            replaced: Boolean(request.replace),
+            missingMaterials: [],
+            missingGroups: [],
+            missingUvSources: [],
+            backupPath: '',
+          })),
+        }
+      }
       case 'unreal_dth_present':
         // The linked Unreal project in the docs fixture has no DTH content yet
         // (the footer card's install button is live, not dimmed).

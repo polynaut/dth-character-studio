@@ -392,6 +392,101 @@ test('houdini-generate-dialog', async ({ page }) => {
   await shoot(page, join(OUT, 'houdini-generate-dialog.png'), dialog)
 })
 
+// ── The Utils drawer (Houdini material / skeleton transfer) ──────────────────
+// The drawer's scan runs hython, which this fake never starts: `materialScan`
+// seeds what a scan of each `.hip` finds (tauri-mock's
+// `run_houdini_material_util` answers from it), and the two settings below are
+// exactly what api/houdini-material.ts requires before it will scan at all —
+// a Houdini installation folder plus its VERSION-MATCHED documents folder.
+const HOUDINI_INSTALL = 'C:/Program Files/Side Effects Software/Houdini 22.0.368'
+const HOUDINI_DOCS = 'C:/Users/You/Documents/houdini22.0'
+/** The project the drawer copies FROM — browsed for, so it needs no character
+ *  of its own (the fixture world has exactly one). */
+const SOURCE_HIP = 'D:/DTH Projects/Demo/Ita/houdini/Ita.hiplc'
+
+/** The source node: a dressed character's finished material setup. The slot
+ *  numbers are the ones docs/guide/06-into-houdini.md quotes, so the shot and
+ *  the prose beside it can't drift apart. */
+const SOURCE_NODE = {
+  path: '/obj/DazToHue/DazToHueMaterial',
+  name: 'DazToHueMaterial',
+  nodeType: 'material',
+  networkBox: 'ItaDefault',
+  materials: 4,
+  uvChannels: 3,
+  bakers: 11,
+  layers: 43,
+  bakerNames: ['T_Skin_Colour', 'T_Skin_Normal'],
+  materialNames: ['MI_Skin', 'Skin'],
+  slots: [
+    { name: 'Skin', displayName: 'MI_Skin', surfaces: 15, bakers: 4, layers: 30, channelUvs: ['uv_geoshell'] },
+    { name: 'Dress', displayName: 'MI_Dress', surfaces: 1, bakers: 4, layers: 4, channelUvs: [] },
+    { name: 'YogaPants', displayName: 'MI_YogaPants', surfaces: 2, bakers: 2, layers: 2, channelUvs: [] },
+    { name: 'HighBoots', displayName: 'MI_HighBoots', surfaces: 7, bakers: 1, layers: 7, channelUvs: [] },
+  ],
+  sectionCounts: [],
+}
+
+/** The target node — the demo character's own project: a DTH network that is
+ *  set up but has no bakers yet, which is what you open the drawer to fix. */
+const TARGET_NODE = {
+  path: '/obj/DazToHue/DazToHueMaterial',
+  name: 'DazToHueMaterial',
+  nodeType: 'material',
+  networkBox: 'KiraDefault',
+  materials: 2,
+  uvChannels: 0,
+  bakers: 0,
+  layers: 0,
+  bakerNames: [],
+  materialNames: ['MI_Skin', 'Skin'],
+  slots: [],
+  sectionCounts: [],
+}
+
+/** Open the demo character's Utils drawer with a source picked and selected —
+ *  the state both Utils shots document. */
+async function openUtilsDrawer(page: Page): Promise<Locator> {
+  const seed = buildSeed({ demo: true, activeProjectFile: P.dcsp, dialogPath: SOURCE_HIP })
+  const settingsPath = `${P.appData}/settings.json`
+  seed.files[settingsPath] = JSON.stringify({
+    ...JSON.parse(seed.files[settingsPath] ?? '{}'),
+    houdiniInstallFolder: HOUDINI_INSTALL,
+    houdiniDocsFolder: HOUDINI_DOCS,
+  })
+  seed.files[`${HOUDINI_INSTALL}/bin/hython.exe`] = 'hython-exe-fixture'
+  seed.files[SOURCE_HIP] = 'hip-fixture'
+  seed.materialScan = { [P.houdini]: [TARGET_NODE], [SOURCE_HIP]: [SOURCE_NODE] }
+  await prime(page, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+  await page.getByRole('button', { name: /^Utils/ }).click()
+  const drawer = page.getByRole('dialog')
+  // The open-scan landed once the character's own node is listed as a target
+  // (opening from the card also preselects it).
+  await drawer.getByRole('checkbox', { name: 'KiraDefault' }).waitFor()
+  // Browse… returns the seeded pick, which scans that one file as the source.
+  await drawer.getByRole('button', { name: 'Browse…' }).click()
+  await drawer.getByRole('radio', { name: 'ItaDefault' }).click()
+  return drawer
+}
+
+test('houdini-utils-drawer', async ({ page }) => {
+  const drawer = await openUtilsDrawer(page)
+  await shoot(page, join(OUT, 'houdini-utils-drawer.png'), drawer)
+})
+
+test('houdini-utils-materials', async ({ page }) => {
+  const drawer = await openUtilsDrawer(page)
+  // The Materials list — the slot-by-slot cost of the source setup. The drawer
+  // scrolls its OWN body, so bring the section up before framing it (`shoot`
+  // deliberately doesn't scroll a fixed-overlay feature).
+  const materials = drawer.locator('section').filter({ hasText: 'needs UV channels' })
+  await materials.evaluate((el) => el.scrollIntoView({ block: 'center' }))
+  await shoot(page, join(OUT, 'houdini-utils-materials.png'), materials)
+})
+
 test('dth-export-dialog', async ({ page }) => {
   // A configured Daz install folder lets the dialog's Runner-update check
   // settle open (the fake holds no readable install, and an unreadable Runner
