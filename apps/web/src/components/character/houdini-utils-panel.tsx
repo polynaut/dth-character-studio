@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
 import { AlertTriangle, FolderOpen, Loader2, RefreshCw, Wrench } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -770,20 +771,17 @@ function NodePicker({
     )
   }
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       {scan.projects.map((project) => (
-        <div key={project.hipPath} className="rounded-md border p-3">
-          <p className="truncate text-sm font-medium" title={project.hipPath}>
-            {fileName(project.hipPath)}
-          </p>
+        <ProjectCard key={project.hipPath} project={project}>
           {!project.ok ? (
-            <p className="mt-1 text-xs text-destructive">{project.error}</p>
+            <p className="text-xs text-destructive">{project.error}</p>
           ) : project.nodes.length === 0 ? (
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               No DazToHue material nodes in this project.
             </p>
           ) : (
-            <ul className="mt-2 space-y-2">
+            <ul>
               {project.nodes.map((node) => {
                 const key = nodeKey(project.hipPath, node.path)
                 return (
@@ -800,20 +798,58 @@ function NodePicker({
               })}
             </ul>
           )}
-        </div>
+        </ProjectCard>
       ))}
     </div>
   )
 }
 
 /**
- * One selectable material node — the linked-project card's sibling.
+ * A scanned Houdini project, wearing the linked-project card look: the
+ * `houdini-card` tint/border, the orange left accent bar and the Houdini mark —
+ * the same anatomy as the card this drawer was opened from, so a project reads
+ * as the same kind of thing here as on the character page.
  *
- * Same anatomy as the DTH Export dialog's project rows (`HipRow`): the
- * `houdini-card` tint/border with its orange left accent bar, a Houdini mark as
- * the tile, a checkbox, and a transparent cover button so the whole row toggles.
- * The heading is the network-box title when the node has one, since that is the
- * name the user gave this network.
+ * The card is the PROJECT; its material nodes are plain rows inside it. Making
+ * each node a card too would have two nested card frames competing for the same
+ * "this is one thing" signal, and the node is not a file — it lives in this one.
+ */
+function ProjectCard({
+  project,
+  children,
+}: {
+  project: MaterialScanProject
+  children: ReactNode
+}) {
+  return (
+    <div className="relative w-full">
+      <div className="houdini-card relative rounded-lg border p-3 pl-4">
+        <div className="flex items-center gap-3">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-[#262626]">
+            <img src={houdiniLogo} alt="" aria-hidden className="size-5 object-contain" />
+          </span>
+          <p className="min-w-0 flex-1 truncate text-base font-medium" title={project.hipPath}>
+            {fileName(project.hipPath)}
+          </p>
+        </div>
+        <div className="mt-2">{children}</div>
+      </div>
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 left-0 w-1.5 rounded-l-lg bg-houdini-orange"
+      />
+    </div>
+  )
+}
+
+/**
+ * One material node inside a project card — a plain row, not a card of its own.
+ *
+ * The whole row is the control (a `<label>` wrapping the input), so clicking
+ * anywhere on it selects. Selection reads as an orange tint rather than a ring:
+ * inside a card that already has an orange border, another border would just
+ * add noise. The heading is the network-box title when the node has one, since
+ * that is the name the user gave this network.
  */
 function MaterialNodeRow({
   node,
@@ -826,63 +862,44 @@ function MaterialNodeRow({
   /** Multi = a target (checkbox); single = the one source (radio). */
   mode: 'single' | 'multi'
   checked: boolean
-  /** Already chosen as the source — offered but refused, so the reason is
-   *  visible rather than the row silently vanishing from the target list. */
+  /** Already chosen as the source — shown but refused, so the reason is visible
+   *  rather than the row silently vanishing from the target list. */
   disabled: boolean
   onToggle: () => void
 }) {
   const { primary, secondary } = nodeLabel(node)
   return (
-    <div className="group/card relative w-full">
-      <div
-        className={`houdini-card relative flex items-center gap-3 rounded-lg border p-3 pl-4${
-          disabled ? ' opacity-50' : ''
-        }`}
-        data-selected={checked ? 'true' : undefined}
-      >
-        <input
-          type={mode === 'multi' ? 'checkbox' : 'radio'}
-          name={mode === 'single' ? 'material-source' : undefined}
-          className="relative z-10 size-4 shrink-0 accent-houdini-orange"
-          aria-label={primary}
-          checked={checked}
-          disabled={disabled}
-          onChange={onToggle}
-        />
-        <span className="flex aspect-[3/4] h-[56px] shrink-0 items-center justify-center rounded-md bg-[#262626]">
-          <img src={houdiniLogo} alt="" aria-hidden className="size-8 object-contain" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <span className="block truncate text-base font-medium">
-            {primary}
-            {secondary && (
-              <span className="ml-1.5 text-xs font-normal text-muted-foreground/70">
-                {secondary}
-              </span>
-            )}
-          </span>
-          <p className="mt-0.5 truncate text-xs text-muted-foreground" title={node.path}>
-            {node.materials} material{node.materials === 1 ? '' : 's'} · {node.uvChannels} UV
-            channel{node.uvChannels === 1 ? '' : 's'} · {node.bakers} baker
-            {node.bakers === 1 ? '' : 's'} · {node.layers} layer{node.layers === 1 ? '' : 's'}
-          </p>
-          {disabled && <p className="mt-0.5 text-xs text-muted-foreground">Chosen as the source</p>}
-        </div>
-      </div>
-      {!disabled && (
-        <button
-          type="button"
-          aria-hidden
-          tabIndex={-1}
-          onClick={onToggle}
-          className="absolute inset-0 rounded-lg"
-        />
-      )}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-y-0 left-0 w-1.5 rounded-l-lg bg-houdini-orange"
+    <label
+      className={`flex items-start gap-3 rounded-md px-2 py-2 ${
+        disabled
+          ? 'cursor-not-allowed opacity-50'
+          : `cursor-pointer ${checked ? 'bg-houdini-orange/20' : 'hover:bg-houdini-orange/10'}`
+      }`}
+    >
+      <input
+        type={mode === 'multi' ? 'checkbox' : 'radio'}
+        name={mode === 'single' ? 'material-source' : undefined}
+        className="mt-1 size-4 shrink-0 accent-houdini-orange"
+        aria-label={primary}
+        checked={checked}
+        disabled={disabled}
+        onChange={onToggle}
       />
-    </div>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium">
+          {primary}
+          {secondary && (
+            <span className="ml-1.5 text-xs font-normal text-muted-foreground/70">{secondary}</span>
+          )}
+        </span>
+        <span className="mt-0.5 block truncate text-xs text-muted-foreground" title={node.path}>
+          {node.materials} material{node.materials === 1 ? '' : 's'} · {node.uvChannels} UV channel
+          {node.uvChannels === 1 ? '' : 's'} · {node.bakers} baker{node.bakers === 1 ? '' : 's'} ·{' '}
+          {node.layers} layer{node.layers === 1 ? '' : 's'}
+          {disabled && ' — chosen as the source'}
+        </span>
+      </span>
+    </label>
   )
 }
 
