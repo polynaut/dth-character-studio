@@ -38,6 +38,7 @@ Nothing here writes to a source file, and a target is only ever saved by a real
 
 import json
 import os
+import re
 import shutil
 import sys
 import traceback
@@ -237,16 +238,44 @@ def _instance_name(template_name, indices):
     return "".join(out)
 
 
+# A channel reference naming another NODE — `ch("/obj/.../parm")`, `chs(...)`,
+# `opparm`, or any relative hop. The HDA's own "Linking" feature builds exactly
+# these: linking a node rewrites every linkable parm to `ch("<source>/<parm>")`
+# so the target live-mirrors the source WITHIN one network.
+_NODE_REF_EXPR = re.compile(r"\b(ch|chs|chf|chi|chramp|opparm|opdigits)\s*\(|\.\./|/obj/")
+
+
+def _portable_expr(expr):
+    """The expression to carry, or None to carry the VALUE instead.
+
+    A transfer crosses FILES. An expression that names another node cannot mean
+    the same thing on the other side — and the dangerous case is not that it
+    breaks, it is that it RESOLVES: DTH node names are identical across
+    projects, so `ch("/obj/DazToHue/DazToHueMaterial/…")` copied into another
+    project silently rebinds to THAT project's own node and produces wrong
+    values with no error. Measured: the HDA's Linking feature puts exactly this
+    shape on every linkable parm of a linked node.
+
+    So a node-referencing expression is flattened to the value it had in the
+    source — which is what the user actually meant to copy. Expressions with no
+    node reference (arithmetic, `$F`, a bare constant) travel as written.
+    """
+    if not expr:
+        return None
+    return None if _NODE_REF_EXPR.search(expr) else expr
+
+
 def _read(node, name):
     """{"v": value, "expr": expression|None} for a parm or parm tuple.
 
-    Expressions travel as expressions: a channel-referenced value must arrive as
-    the reference it is, not as the number it happened to evaluate to.
+    An expression travels only when it is PORTABLE — see `_portable_expr`. One
+    that names another node is dropped and its evaluated value carried instead,
+    because the transfer crosses files.
     """
     parm = node.parm(name)
     if parm is not None:
         try:
-            expr = parm.expression()
+            expr = _portable_expr(parm.expression())
         except hou.OperationFailed:
             expr = None
         return {"v": parm.eval(), "expr": expr}
@@ -255,7 +284,7 @@ def _read(node, name):
         exprs = []
         for one in tup:
             try:
-                exprs.append(one.expression())
+                exprs.append(_portable_expr(one.expression()))
             except hou.OperationFailed:
                 exprs.append(None)
         return {"v": list(tup.eval()), "expr": exprs if any(exprs) else None}
