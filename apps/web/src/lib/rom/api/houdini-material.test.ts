@@ -79,6 +79,39 @@ describe('transferHoudiniMaterials', () => {
     ).rejects.toThrow()
   })
 
+  it('refuses a skeleton section on a material run', async () => {
+    // The Python filters to sections it knows for that kind, so a stray one
+    // would be dropped silently and the run would report success having copied
+    // nothing. Refused at the boundary instead.
+    await expect(
+      transferHoudiniMaterials({
+        data: {
+          nodeType: 'material',
+          source,
+          targets: [{ hipPath: 'D:/chars/Ita/houdini/Ita.hiplc', nodePath: '/obj/x' }],
+          sections: ['skinWeights'],
+          replace: false,
+          dryRun: true,
+        },
+      }),
+    ).rejects.toThrow(/not a material section/i)
+  })
+
+  it('refuses a material section on a skeleton run', async () => {
+    await expect(
+      transferHoudiniMaterials({
+        data: {
+          nodeType: 'skeleton',
+          source,
+          targets: [{ hipPath: 'D:/chars/Ita/houdini/Ita.hiplc', nodePath: '/obj/x' }],
+          sections: ['bakers'],
+          replace: false,
+          dryRun: true,
+        },
+      }),
+    ).rejects.toThrow(/not a skeleton section/i)
+  })
+
   it('rejects an unknown section name', async () => {
     await expect(
       transferHoudiniMaterials({

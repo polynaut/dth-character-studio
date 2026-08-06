@@ -63,6 +63,27 @@ SECTIONS = (
 )
 SECTION_BY_KEY = {s["key"]: s for s in SECTIONS}
 
+SKELETON_TYPE = "DazToHueSkeleton"
+
+# The skeleton node's three top-level TABS. Unlike the material node's sections
+# (each one multiparm block) these are plain folders mixing flat settings with
+# nested multiparms — bone renames, reparents, physics-bone offsets — so they
+# copy as whole subtrees. Measured on a real setup: 22 renames, 10 reparents,
+# 3 deletes and two skin-weight operations, and because Daz bone names are
+# fixed per generation the whole block transfers between G9 characters.
+SKELETON_SECTIONS = (
+    {"key": "general", "folder": "skeleton_options_folder", "label": "General"},
+    {"key": "skeleton", "folder": "skeleton_options_folder_1", "label": "Skeleton"},
+    {"key": "skinWeights", "folder": "skeleton_options_folder_2", "label": "Skin Weights"},
+)
+SKELETON_SECTION_BY_KEY = {s["key"]: s for s in SKELETON_SECTIONS}
+
+# What the panel can transfer, keyed by the `nodeType` a request names.
+NODE_KINDS = {
+    "material": {"type": MATERIAL_TYPE, "sections": [s["key"] for s in SECTIONS]},
+    "skeleton": {"type": SKELETON_TYPE, "sections": [s["key"] for s in SKELETON_SECTIONS]},
+}
+
 MULTI_KINDS = (
     hou.folderType.MultiparmBlock,
     hou.folderType.ScrollingMultiparmBlock,
@@ -322,6 +343,75 @@ def _import_block(node, folder, indices, instances):
     return int(parm.eval())
 
 
+def _export_folder(node, folder):
+    """A whole plain-folder subtree: its flat values plus any nested multiparms.
+
+    The skeleton node's tabs are shaped this way (settings AND lists in one
+    block), where the material node's sections are each a single multiparm.
+    Same walker underneath — `_leaves_and_blocks` already separates the two.
+    """
+    leaves, blocks = _leaves_and_blocks(folder)
+    return {
+        "fields": {leaf.name(): _read(node, leaf.name()) for leaf in leaves},
+        "blocks": {block.name(): _export_block(node, block, []) for block in blocks},
+    }
+
+
+def _import_folder(node, folder, payload):
+    """Apply a folder subtree. Its lists are copied WHOLESALE.
+
+    A configuration block is not a list you append to: adding 22 bone renames on
+    top of 22 existing ones produces 44 rules, not a merged setup. So each nested
+    multiparm is cleared and rebuilt to exactly the source's contents, and flat
+    settings simply overwrite.
+    """
+    if payload is None:
+        return 0
+    changed = 0
+    for name, rec in payload["fields"].items():
+        _write(node, name, rec)
+        changed += 1
+    leaves, blocks = _leaves_and_blocks(folder)
+    by_name = {b.name(): b for b in blocks}
+    for name, instances in payload["blocks"].items():
+        block = by_name.get(name)
+        if block is None:
+            continue
+        count_parm = _count_parm(node, block, [])
+        if count_parm is not None:
+            count_parm.set(0)
+        _import_block(node, block, [], instances)
+        changed += len(instances)
+    return changed
+
+
+def _folder_settings_count(node, folder):
+    """Non-default settings + list entries in a folder — "how much is set here".
+
+    A raw parm count would read the same for an untouched node and a heavily
+    configured one; what the user recognises is how much they changed.
+    """
+    leaves, blocks = _leaves_and_blocks(folder)
+    total = 0
+    for leaf in leaves:
+        parm = node.parm(leaf.name())
+        if parm is None:
+            tup = node.parmTuple(leaf.name())
+            if tup is not None and not all(p.isAtDefault() for p in tup):
+                total += 1
+            continue
+        try:
+            if not parm.isAtDefault():
+                total += 1
+        except hou.OperationFailed:
+            pass
+    for block in blocks:
+        parm = _count_parm(node, block, [])
+        if parm is not None:
+            total += int(parm.eval())
+    return total
+
+
 def _folder_template(node, name):
     try:
         return node.parmTemplateGroup().find(name)
@@ -384,12 +474,19 @@ def _import_section(node, section, payload, replace):
 # --- node inspection ---------------------------------------------------------
 
 
-def _material_nodes(root="/"):
+def _dth_nodes(root="/"):
+    """Every node the panel can work on, in scene order.
+
+    Both kinds come back from ONE scan: opening a `.hip` costs tens of seconds,
+    and making the drawer re-scan when the user switches tab would spend that
+    again for a file already open.
+    """
     try:
         children = hou.node(root).allSubChildren()
     except (hou.OperationFailed, hou.PermissionError):
         return []
-    return [n for n in children if n.type().name() == MATERIAL_TYPE]
+    wanted = {kind["type"] for kind in NODE_KINDS.values()}
+    return [n for n in children if n.type().name() in wanted]
 
 
 def _load(path):
@@ -589,21 +686,56 @@ def _material_slots(node, bakers_payload):
     return slots
 
 
-def _node_info(node):
-    payload = _export_section(node, SECTION_BY_KEY["bakers"])
-    names, _, _, layers, _ = _baker_summary(payload)
+def _blank_info(node, kind):
     return {
         "path": node.path(),
         "name": node.name(),
+        "nodeType": kind,
         "networkBox": _network_box_label(node),
-        "materials": _section_count(node, SECTION_BY_KEY["materials"]),
-        "uvChannels": _section_count(node, SECTION_BY_KEY["uvChannels"]),
-        "bakers": len(names),
-        "layers": layers,
-        "bakerNames": names,
-        "materialNames": sorted(_material_names(node)),
-        "slots": _material_slots(node, payload),
+        "materials": 0,
+        "uvChannels": 0,
+        "bakers": 0,
+        "layers": 0,
+        "bakerNames": [],
+        "materialNames": [],
+        "slots": [],
+        "sectionCounts": [],
     }
+
+
+def _node_info(node):
+    type_name = node.type().name()
+    if type_name == SKELETON_TYPE:
+        info = _blank_info(node, "skeleton")
+        info["sectionCounts"] = [
+            {
+                "key": section["key"],
+                "label": section["label"],
+                "count": (
+                    _folder_settings_count(node, _folder_template(node, section["folder"]))
+                    if _folder_template(node, section["folder"]) is not None
+                    else 0
+                ),
+            }
+            for section in SKELETON_SECTIONS
+        ]
+        return info
+
+    payload = _export_section(node, SECTION_BY_KEY["bakers"])
+    names, _, _, layers, _ = _baker_summary(payload)
+    info = _blank_info(node, "material")
+    info.update(
+        {
+            "materials": _section_count(node, SECTION_BY_KEY["materials"]),
+            "uvChannels": _section_count(node, SECTION_BY_KEY["uvChannels"]),
+            "bakers": len(names),
+            "layers": layers,
+            "bakerNames": names,
+            "materialNames": sorted(_material_names(node)),
+            "slots": _material_slots(node, payload),
+        }
+    )
+    return info
 
 
 # --- operations --------------------------------------------------------------
@@ -615,7 +747,7 @@ def op_scan(request):
         entry = {"hipPath": path, "ok": True, "error": "", "nodes": []}
         try:
             _load(path)
-            entry["nodes"] = [_node_info(n) for n in _material_nodes()]
+            entry["nodes"] = [_node_info(n) for n in _dth_nodes()]
         except Exception as exc:
             entry["ok"] = False
             entry["error"] = str(exc).strip() or exc.__class__.__name__
@@ -643,6 +775,9 @@ def _backup(path):
 
 
 def op_transfer(request):
+    if request.get("nodeType") == "skeleton":
+        return op_transfer_skeleton(request)
+
     source = request["source"]
     dry_run = bool(request.get("dryRun"))
     replace = bool(request.get("replace"))
@@ -832,6 +967,138 @@ def op_transfer(request):
         "foreignPaths": foreign_paths,
         "dryRun": dry_run,
         "replace": replace,
+    }
+
+
+def op_transfer_skeleton(request):
+    """Copy whole skeleton-tab subtrees from one node onto others.
+
+    Simpler than the material transfer by nature: the sections are folders, not
+    lists to merge, so there is no per-material filter and no append mode — see
+    `_import_folder` on why a configuration block is copied wholesale.
+    """
+    source = request["source"]
+    dry_run = bool(request.get("dryRun"))
+    keys = [k for k in request.get("sections", []) if k in SKELETON_SECTION_BY_KEY]
+    if not keys:
+        raise ValueError("no sections selected")
+
+    _load(source["hipPath"])
+    node = hou.node(source["nodePath"])
+    if node is None or node.type().name() != SKELETON_TYPE:
+        raise hou.Error("The source skeleton node was not found: %s" % source["nodePath"])
+
+    payloads = {}
+    # Counted NOW, while the source scene is still the open one: loading a
+    # target replaces the whole scene, and every node reference from the source
+    # goes stale with it (measured — the dry run read a dead node and threw).
+    source_counts = {}
+    for key in keys:
+        folder = _folder_template(node, SKELETON_SECTION_BY_KEY[key]["folder"])
+        payloads[key] = _export_folder(node, folder) if folder is not None else None
+        source_counts[key] = _folder_settings_count(node, folder) if folder is not None else 0
+
+    by_file = []
+    for target in request.get("targets", []):
+        for entry in by_file:
+            if entry["hipPath"] == target["hipPath"]:
+                entry["nodePaths"].append(target["nodePath"])
+                break
+        else:
+            by_file.append({"hipPath": target["hipPath"], "nodePaths": [target["nodePath"]]})
+
+    results = []
+    for entry in by_file:
+        hip = entry["hipPath"]
+        touched = False
+        try:
+            _load(hip)
+        except Exception as exc:
+            for node_path in entry["nodePaths"]:
+                results.append(
+                    {
+                        "hipPath": hip,
+                        "nodePath": node_path,
+                        "ok": False,
+                        "error": str(exc).strip() or exc.__class__.__name__,
+                        "sections": [],
+                        "added": [],
+                        "replaced": True,
+                        "missingMaterials": [],
+                        "missingGroups": [],
+                        "missingUvSources": [],
+                        "backupPath": "",
+                    }
+                )
+            continue
+
+        for node_path in entry["nodePaths"]:
+            target_node = hou.node(node_path)
+            result = {
+                "hipPath": hip,
+                "nodePath": node_path,
+                "ok": True,
+                "error": "",
+                "sections": [],
+                "added": [],
+                "replaced": True,
+                "missingMaterials": [],
+                "missingGroups": [],
+                "missingUvSources": [],
+                "backupPath": "",
+            }
+            if target_node is None or target_node.type().name() != SKELETON_TYPE:
+                result["ok"] = False
+                result["error"] = "Skeleton node not found: %s" % node_path
+                results.append(result)
+                continue
+
+            for key in keys:
+                section = SKELETON_SECTION_BY_KEY[key]
+                folder = _folder_template(target_node, section["folder"])
+                if folder is None or payloads.get(key) is None:
+                    continue
+                before = _folder_settings_count(target_node, folder)
+                if dry_run:
+                    # Wholesale copy: what the source holds is what the target
+                    # will hold.
+                    after = source_counts.get(key, 0)
+                else:
+                    try:
+                        _import_folder(target_node, folder, payloads[key])
+                        after = _folder_settings_count(target_node, folder)
+                        touched = True
+                    except Exception as exc:
+                        result["ok"] = False
+                        result["error"] = str(exc).strip() or exc.__class__.__name__
+                        break
+                result["sections"].append(
+                    {"key": key, "before": before, "after": after, "skipped": 0}
+                )
+            results.append(result)
+
+        if touched and not dry_run:
+            backup = _backup(hip)
+            try:
+                hou.hipFile.save(hip)
+            except Exception as exc:
+                for result in results:
+                    if result["hipPath"] == hip and result["ok"]:
+                        result["ok"] = False
+                        result["error"] = "Could not save the project: %s" % exc
+                continue
+            for result in results:
+                if result["hipPath"] == hip and result["ok"]:
+                    result["backupPath"] = backup
+
+    return {
+        "op": "transfer",
+        "projects": [],
+        "targets": results,
+        "sections": keys,
+        "materials": [],
+        "dryRun": dry_run,
+        "replace": True,
     }
 
 
