@@ -72,6 +72,13 @@ stays judgement, and the opening todo list is the closest thing to a proof of it
 
 ## Stacked PRs
 
+**Changes with different merge gates get different PRs.** A PR merges as one
+unit, so bundling work that can ship now with work that waits on an external
+gate (a DazToHue release, an upstream fix) blocks the shippable half — split
+them and stack when they are entangled. Paid for on 2026-08-04: the junction
+removal (mergeable immediately) was folded into the release-gated prefill PR
+and had to be surgically split back out (#682/#683).
+
 **Stacked PRs need an explicit link, not just a base branch.** When a PR depends
 on another (its base is that PR's branch), targeting the parent branch is
 NECESSARY BUT NOT SUFFICIENT — GitHub tracks a stack object, and without it the
@@ -259,7 +266,15 @@ danger-zone confirm strip — keep their own styling.
 ## Writing conventions
 
 - Generated `.dsa`/CSV output changes must be intentional: the rom tests pin
-  output **byte-identically**. Behavior changes bump `RUNTIME_VERSION`.
+  output **byte-identically**. Any change to what the generators EMIT bumps the
+  matching version — `RUNTIME_VERSION` for script content (even when the
+  runtime files' API is untouched), the CSV era for CSV format, the character
+  schema for definition shape. The bump is not bookkeeping: it is what makes
+  the Refresh-assets detection table fire on existing installs — without it
+  nothing reads as stale, no pulse shows, and a migration that "ships" never
+  actually runs anywhere. Paid for in v0.63: the junction removal changed the
+  reference-path emission without a bump, released installs saw Local = App,
+  and the leftover-junction sweep sat inert until v57 (PR #685) forced it.
 - Daz-facing user copy says "hair"; Houdini/Unreal-facing copy says "groom".
 - Settings: one tolerant zod schema (`studioSettingsSchema`,
   `apps/web/src/lib/rom/storage/settings.ts`) is the single source of app-global

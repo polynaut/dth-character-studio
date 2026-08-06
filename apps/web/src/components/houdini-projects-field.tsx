@@ -3,6 +3,7 @@ import { Plus, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { DirPathChip, displayDirOf } from '#/components/dir-path-chip.tsx'
+import { HoudiniUtilsPanel } from '#/components/character/houdini-utils-panel.tsx'
 import { Portrait } from '#/components/portrait.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import {
@@ -56,6 +57,7 @@ function HoudiniCard({
   avatarSrc,
   onOpen,
   onRemove,
+  onUtils,
 }: {
   hipPath: string
   /** Gender-based placeholder avatar (a Houdini project has no thumbnail). */
@@ -63,6 +65,8 @@ function HoudiniCard({
   onOpen: (e: React.MouseEvent) => void
   /** When set, a hover ✕ unlinks the project from the character. */
   onRemove?: () => void
+  /** Opens the Utils drawer with this project's nodes preselected. */
+  onUtils?: () => void
 }) {
   const fileName = hipPath.split(/[\\/]/).pop() ?? hipPath
   // The heading shows the project name without its extension (e.g. ".hiplc").
@@ -98,15 +102,24 @@ function HoudiniCard({
       onOpen={onOpen}
       onRemove={onRemove}
       removeTitle="Unlink from character"
+      onUtils={onUtils}
+      utilsTitle="Utils — copy material setups between projects"
     />
   )
 }
 
 /**
  * The character's Houdini projects — a flat list (no primary / avatar, unlike Daz
- * scenes). Houdini projects are linked in place and never copied: a Houdini DTH
- * project stores absolute import paths for its referenced files, so relocating it
- * would break those references. "Add project" picks a `.hip` and links it as-is.
+ * scenes). Houdini projects are linked in place and never copied.
+ *
+ * NOT because a `.hip` must hold absolute paths — it needn't, and the studio's
+ * own Generate project deliberately authors relative ones (`$HIP/../…`). It is
+ * because moving a project is only safe when BOTH hold: every reference is
+ * relative, AND its `$JOB` project folder travels with it. The studio can
+ * guarantee neither for a `.hip` the user authored elsewhere, and a copy that
+ * silently breaks half a project's references is worse than not copying.
+ *
+ * "Add project" picks a `.hip` and links it as-is.
  */
 export function HoudiniProjectsField({
   character,
@@ -137,8 +150,13 @@ export function HoudiniProjectsField({
   // hand-linked ones stay unlink-only like before.
   const [keepFiles, setKeepFiles] = useState(true)
 
+  // The Houdini project whose Utils drawer is open ('' = closed). The path also
+  // seeds the drawer's target preselection.
+  const [utilsFor, setUtilsFor] = useState('')
+
   // A project pending the unlink confirm. Houdini projects are only ever linked
-  // in place (absolute import paths forbid copying), so removing is unlink-only —
+  // in place (moving one safely needs relative refs AND its $JOB folder — see
+  // the component doc), so removing is unlink-only —
   // never a file delete, which would hit the user's real .hip.
   const [pendingRemove, setPendingRemove] = useState('')
 
@@ -291,8 +309,10 @@ export function HoudiniProjectsField({
       <Label className={`${hasProjects ? 'mb-1' : 'mb-2'} flex w-fit items-center gap-1 text-xl font-semibold`}>
         Houdini projects
         <InfoPopup label="Houdini projects — more information">
-          Linked in place (not copied) — a Houdini project keeps absolute import paths that a
-          copy would break. Drag <code>.hip</code> files here or use the button.
+          Linked in place, never copied — moving a Houdini project safely needs every reference
+          to be relative <em>and</em> its <code>$JOB</code> project folder to travel with it, and
+          the studio can&apos;t guarantee that for a project you authored elsewhere. Drag{' '}
+          <code>.hip</code> files here or use the button.
         </InfoPopup>
       </Label>
       {projectDirChip && <p className="mb-3 text-xs">{projectDirChip}</p>}
@@ -327,6 +347,7 @@ export function HoudiniProjectsField({
                 avatarSrc={placeholderSrc}
                 onOpen={(e) => void onOpen(hip, e)}
                 onRemove={() => askRemove(hip)}
+                onUtils={() => setUtilsFor(hip)}
               />
             ),
           )}
@@ -383,6 +404,18 @@ export function HoudiniProjectsField({
               )
             }
           }}
+        />
+      )}
+
+      {/* Mounted only while open: the drawer scans the linked projects with
+          hython on mount, which must never happen just because the tab rendered. */}
+      {utilsFor && (
+        <HoudiniUtilsPanel
+          open
+          character={character}
+          initialHipPath={utilsFor}
+          projectId={projectId}
+          onClose={() => setUtilsFor('')}
         />
       )}
 

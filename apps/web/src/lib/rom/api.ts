@@ -156,6 +156,25 @@ export {
 } from './api/houdini'
 export type { GeneratedHoudiniProject, HoudiniExportStarted } from './api/houdini'
 
+// --- houdini material utilities: scan DazToHueMaterial nodes, transfer a
+// --- node's texture-baker setup onto others (hython) ------------------------
+export {
+  MATERIAL_SECTIONS,
+  NODE_KINDS,
+  SKELETON_SECTIONS,
+  scanHoudiniMaterials,
+  transferHoudiniMaterials,
+} from './api/houdini-material'
+export type { MaterialSection, NodeKind, SkeletonSection } from './api/houdini-material'
+export type {
+  MaterialNodeInfo,
+  MaterialSectionResult,
+  MaterialSlotInfo,
+  MaterialScanProject,
+  MaterialTransferTarget,
+  MaterialUtilReport,
+} from './api/native-types.ts'
+
 // --- generate: artifact generation + refresh sweep + version detection ------
 export {
   characterStaleTargets,

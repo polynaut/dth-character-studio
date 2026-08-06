@@ -2,12 +2,14 @@ import type { ReactNode } from 'react'
 import { ChevronRight, CircleCheck, CircleSlash, CircleX, FolderOpen, X } from 'lucide-react'
 
 import { Button, InfoPopup, Input, Label } from '@dth/ui'
-import { pickFolder } from '#/lib/desktop.ts'
+import { FileDropZone } from '#/components/file-drop-zone.tsx'
+import { folderFromDrop, pickFolder } from '#/lib/desktop.ts'
 import { browseStart, displayPath } from '#/lib/path.ts'
 
 import type { InstallReport, InstallStep } from '#/lib/rom/api.ts'
 
-/** A folder-path text field with a native "Browse…" picker button. */
+/** A folder-path text field with a native "Browse…" picker button, which also
+ *  accepts an OS drag-and-drop onto the field (see {@link FolderField}). */
 export function FolderField({
   label,
   value,
@@ -42,26 +44,41 @@ export function FolderField({
           </InfoPopup>
         ) : null}
       </Label>
-      <div className="flex gap-2">
-        <Input
-          value={displayPath(value)}
-          placeholder={placeholder}
-          onChange={(e) => onChange(e.target.value)}
-        />
-        <Button
-          type="button"
-          variant="outline"
-          className="shrink-0"
-          onClick={async () => {
-            // Open where the field already points; only an empty one falls back
-            // to the caller's nearest-sensible folder.
-            const picked = await pickFolder(label, browseStart(value, browseFrom))
-            if (picked) onChange(picked)
-          }}
-        >
-          <FolderOpen /> Browse
-        </Button>
-      </div>
+      {/* Dropping onto the field is the same action as Browse — dragging the
+          folder out of Explorer skips the dialog entirely. A dropped FILE sets
+          the folder it lives in (folderFromDrop), because grabbing a file is
+          easier than grabbing its parent. */}
+      <FileDropZone
+        acceptFolders
+        label="Drop a folder (or a file inside it)"
+        onDrop={(paths) => {
+          void (async () => {
+            const folder = await folderFromDrop(paths[0] ?? '')
+            if (folder) onChange(folder)
+          })()
+        }}
+      >
+        <div className="flex gap-2">
+          <Input
+            value={displayPath(value)}
+            placeholder={placeholder}
+            onChange={(e) => onChange(e.target.value)}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            className="shrink-0"
+            onClick={async () => {
+              // Open where the field already points; only an empty one falls back
+              // to the caller's nearest-sensible folder.
+              const picked = await pickFolder(label, browseStart(value, browseFrom))
+              if (picked) onChange(picked)
+            }}
+          >
+            <FolderOpen /> Browse
+          </Button>
+        </div>
+      </FileDropZone>
     </div>
   )
 }

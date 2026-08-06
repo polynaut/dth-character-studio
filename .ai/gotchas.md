@@ -241,6 +241,92 @@ current code before relying on details, but assume the *lesson* still holds.
   FOOTGUN: explorer.exe accepts BACKSLASH paths only — a '/'-joined path
   makes it silently open a folder window instead of the file's association
   (shell_open_file converts before spawning).
+- **DazToHue HDA multiparms are 0-BASED** — `multiParmStartOffset()` returns
+  `0`, not Houdini's usual `1`. Measured 2026-08-06 on DazToHue 2.5 / Houdini
+  22.0 across the material node's `material`, `material_uv_channel` and
+  `material_texture_baker` blocks. A `range(1, count + 1)` loop therefore drops
+  instance 0 AND reads one past the end — which looks like real data (a
+  "missing" trailing baker) rather than an error. ALWAYS read the offset from
+  the parm; never count from 1. Same 0-based convention as the ROM frame math,
+  by coincidence rather than by contract, so don't infer one from the other.
+- **The repo's ~250 lint warnings are DECISIONS, not debt** — `.oxlintrc.json`
+  documents why each rule is advisory (sequential awaits are deliberate fs
+  ordering, `__TAURI_*` globals are the Tauri contract, the react-markdown
+  component maps are nested by design). Don't "clean them up". What that volume
+  *does* break is noticing a NEW one, so `pnpm lint:budget` pins the count PER
+  RULE in `.lint-baseline.json` and CI fails when it grows. Adding an
+  intentional instance = bump the baseline in the SAME commit
+  (`pnpm lint:budget:update`), which forces the judgement to be made rather than
+  absorbed.
+- **"A `.hip` always holds absolute paths" is FALSE — the real constraint is
+  `$JOB`.** A Houdini project can be authored entirely relative, and the
+  studio's own Generate project does exactly that (`$HIP/../<dazSubdir>/
+  dth-exports/…`). Moving one safely needs BOTH: every reference relative, AND
+  its `$JOB` project folder travelling with it. The studio links Houdini
+  projects in place rather than copying them because it can guarantee neither
+  property for a `.hip` authored elsewhere — not because relative authoring is
+  impossible. Corrected 2026-08-06 (the earlier wording came from a workflow
+  that happened to use absolute refs); state the reason this way, or the next
+  reader concludes movable Houdini projects can't exist.
+- **The DazToHue HDA has its own "Linking" feature, and it is a LIVE MIRROR —
+  not a copy.** `DazToHueShared.do_link_to_source` rewrites every linkable parm
+  of the target to `ch("<source>/<parm>")` / `chs(...)` (plus `opmultiparm` for
+  multiparm children), so the target follows the source. Measured limits: it
+  refuses unless both nodes are **on the same network level** (same parent, same
+  file) and the **same type**, and it calls `hou.ui.displayMessage`, so it
+  cannot run headless. It therefore does NOT overlap the studio's Utils
+  transfer, which is a one-time selective copy ACROSS files.
+  **The trap it creates:** copying *from* a linked node must not carry those
+  expressions. DTH node names are identical across projects, so
+  `ch("/obj/DazToHue/DazToHueMaterial/…")` landing in another project silently
+  REBINDS to that project's own node — wrong values, no error.
+  `material_utils.py` therefore flattens any node-referencing expression to its
+  evaluated value at export (`_portable_expr`) and carries only expressions with
+  no node reference.
+- **A Houdini network box's visible title is its `comment()`, not its
+  `name()`.** Measured 2026-08-06: `name()` is an internal id (`__netbox1`,
+  `__netbox3`, …) that no user ever sees or sets; the text drawn in the box
+  header — and the only human-meaningful label a DTH network has — is the
+  comment. Boxes live in the node's PARENT network (`parent.networkBoxes()`,
+  membership via `box.nodes()`) and can nest, so a lookup should prefer the
+  INNERMOST containing box. This is what lets a scan report `KiraDefault` /
+  `KiraYoga` / `KiraNaked` instead of `DazToHueMaterial`, `…1`, `…2`.
+  Related trap: recursing `node.children()` across a project can raise
+  `hou.PermissionError` on locked assets — wrap network walks in try/except
+  rather than assuming every node is enumerable.
+- **A DazToHue texture baker references its material and geometry groups BY
+  NAME** (`MI_Skin`, `Head`, `GP*`, geoshell `..._Shape`) — measured on the
+  same pass. Copying bakers into a node that lacks those names SUCCEEDS and
+  then bakes nothing, so a transfer that only reports "copied" is lying by
+  omission. `material_utils.py` diffs the needed names against the target's
+  material slots and cooked prim groups and reports the gap
+  (`missingMaterials`/`missingGroups`); an EMPTY `missingGroups` can also mean
+  "no cooked geometry to check against" — never render it as "all present".
+  Layer texture paths are absolute into the Daz library, so they survive a
+  cross-project copy on the same machine and would need remapping off it.
+  COROLLARY, measured the hard way: a material setup is THREE linked blocks —
+  `material` (which surfaces merge into each slot), `material_uv_channel` (the
+  `uv_original`/`uv_geoshell` names layers read) and `material_texture_baker`.
+  Transferring only the third produces a node that imports cleanly and bakes
+  nothing. Copy them together, or report precisely what the target still lacks.
+  Two more measured facts that make the dependency checkable rather than
+  guessed: **UV channels are ANONYMOUS** (positional instances 0/1/2, no name
+  parm — so they can only be copied wholesale), and every baker reads
+  `uv_original` + writes `uv`, both of which exist on any DTH-imported geometry.
+  A source UV outside that intrinsic set (`uv_geoshell`, from the
+  Copy-From-Geoshell channels) therefore means "this material needs the UV
+  channels": measured, a G9 skin does and clothing does not. Slot-to-baker
+  matching goes through the node's `material_prefix` — the slot is `Skin`, the
+  baker names it `MI_Skin`.
+- **Copy HDA multiparms off the parm TEMPLATE GROUP, not a hand-listed field
+  table.** `material_utils.py` walks `parmTemplateGroup().find(<block>)`,
+  flattening plain folders (Simple/Collapsible/Tabs add no index) and recursing
+  into nested multiparm blocks, substituting `#` placeholders left-to-right with
+  the index stack (`..._texture#_#` + `[1, 4]` → `..._texture1_4`). One walker
+  then serves every block — including the 3-level nesting under a UV operation —
+  and a DazToHue update that adds a parameter is carried across automatically
+  instead of being silently dropped. Skip `Button`/`Separator`/`Label`
+  templates: a button is an ACTION, and "copying" one would press it.
 - **The Rust crate version (`apps/desktop/Cargo.toml`, `0.1.0`) is cosmetic.**
   The product version lives in `apps/desktop/package.json`
   (`tauri.conf.json` has `"version": "package.json"`); Changesets bumps only the
