@@ -1,4 +1,4 @@
-import { Check, ExternalLink, FolderOpen, Trash2 } from 'lucide-react'
+import { Check, ExternalLink, FolderOpen, Trash2, Wrench } from 'lucide-react'
 import type { MouseEvent, ReactNode } from 'react'
 
 import { cn } from '../cn.ts'
@@ -39,6 +39,8 @@ export function LinkedAssetCard({
   onReplace,
   replaceTitle = 'Replace',
   replaceDisabled = false,
+  onUtils,
+  utilsTitle = 'Utils',
   selected,
   onSelect,
   onRename,
@@ -84,6 +86,11 @@ export function LinkedAssetCard({
    *  tech through the aria-label, and the wrapping span carries the pointer
    *  tooltip. */
   replaceDisabled?: boolean
+  /** When set, a hover 🔧 appears — per-asset tools that open their own UI
+   *  (the Houdini card's material utilities). Purely a launcher: the card
+   *  itself knows nothing about what the tools do. */
+  onUtils?: () => void
+  utilsTitle?: string
   /** Selectable mode: highlights when `selected`; a card click SELECTS instead
    *  of opening — only the corner icon opens. Both optional (default = the
    *  classic whole-card-opens behavior). */
@@ -224,6 +231,20 @@ export function LinkedAssetCard({
               <FolderOpen className="size-3.5 text-muted-foreground transition-colors group-hover/repl:text-foreground" />
             </Button>
           </span>
+        )}
+        {onUtils && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            // Same hover-reveal adornment as the replace/remove buttons — the
+            // corner cluster reads as one row of card actions.
+            className="group/utils pointer-events-auto border border-transparent opacity-0 transition-opacity group-hover/card:opacity-100 focus-visible:opacity-100 hover:border-white/20 hover:bg-[#333] hover:shadow-sm dark:hover:bg-[#333]"
+            title={utilsTitle}
+            aria-label={utilsTitle}
+            onClick={onUtils}
+          >
+            <Wrench className="size-3.5 text-muted-foreground transition-colors group-hover/utils:text-foreground" />
+          </Button>
         )}
         {onRemove && (
           <Button

@@ -13,6 +13,7 @@ mod foreground;
 mod fsutil;
 mod github;
 mod houdini;
+mod houdini_material;
 mod housekeeping;
 mod install;
 mod junction;
@@ -149,6 +150,7 @@ pub fn run() {
             houdini::create_houdini_project,
             houdini::launch_houdini_job,
             houdini::houdini_running,
+            houdini_material::run_houdini_material_util,
             junction::remove_junction,
             exports::move_exports,
             shellopen::shell_open_file,

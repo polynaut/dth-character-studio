@@ -196,6 +196,115 @@ export const remapResultSchema = z.object({
   detail: z.string(),
 })
 
+// --- DazToHue material utilities (houdini_material.rs) -----------------------
+
+/** One material slot on a node, with the bakers that name it — the unit the
+ *  panel lets you pick, because "the same skin" is what gets reused. */
+export const materialSlotInfoSchema = z.object({
+  /** Slot name as stored (`Skin`). */
+  name: z.string(),
+  /** Name as a baker spells it, with the node's prefix (`MI_Skin`). */
+  displayName: z.string(),
+  /** Daz surfaces merged into this slot (a G9 skin merges ~15). */
+  surfaces: z.number(),
+  bakers: z.number(),
+  layers: z.number(),
+  /** UV names this slot's bakers read that only a UV channel produces. Empty =
+   *  copies fine without the UV channels (measured: clothing; skin needs
+   *  `uv_geoshell`). */
+  channelUvs: z.array(z.string()),
+})
+
+/** One DazToHueMaterial node found by a scan. */
+export const materialNodeInfoSchema = z.object({
+  /** Node path in the scene, e.g. `/obj/DazToHue/DazToHueMaterial`. */
+  path: z.string(),
+  name: z.string(),
+  /** Title of the network box wrapping this node ('' when there is none) —
+   *  what users actually name their DTH networks (`KiraDefault`, `KiraYoga`),
+   *  since the nodes are only ever `DazToHueMaterial`, `…1`, `…2`. */
+  networkBox: z.string(),
+  materials: z.number(),
+  uvChannels: z.number(),
+  bakers: z.number(),
+  /** Total baker layers — how much hand-work the setup represents. */
+  layers: z.number(),
+  bakerNames: z.array(z.string()),
+  /** Slot names with AND without the node's prefix, so a baker's material
+   *  (`MI_Skin`) can be matched however the target spells it. */
+  materialNames: z.array(z.string()),
+  /** The node's material slots, each with its bakers — the panel's pick list. */
+  slots: z.array(materialSlotInfoSchema),
+})
+
+/** One scanned `.hip` (`ok: false` = unreadable; the scan itself still succeeds). */
+export const materialScanProjectSchema = z.object({
+  hipPath: z.string(),
+  ok: z.boolean(),
+  error: z.string(),
+  nodes: z.array(materialNodeInfoSchema),
+})
+
+/** What one transferred section did to a target node. */
+export const materialSectionResultSchema = z.object({
+  /** `materials`, `uvChannels` or `bakers`. */
+  key: z.string(),
+  before: z.number(),
+  after: z.number(),
+  /** Instances an append skipped as already-defined (material slots only). */
+  skipped: z.number(),
+})
+
+/** What a transfer did — or, in a dry run, would do — to one target node. */
+export const materialTransferTargetSchema = z.object({
+  hipPath: z.string(),
+  nodePath: z.string(),
+  ok: z.boolean(),
+  error: z.string(),
+  sections: z.array(materialSectionResultSchema),
+  added: z.array(z.string()),
+  replaced: z.boolean(),
+  /** Materials the copied bakers name that this target will STILL not define
+   *  after the run (its own slots PLUS whatever the `materials` section
+   *  installs). A baker with an unknown material imports fine and then bakes
+   *  nothing — so this is precisely what the user must set up by hand. */
+  missingMaterials: z.array(z.string()),
+  /** Groups the copied layers name that the target's geometry lacks. Empty
+   *  ALSO means "couldn't be checked" (no cooked geometry) — never read it as
+   *  "all present". */
+  missingGroups: z.array(z.string()),
+  /** UV names the copied bakers read that only a UV channel produces, when the
+   *  channels aren't part of this run — the answer to "do I need the UV
+   *  channels too?". Empty for a clothing material. */
+  missingUvSources: z.array(z.string()),
+  /** Rolling pre-transfer backup (empty for a dry run). */
+  backupPath: z.string(),
+})
+
+/** The report of either material-utility operation (mirrors the Rust
+ *  `MaterialUtilReport`). */
+export const materialUtilReportSchema = z.object({
+  op: z.string(),
+  ok: z.boolean(),
+  error: z.string(),
+  projects: z.array(materialScanProjectSchema),
+  targets: z.array(materialTransferTargetSchema),
+  sourceBakers: z.number(),
+  sourceLayers: z.number(),
+  sourceBakerNames: z.array(z.string()),
+  /** The sections this run was asked to transfer. */
+  sections: z.array(z.string()),
+  /** Material slot names it was restricted to (empty = all). */
+  materials: z.array(z.string()),
+  /** Whether Daz-library texture paths were pointed at `$DAZ3D_LIB`. */
+  useLibVar: z.boolean(),
+  rewrittenPaths: z.number(),
+  /** Absolute paths left alone because they live outside the Daz library. */
+  foreignPaths: z.array(z.string()),
+  dryRun: z.boolean(),
+  replace: z.boolean(),
+})
+
 // --- inferred TS types (single source of truth is the schemas above) ---------
 
 export type InstallStep = z.infer<typeof installStepSchema>
@@ -210,3 +319,9 @@ export type RemapResult = z.infer<typeof remapResultSchema>
 export type PoseAssetFramesResult = z.infer<typeof poseAssetFramesSchema>
 export type SceneWearable = z.infer<typeof sceneWearableSchema>
 export type SceneWearables = z.infer<typeof sceneWearablesSchema>
+export type MaterialSlotInfo = z.infer<typeof materialSlotInfoSchema>
+export type MaterialNodeInfo = z.infer<typeof materialNodeInfoSchema>
+export type MaterialSectionResult = z.infer<typeof materialSectionResultSchema>
+export type MaterialScanProject = z.infer<typeof materialScanProjectSchema>
+export type MaterialTransferTarget = z.infer<typeof materialTransferTargetSchema>
+export type MaterialUtilReport = z.infer<typeof materialUtilReportSchema>

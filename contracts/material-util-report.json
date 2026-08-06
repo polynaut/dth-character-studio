@@ -1,0 +1,78 @@
+{
+  "op": "transfer",
+  "ok": true,
+  "error": "",
+  "projects": [
+    {
+      "hipPath": "D:/chars/Kira/houdini/Kira.hiplc",
+      "ok": true,
+      "error": "",
+      "nodes": [
+        {
+          "path": "/obj/DazToHue/DazToHueMaterial",
+          "name": "DazToHueMaterial",
+          "networkBox": "KiraDefault",
+          "materials": 7,
+          "uvChannels": 3,
+          "bakers": 11,
+          "layers": 43,
+          "bakerNames": ["T_Skin_Colour", "T_Skin_Normal"],
+          "materialNames": ["MI_Skin", "Skin"],
+          "slots": [
+            {
+              "name": "Skin",
+              "displayName": "MI_Skin",
+              "surfaces": 15,
+              "bakers": 4,
+              "layers": 30,
+              "channelUvs": ["uv_geoshell"]
+            },
+            {
+              "name": "Dress",
+              "displayName": "MI_Dress",
+              "surfaces": 1,
+              "bakers": 4,
+              "layers": 4,
+              "channelUvs": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "hipPath": "D:/chars/Gone/houdini/Gone.hiplc",
+      "ok": false,
+      "error": "Unable to open file",
+      "nodes": []
+    }
+  ],
+  "targets": [
+    {
+      "hipPath": "D:/chars/Ita/houdini/Ita.hiplc",
+      "nodePath": "/obj/DazToHue/DazToHueMaterial",
+      "ok": true,
+      "error": "",
+      "sections": [
+        { "key": "materials", "before": 25, "after": 7, "skipped": 0 },
+        { "key": "uvChannels", "before": 0, "after": 3, "skipped": 0 },
+        { "key": "bakers", "before": 0, "after": 4, "skipped": 0 }
+      ],
+      "added": ["T_Skin_Colour", "T_Skin_Normal"],
+      "replaced": false,
+      "missingMaterials": ["MI_Skin"],
+      "missingGroups": [],
+      "missingUvSources": ["uv_geoshell"],
+      "backupPath": "D:/chars/Ita/houdini/backup/Ita_dthbak.hiplc"
+    }
+  ],
+  "sourceBakers": 4,
+  "sourceLayers": 30,
+  "sourceBakerNames": ["T_Skin_Colour", "T_Skin_Normal"],
+  "sections": ["materials", "uvChannels", "bakers"],
+  "materials": ["Skin"],
+  "useLibVar": true,
+  "rewrittenPaths": 38,
+  "foreignPaths": ["X:/shared/textures/custom_skin.png"],
+  "dryRun": false,
+  "replace": false
+}

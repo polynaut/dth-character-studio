@@ -9,6 +9,7 @@ import { importPosesFromCsv } from '#/lib/rom/api.ts'
 
 import { Button, cn, InfoPopup, Input, Modal, OverrideMark, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch } from '@dth/ui'
 import { CsvImportDialog } from '#/components/csv-import-dialog.tsx'
+import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import { ScanCsvPickerDialog } from '#/components/scan-csv-picker-dialog.tsx'
 import {
   GROUPED_SECTIONS,
@@ -979,24 +980,35 @@ export const RomSections = memo(function RomSections({
                         overridden={!!overrideData && mergedConfig.customAssetPath !== config.customAssetPath}
                         onChange={(e) => patchSectionForScene(section, { customAssetPath: e.target.value })}
                       />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="shrink-0"
-                        onClick={async () => {
-                          // Re-browsing opens at the preset already chosen (the
-                          // file preselected), else in the DTH releases folder
-                          // the rest of the presets come from.
-                          const picked = await pickDufPath(
-                            'Select a custom JCM pose preset (.duf)',
-                            browseStart(mergedConfig.customAssetPath, dthPosesFolder),
-                          )
-                          if (picked) patchSectionForScene(section, { customAssetPath: picked })
+                      {/* Same action as the picker: a `.duf` dragged out of
+                          Explorer lands straight in the field. */}
+                      <FileDropZone
+                        accept={['duf']}
+                        label="Drop a .duf preset"
+                        onDrop={(paths) => {
+                          const dropped = paths[0]
+                          if (dropped) patchSectionForScene(section, { customAssetPath: dropped })
                         }}
                       >
-                        <FolderOpen /> Browse
-                      </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="shrink-0"
+                          onClick={async () => {
+                            // Re-browsing opens at the preset already chosen (the
+                            // file preselected), else in the DTH releases folder
+                            // the rest of the presets come from.
+                            const picked = await pickDufPath(
+                              'Select a custom JCM pose preset (.duf)',
+                              browseStart(mergedConfig.customAssetPath, dthPosesFolder),
+                            )
+                            if (picked) patchSectionForScene(section, { customAssetPath: picked })
+                          }}
+                        >
+                          <FolderOpen /> Browse
+                        </Button>
+                      </FileDropZone>
                     </div>
                   </div>
                 ) : !GROUPED_SECTIONS.includes(section) ? (

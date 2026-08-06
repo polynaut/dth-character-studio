@@ -76,6 +76,115 @@ across Houdini or DazToHue updates. If the HDA isn't installed the project
 still generates (empty scene, Set Project baked) and the studio tells you to
 add the network from the DazToHue shelf.
 
+## Utils — copy a texture-baker setup between projects
+
+Setting up a **DazToHueMaterial** node is the most tedious part of the whole
+workflow: one skin material easily runs to four bakers of thirty layers, each
+layer naming a texture, a geometry group, a blend mode and seven adjustments —
+on top of the material slots that merge fifteen Daz surfaces into one `Skin`.
+If you reuse the same skin across characters, you were rebuilding all of it by
+hand.
+
+The **Utils** button on a Houdini project card (the 🔧 that appears on hover)
+opens a drawer that copies a material node's **complete setup** — material
+slots, UV channels and texture bakers — from one project into another.
+
+- **Target** — this character's linked Houdini projects, with every DazToHue
+  material node found in each. Tick as many as you want; the card you opened
+  Utils from starts selected.
+
+  **Network boxes are picked up if you use them.** Once a project holds more
+  than one DTH network, the usual way to keep them apart is to wrap each in a
+  network box and give it a title — and then the nodes inside are all called
+  `DazToHueMaterial`, `DazToHueMaterial1`, `DazToHueMaterial2`, which says
+  nothing about which network you're picking. The scan reads the box title and
+  lists those as `KiraDefault`, `KiraYoga`, `KiraNaked`, keeping the node name
+  beside it. Boxes are entirely optional: with one network — or an untitled
+  box — the list simply shows the node name, exactly as before.
+- **Source** — the node to copy *from*: pick another character from the studio,
+  or **Browse…** for any Houdini project on disk. Exactly one node can be the
+  source.
+- **Transfer** asks for confirmation, then offers **Dry run** (changes nothing,
+  reports exactly what a real run would do) and **Run**.
+
+**Replace at target** is off by default: the copied bakers are *added* to
+whatever the target already has. Turned on, the target's existing bakers are
+removed first and only the copied ones remain.
+
+### Pick a material, not a node
+
+The thing you actually reuse is a **material**. The drawer lists the source
+node's material slots with what each one costs by hand:
+
+```
+MI_Skin        15 surfaces · 4 bakers · 30 layers   needs UV channels
+MI_Dress        1 surface  · 4 bakers ·  4 layers
+MI_YogaPants    2 surfaces · 2 bakers ·  2 layers
+MI_HighBoots    7 surfaces · 1 baker  ·  7 layers
+```
+
+Tick one and only that material travels — its slot definition *and* the bakers
+that name it. Tick nothing and everything is copied.
+
+This matters because the two halves behave differently. A **skin** slot merges
+the same ~15 Daz surfaces on every character of a generation, so it transfers
+between any two Genesis 9 characters as-is. **Clothing** slots only match when
+the target wears the same asset.
+
+### What gets copied
+
+**What to copy** picks which parts travel, all on by default:
+
+| | what it is |
+| --- | --- |
+| **Material slots** | which Daz surfaces merge into each material — the merge list *is* the tedious part |
+| **UV channels** | the node's UV channels and their operations (all of them — channels are positional, not named) |
+| **Texture bakers** | the bakers of the picked materials, and every layer |
+
+> **Bakers reference everything by name.** A baker copied into a node that has no
+> material called `MI_Skin` imports fine and then bakes nothing. Untick a part
+> and the report names exactly what's then missing — the material, or the UV
+> source — so you know what to set up by hand first.
+
+**Do you need the UV channels?** The drawer tells you: a material shows
+**needs UV channels** when its bakers read a UV that only a channel produces.
+Measured on a real setup — a skin reads `uv_geoshell` (built by the
+Copy-From-Geoshell channels), while clothing reads only `uv_original`, which
+every DTH import already has. So a skin copy wants the channels and a clothing
+copy doesn't, and you don't have to remember which.
+
+With **Replace at target** off, material slots **merge by name**: slots the
+target already defines are kept, so dropping a skin setup onto a dressed
+character doesn't throw away its clothing materials. Turned on, the selected
+sections are wiped first.
+
+### Portable texture paths
+
+Texture layers store **absolute** paths into your Daz library
+(`D:\DAZ 3D\My DAZ 3D Library\Runtime\Textures\…`), so a copied setup breaks the
+day that library moves — or the day the project opens on a machine where it sits
+on another drive.
+
+**Portable texture paths** (on by default) rewrites those to
+`$DAZ3D_LIB/Runtime/Textures/…`, the variable the studio already wires into
+every configured `houdini.env`. Houdini expands it at load, so the setup keeps
+working wherever the library lives. Turn it off to copy the paths exactly as the
+source stored them.
+
+Only paths **under** your Daz library are rewritten. A texture living somewhere
+else can't be made portable, so it stays absolute and the report lists it — the
+copy is only as movable as those paths.
+
+Every project the transfer writes is saved once, after its previous state is
+kept as `backup/<name>_dthbak.hiplc` (one rolling backup, beside Houdini's own).
+**Close the target projects in Houdini first** — Houdini writes the entire scene
+when you save, so an open copy would overwrite the transfer.
+
+Like Generate project, this runs Houdini's `hython`, so it needs the **Houdini
+installation folder** and its matching documents folder in Settings. Opening a
+`.hip` takes a few seconds per file — the drawer scans when it opens and after a
+run, and there's a **Rescan** button.
+
 ## `$DAZ3D_LIB` — your Daz library, as a variable
 
 With both **My DAZ 3D Library** and the **Houdini documents folder** set in
