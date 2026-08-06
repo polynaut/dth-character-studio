@@ -17,7 +17,25 @@
           "bakers": 11,
           "layers": 43,
           "bakerNames": ["T_Skin_Colour", "T_Skin_Normal"],
-          "materialNames": ["MI_Skin", "Skin"]
+          "materialNames": ["MI_Skin", "Skin"],
+          "slots": [
+            {
+              "name": "Skin",
+              "displayName": "MI_Skin",
+              "surfaces": 15,
+              "bakers": 4,
+              "layers": 30,
+              "channelUvs": ["uv_geoshell"]
+            },
+            {
+              "name": "Dress",
+              "displayName": "MI_Dress",
+              "surfaces": 1,
+              "bakers": 4,
+              "layers": 4,
+              "channelUvs": []
+            }
+          ]
         }
       ]
     },
@@ -43,6 +61,7 @@
       "replaced": false,
       "missingMaterials": ["MI_Skin"],
       "missingGroups": [],
+      "missingUvSources": ["uv_geoshell"],
       "backupPath": "D:/chars/Ita/houdini/backup/Ita_dthbak.hiplc"
     }
   ],
@@ -50,6 +69,7 @@
   "sourceLayers": 30,
   "sourceBakerNames": ["T_Skin_Colour", "T_Skin_Normal"],
   "sections": ["materials", "uvChannels", "bakers"],
+  "materials": ["Skin"],
   "dryRun": false,
   "replace": false
 }

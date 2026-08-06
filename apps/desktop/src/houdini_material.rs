@@ -19,6 +19,28 @@
 
 use serde::{Deserialize, Serialize};
 
+/// One material slot on a node, with the bakers that name it.
+///
+/// The unit a user actually reuses is a MATERIAL — "the same skin", "that one
+/// dress" — so the panel picks slots, and a slot's bakers travel with it.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MaterialSlotInfo {
+    /// Slot name as stored (`Skin`).
+    pub name: String,
+    /// Name as a baker spells it, i.e. with the node's prefix (`MI_Skin`).
+    pub display_name: String,
+    /// Daz surfaces merged into this slot — a G9 skin merges ~15, which is
+    /// exactly the hand-work that makes the setup worth copying.
+    pub surfaces: u32,
+    pub bakers: u32,
+    pub layers: u32,
+    /// UV names this slot's bakers read that only a UV CHANNEL produces
+    /// (`uv_geoshell`). EMPTY means the material copies fine without the
+    /// channels — measured: clothing reads only `uv_original`, skin does not.
+    pub channel_uvs: Vec<String>,
+}
+
 /// One DazToHueMaterial node found by a scan.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -48,6 +70,8 @@ pub struct MaterialNodeInfo {
     /// Every material slot name, with and without the node's prefix — used to
     /// tell whether a transferred baker's material exists here.
     pub material_names: Vec<String>,
+    /// The node's material slots, each with its bakers — the panel's pick list.
+    pub slots: Vec<MaterialSlotInfo>,
 }
 
 /// One scanned `.hip` file.
@@ -102,6 +126,10 @@ pub struct MaterialTransferTarget {
     /// geometry does not have. Empty ALSO means "could not be checked" (no
     /// cooked geometry in a headless session) — never read it as "all present".
     pub missing_groups: Vec<String>,
+    /// UV names the copied bakers read that only a UV channel produces, when
+    /// the channels are NOT part of this run — so "do I need the UV channels
+    /// too?" is answered instead of guessed. Empty for a clothing material.
+    pub missing_uv_sources: Vec<String>,
     /// Where the pre-transfer state was backed up (empty for a dry run).
     pub backup_path: String,
 }
@@ -125,6 +153,8 @@ pub struct MaterialUtilReport {
     pub source_baker_names: Vec<String>,
     /// The sections this run was asked to transfer.
     pub sections: Vec<String>,
+    /// The material slot names it was restricted to (empty = all).
+    pub materials: Vec<String>,
     pub dry_run: bool,
     pub replace: bool,
 }

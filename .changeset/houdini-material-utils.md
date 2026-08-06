@@ -15,13 +15,22 @@ setup from one material node onto any number of this character's nodes: source
 from another studio character or any `.hip` via Browse, append or **Replace at
 target**, with a dry run that writes nothing.
 
-**What to copy** covers all three parts of a setup — material slots, UV channels
-and texture bakers — because they only work together: a baker names its material
-(`MI_Skin`) and its layers name UV channels (`uv_original`, `uv_geoshell`) as
-plain text, so bakers alone import cleanly and bake nothing. Untick a part and
-the report still names exactly what the target is then missing. On append,
-material slots merge by name, so a skin setup copied onto a dressed character
-keeps its clothing materials.
+The unit you pick is a **material** — the drawer lists the source's slots with
+what each costs by hand (`MI_Skin` 15 surfaces · 4 bakers · 30 layers) and copies
+the slot together with the bakers naming it. A Genesis 9 skin merges the same
+surfaces on every character of that generation, so it transfers as-is; clothing
+transfers when the target wears the same asset.
+
+**What to copy** then picks which parts travel — material slots, UV channels,
+texture bakers — all on by default, because a baker names its material
+(`MI_Skin`) and its layers name UV sources as plain text, so bakers alone import
+cleanly and bake nothing. Untick a part and the report names exactly what is then
+missing. A material is flagged **needs UV channels** when its bakers read a UV
+only a channel produces (a skin reads `uv_geoshell`; clothing reads only
+`uv_original`, which every DTH import has) — so the answer to "do I need the UV
+channels too?" is shown rather than guessed. On append, material slots merge by
+name, so a skin setup copied onto a dressed character keeps its clothing
+materials.
 
 Material nodes are labelled by the **network box** around them when there is one
 (`KiraDefault`, `KiraYoga`, `KiraNaked`) instead of `DazToHueMaterial`, `…1`,

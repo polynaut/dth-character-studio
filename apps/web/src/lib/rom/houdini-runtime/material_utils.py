@@ -79,10 +79,21 @@ SKIP_TEMPLATES = (
 BAKER_NAME_FIELD = "material_texture_baker_name#"
 BAKER_MATERIAL_FIELD = "material_texture_baker_material#"
 BAKER_LAYER_BLOCK = "material_texture_baker_layer#"
+LAYER_SOURCE_UV_FIELD = "material_texture_baker_layer_source_uv#_#"
+SLOT_NAME_FIELD = "material_name#"
 LAYER_GROUP_FIELDS = (
     "material_texture_baker_layer_group#_#",
     "material_texture_baker_layer_geoshell_group#_#",
 )
+
+# UV names that exist on any DTH-imported geometry, so a baker reading one needs
+# no UV channel copied with it. Measured on DazToHue 2.5: every baker reads
+# `uv_original` (the untouched Daz UVs) and writes `uv`; only the skin bakers
+# read a channel-PRODUCED name (`uv_geoshell`, from the Copy-From-Geoshell
+# channels). Anything outside this set therefore implies a UV-channel
+# dependency — which is what lets the report tell a user copying a clothing
+# material that they do NOT need the channels, instead of leaving them to guess.
+INTRINSIC_UV_NAMES = frozenset(("", "uv", "uv_original"))
 
 
 # --- generic multiparm copying ----------------------------------------------
@@ -386,10 +397,10 @@ def _material_names(node):
 
 
 def _baker_summary(payload):
-    """(names, materials referenced, groups referenced, layer count)."""
+    """(names, materials referenced, groups referenced, layers, channel UVs)."""
     if payload is None:
-        return ([], set(), set(), 0)
-    names, materials, groups, layers = [], set(), set(), 0
+        return ([], set(), set(), 0, set())
+    names, materials, groups, layers, channel_uvs = [], set(), set(), 0, set()
     for instance in payload["instances"]:
         names.append(_instance_field(instance, BAKER_NAME_FIELD) or "")
         material = _instance_field(instance, BAKER_MATERIAL_FIELD)
@@ -401,12 +412,117 @@ def _baker_summary(payload):
                 value = _instance_field(layer, field)
                 if value:
                     groups.add(value)
-    return (names, materials, groups, layers)
+            source_uv = _instance_field(layer, LAYER_SOURCE_UV_FIELD)
+            if source_uv and source_uv not in INTRINSIC_UV_NAMES:
+                channel_uvs.add(source_uv)
+    return (names, materials, groups, layers, channel_uvs)
+
+
+def _slot_names(payload):
+    """Slot names in a materials payload, in order."""
+    if payload is None:
+        return []
+    return [
+        _instance_field(inst, SLOT_NAME_FIELD) or "" for inst in payload["instances"]
+    ]
+
+
+def _matches_material(baker_material, selected, prefix):
+    """A baker names its material as rendered (`MI_Skin`); the slot is `Skin`."""
+    if not baker_material:
+        return False
+    for name in selected:
+        if baker_material == name or baker_material == prefix + name:
+            return True
+    return False
+
+
+def _filter_payloads(payloads, selected, prefix):
+    """Restrict the materials and bakers payloads to the chosen slot names.
+
+    The unit a user actually reuses is a MATERIAL — "the same skin", "that one
+    dress" — not a whole node, so a slot and the bakers naming it travel
+    together. `selected` empty means every material.
+    """
+    if not selected:
+        return payloads
+    out = dict(payloads)
+    materials = payloads.get("materials")
+    if materials is not None:
+        out["materials"] = {
+            "instances": [
+                inst
+                for inst in materials["instances"]
+                if (_instance_field(inst, SLOT_NAME_FIELD) or "") in selected
+            ],
+            "extras": materials["extras"],
+        }
+    bakers = payloads.get("bakers")
+    if bakers is not None:
+        out["bakers"] = {
+            "instances": [
+                inst
+                for inst in bakers["instances"]
+                if _matches_material(
+                    _instance_field(inst, BAKER_MATERIAL_FIELD), selected, prefix
+                )
+            ],
+            "extras": bakers["extras"],
+        }
+    return out
+
+
+def _material_slots(node, bakers_payload):
+    """Each material slot with the bakers that name it — the panel's pick list.
+
+    A user reuses "the same skin" or "that one dress", so the slot and its
+    bakers are shown (and copied) as one unit. `surfaces` is the count of Daz
+    surfaces merged into the slot: for a G9 skin that is the fifteen-odd merge
+    that makes the setup worth copying at all.
+    """
+    materials = _export_section(node, SECTION_BY_KEY["materials"])
+    if materials is None:
+        return []
+    prefix_rec = materials["extras"].get("material_prefix")
+    prefix = prefix_rec["v"] if prefix_rec else ""
+    slots = []
+    for instance in materials["instances"]:
+        name = _instance_field(instance, SLOT_NAME_FIELD) or ""
+        if not name:
+            continue
+        group = _instance_field(instance, "material_group#") or ""
+        count, layers, uvs = 0, 0, set()
+        if bakers_payload is not None:
+            for baker in bakers_payload["instances"]:
+                if not _matches_material(
+                    _instance_field(baker, BAKER_MATERIAL_FIELD), [name], prefix
+                ):
+                    continue
+                count += 1
+                for layer in baker["b"].get(BAKER_LAYER_BLOCK, []):
+                    layers += 1
+                    source_uv = _instance_field(layer, LAYER_SOURCE_UV_FIELD)
+                    if source_uv and source_uv not in INTRINSIC_UV_NAMES:
+                        uvs.add(source_uv)
+        slots.append(
+            {
+                "name": name,
+                "displayName": prefix + name,
+                # Daz surfaces merged into this slot ("@fbx_material_name=Body …").
+                "surfaces": len([t for t in group.split() if t.strip()]),
+                "bakers": count,
+                "layers": layers,
+                # UV names these bakers read that only a UV CHANNEL produces —
+                # empty means this material copies fine without the channels.
+                "channelUvs": sorted(uvs),
+            }
+        )
+    return slots
 
 
 def _node_info(node):
     payload = _export_section(node, SECTION_BY_KEY["bakers"])
-    names, _, _, layers = _baker_summary(payload)
+    names, _, _, layers, _ = _baker_summary(payload)
     return {
         "path": node.path(),
         "name": node.name(),
@@ -417,6 +533,7 @@ def _node_info(node):
         "layers": layers,
         "bakerNames": names,
         "materialNames": sorted(_material_names(node)),
+        "slots": _material_slots(node, payload),
     }
 
 
@@ -469,19 +586,35 @@ def op_transfer(request):
     if node is None or node.type().name() != MATERIAL_TYPE:
         raise hou.Error("The source material node was not found: %s" % source["nodePath"])
 
+    # The materials block is always exported: even when its section was not
+    # selected it carries the prefix that maps a slot name (`Skin`) to the name
+    # a baker uses (`MI_Skin`), which the filter below needs.
+    all_materials = _export_section(node, SECTION_BY_KEY["materials"])
+    prefix_rec = (all_materials or {"extras": {}})["extras"].get("material_prefix")
+    prefix = prefix_rec["v"] if prefix_rec else ""
+
     payloads = {}
     for key in keys:
         payloads[key] = _export_section(node, SECTION_BY_KEY[key])
-    baker_names, needed_materials, needed_groups, source_layers = _baker_summary(
-        payloads.get("bakers")
-    )
+    selected_materials = [m for m in request.get("materials", []) if m]
+    payloads = _filter_payloads(payloads, selected_materials, prefix)
+
+    (
+        baker_names,
+        needed_materials,
+        needed_groups,
+        source_layers,
+        needed_channel_uvs,
+    ) = _baker_summary(payloads.get("bakers"))
+    # UV names the copied bakers read that only a UV channel produces. Reported
+    # whenever the channels are NOT part of this run, so "do I need the UV
+    # channels too?" is answered by the tool rather than guessed: a clothing
+    # material reads only intrinsic names and comes back empty.
+    missing_uv_sources = sorted(needed_channel_uvs) if "uvChannels" not in keys else []
     # Material names the copy itself will install at the target.
     incoming_materials = set()
-    if "materials" in payloads and payloads["materials"] is not None:
-        prefix_rec = payloads["materials"]["extras"].get("material_prefix")
-        prefix = prefix_rec["v"] if prefix_rec else ""
-        for instance in payloads["materials"]["instances"]:
-            name = _instance_field(instance, "material_name#")
+    if payloads.get("materials") is not None:
+        for name in _slot_names(payloads["materials"]):
             if name:
                 incoming_materials.add(name)
                 incoming_materials.add(prefix + name)
@@ -507,6 +640,7 @@ def op_transfer(request):
             "replaced": replace,
             "missingMaterials": [],
             "missingGroups": [],
+            "missingUvSources": list(missing_uv_sources),
             "backupPath": "",
         }
 
@@ -614,6 +748,7 @@ def op_transfer(request):
         "sourceLayers": source_layers,
         "sourceBakerNames": baker_names,
         "sections": keys,
+        "materials": selected_materials,
         "dryRun": dry_run,
         "replace": replace,
     }
@@ -655,6 +790,7 @@ def main():
     payload.setdefault("sourceLayers", 0)
     payload.setdefault("sourceBakerNames", [])
     payload.setdefault("sections", [])
+    payload.setdefault("materials", [])
     payload.setdefault("dryRun", False)
     payload.setdefault("replace", False)
 

@@ -111,25 +111,50 @@ slots, UV channels and texture bakers — from one project into another.
 whatever the target already has. Turned on, the target's existing bakers are
 removed first and only the copied ones remain.
 
+### Pick a material, not a node
+
+The thing you actually reuse is a **material**. The drawer lists the source
+node's material slots with what each one costs by hand:
+
+```
+MI_Skin        15 surfaces · 4 bakers · 30 layers   needs UV channels
+MI_Dress        1 surface  · 4 bakers ·  4 layers
+MI_YogaPants    2 surfaces · 2 bakers ·  2 layers
+MI_HighBoots    7 surfaces · 1 baker  ·  7 layers
+```
+
+Tick one and only that material travels — its slot definition *and* the bakers
+that name it. Tick nothing and everything is copied.
+
+This matters because the two halves behave differently. A **skin** slot merges
+the same ~15 Daz surfaces on every character of a generation, so it transfers
+between any two Genesis 9 characters as-is. **Clothing** slots only match when
+the target wears the same asset.
+
 ### What gets copied
 
-A material setup is three linked things, and **What to copy** lets you pick any
-combination. All three are on by default, because they only work together:
+**What to copy** picks which parts travel, all on by default:
 
 | | what it is |
 | --- | --- |
-| **Material slots** | which Daz surfaces merge into each material — `Skin` merging fifteen surfaces *is* the tedious part |
-| **UV channels** | the channels baker layers read (`uv_original`, `uv_geoshell`) and the operations that build them |
-| **Texture bakers** | the bakers themselves and every layer |
+| **Material slots** | which Daz surfaces merge into each material — the merge list *is* the tedious part |
+| **UV channels** | the node's UV channels and their operations (all of them — channels are positional, not named) |
+| **Texture bakers** | the bakers of the picked materials, and every layer |
 
 > **Bakers reference everything by name.** A baker copied into a node that has no
-> material called `MI_Skin` imports fine and then bakes nothing. That's why the
-> slots and UV channels travel with it — and why, if you untick them, the report
-> still names every material the target is missing so you know exactly what to
-> set up by hand before the bakers can land.
+> material called `MI_Skin` imports fine and then bakes nothing. Untick a part
+> and the report names exactly what's then missing — the material, or the UV
+> source — so you know what to set up by hand first.
+
+**Do you need the UV channels?** The drawer tells you: a material shows
+**needs UV channels** when its bakers read a UV that only a channel produces.
+Measured on a real setup — a skin reads `uv_geoshell` (built by the
+Copy-From-Geoshell channels), while clothing reads only `uv_original`, which
+every DTH import already has. So a skin copy wants the channels and a clothing
+copy doesn't, and you don't have to remember which.
 
 With **Replace at target** off, material slots **merge by name**: slots the
-target already defines are kept, so copying a skin setup onto a dressed
+target already defines are kept, so dropping a skin setup onto a dressed
 character doesn't throw away its clothing materials. Turned on, the selected
 sections are wiped first.
 

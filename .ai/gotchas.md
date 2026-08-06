@@ -275,6 +275,15 @@ current code before relying on details, but assume the *lesson* still holds.
   `uv_original`/`uv_geoshell` names layers read) and `material_texture_baker`.
   Transferring only the third produces a node that imports cleanly and bakes
   nothing. Copy them together, or report precisely what the target still lacks.
+  Two more measured facts that make the dependency checkable rather than
+  guessed: **UV channels are ANONYMOUS** (positional instances 0/1/2, no name
+  parm — so they can only be copied wholesale), and every baker reads
+  `uv_original` + writes `uv`, both of which exist on any DTH-imported geometry.
+  A source UV outside that intrinsic set (`uv_geoshell`, from the
+  Copy-From-Geoshell channels) therefore means "this material needs the UV
+  channels": measured, a G9 skin does and clothing does not. Slot-to-baker
+  matching goes through the node's `material_prefix` — the slot is `Skin`, the
+  baker names it `MI_Skin`.
 - **Copy HDA multiparms off the parm TEMPLATE GROUP, not a hand-listed field
   table.** `material_utils.py` walks `parmTemplateGroup().find(<block>)`,
   flattening plain folders (Simple/Collapsible/Tabs add no index) and recursing

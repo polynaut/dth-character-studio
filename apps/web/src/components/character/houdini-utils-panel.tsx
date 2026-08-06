@@ -74,6 +74,33 @@ function fileName(path: string): string {
 }
 
 /**
+ * How much a section will actually copy — shown beside each checkbox and in the
+ * confirm dialog. Honours the picked materials: with `Skin` ticked this must
+ * say "1 slot, 4 bakers", not the node's totals, or the dialog would promise
+ * something the run doesn't do. UV channels are node-wide (they are anonymous
+ * and positional), so they never narrow.
+ */
+function sectionCountOf(
+  node: MaterialNodeInfo,
+  key: MaterialSection,
+  picked: ReadonlySet<string>,
+): string {
+  const slots = picked.size === 0 ? node.slots : node.slots.filter((s) => picked.has(s.name))
+  const n =
+    key === 'materials'
+      ? picked.size === 0
+        ? node.materials
+        : slots.length
+      : key === 'uvChannels'
+        ? node.uvChannels
+        : picked.size === 0
+          ? node.bakers
+          : slots.reduce((sum, s) => sum + s.bakers, 0)
+  const unit = key === 'materials' ? 'slot' : key === 'uvChannels' ? 'channel' : 'baker'
+  return `${n} ${unit}${n === 1 ? '' : 's'}`
+}
+
+/**
  * How a material node is labelled in the picker.
  *
  * A project with several DTH networks names them with a NETWORK BOX around each
@@ -83,15 +110,6 @@ function fileName(path: string): string {
  * node name kept beside it — the node name is still what the report and any
  * Houdini-side lookup use.
  */
-/** How many instances a node holds for a given section — shown beside each
- *  checkbox so the user sees what they're about to copy. */
-function sectionCountOf(node: MaterialNodeInfo, key: MaterialSection): string {
-  const n =
-    key === 'materials' ? node.materials : key === 'uvChannels' ? node.uvChannels : node.bakers
-  const unit = key === 'materials' ? 'slot' : key === 'uvChannels' ? 'channel' : 'baker'
-  return `${n} ${unit}${n === 1 ? '' : 's'}`
-}
-
 function nodeLabel(node: MaterialNodeInfo): { primary: string; secondary: string } {
   return node.networkBox
     ? { primary: node.networkBox, secondary: node.name }
@@ -140,6 +158,9 @@ export function HoudiniUtilsPanel({
   const [sections, setSections] = useState<ReadonlySet<MaterialSection>>(
     new Set(MATERIAL_SECTIONS),
   )
+  // Which of the source's material slots to copy. Empty = all; reset whenever
+  // the source node changes, since slot names belong to that node.
+  const [pickedMaterials, setPickedMaterials] = useState<ReadonlySet<string>>(new Set())
 
   // --- the confirm modal ---------------------------------------------------
   const [confirmOpen, setConfirmOpen] = useState(false)
@@ -221,6 +242,11 @@ export function HoudiniUtilsPanel({
 
   // Scanning the chosen source project is a separate (and equally slow) trip —
   // only ever for the ONE file the user picked.
+  // Slot names belong to a node, so a new source starts with none picked.
+  useEffect(() => {
+    setPickedMaterials(new Set())
+  }, [selectedSource])
+
   useEffect(() => {
     setSelectedSource('')
     if (!open || !activeSourceHip) {
@@ -310,6 +336,7 @@ export function HoudiniUtilsPanel({
           source: { hipPath: sourceNode.project.hipPath, nodePath: sourceNode.node.path },
           targets: targetRefs,
           sections: MATERIAL_SECTIONS.filter((key) => sections.has(key)),
+          materials: [...pickedMaterials],
           replace,
           dryRun,
         },
@@ -471,6 +498,64 @@ export function HoudiniUtilsPanel({
               />
             </section>
 
+            {/* --------------------------------------------------------- materials */}
+            {sourceNode && sourceNode.node.slots.length > 0 && (
+              <section>
+                <Label className="mb-1 flex w-fit items-center gap-1 text-base font-semibold">
+                  Materials
+                  <InfoPopup label="Materials — more information">
+                    The unit you actually reuse. A material slot is the list of Daz surfaces
+                    merged into one material — for a Genesis 9 skin that list is the same on
+                    every character of that generation, so it transfers as-is. Clothing only
+                    matches when the target wears the same asset. Each slot&apos;s texture
+                    bakers travel with it.
+                  </InfoPopup>
+                </Label>
+                <p className="mb-2 text-xs text-muted-foreground">
+                  {pickedMaterials.size === 0
+                    ? 'Nothing picked — every material is copied. Tick one to copy just that.'
+                    : `${pickedMaterials.size} of ${sourceNode.node.slots.length} materials`}
+                </p>
+                <ul className="space-y-1">
+                  {sourceNode.node.slots.map((slot) => {
+                    const needsUv = slot.channelUvs.length > 0
+                    return (
+                      <li key={slot.name}>
+                        <label className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-xs hover:bg-accent/50">
+                          <input
+                            type="checkbox"
+                            checked={pickedMaterials.has(slot.name)}
+                            onChange={() =>
+                              setPickedMaterials((prev) => {
+                                const next = new Set(prev)
+                                if (next.has(slot.name)) next.delete(slot.name)
+                                else next.add(slot.name)
+                                return next
+                              })
+                            }
+                          />
+                          <span className="font-medium">{slot.displayName}</span>
+                          <span className="text-muted-foreground">
+                            {slot.surfaces} surface{slot.surfaces === 1 ? '' : 's'} ·{' '}
+                            {slot.bakers} baker{slot.bakers === 1 ? '' : 's'} · {slot.layers}{' '}
+                            layer{slot.layers === 1 ? '' : 's'}
+                          </span>
+                          {needsUv && (
+                            <span
+                              className="text-amber-500"
+                              title={`These bakers read ${slot.channelUvs.join(', ')}, which only a UV channel produces — include UV channels below.`}
+                            >
+                              needs UV channels
+                            </span>
+                          )}
+                        </label>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </section>
+            )}
+
             {/* ------------------------------------------------------ what to copy */}
             <section>
               <Label className="mb-1 flex w-fit items-center gap-1 text-base font-semibold">
@@ -503,7 +588,7 @@ export function HoudiniUtilsPanel({
                       <span className="font-medium">{SECTION_LABELS[key].label}</span>
                       {sourceNode && (
                         <span className="ml-1 text-muted-foreground">
-                          ({sectionCountOf(sourceNode.node, key)})
+                          ({sectionCountOf(sourceNode.node, key, pickedMaterials)})
                         </span>
                       )}
                       <br />
@@ -573,7 +658,7 @@ export function HoudiniUtilsPanel({
               Copy{' '}
               <strong>
                 {MATERIAL_SECTIONS.filter((key) => sections.has(key))
-                  .map((key) => sectionCountOf(sourceNode.node, key))
+                  .map((key) => sectionCountOf(sourceNode.node, key, pickedMaterials))
                   .join(', ')}
               </strong>{' '}
               from <strong>{labelFor(sourceNode.project.hipPath, sourceNode.node.path)}</strong> in{' '}
@@ -769,6 +854,16 @@ function TransferReport({
                   {target.missingMaterials.map((m) => `"${m}"`).join(', ')} — add a matching slot
                   in the Materials tab (or include Material slots above), or those bakers produce
                   no texture.
+                </span>
+              </p>
+            )}
+            {target.missingUvSources.length > 0 && (
+              <p className="flex items-start gap-1 text-amber-500">
+                <AlertTriangle className="mt-0.5 size-3 shrink-0" />
+                <span>
+                  Set up first: these bakers read {target.missingUvSources.join(', ')}, which only
+                  a UV channel produces — tick UV channels, or build the same channel at the
+                  target.
                 </span>
               </p>
             )}

@@ -167,6 +167,7 @@ export type { MaterialSection } from './api/houdini-material'
 export type {
   MaterialNodeInfo,
   MaterialSectionResult,
+  MaterialSlotInfo,
   MaterialScanProject,
   MaterialTransferTarget,
   MaterialUtilReport,

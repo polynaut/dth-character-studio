@@ -198,6 +198,23 @@ export const remapResultSchema = z.object({
 
 // --- DazToHue material utilities (houdini_material.rs) -----------------------
 
+/** One material slot on a node, with the bakers that name it — the unit the
+ *  panel lets you pick, because "the same skin" is what gets reused. */
+export const materialSlotInfoSchema = z.object({
+  /** Slot name as stored (`Skin`). */
+  name: z.string(),
+  /** Name as a baker spells it, with the node's prefix (`MI_Skin`). */
+  displayName: z.string(),
+  /** Daz surfaces merged into this slot (a G9 skin merges ~15). */
+  surfaces: z.number(),
+  bakers: z.number(),
+  layers: z.number(),
+  /** UV names this slot's bakers read that only a UV channel produces. Empty =
+   *  copies fine without the UV channels (measured: clothing; skin needs
+   *  `uv_geoshell`). */
+  channelUvs: z.array(z.string()),
+})
+
 /** One DazToHueMaterial node found by a scan. */
 export const materialNodeInfoSchema = z.object({
   /** Node path in the scene, e.g. `/obj/DazToHue/DazToHueMaterial`. */
@@ -216,6 +233,8 @@ export const materialNodeInfoSchema = z.object({
   /** Slot names with AND without the node's prefix, so a baker's material
    *  (`MI_Skin`) can be matched however the target spells it. */
   materialNames: z.array(z.string()),
+  /** The node's material slots, each with its bakers — the panel's pick list. */
+  slots: z.array(materialSlotInfoSchema),
 })
 
 /** One scanned `.hip` (`ok: false` = unreadable; the scan itself still succeeds). */
@@ -254,6 +273,10 @@ export const materialTransferTargetSchema = z.object({
    *  ALSO means "couldn't be checked" (no cooked geometry) — never read it as
    *  "all present". */
   missingGroups: z.array(z.string()),
+  /** UV names the copied bakers read that only a UV channel produces, when the
+   *  channels aren't part of this run — the answer to "do I need the UV
+   *  channels too?". Empty for a clothing material. */
+  missingUvSources: z.array(z.string()),
   /** Rolling pre-transfer backup (empty for a dry run). */
   backupPath: z.string(),
 })
@@ -271,6 +294,8 @@ export const materialUtilReportSchema = z.object({
   sourceBakerNames: z.array(z.string()),
   /** The sections this run was asked to transfer. */
   sections: z.array(z.string()),
+  /** Material slot names it was restricted to (empty = all). */
+  materials: z.array(z.string()),
   dryRun: z.boolean(),
   replace: z.boolean(),
 })
@@ -289,6 +314,7 @@ export type RemapResult = z.infer<typeof remapResultSchema>
 export type PoseAssetFramesResult = z.infer<typeof poseAssetFramesSchema>
 export type SceneWearable = z.infer<typeof sceneWearableSchema>
 export type SceneWearables = z.infer<typeof sceneWearablesSchema>
+export type MaterialSlotInfo = z.infer<typeof materialSlotInfoSchema>
 export type MaterialNodeInfo = z.infer<typeof materialNodeInfoSchema>
 export type MaterialSectionResult = z.infer<typeof materialSectionResultSchema>
 export type MaterialScanProject = z.infer<typeof materialScanProjectSchema>

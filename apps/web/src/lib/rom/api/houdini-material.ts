@@ -75,6 +75,12 @@ const transferInput = z.object({
   targets: z.array(nodeRef).min(1),
   /** Which parts of the setup to copy — at least one. */
   sections: z.array(z.enum(MATERIAL_SECTIONS)).min(1),
+  /** Restrict the material slots (and the bakers naming them) to these slot
+   *  names. Empty = every material. This is the selection that matters in
+   *  practice: a user reuses "the same skin" or "that one dress", not a whole
+   *  node — and skin slots merge identically across a Daz generation, while
+   *  clothing only matches when the same asset is worn. */
+  materials: z.array(z.string()).default([]),
   /** true = the selected sections are wiped at the target first; false =
    *  append (material slots merge by name rather than duplicating). */
   replace: z.boolean(),
