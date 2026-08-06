@@ -78,15 +78,16 @@ add the network from the DazToHue shelf.
 
 ## Utils — copy a texture-baker setup between projects
 
-Setting up the texture bakers in a **DazToHueMaterial** node is the most tedious
-part of the whole workflow: one skin material easily runs to four bakers of
-thirty layers, each layer naming a texture, a geometry group, a blend mode and
-seven adjustments. If you reuse the same skin across characters, you were
-rebuilding all of it by hand.
+Setting up a **DazToHueMaterial** node is the most tedious part of the whole
+workflow: one skin material easily runs to four bakers of thirty layers, each
+layer naming a texture, a geometry group, a blend mode and seven adjustments —
+on top of the material slots that merge fifteen Daz surfaces into one `Skin`.
+If you reuse the same skin across characters, you were rebuilding all of it by
+hand.
 
 The **Utils** button on a Houdini project card (the 🔧 that appears on hover)
-opens a drawer that copies a material node's **complete texture-baking
-definition** from one project into another.
+opens a drawer that copies a material node's **complete setup** — material
+slots, UV channels and texture bakers — from one project into another.
 
 - **Target** — this character's linked Houdini projects, with every DazToHue
   material node found in each. Tick as many as you want; the card you opened
@@ -110,12 +111,27 @@ definition** from one project into another.
 whatever the target already has. Turned on, the target's existing bakers are
 removed first and only the copied ones remain.
 
-> **Bakers reference materials and groups by name.** A baker copied into a node
-> that has no material called `MI_Skin` imports fine and then bakes nothing —
-> so the report names every material the target is missing. That is what the dry
-> run is for: run it first, and if it warns about missing materials, set those
-> material slots up (Materials tab) before the real run. The material slots
-> themselves are *not* copied — only the baking definitions.
+### What gets copied
+
+A material setup is three linked things, and **What to copy** lets you pick any
+combination. All three are on by default, because they only work together:
+
+| | what it is |
+| --- | --- |
+| **Material slots** | which Daz surfaces merge into each material — `Skin` merging fifteen surfaces *is* the tedious part |
+| **UV channels** | the channels baker layers read (`uv_original`, `uv_geoshell`) and the operations that build them |
+| **Texture bakers** | the bakers themselves and every layer |
+
+> **Bakers reference everything by name.** A baker copied into a node that has no
+> material called `MI_Skin` imports fine and then bakes nothing. That's why the
+> slots and UV channels travel with it — and why, if you untick them, the report
+> still names every material the target is missing so you know exactly what to
+> set up by hand before the bakers can land.
+
+With **Replace at target** off, material slots **merge by name**: slots the
+target already defines are kept, so copying a skin setup onto a dressed
+character doesn't throw away its clothing materials. Turned on, the selected
+sections are wiped first.
 
 Every project the transfer writes is saved once, after its previous state is
 kept as `backup/<name>_dthbak.hiplc` (one rolling backup, beside Houdini's own).

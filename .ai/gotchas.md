@@ -270,6 +270,20 @@ current code before relying on details, but assume the *lesson* still holds.
   "no cooked geometry to check against" — never render it as "all present".
   Layer texture paths are absolute into the Daz library, so they survive a
   cross-project copy on the same machine and would need remapping off it.
+  COROLLARY, measured the hard way: a material setup is THREE linked blocks —
+  `material` (which surfaces merge into each slot), `material_uv_channel` (the
+  `uv_original`/`uv_geoshell` names layers read) and `material_texture_baker`.
+  Transferring only the third produces a node that imports cleanly and bakes
+  nothing. Copy them together, or report precisely what the target still lacks.
+- **Copy HDA multiparms off the parm TEMPLATE GROUP, not a hand-listed field
+  table.** `material_utils.py` walks `parmTemplateGroup().find(<block>)`,
+  flattening plain folders (Simple/Collapsible/Tabs add no index) and recursing
+  into nested multiparm blocks, substituting `#` placeholders left-to-right with
+  the index stack (`..._texture#_#` + `[1, 4]` → `..._texture1_4`). One walker
+  then serves every block — including the 3-level nesting under a UV operation —
+  and a DazToHue update that adds a parameter is carried across automatically
+  instead of being silently dropped. Skip `Button`/`Separator`/`Label`
+  templates: a button is an ACTION, and "copying" one would press it.
 - **The Rust crate version (`apps/desktop/Cargo.toml`, `0.1.0`) is cosmetic.**
   The product version lives in `apps/desktop/package.json`
   (`tauri.conf.json` has `"version": "package.json"`); Changesets bumps only the

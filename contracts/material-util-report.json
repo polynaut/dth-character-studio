@@ -34,8 +34,11 @@
       "nodePath": "/obj/DazToHue/DazToHueMaterial",
       "ok": true,
       "error": "",
-      "bakersBefore": 0,
-      "bakersAfter": 4,
+      "sections": [
+        { "key": "materials", "before": 25, "after": 7, "skipped": 0 },
+        { "key": "uvChannels", "before": 0, "after": 3, "skipped": 0 },
+        { "key": "bakers", "before": 0, "after": 4, "skipped": 0 }
+      ],
       "added": ["T_Skin_Colour", "T_Skin_Normal"],
       "replaced": false,
       "missingMaterials": ["MI_Skin"],
@@ -46,6 +49,7 @@
   "sourceBakers": 4,
   "sourceLayers": 30,
   "sourceBakerNames": ["T_Skin_Colour", "T_Skin_Normal"],
+  "sections": ["materials", "uvChannels", "bakers"],
   "dryRun": false,
   "replace": false
 }

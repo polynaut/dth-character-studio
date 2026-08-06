@@ -19,11 +19,16 @@ import {
   TabsList,
   TabsTrigger,
 } from '@dth/ui'
-import { scanHoudiniMaterials, transferHoudiniMaterials } from '#/lib/rom/api.ts'
+import {
+  MATERIAL_SECTIONS,
+  scanHoudiniMaterials,
+  transferHoudiniMaterials,
+} from '#/lib/rom/api.ts'
 import type {
   CharacterWithProject,
   MaterialNodeInfo,
   MaterialScanProject,
+  MaterialSection,
   MaterialUtilReport,
 } from '#/lib/rom/api.ts'
 import { fetchAllCharacters } from '#/lib/rom/api.ts'
@@ -46,6 +51,19 @@ import type { Character } from '@dth/rom'
  * this replaces.
  */
 
+/** Label + rationale for each transferable part of a material setup. */
+const SECTION_LABELS: Record<MaterialSection, { label: string; hint: string }> = {
+  materials: {
+    label: 'Material slots',
+    hint: 'Which Daz surfaces merge into each material — the list a baker names.',
+  },
+  uvChannels: {
+    label: 'UV channels',
+    hint: 'The channels baker layers read (uv_original, uv_geoshell) and their operations.',
+  },
+  bakers: { label: 'Texture bakers', hint: 'The bakers themselves and all their layers.' },
+}
+
 /** A material node identified across files — the selection key everywhere here. */
 function nodeKey(hipPath: string, nodePath: string): string {
   return `${normalizePath(hipPath).toLowerCase()}|${nodePath}`
@@ -65,6 +83,15 @@ function fileName(path: string): string {
  * node name kept beside it — the node name is still what the report and any
  * Houdini-side lookup use.
  */
+/** How many instances a node holds for a given section — shown beside each
+ *  checkbox so the user sees what they're about to copy. */
+function sectionCountOf(node: MaterialNodeInfo, key: MaterialSection): string {
+  const n =
+    key === 'materials' ? node.materials : key === 'uvChannels' ? node.uvChannels : node.bakers
+  const unit = key === 'materials' ? 'slot' : key === 'uvChannels' ? 'channel' : 'baker'
+  return `${n} ${unit}${n === 1 ? '' : 's'}`
+}
+
 function nodeLabel(node: MaterialNodeInfo): { primary: string; secondary: string } {
   return node.networkBox
     ? { primary: node.networkBox, secondary: node.name }
@@ -107,10 +134,20 @@ export function HoudiniUtilsPanel({
   const [sourceScan, setSourceScan] = useState<ScanState>(EMPTY_SCAN)
   const [selectedSource, setSelectedSource] = useState('')
 
+  // --- what to copy --------------------------------------------------------
+  // All three by default: the parts are one setup, and bakers alone reference
+  // material and UV-channel names that would not exist at the target.
+  const [sections, setSections] = useState<ReadonlySet<MaterialSection>>(
+    new Set(MATERIAL_SECTIONS),
+  )
+
   // --- the confirm modal ---------------------------------------------------
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [replace, setReplace] = useState(false)
-  const [busy, setBusy] = useState(false)
+  // WHICH action is running, not merely that one is: with a shared flag both
+  // buttons spin, so a dry run looks exactly like the destructive one.
+  const [running, setRunning] = useState<'' | 'dry' | 'run'>('')
+  const busy = running !== ''
   const [report, setReport] = useState<MaterialUtilReport | null>(null)
 
   const targetsKey = targets.join('|')
@@ -259,18 +296,20 @@ export function HoudiniUtilsPanel({
     }
   }, [targetScan, sourceScan])
 
-  const canTransfer = sourceNode !== null && targetRefs.length > 0 && !busy
+  const canTransfer =
+    sourceNode !== null && targetRefs.length > 0 && sections.size > 0 && !busy
   const sourceHasBakers = (sourceNode?.node.bakers ?? 0) > 0
 
   async function run(dryRun: boolean) {
     if (!sourceNode) return
-    setBusy(true)
+    setRunning(dryRun ? 'dry' : 'run')
     setReport(null)
     try {
       const result = await transferHoudiniMaterials({
         data: {
           source: { hipPath: sourceNode.project.hipPath, nodePath: sourceNode.node.path },
           targets: targetRefs,
+          sections: MATERIAL_SECTIONS.filter((key) => sections.has(key)),
           replace,
           dryRun,
         },
@@ -293,7 +332,7 @@ export function HoudiniUtilsPanel({
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
     } finally {
-      setBusy(false)
+      setRunning('')
     }
   }
 
@@ -432,6 +471,61 @@ export function HoudiniUtilsPanel({
               />
             </section>
 
+            {/* ------------------------------------------------------ what to copy */}
+            <section>
+              <Label className="mb-1 flex w-fit items-center gap-1 text-base font-semibold">
+                What to copy
+                <InfoPopup label="What to copy — more information">
+                  These are one setup, not three: a texture baker names its material
+                  (<code>MI_Skin</code>) and its layers name UV channels
+                  (<code>uv_original</code>, <code>uv_geoshell</code>) as plain text. Copying
+                  the bakers alone leaves those names pointing at nothing, and they bake
+                  nothing — which is why all three are on by default.
+                </InfoPopup>
+              </Label>
+              <div className="space-y-1">
+                {MATERIAL_SECTIONS.map((key) => (
+                  <label key={key} className="flex cursor-pointer items-start gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={sections.has(key)}
+                      onChange={() =>
+                        setSections((prev) => {
+                          const next = new Set(prev)
+                          if (next.has(key)) next.delete(key)
+                          else next.add(key)
+                          return next
+                        })
+                      }
+                    />
+                    <span>
+                      <span className="font-medium">{SECTION_LABELS[key].label}</span>
+                      {sourceNode && (
+                        <span className="ml-1 text-muted-foreground">
+                          ({sectionCountOf(sourceNode.node, key)})
+                        </span>
+                      )}
+                      <br />
+                      <span className="text-xs text-muted-foreground">
+                        {SECTION_LABELS[key].hint}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              {!sections.has('materials') && sections.has('bakers') && (
+                <p className="mt-2 flex items-start gap-1.5 text-xs text-amber-500">
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                  <span>
+                    Without the material slots, the copied bakers only bake if the target
+                    already defines the same material names. The dry run lists any that are
+                    missing.
+                  </span>
+                </p>
+              )}
+            </section>
+
             {report && <TransferReport report={report} labelFor={labelFor} />}
           </TabsContent>
         </Tabs>
@@ -453,7 +547,9 @@ export function HoudiniUtilsPanel({
                 ? 'Select a source material node first'
                 : targetRefs.length === 0
                   ? 'Select at least one target material node'
-                  : undefined
+                  : sections.size === 0
+                    ? 'Select at least one thing to copy'
+                    : undefined
             }
             onClick={() => {
               setReport(null)
@@ -474,10 +570,13 @@ export function HoudiniUtilsPanel({
         >
           <div className="space-y-2 text-sm">
             <p>
-              Copy <strong>{sourceNode.node.bakers}</strong> texture baker
-              {sourceNode.node.bakers === 1 ? '' : 's'} ({sourceNode.node.layers} layer
-              {sourceNode.node.layers === 1 ? '' : 's'}) from{' '}
-              <strong>{labelFor(sourceNode.project.hipPath, sourceNode.node.path)}</strong> in{' '}
+              Copy{' '}
+              <strong>
+                {MATERIAL_SECTIONS.filter((key) => sections.has(key))
+                  .map((key) => sectionCountOf(sourceNode.node, key))
+                  .join(', ')}
+              </strong>{' '}
+              from <strong>{labelFor(sourceNode.project.hipPath, sourceNode.node.path)}</strong> in{' '}
               <code>{fileName(sourceNode.project.hipPath)}</code> to{' '}
               <strong>{targetRefs.length}</strong> material node
               {targetRefs.length === 1 ? '' : 's'}.
@@ -504,8 +603,8 @@ export function HoudiniUtilsPanel({
               </Label>
               <p className="text-xs text-muted-foreground">
                 {replace
-                  ? 'Every existing texture baker at the targets is removed first — only the copied ones remain.'
-                  : 'The copied bakers are ADDED to whatever each target already has.'}
+                  ? 'Everything the targets already have in the selected sections is removed first — only the copied ones remain.'
+                  : 'The copied entries are ADDED to whatever each target already has. Material slots merge by name: a slot the target already defines is left alone.'}
               </p>
             </div>
           </div>
@@ -523,10 +622,10 @@ export function HoudiniUtilsPanel({
               Cancel
             </Button>
             <Button variant="outline" disabled={busy} onClick={() => void run(true)}>
-              {busy ? <Loader2 className="animate-spin" /> : null} Dry run
+              {running === 'dry' ? <Loader2 className="animate-spin" /> : null} Dry run
             </Button>
             <Button disabled={busy} onClick={() => void run(false)}>
-              {busy ? <Loader2 className="animate-spin" /> : null} Run
+              {running === 'run' ? <Loader2 className="animate-spin" /> : null} Run
             </Button>
           </div>
         </Modal>
@@ -649,8 +748,14 @@ function TransferReport({
             </p>
             {target.ok ? (
               <p className="text-muted-foreground">
-                {target.bakersBefore} → {target.bakersAfter} bakers
-                {target.replaced ? ' (replaced)' : ' (added)'}
+                {target.sections
+                  .map(
+                    (s) =>
+                      `${SECTION_LABELS[s.key as MaterialSection]?.label ?? s.key} ${s.before} → ${s.after}` +
+                      (s.skipped > 0 ? ` (${s.skipped} already defined, kept)` : ''),
+                  )
+                  .join(' · ')}
+                {target.replaced ? ' — replaced' : ' — added'}
                 {target.backupPath ? ' · backup written' : ''}
               </p>
             ) : (
@@ -660,8 +765,10 @@ function TransferReport({
               <p className="flex items-start gap-1 text-amber-500">
                 <AlertTriangle className="mt-0.5 size-3 shrink-0" />
                 <span>
-                  This node has no material named {target.missingMaterials.map((m) => `"${m}"`).join(', ')} —
-                  those bakers will not produce a texture until a matching material slot exists.
+                  Set up first: this node still has no material named{' '}
+                  {target.missingMaterials.map((m) => `"${m}"`).join(', ')} — add a matching slot
+                  in the Materials tab (or include Material slots above), or those bakers produce
+                  no texture.
                 </span>
               </p>
             )}

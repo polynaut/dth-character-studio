@@ -58,11 +58,25 @@ const scanInput = z.object({
   hipPaths: z.array(z.string().min(1)),
 })
 
+/**
+ * The three transferable parts of a material setup.
+ *
+ * They are one setup, not three independent ones: a baker names its material
+ * (`MI_Skin`) and its layers name UV channels (`uv_original`, `uv_geoshell`) as
+ * plain text, so bakers copied without the slots that define those names — and
+ * the UV channels that create them — import cleanly and bake nothing.
+ */
+export const MATERIAL_SECTIONS = ['materials', 'uvChannels', 'bakers'] as const
+export type MaterialSection = (typeof MATERIAL_SECTIONS)[number]
+
 const transferInput = z.object({
   source: nodeRef,
   /** One or more target nodes; several may live in the same project. */
   targets: z.array(nodeRef).min(1),
-  /** true = the target's existing bakers are wiped first; false = append. */
+  /** Which parts of the setup to copy — at least one. */
+  sections: z.array(z.enum(MATERIAL_SECTIONS)).min(1),
+  /** true = the selected sections are wiped at the target first; false =
+   *  append (material slots merge by name rather than duplicating). */
   replace: z.boolean(),
   /** true = report what WOULD happen and write nothing. */
   dryRun: z.boolean(),

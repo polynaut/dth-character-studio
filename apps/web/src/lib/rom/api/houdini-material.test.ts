@@ -47,6 +47,7 @@ describe('transferHoudiniMaterials', () => {
         data: {
           source,
           targets: [{ hipPath: 'd:\\chars\\Kira\\houdini\\kira.hiplc', nodePath: source.nodePath }],
+          sections: ['bakers'],
           replace: false,
           dryRun: false,
         },
@@ -57,7 +58,37 @@ describe('transferHoudiniMaterials', () => {
   it('rejects an empty target list at the schema boundary', async () => {
     await expect(
       transferHoudiniMaterials({
-        data: { source, targets: [], replace: false, dryRun: true },
+        data: { source, targets: [], sections: ['bakers'], replace: false, dryRun: true },
+      }),
+    ).rejects.toThrow()
+  })
+
+  it('rejects a run that would copy nothing', async () => {
+    // Every section unticked is a no-op that still opens and re-saves the
+    // user's project — refused at the schema, not silently performed.
+    await expect(
+      transferHoudiniMaterials({
+        data: {
+          source,
+          targets: [{ hipPath: 'D:/chars/Ita/houdini/Ita.hiplc', nodePath: '/obj/x' }],
+          sections: [],
+          replace: false,
+          dryRun: true,
+        },
+      }),
+    ).rejects.toThrow()
+  })
+
+  it('rejects an unknown section name', async () => {
+    await expect(
+      transferHoudiniMaterials({
+        data: {
+          source,
+          targets: [{ hipPath: 'D:/chars/Ita/houdini/Ita.hiplc', nodePath: '/obj/x' }],
+          sections: ['shaders'],
+          replace: false,
+          dryRun: true,
+        },
       }),
     ).rejects.toThrow()
   })

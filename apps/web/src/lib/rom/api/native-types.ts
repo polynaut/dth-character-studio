@@ -226,18 +226,29 @@ export const materialScanProjectSchema = z.object({
   nodes: z.array(materialNodeInfoSchema),
 })
 
+/** What one transferred section did to a target node. */
+export const materialSectionResultSchema = z.object({
+  /** `materials`, `uvChannels` or `bakers`. */
+  key: z.string(),
+  before: z.number(),
+  after: z.number(),
+  /** Instances an append skipped as already-defined (material slots only). */
+  skipped: z.number(),
+})
+
 /** What a transfer did — or, in a dry run, would do — to one target node. */
 export const materialTransferTargetSchema = z.object({
   hipPath: z.string(),
   nodePath: z.string(),
   ok: z.boolean(),
   error: z.string(),
-  bakersBefore: z.number(),
-  bakersAfter: z.number(),
+  sections: z.array(materialSectionResultSchema),
   added: z.array(z.string()),
   replaced: z.boolean(),
-  /** Materials the copied bakers name that this target doesn't define — a
-   *  baker with an unknown material imports fine and then bakes nothing. */
+  /** Materials the copied bakers name that this target will STILL not define
+   *  after the run (its own slots PLUS whatever the `materials` section
+   *  installs). A baker with an unknown material imports fine and then bakes
+   *  nothing — so this is precisely what the user must set up by hand. */
   missingMaterials: z.array(z.string()),
   /** Groups the copied layers name that the target's geometry lacks. Empty
    *  ALSO means "couldn't be checked" (no cooked geometry) — never read it as
@@ -258,6 +269,8 @@ export const materialUtilReportSchema = z.object({
   sourceBakers: z.number(),
   sourceLayers: z.number(),
   sourceBakerNames: z.array(z.string()),
+  /** The sections this run was asked to transfer. */
+  sections: z.array(z.string()),
   dryRun: z.boolean(),
   replace: z.boolean(),
 })
@@ -277,6 +290,7 @@ export type PoseAssetFramesResult = z.infer<typeof poseAssetFramesSchema>
 export type SceneWearable = z.infer<typeof sceneWearableSchema>
 export type SceneWearables = z.infer<typeof sceneWearablesSchema>
 export type MaterialNodeInfo = z.infer<typeof materialNodeInfoSchema>
+export type MaterialSectionResult = z.infer<typeof materialSectionResultSchema>
 export type MaterialScanProject = z.infer<typeof materialScanProjectSchema>
 export type MaterialTransferTarget = z.infer<typeof materialTransferTargetSchema>
 export type MaterialUtilReport = z.infer<typeof materialUtilReportSchema>

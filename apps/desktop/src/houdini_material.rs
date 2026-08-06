@@ -62,6 +62,21 @@ pub struct MaterialScanProject {
     pub nodes: Vec<MaterialNodeInfo>,
 }
 
+/// What one transferred section did to a target node.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MaterialSectionResult {
+    /// `materials`, `uvChannels` or `bakers`.
+    pub key: String,
+    /// Instance count before and after (for a dry run, what it WOULD become).
+    pub before: u32,
+    pub after: u32,
+    /// Instances an append skipped because the target already defines that name
+    /// — material slots only, where two slots claiming the same surfaces would
+    /// be worse than not copying.
+    pub skipped: u32,
+}
+
 /// What a transfer did (or, in a dry run, would do) to one target node.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -70,15 +85,18 @@ pub struct MaterialTransferTarget {
     pub node_path: String,
     pub ok: bool,
     pub error: String,
-    pub bakers_before: u32,
-    pub bakers_after: u32,
+    /// One entry per transferred section, in the order they were applied.
+    pub sections: Vec<MaterialSectionResult>,
     /// Names of the bakers copied in.
     pub added: Vec<String>,
     /// Whether the target's existing bakers were replaced rather than appended.
     pub replaced: bool,
-    /// Materials the copied bakers reference that this target does NOT define.
-    /// A baker with an unknown material imports fine and then bakes nothing —
-    /// so this is the difference between a real copy and a cosmetic one.
+    /// Materials the copied bakers reference that this target will STILL not
+    /// define once the run finishes — i.e. computed against the target's own
+    /// slots PLUS whatever the `materials` section installs. A baker with an
+    /// unknown material imports fine and then bakes nothing, so this is the
+    /// difference between a real copy and a cosmetic one, and it is what the
+    /// user has to set up by hand before the bakers land.
     pub missing_materials: Vec<String>,
     /// Geometry groups the copied layers reference that the target's cooked
     /// geometry does not have. Empty ALSO means "could not be checked" (no
@@ -105,6 +123,8 @@ pub struct MaterialUtilReport {
     pub source_bakers: u32,
     pub source_layers: u32,
     pub source_baker_names: Vec<String>,
+    /// The sections this run was asked to transfer.
+    pub sections: Vec<String>,
     pub dry_run: bool,
     pub replace: bool,
 }
