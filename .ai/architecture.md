@@ -135,7 +135,9 @@ Rust modules (`src/*.rs`): `lib.rs` (builder + `generate_handler!`), `windows.rs
 creation), `install.rs`/`assets.rs`/`dedup.rs`/`uninstall.rs` (content install +
 dedup + guarded cleanup), `poses.rs` (`.duf` frame counting/wearables + base-figure detection),
 `housekeeping.rs`, `daz.rs` (process probe/script bridge), `houdini.rs` (hython
-project generation + the Houdini job launcher), `avatar.rs` (avatar image
+project generation + the Houdini job launcher), `houdini_material.rs` (the
+material-utility runner: drives `material_utils.py` under hython and returns its
+typed report), `avatar.rs` (avatar image
 up/downscale), `shellopen.rs` (Explorer-delegated file open — the launched app
 inherits the pristine user-session environment, not the studio's),
 `elevation.rs` (elevated-session detection + the title prefix below),
@@ -162,7 +164,7 @@ the builders), and a rename re-titles an already-marked window. Renaming a proje
 (`storage.renameManifestFile`) and calls `sync_renamed_project_window` to
 live-re-title + re-pin every open window on the old file (no close/reopen).
 
-**FFI surface: 35 commands** registered in `generate_handler!` — installs
+**FFI surface: 36 commands** registered in `generate_handler!` — installs
 (`install_dth_release/plugin/daz_assets/daz_merge/houdini_presets/unreal_dth`),
 scans (`list_daz_assets`, `scan_duf_files`, `pose_asset_frames`,
 `scene_wearables`), dedup/uninstall, windows
@@ -180,7 +182,10 @@ see `docs/exporter-plugin-job-file.md`), drives
 side (`create_houdini_project`, `remove_junction` — the best-effort sweep of
 leftover `dth-exports` junctions from the retired feature —
 `launch_houdini_job`/`houdini_running` for
-the "Export too" handoff, plus `move_exports` for the v29 migration).
+the "Export too" handoff, `run_houdini_material_util` (scan a set of `.hip`
+files for DazToHueMaterial nodes / transfer one node's texture bakers onto
+others — the Houdini card's **Utils** drawer), plus `move_exports` for the v29
+migration).
 Nearly all are
 `#[tauri::command(async)]`; structured returns are camelCase serde structs pinned
 by the `contracts/` fixtures (see `.ai/conventions.md` § FFI ritual).

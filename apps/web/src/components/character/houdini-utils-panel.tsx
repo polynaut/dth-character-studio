@@ -1,0 +1,630 @@
+import { useEffect, useMemo, useState } from 'react'
+import { AlertTriangle, FolderOpen, Loader2, RefreshCw, Wrench } from 'lucide-react'
+import { toast } from 'sonner'
+
+import {
+  Button,
+  InfoPopup,
+  Label,
+  Modal,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  SidePanel,
+  Switch,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@dth/ui'
+import { scanHoudiniMaterials, transferHoudiniMaterials } from '#/lib/rom/api.ts'
+import type {
+  CharacterWithProject,
+  MaterialScanProject,
+  MaterialUtilReport,
+} from '#/lib/rom/api.ts'
+import { fetchAllCharacters } from '#/lib/rom/api.ts'
+import { pickHipPath } from '#/lib/desktop.ts'
+import { displayPath, normalizePath, parentDir } from '#/lib/path.ts'
+import type { Character } from '@dth/rom'
+
+/**
+ * The Houdini card's "Utils" drawer — per-project tools that need Houdini itself
+ * to answer, so each one runs hython behind `lib/rom/api/houdini-material.ts`.
+ *
+ * Tab 1 ("Copy from") is the texture-baker transfer: pick ONE source material
+ * node (from another character's project, or any `.hip` on disk) and copy its
+ * bakers onto one or more of THIS character's material nodes. The tab shape is
+ * deliberate — the same drawer is where the next material utility lands.
+ *
+ * Why a transfer is worth a feature: a skin setup measured on a real project is
+ * 4 bakers of 30 layers, each layer naming a texture, a group, a blend mode and
+ * seven adjustments. Reproducing that by hand for every character is the tedium
+ * this replaces.
+ */
+
+/** A material node identified across files — the selection key everywhere here. */
+function nodeKey(hipPath: string, nodePath: string): string {
+  return `${normalizePath(hipPath).toLowerCase()}|${nodePath}`
+}
+
+function fileName(path: string): string {
+  return path.split(/[\\/]/).pop() ?? path
+}
+
+/** A scan result plus the request that produced it, so a stale list is never
+ *  shown against a changed selection. */
+interface ScanState {
+  loading: boolean
+  error: string
+  projects: Array<MaterialScanProject>
+}
+
+const EMPTY_SCAN: ScanState = { loading: false, error: '', projects: [] }
+
+export function HoudiniUtilsPanel({
+  open,
+  onClose,
+  character,
+  /** The card the panel was opened from — its nodes start selected. */
+  initialHipPath,
+}: {
+  open: boolean
+  onClose: () => void
+  character: Character
+  initialHipPath?: string
+}) {
+  // --- target side: this character's own projects ---------------------------
+  const targets = character.houdiniProjects
+  const [targetScan, setTargetScan] = useState<ScanState>(EMPTY_SCAN)
+  const [selectedTargets, setSelectedTargets] = useState<ReadonlySet<string>>(new Set())
+
+  // --- source side ---------------------------------------------------------
+  const [sourceMode, setSourceMode] = useState<'studio' | 'browse'>('studio')
+  const [others, setOthers] = useState<Array<CharacterWithProject>>([])
+  const [sourceCharacterId, setSourceCharacterId] = useState('')
+  const [sourceHip, setSourceHip] = useState('')
+  const [browsedHip, setBrowsedHip] = useState('')
+  const [sourceScan, setSourceScan] = useState<ScanState>(EMPTY_SCAN)
+  const [selectedSource, setSelectedSource] = useState('')
+
+  // --- the confirm modal ---------------------------------------------------
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [replace, setReplace] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [report, setReport] = useState<MaterialUtilReport | null>(null)
+
+  const targetsKey = targets.join('|')
+
+  async function runScan(
+    hipPaths: Array<string>,
+    set: (next: ScanState) => void,
+  ): Promise<Array<MaterialScanProject>> {
+    if (hipPaths.length === 0) {
+      set(EMPTY_SCAN)
+      return []
+    }
+    set({ loading: true, error: '', projects: [] })
+    try {
+      const projects = await scanHoudiniMaterials({ data: { hipPaths } })
+      set({ loading: false, error: '', projects })
+      return projects
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      set({ loading: false, error: message, projects: [] })
+      return []
+    }
+  }
+
+  // Scan the character's projects when the drawer opens. Opening a `.hip` costs
+  // real seconds, so this deliberately does NOT re-run on every render — only on
+  // open, on an explicit rescan, and when the linked set changes.
+  useEffect(() => {
+    if (!open) return
+    void (async () => {
+      const projects = await runScan(targets, setTargetScan)
+      // Preselect the card's own nodes — the panel was opened FROM that project.
+      const from = initialHipPath
+      if (!from) return
+      const match = projects.find(
+        (p) => normalizePath(p.hipPath).toLowerCase() === normalizePath(from).toLowerCase(),
+      )
+      if (match) {
+        setSelectedTargets(new Set(match.nodes.map((n) => nodeKey(match.hipPath, n.path))))
+      }
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, targetsKey, initialHipPath])
+
+  // Candidate source characters: everything the studio can reach that actually
+  // HAS a Houdini project, minus this character (copying onto itself is refused
+  // by the api anyway, and offering it invites the mistake).
+  useEffect(() => {
+    if (!open) return
+    void fetchAllCharacters()
+      .then((all) =>
+        setOthers(all.filter((c) => c.id !== character.id && c.houdiniProjects.length > 0)),
+      )
+      .catch(() => setOthers([]))
+  }, [open, character.id])
+
+  // Reset everything when the drawer closes, so the next open starts clean.
+  useEffect(() => {
+    if (open) return
+    setSelectedTargets(new Set())
+    setSelectedSource('')
+    setSourceHip('')
+    setBrowsedHip('')
+    setSourceScan(EMPTY_SCAN)
+    setReport(null)
+    setReplace(false)
+  }, [open])
+
+  const sourceCharacter = others.find((c) => c.id === sourceCharacterId)
+  const activeSourceHip = sourceMode === 'browse' ? browsedHip : sourceHip
+
+  // Scanning the chosen source project is a separate (and equally slow) trip —
+  // only ever for the ONE file the user picked.
+  useEffect(() => {
+    setSelectedSource('')
+    if (!open || !activeSourceHip) {
+      setSourceScan(EMPTY_SCAN)
+      return
+    }
+    void runScan([activeSourceHip], setSourceScan)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, activeSourceHip])
+
+  async function onBrowse() {
+    const picked = await pickHipPath(
+      'Select a Houdini project (.hip) to copy from',
+      parentDir(activeSourceHip || targets[0] || ''),
+    )
+    if (picked) {
+      setSourceMode('browse')
+      setBrowsedHip(picked)
+    }
+  }
+
+  function toggleTarget(hipPath: string, nodePath: string) {
+    const key = nodeKey(hipPath, nodePath)
+    setSelectedTargets((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  // The selected source node, resolved back to its scan entry.
+  const sourceNode = useMemo(() => {
+    for (const project of sourceScan.projects) {
+      for (const node of project.nodes) {
+        if (nodeKey(project.hipPath, node.path) === selectedSource) {
+          return { project, node }
+        }
+      }
+    }
+    return null
+  }, [sourceScan, selectedSource])
+
+  // Target refs for the transfer, minus the source node itself.
+  const targetRefs = useMemo(() => {
+    const refs: Array<{ hipPath: string; nodePath: string }> = []
+    for (const project of targetScan.projects) {
+      for (const node of project.nodes) {
+        const key = nodeKey(project.hipPath, node.path)
+        if (!selectedTargets.has(key)) continue
+        if (key === selectedSource) continue
+        refs.push({ hipPath: project.hipPath, nodePath: node.path })
+      }
+    }
+    return refs
+  }, [targetScan, selectedTargets, selectedSource])
+
+  const canTransfer = sourceNode !== null && targetRefs.length > 0 && !busy
+  const sourceHasBakers = (sourceNode?.node.bakers ?? 0) > 0
+
+  async function run(dryRun: boolean) {
+    if (!sourceNode) return
+    setBusy(true)
+    setReport(null)
+    try {
+      const result = await transferHoudiniMaterials({
+        data: {
+          source: { hipPath: sourceNode.project.hipPath, nodePath: sourceNode.node.path },
+          targets: targetRefs,
+          replace,
+          dryRun,
+        },
+      })
+      setReport(result)
+      if (!dryRun) {
+        const failed = result.targets.filter((t) => !t.ok)
+        if (failed.length > 0) {
+          toast.error(
+            `${failed.length} of ${result.targets.length} target${result.targets.length === 1 ? '' : 's'} failed — see the report.`,
+          )
+        } else {
+          toast.success(
+            `Copied ${result.sourceBakers} texture baker${result.sourceBakers === 1 ? '' : 's'} to ${result.targets.length} node${result.targets.length === 1 ? '' : 's'}.`,
+          )
+        }
+        // The targets changed on disk — their counts are now stale.
+        void runScan(targets, setTargetScan)
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <SidePanel
+        open={open}
+        onClose={busy ? () => {} : onClose}
+        title={
+          <span className="flex items-center gap-1.5">
+            <Wrench className="size-4 shrink-0" />
+            Utils — {character.name}
+          </span>
+        }
+      >
+        <Tabs defaultValue="copy-from">
+          <TabsList>
+            <TabsTrigger value="copy-from">Copy from</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="copy-from" className="space-y-6">
+            <p className="text-xs text-muted-foreground">
+              Copy the texture-baker setup of one material node onto this character&apos;s
+              material nodes. Bakers name their material and geometry groups as text, so a
+              target that doesn&apos;t define those names takes the bakers and bakes nothing —
+              the dry run lists exactly that before anything is written.
+            </p>
+
+            {/* ---------------------------------------------------------- target */}
+            <section>
+              <Label className="mb-1 flex w-fit items-center gap-1 text-base font-semibold">
+                Target
+                <InfoPopup label="Target — more information">
+                  This character&apos;s linked Houdini projects and the DazToHue material nodes
+                  found in each. Select every node that should receive the copied bakers.
+                </InfoPopup>
+              </Label>
+              <div className="mb-2 flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">
+                  {targets.length === 0
+                    ? 'No Houdini projects linked to this character.'
+                    : `${targets.length} linked project${targets.length === 1 ? '' : 's'}`}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={targetScan.loading || targets.length === 0}
+                  onClick={() => void runScan(targets, setTargetScan)}
+                >
+                  <RefreshCw className={targetScan.loading ? 'animate-spin' : ''} /> Rescan
+                </Button>
+              </div>
+              <NodePicker
+                scan={targetScan}
+                mode="multi"
+                selected={selectedTargets}
+                disabledKey={selectedSource}
+                onToggle={toggleTarget}
+              />
+            </section>
+
+            {/* ---------------------------------------------------------- source */}
+            <section>
+              <Label className="mb-1 flex w-fit items-center gap-1 text-base font-semibold">
+                Source
+                <InfoPopup label="Source — more information">
+                  The node to copy FROM — another character&apos;s project, or any Houdini
+                  project on disk. Exactly one material node can be the source.
+                </InfoPopup>
+              </Label>
+
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <Select
+                  value={sourceCharacterId}
+                  onValueChange={(value) => {
+                    setSourceMode('studio')
+                    setSourceCharacterId(value)
+                    const next = others.find((c) => c.id === value)
+                    setSourceHip(next?.houdiniProjects[0] ?? '')
+                  }}
+                >
+                  <SelectTrigger className="w-64">
+                    <SelectValue placeholder="Character from the studio…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {others.map((c) => (
+                      <SelectItem key={`${c.projectId}|${c.id}`} value={c.id}>
+                        {c.name} — {c.projectName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {sourceCharacter && sourceCharacter.houdiniProjects.length > 1 && (
+                  <Select
+                    value={sourceMode === 'studio' ? sourceHip : ''}
+                    onValueChange={(value) => {
+                      setSourceMode('studio')
+                      setSourceHip(value)
+                    }}
+                  >
+                    <SelectTrigger className="w-72">
+                      <SelectValue placeholder="Project…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {sourceCharacter.houdiniProjects.map((hip) => (
+                        <SelectItem key={hip} value={hip}>
+                          {fileName(hip)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+
+                <Button variant="outline" size="sm" onClick={() => void onBrowse()}>
+                  <FolderOpen /> Browse…
+                </Button>
+              </div>
+
+              {activeSourceHip && (
+                <p className="mb-2 truncate text-xs text-muted-foreground" title={activeSourceHip}>
+                  {displayPath(activeSourceHip)}
+                </p>
+              )}
+
+              <NodePicker
+                scan={sourceScan}
+                mode="single"
+                selected={new Set(selectedSource ? [selectedSource] : [])}
+                onToggle={(hipPath, nodePath) => setSelectedSource(nodeKey(hipPath, nodePath))}
+                empty={
+                  activeSourceHip
+                    ? undefined
+                    : 'Pick a character or browse for a Houdini project to copy from.'
+                }
+              />
+            </section>
+
+            {report && <TransferReport report={report} />}
+          </TabsContent>
+        </Tabs>
+
+        {/* The panel's own footer action — the modal owns the actual run. */}
+        <div className="mt-6 flex items-center justify-end gap-3 border-t pt-4">
+          {sourceNode && !sourceHasBakers && (
+            <span className="flex items-center gap-1.5 text-xs text-amber-500">
+              <AlertTriangle className="size-3.5" /> The source node has no texture bakers.
+            </span>
+          )}
+          <span className="text-xs text-muted-foreground">
+            {targetRefs.length} target node{targetRefs.length === 1 ? '' : 's'} selected
+          </span>
+          <Button
+            disabled={!canTransfer}
+            title={
+              !sourceNode
+                ? 'Select a source material node first'
+                : targetRefs.length === 0
+                  ? 'Select at least one target material node'
+                  : undefined
+            }
+            onClick={() => {
+              setReport(null)
+              setConfirmOpen(true)
+            }}
+          >
+            <Wrench /> Transfer
+          </Button>
+        </div>
+      </SidePanel>
+
+      {confirmOpen && sourceNode && (
+        <Modal
+          open
+          onClose={() => setConfirmOpen(false)}
+          dismissible={!busy}
+          title="Copy texture bakers?"
+        >
+          <div className="space-y-2 text-sm">
+            <p>
+              Copy <strong>{sourceNode.node.bakers}</strong> texture baker
+              {sourceNode.node.bakers === 1 ? '' : 's'} ({sourceNode.node.layers} layer
+              {sourceNode.node.layers === 1 ? '' : 's'}) from{' '}
+              <code>{sourceNode.node.name}</code> in <code>{fileName(sourceNode.project.hipPath)}</code>{' '}
+              to <strong>{targetRefs.length}</strong> material node
+              {targetRefs.length === 1 ? '' : 's'}.
+            </p>
+            <ul className="max-h-32 list-inside list-disc overflow-y-auto text-xs text-muted-foreground">
+              {targetRefs.map((t) => (
+                <li key={nodeKey(t.hipPath, t.nodePath)}>
+                  <code>{fileName(t.hipPath)}</code> — {t.nodePath}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="flex items-start gap-3 rounded-md border p-3">
+            <Switch
+              id="replace-at-target"
+              checked={replace}
+              disabled={busy}
+              onCheckedChange={setReplace}
+            />
+            <div className="text-sm">
+              <Label htmlFor="replace-at-target" className="font-medium">
+                Replace at target
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                {replace
+                  ? 'Every existing texture baker at the targets is removed first — only the copied ones remain.'
+                  : 'The copied bakers are ADDED to whatever each target already has.'}
+              </p>
+            </div>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            A real run saves each target project. Close them in Houdini first — Houdini writes the
+            whole scene on save and would overwrite this. The previous state is kept as{' '}
+            <code>backup/&lt;name&gt;_dthbak.hiplc</code>.
+          </p>
+
+          {report && <TransferReport report={report} />}
+
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" disabled={busy} onClick={() => setConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="outline" disabled={busy} onClick={() => void run(true)}>
+              {busy ? <Loader2 className="animate-spin" /> : null} Dry run
+            </Button>
+            <Button disabled={busy} onClick={() => void run(false)}>
+              {busy ? <Loader2 className="animate-spin" /> : null} Run
+            </Button>
+          </div>
+        </Modal>
+      )}
+    </>
+  )
+}
+
+/** The project → material-node list both sides share. */
+function NodePicker({
+  scan,
+  mode,
+  selected,
+  onToggle,
+  disabledKey,
+  empty,
+}: {
+  scan: ScanState
+  mode: 'single' | 'multi'
+  selected: ReadonlySet<string>
+  onToggle: (hipPath: string, nodePath: string) => void
+  /** A node that cannot be picked here (the chosen source, in the target list). */
+  disabledKey?: string
+  empty?: string
+}) {
+  if (scan.loading) {
+    return (
+      <p className="flex items-center gap-2 rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+        <Loader2 className="size-3.5 animate-spin" />
+        Opening the project in Houdini — this takes a moment per file.
+      </p>
+    )
+  }
+  if (scan.error) {
+    return <p className="rounded-md border border-destructive/50 p-3 text-xs text-destructive">{scan.error}</p>
+  }
+  if (scan.projects.length === 0) {
+    return (
+      <p className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+        {empty ?? 'No Houdini projects to scan.'}
+      </p>
+    )
+  }
+  return (
+    <div className="space-y-2">
+      {scan.projects.map((project) => (
+        <div key={project.hipPath} className="rounded-md border p-3">
+          <p className="truncate text-sm font-medium" title={project.hipPath}>
+            {fileName(project.hipPath)}
+          </p>
+          {!project.ok ? (
+            <p className="mt-1 text-xs text-destructive">{project.error}</p>
+          ) : project.nodes.length === 0 ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              No DazToHue material nodes in this project.
+            </p>
+          ) : (
+            <ul className="mt-2 space-y-1">
+              {project.nodes.map((node) => {
+                const key = nodeKey(project.hipPath, node.path)
+                const isDisabled = disabledKey === key
+                return (
+                  <li key={key}>
+                    <label
+                      className={`flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-xs hover:bg-accent/50 ${
+                        isDisabled ? 'cursor-not-allowed opacity-40' : ''
+                      }`}
+                    >
+                      <input
+                        type={mode === 'multi' ? 'checkbox' : 'radio'}
+                        name={mode === 'single' ? 'material-source' : undefined}
+                        checked={selected.has(key)}
+                        disabled={isDisabled}
+                        onChange={() => onToggle(project.hipPath, node.path)}
+                      />
+                      <span className="font-medium">{node.name}</span>
+                      <span className="text-muted-foreground">
+                        {node.bakers} baker{node.bakers === 1 ? '' : 's'} · {node.layers} layer
+                        {node.layers === 1 ? '' : 's'} · {node.materials} material
+                        {node.materials === 1 ? '' : 's'}
+                      </span>
+                      {isDisabled && <span className="text-muted-foreground">(source)</span>}
+                    </label>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** What a run (or dry run) did, per target. */
+function TransferReport({ report }: { report: MaterialUtilReport }) {
+  return (
+    <div className="rounded-md border p-3">
+      <p className="mb-2 text-sm font-medium">
+        {report.dryRun ? 'Dry run — nothing was written' : 'Transfer complete'}
+      </p>
+      <ul className="space-y-2 text-xs">
+        {report.targets.map((target) => (
+          <li key={`${target.hipPath}|${target.nodePath}`}>
+            <p className="truncate" title={target.hipPath}>
+              <code>{fileName(target.hipPath)}</code> — {target.nodePath}
+            </p>
+            {target.ok ? (
+              <p className="text-muted-foreground">
+                {target.bakersBefore} → {target.bakersAfter} bakers
+                {target.replaced ? ' (replaced)' : ' (added)'}
+                {target.backupPath ? ' · backup written' : ''}
+              </p>
+            ) : (
+              <p className="text-destructive">{target.error}</p>
+            )}
+            {target.missingMaterials.length > 0 && (
+              <p className="flex items-start gap-1 text-amber-500">
+                <AlertTriangle className="mt-0.5 size-3 shrink-0" />
+                <span>
+                  This node has no material named {target.missingMaterials.map((m) => `"${m}"`).join(', ')} —
+                  those bakers will not produce a texture until a matching material slot exists.
+                </span>
+              </p>
+            )}
+            {target.missingGroups.length > 0 && (
+              <p className="flex items-start gap-1 text-amber-500">
+                <AlertTriangle className="mt-0.5 size-3 shrink-0" />
+                <span>Groups not found on the target geometry: {target.missingGroups.join(', ')}</span>
+              </p>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}

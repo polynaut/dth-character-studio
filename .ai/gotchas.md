@@ -241,6 +241,24 @@ current code before relying on details, but assume the *lesson* still holds.
   FOOTGUN: explorer.exe accepts BACKSLASH paths only — a '/'-joined path
   makes it silently open a folder window instead of the file's association
   (shell_open_file converts before spawning).
+- **DazToHue HDA multiparms are 0-BASED** — `multiParmStartOffset()` returns
+  `0`, not Houdini's usual `1`. Measured 2026-08-06 on DazToHue 2.5 / Houdini
+  22.0 across the material node's `material`, `material_uv_channel` and
+  `material_texture_baker` blocks. A `range(1, count + 1)` loop therefore drops
+  instance 0 AND reads one past the end — which looks like real data (a
+  "missing" trailing baker) rather than an error. ALWAYS read the offset from
+  the parm; never count from 1. Same 0-based convention as the ROM frame math,
+  by coincidence rather than by contract, so don't infer one from the other.
+- **A DazToHue texture baker references its material and geometry groups BY
+  NAME** (`MI_Skin`, `Head`, `GP*`, geoshell `..._Shape`) — measured on the
+  same pass. Copying bakers into a node that lacks those names SUCCEEDS and
+  then bakes nothing, so a transfer that only reports "copied" is lying by
+  omission. `material_utils.py` diffs the needed names against the target's
+  material slots and cooked prim groups and reports the gap
+  (`missingMaterials`/`missingGroups`); an EMPTY `missingGroups` can also mean
+  "no cooked geometry to check against" — never render it as "all present".
+  Layer texture paths are absolute into the Daz library, so they survive a
+  cross-project copy on the same machine and would need remapping off it.
 - **The Rust crate version (`apps/desktop/Cargo.toml`, `0.1.0`) is cosmetic.**
   The product version lives in `apps/desktop/package.json`
   (`tauri.conf.json` has `"version": "package.json"`); Changesets bumps only the

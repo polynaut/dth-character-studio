@@ -76,6 +76,48 @@ across Houdini or DazToHue updates. If the HDA isn't installed the project
 still generates (empty scene, Set Project baked) and the studio tells you to
 add the network from the DazToHue shelf.
 
+## Utils — copy a texture-baker setup between projects
+
+Setting up the texture bakers in a **DazToHueMaterial** node is the most tedious
+part of the whole workflow: one skin material easily runs to four bakers of
+thirty layers, each layer naming a texture, a geometry group, a blend mode and
+seven adjustments. If you reuse the same skin across characters, you were
+rebuilding all of it by hand.
+
+The **Utils** button on a Houdini project card (the 🔧 that appears on hover)
+opens a drawer that copies a material node's **complete texture-baking
+definition** from one project into another.
+
+- **Target** — this character's linked Houdini projects, with every DazToHue
+  material node found in each. Tick as many as you want; the card you opened
+  Utils from starts selected.
+- **Source** — the node to copy *from*: pick another character from the studio,
+  or **Browse…** for any Houdini project on disk. Exactly one node can be the
+  source.
+- **Transfer** asks for confirmation, then offers **Dry run** (changes nothing,
+  reports exactly what a real run would do) and **Run**.
+
+**Replace at target** is off by default: the copied bakers are *added* to
+whatever the target already has. Turned on, the target's existing bakers are
+removed first and only the copied ones remain.
+
+> **Bakers reference materials and groups by name.** A baker copied into a node
+> that has no material called `MI_Skin` imports fine and then bakes nothing —
+> so the report names every material the target is missing. That is what the dry
+> run is for: run it first, and if it warns about missing materials, set those
+> material slots up (Materials tab) before the real run. The material slots
+> themselves are *not* copied — only the baking definitions.
+
+Every project the transfer writes is saved once, after its previous state is
+kept as `backup/<name>_dthbak.hiplc` (one rolling backup, beside Houdini's own).
+**Close the target projects in Houdini first** — Houdini writes the entire scene
+when you save, so an open copy would overwrite the transfer.
+
+Like Generate project, this runs Houdini's `hython`, so it needs the **Houdini
+installation folder** and its matching documents folder in Settings. Opening a
+`.hip` takes a few seconds per file — the drawer scans when it opens and after a
+run, and there's a **Rescan** button.
+
 ## `$DAZ3D_LIB` — your Daz library, as a variable
 
 With both **My DAZ 3D Library** and the **Houdini documents folder** set in

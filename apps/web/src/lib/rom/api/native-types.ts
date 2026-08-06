@@ -196,6 +196,68 @@ export const remapResultSchema = z.object({
   detail: z.string(),
 })
 
+// --- DazToHue material utilities (houdini_material.rs) -----------------------
+
+/** One DazToHueMaterial node found by a scan. */
+export const materialNodeInfoSchema = z.object({
+  /** Node path in the scene, e.g. `/obj/DazToHue/DazToHueMaterial`. */
+  path: z.string(),
+  name: z.string(),
+  materials: z.number(),
+  uvChannels: z.number(),
+  bakers: z.number(),
+  /** Total baker layers — how much hand-work the setup represents. */
+  layers: z.number(),
+  bakerNames: z.array(z.string()),
+  /** Slot names with AND without the node's prefix, so a baker's material
+   *  (`MI_Skin`) can be matched however the target spells it. */
+  materialNames: z.array(z.string()),
+})
+
+/** One scanned `.hip` (`ok: false` = unreadable; the scan itself still succeeds). */
+export const materialScanProjectSchema = z.object({
+  hipPath: z.string(),
+  ok: z.boolean(),
+  error: z.string(),
+  nodes: z.array(materialNodeInfoSchema),
+})
+
+/** What a transfer did — or, in a dry run, would do — to one target node. */
+export const materialTransferTargetSchema = z.object({
+  hipPath: z.string(),
+  nodePath: z.string(),
+  ok: z.boolean(),
+  error: z.string(),
+  bakersBefore: z.number(),
+  bakersAfter: z.number(),
+  added: z.array(z.string()),
+  replaced: z.boolean(),
+  /** Materials the copied bakers name that this target doesn't define — a
+   *  baker with an unknown material imports fine and then bakes nothing. */
+  missingMaterials: z.array(z.string()),
+  /** Groups the copied layers name that the target's geometry lacks. Empty
+   *  ALSO means "couldn't be checked" (no cooked geometry) — never read it as
+   *  "all present". */
+  missingGroups: z.array(z.string()),
+  /** Rolling pre-transfer backup (empty for a dry run). */
+  backupPath: z.string(),
+})
+
+/** The report of either material-utility operation (mirrors the Rust
+ *  `MaterialUtilReport`). */
+export const materialUtilReportSchema = z.object({
+  op: z.string(),
+  ok: z.boolean(),
+  error: z.string(),
+  projects: z.array(materialScanProjectSchema),
+  targets: z.array(materialTransferTargetSchema),
+  sourceBakers: z.number(),
+  sourceLayers: z.number(),
+  sourceBakerNames: z.array(z.string()),
+  dryRun: z.boolean(),
+  replace: z.boolean(),
+})
+
 // --- inferred TS types (single source of truth is the schemas above) ---------
 
 export type InstallStep = z.infer<typeof installStepSchema>
@@ -210,3 +272,7 @@ export type RemapResult = z.infer<typeof remapResultSchema>
 export type PoseAssetFramesResult = z.infer<typeof poseAssetFramesSchema>
 export type SceneWearable = z.infer<typeof sceneWearableSchema>
 export type SceneWearables = z.infer<typeof sceneWearablesSchema>
+export type MaterialNodeInfo = z.infer<typeof materialNodeInfoSchema>
+export type MaterialScanProject = z.infer<typeof materialScanProjectSchema>
+export type MaterialTransferTarget = z.infer<typeof materialTransferTargetSchema>
+export type MaterialUtilReport = z.infer<typeof materialUtilReportSchema>

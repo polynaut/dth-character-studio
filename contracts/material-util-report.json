@@ -1,0 +1,50 @@
+{
+  "op": "transfer",
+  "ok": true,
+  "error": "",
+  "projects": [
+    {
+      "hipPath": "D:/chars/Kira/houdini/Kira.hiplc",
+      "ok": true,
+      "error": "",
+      "nodes": [
+        {
+          "path": "/obj/DazToHue/DazToHueMaterial",
+          "name": "DazToHueMaterial",
+          "materials": 7,
+          "uvChannels": 3,
+          "bakers": 11,
+          "layers": 43,
+          "bakerNames": ["T_Skin_Colour", "T_Skin_Normal"],
+          "materialNames": ["MI_Skin", "Skin"]
+        }
+      ]
+    },
+    {
+      "hipPath": "D:/chars/Gone/houdini/Gone.hiplc",
+      "ok": false,
+      "error": "Unable to open file",
+      "nodes": []
+    }
+  ],
+  "targets": [
+    {
+      "hipPath": "D:/chars/Ita/houdini/Ita.hiplc",
+      "nodePath": "/obj/DazToHue/DazToHueMaterial",
+      "ok": true,
+      "error": "",
+      "bakersBefore": 0,
+      "bakersAfter": 4,
+      "added": ["T_Skin_Colour", "T_Skin_Normal"],
+      "replaced": false,
+      "missingMaterials": ["MI_Skin"],
+      "missingGroups": [],
+      "backupPath": "D:/chars/Ita/houdini/backup/Ita_dthbak.hiplc"
+    }
+  ],
+  "sourceBakers": 4,
+  "sourceLayers": 30,
+  "sourceBakerNames": ["T_Skin_Colour", "T_Skin_Normal"],
+  "dryRun": false,
+  "replace": false
+}

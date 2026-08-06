@@ -3,6 +3,7 @@ import { Plus, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { DirPathChip, displayDirOf } from '#/components/dir-path-chip.tsx'
+import { HoudiniUtilsPanel } from '#/components/character/houdini-utils-panel.tsx'
 import { Portrait } from '#/components/portrait.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import {
@@ -56,6 +57,7 @@ function HoudiniCard({
   avatarSrc,
   onOpen,
   onRemove,
+  onUtils,
 }: {
   hipPath: string
   /** Gender-based placeholder avatar (a Houdini project has no thumbnail). */
@@ -63,6 +65,8 @@ function HoudiniCard({
   onOpen: (e: React.MouseEvent) => void
   /** When set, a hover ✕ unlinks the project from the character. */
   onRemove?: () => void
+  /** Opens the Utils drawer with this project's nodes preselected. */
+  onUtils?: () => void
 }) {
   const fileName = hipPath.split(/[\\/]/).pop() ?? hipPath
   // The heading shows the project name without its extension (e.g. ".hiplc").
@@ -98,6 +102,8 @@ function HoudiniCard({
       onOpen={onOpen}
       onRemove={onRemove}
       removeTitle="Unlink from character"
+      onUtils={onUtils}
+      utilsTitle="Utils — copy material setups between projects"
     />
   )
 }
@@ -136,6 +142,10 @@ export function HoudiniProjectsField({
   // Only offered for GENERATED projects (living directly in the export dir) —
   // hand-linked ones stay unlink-only like before.
   const [keepFiles, setKeepFiles] = useState(true)
+
+  // The Houdini project whose Utils drawer is open ('' = closed). The path also
+  // seeds the drawer's target preselection.
+  const [utilsFor, setUtilsFor] = useState('')
 
   // A project pending the unlink confirm. Houdini projects are only ever linked
   // in place (absolute import paths forbid copying), so removing is unlink-only —
@@ -327,6 +337,7 @@ export function HoudiniProjectsField({
                 avatarSrc={placeholderSrc}
                 onOpen={(e) => void onOpen(hip, e)}
                 onRemove={() => askRemove(hip)}
+                onUtils={() => setUtilsFor(hip)}
               />
             ),
           )}
@@ -381,6 +392,17 @@ export function HoudiniProjectsField({
               )
             }
           }}
+        />
+      )}
+
+      {/* Mounted only while open: the drawer scans the linked projects with
+          hython on mount, which must never happen just because the tab rendered. */}
+      {utilsFor && (
+        <HoudiniUtilsPanel
+          open
+          character={character}
+          initialHipPath={utilsFor}
+          onClose={() => setUtilsFor('')}
         />
       )}
 

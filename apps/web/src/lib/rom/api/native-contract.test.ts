@@ -7,6 +7,7 @@ import {
   dedupReportSchema,
   housekeepingResultSchema,
   installReportSchema,
+  materialUtilReportSchema,
   poseAssetFramesSchema,
   remapResultSchema,
   sceneWearablesSchema,
@@ -30,6 +31,7 @@ const CASES = [
   ['install-report.json', installReportSchema],
   ['dedup-report.json', dedupReportSchema],
   ['remap-results.json', z.array(remapResultSchema)],
+  ['material-util-report.json', materialUtilReportSchema],
 ] as const
 
 describe('native FFI contract fixtures', () => {
