@@ -23,6 +23,7 @@ import {
 import {
   MATERIAL_SECTIONS,
   SKELETON_SECTIONS,
+  prefillHoudiniNetwork,
   repairHoudiniDefaults,
   repathHoudiniReferences,
   scanHoudiniMaterials,
@@ -37,6 +38,7 @@ import type {
   MaterialSlotInfo,
   MaterialUtilReport,
   NodeKind,
+  ProjectPrefillInfo,
   SkeletonSection,
 } from '#/lib/rom/api.ts'
 import { fetchAllCharacters, listAssets } from '#/lib/rom/api.ts'
@@ -249,6 +251,8 @@ export function HoudiniUtilsPanel({
   const [defaultsReport, setDefaultsReport] = useState<MaterialUtilReport | null>(null)
   const [repathOpen, setRepathOpen] = useState(false)
   const [repathReport, setRepathReport] = useState<MaterialUtilReport | null>(null)
+  const [prefillOpen, setPrefillOpen] = useState(false)
+  const [prefillReport, setPrefillReport] = useState<MaterialUtilReport | null>(null)
 
   const targetsKey = targets.join('|')
 
@@ -580,6 +584,45 @@ export function HoudiniUtilsPanel({
     [targetScan, charFolder],
   )
 
+  /** Projects with at least one blank parm the studio can fill. A parm this
+   *  DazToHue version lacks is NOT work — it is reported in the row instead. */
+  const prefillTargets = useMemo(
+    () =>
+      targetScan.projects
+        .filter((p) => p.ok && p.prefill.fillable.length > 0)
+        .map((p) => p.hipPath),
+    [targetScan],
+  )
+
+  async function runPrefill(dryRun: boolean) {
+    if (prefillTargets.length === 0 || !projectId) return
+    setRunning(dryRun ? 'dry' : 'run')
+    setPrefillReport(null)
+    try {
+      const result = await prefillHoudiniNetwork({
+        data: { projectId, id: character.id, hipPaths: prefillTargets, dryRun },
+      })
+      setPrefillReport(result)
+      if (!dryRun) {
+        const failed = result.prefill.filter((r) => !r.ok)
+        if (failed.length > 0) {
+          toast.error(`${failed.length} of ${result.prefill.length} projects failed — see below.`)
+        } else {
+          const filled = result.prefill.reduce((n, r) => n + r.filled.length, 0)
+          toast.success(
+            `Filled ${filled} parameter${filled === 1 ? '' : 's'} the studio already knew.`,
+          )
+          setPrefillOpen(false)
+        }
+        void runScan(targets, setTargetScan)
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+    } finally {
+      setRunning('')
+    }
+  }
+
   async function runRepath(dryRun: boolean) {
     if (repath.targets.length === 0) return
     setRunning(dryRun ? 'dry' : 'run')
@@ -696,6 +739,7 @@ export function HoudiniUtilsPanel({
               report={defaultsReport}
               repathReport={repathReport}
               repathReason={repath.reason}
+              prefillReport={prefillReport}
               onRescan={() => void runScan(targets, setTargetScan)}
             />
           </TabsContent>
@@ -1111,6 +1155,21 @@ export function HoudiniUtilsPanel({
             >
               <Wrench /> Make paths portable
             </Button>
+            <Button
+              variant="outline"
+              disabled={busy || prefillTargets.length === 0 || !projectId}
+              title={
+                prefillTargets.length === 0
+                  ? 'Nothing blank the studio has an answer for'
+                  : undefined
+              }
+              onClick={() => {
+                setPrefillReport(null)
+                setPrefillOpen(true)
+              }}
+            >
+              <Wrench /> Fill network
+            </Button>
           </div>
         ) : (
         <div className="mt-6 flex items-center justify-end gap-3 border-t pt-4">
@@ -1196,6 +1255,60 @@ export function HoudiniUtilsPanel({
               {running === 'dry' ? <Loader2 className="animate-spin" /> : null} Dry run
             </Button>
             <Button disabled={busy} onClick={() => void runDefaults(false)}>
+              {running === 'run' ? <Loader2 className="animate-spin" /> : null} Run
+            </Button>
+          </div>
+        </Modal>
+      )}
+
+      {prefillOpen && (
+        <Modal
+          open
+          onClose={() => setPrefillOpen(false)}
+          dismissible={!busy}
+          title="Fill the DazToHue network?"
+        >
+          <div className="space-y-2 text-sm">
+            <p>
+              Fill the blank DazToHue parameters the studio already knows — the same wiring
+              <strong> Generate project</strong> gives a new project — across{' '}
+              <strong>{prefillTargets.length}</strong> project
+              {prefillTargets.length === 1 ? '' : 's'}.
+            </p>
+            <ul className="max-h-32 list-inside list-disc overflow-y-auto text-xs text-muted-foreground">
+              {prefillTargets.map((hip) => (
+                <li key={hip}>
+                  <code>{fileName(hip)}</code>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* The two properties that make this safe to run on a project the
+              user has already configured by hand. */}
+          <p className="rounded-md border p-3 text-xs text-muted-foreground">
+            Only <strong>blank</strong> parameters are written — anything you set yourself is left
+            exactly as it is. A parameter your installed DazToHue version doesn&apos;t have is
+            skipped and named in the report, so this stays useful before the release that adds
+            the PoseAsset CSV path.
+          </p>
+
+          <p className="text-xs text-muted-foreground">
+            A real run saves each project. Close them in Houdini first — Houdini writes the whole
+            scene on save and would overwrite this. The previous state is kept as{' '}
+            <code>backup/&lt;name&gt;_dthbak.hiplc</code>.
+          </p>
+
+          {prefillReport && <PrefillReport report={prefillReport} />}
+
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" disabled={busy} onClick={() => setPrefillOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="outline" disabled={busy} onClick={() => void runPrefill(true)}>
+              {running === 'dry' ? <Loader2 className="animate-spin" /> : null} Dry run
+            </Button>
+            <Button disabled={busy} onClick={() => void runPrefill(false)}>
               {running === 'run' ? <Loader2 className="animate-spin" /> : null} Run
             </Button>
           </div>
@@ -1409,6 +1522,7 @@ function DefaultsTab({
   report,
   repathReport,
   repathReason,
+  prefillReport,
   onRescan,
 }: {
   scan: ScanState
@@ -1418,6 +1532,7 @@ function DefaultsTab({
   repathReport: MaterialUtilReport | null
   /** Why the repath action is unavailable, '' when it can run. */
   repathReason: string
+  prefillReport: MaterialUtilReport | null
   onRescan: () => void
 }) {
   return (
@@ -1496,6 +1611,7 @@ function DefaultsTab({
                     </li>
                   ))}
                   <RefRows refs={project.refs} reason={repathReason} />
+                  <PrefillRow prefill={project.prefill} />
                 </ul>
               )}
             </ProjectCard>
@@ -1505,6 +1621,7 @@ function DefaultsTab({
 
       {report && <DefaultsReport report={report} />}
       {repathReport && <RepathReport report={repathReport} />}
+      {prefillReport && <PrefillReport report={prefillReport} />}
     </div>
   )
 }
@@ -1576,6 +1693,91 @@ function RefRows({
           disabled button. */}
       {!clean && reason !== '' && <li className="text-xs text-amber-500">{reason}</li>}
     </>
+  )
+}
+
+/**
+ * What Generate project would have wired, for a project that already exists.
+ *
+ * Two separate facts, and conflating them would be the whole trap: `fillable`
+ * is work the studio can do now; `missing` is a parameter the INSTALLED
+ * DazToHue doesn't have. Naming the second is the point — the PoseAsset CSV
+ * path is absent from DazToHue 2.5 (the node ships a button instead), so a user
+ * who expected it filled gets a reason rather than a silent gap, and the same
+ * action starts filling it the day that release lands.
+ */
+function PrefillRow({ prefill }: { prefill: ProjectPrefillInfo }) {
+  const short = (label: string) => label.split(' ').pop() ?? label
+  if (prefill.fillable.length === 0 && prefill.missing.length === 0) return null
+  return (
+    <li className="text-xs">
+      <p className="flex items-center gap-2">
+        <span className="font-medium">DazToHue network</span>
+        {prefill.fillable.length === 0 ? (
+          <span className="text-muted-foreground">nothing left to fill</span>
+        ) : (
+          <span className="flex items-center gap-1 text-amber-500">
+            <AlertTriangle className="size-3 shrink-0" />
+            {prefill.fillable.length} blank
+          </span>
+        )}
+      </p>
+      {prefill.fillable.length > 0 && (
+        <p className="text-muted-foreground">
+          The studio knows these: {prefill.fillable.map(short).join(', ')}.
+        </p>
+      )}
+      {prefill.missing.length > 0 && (
+        <p className="text-muted-foreground">
+          Your DazToHue version has no {prefill.missing.map(short).join(', ')} — it will be filled
+          automatically once a release adds it.
+        </p>
+      )}
+    </li>
+  )
+}
+
+/** What a prefill did, or would do, per project. */
+function PrefillReport({ report }: { report: MaterialUtilReport }) {
+  const short = (label: string) => label.split(' ').pop() ?? label
+  return (
+    <div className="rounded-md border p-3">
+      <p className="mb-2 text-sm font-medium">
+        {report.dryRun ? 'Dry run — nothing was written' : 'Network filled'}
+      </p>
+      <ul className="space-y-2 text-xs">
+        {report.prefill.map((entry) => (
+          <li key={entry.hipPath}>
+            <p className="truncate" title={entry.hipPath}>
+              <strong>{fileName(entry.hipPath)}</strong>
+            </p>
+            {entry.ok ? (
+              <>
+                <p className="text-muted-foreground">
+                  {entry.filled.length} parameter{entry.filled.length === 1 ? '' : 's'} filled
+                  {entry.skippedSet.length > 0
+                    ? ` · ${entry.skippedSet.length} already set, left alone`
+                    : ''}
+                  {entry.backupPath ? ' · backup written' : ''}
+                </p>
+                {entry.filled.map((parm) => (
+                  <p key={parm.label} className="truncate text-muted-foreground" title={parm.value}>
+                    {short(parm.label)} = <code>{parm.value}</code>
+                  </p>
+                ))}
+                {entry.skippedMissing.length > 0 && (
+                  <p className="text-muted-foreground">
+                    Not in your DazToHue version: {entry.skippedMissing.map(short).join(', ')}.
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className="text-destructive">{entry.error}</p>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }
 

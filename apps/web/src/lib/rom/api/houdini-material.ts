@@ -6,6 +6,11 @@ import * as storage from '../storage'
 import { houdiniVersionFromInstall, matchingHoudiniDocsFolder } from '#/lib/houdini-version.ts'
 import { HOUDINI_SCRIPTS_FOLDER } from '../houdini-jobs'
 import { normalizePath } from '#/lib/path.ts'
+import { hipRefPrefixFor } from '#/lib/scene-subfolder.ts'
+import { buildHoudiniPrefill } from '../houdini-jobs'
+import { characterScenesRoot } from './execute'
+import { charsRoot, locateCharacter, resolveProject } from './core'
+import type { Character } from '@dth/rom'
 import { materialUtilReportSchema } from './native-types.ts'
 import type { MaterialScanProject, MaterialUtilReport } from './native-types.ts'
 import { joinPath } from './core'
@@ -417,6 +422,83 @@ export async function repathHoudiniReferences({
     throw new Error('Repathing Houdini references needs the desktop app (it runs hython).')
   }
   return runMaterialUtil({ op: 'repath', ...input })
+}
+
+const prefillInput = z.object({
+  projectId: z.string().min(1),
+  /** The character whose values are filled in — its export layout is the
+   *  source of every path. */
+  id: z.string().min(1),
+  /** The linked `.hip` files to fill. */
+  hipPaths: z.array(z.string().min(1)).min(1),
+  dryRun: z.boolean(),
+})
+
+/**
+ * Fill the blank DazToHue parms of projects that ALREADY exist.
+ *
+ * Generate project wires a fresh network end-to-end; a project made before that
+ * — or before the DazToHue release that adds a parm — can never be regenerated,
+ * so the same values are offered as an action here.
+ *
+ * Two properties worth keeping:
+ *
+ *  - **Feature-detected per parm.** A parm the installed HDA doesn't have is
+ *    reported as missing, never an error, so this ships today and starts
+ *    filling the PoseAsset CSV path by itself the day that release lands.
+ *  - **Only BLANK parms are written**, so it can never overwrite a value the
+ *    user set by hand — the same posture 456.py takes with a blank export
+ *    directory.
+ *
+ * The `$HIP`-relative prefix is computed **per target**, not once: how many
+ * `..` hops reach the export root depends on how deep that particular `.hip`
+ * sits, and a hand-linked project is routinely a level deeper than a generated
+ * one.
+ */
+export async function prefillHoudiniNetwork({
+  data,
+}: {
+  data: unknown
+}): Promise<MaterialUtilReport> {
+  const input = prefillInput.parse(data)
+  if (!isTauri()) {
+    throw new Error('Prefilling a DazToHue network needs the desktop app (it runs hython).')
+  }
+  const { character, charFolder, scenesRootAbs, relative } = await prefillContext(input)
+  const targets = input.hipPaths.map((hipPath) => ({
+    hipPath,
+    values: buildHoudiniPrefill(character, {
+      hipRefPrefix: relative
+        ? hipRefPrefixFor([hipPath], charFolder, character.exportPath)
+        : '',
+      scenesRootAbs,
+    }),
+  }))
+  return runMaterialUtil({ op: 'prefill', targets, dryRun: input.dryRun })
+}
+
+/** The character + layout a prefill needs, resolved the same way generation
+ *  resolves it (`api/houdini.ts`) so both fill identical values. */
+async function prefillContext(input: { projectId: string; id: string }): Promise<{
+  character: Character
+  charFolder: string
+  /** undefined for a sceneless character — `buildHoudiniPrefill` takes that and
+   *  returns empty paths, which the Python then leaves alone. */
+  scenesRootAbs: string | undefined
+  relative: boolean
+}> {
+  const project = await resolveProject(input.projectId)
+  const lib = charsRoot(project)
+  const location = await locateCharacter(lib, input.id)
+  if (!location) throw new Error(`Character ${input.id} not found`)
+  const character = await storage.getCharacter(lib, input.id, location.definitionAbs)
+  if (!character) throw new Error(`Character ${input.id} not found`)
+  return {
+    character,
+    charFolder: location.folderAbs,
+    scenesRootAbs: characterScenesRoot(character, location, project.dazSubdir ?? 'daz3d'),
+    relative: project.houdiniPathStyle !== 'absolute',
+  }
 }
 
 /**

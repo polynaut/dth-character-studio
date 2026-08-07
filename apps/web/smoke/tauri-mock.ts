@@ -395,6 +395,7 @@ export function installTauriMock(seed: TauriMockSeed): void {
           targets: [],
           defaults: [],
           repath: [],
+          prefill: [],
           sourceBakers: 0,
           sourceLayers: 0,
           sourceBakerNames: [],
@@ -422,7 +423,22 @@ export function installTauriMock(seed: TauriMockSeed): void {
               // nothing to repath, so the Defaults tab's reference rows stay
               // quiet unless a spec seeds them.
               refs: { collapsible: 0, foreign: 0, broken: [] },
+              prefill: { fillable: [], missing: [] },
               hipDir: norm(hipPath).replace(/\/[^/]*$/, ''),
+            })),
+          }
+        }
+        if (request.op === 'prefill') {
+          return {
+            ...base,
+            prefill: (request.targets as Array<{ hipPath: string }>).map((t) => ({
+              hipPath: t.hipPath,
+              ok: true,
+              error: '',
+              filled: [],
+              skippedMissing: [],
+              skippedSet: [],
+              backupPath: '',
             })),
           }
         }

@@ -293,6 +293,37 @@ export const repathResultSchema = z.object({
   backupPath: z.string(),
 })
 
+/** The Generate-project wiring as it applies to an EXISTING project. Both lists
+ *  are feature-detected against the installed HDA, which is what lets the
+ *  action ship before the DazToHue release adding the PoseAsset CSV path. */
+export const projectPrefillInfoSchema = z.object({
+  /** Parms that exist here and are currently BLANK — the only ones a prefill
+   *  writes, so it can never overwrite a value the user set. */
+  fillable: z.array(z.string()),
+  /** Parms this DazToHue version doesn't carry at all (today: the PoseAsset
+   *  CSV path). Named rather than skipped silently. */
+  missing: z.array(z.string()),
+})
+
+/** One parm a prefill wrote, or would write. */
+export const prefilledParmSchema = z.object({
+  label: z.string(),
+  value: z.string(),
+})
+
+/** What the `prefill` op did (or would do) to one project. */
+export const prefillResultSchema = z.object({
+  hipPath: z.string(),
+  ok: z.boolean(),
+  error: z.string(),
+  filled: z.array(prefilledParmSchema),
+  /** Parms this DazToHue version doesn't have — the release gap, named. */
+  skippedMissing: z.array(z.string()),
+  /** Parms left alone because the user had already set them. */
+  skippedSet: z.array(z.string()),
+  backupPath: z.string(),
+})
+
 /** One scanned `.hip` (`ok: false` = unreadable; the scan itself still succeeds). */
 export const materialScanProjectSchema = z.object({
   hipPath: z.string(),
@@ -308,6 +339,9 @@ export const materialScanProjectSchema = z.object({
   hipDir: z.string(),
   /** What a repath would do to this project's stored file references. */
   refs: projectRefInfoSchema,
+  /** Which DazToHue parms the studio could fill here, and which this DazToHue
+   *  version doesn't carry at all. */
+  prefill: projectPrefillInfoSchema,
 })
 
 /** What the `defaults` operation did (or would do) to one project's `$JOB`.
@@ -391,6 +425,8 @@ export const materialUtilReportSchema = z.object({
   defaults: z.array(houdiniDefaultsResultSchema),
   /** Populated by `repath` — one entry per project it was asked about. */
   repath: z.array(repathResultSchema),
+  /** Populated by `prefill` — one entry per project it was asked about. */
+  prefill: z.array(prefillResultSchema),
   sourceBakers: z.number(),
   sourceLayers: z.number(),
   sourceBakerNames: z.array(z.string()),
@@ -429,4 +465,6 @@ export type MaterialTransferTarget = z.infer<typeof materialTransferTargetSchema
 export type HoudiniDefaultsResult = z.infer<typeof houdiniDefaultsResultSchema>
 export type ProjectRefInfo = z.infer<typeof projectRefInfoSchema>
 export type RepathResult = z.infer<typeof repathResultSchema>
+export type ProjectPrefillInfo = z.infer<typeof projectPrefillInfoSchema>
+export type PrefillResult = z.infer<typeof prefillResultSchema>
 export type MaterialUtilReport = z.infer<typeof materialUtilReportSchema>

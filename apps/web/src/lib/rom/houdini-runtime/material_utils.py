@@ -6,7 +6,7 @@ the polling: this one is synchronous and the studio waits for the process).
 
     hython material_utils.py <requestFile> <resultFile>
 
-Four operations:
+Five operations:
 
   scan      list every DazToHueMaterial node in a set of `.hip` files, with the
             counts the panel shows (materials / UV channels / bakers / layers)
@@ -18,6 +18,9 @@ Four operations:
   defaults  repoint a project's `$JOB` at the folder the studio expects, so a
             hand-picked export collapses to a variable instead of an absolute
             path (`op_defaults`).
+  prefill   fill the blank DazToHue parms the studio already knows (the
+            Generate-project wiring, for projects that already exist), feature
+            detected per parm (`op_prefill`).
   repath    make the references a project ALREADY stores portable — express
             each absolute one relative to `$HIP`/`$JOB`/`$DAZ3D_LIB`, and
             rebuild any DazToHue import path whose file isn't there
@@ -152,6 +155,36 @@ LIB_VAR = "$DAZ3D_LIB"
 # travels with the scene file itself, while `$JOB` is a setting that can be
 # repointed out from under it.
 REF_ROOT_VARS = ("$HIP", "$JOB", LIB_VAR)
+
+# What "Generate project" wires onto a fresh network, keyed by the payload field
+# the studio sends. Existing projects can't be regenerated, so the Utils drawer
+# offers the same fill as an action — the name list is the one measured off the
+# installed HDA in `houdini.rs`, and must stay in step with it.
+#
+# STRING parms only, and only ones that are currently BLANK. Two deliberate
+# limits:
+#   * `import_skinning_method` is a menu, so it has no "empty" state — a default
+#     and a deliberate choice are indistinguishable, and overwriting the user's
+#     is not worth guessing. Generation sets it on a fresh node; this doesn't.
+#   * a parm the user already filled is left alone, the same posture 456.py
+#     takes with a blank export directory ("respect what the user configured").
+PREFILL_PARMS = (
+    (
+        "daztohueimport",
+        (
+            ("import_character_name", "characterName"),
+            ("import_character_dtu_file", "dth"),
+            ("import_character_fbx_file", "fbx"),
+            ("import_character_alembic_file", "abc"),
+            ("import_character_rom_fbx_file", "romFbx"),
+        ),
+    ),
+    # Absent from DazToHue 2.5 (measured — the node has a `pose_asset_import_csv`
+    # BUTTON instead). It is reported as missing rather than skipped silently, so
+    # the day the CSV-path release lands the row simply starts offering it.
+    ("daztohueposeasset", (("pose_asset_csv_file_path", "csv"),)),
+    ("daztohueexport", (("export_directory", "exportDirectory"),)),
+)
 
 # The DazToHueImport file parms, with the extension each one holds. A Daz export
 # writes all three beside each other with the SAME basename
@@ -975,6 +1008,7 @@ def op_scan(request):
             "job": "",
             "hipDir": "",
             "refs": {"collapsible": 0, "foreign": 0, "broken": []},
+            "prefill": {"fillable": [], "missing": []},
         }
         try:
             _load(path)
@@ -984,6 +1018,7 @@ def op_scan(request):
             entry["job"] = _scene_job()
             entry["hipDir"] = _norm_path(hou.getenv("HIP") or "")
             entry["refs"] = _project_ref_info()
+            entry["prefill"] = _prefill_scan()
         except Exception as exc:
             entry["ok"] = False
             entry["error"] = str(exc).strip() or exc.__class__.__name__
@@ -1132,6 +1167,104 @@ def _repair_import_refs(node, roots, dry_run):
             parm.set(portable)
         fixed.append((node.path() + " " + name, old, portable))
     return fixed
+
+
+# --- prefilling an existing network ------------------------------------------
+
+
+def _prefill_parms_for(node):
+    """The (parm, payload key) pairs this node kind takes, or ()."""
+    name = node.type().name().lower()
+    if "daztohue" not in name:
+        return ()
+    for prefix, parms in PREFILL_PARMS:
+        # `daztohuegroomimport` does not contain `daztohueimport`, so the groom
+        # chain is excluded by the substring itself — the explicit guard is
+        # there because that is easy to break and hard to notice.
+        if prefix in name and "groom" not in name:
+            return parms
+    return ()
+
+
+def _prefill_scan():
+    """`{fillable, missing}` for the open scene — what the drawer's row shows.
+
+    `fillable` is a parm that EXISTS here and is currently blank; `missing` is
+    one this DazToHue version doesn't have at all (today: the PoseAsset CSV
+    path). Reporting the second is the point — it tells the user why a value
+    they expected isn't offered, instead of leaving a silent gap.
+    """
+    info = {"fillable": [], "missing": []}
+    for node in hou.node("/").allSubChildren():
+        for parm_name, _key in _prefill_parms_for(node):
+            label = node.path() + " " + parm_name
+            parm = node.parm(parm_name)
+            if parm is None:
+                info["missing"].append(label)
+            elif not str(parm.unexpandedString() or "").strip():
+                info["fillable"].append(label)
+    return info
+
+
+def op_prefill(request):
+    """Fill the blank DazToHue parms the studio already knows the answer to.
+
+    The companion to Generate project, for projects that already exist and so
+    can never be regenerated. Same values, same names, same feature detection: a
+    parm this DazToHue release doesn't carry is REPORTED as missing rather than
+    failing anything, so the day the CSV-path release lands the same action
+    starts filling it with no code change.
+
+    Non-destructive by construction — only blank parms are written, so running
+    it can never overwrite something the user set by hand.
+
+    Values arrive PER TARGET: `$HIP`-relative paths depend on how deep that
+    particular `.hip` sits, which differs between a generated project and a
+    hand-made one.
+    """
+    dry_run = bool(request.get("dryRun"))
+    results = []
+    for target in request.get("targets", []):
+        path = target.get("hipPath", "")
+        values = target.get("values") or {}
+        result = {
+            "hipPath": path,
+            "ok": True,
+            "error": "",
+            "filled": [],
+            "skippedMissing": [],
+            "skippedSet": [],
+            "backupPath": "",
+        }
+        try:
+            _load(path)
+            changed = 0
+            for node in hou.node("/").allSubChildren():
+                for parm_name, key in _prefill_parms_for(node):
+                    label = node.path() + " " + parm_name
+                    parm = node.parm(parm_name)
+                    if parm is None:
+                        result["skippedMissing"].append(label)
+                        continue
+                    value = str(values.get(key) or "")
+                    if not value:
+                        continue  # the studio has no answer for this one
+                    if str(parm.unexpandedString() or "").strip():
+                        result["skippedSet"].append(label)
+                        continue
+                    if not dry_run:
+                        parm.set(value)
+                    result["filled"].append({"label": label, "value": value})
+                    changed += 1
+            if changed and not dry_run:
+                result["backupPath"] = _backup(path)
+                hou.hipFile.save(path)
+        except Exception as exc:
+            result["ok"] = False
+            result["error"] = str(exc).strip() or exc.__class__.__name__
+            result["filled"] = []
+        results.append(result)
+    return {"op": "prefill", "projects": [], "targets": [], "prefill": results, "dryRun": dry_run}
 
 
 def _project_ref_info():
@@ -1670,6 +1803,7 @@ OPS = {
     "transfer": op_transfer,
     "defaults": op_defaults,
     "repath": op_repath,
+    "prefill": op_prefill,
 }
 
 
@@ -1714,6 +1848,7 @@ def main():
     payload.setdefault("replace", False)
     payload.setdefault("defaults", [])
     payload.setdefault("repath", [])
+    payload.setdefault("prefill", [])
 
     # Write-then-rename: the studio reads this the moment hython exits, and a
     # half-written JSON would parse as a corrupt result rather than a failure.
