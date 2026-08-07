@@ -84,17 +84,9 @@ describe('string bounds (hostile shared JSONs)', () => {
       extraScenes: ['X:\\_3d\\dth-characters\\Electra\\daz3d\\ElectraSummer_G9.duf'],
       houdiniProjects: ['X:\\_3d\\dth-characters\\Electra\\houdini\\Electra.hip'],
       preserveMorphs: [{ name: 'body_bs_BreastsPosition', keepValue: 0.5 }],
-      products: [
-        {
-          name: 'Golden Palace for Genesis 9',
-          artist: 'Meipe',
-          usedBy: 'GoldenPalace_G9; GP Shell',
-          scenes: ['ElectraDefault_G9'],
-        },
-      ],
     })
     expect(character.name).toBe('Electra')
-    expect(character.products[0].artist).toBe('Meipe')
+    expect(character.preserveMorphs[0].keepValue).toBe(0.5)
   })
 
   it('rejects an absurd multi-megabyte string field', () => {

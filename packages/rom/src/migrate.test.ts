@@ -637,32 +637,34 @@ describe('characterSchema — v20 groomMode removal', () => {
   })
 })
 
-// v8 added `products` / `productsUnmatched` / `productsScannedAt` — additive with
-// [] / '' defaults, so there is no migrate step; zod fills them when reading an
-// older (v7-shaped) definition. This is the "ritual" test for that change.
-describe('characterSchema — v8 product fields (additive)', () => {
+// v30 REMOVED `products` / `productsUnmatched` / `productsScannedAt` (added in
+// v8): the Daz-product scan results moved off the definition into the character's
+// own meta folder. A removal needs no migrate step — zod strips unknown keys — so
+// this is the "ritual" test for that change. The values themselves are carried
+// over by the web layer BEFORE the save that strips them
+// (`carryStoredProductsToMeta`), which is where their preservation is tested.
+describe('characterSchema — v30 product fields (removed)', () => {
   const base = { id: 'c1', name: 'Electra', createdAt: '2026-01-01', updatedAt: '2026-01-01' }
 
-  it('fills product fields with defaults for a v7-shaped definition', () => {
-    // A v7 JSON has none of the v8 keys; zod supplies the defaults on read.
-    const parsed = characterSchema.parse({ ...base, schemaVersion: 7 })
-    expect(parsed.products).toEqual([])
-    expect(parsed.productsUnmatched).toEqual([])
-    expect(parsed.productsScannedAt).toBe('')
-  })
-
-  it('round-trips stored product + unmatched records', () => {
+  it('strips the v8 product fields from a stored definition', () => {
     const parsed = characterSchema.parse({
       ...base,
+      schemaVersion: 29,
       products: [
         { name: 'Golden Palace', sku: '2254-1', artist: 'Meipe', version: '1.0', productType: 'Anatomy', matchMethod: 'SKU Match' },
       ],
       productsUnmatched: [{ name: 'Some Prop', technicalName: 'someProp_1234', assetType: 'Node' }],
       productsScannedAt: '2026-06-28T00:00:00.000Z',
-    })
-    expect(parsed.products[0].sku).toBe('2254-1')
-    expect(parsed.productsUnmatched[0].assetType).toBe('Node')
-    expect(parsed.productsScannedAt).toBe('2026-06-28T00:00:00.000Z')
+    }) as Record<string, unknown>
+    expect(parsed.products).toBeUndefined()
+    expect(parsed.productsUnmatched).toBeUndefined()
+    expect(parsed.productsScannedAt).toBeUndefined()
+  })
+
+  it('reads a definition that never had them just the same', () => {
+    const parsed = characterSchema.parse({ ...base, schemaVersion: 7 }) as Record<string, unknown>
+    expect(parsed.products).toBeUndefined()
+    expect(parsed.name).toBe('Electra')
   })
 })
 

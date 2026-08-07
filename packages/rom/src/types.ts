@@ -929,8 +929,18 @@ export function jcmMorphModForRuntime(mod: JcmMorphMod): {
  *       PRUNES the scene records the override removal itself empties (a
  *       project-folder-only record is a dead stub once the field is gone —
  *       schema v24's rule; records that were already empty are left alone).
+ *  30 — removed `products` / `productsUnmatched` / `productsScannedAt` (added in
+ *       v8). Daz-product scan results are machine-derived provenance that never
+ *       affected generation, and storing a few hundred rows of them inflated a
+ *       definition meant to be read and shared. They moved to the character's own
+ *       meta folder (`.dcsmeta/characters/<folder>/products.json`), written
+ *       unattended when the studio picks up what the Daz scan wrote — which is
+ *       also what retired the "review, then store" dialog. Removals are
+ *       zod-stripped, so no migration step; the web layer carries an existing
+ *       definition's stored products into the new file BEFORE the save that
+ *       strips them (`carryStoredProductsToMeta`, api/products.ts).
  */
-export const CHARACTER_SCHEMA_VERSION = 29
+export const CHARACTER_SCHEMA_VERSION = 30
 
 /**
  * Version of the generated **script runtime** — the bundled DTH `.dsa` runtime
@@ -1401,8 +1411,14 @@ export const CHARACTER_SCHEMA_VERSION = 29
  *       scripts must regenerate. The bump is also what carries the one-time file
  *       MOVE across a library: Refresh assets regenerates each character, and
  *       that pass is where the old files are relocated.
+ * v60 — no script-API change: the Daz-product scan is now armed by the DIM
+ *       manifests folder being set in Settings, not by the per-project "Daz
+ *       Products" toggle (which now only decides whether the character page
+ *       shows the tab). Projects with the toggle off therefore emit the scan
+ *       config and the `Scan_Products_<Name>.dsa` for the first time, so the
+ *       generated content changed and every character must regenerate.
  */
-export const RUNTIME_VERSION = 59
+export const RUNTIME_VERSION = 60
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a
@@ -1662,18 +1678,12 @@ export const characterSchema = z.object({
    * {@link poseAssetCsvEra} to the active release's; Refresh re-stamps it.
    */
   generatedDthVersion: z.string().max(MAX_NAME_LENGTH).default(''),
-  /**
-   * Daz products this character uses, as stored from the most recent product
-   * scan (the generated `Scan_Products_<Name>.dsa` analyses the open scene and
-   * writes a CSV; the user reviews + stores it from the character page). Empty
-   * until a scan is stored. Provenance only — does NOT affect generation.
-   */
-  products: z.array(productRecordSchema).default([]),
-  /** Scene assets the last stored scan could not match to a product — kept for
-   *  manual review next to {@link products}. */
-  productsUnmatched: z.array(unmatchedAssetSchema).default([]),
-  /** ISO timestamp the products above were last stored from a scan; '' = never. */
-  productsScannedAt: z.string().max(MAX_NAME_LENGTH).default(''),
+  // NOTE: the Daz-product scan results used to live here (`products` /
+  // `productsUnmatched` / `productsScannedAt`, v8–v29). They were machine-derived
+  // provenance that never affected generation, and a few hundred rows of it in a
+  // definition meant to be readable and shared. As of v30 they live in the
+  // character's own meta folder (`.dcsmeta/characters/<folder>/products.json` —
+  // apps/web `lib/rom/character-products.ts`), written unattended by the pickup.
   /**
    * Character-JSON schema version (see {@link CHARACTER_SCHEMA_VERSION}). Stamped
    * on every save. The default is the BASELINE `1` — never the live constant —

@@ -85,10 +85,13 @@ export const Route = createFileRoute('/projects/$projectId/characters/$character
         ? fileExists({ data: { path: character.scenePath } })
         : Promise.resolve(false),
       sceneFolder ? fileExists({ data: { path: sceneFolder } }) : Promise.resolve(false),
-      // Best-effort: a scan CSV exists only after the user runs the generated
-      // Scan_Products script in Daz. Harmless when the feature is off (the UI
-      // section that consumes it is gated on project.dazProductsEnabled).
-      fetchProductScan({ data: { projectId, id } }),
+      // Ingests whatever the Daz product scan has left in the drop folder, then
+      // reads the store back. Runs whether or not the project shows the Products
+      // tab — the results are collected regardless; the toggle only decides who
+      // gets to look. A hover PRELOAD must not ingest, for the same reason the
+      // run log below doesn't: the pickup DELETES the CSVs, and hovering a card
+      // would race the Daz script mid-write.
+      fetchProductScan({ data: { projectId, id, ingest: !preload } }),
       // The run log the ROM script writes in Daz — re-read on window focus too,
       // so problems show the moment the user switches back to the studio. A
       // hover PRELOAD must not ingest (ingesting deletes the Daz-written file —
@@ -563,7 +566,6 @@ function CharacterPage() {
               productScan={productScan}
               dimManifestsFolder={settings.dimManifestsFolder}
               scriptsPath={scriptsPath}
-              persistPatch={draft.persistPatch}
             />
           </SceneLock>
         </div>

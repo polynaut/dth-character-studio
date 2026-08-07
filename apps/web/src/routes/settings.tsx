@@ -1576,10 +1576,13 @@ function SettingsPage() {
               </div>
               <div className="flex items-center justify-between gap-3 border-t pt-4 text-sm">
                 <span className="flex items-center gap-1 font-medium">
-                  Enable Daz Products
-                  <InfoPopup label="Enable Daz Products — more information" className="-translate-y-px">
-                    Adds per-character product scanning — a generated{' '}
-                    <strong>Scan_Products</strong> script finds the Daz products a scene uses.{' '}
+                  Show the Daz Products tab
+                  <InfoPopup label="Show the Daz Products tab — more information" className="-translate-y-px">
+                    Whether this project's characters get a <strong>Products</strong> tab showing
+                    the Daz products each scene uses. It does NOT control the scanning: with a{' '}
+                    <strong>DAZ Install Manager manifests folder</strong> set below, every export
+                    run scans and the results are filed either way — this only decides whether you
+                    see them.{' '}
                     <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/product-scanning.html#daz-product-scanning">
                       Open guide
                     </GuideLink>
@@ -1590,9 +1593,9 @@ function SettingsPage() {
                   onCheckedChange={(v) => patchProject({ dazProductsEnabled: v })}
                 />
               </div>
-              {/* Directly under the Daz Products toggle it belongs to — this
-                  folder is what that scan resolves product names from, so the
-                  two read as one setting rather than two neighbours. */}
+              {/* Directly under the tab toggle it reads with — this folder is
+                  what actually arms the scan, so the two belong together even
+                  though only one of them is per-project. */}
               <div>
                 {/* Derived with the rest once an installation is active — the
                     manual field and its probe stay for a machine without DIM. */}

@@ -170,10 +170,12 @@ Settings also has an **App Data** tab — the app's own on-disk state:
   network-drive mappings and scan outputs (project data lives in each project's
   own folder). The path chip copies it; Alt+click reveals it.
 - **Storage & housekeeping** — the studio ages out **its own** generated data
-  so it can't fill your disk: **Clean up now** deletes per-scene
-  [product-scan](./product-scanning.md) files and `Scan_Frames` keyframe CSVs
-  older than 30 days, plus **note media no note references anymore** after
-  7 days (all three also swept automatically on every launch).
+  so it can't fill your disk: **Clean up now** deletes `Scan_Frames` keyframe
+  CSVs and any leftover [product-scan](./product-scanning.md) drop files older
+  than 30 days, plus **note media no note references anymore** after
+  7 days (all three also swept automatically on every launch). Product-scan
+  files are normally deleted the moment the studio reads them, so that folder
+  is usually empty — the age-out is a safety net for one that was locked.
 
 (Mapped **network drives** the app remembers show as their own pane at the
 bottom of the **General** tab, with a "Re-map missing now" action.)

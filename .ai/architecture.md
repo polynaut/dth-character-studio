@@ -221,9 +221,10 @@ rewritten before every Houdini run (`houdini-jobs.ts`). Generated Daz scripts in
 `.dcsmeta/characters/<library-relative character folder>/` — `characterMetaDir`
 in `storage/projects.ts`. Everything the studio writes FOR ITSELF about one
 character: `.dth_execute_stamps.json`, `.dth_export_folders.json`,
-`.last_rom_run.json`, the Daz-written `dth_rom_run_log.json` transport, and the
-generated `<Name>_pose_asset.csv` (plus per-scene variants). They all sat in the
-character folder root until v0.69, mixed in with the user's scenes and `.hip`s.
+`.last_rom_run.json`, the Daz-written `dth_rom_run_log.json` transport, the
+generated `<Name>_pose_asset.csv` (plus per-scene variants), and — since v0.70 —
+`products.json`. They all sat in the character folder root until v0.69, mixed in
+with the user's scenes and `.hip`s (`products.json`'s data sat on the definition).
 
 Three consequences worth knowing before touching this:
 
@@ -244,3 +245,26 @@ Three consequences worth knowing before touching this:
   the files. It only ever touches names the studio itself writes for THAT
   character (`relocatableInternals`) — never a `*_pose_asset.csv` pattern, which
   would also match a CSV the user copied back out of an export folder.
+
+### Daz product scanning (v0.70: unattended)
+
+- **`settings.dimManifestsFolder` arms it, not `project.dazProductsEnabled`.**
+  That folder IS the product database, so it is the only prerequisite; the
+  per-project toggle now decides ONLY whether the character page shows the
+  Products tab. Both `generateCharacterFiles` (which emits the scan config +
+  `Scan_Products_<Name>.dsa`) and `fetchProjectScanPlan` read the folder.
+- **The results are per SCENE, in `products.json`.** `lib/rom/character-products.ts`
+  owns the file shape and `withScans` — a pickup REPLACES the scenes it carries
+  and leaves the rest, the same rule the ROM run log follows. Storing the merged
+  view instead would let a one-scene re-scan wipe five scenes' products; the merge
+  (`mergedProducts`) happens on read, for display only.
+- **The pickup deletes its input.** `ingestProductScans` (api/products.ts) parses
+  every CSV in the app-data drop folder, writes the store, and only THEN removes
+  the CSVs it consumed. A CSV that won't parse is left alone — it may be a partial
+  write Daz is still finishing. Runs from `fetchProductScan` (route load + focus,
+  `ingest: false` on hover-preload), the Refresh sweep, and the Tools scan's
+  completion (`ingestProjectProductScans`).
+- **Schema v30 dropped `products`/`productsUnmatched`/`productsScannedAt`.**
+  `carryStoredProductsToMeta` reads the RAW definition and writes the store
+  before the save that strips them — so it must run BEFORE `storage.saveCharacter`
+  at both save sites (`api.saveCharacter`, the Refresh sweep's schema re-save).

@@ -110,7 +110,7 @@ only. Changing the project's characters subfolder never touches `.assets`.
 ## Good to know
 
 - `.duf` scenes only.
-- The adjacent **Enable Daz Products** switch is a separate feature — see
+- The adjacent **Show the Daz Products tab** switch is a separate feature — see
   [Daz product scanning](./product-scanning.md).
 
 [← Guide overview](./README.md)

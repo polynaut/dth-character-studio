@@ -52,6 +52,7 @@ import {
   resolveProject,
 } from './core'
 import { copyTipImage, findTipImage, removeCharacterAvatars, writeAvatarBytes } from './avatars'
+import { carryStoredProductsToMeta } from './products'
 import { sceneWearables } from './generate'
 import { seedSceneHair } from '#/lib/groom-detect.ts'
 import { primarySceneDerivation } from '#/lib/scene-compat.ts'
@@ -368,6 +369,14 @@ export async function saveCharacter({ data }: { data: unknown }): Promise<Charac
   const lib = charsRoot(project)
   const parsed = characterSchema.parse(character)
   await migrateExportRoot(project, parsed, lib)
+  // Carry a pre-v30 definition's stored Daz products into the character's meta
+  // folder BEFORE this save strips them (`parsed` above already dropped them —
+  // the carry reads the raw JSON still on disk). Best-effort inside the helper;
+  // no-op the moment a store exists.
+  const before = await locateCharacter(lib, parsed.id)
+  if (before) {
+    await carryStoredProductsToMeta(project, before.relFolder, parsed.id, before.definitionAbs)
+  }
   // The save resolves (and, on a rename, moves) the character's folder itself
   // and reports where it landed — prime the session cache with that POST-save
   // location instead of blanket-clearing it, which forced the save+generate

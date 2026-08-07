@@ -11,6 +11,7 @@ import {
   fetchExportRunProgress,
   fetchExportRunnerGate,
   fetchProjectScanPlan,
+  ingestProjectProductScans,
   startProjectScan,
 } from '#/lib/rom/api.ts'
 import { normalizeSceneKey } from '#/lib/rom/execute-jobs.ts'
@@ -132,6 +133,10 @@ export function ProjectScanSection({
     if (run.state === 'finished') {
       setPhase('idle')
       setProgress(null)
+      // Take in what the batch's product scans wrote, across every character —
+      // nobody is sitting on a character page after a project-wide run, and the
+      // per-character pickup only happens when one is opened.
+      if (projectId) await ingestProjectProductScans({ data: { projectId } })
       if (run.failed > 0) {
         toast.warning(
           `The project scan finished with ${run.failed} failed ${run.failed === 1 ? 'row' : 'rows'}.`,

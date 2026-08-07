@@ -1037,10 +1037,14 @@ export interface ProjectScanPlan {
   characters: Array<ProjectScanCharacter>
   /** Total scannable scenes across the project (the row count for a scene pass). */
   totalScenes: number
-  /** The project has the Daz Products feature switched on. */
+  /** The product pass can run: a DIM `ManifestFiles` folder is configured. That
+   *  folder IS the product database — without one a scan could only report every
+   *  asset as unmatched, so it is the one thing the pass needs. (The per-project
+   *  "Daz Products" toggle is NOT part of this: it only decides whether the
+   *  character page shows the tab.) */
   productsEnabled: boolean
-  /** A DIM `ManifestFiles` folder is configured — without one a product scan
-   *  reports every asset as unmatched, so the panel's Products option says so. */
+  /** Same condition, kept as its own field because the panel words the two
+   *  differently — "unavailable" vs "set the folder in Settings". */
   dimConfigured: boolean
 }
 
@@ -1076,7 +1080,7 @@ export async function fetchProjectScanPlan({ data }: { data: unknown }): Promise
   return {
     characters: out,
     totalScenes,
-    productsEnabled: project.dazProductsEnabled === true,
+    productsEnabled: settings.dimManifestsFolder.trim() !== '',
     dimConfigured: settings.dimManifestsFolder.trim() !== '',
   }
 }

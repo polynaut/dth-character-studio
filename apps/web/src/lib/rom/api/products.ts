@@ -1,14 +1,32 @@
-import { exists, readDir, readTextFile, remove, stat } from '@tauri-apps/plugin-fs'
+import { exists, mkdir, readDir, readTextFile, remove } from '@tauri-apps/plugin-fs'
 import { isTauri } from '@tauri-apps/api/core'
+import { z } from 'zod'
 
-import { mergeProductScans, parseProductScanCsv } from '@dth/rom'
+import { parseProductScanCsv, scansFromMerged } from '@dth/rom'
 import * as storage from '../storage'
-import { charScopeInput, joinPath, productScanCache, resolveProject } from './core'
+import {
+  characterProductsJson,
+  emptyCharacterProducts,
+  mergedProducts,
+  parseCharacterProductsText,
+  PRODUCTS_FILE,
+  withScans,
+} from '../character-products.ts'
+import { charScopeInput, charsRoot, joinPath, locateCharacter, resolveProject } from './core'
 
 import type { MergedProductScan, ProductScan } from '@dth/rom'
+import type { CharacterProductsFile } from '../character-products.ts'
+import type { ProjectInfo } from './core'
 
-// The Daz Products scan: reading back the per-scene CSVs the generated
-// `Scan_Products_<Name>.dsa` writes from Daz, plus DIM-folder auto-detection.
+// The Daz Products scan: picking up the per-scene CSVs the generated
+// `Scan_Products_<Name>.dsa` writes from Daz into the studio's own store, plus
+// DIM-folder auto-detection.
+//
+// The pickup is unattended. Daz writes a CSV per scanned scene into the drop
+// folder; the studio parses them, folds each scene into
+// `.dcsmeta/characters/<folder>/products.json`, and DELETES the CSV it consumed.
+// There is no review step and no "store on character" button any more — the scan
+// either produced results or it didn't.
 
 /**
  * Best-effort auto-detect of the DAZ Install Manager `ManifestFiles` folder (the
@@ -34,116 +52,219 @@ export async function detectDimManifestsFolder(): Promise<string> {
   return ''
 }
 
-/**
- * Read back a character's product scans (written from Daz by the generated
- * `Scan_Products_<Name>.dsa`). The script writes one CSV per Daz scene into the
- * character's scan folder; this reads every CSV and merges them so each product /
- * unmatched asset is attributed to the scene(s) it was found in. Best-effort —
- * returns `{ exists: false }` when no scan has been run or the folder is unreadable.
- */
-/** One per-scene CSV on disk in a character's scan folder — surfaced so the UI can
- *  show exactly which files back the merged results and when each was last written. */
-export interface ProductScanFile {
-  /** The CSV file name on disk (e.g. `KiraSummertide_G9_GP.csv`). */
-  name: string
-  /** The Daz scene the CSV was written for ('' for an unsaved scene). */
-  scene: string
-  scenePath: string
-  products: number
-  unmatched: number
-  /** ISO mtime of the file, or '' when it couldn't be stat'd. */
-  modifiedAt: string
+/** Absolute path of a character's stored product results. */
+function productsPath(project: ProjectInfo, relFolder: string, characterId: string): string {
+  return joinPath(storage.characterMetaDir(project.path, relFolder, characterId), PRODUCTS_FILE)
+}
+
+/** Read the store (missing / unreadable = empty — see `parseCharacterProductsText`). */
+async function readProducts(path: string): Promise<CharacterProductsFile> {
+  try {
+    if (await exists(path)) return parseCharacterProductsText(await readTextFile(path))
+  } catch {
+    // unreadable store — treat as empty; the next scan rewrites it
+  }
+  return emptyCharacterProducts()
 }
 
 export interface ProductScanResult {
+  /** Whether anything has been scanned for this character. */
   exists: boolean
+  /** Every stored scene merged, for display. */
   scan: MergedProductScan | null
-  dir: string
-  files: Array<ProductScanFile>
+  /** Where the results are stored (shown on the tab). */
+  path: string
+  /** ISO timestamp of the most recent pickup; '' when never scanned. */
+  scannedAt: string
+  /** Per stored scene: its name, path and counts — what backs the merged view. */
+  scenes: Array<{ scene: string; scenePath: string; products: number; unmatched: number; scannedAt: string }>
 }
 
+/**
+ * A character's product results, ingesting anything Daz has left in the drop
+ * folder first.
+ *
+ * `ingest: false` is the hover-PRELOAD path: picking up DELETES the CSVs, and
+ * merely hovering a character card must never race the Daz script mid-write — a
+ * half-written CSV would parse into a truncated scene and the real one would be
+ * gone. The same rule the ROM run log follows.
+ */
 export async function fetchProductScan({ data }: { data: unknown }): Promise<ProductScanResult> {
-  const { projectId, id } = charScopeInput.parse(data)
+  const { projectId, id, ingest } = charScopeInput
+    .extend({ ingest: z.boolean().default(true) })
+    .parse(data)
   const project = await resolveProject(projectId)
-  const dir = await storage.productScanDir(project.id, id)
-  try {
-    if (!(await exists(dir))) {
-      productScanCache.delete(dir)
-      return { exists: false, scan: null, dir, files: [] }
-    }
-    // List + stat the CSVs first (cheap): when the listing matches the cached
-    // signature (names + mtimes + sizes), serve the cached merge instead of
-    // re-reading and re-parsing every file on each navigation to the character.
-    const listing: Array<{ name: string; modifiedAt: string; size: number }> = []
-    let anyUnstattable = false
-    for (const entry of await readDir(dir)) {
-      if (!entry.isFile || !entry.name.toLowerCase().endsWith('.csv')) continue
-      let modifiedAt = ''
-      let size = -1
-      try {
-        const info = await stat(joinPath(dir, entry.name))
-        modifiedAt = info.mtime ? info.mtime.toISOString() : ''
-        size = info.size
-      } catch {
-        // stat failed — the entry can't be revalidated, so this run neither
-        // trusts the cache (its `|-1` stamp won't match a healthy signature)
-        // nor stores its result (see below)
-        anyUnstattable = true
-      }
-      listing.push({ name: entry.name, modifiedAt, size })
-    }
-    listing.sort((a, b) => a.name.localeCompare(b.name))
-    const signature = listing.map((f) => `${f.name}|${f.modifiedAt}|${f.size}`).join('\n')
-    const cached = productScanCache.get(dir)
-    if (cached && cached.signature === signature) return cached.result
-
-    const scans: Array<ProductScan> = []
-    const files: Array<ProductScanFile> = []
-    for (const f of listing) {
-      try {
-        const parsed = parseProductScanCsv(await readTextFile(joinPath(dir, f.name)))
-        scans.push(parsed)
-        files.push({
-          name: f.name,
-          scene: parsed.sceneName,
-          scenePath: parsed.scenePath,
-          products: parsed.products.length,
-          unmatched: parsed.unmatched.length,
-          modifiedAt: f.modifiedAt,
-        })
-      } catch {
-        // skip an individual unreadable CSV
-      }
-    }
-    let result: ProductScanResult
-    if (scans.length === 0) {
-      result = { exists: false, scan: null, dir, files: [] }
-    } else {
-      files.sort((a, b) =>
-        (a.scene || a.name).localeCompare(b.scene || b.name, undefined, { sensitivity: 'base' }),
-      )
-      result = { exists: true, scan: mergeProductScans(scans), dir, files }
-    }
-    // An unstattable entry can't prove itself unchanged later — storing this
-    // run would only park a result under a signature no future run can match
-    // (permanently unservable). Skip the store; the next run re-reads.
-    if (!anyUnstattable) productScanCache.set(dir, { signature, result })
-    return result
-  } catch {
-    return { exists: false, scan: null, dir, files: [] }
+  const location = await locateCharacter(charsRoot(project), id)
+  const empty: ProductScanResult = {
+    exists: false,
+    scan: null,
+    path: '',
+    scannedAt: '',
+    scenes: [],
+  }
+  if (!location) return empty
+  const path = productsPath(project, location.relFolder, id)
+  if (ingest) await ingestProductScans(project, location.relFolder, id)
+  const store = await readProducts(path)
+  if (store.scans.length === 0) return { ...empty, path }
+  return {
+    exists: true,
+    scan: mergedProducts(store),
+    path,
+    scannedAt: store.scannedAt,
+    scenes: store.scans.map((s) => ({
+      scene: s.sceneName,
+      scenePath: s.scenePath,
+      products: s.products.length,
+      unmatched: s.unmatched.length,
+      scannedAt: s.scannedAt,
+    })),
   }
 }
 
 /**
- * Discard a character's unstored product-scan results — the per-scene CSVs the Daz
- * script wrote into the scan folder. This clears the review panel; it does NOT
- * touch the products already stored on the character (those live in its JSON).
- * The whole folder is removed — the next scan recreates it. Best-effort.
+ * Pick up whatever the Daz script has written for one character: parse every CSV
+ * in its drop folder, fold each scanned scene into the store, and delete the CSVs
+ * that made it in.
+ *
+ * Ordering is the whole safety story — the store is written FIRST and only the
+ * CSVs whose contents reached it are deleted. A failed write leaves every CSV on
+ * disk for the next pickup; a CSV that won't parse is left alone too (it may be a
+ * partial write Daz is still finishing, and a later pickup gets the whole file).
+ *
+ * Returns how many scenes were taken in. Best-effort throughout: this runs on a
+ * route load, and an unreadable drop folder must never break opening a character.
+ */
+export async function ingestProductScans(
+  project: ProjectInfo,
+  relFolder: string,
+  characterId: string,
+): Promise<number> {
+  const dir = await storage.productScanDir(project.id, characterId)
+  try {
+    if (!(await exists(dir))) return 0
+    const names = (await readDir(dir))
+      .filter((e) => e.isFile && e.name.toLowerCase().endsWith('.csv'))
+      .map((e) => e.name)
+    if (names.length === 0) return 0
+    // Parse first, so a single bad file can't cost the good ones their pickup.
+    // Independent reads, so concurrent; `map` keeps the drop folder's order.
+    const parsed = (
+      await Promise.all(
+        names.map(async (name) => {
+          try {
+            return { name, scan: parseProductScanCsv(await readTextFile(joinPath(dir, name))) }
+          } catch {
+            return null // unreadable or mid-write — left on disk for the next pickup
+          }
+        }),
+      )
+    ).filter((p): p is { name: string; scan: ProductScan } => p !== null)
+    if (parsed.length === 0) return 0
+    const path = productsPath(project, relFolder, characterId)
+    const store = withScans(
+      await readProducts(path),
+      parsed.map((p) => p.scan),
+      new Date().toISOString(),
+    )
+    await mkdir(storage.characterMetaDir(project.path, relFolder, characterId), { recursive: true })
+    await storage.writeTextFileAtomic(path, characterProductsJson(store))
+    // Only now — the results are safely stored, so the transport can go.
+    await Promise.all(
+      parsed.map(async (p) => {
+        try {
+          await remove(joinPath(dir, p.name))
+        } catch {
+          // locked CSV: it is re-ingested next time and simply replaces its own
+          // scene again, so a failed delete costs nothing but a retry
+        }
+      }),
+    )
+    return parsed.length
+  } catch {
+    return 0
+  }
+}
+
+/**
+ * The same pickup across every character of a project — for the moments a batch
+ * finishes and the user isn't sitting on any one character's page (Tools → Scan
+ * project, Refresh assets). Without it, a ten-character batch would leave its
+ * CSVs waiting until each character page was visited.
+ */
+export async function ingestProjectProductScans({ data }: { data: unknown }): Promise<number> {
+  const { projectId } = z.object({ projectId: z.string().min(1) }).parse(data)
+  if (!isTauri()) return 0
+  try {
+    const project = await resolveProject(projectId)
+    const scan = await storage.scanCharacterLibrary(charsRoot(project))
+    const counts = await Promise.all(
+      scan.entries.map((entry) =>
+        ingestProductScans(project, entry.location.relFolder, entry.character.id),
+      ),
+    )
+    return counts.reduce((a, b) => a + b, 0)
+  } catch {
+    return 0
+  }
+}
+
+/**
+ * Carry a pre-v30 character's stored products into the new store — the one-time
+ * move off the definition JSON.
+ *
+ * Reads the RAW definition, because this has to run BEFORE the save that strips
+ * those fields (zod drops them the moment the character is parsed at the current
+ * schema). Never overwrites an existing store: a character that has already
+ * scanned under the new model has better data than the definition's snapshot.
+ *
+ * The definition kept the MERGED view, so it is split back per scene
+ * ({@link scansFromMerged}) — exact for everything the merge preserved. Returns
+ * true when a store was written. Best-effort: losing this costs one re-scan.
+ */
+export async function carryStoredProductsToMeta(
+  project: ProjectInfo,
+  relFolder: string,
+  characterId: string,
+  definitionAbs: string,
+): Promise<boolean> {
+  try {
+    const path = productsPath(project, relFolder, characterId)
+    if (await exists(path)) return false
+    const raw: unknown = JSON.parse(await readTextFile(definitionAbs))
+    if (!raw || typeof raw !== 'object') return false
+    const record = raw as Record<string, unknown>
+    const products = Array.isArray(record.products) ? record.products : []
+    const unmatched = Array.isArray(record.productsUnmatched) ? record.productsUnmatched : []
+    if (products.length === 0 && unmatched.length === 0) return false
+    const merged = {
+      scenes: [...new Set(products.flatMap((p: { scenes?: Array<string> }) => p.scenes ?? []))],
+      products,
+      unmatched,
+    } as MergedProductScan
+    const scannedAt =
+      typeof record.productsScannedAt === 'string' && record.productsScannedAt
+        ? record.productsScannedAt
+        : new Date().toISOString()
+    const store = withScans(emptyCharacterProducts(), scansFromMerged(merged), scannedAt)
+    await mkdir(storage.characterMetaDir(project.path, relFolder, characterId), { recursive: true })
+    await storage.writeTextFileAtomic(path, characterProductsJson(store))
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Discard a character's stored product results. They are fully re-derivable —
+ * open the scenes in Daz and export/scan again — so this is a plain delete of the
+ * store, not a two-stage thing. Best-effort.
  */
 export async function clearProductScan({ data }: { data: unknown }): Promise<void> {
   const { projectId, id } = charScopeInput.parse(data)
   const project = await resolveProject(projectId)
-  const dir = await storage.productScanDir(project.id, id)
-  productScanCache.delete(dir)
-  if (await exists(dir)) await remove(dir, { recursive: true })
+  const location = await locateCharacter(charsRoot(project), id)
+  if (!location) return
+  const path = productsPath(project, location.relFolder, id)
+  if (await exists(path)) await remove(path)
 }

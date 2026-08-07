@@ -248,9 +248,13 @@ describe('generated script artwork', () => {
   it('writes no artwork for a script that has none — the product scan', async () => {
     await setup()
     const c = seedCharacter({ exportPath: 'D:/exports' })
-    // Daz Products on → the per-character scan script is emitted too.
-    const manifest = await storage.readManifest(LIB)
-    await storage.writeManifest(LIB, { ...manifest, dazProductsEnabled: true })
+    // A DIM manifests folder is what arms the product scan (since v0.70 — the
+    // per-project toggle only decides whether the tab is shown), so setting it
+    // is what makes the per-character scan script get emitted.
+    await storage.saveSettings({
+      ...(await storage.getSettings()),
+      dimManifestsFolder: 'D:/DAZ 3D/Install Manager/ManifestFiles',
+    })
 
     await generateCharacterFiles({ data: { projectId: LIB, id: c.id } })
 

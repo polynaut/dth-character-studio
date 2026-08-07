@@ -183,3 +183,48 @@ export function mergeProductScans(scans: Array<ProductScan>): MergedProductScan 
     unmatched: [...unmatchedByKey.values()].sort(byName),
   }
 }
+
+/**
+ * Split a merged view back into its per-scene scans — the inverse of
+ * {@link mergeProductScans}, as far as a merge can be inverted.
+ *
+ * Only the one-time carry-over needs this: product results used to be stored on
+ * the character definition already merged, and the store they moved to keeps
+ * them per scene (so a re-scan of ONE scene replaces only that scene). Rebuilding
+ * the split from `scenes` is exact for everything a merge preserves; what it
+ * cannot restore is the per-scene difference in `usedBy` / `usage`, which the
+ * merge unioned — every scene gets the union back. `scenePath` is unrecoverable
+ * (a merged record keeps only scene NAMES), so the rebuilt scans carry ''.
+ *
+ * Records that name no scene at all (pre-multi-scene data) land in a single
+ * unnamed scan rather than being dropped.
+ */
+export function scansFromMerged(merged: MergedProductScan): Array<ProductScan> {
+  const UNNAMED = ''
+  const names = merged.scenes.length > 0 ? [...merged.scenes] : [UNNAMED]
+  // `scenes` is only optional in PRACTICE: this runs over raw pre-v30 definition
+  // JSON, where a record written before per-scene attribution existed carries no
+  // array at all. Reading `.length` off that is how the carry-over first failed.
+  const scenesOf = (r: { scenes?: Array<string> }) =>
+    r.scenes && r.scenes.length > 0 ? r.scenes : [UNNAMED]
+  // Keep a scan per known scene name, plus the unnamed bucket only if used.
+  const out = new Map<string, ProductScan>()
+  const scanFor = (scene: string): ProductScan => {
+    let scan = out.get(scene)
+    if (!scan) {
+      scan = { sceneName: scene === UNNAMED ? '' : scene, scenePath: '', products: [], unmatched: [] }
+      out.set(scene, scan)
+    }
+    return scan
+  }
+  for (const scene of names) scanFor(scene)
+  for (const p of merged.products) {
+    for (const scene of scenesOf(p)) scanFor(scene).products.push({ ...p, scenes: [] })
+  }
+  for (const a of merged.unmatched) {
+    for (const scene of scenesOf(a)) scanFor(scene).unmatched.push({ ...a, scenes: [] })
+  }
+  // A named scene that ended up with nothing is still a scene that was scanned —
+  // dropping it would make a re-scan of another scene look like the first one.
+  return [...out.values()]
+}

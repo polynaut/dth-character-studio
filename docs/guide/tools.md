@@ -61,9 +61,9 @@ set in [Settings](./02-setup.md).
   figure as this scene's contribution. Build **Base morphs** first and nothing
   is lost: the next ROM or export run scans the scene by itself.
 - **Products** — runs the [Daz Products scan](./product-scanning.md) for the
-  same scenes. Only available when the project has *Daz Products* switched on
-  (**Settings → Project**); it shares the scene opens with the morph scan, so
-  ticking both costs no extra time.
+  same scenes. Available once a **DAZ Install Manager manifests folder** is set
+  (**Settings**) — that folder is what the scan matches against. It shares the
+  scene opens with the morph scan, so ticking both costs no extra time.
 
 **Scenes to scan** — the two scene passes default to every linked scene, but
 each one is a full Daz open, so a big project is a long run. Expand the list to

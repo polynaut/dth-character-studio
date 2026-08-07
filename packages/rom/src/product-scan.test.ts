@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { mergeProductScans, parseProductScanCsv, type ProductScan } from './product-scan'
+import {
+  mergeProductScans,
+  parseProductScanCsv,
+  scansFromMerged,
+  type ProductScan,
+} from './product-scan'
 
 const HEADER =
   'row_type,name,sku,artist,version,product_type,match_method,technical_name,asset_type,source_file,usage,used_by'
@@ -216,3 +221,44 @@ function makeProduct(over: Partial<ProductScan['products'][number]>): ProductSca
     ...over,
   }
 }
+
+// The inverse of the merge — used once, to carry a pre-v30 definition's stored
+// (already merged) products into the per-scene store they live in now.
+describe('scansFromMerged', () => {
+  it('puts each record back in every scene it was attributed to', () => {
+    const scans = scansFromMerged({
+      scenes: ['Default', 'Summer'],
+      products: [
+        makeProduct({ name: 'Golden Palace', sku: 'a', scenes: ['Default', 'Summer'] }),
+        makeProduct({ name: 'Beachwear', sku: 'b', scenes: ['Summer'] }),
+      ],
+      unmatched: [],
+    })
+
+    expect(scans.map((s) => s.sceneName)).toEqual(['Default', 'Summer'])
+    expect(scans[0].products.map((p) => p.name)).toEqual(['Golden Palace'])
+    expect(scans[1].products.map((p) => p.name)).toEqual(['Golden Palace', 'Beachwear'])
+  })
+
+  it('round-trips through the merge it inverts', () => {
+    const merged = mergeProductScans([
+      { sceneName: 'Default', scenePath: '', products: [makeProduct({ name: 'A', sku: 'a' })], unmatched: [] },
+      { sceneName: 'Summer', scenePath: '', products: [makeProduct({ name: 'B', sku: 'b' })], unmatched: [] },
+    ])
+    expect(mergeProductScans(scansFromMerged(merged))).toEqual(merged)
+  })
+
+  it('keeps a record that names NO scene, in an unnamed scan', () => {
+    // Pre-multi-scene data (and hand-edited JSON) can carry no attribution at
+    // all. Dropping those records would lose them silently; reading `.length`
+    // off the missing array used to throw and abort the whole carry-over.
+    const scans = scansFromMerged({
+      scenes: [],
+      products: [{ ...makeProduct({ name: 'Orphan' }), scenes: undefined } as never],
+      unmatched: [],
+    })
+    expect(scans).toHaveLength(1)
+    expect(scans[0].sceneName).toBe('')
+    expect(scans[0].products.map((p) => p.name)).toEqual(['Orphan'])
+  })
+})

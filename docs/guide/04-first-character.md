@@ -320,8 +320,8 @@ images or files straight into the editor** — it autosaves. Stored as
 travel with your project backup. The project page has the same tab for
 project-wide notes.
 
-A **Products** tab appears when the project enables Daz Products — see
-[Daz product scanning](./product-scanning.md).
+A **Products** tab appears when the project switches it on — the scanning itself
+runs regardless. See [Daz product scanning](./product-scanning.md).
 
 </td></tr></table>
 </details>
