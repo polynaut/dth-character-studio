@@ -89,6 +89,13 @@ generation they are shown greyed out):
   *Move*), and see
   [project checks](./06-into-houdini.md#project-checks--what-the-card-warns-about)
   for what a copied project needs afterwards.
+- **Saved something new?** The studio notices by itself: save a `.duf` or a
+  Houdini project anywhere into the character's folder, tab back, and a banner
+  offers to **Review** the new files — a wizard with one page per file runs the
+  same checks as adding by hand, then links each file in place (a character
+  without a primary scene gets **Set as primary**). **Skip** ignores a file
+  permanently (it can still be added by pick/drop later); the banner's ✕ only
+  hides it for the session.
 
 </td></tr></table>
 </details>
