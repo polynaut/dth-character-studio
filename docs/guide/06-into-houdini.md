@@ -43,7 +43,16 @@ The character page's **Houdini projects → Generate project** creates the whole
 project for you: a new scene named after the character (editable in the dialog,
 which refuses a name that already exists), saved in the houdini folder **next
 to** the `houdini-project` folder it Set-Projects into, with **Set Project
-already baked in** and the **DazToHue network ready** — open it and import.
+already baked in** and the **DazToHue network ready**. The network comes out
+**wired**: the import file paths (`.dth`, FBX, Alembic, ROM FBX), the
+**PoseAsset CSV path**, the **export directory** and the **Skinning method**
+(Linear / Dual Quaternion, from the ROM definition) are prefilled for the
+primary scene — relative to the scene (`$HIP/../daz3d/dth-exports/…`) by
+default, absolute when the project's
+[Houdini path style](./05-rom-in-daz.md#reference-skeleton-paths--hip-by-default)
+says so — and the **character name** is set with them. A parameter
+your installed DazToHue version doesn't have yet is simply skipped (the CSV
+path needs the release with the CSV-driven PoseAsset node).
 The project folder is shared: generate a second or third project and they all
 open with the same `$JOB`.
 

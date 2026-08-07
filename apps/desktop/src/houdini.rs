@@ -134,14 +134,22 @@ pub struct CreateHoudiniProjectRequest {
     /// HDA!) never load — the same leak that hid the DazToHue shelf from
     /// studio-launched Houdini. Empty = inherit (no override).
     pub houdini_pref_dir: String,
+    /// JSON `HoudiniPrefill` (built in TS — paths resolved there, per the
+    /// convention) applied to the fresh network's nodes: import/CSV/export
+    /// paths, character name, skinning. Travels as the `DTH_PREFILL` env var
+    /// so no value ever has to be escaped into the Python source. Empty =
+    /// prefill nothing.
+    pub prefill_json: String,
 }
 
-/// Returns `"<created>|<visible>"`: `Shelf/<tool>` when the shelf tool built
-/// the network ('none' when it couldn't — the scene saved empty, `$JOB`
-/// still baked), and every DazToHue-ish node type hython could see across
+/// Returns `"<created>|<visible>|<prefilled>"`: `Shelf/<tool>` when the shelf
+/// tool built the network ('none' when it couldn't — the scene saved empty,
+/// `$JOB` still baked), every DazToHue-ish node type hython could see across
 /// ALL categories (comma-joined, 'none' when zero) — the UI surfaces the
 /// list so a missing network is diagnosable (otls not loading vs the shelf
-/// tool failing headless).
+/// tool failing headless) — and the `node.parm` names the prefill actually
+/// set (comma-joined, 'none' when zero: parms missing on an older HDA are
+/// skipped one by one, never an error).
 #[tauri::command(async)]
 pub fn create_houdini_project(request: CreateHoudiniProjectRequest) -> Result<String, String> {
     std::fs::create_dir_all(&request.project_dir)
@@ -195,9 +203,49 @@ pub fn create_houdini_project(request: CreateHoudiniProjectRequest) -> Result<St
             "                    pass\n",
             "except Exception:\n",
             "    added = ''\n",
+            // Prefill AFTER the shelf tool built the chain, BEFORE the save, so
+            // the wiring lands in the .hip. Per-parm and best-effort: a parm an
+            // older HDA doesn't have is skipped (parm() is None), a value the
+            // prefill left '' is left alone, and no failure here may ever take
+            // down the generation — the network without prefills is still the
+            // network. Values arrive via the DTH_PREFILL env var (JSON), never
+            // escaped into this source.
+            "prefilled = []\n",
+            "try:\n",
+            "    import json, os\n",
+            "    pf = json.loads(os.environ.get('DTH_PREFILL', '') or 'null')\n",
+            "    if pf and added:\n",
+            "        def set_parm(node, name, value):\n",
+            "            if not value:\n",
+            "                return\n",
+            "            p = node.parm(name)\n",
+            "            if p is None:\n",
+            "                return\n",
+            "            try:\n",
+            "                p.set(value)\n",
+            "                prefilled.append(node.name() + '.' + name)\n",
+            "            except Exception:\n",
+            "                pass\n",
+            "        for top in new:\n",
+            "            for node in [top] + list(top.allSubChildren()):\n",
+            "                t = node.type().name().lower()\n",
+            "                if 'daztohueimport' in t:\n",
+            "                    set_parm(node, 'import_character_name', pf.get('characterName'))\n",
+            "                    set_parm(node, 'import_character_dtu_file', pf.get('dth'))\n",
+            "                    set_parm(node, 'import_character_fbx_file', pf.get('fbx'))\n",
+            "                    set_parm(node, 'import_character_alembic_file', pf.get('abc'))\n",
+            "                    set_parm(node, 'import_character_rom_fbx_file', pf.get('romFbx'))\n",
+            "                    set_parm(node, 'import_skinning_method', pf.get('skinning'))\n",
+            "                elif 'daztohueposeasset' in t:\n",
+            "                    set_parm(node, 'pose_asset_csv_file_path', pf.get('csv'))\n",
+            "                elif 'daztohueexport' in t and 'groom' not in t:\n",
+            "                    set_parm(node, 'export_directory', pf.get('exportDirectory'))\n",
+            "except Exception:\n",
+            "    pass\n",
             "hou.hipFile.save('{scene}')\n",
             "print('DTH_NETWORK=' + (added or 'none'))\n",
             "print('DTH_TYPES=' + (','.join(visible) or 'none'))\n",
+            "print('DTH_PREFILL=' + (','.join(prefilled) or 'none'))\n",
         ),
         job = escape(&request.job_dir),
         scene = escape(&request.scene_path),
@@ -211,6 +259,9 @@ pub fn create_houdini_project(request: CreateHoudiniProjectRequest) -> Result<St
             "HOUDINI_USER_PREF_DIR",
             request.houdini_pref_dir.replace('\\', "/").trim_end_matches('/'),
         );
+    }
+    if !request.prefill_json.is_empty() {
+        command.env("DTH_PREFILL", &request.prefill_json);
     }
     let output = command
         .output()
@@ -241,5 +292,10 @@ pub fn create_houdini_project(request: CreateHoudiniProjectRequest) -> Result<St
             .find_map(|line| line.trim().strip_prefix(prefix).map(str::to_string))
             .unwrap_or_else(|| "none".to_string())
     };
-    Ok(format!("{}|{}", marker("DTH_NETWORK="), marker("DTH_TYPES=")))
+    Ok(format!(
+        "{}|{}|{}",
+        marker("DTH_NETWORK="),
+        marker("DTH_TYPES="),
+        marker("DTH_PREFILL=")
+    ))
 }

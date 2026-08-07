@@ -4,6 +4,7 @@ import { characterSchema } from '@dth/rom'
 
 import {
   buildHoudiniJob,
+  buildHoudiniPrefill,
   houdiniResultSummary,
   houdiniRunFilesToClear,
   houdiniRunStateFrom,
@@ -105,6 +106,53 @@ describe('buildHoudiniJob', () => {
   it('dedupes two scenes that would resolve to the same file', () => {
     const job = buildHoudiniJob(kira(), [PRIMARY, PRIMARY], { resultPath: 'r.json' })
     expect(job.scenes).toHaveLength(1)
+  })
+
+  it('prefill: primary-scene paths ride the $HIP prefix, export directory keeps its slash', () => {
+    const prefill = buildHoudiniPrefill(kira(), {
+      hipRefPrefix: '$HIP/../daz3d/dth-exports',
+      scenesRootAbs: ROOT,
+    })
+    expect(prefill).toEqual({
+      characterName: 'Kira',
+      // G9 with no explicit preset pick assumes the DTH-recommended DQS —
+      // which the Import node's menu spells 'dualquat'.
+      skinning: 'dualquat',
+      csv: '$HIP/../daz3d/dth-exports/primary/Kira_pose_asset.csv',
+      dth: '$HIP/../daz3d/dth-exports/primary/Kira.dth',
+      fbx: '$HIP/../daz3d/dth-exports/primary/Kira.fbx',
+      abc: '$HIP/../daz3d/dth-exports/primary/Kira.abc',
+      romFbx: '$HIP/../daz3d/dth-exports/primary/Kira_experimental_rom.fbx',
+      // The HDA concatenates export_directory + character_name — the trailing
+      // slash is load-bearing (456.py's measured facts).
+      exportDirectory: '$HIP/../daz3d/dth-exports/',
+    })
+  })
+
+  it('prefill: an empty prefix (absolute style) uses the export root verbatim', () => {
+    const prefill = buildHoudiniPrefill(kira(), { hipRefPrefix: '', scenesRootAbs: ROOT })
+    expect(prefill.dth).toBe('X:/p/Kira/daz3d/dth-exports/primary/Kira.dth')
+    expect(prefill.exportDirectory).toBe('X:/p/Kira/daz3d/dth-exports/')
+  })
+
+  it('prefill: no export directory still fills name + skinning, paths stay empty', () => {
+    const prefill = buildHoudiniPrefill(kira({ exportPath: '' }), {
+      hipRefPrefix: '$HIP/../daz3d/dth-exports',
+      scenesRootAbs: ROOT,
+    })
+    expect(prefill.characterName).toBe('Kira')
+    expect(prefill.skinning).toBe('dualquat')
+    expect(prefill.csv).toBe('')
+    expect(prefill.exportDirectory).toBe('')
+  })
+
+  it('prefill: a Linear-only generation maps to the linear menu token', () => {
+    // G8 ships no DQS ROM, so the auto-selected skinning is Linear.
+    const prefill = buildHoudiniPrefill(kira({ genesis: 'G8' }), {
+      hipRefPrefix: '$HIP/../daz3d/dth-exports',
+      scenesRootAbs: ROOT,
+    })
+    expect(prefill.skinning).toBe('linear')
   })
 
   it('carries closeWhenDone when asked, and defaults it to false', () => {
