@@ -222,8 +222,8 @@ rewritten before every Houdini run (`houdini-jobs.ts`). Generated Daz scripts in
 in `storage/projects.ts`. Everything the studio writes FOR ITSELF about one
 character: `.dth_execute_stamps.json`, `.dth_export_folders.json`,
 `.last_rom_run.json`, the Daz-written `dth_rom_run_log.json` transport, the
-generated `<Name>_pose_asset.csv` (plus per-scene variants), since v0.68
-`products.json`, and `detected-ignore.json` (the new-file wizard's permanent skip
+generated `<Name>_pose_asset.csv` (plus per-scene variants), `products.json`
+(since v0.68), and `detected-ignore.json` (the new-file wizard's permanent skip
 list). They all sat in the character folder root until v0.68, mixed in
 with the user's scenes and `.hip`s (`products.json`'s data sat on the definition).
 
