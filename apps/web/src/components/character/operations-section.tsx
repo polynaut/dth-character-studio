@@ -130,7 +130,8 @@ export function CharacterOperationsSection({
           }
           busy={deleting}
           error={deleteError}
-          onConfirm={onDeleteCharacter}
+          // Fire and forget on purpose — `busy`/`error` are the dialog's channel.
+          onConfirm={(opts) => void onDeleteCharacter(opts)}
           onClose={() => setDeleteOpen(false)}
         />
       )}

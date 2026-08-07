@@ -1,6 +1,5 @@
 {
-  "eslint/no-await-in-loop": 134,
   "oxc/no-map-spread": 9,
-  "react/no-unstable-nested-components": 24,
-  "typescript/no-misused-promises": 36
+  "eslint/no-await-in-loop": 134,
+  "react/no-unstable-nested-components": 24
 }

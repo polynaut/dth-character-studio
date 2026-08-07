@@ -154,7 +154,9 @@ export function AssetsGrid({
           keepLabel={pendingDelete.linked ? undefined : 'Keep the copied scene files on disk'}
           busy={deleting}
           error={deleteError}
-          onConfirm={confirmDelete}
+          // Fire and forget on purpose: the dialog reports progress and failure
+          // through `busy`/`error`, so it never awaits this.
+          onConfirm={(opts) => void confirmDelete(opts)}
           onClose={() => setPendingDelete(null)}
         />
       )}

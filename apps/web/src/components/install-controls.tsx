@@ -34,6 +34,16 @@ export function FolderField({
 }) {
   // Prefer the richer `info` text in the popup, falling back to `help`.
   const popup = info ?? help
+
+  // Named so the click handler can stay a plain void call: the picker reports
+  // its own cancellation by returning nothing, so there is nothing to await.
+  async function browse() {
+    // Open where the field already points; only an empty one falls back to the
+    // caller's nearest-sensible folder.
+    const picked = await pickFolder(label, browseStart(value, browseFrom))
+    if (picked) onChange(picked)
+  }
+
   return (
     <div>
       <Label className="mb-1 flex w-fit items-center gap-1">
@@ -68,12 +78,7 @@ export function FolderField({
             type="button"
             variant="outline"
             className="shrink-0"
-            onClick={async () => {
-              // Open where the field already points; only an empty one falls back
-              // to the caller's nearest-sensible folder.
-              const picked = await pickFolder(label, browseStart(value, browseFrom))
-              if (picked) onChange(picked)
-            }}
+            onClick={() => void browse()}
           >
             <FolderOpen /> Browse
           </Button>

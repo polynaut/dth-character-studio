@@ -178,7 +178,7 @@ function CharacterProductsTabImpl({
           <Button
             variant="outline"
             size="sm"
-            onClick={clearScan}
+            onClick={() => void clearScan()}
             disabled={!productScan?.exists || clearingScan}
             title="Discard the scan results (leaves products already stored on the character untouched)"
           >
@@ -268,7 +268,7 @@ function CharacterProductsTabImpl({
                       : ''}
               </span>
               <Button
-                onClick={storeProducts}
+                onClick={() => void storeProducts()}
                 disabled={storingProducts || scanUpToDate}
                 title={
                   scanUpToDate

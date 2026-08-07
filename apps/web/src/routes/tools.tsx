@@ -340,9 +340,9 @@ function ToolsPage() {
             onCloseReport={() => setAssetsReport(null)}
             changedAssets={changedAssets}
             onScan={() => void runScan()}
-            onDryRun={() => runInstall(installDazAssets, true, setAssetsBusy, setAssetsReport)}
+            onDryRun={() => void runInstall(installDazAssets, true, setAssetsBusy, setAssetsReport)}
             onInstall={() =>
-              runInstall(
+              void runInstall(
                 ({ data }) => installDazAssets({ data: { ...data, only: changedAssets } }),
                 false,
                 setAssetsBusy,
@@ -374,8 +374,8 @@ function ToolsPage() {
             busy={morphsBusy}
             report={morphsReport}
             onCloseReport={() => setMorphsReport(null)}
-            onDryRun={() => runInstall(installDazMorphs, true, setMorphsBusy, setMorphsReport)}
-            onInstall={() => runInstall(installDazMorphs, false, setMorphsBusy, setMorphsReport)}
+            onDryRun={() => void runInstall(installDazMorphs, true, setMorphsBusy, setMorphsReport)}
+            onInstall={() => void runInstall(installDazMorphs, false, setMorphsBusy, setMorphsReport)}
           />
 
           <DazPresetsSection
@@ -386,8 +386,10 @@ function ToolsPage() {
             busy={presetsBusy}
             report={presetsReport}
             onCloseReport={() => setPresetsReport(null)}
-            onDryRun={() => runInstall(installDazPresets, true, setPresetsBusy, setPresetsReport)}
-            onInstall={() => runInstall(installDazPresets, false, setPresetsBusy, setPresetsReport)}
+            onDryRun={() => void runInstall(installDazPresets, true, setPresetsBusy, setPresetsReport)}
+            onInstall={() =>
+              void runInstall(installDazPresets, false, setPresetsBusy, setPresetsReport)
+            }
           />
 
           <HoudiniPresetsSection
@@ -396,9 +398,11 @@ function ToolsPage() {
             busy={houdiniBusy}
             report={houdiniReport}
             onCloseReport={() => setHoudiniReport(null)}
-            onDryRun={() => runInstall(installHoudiniPresets, true, setHoudiniBusy, setHoudiniReport)}
+            onDryRun={() =>
+              void runInstall(installHoudiniPresets, true, setHoudiniBusy, setHoudiniReport)
+            }
             onInstall={() =>
-              runInstall(installHoudiniPresets, false, setHoudiniBusy, setHoudiniReport)
+              void runInstall(installHoudiniPresets, false, setHoudiniBusy, setHoudiniReport)
             }
           />
 
