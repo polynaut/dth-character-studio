@@ -474,6 +474,25 @@ a {
   }
 }
 
+/* The Settings "Daz installation" card. Same green tint/border language as
+   `daz-card` above, so a detected Daz Studio reads as the same kind of object
+   as a linked Daz scene — but WITHOUT the left accent bar and without the
+   selected ring: activating one is setting a value, not selecting an item in a
+   list, so the active state is just a lifted tint and a solid green border.
+   `:disabled` (the folder is gone) keeps the resting tint and never hovers. */
+@utility daz-install-card {
+  background-color: color-mix(in oklab, var(--daz-green) 7%, var(--card));
+  border-color: color-mix(in oklab, var(--daz-green) 26%, var(--border));
+  &:hover:not(:disabled):not([data-active='true']) {
+    background-color: color-mix(in oklab, var(--daz-green) 12%, var(--card));
+    border-color: color-mix(in oklab, var(--daz-green) 55%, var(--border));
+  }
+  &[data-active='true'] {
+    background-color: color-mix(in oklab, var(--daz-green) 20%, var(--card));
+    border-color: var(--daz-green);
+  }
+}
+
 /* The linked-project "Houdini card": mirrors `daz-card` with a Houdini-orange
    LEFT ACCENT BAR + faint orange tint / border. The DTH Export dialog's
    project rows are selectable (checkbox + cover button, like the Daz rows),

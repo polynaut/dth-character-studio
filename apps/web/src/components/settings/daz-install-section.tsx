@@ -113,6 +113,7 @@ export function DazInstallSection({
               busy={busyKey === app.key}
               recommended={activeKey === '' && app.key === recommendedKey}
               disabled={busyKey !== ''}
+              tone="daz"
               onActivate={() => onActivate(app.key)}
             />
           ))}
