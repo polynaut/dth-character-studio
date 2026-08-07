@@ -12,10 +12,6 @@ import type { Page } from '@playwright/test'
 // the honest shape of the feature: opening a character page reads instantly and
 // kicks a sweep off for next time; it never blocks on hython.
 
-/** The fixed mtime the fake reports for every file (tauri-mock's FAKE_MTIME_MS)
- *  — a store entry has to carry it to read as still-fresh. */
-const FAKE_MTIME_MS = 1767225600000
-
 /** The character's scan store, in its `.dcsmeta` folder. */
 const STORE = `${P.project}/.dcsmeta/characters/Kira/houdini-scan.json`
 
@@ -35,19 +31,24 @@ function scan(over: Record<string, unknown> = {}) {
 
 async function openWithStore(page: Page, project: Record<string, unknown>) {
   const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true, houdiniProject: true })
-  // The store keys each entry on `<path>|<mtime>`, so the seeded entry has to
-  // carry the stamp the fake reports or it reads as stale and is ignored.
   seed.files[STORE] = JSON.stringify({
     version: 1,
     projects: {
       [P.houdini.toLowerCase()]: {
-        key: `${P.houdini.toLowerCase()}|${FAKE_MTIME_MS}`,
+        key: `${P.houdini.toLowerCase()}|__MTIME__`,
         scannedAt: '2026-08-07T00:00:00.000Z',
         project,
       },
     },
   })
   await page.addInitScript(installTauriMock, seed)
+  // The store keys on `<path>|<mtime>`, and the fake stamps its world when it is
+  // installed — so the seeded entry gets that stamp here, after install.
+  await page.addInitScript((storePath: string) => {
+    const mock = (window as any).__tauriMock
+    const raw = mock.files.get(storePath) as string
+    mock.files.set(storePath, raw.replace('__MTIME__', String(mock.mtimeMs)))
+  }, STORE)
   await page.goto('/')
   await page.getByRole('link', { name: /Kira/ }).click()
   await expect(page.getByText(/custom ROM frames/)).toBeVisible()

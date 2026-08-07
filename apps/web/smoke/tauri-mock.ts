@@ -85,6 +85,9 @@ export interface TauriMockSeed {
 /** What the spec reads back via `page.evaluate` from `window.__tauriMock`. */
 export interface TauriMockState {
   files: Map<string, string>
+  /** The mtime every file in the fake world reports — stable per page, so a
+   *  spec can seed an mtime-keyed cache entry that reads as fresh. */
+  mtimeMs: number
   calls: Array<{ cmd: string; args: unknown }>
   unhandled: Array<string>
   /** What `daz_studio_running` reports — false until a spec flips it (the way
@@ -98,9 +101,16 @@ export interface TauriMockState {
 
 export function installTauriMock(seed: TauriMockSeed): void {
   const files = new Map(Object.entries(seed.files))
-  /** Every file's mtime in the fake world — see `stat`. Exposed so a spec can
-   *  seed an mtime-keyed cache entry that reads as fresh. */
-  const FAKE_MTIME_MS = 1767225600000 // 2026-01-01T00:00:00Z
+  /**
+   * Every file's mtime in the fake world — see `stat`.
+   *
+   * Stable (so mtime-keyed caches can actually hit) but NOT a fixed date in the
+   * past: age-based housekeeping compares against the real clock, and a world
+   * whose files all look months old gets its just-written run files swept out
+   * from under it. Stamped once, when the fake is installed. Exposed on
+   * `__tauriMock` so a spec can seed a cache entry that reads as fresh.
+   */
+  const FAKE_MTIME_MS = Date.now()
   const extraDirs = new Set<string>()
   const calls: Array<{ cmd: string; args: unknown }> = []
   const unhandled: Array<string> = []
@@ -108,6 +118,8 @@ export function installTauriMock(seed: TauriMockSeed): void {
   // `state.houdiniRunning` from a spec is how a run goes live and then exits.
   const state: TauriMockState = {
     files,
+    /** The mtime every file reports — a spec seeding an mtime-keyed cache needs it. */
+    mtimeMs: FAKE_MTIME_MS,
     calls,
     unhandled,
     houdiniRunning: seed.houdiniRunning ?? false,
