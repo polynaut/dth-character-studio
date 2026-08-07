@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { isSameNode, transferHoudiniMaterials } from './houdini-material.ts'
+import { discardHoudiniBackups, isSameNode, isStudioBackup, transferHoudiniMaterials } from './houdini-material.ts'
 
 // The transfer itself needs hython and a real `.hip`, so what is unit-testable
 // here is the guard that decides a transfer must not run at all — the one rule
@@ -32,6 +32,43 @@ describe('isSameNode', () => {
 
   it('compares node paths case-SENSITIVELY (Houdini node names are)', () => {
     expect(isSameNode(node, { ...node, nodePath: '/obj/daztohue/daztohuematerial' })).toBe(false)
+  })
+})
+
+describe('isStudioBackup', () => {
+  // The gate on a DELETE, so what matters is everything it must refuse. The
+  // studio's own copies are the only files the discard may ever remove.
+  it('accepts the copies `_backup` writes', () => {
+    expect(isStudioBackup('D:/chars/Ita/houdini/backup/Ita_dthbak.hiplc')).toBe(true)
+    expect(isStudioBackup('D:\\chars\\Ita\\houdini\\backup\\Ita_dthbak.hip')).toBe(true)
+    // Trailing whitespace off a report field must not defeat the check.
+    expect(isStudioBackup(' D:/chars/Ita/houdini/backup/Ita_dthbak.hiplc ')).toBe(true)
+  })
+
+  it("refuses Houdini's own backups in the same folder", () => {
+    // These sit right beside ours and are the user's safety net, not the
+    // studio's — deleting one would be the worst kind of tidy-up.
+    expect(isStudioBackup('D:/chars/Ita/houdini/backup/Ita_bak1.hip')).toBe(false)
+    expect(isStudioBackup('D:/chars/Ita/houdini/backup/Ita_bak12.hiplc')).toBe(false)
+  })
+
+  it('refuses a project file, however similarly named', () => {
+    expect(isStudioBackup('D:/chars/Ita/houdini/Ita.hiplc')).toBe(false)
+    expect(isStudioBackup('D:/chars/Ita/houdini/Ita_dthbak')).toBe(false)
+    // A folder named like a backup is not a backup file.
+    expect(isStudioBackup('D:/chars/Ita/houdini/Ita_dthbak.hiplc/scene.hip')).toBe(false)
+  })
+})
+
+describe('discardHoudiniBackups', () => {
+  it('needs the desktop app', async () => {
+    await expect(
+      discardHoudiniBackups({ data: { paths: ['D:/x/backup/x_dthbak.hiplc'] } }),
+    ).rejects.toThrow(/desktop app/i)
+  })
+
+  it('rejects a path that is not a string at the schema boundary', async () => {
+    await expect(discardHoudiniBackups({ data: { paths: [''] } })).rejects.toThrow()
   })
 })
 

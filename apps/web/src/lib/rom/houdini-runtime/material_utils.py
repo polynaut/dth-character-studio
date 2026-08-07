@@ -1421,6 +1421,12 @@ def _backup(path):
     Taken on every real run and reported in `backupPath`, but the studio only
     ever SHOWS it on a failure, where it becomes the offer to revert
     (`restore_houdini_backup`). A run that worked has nothing to undo.
+
+    Lifetime is the drawer SESSION: the studio collects every `backupPath` it
+    was handed and offers to delete them when the panel closes
+    (`discardHoudiniBackups`), because an ~8 MB copy beside every project the
+    user ever ran this on is how a disk fills. Nothing here depends on that —
+    a copy that survives is simply the next run's rolling target.
     """
     folder = os.path.join(os.path.dirname(path), "backup")
     name, ext = os.path.splitext(os.path.basename(path))
