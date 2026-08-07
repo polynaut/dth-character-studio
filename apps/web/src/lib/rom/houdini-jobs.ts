@@ -227,24 +227,49 @@ export interface HoudiniPrefill {
    *  `<name>_experimental_rom.fbx` (measured on a real DTH Exporter 2.x
    *  export folder; the name is the plugin's to change). */
   romFbx: string
-  /** `export_directory` — trailing slash REQUIRED: the HDA concatenates
-   *  `export_directory + character_name` naively (456.py's measured facts). */
+  /** `export_directory` — where Houdini WRITES its Unreal-bound output, i.e. the
+   *  character's `export/` folder, NOT the `dth-exports` the imports read from.
+   *  Trailing slash REQUIRED: the HDA concatenates `export_directory +
+   *  character_name` naively (456.py's measured facts). */
   exportDirectory: string
 }
 
 /**
- * Build the prefill for a character's PRIMARY scene — the shelf tool creates
- * ONE network, and the primary is the scene every character has. With a
- * `hipRefPrefix` (e.g. `$HIP/../daz3d/dth-exports`, computed by
- * `hipRefPrefixFor` for the hip being generated) the paths ride it; absolute
- * otherwise — the same style split the generated CSVs use. Name + skinning
- * are always filled; the path fields are '' when the character has no export
- * directory to point into.
+ * Build the prefill for ONE of the character's scenes — the shelf tool creates
+ * one network, and that network imports one scene's export set.
+ *
+ * `scenePath` picks it; omitted (or naming a scene this character doesn't link)
+ * falls back to the PRIMARY, which every character has. A character with several
+ * outfit scenes gets a project per scene, each wired to its own
+ * `dth-exports/<subfolder>/` — before v0.71 every generated project pointed at
+ * the primary's, and re-aiming it was a hand edit of five paths.
+ *
+ * With a `hipRefPrefix` (e.g. `$HIP/../daz3d/dth-exports`, computed by
+ * `hipRefPrefixFor` for the hip being generated) the import paths ride it;
+ * absolute otherwise — the same style split the generated CSVs use. Name +
+ * skinning are always filled; the path fields are '' when the character has no
+ * export directory to point into.
+ *
+ * `exportDirectory` is a DIFFERENT folder from the import paths and must not be
+ * derived from them: the imports read the Daz→Houdini intermediates under
+ * `dth-exports`, while this is where Houdini WRITES for Unreal — the character's
+ * own `export/` folder (the project's `exportSubdir`). It came from the caller
+ * because only the host knows that subdir. Until v0.71 it was the export ROOT,
+ * which quietly aimed Houdini's output into the regenerable Daz-side tree.
  */
 export function buildHoudiniPrefill(
   character: Character,
-  options: { hipRefPrefix: string; scenesRootAbs?: string },
+  options: {
+    hipRefPrefix: string
+    scenesRootAbs?: string
+    /** Which linked scene to wire up; default (or unknown) = the primary. */
+    scenePath?: string
+    /** The character's FINAL export folder, in whichever style the caller
+     *  resolved (`$HIP/../export` or absolute). '' leaves the parm alone. */
+    finalExportDir?: string
+  },
 ): HoudiniPrefill {
+  const finalExport = stripTrailingSeparators((options.finalExportDir ?? '').trim().replace(/\\/g, '/'))
   const base: HoudiniPrefill = {
     characterName: characterSlug(character),
     skinning: characterSkinning(character) === 'dqs' ? 'dualquat' : 'linear',
@@ -253,10 +278,17 @@ export function buildHoudiniPrefill(
     fbx: '',
     abc: '',
     romFbx: '',
-    exportDirectory: '',
+    // Trailing slash: the HDA concatenates it with the character name.
+    exportDirectory: finalExport ? `${finalExport}/` : '',
   }
   const exportRoot = stripTrailingSeparators(character.exportPath.trim().replace(/\\/g, '/'))
-  const key = character.scenePath.trim().replace(/\\/g, '/').toLowerCase()
+  const linked = new Set(
+    [character.scenePath, ...character.extraScenes]
+      .map((scene) => scene.trim().replace(/\\/g, '/').toLowerCase())
+      .filter(Boolean),
+  )
+  const asked = (options.scenePath ?? '').trim().replace(/\\/g, '/').toLowerCase()
+  const key = asked && linked.has(asked) ? asked : character.scenePath.trim().replace(/\\/g, '/').toLowerCase()
   if (!exportRoot || !key) return base
   const entry = sceneExportFolderRel(character, options.scenesRootAbs)[key]
   if (!entry) return base
@@ -272,7 +304,6 @@ export function buildHoudiniPrefill(
     fbx: `${dir}/${name}.fbx`,
     abc: `${dir}/${name}.abc`,
     romFbx: `${dir}/${name}_experimental_rom.fbx`,
-    exportDirectory: `${root}/`,
   }
 }
 

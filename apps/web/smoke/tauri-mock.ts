@@ -355,6 +355,15 @@ export function installTauriMock(seed: TauriMockSeed): void {
         // never contains one, and 'absent' is the truthful answer; the call is
         // recorded (see `calls`) so a spec can assert the sweep ran.
         return 'absent'
+      case 'create_houdini_project': {
+        // Generate project. The real command runs hython, which this fake never
+        // starts — but everything worth asserting is already in the REQUEST:
+        // `prefillJson` is the whole wiring decision (which scene's export set
+        // the imports point at, where Houdini writes). So write the `.hiplc` the
+        // caller then links, and report a network that was created and filled.
+        files.set(norm(args.request.scenePath), 'hiplc-fixture')
+        return 'daztohueimport|daztohueimport|import_character_dtu_file'
+      }
       case 'open_project_window': // opens a separate OS window on the desktop —
         return null //              recorded (see `calls`), nothing to do here
       case 'shell_open_file': // Explorer-style double-click (openScene's `.hip`/

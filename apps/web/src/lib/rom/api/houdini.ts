@@ -28,6 +28,7 @@ import type { Character } from '@dth/rom'
 // before each launch (see startHoudiniExport).
 import houdiniRunnerScript from '../houdini-runtime/456.py?raw'
 import { characterScenesRoot } from './execute'
+import { normalizeRelFolder } from '../library'
 import { charScopeInput, charsRoot, joinPath, locateCharacter, resolveProject } from './core'
 
 // "Generate project": create a ready-made DazToHue Houdini project for a
@@ -50,6 +51,10 @@ import { charScopeInput, charsRoot, joinPath, locateCharacter, resolveProject } 
 const generateInput = charScopeInput.extend({
   /** The new scene's name (dialog input, prefilled `<Project>_<Character>`). */
   sceneName: z.string().min(1),
+  /** Which linked Daz scene the network should import — the dialog's picker on
+   *  a multi-scene character. Empty (or a scene this character doesn't link)
+   *  means the primary, which is the single-scene case and the old behaviour. */
+  dazScenePath: z.string().default(''),
 })
 
 /** Folder/file-name-safe: Windows-illegal characters collapse to one space
@@ -180,7 +185,7 @@ export async function generateHoudiniProject({
 }: {
   data: unknown
 }): Promise<GeneratedHoudiniProject> {
-  const { projectId, id, sceneName } = generateInput.parse(data)
+  const { projectId, id, sceneName, dazScenePath } = generateInput.parse(data)
   if (!isTauri()) throw new Error('Generate project needs the desktop app (it runs hython).')
 
   const settings = await storage.getSettings()
@@ -263,11 +268,23 @@ export async function generateHoudiniProject({
   // absolute), the character name (prefilled paths may bypass the HDA's
   // auto-fill) and the skinning the ROM targets.
   const scenesRootAbs = characterScenesRoot(character, location, project.dazSubdir ?? 'daz3d')
-  const hipRefPrefix =
-    project.houdiniPathStyle !== 'absolute'
-      ? hipRefPrefixFor([scenePath], charFolder, character.exportPath)
-      : ''
-  const prefill = buildHoudiniPrefill(character, { hipRefPrefix, scenesRootAbs })
+  const relative = project.houdiniPathStyle !== 'absolute'
+  const hipRefPrefix = relative
+    ? hipRefPrefixFor([scenePath], charFolder, character.exportPath)
+    : ''
+  // Houdini's OWN output goes to the character's `export/` folder — the end of
+  // the pipeline, not the `dth-exports` intermediates the imports read. Its
+  // prefix is computed against that folder, so it comes out `$HIP/../export`
+  // rather than sharing the imports' `$HIP/../daz3d/dth-exports`.
+  const finalExportAbs = joinPath(charFolder, normalizeRelFolder(project.exportSubdir))
+  const finalExportDir =
+    (relative ? hipRefPrefixFor([scenePath], charFolder, finalExportAbs) : '') || finalExportAbs
+  const prefill = buildHoudiniPrefill(character, {
+    hipRefPrefix,
+    scenesRootAbs,
+    scenePath: dazScenePath,
+    finalExportDir,
+  })
 
   // zod-parsed, not a bare invoke<T>() cast (primitive
   // "<created>|<visible>|<prefilled>" report — no fixture needed).
