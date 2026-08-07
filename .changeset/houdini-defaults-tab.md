@@ -1,8 +1,8 @@
 ---
-'@dth/desktop': patch
-'@dth/web': patch
-'@dth/rom': patch
-'@dth/ui': patch
+'@dth/desktop': minor
+'@dth/web': minor
+'@dth/rom': minor
+'@dth/ui': minor
 ---
 
 Houdini Utils gains a **Defaults** tab: per-project Houdini settings shown with
