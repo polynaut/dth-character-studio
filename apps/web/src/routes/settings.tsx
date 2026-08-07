@@ -656,6 +656,77 @@ function SettingsPage() {
     'You have unsaved settings — leave and lose them?',
   )
 
+  /**
+   * Keep the DERIVED install paths in step with what the machine now says.
+   *
+   * Activating a card resolves three Daz paths (two Houdini ones) and writes
+   * them, and they are read-only for as long as that installation stays active.
+   * But the source can move afterwards — point DIM at a different content
+   * library, or Houdini gets reinstalled — and a stored snapshot would then
+   * quietly disagree with the machine while the UI still called it derived. So
+   * every scan re-derives and writes back the drift; re-clicking the active card
+   * is no longer the only way to pick up a change.
+   *
+   * Three rules keep this from being a footgun:
+   *
+   *  - **Only while an installation is ACTIVE.** With the paths handed back
+   *    (`…InstallKey` cleared by "Set the paths manually") they are the user's,
+   *    and nothing here touches them.
+   *  - **Never writes an EMPTY value over a set one.** DIM dropping its manifest
+   *    override shouldn't blank a working path — the explicit activation says so
+   *    out loud in its toast, but a silent sync has no way to.
+   *  - **Never persists somebody else's pending edits.** With other fields
+   *    unsaved, the fresh values still land in the form (so the user's own Save
+   *    carries them) but the disk write waits for a clean page.
+   *
+   * A stored key matching no install is the "machine changed" case the sections
+   * already report — `derive…` returns null and this leaves everything alone,
+   * rather than re-deriving from some other installation.
+   */
+  useEffect(() => {
+    const drift: Partial<typeof settings> = {}
+    const daz = dazScan && settings.dazInstallKey ? deriveDazPaths(dazScan, settings.dazInstallKey) : null
+    if (daz) {
+      if (daz.dazInstallFolder && daz.dazInstallFolder !== settings.dazInstallFolder) {
+        drift.dazInstallFolder = daz.dazInstallFolder
+      }
+      if (daz.dazLibraryFolder && daz.dazLibraryFolder !== settings.dazLibraryFolder) {
+        drift.dazLibraryFolder = daz.dazLibraryFolder
+      }
+      if (daz.dimManifestsFolder && daz.dimManifestsFolder !== settings.dimManifestsFolder) {
+        drift.dimManifestsFolder = daz.dimManifestsFolder
+      }
+    }
+    const houdini =
+      houdiniScan && settings.houdiniInstallKey
+        ? deriveHoudiniPaths(houdiniScan, settings.houdiniInstallKey)
+        : null
+    if (houdini) {
+      if (houdini.houdiniInstallFolder && houdini.houdiniInstallFolder !== settings.houdiniInstallFolder) {
+        drift.houdiniInstallFolder = houdini.houdiniInstallFolder
+      }
+      if (houdini.houdiniDocsFolder && houdini.houdiniDocsFolder !== settings.houdiniDocsFolder) {
+        drift.houdiniDocsFolder = houdini.houdiniDocsFolder
+      }
+    }
+    if (Object.keys(drift).length === 0) return
+    const next = { ...settings, ...drift }
+    setSettings(next)
+    if (dirty || projectDirty) return
+    void (async () => {
+      try {
+        await saveSettings({ data: { settings: next, baseline: initial } })
+        await router.invalidate()
+        toast.info('Updated the paths from your Daz / Houdini installation — they had changed.')
+      } catch {
+        // The form already shows the truth; a failed write retries next visit.
+      }
+    })()
+    // Deliberately keyed on a fresh SCAN only: listing `settings`/`dirty` would
+    // re-fire on every keystroke, and the effect's own setSettings would then
+    // chase itself. A scan is the only thing that can produce new information.
+  }, [dazScan, houdiniScan])
+
   // Re-scan the active release's poses and refresh dependent routes. The studio
   // keeps the pose list in memory (no on-disk cache), so this just re-runs the
   // native scan and updates it — done whenever the release settings are applied:

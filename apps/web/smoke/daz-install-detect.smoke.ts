@@ -68,6 +68,10 @@ async function savedSettings(page: Page): Promise<Record<string, unknown>> {
   return JSON.parse(raw) as Record<string, unknown>
 }
 
+/** The Daz section's Rescan — the Houdini section below it has one too, and the
+ *  Daz card block is rendered first. */
+const dazRescan = (page: Page) => page.getByRole('button', { name: 'Rescan' }).first()
+
 async function openDazSettings(page: Page, seed: ReturnType<typeof dimSeed>) {
   await page.addInitScript(installTauriMock, seed)
   await page.goto('/')
@@ -150,6 +154,83 @@ test('"Set the paths manually" hands the fields back, keeping the values', async
   const saved = await savedSettings(page)
   expect(saved.dazInstallFolder).toBe(DS6)
   expect(saved.dazLibraryFolder).toBe(LIBRARY)
+})
+
+test('a library moved in DIM is picked up on the next visit, with no re-activation', async ({
+  page,
+}) => {
+  // The scenario this exists for: activate an installation, then change DIM's
+  // Advanced Settings. The stored paths were a SNAPSHOT taken at activation, so
+  // without the re-derive the studio kept generating into the old library and
+  // nothing said a word — re-clicking the already-active card was the only cure,
+  // and the card reads "Active", which invites nobody to click it.
+  const seed = dimSeed()
+  await openDazSettings(page, seed)
+  await page.getByRole('button', { name: /DAZ Studio 6/ }).click()
+  await expect.poll(async () => (await savedSettings(page)).dazLibraryFolder).toBe(LIBRARY)
+
+  // DIM now installs into a different library, and the manifests moved with it.
+  const MOVED = 'E:/Daz Content/My DAZ 3D Library'
+  const MOVED_MANIFESTS = 'E:/Daz Content/ManifestFiles'
+  await page.evaluate(
+    ([path, ini]) => (window as any).__tauriMock.files.set(path, ini),
+    [
+      `${DAZ_APPDATA}/InstallManager/UserAccounts/Remo.ini`,
+      [
+        '[General]',
+        'Account=DEADBEEFCAFE0123456789ABCDEF',
+        `CurInstallPath=${MOVED}`,
+        `OverrideManifestDir=${MOVED_MANIFESTS}`,
+        '',
+      ].join('\n'),
+    ] as const,
+  )
+  await page.evaluate(
+    ([a, b]) => {
+      const f = (window as any).__tauriMock.files
+      f.set(a, 'library')
+      f.set(b, '<dsx/>')
+    },
+    [`${MOVED}/readme.txt`, `${MOVED_MANIFESTS}/IM00012345_1_Product.dsx`] as const,
+  )
+
+  // Re-scan (what a fresh Settings visit does) — no card is clicked.
+  await dazRescan(page).click()
+
+  await expect.poll(async () => (await savedSettings(page)).dazLibraryFolder).toBe(MOVED)
+  const saved = await savedSettings(page)
+  expect(saved.dimManifestsFolder).toBe(MOVED_MANIFESTS)
+  // The installation itself didn't move, and the key is untouched.
+  expect(saved.dazInstallFolder).toBe(DS6)
+  expect(saved.dazInstallKey).toBe('dzstudio6installdir-64')
+  // The read-only list shows the new value, so it can't disagree with the card.
+  // `.first()`: the new library also reaches everything derived FROM it on this
+  // page (the script install location, the release install target) — which is
+  // rather the point of syncing it.
+  await expect(page.getByText(MOVED).first()).toBeVisible()
+})
+
+test('a DIM value that disappeared does NOT blank a working path', async ({ page }) => {
+  // Only drift toward a REAL value is synced. DIM dropping its manifest override
+  // (or an account file going unreadable) must not silently clear a path the
+  // studio depends on — the explicit activation says so in its toast; a silent
+  // sync has no way to.
+  await openDazSettings(page, dimSeed())
+  await page.getByRole('button', { name: /DAZ Studio 6/ }).click()
+  await expect.poll(async () => (await savedSettings(page)).dimManifestsFolder).toBe(MANIFESTS)
+
+  await page.evaluate(
+    ([path, ini]) => (window as any).__tauriMock.files.set(path, ini),
+    [
+      `${DAZ_APPDATA}/InstallManager/UserAccounts/Remo.ini`,
+      ['[General]', `CurInstallPath=${LIBRARY}`, ''].join('\n'),
+    ] as const,
+  )
+  await dazRescan(page).click()
+
+  // Still there — and the library, which DIM still names, is still right.
+  await expect.poll(async () => (await savedSettings(page)).dazLibraryFolder).toBe(LIBRARY)
+  expect((await savedSettings(page)).dimManifestsFolder).toBe(MANIFESTS)
 })
 
 test('a machine with no DIM says so instead of showing empty cards', async ({ page }) => {

@@ -44,6 +44,14 @@ They show read-only underneath the cards while an installation is active — an
 editable copy of a derived path is one that can quietly disagree with what
 produced it.
 
+**Change something in DIM later** — move your content library, point it at a
+different manifests folder — and the studio picks it up the next time it looks:
+opening Settings re-reads the installations, and any path that moved is updated
+and saved. There is nothing to re-activate. (Two exceptions, both deliberate: a
+value DIM has *dropped* never blanks a working path, and with other unsaved
+settings on the page the new values wait for your **Save** instead of being
+written behind it.)
+
 > **Both Daz Studio 4 and 6 installed?** Both get a card and the newest is
 > marked *recommended*, but nothing is activated until you click. Only the
 > **install folder** follows the card — the library and product database belong

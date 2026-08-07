@@ -19,7 +19,10 @@ import type { DazInstallScan, DerivedDazPaths } from '#/lib/daz-install.ts'
  * are a consequence of the choice, so there is nothing left to "save".
  *
  * The read-only display is the point — a derived value you can edit is a value
- * that silently disagrees with what it was derived from. The escape hatch is
+ * that silently disagrees with what it was derived from. That rule cuts both
+ * ways, so the Settings route RE-DERIVES on every scan: change DIM's content
+ * library afterwards and the stored paths follow, without anyone having to know
+ * that re-clicking the active card would have done it. The escape hatch is
  * explicit instead: **Set the paths manually** deactivates the installation and
  * hands the three fields back, for the machine DIM doesn't describe (a portable
  * install, a library on a share, no DIM at all).
@@ -39,7 +42,9 @@ export function DazInstallSection({
   loading: boolean
   /** The activated installation's key, '' when the paths are the user's own. */
   activeKey: string
-  /** What the active installation currently resolves to — the read-only list. */
+  /** The three derived paths as STORED — the read-only list. Kept in step with
+   *  what DIM currently says by the Settings route's re-derive-on-scan, so this
+   *  and the card above it can't drift apart. */
   derived: DerivedDazPaths | null
   /** The card mid-activation, '' when idle. */
   busyKey: string
