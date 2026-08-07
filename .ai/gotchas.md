@@ -318,6 +318,38 @@ current code before relying on details, but assume the *lesson* still holds.
   channels": measured, a G9 skin does and clothing does not. Slot-to-baker
   matching goes through the node's `material_prefix` — the slot is `Skin`, the
   baker names it `MI_Skin`.
+- **A DazToHue material slot is a CLAIM on Daz surfaces, and a surface can
+  belong to exactly one slot — so slots merge BY SURFACE, never by name and
+  never wholesale.** Measured 2026-08-07: `material_group#` is a plain STRING of
+  space-separated group expressions, one per surface
+  (`@fbx_material_name=Body @fbx_material_name=Head …`); a G9 `Skin` merges 15,
+  a raw import holds each as its own slot. Both obvious transfer modes violate
+  the invariant, and both shipped: *replace* wiped the list (a real 25-slot node
+  came back holding **1**), and *append* merging by slot NAME left the target's
+  own `Body`/`Head`/`Legs` beside an incoming `Skin` that already claimed them —
+  the same surface claimed twice. The correct rule evicts exactly the target
+  slots claiming the incoming slots' surfaces (plus any whose NAME an incoming
+  slot carries — two `Skin` slots render one `MI_Skin` and a baker could bind to
+  either), and TRIMS rather than drops a slot claiming a mix, or the surfaces
+  nothing else claims are orphaned. Because the eviction set is read from the
+  incoming slots' own `material_group`, the rule needs **no generation list** and
+  cannot go stale. Two corollaries: tokens are compared VERBATIM (a pattern like
+  `@fbx_material_name=GP*` therefore evicts nothing — the safe direction, since
+  a wrong eviction destroys work while a missed one leaves a visible duplicate),
+  and the rule lives on two sides — `houdini-material-merge.ts` (the panel's
+  before-you-run preview) and `_plan_surface_merge` in `material_utils.py` (what
+  actually writes the `.hip`) — pinned by the same cases against the same two
+  real projects. Still UNMEASURED: how G8/G8.1/G3 name their surfaces, so
+  nothing claims cross-generation compatibility; the report instead names
+  incoming surfaces that NO target slot claims, and a whole set of them is the
+  "different figures" tell.
+- **`removeMultiParmInstance(i)` takes the instance index and RENUMBERS what
+  follows.** Measured 2026-08-07 on a 25-slot DazToHueMaterial: removing
+  instances 10 and 9 left 23 compactly numbered 0…22, and the change survived
+  `hou.hipFile.save()` + reload. So a batch of removals must run in DESCENDING
+  index order, and any in-place edit of surviving instances (rewriting a
+  `material_group#`) must happen BEFORE the removals — every index read
+  beforehand is stale afterwards.
 - **Copy HDA multiparms off the parm TEMPLATE GROUP, not a hand-listed field
   table.** `material_utils.py` walks `parmTemplateGroup().find(<block>)`,
   flattening plain folders (Simple/Collapsible/Tabs add no index) and recursing

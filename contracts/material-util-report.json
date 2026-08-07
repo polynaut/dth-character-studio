@@ -23,7 +23,11 @@
             {
               "name": "Skin",
               "displayName": "MI_Skin",
-              "surfaces": 15,
+              "surfaces": [
+                "@fbx_material_name=Body",
+                "@fbx_material_name=Fingernails",
+                "@fbx_material_name=Head"
+              ],
               "bakers": 4,
               "layers": 30,
               "channelUvs": ["uv_geoshell"]
@@ -31,7 +35,7 @@
             {
               "name": "Dress",
               "displayName": "MI_Dress",
-              "surfaces": 1,
+              "surfaces": ["@fbx_material_name=Dress"],
               "bakers": 4,
               "layers": 4,
               "channelUvs": []
@@ -73,15 +77,22 @@
       "ok": true,
       "error": "",
       "sections": [
-        { "key": "materials", "before": 25, "after": 7, "skipped": 0 },
-        { "key": "uvChannels", "before": 0, "after": 3, "skipped": 0 },
-        { "key": "bakers", "before": 0, "after": 4, "skipped": 0 }
+        {
+          "key": "materials",
+          "before": 25,
+          "after": 11,
+          "evicted": ["Fingernails", "Head", "Body", "Mouth", "Teeth"],
+          "trimmed": ["Body1"]
+        },
+        { "key": "uvChannels", "before": 0, "after": 3, "evicted": [], "trimmed": [] },
+        { "key": "bakers", "before": 0, "after": 4, "evicted": [], "trimmed": [] }
       ],
       "added": ["T_Skin_Colour", "T_Skin_Normal"],
       "replaced": false,
       "missingMaterials": ["MI_Skin"],
       "missingGroups": [],
       "missingUvSources": ["uv_geoshell"],
+      "unclaimedSurfaces": ["@fbx_material_name=GPVagina"],
       "backupPath": "D:/chars/Ita/houdini/backup/Ita_dthbak.hiplc"
     }
   ],

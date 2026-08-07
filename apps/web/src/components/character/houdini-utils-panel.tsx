@@ -31,11 +31,18 @@ import type {
   MaterialNodeInfo,
   MaterialScanProject,
   MaterialSection,
+  MaterialSlotInfo,
   MaterialUtilReport,
   NodeKind,
   SkeletonSection,
 } from '#/lib/rom/api.ts'
 import { fetchAllCharacters, listAssets } from '#/lib/rom/api.ts'
+import {
+  mergeTouchCount,
+  planSurfaceMerge,
+  surfaceLabel,
+} from '#/lib/rom/houdini-material-merge.ts'
+import type { SurfaceMergePlan } from '#/lib/rom/houdini-material-merge.ts'
 import type { DazAsset } from '#/lib/rom/storage.ts'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import houdiniLogo from '#/assets/houdini-logo.svg'
@@ -97,6 +104,14 @@ function fileName(path: string): string {
   return path.split(/[\\/]/).pop() ?? path
 }
 
+/** The source slots a run will actually install — every one when none is picked. */
+function pickedSlots(
+  node: MaterialNodeInfo,
+  picked: ReadonlySet<string>,
+): Array<MaterialSlotInfo> {
+  return picked.size === 0 ? node.slots : node.slots.filter((s) => picked.has(s.name))
+}
+
 /**
  * How much a section will actually copy — shown beside each checkbox and in the
  * confirm dialog. Honours the picked materials: with `Skin` ticked this must
@@ -109,7 +124,7 @@ function sectionCountOf(
   key: MaterialSection,
   picked: ReadonlySet<string>,
 ): string {
-  const slots = picked.size === 0 ? node.slots : node.slots.filter((s) => picked.has(s.name))
+  const slots = pickedSlots(node, picked)
   const n =
     key === 'materials'
       ? picked.size === 0
@@ -394,6 +409,40 @@ export function HoudiniUtilsPanel({
             (pickedMaterials.size === 0 || pickedMaterials.has(slot.name)),
         )
       : []
+
+  /**
+   * What installing the picked materials does to each target's OWN slots.
+   *
+   * Shown in the confirm dialog, before anything runs. A material slot is a
+   * claim on Daz surfaces and a surface belongs to exactly one slot, so
+   * installing `Skin` necessarily takes back the target's `Body`, `Head`,
+   * `Legs`… — that is correct, and it is also the single most surprising thing
+   * this tool does. The rule itself lives in `houdini-material-merge.ts`, the
+   * twin of the Python that performs it, so this preview cannot drift from what
+   * the run will actually write.
+   */
+  const mergePreview = useMemo((): Array<{
+    hipPath: string
+    nodePath: string
+    plan: SurfaceMergePlan
+  }> => {
+    if (kind !== 'material' || !sections.has('materials') || !sourceNode) return []
+    const incoming = pickedSlots(sourceNode.node, pickedMaterials)
+    if (incoming.length === 0) return []
+    const byKey = new Map<string, MaterialNodeInfo>()
+    for (const project of targetScan.projects) {
+      for (const node of project.nodes) byKey.set(nodeKey(project.hipPath, node.path), node)
+    }
+    return targetRefs.map((ref) => ({
+      ...ref,
+      plan: planSurfaceMerge(byKey.get(nodeKey(ref.hipPath, ref.nodePath))?.slots ?? [], incoming),
+    }))
+  }, [kind, sections, sourceNode, pickedMaterials, targetRefs, targetScan])
+
+  /** Whether the replace switch has anything left to act on — it no longer
+   *  governs material slots, so with only those selected it would be a control
+   *  that does nothing. */
+  const replaceApplies = sections.has('uvChannels') || sections.has('bakers')
 
   const canTransfer =
     sourceNode !== null &&
@@ -711,10 +760,14 @@ export function HoudiniUtilsPanel({
                             }
                           />
                           <span className="font-medium">{slot.displayName}</span>
-                          <span className="text-muted-foreground">
-                            {slot.surfaces} surface{slot.surfaces === 1 ? '' : 's'} ·{' '}
-                            {slot.bakers} baker{slot.bakers === 1 ? '' : 's'} · {slot.layers}{' '}
-                            layer{slot.layers === 1 ? '' : 's'}
+                          <span
+                            className="text-muted-foreground"
+                            title={slot.surfaces.map(surfaceLabel).join(', ')}
+                          >
+                            {slot.surfaces.length} surface
+                            {slot.surfaces.length === 1 ? '' : 's'} · {slot.bakers} baker
+                            {slot.bakers === 1 ? '' : 's'} · {slot.layers} layer
+                            {slot.layers === 1 ? '' : 's'}
                           </span>
                           {needsUv && (
                             <span
@@ -918,30 +971,41 @@ export function HoudiniUtilsPanel({
             </ul>
           </div>
 
+          {kind === 'material' && <MergePreview entries={mergePreview} labelFor={labelFor} />}
+
           {kind === 'skeleton' ? (
             <p className="rounded-md border p-3 text-xs text-muted-foreground">
               Each selected section replaces the target&apos;s — a configuration block is copied
               wholesale, so there is no append mode here.
             </p>
           ) : (
-          <div className="flex items-start gap-3 rounded-md border p-3">
-            <Switch
-              id="replace-at-target"
-              checked={replace}
-              disabled={busy}
-              onCheckedChange={setReplace}
-            />
-            <div className="text-sm">
-              <Label htmlFor="replace-at-target" className="font-medium">
-                Replace at target
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                {replace
-                  ? 'Everything the targets already have in the selected sections is removed first — only the copied ones remain.'
-                  : 'The copied entries are ADDED to whatever each target already has. Material slots merge by name: a slot the target already defines is left alone.'}
-              </p>
-            </div>
-          </div>
+            replaceApplies && (
+              <div className="flex items-start gap-3 rounded-md border p-3">
+                <Switch
+                  id="replace-at-target"
+                  checked={replace}
+                  disabled={busy}
+                  onCheckedChange={setReplace}
+                />
+                <div className="text-sm">
+                  <Label htmlFor="replace-at-target" className="font-medium">
+                    Replace UV channels and bakers
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    {replace
+                      ? "The targets' existing UV channels and texture bakers are removed first — only the copied ones remain."
+                      : 'The copied UV channels and bakers are ADDED to whatever each target already has.'}
+                  </p>
+                  {/* The switch used to cover material slots too, and that is
+                      exactly how a 25-slot node became a 1-slot node. Saying
+                      what it no longer touches is cheaper than a user finding
+                      out. */}
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Material slots are never replaced wholesale — they merge by surface, above.
+                  </p>
+                </div>
+              </div>
+            )
           )}
 
           {kind === 'material' && (
@@ -987,6 +1051,74 @@ export function HoudiniUtilsPanel({
         </Modal>
       )}
     </>
+  )
+}
+
+/**
+ * What the merge will do to each target's own material slots, before running.
+ *
+ * The transfer's one genuinely surprising act: installing a `Skin` that merges
+ * fifteen Daz surfaces removes the fifteen slots at the target that claim those
+ * same surfaces, because a surface can belong to only one slot. Correct — and
+ * previously invisible until the report, which is how it read as data loss.
+ *
+ * Silent when nothing is affected: a preview that says "0 slots replaced" on
+ * every run trains the user to skip the one time it doesn't.
+ */
+function MergePreview({
+  entries,
+  labelFor,
+}: {
+  entries: ReadonlyArray<{ hipPath: string; nodePath: string; plan: SurfaceMergePlan }>
+  labelFor: (hipPath: string, nodePath: string) => string
+}) {
+  const affected = entries.filter(
+    (entry) => mergeTouchCount(entry.plan) > 0 || entry.plan.unclaimed.length > 0,
+  )
+  if (affected.length === 0) return null
+  return (
+    <div className="rounded-md border p-3 text-xs">
+      <p className="mb-1 text-sm font-medium">What this replaces at each target</p>
+      <p className="mb-2 text-muted-foreground">
+        A Daz surface belongs to exactly one material slot, so installing these materials takes
+        back the surfaces they claim. Every other slot is left alone.
+      </p>
+      <ul className="space-y-1.5">
+        {affected.map((entry) => (
+          <li key={nodeKey(entry.hipPath, entry.nodePath)}>
+            <p className="truncate">
+              <strong>{labelFor(entry.hipPath, entry.nodePath)}</strong> —{' '}
+              <code>{fileName(entry.hipPath)}</code>
+            </p>
+            {entry.plan.evicted.length > 0 && (
+              <p className="text-muted-foreground">
+                {entry.plan.evicted.length} slot{entry.plan.evicted.length === 1 ? '' : 's'}{' '}
+                replaced: {entry.plan.evicted.join(', ')}
+              </p>
+            )}
+            {entry.plan.trimmed.length > 0 && (
+              <p className="text-muted-foreground">
+                {entry.plan.trimmed.length} slot{entry.plan.trimmed.length === 1 ? '' : 's'} keep
+                their remaining surfaces: {entry.plan.trimmed.join(', ')}
+              </p>
+            )}
+            {entry.plan.unclaimed.length > 0 && (
+              <p className="flex items-start gap-1 text-amber-500">
+                <AlertTriangle className="mt-0.5 size-3 shrink-0" />
+                <span>
+                  {entry.plan.unclaimed.length} surface
+                  {entry.plan.unclaimed.length === 1 ? '' : 's'} the copied materials claim exist
+                  on no slot here: {entry.plan.unclaimed.map(surfaceLabel).join(', ')}.{' '}
+                  {entry.plan.evicted.length === 0 && entry.plan.trimmed.length === 0
+                    ? 'Nothing at all matched — check both nodes are the same figure.'
+                    : 'Normal if the source wears something this character does not.'}
+                </span>
+              </p>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }
 
@@ -1207,19 +1339,45 @@ function TransferReport({
               <code>{fileName(target.hipPath)}</code>
             </p>
             {target.ok ? (
-              <p className="text-muted-foreground">
+              <>
+                <p className="text-muted-foreground">
+                  {target.sections
+                    .map(
+                      (s) =>
+                        `${SECTION_LABELS[s.key as MaterialSection]?.label ?? s.key} ${s.before} → ${s.after}`,
+                    )
+                    .join(' · ')}
+                  {target.backupPath ? ' · backup written' : ''}
+                </p>
+                {/* Named, not just counted: a slot that vanished without being
+                    named reads as data loss even when it was the correct
+                    thing to do. */}
                 {target.sections
-                  .map(
-                    (s) =>
-                      `${SECTION_LABELS[s.key as MaterialSection]?.label ?? s.key} ${s.before} → ${s.after}` +
-                      (s.skipped > 0 ? ` (${s.skipped} already defined, kept)` : ''),
-                  )
-                  .join(' · ')}
-                {target.replaced ? ' — replaced' : ' — added'}
-                {target.backupPath ? ' · backup written' : ''}
-              </p>
+                  .filter((s) => s.evicted.length > 0 || s.trimmed.length > 0)
+                  .map((s) => (
+                    <p key={s.key} className="text-muted-foreground">
+                      {s.evicted.length > 0 &&
+                        `Replaced ${s.evicted.length} slot${s.evicted.length === 1 ? '' : 's'} whose surfaces moved into the copied materials: ${s.evicted.join(', ')}. `}
+                      {s.trimmed.length > 0 &&
+                        `Kept ${s.trimmed.join(', ')} with the surfaces nothing else claims.`}
+                    </p>
+                  ))}
+              </>
             ) : (
               <p className="text-destructive">{target.error}</p>
+            )}
+            {target.unclaimedSurfaces.length > 0 && (
+              <p className="flex items-start gap-1 text-amber-500">
+                <AlertTriangle className="mt-0.5 size-3 shrink-0" />
+                <span>
+                  {target.unclaimedSurfaces.length} surface
+                  {target.unclaimedSurfaces.length === 1 ? '' : 's'} the copied materials claim
+                  exist on no slot here:{' '}
+                  {target.unclaimedSurfaces.map(surfaceLabel).join(', ')} — normal if the source
+                  wears something this character does not, but a whole set means the two nodes
+                  describe different figures.
+                </span>
+              </p>
             )}
             {target.missingMaterials.length > 0 && (
               <p className="flex items-start gap-1 text-amber-500">

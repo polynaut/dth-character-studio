@@ -22,11 +22,19 @@ where one `Skin` merges fifteen Daz surfaces — and the UV channels that create
 those names are the other two thirds of the same setup, which is why all three
 are transferable and why the report still names whatever a target is missing.
 
+Material slots are merged BY SURFACE, never by name and never wholesale — see
+`_plan_surface_merge`, which owns that rule and explains why the two obvious
+modes are both wrong.
+
 Facts measured against DazToHue 2.5 / Houdini 22.0 rather than assumed:
 
   * The DazToHue multiparms are **0-based** (`multiParmStartOffset() == 0`), not
     the 1-based Houdini default. Every index here is read from the node — a
     1-based loop silently drops instance 0 and invents a trailing phantom.
+  * `material_group#` is a plain STRING of space-separated group expressions,
+    one per Daz surface: `@fbx_material_name=Body @fbx_material_name=Head …`.
+  * `removeMultiParmInstance(i)` takes the instance index and RENUMBERS what
+    follows, so a batch of removals must run in descending order.
   * A network box's visible title is its `comment()`; `name()` is an internal
     id (`__netbox1`) nobody sets.
   * Walking a project's nodes can raise `hou.PermissionError` on locked assets,
@@ -55,12 +63,13 @@ SECTIONS = (
         "key": "materials",
         "multi": "material",
         "extras": ("material_prefix", "material_exclude_character_name"),
-        # Appending duplicate SLOT NAMES would leave two slots claiming the same
-        # surfaces, so an append merges by name instead (see _import_section).
-        "dedupe_field": "material_name#",
+        # A material slot is a CLAIM on Daz surfaces, and a surface can belong to
+        # exactly one slot — so this section is neither appended nor replaced
+        # wholesale, it is merged by surface (`_plan_surface_merge`).
+        "merge_by_surface": True,
     },
-    {"key": "uvChannels", "multi": "material_uv_channel", "extras": (), "dedupe_field": ""},
-    {"key": "bakers", "multi": "material_texture_baker", "extras": (), "dedupe_field": ""},
+    {"key": "uvChannels", "multi": "material_uv_channel", "extras": ()},
+    {"key": "bakers", "multi": "material_texture_baker", "extras": ()},
 )
 SECTION_BY_KEY = {s["key"]: s for s in SECTIONS}
 
@@ -103,6 +112,10 @@ BAKER_MATERIAL_FIELD = "material_texture_baker_material#"
 BAKER_LAYER_BLOCK = "material_texture_baker_layer#"
 LAYER_SOURCE_UV_FIELD = "material_texture_baker_layer_source_uv#_#"
 SLOT_NAME_FIELD = "material_name#"
+# The Daz surfaces merged into a slot, as one space-separated string of group
+# expressions (`@fbx_material_name=Body @fbx_material_name=Head`). Measured, not
+# assumed — see the module header.
+SLOT_GROUP_FIELD = "material_group#"
 LAYER_GROUP_FIELDS = (
     "material_texture_baker_layer_group#_#",
     "material_texture_baker_layer_geoshell_group#_#",
@@ -463,41 +476,173 @@ def _instance_field(instance, field_name):
     return rec["v"] if rec else None
 
 
+# --- merging material slots by surface ---------------------------------------
+#
+# MIRROR: `apps/web/src/lib/rom/houdini-material-merge.ts` implements the same
+# rule for the confirm dialog's preview, and is pinned by the same cases against
+# the same two real projects. Change one, change both.
+
+
+def _surface_tokens(group):
+    """The claims in a `material_group` string, in order.
+
+    Compared VERBATIM everywhere below — the attribute name is the HDA's
+    business, and an exact compare cannot mistake one claim for another. A
+    pattern token (`@fbx_material_name=GP*`) therefore matches nothing and
+    evicts nothing: the conservative direction, since a wrong eviction deletes
+    the user's work while a missed one leaves a duplicate they can see.
+    """
+    return [t for t in (group or "").split() if t]
+
+
+def _node_slot_claims(node):
+    """Every material slot on a node as `{index, name, surfaces}`, in order."""
+    parm = node.parm("material")
+    if parm is None:
+        return []
+    base = _offset(parm)
+    slots = []
+    for i in range(base, base + int(parm.eval())):
+        name_parm = node.parm(_instance_name(SLOT_NAME_FIELD, [i]))
+        group_parm = node.parm(_instance_name(SLOT_GROUP_FIELD, [i]))
+        slots.append(
+            {
+                "index": i,
+                "name": name_parm.eval() if name_parm is not None else "",
+                "surfaces": _surface_tokens(
+                    group_parm.eval() if group_parm is not None else ""
+                ),
+            }
+        )
+    return slots
+
+
+def _payload_slot_claims(payload):
+    """The same shape for the slots a transfer is about to install."""
+    if payload is None:
+        return []
+    return [
+        {
+            "index": -1,
+            "name": _instance_field(inst, SLOT_NAME_FIELD) or "",
+            "surfaces": _surface_tokens(_instance_field(inst, SLOT_GROUP_FIELD) or ""),
+        }
+        for inst in payload["instances"]
+    ]
+
+
+def _plan_surface_merge(target_slots, incoming):
+    """What installing `incoming` does to the slots a target already has.
+
+    **A Daz surface can belong to exactly one material slot.** That invariant is
+    what makes this well-defined, and neither obvious mode obeys it:
+
+      * *Replace* wipes the list — measured, copying one `MI_Skin` onto a real
+        25-slot node left it holding 1 slot and no way back but the backup.
+      * *Append* merging by slot NAME leaves the target's own `Body`, `Head`,
+        `Legs`… beside an incoming `Skin` that already merges all three, so the
+        same surfaces end up claimed twice.
+
+    So an incoming slot evicts exactly the slots claiming the surfaces it
+    claims. A target slot claiming a MIX of taken and untaken surfaces is
+    trimmed rather than dropped — dropping it whole would orphan the surfaces
+    nothing else claims.
+
+    The eviction set comes from the incoming slots' own `material_group`, read
+    out of the source at transfer time, so nothing here knows what a Genesis 9
+    skin is made of and no generation list has to be kept up to date.
+
+    Returns `(evicted, trimmed, unclaimed)`:
+      evicted   target slot dicts to remove
+      trimmed   `(slot, kept tokens)` pairs to rewrite
+      unclaimed incoming tokens NO target slot claims — a handful is ordinary,
+                all of them means the two nodes describe different figures
+    """
+    incoming_surfaces = set()
+    # First-seen order, so the report is stable and matches the JS mirror (whose
+    # Set preserves insertion order).
+    incoming_order = []
+    incoming_names = set()
+    for slot in incoming:
+        if slot["name"]:
+            incoming_names.add(slot["name"])
+        for token in slot["surfaces"]:
+            if token not in incoming_surfaces:
+                incoming_surfaces.add(token)
+                incoming_order.append(token)
+
+    evicted, trimmed, claimed = [], [], set()
+    for slot in target_slots:
+        for token in slot["surfaces"]:
+            if token in incoming_surfaces:
+                claimed.add(token)
+        # A name collision is its own eviction reason, independent of surfaces:
+        # two slots called `Skin` render one material name (`MI_Skin`) and a
+        # baker naming it could resolve to either. The incoming one is what the
+        # user just asked for, so it wins.
+        if slot["name"] in incoming_names:
+            evicted.append(slot)
+            continue
+        kept = [t for t in slot["surfaces"] if t not in incoming_surfaces]
+        if len(kept) == len(slot["surfaces"]):
+            continue
+        # Emptied by the merge — every surface it existed to claim has moved. A
+        # slot that claimed NOTHING is left alone: it lost nothing, and deleting
+        # an empty slot the user made is not this rule's job.
+        if not kept:
+            evicted.append(slot)
+        else:
+            trimmed.append((slot, kept))
+
+    unclaimed = [t for t in incoming_order if t not in claimed]
+    return (evicted, trimmed, unclaimed)
+
+
+def _apply_surface_merge(node, payload):
+    """Make room for the incoming slots. Returns (evicted, trimmed, unclaimed) names."""
+    evicted, trimmed, unclaimed = _plan_surface_merge(
+        _node_slot_claims(node), _payload_slot_claims(payload)
+    )
+    # Trim BEFORE removing: a removal renumbers every instance after it
+    # (measured), which would make each index taken above stale.
+    for slot, kept in trimmed:
+        parm = node.parm(_instance_name(SLOT_GROUP_FIELD, [slot["index"]]))
+        if parm is not None:
+            parm.set(" ".join(kept))
+    count_parm = node.parm("material")
+    if count_parm is not None:
+        for slot in sorted(evicted, key=lambda s: s["index"], reverse=True):
+            count_parm.removeMultiParmInstance(slot["index"])
+    return (
+        [s["name"] for s in evicted],
+        [s["name"] for s, _ in trimmed],
+        unclaimed,
+    )
+
+
 def _import_section(node, section, payload, replace):
-    """Apply one section. Returns (before, after, skipped)."""
+    """Apply one section. Returns (before, after, evicted, trimmed, unclaimed)."""
     folder = _folder_template(node, section["multi"])
     if folder is None or payload is None:
-        return (0, 0, 0)
+        return (0, 0, [], [], [])
     parm = _count_parm(node, folder, [])
     if parm is None:
-        return (0, 0, 0)
+        return (0, 0, [], [], [])
     before = int(parm.eval())
 
-    instances = payload["instances"]
-    skipped = 0
-    if replace:
+    evicted, trimmed, unclaimed = [], [], []
+    if section.get("merge_by_surface"):
+        # Deliberately ignores `replace`: for material slots BOTH modes are
+        # wrong, and the only correct way to make room is to take back exactly
+        # the claims the incoming slots make (`_plan_surface_merge`).
+        evicted, trimmed, unclaimed = _apply_surface_merge(node, payload)
+    elif replace:
         parm.set(0)
-    elif section["dedupe_field"]:
-        # Merge by name: a slot the target already defines is left alone, so an
-        # append can never produce two slots claiming the same surfaces.
-        existing = set()
-        base = _offset(parm)
-        for i in range(base, base + before):
-            existing_parm = node.parm(_instance_name(section["dedupe_field"], [i]))
-            if existing_parm is not None:
-                existing.add(existing_parm.eval())
-        kept = [
-            inst
-            for inst in instances
-            if _instance_field(inst, section["dedupe_field"]) not in existing
-        ]
-        skipped = len(instances) - len(kept)
-        instances = kept
 
-    _import_block(node, folder, [], instances)
+    _import_block(node, folder, [], payload["instances"])
     for name, rec in payload["extras"].items():
         _write(node, name, rec)
-    return (before, int(parm.eval()), skipped)
+    return (before, int(parm.eval()), evicted, trimmed, unclaimed)
 
 
 # --- node inspection ---------------------------------------------------------
@@ -671,9 +816,9 @@ def _material_slots(node, bakers_payload):
     """Each material slot with the bakers that name it — the panel's pick list.
 
     A user reuses "the same skin" or "that one dress", so the slot and its
-    bakers are shown (and copied) as one unit. `surfaces` is the count of Daz
-    surfaces merged into the slot: for a G9 skin that is the fifteen-odd merge
-    that makes the setup worth copying at all.
+    bakers are shown (and copied) as one unit. `surfaces` is the slot's own
+    claim list — for a G9 skin the fifteen-odd merge that makes the setup worth
+    copying at all, and the input the panel's merge preview runs on.
     """
     materials = _export_section(node, SECTION_BY_KEY["materials"])
     if materials is None:
@@ -703,8 +848,9 @@ def _material_slots(node, bakers_payload):
             {
                 "name": name,
                 "displayName": prefix + name,
-                # Daz surfaces merged into this slot ("@fbx_material_name=Body …").
-                "surfaces": len([t for t in group.split() if t.strip()]),
+                # The Daz surfaces merged into this slot, as the raw group
+                # expressions the merge rule compares ("@fbx_material_name=Body").
+                "surfaces": _surface_tokens(group),
                 "bakers": count,
                 "layers": layers,
                 # UV names these bakers read that only a UV CHANNEL produces —
@@ -883,6 +1029,7 @@ def op_transfer(request):
             "missingMaterials": [],
             "missingGroups": [],
             "missingUvSources": list(missing_uv_sources),
+            "unclaimedSurfaces": [],
             "backupPath": "",
         }
 
@@ -947,18 +1094,49 @@ def op_transfer(request):
                 if dry_run:
                     before = _section_count(target_node, section)
                     incoming = len(payload["instances"])
-                    after = incoming if replace else before + incoming
-                    result["sections"].append(
-                        {"key": key, "before": before, "after": after, "skipped": 0}
-                    )
+                    # The dry run runs the SAME plan, it just doesn't write it —
+                    # a preview computed by a second rule would be a preview of
+                    # something else.
+                    if section.get("merge_by_surface"):
+                        evicted, trimmed, unclaimed = _plan_surface_merge(
+                            _node_slot_claims(target_node), _payload_slot_claims(payload)
+                        )
+                        result["sections"].append(
+                            {
+                                "key": key,
+                                "before": before,
+                                "after": before - len(evicted) + incoming,
+                                "evicted": [s["name"] for s in evicted],
+                                "trimmed": [s["name"] for s, _ in trimmed],
+                            }
+                        )
+                        result["unclaimedSurfaces"] = unclaimed
+                    else:
+                        result["sections"].append(
+                            {
+                                "key": key,
+                                "before": before,
+                                "after": incoming if replace else before + incoming,
+                                "evicted": [],
+                                "trimmed": [],
+                            }
+                        )
                     continue
                 try:
-                    before, after, skipped = _import_section(
+                    before, after, evicted, trimmed, unclaimed = _import_section(
                         target_node, section, payload, replace
                     )
                     result["sections"].append(
-                        {"key": key, "before": before, "after": after, "skipped": skipped}
+                        {
+                            "key": key,
+                            "before": before,
+                            "after": after,
+                            "evicted": evicted,
+                            "trimmed": trimmed,
+                        }
                     )
+                    if section.get("merge_by_surface"):
+                        result["unclaimedSurfaces"] = unclaimed
                     touched = True
                 except Exception as exc:
                     result["ok"] = False
@@ -1056,6 +1234,7 @@ def op_transfer_skeleton(request):
                         "missingMaterials": [],
                         "missingGroups": [],
                         "missingUvSources": [],
+                        "unclaimedSurfaces": [],
                         "backupPath": "",
                     }
                 )
@@ -1074,6 +1253,7 @@ def op_transfer_skeleton(request):
                 "missingMaterials": [],
                 "missingGroups": [],
                 "missingUvSources": [],
+                "unclaimedSurfaces": [],
                 "backupPath": "",
             }
             if target_node is None or target_node.type().name() != SKELETON_TYPE:
@@ -1102,7 +1282,13 @@ def op_transfer_skeleton(request):
                         result["error"] = str(exc).strip() or exc.__class__.__name__
                         break
                 result["sections"].append(
-                    {"key": key, "before": before, "after": after, "skipped": 0}
+                    {
+                        "key": key,
+                        "before": before,
+                        "after": after,
+                        "evicted": [],
+                        "trimmed": [],
+                    }
                 )
             results.append(result)
 

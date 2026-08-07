@@ -115,9 +115,10 @@ slots, UV channels and texture bakers — from one project into another.
 - **Transfer** asks for confirmation, then offers **Dry run** (changes nothing,
   reports exactly what a real run would do) and **Run**.
 
-**Replace at target** is off by default: the copied bakers are *added* to
-whatever the target already has. Turned on, the target's existing bakers are
-removed first and only the copied ones remain.
+**Replace UV channels and bakers** is off by default: the copied ones are
+*added* to whatever the target already has. Turned on, the target's existing UV
+channels and bakers are removed first. It does not cover **material slots** —
+those always [merge by surface](#material-slots-merge-by-surface).
 
 ### Pick a material, not a node
 
@@ -182,10 +183,29 @@ are identical in every project, so the copy would silently rebind to the
 parameter is copied as the value it had in the source — which is what you meant
 to reuse. Expressions naming no node travel as written.
 
-With **Replace at target** off, material slots **merge by name**: slots the
-target already defines are kept, so dropping a skin setup onto a dressed
-character doesn't throw away its clothing materials. Turned on, the selected
-sections are wiped first.
+### Material slots merge by surface
+
+A material slot is a **claim on Daz surfaces**, and a surface can belong to only
+one slot. So installing a slot removes exactly the slots that claim the same
+surfaces — no more, no less.
+
+Copying a `Skin` that merges `Body Head Legs …` onto a freshly imported
+character (which holds each of those as its *own* slot) leaves you with `Skin`
+plus the clothing and eye slots it never touched. Neither of the obvious
+alternatives is right: replacing the list wholesale would throw away the
+clothing, and appending would leave the target's `Body` beside the incoming
+`Skin` that already claims it — the same surface claimed twice.
+
+A target slot claiming a *mix* of taken and untaken surfaces is not dropped; it
+keeps the ones nothing else claims.
+
+The confirm dialog lists what this replaces at each target **before** you run,
+and the report names it again afterwards. The eviction set is read out of the
+source's own slots at transfer time, so it needs no per-generation knowledge —
+but for that same reason the studio cannot tell a Genesis 9 skin from a Genesis
+8 one. If the copied materials claim surfaces that exist on *no* slot at the
+target, the drawer says so: a few is normal (the source wears something this
+character doesn't), all of them means you are copying between different figures.
 
 ### Portable texture paths
 
