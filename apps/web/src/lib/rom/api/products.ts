@@ -2,7 +2,12 @@ import { exists, mkdir, readDir, readTextFile, remove } from '@tauri-apps/plugin
 import { isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
-import { parseProductScanCsv, scansFromMerged } from '@dth/rom'
+import {
+  parseProductScanCsv,
+  productRecordSchema,
+  scansFromMerged,
+  unmatchedAssetSchema,
+} from '@dth/rom'
 import * as storage from '../storage'
 import {
   characterProductsJson,
@@ -50,6 +55,16 @@ export async function detectDimManifestsFolder(): Promise<string> {
     }
   }
   return ''
+}
+
+/** Every element of an unknown value that parses, the rest dropped. For reading
+ *  arrays out of raw JSON where one bad row must not cost the good ones. */
+function parseEach<T>(value: unknown, schema: z.ZodType<T>): Array<T> {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item) => {
+    const parsed = schema.safeParse(item)
+    return parsed.success ? [parsed.data] : []
+  })
 }
 
 /** Absolute path of a character's stored product results. */
@@ -234,14 +249,18 @@ export async function carryStoredProductsToMeta(
     const raw: unknown = JSON.parse(await readTextFile(definitionAbs))
     if (!raw || typeof raw !== 'object') return false
     const record = raw as Record<string, unknown>
-    const products = Array.isArray(record.products) ? record.products : []
-    const unmatched = Array.isArray(record.productsUnmatched) ? record.productsUnmatched : []
+    // PARSED, not cast. This is raw definition JSON of unknown age, and the first
+    // cut of this function crashed on exactly that — a record written before
+    // per-scene attribution existed carries no `scenes` array. A row that fails
+    // is dropped rather than failing the whole carry: a partial carry beats none.
+    const products = parseEach(record.products, productRecordSchema)
+    const unmatched = parseEach(record.productsUnmatched, unmatchedAssetSchema)
     if (products.length === 0 && unmatched.length === 0) return false
-    const merged = {
-      scenes: [...new Set(products.flatMap((p: { scenes?: Array<string> }) => p.scenes ?? []))],
+    const merged: MergedProductScan = {
+      scenes: [...new Set(products.flatMap((p) => p.scenes))],
       products,
       unmatched,
-    } as MergedProductScan
+    }
     const scannedAt =
       typeof record.productsScannedAt === 'string' && record.productsScannedAt
         ? record.productsScannedAt

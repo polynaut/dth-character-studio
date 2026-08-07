@@ -30,9 +30,8 @@ again: every Daz Studio DIM has installed appears as a card at the top of
   <sub><em>Both Daz Studios found; DAZ Studio 6 activated, and the paths it derives shown read-only.</em></sub>
 </p>
 
-Click one to **activate** it. Three paths are filled from it and saved
-immediately — there is no Save to press, because the paths follow from the
-choice:
+Click one to **activate** it. Three paths are filled and saved on the spot —
+there is no Save to press:
 
 | Path | Where it comes from |
 | --- | --- |
@@ -40,33 +39,20 @@ choice:
 | **Daz Studio install folder** | that card's own install folder |
 | **DAZ Install Manager manifests folder** | DIM's product database (see [Product scanning](./product-scanning.md)) |
 
-They show read-only underneath the cards while an installation is active — an
-editable copy of a derived path is one that can quietly disagree with what
-produced it.
+They stay read-only while an installation is active, and they follow DIM: move
+your library later and opening Settings picks it up, with nothing to
+re-activate. The newest Studio is marked *recommended*, but nothing activates
+itself, and switching cards changes only the install folder — the other two
+belong to DIM, not to one Studio version.
 
-**Change something in DIM later** — move your content library, point it at a
-different manifests folder — and the studio picks it up the next time it looks:
-opening Settings re-reads the installations, and any path that moved is updated
-and saved. There is nothing to re-activate. (Two exceptions, both deliberate: a
-value DIM has *dropped* never blanks a working path, and with other unsaved
-settings on the page the new values wait for your **Save** instead of being
-written behind it.)
-
-> **Both Daz Studio 4 and 6 installed?** Both get a card and the newest is
-> marked *recommended*, but nothing is activated until you click. Only the
-> **install folder** follows the card — the library and product database belong
-> to DIM, not to one Studio version, so switching cards leaves them alone.
-
-**Nothing detected, or a machine DIM doesn't describe?** The section says so and
-the three paths stay ordinary editable fields, exactly as before. The same
-applies on purpose after activating: **Set the paths manually** hands them back,
-keeping their current values.
+**No DIM, or a machine it doesn't describe?** The section says so and the three
+paths stay ordinary editable fields. **Set the paths manually** does the same
+after activating, keeping the values.
 
 ## Houdini installation — same idea
 
-Directly below, and the same deal: SideFX registers every installed Houdini, so
-each one gets a card. Activating one fills **both** Houdini paths at once —
-the installation folder and the matching
+Every Houdini SideFX registered gets a card directly below. Activating one fills
+**both** paths together: the installation folder and its matching
 `houdini<major>.<minor>` documents folder.
 
 <p align="center">
@@ -75,22 +61,19 @@ the installation folder and the matching
   <sub><em>Houdini 22.0.368 activated — its installation folder and the matching <code>houdini22.0</code> documents folder, filled together.</em></sub>
 </p>
 
-**Filling them together is the point, not a convenience.** The studio runs
-Houdini's `hython` with that documents folder as its preferences directory;
-pointed at another version's, it loads the wrong DazToHue assets — or none — and
-every DazToHue node comes back as an unknown type. Pairing them by hand is
-exactly how that goes wrong, so the card does it for you.
+Pairing them is the point: the studio runs Houdini's `hython` with that
+documents folder as its preferences directory, and pointed at another version's
+it loads the wrong DazToHue assets — or none — leaving every DazToHue node an
+unknown type.
 
-> **An install whose documents folder doesn't exist yet** is still offered, with
-> the missing folder named on the card. Houdini creates it on first launch, so
-> the usual fix is to start that Houdini once and press **Rescan**. The
-> *recommended* card skips it in the meantime.
+> **Documents folder not there yet?** The card says so and stays on offer.
+> Houdini creates it on first launch, so start that Houdini once and press
+> **Rescan**.
 
-**Extra Houdini folders stay yours.** The list further down is untouched by
-activating — it exists so an older Houdini can keep an older DTH release, which
-is a decision about the *other* versions. A `houdini<major>.<minor>` folder with
-no installed Houdini behind it is reported below the cards rather than dropped;
-it's usually left over from an uninstall.
+The **extra Houdini folders** list further down is yours and is never touched by
+activating — it exists so an older Houdini can keep an older DTH release. A
+`houdini…` folder with no Houdini behind it is reported there rather than
+dropped; usually an uninstall left it.
 
 ## Setup DTH Release
 

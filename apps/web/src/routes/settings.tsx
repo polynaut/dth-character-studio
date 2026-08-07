@@ -683,49 +683,65 @@ function SettingsPage() {
    * already report — `derive…` returns null and this leaves everything alone,
    * rather than re-deriving from some other installation.
    */
+  // What the sync effect below READS but must not re-run for. Refreshed after
+  // every render, and declared BEFORE the effect that consumes it so its values
+  // are always this render's (effects fire in declaration order).
+  const syncInputs = useRef({ settings, initial, dirty, projectDirty })
   useEffect(() => {
-    const drift: Partial<typeof settings> = {}
-    const daz = dazScan && settings.dazInstallKey ? deriveDazPaths(dazScan, settings.dazInstallKey) : null
+    syncInputs.current = { settings, initial, dirty, projectDirty }
+  })
+
+  useEffect(() => {
+    const now = syncInputs.current
+    const stored = now.settings
+    const drift: Partial<typeof stored> = {}
+    const daz =
+      dazScan && stored.dazInstallKey ? deriveDazPaths(dazScan, stored.dazInstallKey) : null
     if (daz) {
-      if (daz.dazInstallFolder && daz.dazInstallFolder !== settings.dazInstallFolder) {
+      if (daz.dazInstallFolder && daz.dazInstallFolder !== stored.dazInstallFolder) {
         drift.dazInstallFolder = daz.dazInstallFolder
       }
-      if (daz.dazLibraryFolder && daz.dazLibraryFolder !== settings.dazLibraryFolder) {
+      if (daz.dazLibraryFolder && daz.dazLibraryFolder !== stored.dazLibraryFolder) {
         drift.dazLibraryFolder = daz.dazLibraryFolder
       }
-      if (daz.dimManifestsFolder && daz.dimManifestsFolder !== settings.dimManifestsFolder) {
+      if (daz.dimManifestsFolder && daz.dimManifestsFolder !== stored.dimManifestsFolder) {
         drift.dimManifestsFolder = daz.dimManifestsFolder
       }
     }
     const houdini =
-      houdiniScan && settings.houdiniInstallKey
-        ? deriveHoudiniPaths(houdiniScan, settings.houdiniInstallKey)
+      houdiniScan && stored.houdiniInstallKey
+        ? deriveHoudiniPaths(houdiniScan, stored.houdiniInstallKey)
         : null
     if (houdini) {
-      if (houdini.houdiniInstallFolder && houdini.houdiniInstallFolder !== settings.houdiniInstallFolder) {
+      if (
+        houdini.houdiniInstallFolder &&
+        houdini.houdiniInstallFolder !== stored.houdiniInstallFolder
+      ) {
         drift.houdiniInstallFolder = houdini.houdiniInstallFolder
       }
-      if (houdini.houdiniDocsFolder && houdini.houdiniDocsFolder !== settings.houdiniDocsFolder) {
+      if (houdini.houdiniDocsFolder && houdini.houdiniDocsFolder !== stored.houdiniDocsFolder) {
         drift.houdiniDocsFolder = houdini.houdiniDocsFolder
       }
     }
     if (Object.keys(drift).length === 0) return
-    const next = { ...settings, ...drift }
+    const next = { ...stored, ...drift }
     setSettings(next)
-    if (dirty || projectDirty) return
+    if (now.dirty || now.projectDirty) return
     void (async () => {
       try {
-        await saveSettings({ data: { settings: next, baseline: initial } })
+        await saveSettings({ data: { settings: next, baseline: now.initial } })
         await router.invalidate()
         toast.info('Updated the paths from your Daz / Houdini installation — they had changed.')
       } catch {
         // The form already shows the truth; a failed write retries next visit.
       }
     })()
-    // Deliberately keyed on a fresh SCAN only: listing `settings`/`dirty` would
-    // re-fire on every keystroke, and the effect's own setSettings would then
-    // chase itself. A scan is the only thing that can produce new information.
-  }, [dazScan, houdiniScan])
+    // Keyed on a fresh SCAN only — everything else comes in through the ref
+    // above. Listing `settings`/`dirty` would re-fire this on every keystroke,
+    // and its own setSettings would then chase itself; a scan is the only thing
+    // that can produce new information here. (`router` is stable, so naming it
+    // satisfies the dependency check without ever re-triggering.)
+  }, [dazScan, houdiniScan, router])
 
   // Re-scan the active release's poses and refresh dependent routes. The studio
   // keeps the pose list in memory (no on-disk cache), so this just re-runs the
