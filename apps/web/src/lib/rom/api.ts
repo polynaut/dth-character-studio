@@ -162,6 +162,7 @@ export {
   MATERIAL_SECTIONS,
   NODE_KINDS,
   SKELETON_SECTIONS,
+  prefillHoudiniNetwork,
   repairHoudiniDefaults,
   repathHoudiniReferences,
   scanHoudiniMaterials,
@@ -176,6 +177,8 @@ export type {
   MaterialScanProject,
   MaterialTransferTarget,
   MaterialUtilReport,
+  PrefillResult,
+  ProjectPrefillInfo,
   ProjectRefInfo,
   RepathResult,
 } from './api/native-types.ts'

@@ -121,6 +121,53 @@ pub struct MaterialScanProject {
     pub hip_dir: String,
     /// What a repath would do to this project's stored file references.
     pub refs: ProjectRefInfo,
+    /// Which DazToHue parms the studio could fill here, and which this
+    /// DazToHue version doesn't carry at all.
+    pub prefill: ProjectPrefillInfo,
+}
+
+/// The Generate-project wiring, as it applies to a project that already exists.
+///
+/// Existing projects can never be regenerated, so the Utils drawer offers the
+/// same fill as an action. Both lists are feature-detected against the
+/// INSTALLED HDA, which is what lets this ship before the DazToHue release that
+/// adds the PoseAsset CSV path.
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectPrefillInfo {
+    /// Parms that exist on this network and are currently BLANK — the only
+    /// ones a prefill writes, so it can never overwrite a user's value.
+    pub fillable: Vec<String>,
+    /// Parms this DazToHue version does not have (today: the PoseAsset CSV
+    /// path — DazToHue 2.5 ships a `pose_asset_import_csv` BUTTON instead).
+    /// Reported rather than skipped silently, so a value the user expected to
+    /// be filled has a visible reason for not being.
+    pub missing: Vec<String>,
+}
+
+/// One parm a prefill wrote (or, in a dry run, would write).
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrefilledParm {
+    /// `<node path> <parm name>`.
+    pub label: String,
+    pub value: String,
+}
+
+/// What `prefill` did (or would do) to one project.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrefillResult {
+    pub hip_path: String,
+    pub ok: bool,
+    pub error: String,
+    pub filled: Vec<PrefilledParm>,
+    /// Parms this DazToHue version doesn't have — the release gap, named.
+    pub skipped_missing: Vec<String>,
+    /// Parms left alone because the user had already set them.
+    pub skipped_set: Vec<String>,
+    /// Pre-prefill backup (empty for a dry run, and when nothing changed).
+    pub backup_path: String,
 }
 
 /// How portable a project's stored file references are.
@@ -266,7 +313,7 @@ pub struct MaterialTransferTarget {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MaterialUtilReport {
-    /// `scan`, `transfer`, `defaults` or `repath`.
+    /// `scan`, `transfer`, `defaults`, `repath` or `prefill`.
     pub op: String,
     /// false = the operation itself failed (bad request, source node missing);
     /// per-project and per-target failures are reported in their own `ok`.
@@ -280,6 +327,8 @@ pub struct MaterialUtilReport {
     pub defaults: Vec<HoudiniDefaultsResult>,
     /// Populated by `repath` — one entry per project it was asked about.
     pub repath: Vec<RepathResult>,
+    /// Populated by `prefill` — one entry per project it was asked about.
+    pub prefill: Vec<PrefillResult>,
     pub source_bakers: u32,
     pub source_layers: u32,
     pub source_baker_names: Vec<String>,

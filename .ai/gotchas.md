@@ -348,6 +348,23 @@ current code before relying on details, but assume the *lesson* still holds.
   when it actually exists. Related dry-run trap: the repaired value is stored
   in its already-collapsed form, because collapsing it in the following pass
   made a real run report one more rewrite than its own dry run.
+- **The PoseAsset CSV PATH does not exist in DazToHue 2.5 — the node ships a
+  `pose_asset_import_csv` BUTTON instead.** Measured 2026-08-07 off the
+  installed HDA's parm template group (no instantiation needed): of the eight
+  parms Generate project wires, seven are present today
+  (`import_character_name`, the four `import_character_*_file` paths,
+  `import_skinning_method`, `export_directory`) and only
+  `pose_asset_csv_file_path` is absent. That is why neither the generation
+  prefill nor the Utils "Fill network" action waits for a DazToHue release:
+  each parm is written only when `node.parm(name)` is not None, and the
+  missing one is REPORTED so a user who expected it gets a reason instead of a
+  silent gap. Verified end to end by extracting the `format!` snippet out of
+  `houdini.rs` verbatim and running it under hython — the network builds,
+  seven prefills land and persist through a save, the CSV path is skipped, and
+  the generation succeeds. Corollary for the Utils action: it fills only BLANK
+  string parms (`import_skinning_method` is a menu, where a default and a
+  deliberate choice are indistinguishable — generation sets it, the repair
+  doesn't).
 - **`$JOB` is SCENE state saved inside the `.hip`, and a load OVERWRITES the
   process value — so it leaks between files in one hython run.** Measured
   2026-08-07: seeding a sentinel then loading a project replaced it with that

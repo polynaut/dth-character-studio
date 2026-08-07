@@ -10,6 +10,10 @@
       "job": "D:/chars/Kira",
       "hipDir": "D:/chars/Kira/houdini",
       "refs": { "collapsible": 131, "foreign": 0, "broken": [] },
+      "prefill": {
+        "fillable": ["/obj/DazToHue/DazToHueImport import_character_rom_fbx_file"],
+        "missing": ["/obj/DazToHue/DazToHuePoseAsset pose_asset_csv_file_path"]
+      },
       "nodes": [
         {
           "path": "/obj/DazToHue/DazToHueMaterial",
@@ -73,6 +77,7 @@
       "job": "",
       "hipDir": "",
       "refs": { "collapsible": 0, "foreign": 0, "broken": [] },
+      "prefill": { "fillable": [], "missing": [] },
       "nodes": []
     }
   ],
@@ -136,6 +141,22 @@
         }
       ],
       "foreign": ["X:/shared/textures/custom_skin.png"],
+      "backupPath": "D:/chars/Ita/houdini/backup/Ita_dthbak.hiplc"
+    }
+  ],
+  "prefill": [
+    {
+      "hipPath": "D:/chars/Ita/houdini/Ita.hiplc",
+      "ok": true,
+      "error": "",
+      "filled": [
+        {
+          "label": "/obj/DazToHue/DazToHueImport import_character_rom_fbx_file",
+          "value": "$HIP/../daz3d/dth-exports/primary/Ita_experimental_rom.fbx"
+        }
+      ],
+      "skippedMissing": ["/obj/DazToHue/DazToHuePoseAsset pose_asset_csv_file_path"],
+      "skippedSet": ["/obj/DazToHue/DazToHueImport import_character_dtu_file"],
       "backupPath": "D:/chars/Ita/houdini/backup/Ita_dthbak.hiplc"
     }
   ],

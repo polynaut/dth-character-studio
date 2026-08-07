@@ -326,6 +326,21 @@ wherever the `.hip` sits, so "repairing" it would mean moving your scene file �
 your call, not something the studio can do safely while the project may be open
 or under version control.
 
+**Fill network** gives an *existing* project the same wiring
+[Generate project](#generate-the-houdini-project-automatically) gives a new one:
+the import file paths, the export directory and — once your DazToHue has it —
+the PoseAsset CSV path. Projects you already have can never be regenerated, so
+this is how they catch up.
+
+Two things make it safe to run on a project you set up by hand:
+
+- **Only blank parameters are written.** Anything you filled in yourself is
+  listed as *already set, left alone* and never touched.
+- **A parameter your DazToHue version doesn't have is named, not silently
+  skipped.** DazToHue 2.5 has no PoseAsset CSV *path* — the node ships an import
+  *button* instead — so the row says so, and the same action starts filling it
+  the day a release adds it. Nothing to re-install, nothing to re-generate.
+
 **Repair `$JOB`** is enabled only when at least one project actually differs,
 and it touches only those — a project already on the right folder is listed and
 left alone, so running it twice rewrites nothing the second time. It offers the
