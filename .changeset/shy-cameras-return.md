@@ -1,6 +1,6 @@
 ---
-'@dth/web': patch
-'@dth/desktop': patch
+'@dth/web': minor
+'@dth/desktop': minor
 ---
 
 After an elevated install, one click back to normal — drag-and-drop works again
