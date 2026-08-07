@@ -1478,35 +1478,9 @@ function SettingsPage() {
                   onCheckedChange={(v) => patchProject({ dazProductsEnabled: v })}
                 />
               </div>
-              <div className="border-t pt-4">
-                <Label className="mb-1 flex w-fit items-center gap-1">
-                  Houdini path style
-                  <InfoPopup label="Houdini path style — more information">
-                    Bone-scale <strong>reference-skeleton</strong> paths in the PoseAsset CSV are
-                    written relative to the scene file — <code>$HIP/../…</code> — so the project
-                    keeps resolving after the character tree is moved, renamed, or opened on
-                    another machine. Characters with <em>no</em> Houdini project inside their
-                    folder get absolute paths regardless.{' '}
-                    <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/05-rom-in-daz.html#reference-skeleton-paths--hip-by-default">
-                      Open guide
-                    </GuideLink>
-                  </InfoPopup>
-                </Label>
-                <Select
-                  value={projectSettings.houdiniPathStyle}
-                  onValueChange={(value) =>
-                    patchProject({ houdiniPathStyle: value === 'absolute' ? 'absolute' : 'hip' })
-                  }
-                >
-                  <SelectTrigger className="w-72">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="hip">Relative to the scene file ($HIP) (recommended)</SelectItem>
-                    <SelectItem value="absolute">Absolute paths</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              {/* Directly under the Daz Products toggle it belongs to — this
+                  folder is what that scan resolves product names from, so the
+                  two read as one setting rather than two neighbours. */}
               <div>
                 {/* Derived with the rest once an installation is active — the
                     manual field and its probe stay for a machine without DIM. */}
@@ -1540,6 +1514,38 @@ function SettingsPage() {
                     </Button>
                   </>
                 )}
+              </div>
+              {/* Last, behind its own rule: the only setting on this tab that
+                  changes what GENERATION writes, rather than where the studio
+                  keeps things — and the one least often touched. */}
+              <div className="border-t pt-4">
+                <Label className="mb-1 flex w-fit items-center gap-1">
+                  Houdini path style
+                  <InfoPopup label="Houdini path style — more information">
+                    Bone-scale <strong>reference-skeleton</strong> paths in the PoseAsset CSV are
+                    written relative to the scene file — <code>$HIP/../…</code> — so the project
+                    keeps resolving after the character tree is moved, renamed, or opened on
+                    another machine. Characters with <em>no</em> Houdini project inside their
+                    folder get absolute paths regardless.{' '}
+                    <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/05-rom-in-daz.html#reference-skeleton-paths--hip-by-default">
+                      Open guide
+                    </GuideLink>
+                  </InfoPopup>
+                </Label>
+                <Select
+                  value={projectSettings.houdiniPathStyle}
+                  onValueChange={(value) =>
+                    patchProject({ houdiniPathStyle: value === 'absolute' ? 'absolute' : 'hip' })
+                  }
+                >
+                  <SelectTrigger className="w-72">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="hip">Relative to the scene file ($HIP) (recommended)</SelectItem>
+                    <SelectItem value="absolute">Absolute paths</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </section>
           </TabsContent>
