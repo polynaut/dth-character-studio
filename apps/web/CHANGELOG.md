@@ -1,7 +1,15 @@
 # @dth/web
 
-## 0.65.0
+## 0.66.0
 
+
+### Patch Changes
+
+- Updated dependencies [[`ec95f9c`](https://github.com/polynaut/dth-character-studio/commit/ec95f9c0adbe5634ad00a28b1b48f77d9a657726), [`ce08aad`](https://github.com/polynaut/dth-character-studio/commit/ce08aad4c04f6a6c2eadebf9d148fc14ff3452a5)]:
+  - @dth/rom@0.66.0
+  - @dth/ui@0.66.0
+
+## 0.65.0
 
 ### Patch Changes
 
