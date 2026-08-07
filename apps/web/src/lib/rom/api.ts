@@ -118,6 +118,9 @@ export {
   fetchProductScan,
   ingestProjectProductScans,
 } from './api/products'
+// --- detected files: new scenes/.hips found in the character folder ---------
+export { fetchDetectedFiles, ignoreDetectedFiles } from './api/detected-files'
+export type { DetectedFilesResult } from './api/detected-files'
 // --- the Daz installation DIM already knows about ---------------------------
 export { detectDazInstalls } from './api/daz-install'
 // --- the Houdini versions SideFX registered ---------------------------------
