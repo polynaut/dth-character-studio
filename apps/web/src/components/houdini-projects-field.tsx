@@ -301,24 +301,33 @@ export function HoudiniProjectsField({
     // checks will be flagging it as soon as the background sweep has run.
     let copied = 0
     if (copyIn && projectId) {
-      try {
-        // Sequential on purpose, not for politeness: the copy refuses a name
-        // already in the folder, and two dropped files sharing a basename would
-        // both pass that check at once if they ran together.
-        const bringIn = async (rest: Array<string>, done: Array<string>): Promise<Array<string>> => {
-          const [head, ...tail] = rest
-          if (head === undefined) return done
+      // Sequential on purpose, not for politeness: the copy refuses a name
+      // already in the folder, and two dropped files sharing a basename would
+      // both pass that check at once if they ran together. A failure stops the
+      // batch but keeps what already came in — with Move on, those originals
+      // are gone, so a copy that made it MUST get its card or the user loses
+      // track of their own file.
+      const bringIn = async (
+        rest: Array<string>,
+        done: Array<string>,
+      ): Promise<{ done: Array<string>; failed: string }> => {
+        const [head, ...tail] = rest
+        if (head === undefined) return { done, failed: '' }
+        try {
           const dest = await copyHoudiniProject({
             data: { projectId, id: character.id, hipPath: head, deleteOriginal: moveIn },
           })
           return bringIn(tail, [...done, dest])
+        } catch (e) {
+          return { done, failed: e instanceof Error ? e.message : String(e) }
         }
-        const brought = await bringIn(fresh, [])
-        copied = brought.length
-        fresh = brought
-      } catch (e) {
+      }
+      const brought = await bringIn(fresh, [])
+      if (brought.failed) setError(brought.failed)
+      copied = brought.done.length
+      fresh = brought.done
+      if (fresh.length === 0) {
         setBusy(false)
-        setError(e instanceof Error ? e.message : String(e))
         return
       }
     }

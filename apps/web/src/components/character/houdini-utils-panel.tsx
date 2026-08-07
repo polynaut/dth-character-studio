@@ -353,9 +353,16 @@ export function HoudiniUtilsPanel({
 
   const targetsKey = targets.join('|')
 
+  /** The store scope for TARGET scans — the character's own store, so what the
+   *  drawer earns (the fallback scan, every post-repair rescan) lands where the
+   *  card badge and the next open read it. Source scans stay unscoped and go to
+   *  the shared source store. */
+  const targetScope = projectId ? { projectId, characterId: character.id } : undefined
+
   async function runScan(
     hipPaths: Array<string>,
     set: (next: ScanState) => void,
+    scope?: { projectId: string; characterId: string },
   ): Promise<Array<MaterialScanProject>> {
     if (hipPaths.length === 0) {
       set(EMPTY_SCAN)
@@ -363,7 +370,7 @@ export function HoudiniUtilsPanel({
     }
     set({ loading: true, error: '', projects: [] })
     try {
-      const projects = await scanHoudiniMaterials({ data: { hipPaths } })
+      const projects = await scanHoudiniMaterials({ data: { hipPaths, ...scope } })
       set({ loading: false, error: '', projects })
       return projects
     } catch (error) {
@@ -373,37 +380,61 @@ export function HoudiniUtilsPanel({
     }
   }
 
+  /** Every scan of the character's own projects goes through this, so they all
+   *  persist under the character's store. */
+  function scanTargets(): Promise<Array<MaterialScanProject>> {
+    return runScan(targets, setTargetScan, targetScope)
+  }
+
   /**
-   * The character's own projects, READ from the store rather than scanned.
+   * The character's own projects: the store first, a scan only for what it
+   * doesn't cover.
    *
-   * The background sweep (`scanCharacterHoudiniProjects`) is the only thing that
-   * scans them now, so the drawer opens instantly on whatever that left and
-   * POLLS while it is still working — a sweep is always running by the time
-   * anyone can click Utils, because the character page starts one on mount.
-   * Polling stops as soon as anything arrives, or after the cap: a project the
-   * sweep cannot scan (no Houdini configured) must not spin forever.
+   * The background sweep (`scanCharacterHoudiniProjects`) fills the store for
+   * character-folder projects, so the common open is instant. What the store
+   * cannot answer — a project linked from outside the character folder (never
+   * swept, by design) or a `.hip` saved since the last sweep — is scanned HERE
+   * and merged: a partial cache must not hide a linked project from the node
+   * lists and the repairs. It never WAITS on the sweep either, because a sweep
+   * is not guaranteed to deliver (no Houdini configured, external project).
    */
   async function loadCachedTargets(): Promise<Array<MaterialScanProject>> {
     if (targets.length === 0) {
       setTargetScan(EMPTY_SCAN)
       return []
     }
-    if (!projectId) return runScan(targets, setTargetScan)
+    if (!projectId) return scanTargets()
     setTargetScan({ loading: true, error: '', projects: [] })
     // Nudge the sweep in case this drawer was reached without the page mounting
     // one (it coalesces, so an already-running sweep is joined, not doubled).
     void scanCharacterHoudiniProjects({ data: { projectId, id: character.id } })
     const cached = await fetchCachedHoudiniScans({ data: { projectId, id: character.id } })
-    if (cached.length > 0) {
+    const covered = new Set(cached.map((p) => normalizePath(p.hipPath).toLowerCase()))
+    const uncovered = targets.filter((t) => !covered.has(normalizePath(t).toLowerCase()))
+    if (uncovered.length === 0) {
       setTargetScan({ loading: false, error: '', projects: cached })
       return cached
     }
-    // Nothing stored yet. Scan HERE rather than waiting on the sweep: waiting is
-    // only safe if a sweep is guaranteed to deliver, and it isn't — a project
-    // outside the character folder is never swept, and a machine with no Houdini
-    // configured never produces anything. The sweep still warms the store, so
-    // the next open is the instant one.
-    return runScan(targets, setTargetScan)
+    try {
+      const fresh = await scanHoudiniMaterials({
+        data: { hipPaths: uncovered, projectId, characterId: character.id },
+      })
+      // Present in linked order, the way a full scan would.
+      const byPath = new Map(
+        [...cached, ...fresh].map((p) => [normalizePath(p.hipPath).toLowerCase(), p]),
+      )
+      const projects = targets
+        .map((t) => byPath.get(normalizePath(t).toLowerCase()))
+        .filter((p): p is MaterialScanProject => p !== undefined)
+      setTargetScan({ loading: false, error: '', projects })
+      return projects
+    } catch (error) {
+      // The cached half is still good — show it next to the error rather than
+      // trading known projects for a message.
+      const message = error instanceof Error ? error.message : String(error)
+      setTargetScan({ loading: false, error: message, projects: cached })
+      return cached
+    }
   }
 
   // Read the character's projects when the drawer opens. Opening a `.hip` costs
@@ -696,7 +727,7 @@ export function HoudiniUtilsPanel({
           setConfirmOpen(false)
         }
         // The targets changed on disk — their counts are now stale.
-        void runScan(targets, setTargetScan)
+        void scanTargets()
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
@@ -786,7 +817,7 @@ export function HoudiniUtilsPanel({
         return next
       })
       toast.success(`${fileName(hipPath)} is back to the state it was in before the run.`)
-      void runScan(targets, setTargetScan)
+      void scanTargets()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
     } finally {
@@ -859,7 +890,7 @@ export function HoudiniUtilsPanel({
           )
           setPrefillOpen(false)
         }
-        void runScan(targets, setTargetScan)
+        void scanTargets()
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
@@ -895,7 +926,7 @@ export function HoudiniUtilsPanel({
           )
           setRepathOpen(false)
         }
-        void runScan(targets, setTargetScan)
+        void scanTargets()
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
@@ -929,7 +960,7 @@ export function HoudiniUtilsPanel({
           setDefaultsOpen(false)
         }
         // The files changed on disk — their scanned $JOB is now stale.
-        void runScan(targets, setTargetScan)
+        void scanTargets()
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
@@ -987,7 +1018,7 @@ export function HoudiniUtilsPanel({
               result={actionReport}
               repathReason={repath.reason}
               restore={restore}
-              onRescan={() => void runScan(targets, setTargetScan)}
+              onRescan={() => void scanTargets()}
             />
           </TabsContent>
 
@@ -1021,7 +1052,7 @@ export function HoudiniUtilsPanel({
                   variant="ghost"
                   size="sm"
                   disabled={targetScan.loading || targets.length === 0}
-                  onClick={() => void runScan(targets, setTargetScan)}
+                  onClick={() => void scanTargets()}
                 >
                   <RefreshCw className={targetScan.loading ? 'animate-spin' : ''} /> Rescan
                 </Button>

@@ -125,6 +125,31 @@ async function writeScanStore(path: string, store: HoudiniScanStore): Promise<vo
   }
 }
 
+/** Pending store writes, per file — see {@link queueScanStoreWrite}. */
+const scanStoreWrites = new Map<string, Promise<void>>()
+
+/**
+ * Serialize writes to one store file, each folding into a FRESH read.
+ *
+ * A scan holds the store open across a whole hython run (tens of seconds), so
+ * two projects scanned concurrently — the sweep runs two workers — would each
+ * write a store based on what it read at the start, and the last writer would
+ * drop the other's entry. Re-reading at write time, in a per-file queue, makes
+ * concurrent results append instead of overwrite. (Two WINDOWS can still race
+ * on the shared source store — the atomic write keeps that to a lost entry,
+ * never a corrupt file, and a lost entry is just a rescan later.)
+ */
+function queueScanStoreWrite(
+  path: string,
+  mutate: (store: HoudiniScanStore) => HoudiniScanStore,
+): Promise<void> {
+  const next = (scanStoreWrites.get(path) ?? Promise.resolve()).then(async () => {
+    await writeScanStore(path, mutate(await readScanStore(path)))
+  })
+  scanStoreWrites.set(path, next)
+  return next
+}
+
 /**
  * The three transferable parts of a material setup.
  *
@@ -373,7 +398,9 @@ export async function scanHoudiniMaterials({
     }
   })
   if (persist.length > 0 && storePath) {
-    await writeScanStore(storePath, withScanResults(stored, persist, new Date().toISOString()))
+    await queueScanStoreWrite(storePath, (store) =>
+      withScanResults(store, persist, new Date().toISOString()),
+    )
   }
 
   const byPath = new Map(fresh.map((p) => [normalizePath(p.hipPath).toLowerCase(), p]))
@@ -437,8 +464,9 @@ export async function scanCharacterHoudiniProjects({ data }: { data: unknown }):
       // Prune first, so unlinking a project drops its entry even when nothing
       // needs re-scanning.
       const storePath = await scanStorePath(projectId, id)
-      const stored = await readScanStore(storePath)
-      await writeScanStore(storePath, withScanResults(stored, [], new Date().toISOString(), inside))
+      await queueScanStoreWrite(storePath, (store) =>
+        withScanResults(store, [], new Date().toISOString(), inside),
+      )
       // A worker pool at the concurrency cap — as one project finishes the next
       // starts, rather than waiting for a whole batch. Each trip goes through
       // `scanHoudiniMaterials`, so the mtime short-circuit, the in-flight
@@ -475,10 +503,11 @@ function insideFolder(hip: string, folder: string): boolean {
 /**
  * The character's projects as the store has them — no hython, no waiting.
  *
- * This is what the Utils drawer opens on: the background sweep is the only thing
- * that scans a character's own projects now, so the drawer reads what that left
- * and polls while it is still working. Projects OUTSIDE the character folder are
- * absent by design — nothing scans them (see {@link scanCharacterHoudiniProjects}).
+ * This is what the Utils drawer opens on: it reads what the background sweep
+ * left and scans only what the store doesn't cover — it never WAITS on the
+ * sweep, because a sweep is not guaranteed to deliver (no Houdini configured,
+ * a project outside the character folder — the sweep skips those by design,
+ * see {@link scanCharacterHoudiniProjects}).
  *
  * Stale entries are skipped rather than served: a `.hip` saved in Houdini since
  * the last sweep has a new mtime, so it simply isn't in the answer, and the

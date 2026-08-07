@@ -69,6 +69,87 @@ test('a wired project shows no badge', async ({ page }) => {
   await expect(page.getByText('Needs attention')).toHaveCount(0)
 })
 
+test('the drawer merges the store with a scan of what it does not cover', async ({ page }) => {
+  // One linked project the store answers for (inside the character folder,
+  // fresh entry) and one it can never answer for (linked from outside — the
+  // sweep skips those by design). The drawer must show BOTH: the cache is only
+  // an answer for the projects it covers, and a partial cache silently hiding
+  // a linked project from the node lists and the repairs was a real bug.
+  const OUTSIDE = 'D:/Templates/G9_Skin_Base.hiplc'
+  const HOUDINI_INSTALL = 'C:/Program Files/Side Effects Software/Houdini 22.0.368'
+  const node = (networkBox: string) => ({
+    path: '/obj/DazToHue/DazToHueMaterial',
+    name: 'DazToHueMaterial',
+    nodeType: 'material',
+    networkBox,
+    materials: 0,
+    uvChannels: 0,
+    bakers: 0,
+    layers: 0,
+    bakerNames: [],
+    materialNames: [],
+    slots: [],
+    sectionCounts: [],
+  })
+
+  const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true, houdiniProject: true })
+  // hython configured, so the drawer CAN scan the uncovered link itself.
+  const settingsPath = `${P.appData}/settings.json`
+  seed.files[settingsPath] = JSON.stringify({
+    ...JSON.parse(seed.files[settingsPath] ?? '{}'),
+    houdiniInstallFolder: HOUDINI_INSTALL,
+    houdiniDocsFolder: 'C:/Users/dev/Documents/houdini22.0',
+  })
+  seed.files[`${HOUDINI_INSTALL}/bin/hython.exe`] = 'hython-exe-fixture'
+  seed.files[OUTSIDE] = 'hip-fixture'
+  const charPath = `${P.charFolder}/Kira.json`
+  const char = JSON.parse(seed.files[charPath] ?? '{}')
+  char.houdiniProjects = [P.houdini, OUTSIDE]
+  seed.files[charPath] = JSON.stringify(char)
+  // The fake hython only knows the OUTSIDE project's nodes. If the drawer
+  // re-scanned the inside one instead of taking the store's word, its card
+  // would come back empty and 'CachedBox' would be missing below.
+  seed.materialScan = { [OUTSIDE]: [node('ScannedBox')] }
+  seed.files[STORE] = JSON.stringify({
+    version: 1,
+    projects: {
+      [P.houdini.toLowerCase()]: {
+        key: `${P.houdini.toLowerCase()}|__MTIME__`,
+        scannedAt: '2026-08-07T00:00:00.000Z',
+        project: scan({ nodes: [node('CachedBox')] }),
+      },
+    },
+  })
+  await page.addInitScript(installTauriMock, seed)
+  await page.addInitScript((storePath: string) => {
+    const mock = (window as any).__tauriMock
+    const raw = mock.files.get(storePath) as string
+    mock.files.set(storePath, raw.replace('__MTIME__', String(mock.mtimeMs)))
+  }, STORE)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await expect(page.getByText(/custom ROM frames/)).toBeVisible()
+
+  // Two cards, two Utils buttons — either opens the same drawer.
+  await page.getByRole('button', { name: /^Utils/ }).first().click()
+  const drawer = page.getByRole('dialog')
+  await drawer.getByRole('tab', { name: 'Material' }).click()
+
+  // The cached project, served from the store…
+  await expect(drawer.getByText('CachedBox')).toBeVisible()
+  // …and the outside link, scanned on the spot and merged in.
+  await expect(drawer.getByText('ScannedBox')).toBeVisible()
+
+  // The drawer's own scan persisted under the CHARACTER's store — target scans
+  // carry the character scope, so what the drawer earns is what the card badge
+  // and the next open read (not the shared source store).
+  await expect
+    .poll(async () =>
+      page.evaluate((p) => ((window as any).__tauriMock.files.get(p) ?? '') as string, STORE),
+    )
+    .toContain('g9_skin_base')
+})
+
 test('unresolved imports and blank parms are both named', async ({ page }) => {
   await openWithStore(
     page,

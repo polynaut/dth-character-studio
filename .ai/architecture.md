@@ -256,14 +256,21 @@ Three consequences worth knowing before touching this:
   store is cumulative on purpose, since a template stays cached across the
   characters it is copied into.
 - **`scanCharacterHoudiniProjects` is the only thing that scans a character's own
-  projects.** Character-folder projects ONLY (a project linked from the user's
-  own tree has no `$JOB` expectation and no repair), a worker pool capped at 2
-  hython processes, coalesced per character, and silent — a background job must
-  never toast at somebody who didn't ask.
-- **The drawer reads the store** (`fetchCachedHoudiniScans`) and falls back to
-  scanning when it is empty. It briefly POLLED for the sweep instead; that is
-  wrong, because waiting is only safe if a sweep is guaranteed to deliver and it
-  is not (external project, no Houdini configured).
+  projects UNPROMPTED.** Character-folder projects ONLY (a project linked from
+  the user's own tree has no `$JOB` expectation and no repair), a worker pool
+  capped at 2 hython processes, coalesced per character, and silent — a
+  background job must never toast at somebody who didn't ask. Store writes are
+  serialized per file and fold into a fresh read (`queueScanStoreWrite`): a scan
+  holds no store open across its hython run, so two workers finishing together
+  append instead of last-writer-wins.
+- **The drawer reads the store** (`fetchCachedHoudiniScans`) **and scans only
+  what it doesn't cover** — an outside-folder link (never swept), a `.hip` saved
+  since the last sweep — then merges, so a partial cache never hides a linked
+  project from the node lists or the repairs. Target scans pass the character
+  scope, so drawer-earned results land in the character's store, not the shared
+  source store. It briefly POLLED for the sweep instead; that is wrong, because
+  waiting is only safe if a sweep is guaranteed to deliver and it is not
+  (external project, no Houdini configured).
 - **The cache may never fail a scan.** Resolving the store path was once
   unguarded and took the drawer's whole project list down with it. A broken cache
   degrades to "no cache", never to "no scan".
