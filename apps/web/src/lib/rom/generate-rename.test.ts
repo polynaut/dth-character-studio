@@ -186,6 +186,9 @@ describe('removalSweepNames', () => {
   })
 })
 
+/** A character's app-internal folder — the CSVs and the sweep both live here now. */
+const meta = (project: string, folder: string) => `${project}/.dcsmeta/characters/${folder}`
+
 describe('generateCharacterFiles previousName sweep', () => {
   it('a case-only rename (kira → Kira) does NOT delete the just-written CSV', async () => {
     await storage.createProjectManifest('/games/P', 'P')
@@ -198,20 +201,85 @@ describe('generateCharacterFiles previousName sweep', () => {
     expect(res.outDir).toBe('/games/P/Kira')
     // Pre-fix, the 'kira_pose_asset.csv' candidate survived the case-sensitive
     // filter and the case-insensitive remove deleted this very file.
-    expect(files.has('/games/P/Kira/Kira_pose_asset.csv')).toBe(true)
+    expect(files.has(`${meta('/games/P', 'Kira')}/Kira_pose_asset.csv`)).toBe(true)
   })
 
-  it('a REAL rename still sweeps the old-named CSV left behind in the folder', async () => {
+  it('a REAL rename still sweeps the old-named CSV left behind in the meta folder', async () => {
     await storage.createProjectManifest('/games/Q', 'Q')
     const c = seedCharacter('/games/Q', 'Kira', 'Kira')
     // Leftover from before the Electra → Kira rename travelled with the folder.
-    files.set('/games/Q/Kira/Electra_pose_asset.csv', 'old')
+    addDir(meta('/games/Q', 'Kira'))
+    files.set(`${meta('/games/Q', 'Kira')}/Electra_pose_asset.csv`, 'old')
 
     await generateCharacterFiles({
       data: { projectId: '/games/Q', id: c.id, previousName: 'Electra' },
     })
 
-    expect(files.has('/games/Q/Kira/Electra_pose_asset.csv')).toBe(false)
-    expect(files.has('/games/Q/Kira/Kira_pose_asset.csv')).toBe(true)
+    expect(files.has(`${meta('/games/Q', 'Kira')}/Electra_pose_asset.csv`)).toBe(false)
+    expect(files.has(`${meta('/games/Q', 'Kira')}/Kira_pose_asset.csv`)).toBe(true)
+  })
+})
+
+describe('generateCharacterFiles relocates the app files into .dcsmeta', () => {
+  it("moves what the studio wrote and nothing else out of the character folder", async () => {
+    await storage.createProjectManifest('/games/R', 'R')
+    const c = seedCharacter('/games/R', 'Kira', 'Kira')
+    files.set('/games/R/Kira/.dth_execute_stamps.json', '{"version":1,"scenes":{}}')
+    files.set('/games/R/Kira/.dth_export_folders.json', '{"version":1,"exportDir":"","folders":[]}')
+    files.set('/games/R/Kira/.last_rom_run.json', '{}')
+    files.set('/games/R/Kira/dth_rom_run_log.json', '{}')
+    files.set('/games/R/Kira/Kira_pose_asset.csv', 'stale')
+    // NOT the studio's: a note the user dropped in, and a CSV they copied back
+    // out of an export folder (whose name a `*_pose_asset.csv` pattern WOULD have
+    // matched — the reason the rule is an intersection with the owned names).
+    files.set('/games/R/Kira/my-notes.txt', 'mine')
+    files.set('/games/R/Kira/Kira_Summertide_v2_pose_asset.csv', 'mine')
+
+    const res = await generateCharacterFiles({ data: { projectId: '/games/R', id: c.id } })
+
+    const dir = meta('/games/R', 'Kira')
+    for (const name of [
+      '.dth_execute_stamps.json',
+      '.last_rom_run.json',
+      'dth_rom_run_log.json',
+    ]) {
+      expect(files.has(`${dir}/${name}`)).toBe(true)
+      expect(files.has(`/games/R/Kira/${name}`)).toBe(false)
+    }
+    expect(res.movedInternals).toContain('dth_rom_run_log.json')
+    // The freshly generated CSV replaced the stale one it relocated.
+    expect(files.get(`${dir}/Kira_pose_asset.csv`)).not.toBe('stale')
+    expect(files.has('/games/R/Kira/Kira_pose_asset.csv')).toBe(false)
+    // The user's files stayed exactly where they were.
+    expect(files.get('/games/R/Kira/my-notes.txt')).toBe('mine')
+    expect(files.get('/games/R/Kira/Kira_Summertide_v2_pose_asset.csv')).toBe('mine')
+  })
+
+  it('is idempotent — a second generation has nothing left to move', async () => {
+    await storage.createProjectManifest('/games/S', 'S')
+    const c = seedCharacter('/games/S', 'Kira', 'Kira')
+    files.set('/games/S/Kira/.last_rom_run.json', '{"ok":true}')
+
+    const first = await generateCharacterFiles({ data: { projectId: '/games/S', id: c.id } })
+    const second = await generateCharacterFiles({ data: { projectId: '/games/S', id: c.id } })
+
+    expect(first.movedInternals).toEqual(['.last_rom_run.json'])
+    expect(second.movedInternals).toEqual([])
+    expect(files.get(`${meta('/games/S', 'Kira')}/.last_rom_run.json`)).toBe('{"ok":true}')
+  })
+
+  it('drops a character-folder copy rather than overwriting the migrated one', async () => {
+    await storage.createProjectManifest('/games/T', 'T')
+    const c = seedCharacter('/games/T', 'Kira', 'Kira')
+    const dir = meta('/games/T', 'Kira')
+    addDir(dir)
+    files.set(`${dir}/.last_rom_run.json`, 'current')
+    // What an older build, sharing the project, would write to the old path.
+    files.set('/games/T/Kira/.last_rom_run.json', 'stale')
+
+    await generateCharacterFiles({ data: { projectId: '/games/T', id: c.id } })
+
+    expect(files.get(`${dir}/.last_rom_run.json`)).toBe('current')
+    expect(files.has('/games/T/Kira/.last_rom_run.json')).toBe(false)
   })
 })

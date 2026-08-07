@@ -148,6 +148,10 @@ export const P = {
   project: 'D:/DTH Projects/Demo',
   dcsp: 'D:/DTH Projects/Demo/Demo.dcsp',
   charFolder: 'D:/DTH Projects/Demo/Kira',
+  /** The character's app-internal folder in the project's `.dcsmeta`: the
+   *  generated PoseAsset CSV, the run log, the Execute stamps, the
+   *  export-folder record. Nothing the user ever opens. */
+  charMeta: 'D:/DTH Projects/Demo/.dcsmeta/characters/Kira',
   /** Where Save installs the character's Daz scripts (project/character names). */
   scriptsDir: 'D:/DAZ 3D/My DAZ 3D Library/Scripts/DTH-Character-Studio/Demo/Kira',
   /** The character's primary Daz scene — mandatory in the real create flow, so

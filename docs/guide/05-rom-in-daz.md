@@ -319,7 +319,8 @@ and those exports are on disk.
 > [!NOTE]
 > Prefer exporting by hand? Turn off *Run the export with the ROM script* — the
 > ROM is still built in Daz, and you export with the DTH Exporter as described
-> in the DazToHue docs; the PoseAsset CSV is waiting in the character's folder.
+> in the DazToHue docs; the PoseAsset CSV is waiting in
+> [the studio's own folder for that character](./06-into-houdini.md#what-the-studio-gives-you).
 
 &nbsp;
 

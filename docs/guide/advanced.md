@@ -144,7 +144,9 @@ Save still produces **one** ROM apply-script — there are no per-scene scripts:
   primary and every outfit scene.
 - A scene whose overrides change the **frame layout** — different frames or
   counts, a swapped preset, a flipped mode — also gets its own
-  **`<Name>_<Scene>_pose_asset.csv`** next to the default one, since Houdini
+  **`<Name>_<Scene>_pose_asset.csv`** beside the default one (in the studio's
+  own [`.dcsmeta` folder](./06-into-houdini.md#what-the-studio-gives-you) for
+  that character), since Houdini
   has no runtime to pick frames. Overrides that only change applied values
   (identity dials, preserve morphs, GEN art direction, JCM mods) ride the base
   CSV — no extra file.

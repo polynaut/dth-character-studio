@@ -108,7 +108,7 @@ test('project window: character editor measures, edits and saves both artifacts'
 
   const written = await filesWritten(page)
   // Houdini PoseAsset CSV → next to the definition in the character folder.
-  expect(written).toContain(`${P.charFolder}/Kira_pose_asset.csv`)
+  expect(written).toContain(`${P.charMeta}/Kira_pose_asset.csv`)
   // Daz script → the per-character scripts folder in the DAZ library, with the
   // shared runtime installed at the scripts root.
   const dsa = await fileContent(page, `${P.scriptsDir}/ROM_Kira_G9.dsa`)
@@ -181,6 +181,12 @@ test('project window: inline rename moves the folder and regenerates the script'
   )
   expect(novaDsa).toContain(`var dthRefRootAbs = "${novaFolder}/daz3d/dth-exports";`)
   expect(novaDsa).toContain('"$HIP/../daz3d/dth-exports"')
+  // The app's own folder for this character followed the rename, and the script
+  // reads its CSV from the new one — a stale path here would make every export
+  // report "PoseAsset CSV not found" while the file sat under the old name.
+  const novaMeta = `${P.project}/.dcsmeta/characters/Nova`
+  expect(written).toContain(`${novaMeta}/Nova_pose_asset.csv`)
+  expect(novaDsa).toContain(`var dthCsvSrcDir = new DzDir("${novaMeta}");`)
 
   expect(await unhandledCommands(page)).toEqual([])
 })

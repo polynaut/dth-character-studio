@@ -8,6 +8,7 @@ import {
   parseExportFoldersRecord,
   staleExportFolders,
 } from '../execute-jobs.ts'
+import { CHARACTER_INTERNAL_FILES, relocatableInternals } from '../character-internals.ts'
 
 import { normalizePathLower } from '#/lib/path.ts'
 import { normalizeRelFolder } from '../library'
@@ -224,8 +225,9 @@ export function removalSweepNames(
 
 /**
  * Compiles the character into its DTH artifacts and writes them to two places:
- *  - the Houdini PoseAsset CSV → the character's own folder (next to its
- *    definition JSON), and
+ *  - the Houdini PoseAsset CSV → the character's folder in the project's hidden
+ *    meta folder (`.dcsmeta/characters/<folder>` — `storage.characterMetaDir`),
+ *    where the studio's other per-character files live too, and
  *  - the self-contained Daz script (<Name>_<Genesis>.dsa) → a per-character
  *    subfolder `<My DAZ 3D Library>/Scripts/DTH-Character-Studio/<project>/<character>/`.
  *    The DTH runtime files it imports are installed ONCE in that root (copied
@@ -246,6 +248,10 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   /** Leftover `houdini-project` folders that were NOT removed because they
    *  hold something. The user's own output; theirs to look at and delete. */
   keptProjectDirs: Array<string>
+  /** App-internal files this generation relocated out of the character folder
+   *  into `.dcsmeta/characters/<folder>` (the one-time v0.69 move) — reported
+   *  per character by Refresh assets. Empty once a character has migrated. */
+  movedInternals: Array<string>
 }> {
   const { projectId, id, previousName, targets } = generateInput.parse(data)
   // Which artifact groups to (re)write. The editor's Generate writes both; a
@@ -271,6 +277,35 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
     if (location) cacheCharacterLocation(lib, id, location)
   }
   if (!location || !character) throw new Error(`Character ${id} not found`)
+  // Scene-suffixed PoseAsset names of EVERY stored override (active or not) at a
+  // given character name. Two consumers: the stale-artifact sweep further down,
+  // and the internals relocation right below — which may only touch names the
+  // studio itself wrote.
+  const overrideCsvNames = (name: string) =>
+    character.sceneOverrides.map((o) =>
+      poseAssetFileName({ ...character, name }, sceneOverrideSlug(o.scenePath)),
+    )
+  // The legacy-cased CSV (<name>_PoseAsset.csv) older versions wrote, before the
+  // file became <name>_pose_asset.csv.
+  const legacyPose = poseAssetFileName(character).replace(/_pose_asset\.csv$/, '_PoseAsset.csv')
+  // Where this character's app-internal files live: the project's hidden meta
+  // folder, keyed on the character's own folder (`.dcsmeta/characters/Ita`).
+  // Everything the studio writes for itself goes there — the run log, the
+  // Execute stamps, the export-folder record and the PoseAsset CSV(s) — so the
+  // character folder holds only the user's own files plus the definition.
+  const metaDir = storage.characterMetaDir(project.path, location.relFolder, character.id)
+  // …and the one-time move of the copies older builds left in the character
+  // folder root. Runs before anything is written, on every generation, so a
+  // character migrates on its next save and a whole library on one Refresh.
+  const movedInternals = await migrateCharacterInternals(location.folderAbs, metaDir, [
+    ...CHARACTER_INTERNAL_FILES,
+    legacyPose,
+    poseAssetFileName(character),
+    ...overrideCsvNames(character.name),
+    ...(previousName
+      ? [poseAssetFileName({ ...character, name: previousName }), ...overrideCsvNames(previousName)]
+      : []),
+  ])
   // A scene-less character (created without a Daz scene; the editor is locked
   // until the primary is linked) generates NOTHING — its artifacts would embed
   // an empty scene. Every generation path funnels through here (save, create,
@@ -284,6 +319,7 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
       sweptJunctions: [],
       sweptProjectDirs: [],
       keptProjectDirs: [],
+      movedInternals,
     }
   }
   // Exact ROM paths from the active release's pose scan; {} when the folder is
@@ -295,10 +331,17 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   // Frame lengths measured live from the actual .duf assets (hard-errors if an
   // included block can't be read — never a wrong-length ROM).
   const frames = await resolvePresetFrames(character, catalog)
-  // The character's own folder holds the canonical PoseAsset CSV. Its absolute
-  // path is baked into the generated script so the script can move the CSV into
-  // the resolved export dir (scene subfolder included) when it runs in Daz.
+  // The character's own folder — the anchor for its scenes, Houdini projects and
+  // export root (NOT for the generated CSV, which lives in `metaDir` above).
   const outDir = await storage.getCharacterFolder(lib, id, location.folderAbs)
+  // The meta folder has to exist before the scripts that write into it run: the
+  // runtime's run log lands there whether or not this pass wrote a CSV.
+  // Best-effort — a failure here surfaces on the write below, not now.
+  try {
+    await mkdir(metaDir, { recursive: true })
+  } catch {
+    // an unwritable meta folder fails loudly at the CSV write, with a real path
+  }
   // Stamp the generating studio version into the script header for traceability.
   const versioned = { ...character, studioVersion: await storage.studioVersion() }
   // The active DTH release selects the PoseAsset CSV era/variant (the Daz scripts
@@ -406,7 +449,7 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
     versioned,
     romPaths,
     frames,
-    outDir,
+    metaDir,
     activeRelease,
     scanProducts,
     sceneRomPaths,
@@ -415,31 +458,28 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
     hipRefPrefix,
     indexSync,
   )
-  // Scene-suffixed artifact names of EVERY stored override (active or not) at a
-  // given character name — the sweep candidates. Filtered against what was just
-  // written, this removes the per-scene CSV of an override whose ROM was
-  // disarmed / scene unlinked, and (always, since they're no longer generated)
-  // the LEGACY per-scene ROM/Export scripts from before the one-script model.
-  const overrideCsvNames = (name: string) =>
-    character.sceneOverrides.map((o) =>
-      poseAssetFileName({ ...character, name }, sceneOverrideSlug(o.scenePath)),
-    )
+  // Scene-suffixed SCRIPT names of every stored override (active or not) — the
+  // sweep candidates. Filtered against what was just written, this removes the
+  // LEGACY per-scene ROM/Export scripts from before the one-script model (always,
+  // since they're no longer generated). The CSV twin is `overrideCsvNames` above.
   const overrideScriptNames = (name: string) =>
     character.sceneOverrides.flatMap((o) => {
       const base = characterScriptName({ ...character, name }, sceneOverrideSlug(o.scenePath))
       return [`ROM_${base}.dsa`, `Export_${base}.dsa`]
     })
 
-  // Houdini deliverable(s) — <Name>_pose_asset.csv — live in the character's own folder.
+  // Houdini deliverable(s) — <Name>_pose_asset.csv — live in the character's meta
+  // folder, whose absolute path the generated export script carries so it can
+  // copy the right CSV into the resolved export dir when it runs.
   if (writeHoudini) {
     const houdiniFiles = files.filter((file) => file.target === 'houdini')
-    await storage.writeFilesToFolder(outDir, houdiniFiles)
+    await storage.writeFilesToFolder(metaDir, houdiniFiles)
     const writtenHoudini = houdiniFiles.map((file) => file.fileName)
     // After a rename the PoseAsset filenames change too — drop the old-named
-    // ones (default + per-scene) that traveled with the folder.
+    // ones (default + per-scene) that traveled with the meta folder.
     if (previousName) {
       await storage.removeFilesFromFolder(
-        outDir,
+        metaDir,
         removalSweepNames(
           [
             poseAssetFileName({ ...character, name: previousName }),
@@ -452,9 +492,8 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
     // Drop the legacy-cased CSV (<name>_PoseAsset.csv) left by older versions —
     // the file is now <name>_pose_asset.csv — and the CSVs of overrides that no
     // longer generate.
-    const legacyPose = poseAssetFileName(character).replace(/_pose_asset\.csv$/, '_PoseAsset.csv')
     await storage.removeFilesFromFolder(
-      outDir,
+      metaDir,
       removalSweepNames([legacyPose, ...overrideCsvNames(character.name)], writtenHoudini),
     )
     // Record which DTH release the CSV was generated for (its era drives staleness).
@@ -575,7 +614,7 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   }
   await migrateRomAnimationFolders(versioned)
   await housekeepRomAnimations(versioned)
-  await housekeepExportFolders(versioned, outDir, scenesRootAbs)
+  await housekeepExportFolders(versioned, metaDir, scenesRootAbs)
   return {
     outDir,
     files,
@@ -584,6 +623,55 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
     sweptJunctions,
     sweptProjectDirs,
     keptProjectDirs,
+    movedInternals,
+  }
+}
+
+/**
+ * Move the app's own per-character files out of the character folder root into
+ * `.dcsmeta/characters/<folder>` — the one-time v0.69 relocation, run on every
+ * generation because that is the one place every character passes through.
+ *
+ * `owned` is the exact list of names the studio writes for THIS character (see
+ * {@link relocatableInternals}); nothing else in the folder is touched, so a
+ * file the user put there can't be swept up by it. A destination that already
+ * holds the name means this character has migrated and something wrote the old
+ * path again (an older build sharing the project) — the character-folder copy
+ * is then dropped rather than overwriting the current one.
+ *
+ * Best effort throughout: a locked file (Daz mid-write, a CSV open in Excel)
+ * stays put and the next generation retries it. Returns what actually moved.
+ * Unguarded by `isTauri()` on purpose — the first `readDir` throws in a browser
+ * build and lands in the same catch, which keeps the rule under test.
+ */
+async function migrateCharacterInternals(
+  charFolderAbs: string,
+  metaDir: string,
+  owned: ReadonlyArray<string>,
+): Promise<Array<string>> {
+  try {
+    const listing = (await readDir(charFolderAbs)).filter((e) => e.isFile).map((e) => e.name)
+    const present = relocatableInternals(listing, owned)
+    if (present.length === 0) return []
+    await mkdir(metaDir, { recursive: true })
+    // Independent files — moved concurrently, each failing on its own.
+    const moved = await Promise.all(
+      present.map(async (name) => {
+        try {
+          const from = joinPath(charFolderAbs, name)
+          const to = joinPath(metaDir, name)
+          if (await exists(to)) await remove(from)
+          else await rename(from, to)
+          return name
+        } catch {
+          return '' // locked / in use — it relocates on a later generation
+        }
+      }),
+    )
+    return moved.filter(Boolean)
+  } catch {
+    // an unreadable character folder is never worth failing a generation over
+    return []
   }
 }
 
@@ -676,7 +764,7 @@ async function housekeepRomAnimations(character: Character): Promise<void> {
 /**
  * Export-folder housekeeping: the definition knows exactly which export
  * folders its layout comprises, so every generation records them
- * ({@link EXPORT_FOLDERS_FILE} in the character folder) and deletes the
+ * ({@link EXPORT_FOLDERS_FILE} in the character's meta folder) and deletes the
  * previously recorded ones that fell OUT of the layout — a renamed/cleared
  * Houdini project folder or a changed scene subfolder must not leave its old
  * export tree behind. Only ever deletes RECORDED folders inside the CURRENT
@@ -687,13 +775,13 @@ async function housekeepRomAnimations(character: Character): Promise<void> {
  */
 async function housekeepExportFolders(
   character: Character,
-  charFolderAbs: string,
+  metaDirAbs: string,
   scenesRootAbs?: string,
 ): Promise<void> {
   if (!isTauri()) return
   try {
     const exportDirAbs = character.exportPath.trim()
-    const recordPath = joinPath(charFolderAbs, EXPORT_FOLDERS_FILE)
+    const recordPath = joinPath(metaDirAbs, EXPORT_FOLDERS_FILE)
     const recorded = (await exists(recordPath))
       ? parseExportFoldersRecord(await readTextFile(recordPath))
       : null
@@ -1174,12 +1262,27 @@ async function refreshAllAssetsInner(refreshOpts: {
         res.keptProjectDirs.length > 0
           ? `kept houdini-project — it is not empty (${res.keptProjectDirs.join(', ')})`
           : undefined
+      // The one-time move of the app's own files into `.dcsmeta` — named
+      // because it changes what the user sees in their character folder.
+      const internalsNote =
+        res.movedInternals.length > 0
+          ? `moved ${res.movedInternals.length} app file${
+              res.movedInternals.length === 1 ? '' : 's'
+            } into .dcsmeta`
+          : undefined
       results.push({
         project: project.name,
         character: character.name,
         ok: true,
         detail:
-          [sceneMoveNote, junctionNote, projectDirNote, keptProjectDirNote, res.scriptsError]
+          [
+            sceneMoveNote,
+            junctionNote,
+            projectDirNote,
+            keptProjectDirNote,
+            internalsNote,
+            res.scriptsError,
+          ]
             .filter(Boolean)
             .join(' — ') || undefined,
       })

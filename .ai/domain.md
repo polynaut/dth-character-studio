@@ -101,8 +101,9 @@ offsets byte-identically — if a generation change moves them, the change is wr
   a scene is the slow part, so the morph and product scans share the one open.
   The job-file contract has no per-row parameters — the sidecar IS how a row is
   parameterized, and the worker looks itself up in it by `normalizeSceneKey`.
-- `<name>_pose_asset.csv` — the Houdini PoseAsset CSV, written next to the
-  character JSON and copied into the export dir by the ROM script's export block.
+- `<name>_pose_asset.csv` — the Houdini PoseAsset CSV, written into the
+  character's `.dcsmeta` folder (see **Where the app's own per-character files
+  live** below) and copied into the export dir by the ROM script's export block.
 - Optional: `Export_<Name>_<Genesis>.dsa` (split export), `Export_Hair_…` (one
   `<Name>_Hair_<item>_grooms.abc` per hair item of the open scene), `Scan_Products_…`
   (product scan).
@@ -522,7 +523,8 @@ older runtimes as stale.
   effectively is. Running ANY generated script on a ROM animation by hand works
   the same way now (it used to abort as a foreign scene).
 - **Export-folder housekeeping**: every generation records the layout's
-  export-relative folders in `.dth_export_folders.json` (character folder) and
+  export-relative folders in `.dth_export_folders.json` (the character's
+  `.dcsmeta` folder) and
   deletes RECORDED folders that fell out of the layout — a renamed/cleared
   project folder can't leave its old tree behind. `staleExportFolders`
   (execute-jobs.ts) is deliberately conservative: same export dir only, plain

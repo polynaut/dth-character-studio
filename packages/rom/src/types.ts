@@ -1393,8 +1393,16 @@ export const CHARACTER_SCHEMA_VERSION = 29
  *       it in front of anyone who had never built the index. Nothing is lost
  *       by refusing: a later scan replaces a scene's contribution wholesale,
  *       so the first run after the base index exists files it correctly.
+ * v59 — no script-API change: the app's own per-character files moved out of the
+ *       character folder into `.dcsmeta/characters/<folder>` (the project's
+ *       hidden meta folder). Two of them are baked into the generated scripts —
+ *       the PoseAsset CSV the export block copies, and the `runLogPath` the
+ *       runtime writes — so the emitted CONTENT changed and every character's
+ *       scripts must regenerate. The bump is also what carries the one-time file
+ *       MOVE across a library: Refresh assets regenerates each character, and
+ *       that pass is where the old files are relocated.
  */
-export const RUNTIME_VERSION = 58
+export const RUNTIME_VERSION = 59
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

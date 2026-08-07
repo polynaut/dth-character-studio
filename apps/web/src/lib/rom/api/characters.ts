@@ -9,10 +9,7 @@ import { mergeRomRunLogs, parseRomRunLogText, unreadableRomRunLog } from '../run
 import type { RomRunLog } from '../run-log.ts'
 export type { RomRunFailedMorph, RomRunLog, RomRunSceneRun } from '../run-log.ts'
 
-/** The studio's OWN copy of the last run log (`.last_rom_run.json`, character
- *  folder). The Daz-written `dth_rom_run_log.json` is a throwaway transport:
- *  fetchRomRunLog ingests it here and deletes it. */
-const LAST_ROM_RUN_FILE = '.last_rom_run.json'
+import { LAST_ROM_RUN_FILE } from '../character-internals.ts'
 import * as storage from '../storage'
 import { normalizeRelFolder } from '../library'
 import {
@@ -278,9 +275,10 @@ export async function createCharacter({ data }: { data: unknown }): Promise<Char
 /**
  * The character's last ROM run log. A freshly Daz-written `dth_rom_run_log.json`
  * is ingested into the studio's own `.last_rom_run.json` and DELETED (throwaway
- * transport); otherwise the stored copy is returned. Null when no run was ever
- * logged (or the report was dismissed). Defensive throughout — a malformed file
- * becomes an `unreadable` problem log rather than an exception.
+ * transport); otherwise the stored copy is returned. Both live in the
+ * character's meta folder (`.dcsmeta/characters/<folder>`). Null when no run was
+ * ever logged (or the report was dismissed). Defensive throughout — a malformed
+ * file becomes an `unreadable` problem log rather than an exception.
  */
 export async function fetchRomRunLog({ data }: { data: unknown }): Promise<RomRunLog | null> {
   // `ingest: false` (the route's hover-PRELOAD path) reads the stored copy only:
@@ -290,9 +288,10 @@ export async function fetchRomRunLog({ data }: { data: unknown }): Promise<RomRu
   const { projectId, id, ingest } = charScopeInput
     .extend({ ingest: z.boolean().default(true) })
     .parse(data)
-  const location = await locateCharacter(await charactersRoot(projectId), id)
+  const project = await resolveProject(projectId)
+  const location = await locateCharacter(charsRoot(project), id)
   if (!location) return null
-  const folder = location.folderAbs
+  const folder = storage.characterMetaDir(project.path, location.relFolder, id)
   const dazPath = joinPath(folder, ROM_RUN_LOG_FILE)
   const storePath = joinPath(folder, LAST_ROM_RUN_FILE)
   try {
@@ -347,9 +346,10 @@ export async function fetchRomRunLog({ data }: { data: unknown }): Promise<RomRu
  *  ingested Daz file). Best-effort. */
 export async function dismissRomRunLog({ data }: { data: unknown }): Promise<void> {
   const { projectId, id } = charScopeInput.parse(data)
-  const location = await locateCharacter(await charactersRoot(projectId), id)
+  const project = await resolveProject(projectId)
+  const location = await locateCharacter(charsRoot(project), id)
   if (!location) return
-  const folder = location.folderAbs
+  const folder = storage.characterMetaDir(project.path, location.relFolder, id)
   for (const name of [LAST_ROM_RUN_FILE, ROM_RUN_LOG_FILE]) {
     try {
       const path = joinPath(folder, name)
@@ -418,8 +418,22 @@ async function migrateExportRoot(
     )
     if (!newRoot || normalizePathLower(newRoot) === normalizePathLower(oldRoot)) return
 
-    const recordPath = joinPath(location.folderAbs, EXPORT_FOLDERS_FILE)
-    if (!(await exists(recordPath))) return
+    // The record lives in the character's meta folder — but this save can be the
+    // FIRST one after the v0.69 relocation, and the relocation itself only runs
+    // on generation (which comes after this). So fall back to the old spot in
+    // the character folder; missing it here would strand exactly the gigabytes
+    // this function exists to carry.
+    const metaRecord = joinPath(
+      storage.characterMetaDir(project.path, location.relFolder, character.id),
+      EXPORT_FOLDERS_FILE,
+    )
+    const legacyRecord = joinPath(location.folderAbs, EXPORT_FOLDERS_FILE)
+    const recordPath = (await exists(metaRecord))
+      ? metaRecord
+      : (await exists(legacyRecord))
+        ? legacyRecord
+        : ''
+    if (!recordPath) return
     const recorded = parseExportFoldersRecord(await readTextFile(recordPath))
     // A record written for a DIFFERENT export dir describes folders that aren't
     // at `oldRoot` — the same guard the housekeeping's delete side applies.
@@ -500,6 +514,18 @@ export async function deleteCharacter({ data }: { data: unknown }): Promise<void
       if (await exists(dir)) await remove(dir, { recursive: true })
     } catch {
       // leave an orphaned script folder rather than failing the delete
+    }
+  }
+  // The character's own folder in the project's meta folder (run log, Execute
+  // stamps, export-folder record, PoseAsset CSVs) — pure app data, so it goes
+  // whatever the keep flags say: those spare the user's Daz/Houdini files, and
+  // none of these is one. Best-effort.
+  if (location) {
+    try {
+      const metaDir = storage.characterMetaDir(project.path, location.relFolder, id)
+      if (await exists(metaDir)) await remove(metaDir, { recursive: true })
+    } catch {
+      // leave the meta folder behind rather than failing the delete
     }
   }
   // Prune the character's app-data product-scan folder + its avatar image — both
@@ -617,13 +643,21 @@ export async function moveCharacter({
   data: unknown
 }): Promise<{ location: storage.CharacterLocation; character: Character }> {
   const { projectId, id, relPath } = moveInput.parse(data)
-  const root = await charactersRoot(projectId)
+  const project = await resolveProject(projectId)
+  const root = charsRoot(project)
   // The shared lock gate: refuse (with the file list) before touching disk if
   // the character folder has files open in Daz/Houdini.
   const loc = await locateCharacter(root, id)
   if (loc) await assertMovable(loc.folderAbs)
   invalidateCharacterLocations()
-  return withBusyCursor(storage.moveCharacter(root, id, relPath))
+  const moved = await withBusyCursor(storage.moveCharacter(root, id, relPath))
+  // The meta folder is keyed on the character's library-relative folder, so it
+  // has to follow the move (the rename path in storage.saveCharacter does the
+  // same). Best-effort inside the helper.
+  if (loc) {
+    await storage.moveCharacterMetaDir(project.path, loc.relFolder, moved.location.relFolder, id)
+  }
+  return moved
 }
 
 const moveScenesFolderInput = z.object({

@@ -120,8 +120,10 @@ The active folder for a window is pinned by the project/character route loaders 
 
 - **Project folder** (backed up by the user): the `.dcsp`, the character folders (under
   `charactersSubdir` when set, e.g. `<dir>/assets/characters/<Name>/`, else directly `<dir>/<Name>/` →
-  `<Name>.json` + generated artifacts), a hidden **`.dcsmeta/`** (`images/` avatars, `media/` notes
-  media), and `.assets/` for project-scoped Daz-scene assets (only when `assetsEnabled`).
+  `<Name>.json` + the user's scenes/`.hip`s), a hidden **`.dcsmeta/`** (`images/` avatars, `media/` notes
+  media, `characters/<folder>/` everything the app writes about one character — the run log, the
+  Execute stamps, the export-folder record and the generated PoseAsset CSV; `characterMetaDir`), and
+  `.assets/` for project-scoped Daz-scene assets (only when `assetsEnabled`).
 - **App-data folder** (`appLocalDataDir()`, volatile/machine-only): `settings.json` (machine/tool
   paths), `recents.json` (recently-opened `.dcsp` list, the Home screen's source),
   `network-drives.json`, and the scan outputs `product-scans/` +

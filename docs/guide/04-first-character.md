@@ -244,8 +244,12 @@ Press **Save**. Every save regenerates the character's files in one go:
 
 - **`ROM_<Name>_G9.dsa`** — the Daz apply-script, installed straight into your
   Daz library under `Scripts/DTH-Character-Studio/<Project>/<Character>/`
-- **`<Name>_pose_asset.csv`** — the Houdini PoseAsset import CSV, stored in the
-  character's folder
+- **`<Name>_pose_asset.csv`** — the Houdini PoseAsset import CSV. It's kept in
+  the project's hidden `.dcsmeta/characters/<Character>/` folder, together with
+  the studio's other bookkeeping for that character, so your character folder
+  holds only your own files. The export script copies it into the export folder
+  when it runs; see [Into Houdini](./06-into-houdini.md#what-the-studio-gives-you)
+  for grabbing it by hand.
 
 Two more scripts appear alongside the ROM one **only when their feature is on**:
 

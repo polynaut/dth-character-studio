@@ -1,4 +1,4 @@
-import { exists, readTextFile, remove, rename, stat } from '@tauri-apps/plugin-fs'
+import { exists, mkdir, readTextFile, remove, rename, stat } from '@tauri-apps/plugin-fs'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
@@ -37,6 +37,7 @@ import {
   projectIdInput,
   resolveProject,
 } from './core'
+import type { ProjectInfo } from './core'
 
 import type {
   ExecuteStamp,
@@ -103,15 +104,30 @@ export function characterScenesRoot(
   return rootRel ? joinPath(charFolder, rootRel) : charFolder
 }
 
+/** Where a character's handoff stamps live: its folder in the project's meta
+ *  folder, alongside the run log and the generated PoseAsset CSV. */
+function stampsPath(project: ProjectInfo, location: CharacterLocation, id: string): string {
+  return joinPath(
+    storage.characterMetaDir(project.path, location.relFolder, id),
+    EXECUTE_STAMPS_FILE,
+  )
+}
+
 /** Read a character's stored handoff stamps (missing/corrupt = empty). */
-async function readStamps(location: CharacterLocation): Promise<ExecuteStamps> {
-  const stampsPath = joinPath(location.folderAbs, EXECUTE_STAMPS_FILE)
+async function readStamps(path: string): Promise<ExecuteStamps> {
   try {
-    if (await exists(stampsPath)) return parseExecuteStamps(await readTextFile(stampsPath))
+    if (await exists(path)) return parseExecuteStamps(await readTextFile(path))
   } catch {
     // unreadable stamps = no stamps — worst case a scene re-runs needlessly
   }
   return { version: 1, scenes: {} }
+}
+
+/** Replace a character's handoff stamps, creating the meta folder if a character
+ *  reaches DTH Export before anything else has written there. */
+async function writeStamps(path: string, stamps: ExecuteStamps): Promise<void> {
+  await mkdir(dirname(path), { recursive: true })
+  await storage.writeTextFileAtomic(path, JSON.stringify(stamps, null, 2))
 }
 
 /** Absolute paths of the (one, global) job file pair — the pending file the
@@ -533,16 +549,14 @@ export async function abortExporterJobs({ data }: { data: unknown }): Promise<vo
   activeRun = null
   if (rows.length === 0) return
   try {
-    const { location } = await loadCharacter(projectId, id)
-    const stored = await readStamps(location)
+    const { project, location } = await loadCharacter(projectId, id)
+    const path = stampsPath(project, location, id)
+    const stored = await readStamps(path)
     const aborted = new Set(rows.map((row) => normalizeSceneKey(row.scenePath)))
     const scenes = Object.fromEntries(
       Object.entries(stored.scenes).filter(([key]) => !aborted.has(key)),
     )
-    await storage.writeTextFileAtomic(
-      joinPath(location.folderAbs, EXECUTE_STAMPS_FILE),
-      JSON.stringify({ version: 1, scenes }, null, 2),
-    )
+    await writeStamps(path, { version: 1, scenes })
   } catch {
     // stamp rollback is best-effort — the abort itself (the delete) succeeded
   }
@@ -582,7 +596,7 @@ export async function fetchExecuteScenes({ data }: { data: unknown }): Promise<A
   const { projectId, id } = charScopeInput.parse(data)
   if (!isTauri()) return []
   const { project, location, character } = await loadCharacter(projectId, id)
-  const stored = await readStamps(location)
+  const stored = await readStamps(stampsPath(project, location, id))
   const linked = [character.scenePath, ...character.extraScenes].filter(Boolean)
   // Where each scene's export lands, for the "has this ROM been exported as it
   // now stands?" compare below. The delivered PoseAsset CSV is the marker: the
@@ -844,16 +858,14 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
   // Stamping either would make the dialog report scenes as up to date when
   // their current inputs never reached Houdini.
   if (mode === 'rom-export') {
-    const stored = await readStamps(location)
+    const path = stampsPath(project, location, id)
+    const stored = await readStamps(path)
     const nextStamps: ExecuteStamps = { version: 1, scenes: { ...stored.scenes } }
     for (const scene of scenes) {
       const stamp = stamps.get(scene)
       if (stamp) nextStamps.scenes[normalizeSceneKey(scene)] = stamp
     }
-    await storage.writeTextFileAtomic(
-      joinPath(location.folderAbs, EXECUTE_STAMPS_FILE),
-      JSON.stringify(nextStamps, null, 2),
-    )
+    await writeStamps(path, nextStamps)
   }
 
   // Start Daz scene-less when it isn't running; a running instance needs
