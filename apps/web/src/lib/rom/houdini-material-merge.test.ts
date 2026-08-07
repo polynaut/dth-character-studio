@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  isFigureMismatch,
   mergeTouchCount,
   planSurfaceMerge,
   surfaceLabel,
@@ -241,5 +242,50 @@ describe('surfaceLabel', () => {
     // a confident mis-parse.
     expect(surfaceLabel('Body')).toBe('Body')
     expect(surfaceLabel('@group')).toBe('@group')
+  })
+})
+
+/**
+ * The cross-generation question, answered without knowing about generations.
+ *
+ * A transfer only makes sense within one Genesis version. The check for that is
+ * not a table of surface names per generation — it is the SOURCE's own selected
+ * surfaces matched against the target's, which is what makes it correct for
+ * generations nobody has measured, and for third-party figures too.
+ */
+describe('isFigureMismatch', () => {
+  const skinOnlyIncoming = KIRA_SLOTS.filter((s) => s.name === 'Skin')
+
+  it('is false for the same figure — the real G9 pair', () => {
+    expect(isFigureMismatch(ITA_SLOTS, skinOnlyIncoming)).toBe(false)
+  })
+
+  it('is false when only SOME surfaces are unclaimed', () => {
+    // Kira wears a dress and boots Ita does not. Ordinary, not a mismatch.
+    const plan = planSurfaceMerge(ITA_SLOTS, KIRA_SLOTS)
+    expect(plan.unclaimed.length).toBeGreaterThan(0)
+    expect(isFigureMismatch(ITA_SLOTS, KIRA_SLOTS)).toBe(false)
+  })
+
+  it('is true when NOTHING the incoming materials claim exists there', () => {
+    const otherFigure = [slot('Torso', 'G8Torso'), slot('Face', 'G8Face')]
+    expect(isFigureMismatch(otherFigure, skinOnlyIncoming)).toBe(true)
+  })
+
+  it('is false for a target with no slots at all', () => {
+    // A fresh DTH network with nothing imported yet — there is nothing to
+    // contradict, and setting it up from a template is a normal thing to want.
+    expect(isFigureMismatch([], skinOnlyIncoming)).toBe(false)
+  })
+
+  it('is false when the incoming slots claim no surfaces', () => {
+    expect(isFigureMismatch(ITA_SLOTS, [{ name: 'Blank', surfaces: [] }])).toBe(false)
+  })
+
+  it('needs only ONE shared surface to accept the pair', () => {
+    // Deliberately not a ratio: a user copying one clothing material onto a
+    // character that shares just that item is a legitimate transfer.
+    const target = [slot('Shirt', 'Shirt'), slot('Trousers', 'Trousers')]
+    expect(isFigureMismatch(target, [slot('Top', 'Shirt', 'Cuffs', 'Collar')])).toBe(false)
   })
 })

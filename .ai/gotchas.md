@@ -386,10 +386,24 @@ current code before relying on details, but assume the *lesson* still holds.
   and the rule lives on two sides — `houdini-material-merge.ts` (the panel's
   before-you-run preview) and `_plan_surface_merge` in `material_utils.py` (what
   actually writes the `.hip`) — pinned by the same cases against the same two
-  real projects. Still UNMEASURED: how G8/G8.1/G3 name their surfaces, so
-  nothing claims cross-generation compatibility; the report instead names
-  incoming surfaces that NO target slot claims, and a whole set of them is the
-  "different figures" tell.
+  real projects.
+- **The cross-generation question needs NO generation knowledge — the source's
+  own selected surfaces ARE the check.** A material setup only transfers within
+  one Genesis version, and the tempting fix was a per-generation surface table
+  (which would have meant measuring G8/G8.1/G3, and then maintaining it
+  forever). Remo's call, and it is the better one: match the surfaces the
+  SELECTED materials claim against the ones the target actually has.
+  `isFigureMismatch` (`houdini-material-merge.ts`) is true only when NONE match,
+  and that BLOCKS the transfer — a few unclaimed is ordinary (the source wears
+  something the target doesn't), all of them means different figures, where the
+  copy would evict nothing, install slots naming surfaces that aren't there and
+  leave every baker baking nothing. Correct for generations nobody measured and
+  for third-party figures by construction. Two deliberate non-mismatches: a
+  target with ZERO slots (a fresh DTH network — nothing to contradict, and
+  seeding it from a template is the drawer's purpose) and incoming slots that
+  claim no surfaces. It blocks rather than warns for the same reason the
+  UV-channel dependency does: an advisory let the user run a transfer already
+  known to be broken.
 - **`removeMultiParmInstance(i)` takes the instance index and RENUMBERS what
   follows.** Measured 2026-08-07 on a 25-slot DazToHueMaterial: removing
   instances 10 and 9 left 23 compactly numbered 0…22, and the change survived
