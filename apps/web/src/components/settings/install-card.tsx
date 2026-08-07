@@ -26,6 +26,10 @@ export function InstallCard({
   warning,
   disabled,
   onActivate,
+  /** `daz` paints the card in the Daz leaf-green of the linked-scene cards, so
+   *  a detected Daz Studio reads as the same kind of object. Default keeps the
+   *  neutral/primary look the Houdini section uses. */
+  tone,
 }: {
   logo: string
   title: string
@@ -37,17 +41,26 @@ export function InstallCard({
   warning?: ReactNode
   disabled: boolean
   onActivate: () => void
+  tone?: 'daz'
 }) {
+  const daz = tone === 'daz'
   return (
     <button
       type="button"
       disabled={!exists || disabled}
       onClick={onActivate}
+      data-active={active ? 'true' : 'false'}
       className={`flex min-w-[16rem] flex-1 items-start gap-3 rounded-lg border p-3 text-left transition-colors ${
+        daz ? 'daz-install-card ' : ''
+      }${
         active
-          ? 'border-primary bg-primary/10'
+          ? daz
+            ? ''
+            : 'border-primary bg-primary/10'
           : exists
-            ? 'hover:bg-accent/50'
+            ? daz
+              ? ''
+              : 'hover:bg-accent/50'
             : 'cursor-not-allowed opacity-60'
       }`}
     >
@@ -62,11 +75,19 @@ export function InstallCard({
               column down the card list. */}
           <span className="ml-auto shrink-0">
             {active ? (
-              <span className="flex items-center gap-1 text-xs font-medium text-primary">
+              <span
+                className={`flex items-center gap-1 text-xs font-medium ${
+                  daz ? 'text-daz-green' : 'text-primary'
+                }`}
+              >
                 <Check className="size-3.5" /> Active
               </span>
             ) : exists ? (
-              <span className="rounded-md border border-primary/40 px-2 py-0.5 text-xs font-medium text-primary">
+              <span
+                className={`rounded-md border px-2 py-0.5 text-xs font-medium ${
+                  daz ? 'border-daz-green/40 text-daz-green' : 'border-primary/40 text-primary'
+                }`}
+              >
                 {busy ? 'Activating…' : 'Activate'}
               </span>
             ) : null}

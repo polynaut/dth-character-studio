@@ -415,11 +415,9 @@ export function HoudiniProjectsField({
           character={character}
           initialHipPath={utilsFor}
           projectId={projectId}
-          // The General tab checks each project against these two: `$JOB`
-          // should be the CHARACTER folder (v0.64), and `$HIP` is only ever
-          // compared with where the studio puts a generated scene.
+          // The General tab checks each project's `$JOB`, which should be the
+          // CHARACTER folder (v0.64).
           charFolder={charFolder}
-          houdiniDir={houdiniDir}
           onClose={() => setUtilsFor('')}
         />
       )}
@@ -549,9 +547,9 @@ function GenerateProjectDialog({
           <InfoPopup label="Generate Houdini project — more information">
             Creates a new Houdini scene with the DazToHue network — built by running your
             installed DazToHue <em>shelf tool</em>, so it always matches the current plugin —
-            and <em>Set Project</em> baked to the character&apos;s Houdini project folder:
-            every import resolves relative to the scene file (<code>$HIP/../…</code>), so the
-            project stays moveable. Runs Houdini&apos;s <code>hython</code>; the first start
+            and <em>Set Project</em> baked to the character folder, which holds both the
+            scene and the exports: every import resolves relative to the scene file
+            (<code>$HIP/../…</code>), so the project stays moveable. Runs Houdini&apos;s <code>hython</code>; the first start
             can take a moment.
           </InfoPopup>
         </span>

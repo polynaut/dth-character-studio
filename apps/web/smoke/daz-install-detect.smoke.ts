@@ -87,7 +87,6 @@ test('finds both Daz Studios and recommends the newest', async ({ page }) => {
   await expect(page.getByRole('button', { name: /DAZ Studio 4/ })).toBeVisible()
   // DS6 is the one pointed at; nothing is activated until the user says so.
   await expect(page.getByRole('button', { name: /DAZ Studio 6.*recommended/s })).toBeVisible()
-  await expect(page.getByText('DIM account: Remo')).toBeVisible()
 })
 
 test('activating an installation derives the paths and saves them itself', async ({ page }) => {

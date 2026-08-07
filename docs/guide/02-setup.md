@@ -7,6 +7,16 @@ come from your
 [DazToHue](https://www.artstation.com/marketplace/p/BLM5K/daztohue) purchase —
 extract the downloaded archives somewhere permanent first.
 
+The first two are usually already done for you: the tab opens with every Daz
+Studio and every Houdini on the machine listed as a card. Click the one you
+want and its paths are filled in and saved.
+
+<p align="center">
+  <img width="900" alt="Settings → General with a Daz Studio and a Houdini installation card activated" src="screenshots/settings-installations.png" />
+  <br>
+  <sub><em>Both detections, each with a card activated: DAZ Studio 6 and Houdini 22.0.368, with the paths they derive shown read-only beneath.</em></sub>
+</p>
+
 ## Daz installation — pick it once
 
 You already told the **DAZ Install Manager** where Daz Studio, your content

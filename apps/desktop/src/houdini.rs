@@ -101,8 +101,8 @@ pub fn launch_houdini_job(request: LaunchHoudiniJobRequest) -> Result<(), String
 /// can't run the scene stays EMPTY (the UI says to add the network from the
 /// shelf).
 ///
-/// Path resolution happens in TS (api/houdini.ts); this command only creates
-/// the folder and drives hython. `hython -c` keeps it script-file-free; args
+/// Path resolution happens in TS (api/houdini.ts); this command only drives
+/// hython. `hython -c` keeps it script-file-free; args
 /// go through the process API, so no shell quoting is involved — the paths
 /// are embedded into the Python snippet with '/' separators and escaped
 /// quotes.
@@ -111,9 +111,6 @@ pub fn launch_houdini_job(request: LaunchHoudiniJobRequest) -> Result<(), String
 pub struct CreateHoudiniProjectRequest {
     /// Absolute path of `hython.exe` (from the Houdini install folder).
     pub hython_path: String,
-    /// The shared project folder Houdini writes its own files into (created if
-    /// missing) — backups, geo caches. NOT `$JOB` since v0.64; see `job_dir`.
-    pub project_dir: String,
     /// The folder `$JOB` is baked to: the CHARACTER folder.
     ///
     /// Measured with `hou.text.collapseCommonVars` (what the file picker uses to
@@ -152,8 +149,6 @@ pub struct CreateHoudiniProjectRequest {
 /// skipped one by one, never an error).
 #[tauri::command(async)]
 pub fn create_houdini_project(request: CreateHoudiniProjectRequest) -> Result<String, String> {
-    std::fs::create_dir_all(&request.project_dir)
-        .map_err(|e| format!("Could not create the project folder: {e}"))?;
     let escape = |s: &str| s.replace('\\', "/").replace('\'', "\\'");
     // ONE creation strategy: run the DazToHue SHELF TOOL's own script
     // (hou.shelves.tools) — the ground truth of what "the DazToHue network"
@@ -298,4 +293,100 @@ pub fn create_houdini_project(request: CreateHoudiniProjectRequest) -> Result<St
         marker("DTH_TYPES="),
         marker("DTH_PREFILL=")
     ))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoveDirIfEmptyRequest {
+    /// The folder to retire. Removed ONLY when it is empty.
+    pub dir_path: String,
+}
+
+/// Remove a leftover folder — but only when it holds nothing.
+///
+/// The sweep behind the retired `houdini-project` folder (v0.68). That folder
+/// was created as the shared "project folder" every generated scene would
+/// `Set Project` to, which could never do what it promised: Houdini writes its
+/// own output (render/, geo/, backup/) relative to `$HIP`, and `$HIP` is
+/// DERIVED from where the `.hip` sits — `Set Project` sets `$JOB`, not `$HIP`.
+/// So the output landed beside the scenes and this folder stayed empty.
+///
+/// **Empty is the whole safety rail.** A pre-v0.64 project DID have `$JOB`
+/// pointed here, so Houdini may have written real caches or renders into it —
+/// user output the studio has no business deleting. `std::fs::remove_dir`
+/// refuses a non-empty directory by itself; the explicit read_dir check is
+/// there to report `"not-empty"` as a normal outcome rather than an error, so
+/// the caller can tell the user what it left behind.
+///
+/// Returns `"removed"`, `"absent"` (nothing there), `"not-empty"` (left alone,
+/// deliberately not an error) or `"not-a-directory"` (a file — or a reparse
+/// point, which is never followed — sits at that path).
+#[tauri::command]
+pub fn remove_dir_if_empty(request: RemoveDirIfEmptyRequest) -> Result<String, String> {
+    let dir = std::path::Path::new(&request.dir_path);
+    // symlink_metadata, not metadata: a junction/symlink must NOT be followed —
+    // removing one here could look "empty" while its target holds everything.
+    let Ok(meta) = std::fs::symlink_metadata(dir) else {
+        return Ok("absent".into());
+    };
+    if !meta.is_dir() || meta.file_type().is_symlink() {
+        return Ok("not-a-directory".into());
+    }
+    let mut entries =
+        std::fs::read_dir(dir).map_err(|e| format!("Could not read the folder: {e}"))?;
+    if entries.next().is_some() {
+        return Ok("not-empty".into());
+    }
+    std::fs::remove_dir(dir).map_err(|e| format!("Could not remove the folder: {e}"))?;
+    Ok("removed".into())
+}
+
+#[cfg(test)]
+mod remove_dir_if_empty_tests {
+    use super::*;
+
+    fn request(dir: &std::path::Path) -> RemoveDirIfEmptyRequest {
+        RemoveDirIfEmptyRequest {
+            dir_path: dir.to_string_lossy().into_owned(),
+        }
+    }
+
+    #[test]
+    fn removes_an_empty_folder() {
+        let temp = std::env::temp_dir().join("dth_rmdir_empty");
+        let _ = std::fs::remove_dir_all(&temp);
+        std::fs::create_dir_all(&temp).unwrap();
+        assert_eq!(remove_dir_if_empty(request(&temp)).unwrap(), "removed");
+        assert!(!temp.exists());
+    }
+
+    #[test]
+    fn absent_is_not_an_error() {
+        let temp = std::env::temp_dir().join("dth_rmdir_absent");
+        let _ = std::fs::remove_dir_all(&temp);
+        assert_eq!(remove_dir_if_empty(request(&temp)).unwrap(), "absent");
+    }
+
+    /// The one that matters: a `houdini-project` holding a pre-v0.64 project's
+    /// caches is the user's own output and must survive the sweep untouched.
+    #[test]
+    fn refuses_a_folder_with_anything_in_it() {
+        let temp = std::env::temp_dir().join("dth_rmdir_full");
+        let _ = std::fs::remove_dir_all(&temp);
+        std::fs::create_dir_all(temp.join("geo")).unwrap();
+        std::fs::write(temp.join("geo").join("cache.bgeo"), b"x").unwrap();
+        assert_eq!(remove_dir_if_empty(request(&temp)).unwrap(), "not-empty");
+        assert!(temp.join("geo").join("cache.bgeo").exists());
+        std::fs::remove_dir_all(&temp).unwrap();
+    }
+
+    #[test]
+    fn refuses_a_file() {
+        let temp = std::env::temp_dir().join("dth_rmdir_file");
+        let _ = std::fs::remove_file(&temp);
+        std::fs::write(&temp, b"x").unwrap();
+        assert_eq!(remove_dir_if_empty(request(&temp)).unwrap(), "not-a-directory");
+        assert!(temp.exists());
+        std::fs::remove_file(&temp).unwrap();
+    }
 }

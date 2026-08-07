@@ -116,9 +116,6 @@ pub struct MaterialScanProject {
     /// nodes: opening a `.hip` costs tens of seconds and the General tab must
     /// not pay it twice. Empty only when the project could not be read.
     pub job: String,
-    /// The folder the `.hip` sits in — i.e. `$HIP`, which is derived rather
-    /// than stored, so it is reported and never rewritten.
-    pub hip_dir: String,
     /// What a repath would do to this project's stored file references.
     pub refs: ProjectRefInfo,
     /// Which DazToHue parms the studio could fill here, and which this

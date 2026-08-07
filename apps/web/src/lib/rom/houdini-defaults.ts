@@ -19,6 +19,9 @@
  * value sits BELOW the exports, so it could never help. `$HIP` still wins for
  * paths inside the houdini folder, so repointing `$JOB` disturbs nothing.
  *
+ * `$JOB` is the only row: `$HIP` is derived from the scene's own location and
+ * was never actionable, so reporting it was noise (dropped in v0.68).
+ *
  * The rows are computed here rather than in the panel so the decision is
  * testable, and so the "does this project differ?" comparison is the same one
  * `op_defaults` (`houdini-runtime/material_utils.py`) makes before it writes.
@@ -26,7 +29,7 @@
 
 /** A folder-valued setting the studio can check, and sometimes repair. */
 export interface DefaultsRow {
-  key: 'job' | 'hip'
+  key: 'job'
   label: string
   /** What the scene carries today ('' when the scan could not read it). */
   current: string
@@ -39,14 +42,7 @@ export interface DefaultsRow {
    */
   status: 'matches' | 'differs' | 'unknown'
   matches: boolean
-  /**
-   * Whether the studio can write this.
-   *
-   * `$HIP` is DERIVED from where the `.hip` sits, so "repairing" it would mean
-   * moving the user's scene file — which the studio has no safe way to do (the
-   * project may be open, referenced, or under version control). That row
-   * reports and stops there, which is what #701 asks for.
-   */
+  /** Whether the studio can write this. */
   actionable: boolean
   /** Why this row cannot be actioned, for the disabled state. */
   reason: string
@@ -71,13 +67,16 @@ export function sameFolder(a: string, b: string): boolean {
  * The Defaults rows for one scanned project.
  *
  * `charFolder` is the character's own folder — the value v0.64 bakes and the
- * one a repair writes. `houdiniDir` is where the studio puts a generated
- * scene, which is all `$HIP` is ever compared against.
+ * one a repair writes.
+ *
+ * `$HIP` used to be reported here beside `$JOB`. It was dropped in v0.68: it is
+ * DERIVED from where the `.hip` sits and can never be anything else, so the row
+ * could only ever restate the scene's own location — a check that cannot fail,
+ * next to an action that could never run.
  */
 export function defaultsRowsFor(
-  scanned: { job: string; hipDir: string },
+  scanned: { job: string },
   charFolder: string,
-  houdiniDir: string,
 ): Array<DefaultsRow> {
   const row = (
     key: DefaultsRow['key'],
@@ -99,17 +98,7 @@ export function defaultsRowsFor(
       reason,
     }
   }
-  return [
-    row('job', 'Project folder ($JOB)', scanned.job, charFolder, true, ''),
-    row(
-      'hip',
-      'Scene location ($HIP)',
-      scanned.hipDir,
-      houdiniDir,
-      false,
-      '$HIP is wherever the scene file sits — moving it is your call, not something the studio can do safely.',
-    ),
-  ]
+  return [row('job', 'Project folder ($JOB)', scanned.job, charFolder, true, '')]
 }
 
 /** What the scan reports about a project's stored file references. */

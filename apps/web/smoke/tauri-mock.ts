@@ -348,6 +348,13 @@ export function installTauriMock(seed: TauriMockSeed): void {
         // junction — 'absent' is the truthful answer; the call itself is
         // recorded (see `calls`) so a spec can assert the sweep ran.
         return 'absent'
+      case 'remove_dir_if_empty':
+        // The retired `houdini-project` folder (v0.68), swept by the same
+        // generation funnel as the junctions above — so the mock has to know
+        // it or `unhandled` fills up on ordinary saves. The fixture world
+        // never contains one, and 'absent' is the truthful answer; the call is
+        // recorded (see `calls`) so a spec can assert the sweep ran.
+        return 'absent'
       case 'open_project_window': // opens a separate OS window on the desktop —
         return null //              recorded (see `calls`), nothing to do here
       case 'shell_open_file': // Explorer-style double-click (openScene's `.hip`/

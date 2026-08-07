@@ -42,7 +42,7 @@ import { copyDazScene } from './attachments'
 import { clearImageSrcCache, rebuildAvatarMaster, upscaleStoredAvatar } from './avatars'
 import { poseAssetFramesSchema, sceneWearablesSchema } from './native-types'
 import { hipRefPrefixFor } from '#/lib/scene-subfolder.ts'
-import { sweepExportJunctions } from './houdini'
+import { sweepExportJunctions, sweepHoudiniProjectDirs } from './houdini'
 import { CHARACTER_SCHEMA_VERSION, poseAssetCsvEra, RUNTIME_VERSION } from '@dth/rom'
 import {
   basename,
@@ -240,6 +240,12 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   /** Leftover `dth-exports` junctions removed by this generation's sweep (the
    *  retired junction feature) — Refresh assets reports them per character. */
   sweptJunctions: Array<string>
+  /** Empty leftover `houdini-project` folders removed by this generation (the
+   *  folder retired in v0.68) — reported like the junctions above. */
+  sweptProjectDirs: Array<string>
+  /** Leftover `houdini-project` folders that were NOT removed because they
+   *  hold something. The user's own output; theirs to look at and delete. */
+  keptProjectDirs: Array<string>
 }> {
   const { projectId, id, previousName, targets } = generateInput.parse(data)
   // Which artifact groups to (re)write. The editor's Generate writes both; a
@@ -276,6 +282,8 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
       scriptsDir: null,
       scriptsError: null,
       sweptJunctions: [],
+      sweptProjectDirs: [],
+      keptProjectDirs: [],
     }
   }
   // Exact ROM paths from the active release's pose scan; {} when the folder is
@@ -381,6 +389,15 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   const sweptJunctions = await sweepExportJunctions(versioned, outDir, project.houdiniSubdir).catch(
     () => [] as Array<string>,
   )
+  // Same idea for the `houdini-project` folder retired in v0.68: it could never
+  // collect Houdini's output ($HIP is derived from where the .hip sits, and Set
+  // Project only sets $JOB), so it is removed — but ONLY when empty. A pre-v0.64
+  // project had $JOB pointed at it and may hold real caches; that is the user's
+  // output, so a non-empty one is kept and reported instead.
+  const { removed: sweptProjectDirs, kept: keptProjectDirs } = await sweepHoudiniProjectDirs(
+    outDir,
+    project.houdiniSubdir,
+  ).catch(() => ({ removed: [] as Array<string>, kept: [] as Array<string> }))
   // The ONE character script embeds every linked scene's overrides and selects
   // the open scene at run time; generateAll also mints a per-scene PoseAsset CSV
   // for each ROM-override scene (Houdini has no runtime to select frames). Both
@@ -559,7 +576,15 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   await migrateRomAnimationFolders(versioned)
   await housekeepRomAnimations(versioned)
   await housekeepExportFolders(versioned, outDir, scenesRootAbs)
-  return { outDir, files, scriptsDir, scriptsError, sweptJunctions }
+  return {
+    outDir,
+    files,
+    scriptsDir,
+    scriptsError,
+    sweptJunctions,
+    sweptProjectDirs,
+    keptProjectDirs,
+  }
 }
 
 /**
@@ -1139,12 +1164,24 @@ async function refreshAllAssetsInner(refreshOpts: {
               res.sweptJunctions.length === 1 ? '' : 's'
             }`
           : undefined
+      // The retired houdini-project folder: removed silently when empty (the
+      // normal case — nothing ever wrote there), but a KEPT one is always
+      // reported. It holds the user's own output and only they can decide it
+      // is disposable, so it must not disappear from the report.
+      const projectDirNote =
+        res.sweptProjectDirs.length > 0 ? 'removed the empty houdini-project folder' : undefined
+      const keptProjectDirNote =
+        res.keptProjectDirs.length > 0
+          ? `kept houdini-project — it is not empty (${res.keptProjectDirs.join(', ')})`
+          : undefined
       results.push({
         project: project.name,
         character: character.name,
         ok: true,
         detail:
-          [sceneMoveNote, junctionNote, res.scriptsError].filter(Boolean).join(' — ') || undefined,
+          [sceneMoveNote, junctionNote, projectDirNote, keptProjectDirNote, res.scriptsError]
+            .filter(Boolean)
+            .join(' — ') || undefined,
       })
     } catch (e) {
       results.push({
