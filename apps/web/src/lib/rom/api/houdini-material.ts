@@ -318,8 +318,18 @@ export async function scanHoudiniMaterials({
   // TWO layers, same mtime key: the in-memory Map answers within a session, the
   // on-disk store survives a restart and is shared between windows. The disk
   // read costs one small JSON; the miss it saves costs a whole hython start.
-  const storePath = await scanStorePath(projectId, characterId)
-  const stored = await readScanStore(storePath)
+  // The persistent layer must never be able to FAIL a scan: it is an
+  // optimisation, and a broken cache degrading to "no cache" is correct where
+  // degrading to "no scan" is not. (Learned the hard way — an unguarded store
+  // path resolution took the Utils drawer's whole project list down with it.)
+  let storePath = ''
+  let stored = emptyScanStore()
+  try {
+    storePath = await scanStorePath(projectId, characterId)
+    stored = await readScanStore(storePath)
+  } catch {
+    storePath = ''
+  }
   const keys = await Promise.all(hipPaths.map(scanKey))
   const cached = new Map<string, MaterialScanProject>()
   const stale: Array<string> = []
@@ -362,7 +372,7 @@ export async function scanHoudiniMaterials({
       persist.push({ hipPath: hipPaths[i], key: cacheAt, project })
     }
   })
-  if (persist.length > 0) {
+  if (persist.length > 0 && storePath) {
     await writeScanStore(storePath, withScanResults(stored, persist, new Date().toISOString()))
   }
 
@@ -460,6 +470,39 @@ function insideFolder(hip: string, folder: string): boolean {
   const norm = (p: string) => p.trim().replace(/\\/g, '/').toLowerCase().replace(/\/+$/, '')
   const root = norm(folder)
   return root !== '' && norm(hip).startsWith(`${root}/`)
+}
+
+/**
+ * The character's projects as the store has them — no hython, no waiting.
+ *
+ * This is what the Utils drawer opens on: the background sweep is the only thing
+ * that scans a character's own projects now, so the drawer reads what that left
+ * and polls while it is still working. Projects OUTSIDE the character folder are
+ * absent by design — nothing scans them (see {@link scanCharacterHoudiniProjects}).
+ *
+ * Stale entries are skipped rather than served: a `.hip` saved in Houdini since
+ * the last sweep has a new mtime, so it simply isn't in the answer, and the
+ * caller sees it as "not scanned yet" while the sweep catches up.
+ */
+export async function fetchCachedHoudiniScans({
+  data,
+}: {
+  data: unknown
+}): Promise<Array<MaterialScanProject>> {
+  const { projectId, id } = characterScopeInput.parse(data)
+  if (!isTauri()) return []
+  try {
+    const { character, charFolder } = await prefillContext({ projectId, id })
+    const stored = await readScanStore(await scanStorePath(projectId, id))
+    const hits = await Promise.all(
+      character.houdiniProjects
+        .filter((hipPath) => insideFolder(hipPath, charFolder))
+        .map(async (hipPath) => freshScan(stored, hipPath, await scanKey(hipPath))),
+    )
+    return hits.filter((p): p is MaterialScanProject => p !== null)
+  } catch {
+    return []
+  }
 }
 
 /** One project's stored verdict, for the character page's cards. */

@@ -176,6 +176,7 @@ export {
   repairHoudiniDefaults,
   repathHoudiniReferences,
   restoreHoudiniBackup,
+  fetchCachedHoudiniScans,
   fetchHoudiniProjectStatus,
   scanCharacterHoudiniProjects,
   scanHoudiniMaterials,

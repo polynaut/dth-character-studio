@@ -38,6 +38,8 @@ import {
   repathHoudiniReferences,
   discardHoudiniBackups,
   restoreHoudiniBackup,
+  fetchCachedHoudiniScans,
+  scanCharacterHoudiniProjects,
   scanHoudiniMaterials,
   transferHoudiniMaterials,
 } from '#/lib/rom/api.ts'
@@ -250,6 +252,7 @@ interface ScanState {
 
 const EMPTY_SCAN: ScanState = { loading: false, error: '', projects: [] }
 
+
 export function HoudiniUtilsPanel({
   open,
   onClose,
@@ -370,13 +373,46 @@ export function HoudiniUtilsPanel({
     }
   }
 
-  // Scan the character's projects when the drawer opens. Opening a `.hip` costs
+  /**
+   * The character's own projects, READ from the store rather than scanned.
+   *
+   * The background sweep (`scanCharacterHoudiniProjects`) is the only thing that
+   * scans them now, so the drawer opens instantly on whatever that left and
+   * POLLS while it is still working — a sweep is always running by the time
+   * anyone can click Utils, because the character page starts one on mount.
+   * Polling stops as soon as anything arrives, or after the cap: a project the
+   * sweep cannot scan (no Houdini configured) must not spin forever.
+   */
+  async function loadCachedTargets(): Promise<Array<MaterialScanProject>> {
+    if (targets.length === 0) {
+      setTargetScan(EMPTY_SCAN)
+      return []
+    }
+    if (!projectId) return runScan(targets, setTargetScan)
+    setTargetScan({ loading: true, error: '', projects: [] })
+    // Nudge the sweep in case this drawer was reached without the page mounting
+    // one (it coalesces, so an already-running sweep is joined, not doubled).
+    void scanCharacterHoudiniProjects({ data: { projectId, id: character.id } })
+    const cached = await fetchCachedHoudiniScans({ data: { projectId, id: character.id } })
+    if (cached.length > 0) {
+      setTargetScan({ loading: false, error: '', projects: cached })
+      return cached
+    }
+    // Nothing stored yet. Scan HERE rather than waiting on the sweep: waiting is
+    // only safe if a sweep is guaranteed to deliver, and it isn't — a project
+    // outside the character folder is never swept, and a machine with no Houdini
+    // configured never produces anything. The sweep still warms the store, so
+    // the next open is the instant one.
+    return runScan(targets, setTargetScan)
+  }
+
+  // Read the character's projects when the drawer opens. Opening a `.hip` costs
   // real seconds, so this deliberately does NOT re-run on every render — only on
   // open, on an explicit rescan, and when the linked set changes.
   useEffect(() => {
     if (!open) return
     void (async () => {
-      const projects = await runScan(targets, setTargetScan)
+      const projects = await loadCachedTargets()
       // Preselect the card's own nodes — the panel was opened FROM that project.
       const from = initialHipPath
       if (!from) return
