@@ -458,9 +458,13 @@ const TARGET_NODE = {
   sectionCounts: [],
 }
 
-/** Open the demo character's Utils drawer with a source picked and selected —
- *  the state both Utils shots document. */
-async function openUtilsDrawer(page: Page): Promise<Locator> {
+/** Open the demo character's Utils drawer, scanned and ready. It opens on
+ *  General; the transfer shots switch tab themselves.
+ *
+ *  `staleJob` gives the project the pre-v0.64 `$JOB` (the shared
+ *  `houdini/houdini-project` folder, below the exports) so the General tab has
+ *  the case it exists for: one check that differs, the rest passing. */
+async function openUtilsDrawer(page: Page, staleJob = false): Promise<Locator> {
   const seed = buildSeed({ demo: true, activeProjectFile: P.dcsp, dialogPath: SOURCE_HIP })
   const settingsPath = `${P.appData}/settings.json`
   seed.files[settingsPath] = JSON.stringify({
@@ -471,12 +475,20 @@ async function openUtilsDrawer(page: Page): Promise<Locator> {
   seed.files[`${HOUDINI_INSTALL}/bin/hython.exe`] = 'hython-exe-fixture'
   seed.files[SOURCE_HIP] = 'hip-fixture'
   seed.materialScan = { [P.houdini]: [TARGET_NODE], [SOURCE_HIP]: [SOURCE_NODE] }
+  if (staleJob) seed.materialJob = { [P.houdini]: `${P.charFolder}/houdini/houdini-project` }
   await prime(page, seed)
   await page.goto('/')
   await page.getByRole('link', { name: /Kira/ }).click()
   await page.getByText(/custom ROM frames/).waitFor()
   await page.getByRole('button', { name: /^Utils/ }).click()
-  const drawer = page.getByRole('dialog')
+  return page.getByRole('dialog')
+}
+
+/** …and on the Material tab with a source picked — the state both transfer
+ *  shots document. */
+async function openMaterialTab(page: Page): Promise<Locator> {
+  const drawer = await openUtilsDrawer(page)
+  await drawer.getByRole('tab', { name: 'Material' }).click()
   // The open-scan landed once the character's own node is listed as a target
   // (opening from the card also preselects it).
   await drawer.getByRole('checkbox', { name: 'KiraDefault' }).waitFor()
@@ -486,13 +498,20 @@ async function openUtilsDrawer(page: Page): Promise<Locator> {
   return drawer
 }
 
+test('houdini-utils-general', async ({ page }) => {
+  const drawer = await openUtilsDrawer(page, true)
+  // The scan landed once the project card carries its verdicts.
+  await drawer.getByText('Project folder ($JOB)').waitFor()
+  await shoot(page, join(OUT, 'houdini-utils-general.png'), drawer)
+})
+
 test('houdini-utils-drawer', async ({ page }) => {
-  const drawer = await openUtilsDrawer(page)
+  const drawer = await openMaterialTab(page)
   await shoot(page, join(OUT, 'houdini-utils-drawer.png'), drawer)
 })
 
 test('houdini-utils-materials', async ({ page }) => {
-  const drawer = await openUtilsDrawer(page)
+  const drawer = await openMaterialTab(page)
   // The Materials list — the slot-by-slot cost of the source setup. The drawer
   // scrolls its OWN body, so bring the section up before framing it (`shoot`
   // deliberately doesn't scroll a fixed-overlay feature).

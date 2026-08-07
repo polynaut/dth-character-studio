@@ -501,6 +501,35 @@ async function prefillContext(input: { projectId: string; id: string }): Promise
   }
 }
 
+const restoreInput = z.object({
+  /** The project to put back — the file the failed run was saving. */
+  hipPath: z.string().min(1),
+  /** The `…_dthbak` file from that same run's report. The Rust side refuses
+   *  anything else, so a stale report can never aim this at another scene. */
+  backupPath: z.string().min(1),
+})
+
+/**
+ * Revert a project to the state it was in before a run that failed.
+ *
+ * Every real run takes one rolling backup before it saves, and none of that is
+ * shown while things work — a "backup written" line on every success is noise
+ * that teaches the eye to skip the one line that matters. The backup surfaces
+ * exactly once: as this offer, beside the entry that failed.
+ *
+ * A plain file copy in Rust rather than a Houdini round trip — hython would
+ * spend tens of seconds re-saving a scene that is already correct on disk, and
+ * that save is one more chance to damage what is being rescued. Restoring does
+ * NOT consume the backup: it is rolling, and the next failure needs it too.
+ */
+export async function restoreHoudiniBackup({ data }: { data: unknown }): Promise<void> {
+  const input = restoreInput.parse(data)
+  if (!isTauri()) {
+    throw new Error('Restoring a Houdini project backup needs the desktop app.')
+  }
+  await invoke('restore_houdini_backup', { request: input })
+}
+
 /**
  * Whether two node references point at the SAME material node.
  *

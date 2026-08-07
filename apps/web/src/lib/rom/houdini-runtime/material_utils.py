@@ -1014,7 +1014,7 @@ def op_scan(request):
             _load(path)
             entry["nodes"] = [_node_info(n) for n in _dth_nodes()]
             # Read in the SAME pass as the nodes — opening a `.hip` costs tens
-            # of seconds, and the Defaults tab must not pay it a second time.
+            # of seconds, and the General tab must not pay it a second time.
             entry["job"] = _scene_job()
             entry["hipDir"] = _norm_path(hou.getenv("HIP") or "")
             entry["refs"] = _project_ref_info()
@@ -1417,6 +1417,10 @@ def _backup(path):
     Deliberately NOT timestamped: a `.hiplc` here is ~8 MB and an unbounded
     trail would quietly fill the user's drive. The most recent pre-transfer
     state is what a mistake needs.
+
+    Taken on every real run and reported in `backupPath`, but the studio only
+    ever SHOWS it on a failure, where it becomes the offer to revert
+    (`restore_houdini_backup`). A run that worked has nothing to undo.
     """
     folder = os.path.join(os.path.dirname(path), "backup")
     name, ext = os.path.splitext(os.path.basename(path))
@@ -1636,6 +1640,11 @@ def op_transfer(request):
                         result["ok"] = False
                         result["error"] = "Could not save the project: %s" % exc
                         result["added"] = []
+                        # The backup travels with the FAILURE too, not only with
+                        # the successes: a save that raised is the one moment
+                        # the pre-run state is worth having, and the studio
+                        # offers it as a revert from exactly this field.
+                        result["backupPath"] = backup
                 continue
             for result in results:
                 if result["hipPath"] == hip and result["ok"]:
@@ -1782,6 +1791,9 @@ def op_transfer_skeleton(request):
                     if result["hipPath"] == hip and result["ok"]:
                         result["ok"] = False
                         result["error"] = "Could not save the project: %s" % exc
+                        # See the material transfer above — a failed save is
+                        # precisely when the pre-run backup has to be reachable.
+                        result["backupPath"] = backup
                 continue
             for result in results:
                 if result["hipPath"] == hip and result["ok"]:

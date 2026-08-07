@@ -119,7 +119,7 @@ export interface ScannedRefs {
   broken: ReadonlyArray<string>
 }
 
-/** A project as the Defaults tab sees it. */
+/** A project as the General tab sees it. */
 export interface ScannedProject {
   hipPath: string
   ok: boolean

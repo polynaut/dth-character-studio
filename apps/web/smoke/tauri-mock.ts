@@ -63,7 +63,7 @@ export interface TauriMockSeed {
    *  A path with no entry scans as a readable project with NO nodes, which is
    *  exactly what a scene that never got a DTH network looks like. */
   materialScan?: Record<string, Array<Record<string, unknown>>>
-  /** The `$JOB` a scanned project reports — the Defaults tab's input. Omit and
+  /** The `$JOB` a scanned project reports — the General tab's input. Omit and
    *  the project reads as unreadable, which the tab reports and never repairs. */
   materialJob?: Record<string, string>
 }
@@ -417,10 +417,10 @@ export function installTauriMock(seed: TauriMockSeed): void {
               nodes: seed.materialScan?.[norm(hipPath)] ?? [],
               // $JOB/$HIP come off the same scan in the real Python. The seed
               // may name a $JOB; without one the project reads as already
-              // correct, so the Defaults tab is quiet unless a spec asks for it.
+              // correct, so the General tab is quiet unless a spec asks for it.
               job: seed.materialJob?.[norm(hipPath)] ?? '',
               // No hython here to read real parms: a scanned project reports
-              // nothing to repath, so the Defaults tab's reference rows stay
+              // nothing to repath, so the General tab's reference rows stay
               // quiet unless a spec seeds them.
               refs: { collapsible: 0, foreign: 0, broken: [] },
               prefill: { fillable: [], missing: [] },
@@ -494,6 +494,17 @@ export function installTauriMock(seed: TauriMockSeed): void {
             backupPath: '',
           })),
         }
+      }
+      case 'restore_houdini_backup': {
+        // The revert a failed run offers: a plain file copy in the real Rust,
+        // so the fake does exactly that against its in-memory files. Refusing
+        // a missing backup here keeps the failure path honest — the studio
+        // reports it rather than truncating the project.
+        const backup = norm(args.request.backupPath)
+        const hip = norm(args.request.hipPath)
+        if (!isFile(backup)) throw new Error(`The backup is no longer there:\n${backup}`)
+        files.set(hip, mustRead(backup))
+        return null
       }
       case 'unreal_dth_present':
         // The linked Unreal project in the docs fixture has no DTH content yet

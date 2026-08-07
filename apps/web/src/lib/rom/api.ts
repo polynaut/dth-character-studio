@@ -165,6 +165,7 @@ export {
   prefillHoudiniNetwork,
   repairHoudiniDefaults,
   repathHoudiniReferences,
+  restoreHoudiniBackup,
   scanHoudiniMaterials,
   transferHoudiniMaterials,
 } from './api/houdini-material'

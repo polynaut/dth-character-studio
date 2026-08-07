@@ -280,6 +280,18 @@ The persisted `Character` shape is versioned (`CHARACTER_SCHEMA_VERSION` in
 in `apps/web/src/styles.css` — kit-only utility classes break without it.
 Export only what the app consumes (`packages/ui/src/index.ts` is the sole entry).
 
+A safety net is not a status line. Backups, quarantine copies and other
+"we kept the old one" mechanics are taken silently and surfaced ONLY where they
+can be acted on — the failure they exist for. The Houdini Utils drawer is the
+worked example: `material_utils.py` takes one rolling backup before every save,
+four report components used to print "· backup written" on every success, and
+the line trained the eye to skip exactly the case that mattered. It now appears
+once, as **Undo this run** beside a failed entry, wired to
+`restore_houdini_backup` (a plain Rust file copy — never a Houdini round trip,
+which would be another chance to damage what is being rescued). A report that
+narrates the net on every happy path is noise; one that offers it on the
+unhappy path is a feature.
+
 Modal footers: the Cancel button is always `variant="ghost"`, first child of
 the right-aligned `flex justify-end gap-2` footer row — immediately left of the
 affirmative/primary action (e.g. `bulk-delete-dialog.tsx`,

@@ -151,6 +151,7 @@ pub fn run() {
             houdini::launch_houdini_job,
             houdini::houdini_running,
             houdini_material::run_houdini_material_util,
+            houdini_material::restore_houdini_backup,
             junction::remove_junction,
             exports::move_exports,
             shellopen::shell_open_file,
