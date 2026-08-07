@@ -19,11 +19,13 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  Switch,
   useModifierHeld,
   useRefetchOnFocus,
 } from '@dth/ui'
 import houdiniLogo from '#/assets/houdini-logo.svg'
 import {
+  copyHoudiniProject,
   fetchHoudiniProjectStatus,
   fileExists,
   generatedHoudiniScenePath,
@@ -171,6 +173,12 @@ export function HoudiniProjectsField({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [generateOpen, setGenerateOpen] = useState(false)
+  // Bring an added project INTO the character's Houdini folder rather than
+  // linking it where it lies. Off by default: linking in place is what this
+  // field has always done, and a copy is the choice that moves files.
+  const [copyIn, setCopyIn] = useState(false)
+  /** With copy on: remove the original once the copy is on disk. */
+  const [moveIn, setMoveIn] = useState(false)
   // Remove dialog: "Keep houdini files" ON (the safe default) = unlink only;
   // OFF = also delete the scene file + the Houdini project folder from disk.
   // Only offered for GENERATED projects (living directly in the export dir) —
@@ -283,16 +291,49 @@ export function HoudiniProjectsField({
     // De-dupe case-insensitively on the normalised path (Windows): dropping
     // `d:/x.hip` after `D:\x.hip` was picked must not link the same project twice.
     const linked = new Set(character.houdiniProjects.map((p) => normalizePath(p).toLowerCase()))
-    const fresh = paths.filter((p) => !linked.has(normalizePath(p).toLowerCase()))
+    let fresh = paths.filter((p) => !linked.has(normalizePath(p).toLowerCase()))
     if (fresh.length === 0) return
     setBusy(true)
     setError('')
+    // COPY (or move) the file in first, when asked — what the character links is
+    // then the copy. A copied `.hip` arrives carrying the source's `$JOB` and
+    // absolute references, so the toast points at the Utils drawer; the card's
+    // checks will be flagging it as soon as the background sweep has run.
+    let copied = 0
+    if (copyIn && projectId) {
+      try {
+        // Sequential on purpose, not for politeness: the copy refuses a name
+        // already in the folder, and two dropped files sharing a basename would
+        // both pass that check at once if they ran together.
+        const bringIn = async (rest: Array<string>, done: Array<string>): Promise<Array<string>> => {
+          const [head, ...tail] = rest
+          if (head === undefined) return done
+          const dest = await copyHoudiniProject({
+            data: { projectId, id: character.id, hipPath: head, deleteOriginal: moveIn },
+          })
+          return bringIn(tail, [...done, dest])
+        }
+        const brought = await bringIn(fresh, [])
+        copied = brought.length
+        fresh = brought
+      } catch (e) {
+        setBusy(false)
+        setError(e instanceof Error ? e.message : String(e))
+        return
+      }
+    }
     await persistPatch(
       { houdiniProjects: [...character.houdiniProjects, ...fresh] },
       {
         toast:
           toastTitle ??
-          (fresh.length === 1 ? 'Linked Houdini project' : `Linked ${fresh.length} Houdini projects`),
+          (copied > 0
+            ? `${moveIn ? 'Moved' : 'Copied'} ${copied} Houdini project${
+                copied === 1 ? '' : 's'
+              } in — open Utils to repoint anything the copy left behind`
+            : fresh.length === 1
+              ? 'Linked Houdini project'
+              : `Linked ${fresh.length} Houdini projects`),
       },
     )
     setBusy(false)
@@ -411,9 +452,27 @@ export function HoudiniProjectsField({
           )}
         </div>
       )}
+      {/* Copying a project used to be refused outright: a copied `.hip` carries
+          the source's $JOB and its absolute references, so it imports the
+          character it came FROM, and the studio had no way to see or fix that.
+          It can now — the background scan finds exactly those faults, the card
+          flags them and the Utils drawer repairs them — so the choice is
+          offered, with linking still the default. */}
+      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        <label className="flex items-center gap-1.5">
+          <Switch checked={copyIn} onCheckedChange={setCopyIn} disabled={busy} />
+          Copy into the character&apos;s Houdini folder
+        </label>
+        {copyIn && (
+          <label className="flex items-center gap-1.5">
+            <Switch checked={moveIn} onCheckedChange={setMoveIn} disabled={busy} />
+            Move (remove the original)
+          </label>
+        )}
+      </div>
       <div className={`flex flex-wrap gap-2 ${hasProjects ? 'mt-3' : ''}`}>
         <Button variant="outline" size="sm" disabled={busy} onClick={() => void onAddPick()}>
-          <Plus /> {busy ? 'Linking…' : 'Add project'}
+          <Plus /> {busy ? 'Working…' : 'Add project'}
         </Button>
         {/* Generate: hython creates a ready-made DazToHue project from the
             user's template, with $JOB baked to <exportDir>/<projectFolder> —

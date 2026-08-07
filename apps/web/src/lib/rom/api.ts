@@ -158,6 +158,7 @@ export type {
 export {
   dismissHoudiniRun,
   fetchHoudiniRunProgress,
+  copyHoudiniProject,
   generatedHoudiniScenePath,
   generateHoudiniProject,
   removeGeneratedHoudiniProject,

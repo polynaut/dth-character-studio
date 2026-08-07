@@ -106,6 +106,33 @@ across Houdini or DazToHue updates. If the HDA isn't installed the project
 still generates (empty scene, Set Project baked) and the studio tells you to
 add the network from the DazToHue shelf.
 
+## Project checks — what the card warns about
+
+The studio checks a character's own Houdini projects in the background: opening
+the character page scans them (at most two at a time) and caches the result, so
+nothing waits on Houdini and a project you haven't touched since costs nothing to
+re-check. Projects linked from **outside** the character folder are left alone —
+those are yours, and the studio has no `$JOB` expectation for them.
+
+A project that needs attention gets a **Needs attention** marker on its card,
+with the reason in the tooltip:
+
+| What it says | What it means |
+| --- | --- |
+| `$JOB` points at … | the project's Set Project is another character's folder — every path it stores collapses against the wrong root |
+| import paths do not resolve | a `.dth`/FBX/Alembic reference points at a file that isn't there |
+| Not filled in yet | a DazToHue parameter the studio knows the value for is still blank |
+
+All of them are repaired from the **Utils** drawer's *General* tab
+(**Repair $JOB**, **Make paths portable**, **Fill network**) — which is exactly
+what makes **copying** a project workable: a copy arrives carrying the source's
+`$JOB` and file references, the card tells you so, and three buttons fix it.
+
+> [!NOTE]
+> The checks cover `$JOB`, the DazToHue import paths and blank parameters. They
+> do **not** verify material texture paths — a clean card is not a promise that
+> every path in the scene resolves.
+
 ## Utils — copy a texture-baker setup between projects
 
 Setting up a **DazToHueMaterial** node is the most tedious part of the whole
