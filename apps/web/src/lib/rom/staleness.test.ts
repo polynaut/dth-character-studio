@@ -128,7 +128,7 @@ beforeEach(() => {
 // dthRelease/generatedDthVersion are dotted version strings (poseAssetCsvEra
 // compares them numerically; '2.4.3' is the first breaking era).
 const APP = { schema: CHARACTER_SCHEMA_VERSION, runtime: RUNTIME_VERSION, dthRelease: '2.4.3' }
-const BOTH = { hasDazLibrary: true, hasDthRelease: true }
+const BOTH = { hasDazLibrary: true, hasDthRelease: true, dimManifestsFolder: '' }
 
 function status(patch: Partial<api.CharacterAssetStatus> = {}): api.CharacterAssetStatus {
   return {
@@ -139,6 +139,7 @@ function status(patch: Partial<api.CharacterAssetStatus> = {}): api.CharacterAss
     runtimeVersion: RUNTIME_VERSION,
     generatedDthVersion: APP.dthRelease,
     hasScene: true,
+    scanDimPath: '',
     ...patch,
   }
 }
@@ -167,6 +168,36 @@ describe('characterStaleTargets / isCharacterStale', () => {
     expect(
       api.characterStaleTargets(status({ runtimeVersion: null }), APP, {
         ...BOTH,
+        hasDazLibrary: false,
+      }).runtime,
+    ).toBe(false)
+  })
+
+  it('a script whose baked scan arming differs from the DIM setting flags runtime', () => {
+    const DIM = 'C:/DAZ 3D/Install Manager/ManifestFiles'
+    const withDim = { ...BOTH, dimManifestsFolder: DIM }
+    // Script generated before the setting existed → scans nothing → regenerate.
+    expect(api.characterStaleTargets(status({ scanDimPath: '' }), APP, withDim).runtime).toBe(true)
+    // Script baked for a folder that MOVED → it reads a dead product database
+    // and would replace good results with all-unmatched noise → regenerate.
+    expect(
+      api.characterStaleTargets(status({ scanDimPath: 'D:/old/ManifestFiles' }), APP, withDim)
+        .runtime,
+    ).toBe(true)
+    // Matching arming (case/slash-insensitively) is current.
+    expect(
+      api.characterStaleTargets(
+        status({ scanDimPath: 'c:\\daz 3d\\install manager\\manifestfiles\\' }),
+        APP,
+        withDim,
+      ).runtime,
+    ).toBe(false)
+    // Setting cleared while the script still scans → also stale.
+    expect(api.characterStaleTargets(status({ scanDimPath: DIM }), APP, BOTH).runtime).toBe(true)
+    // Without a DAZ library there are no scripts to judge, arming included.
+    expect(
+      api.characterStaleTargets(status({ scanDimPath: '' }), APP, {
+        ...withDim,
         hasDazLibrary: false,
       }).runtime,
     ).toBe(false)

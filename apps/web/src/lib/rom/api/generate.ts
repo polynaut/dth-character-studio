@@ -41,7 +41,7 @@ import * as storage from '../storage'
 import { relativeInside } from '../storage/fs'
 import { copyDazScene } from './attachments'
 import { clearImageSrcCache, rebuildAvatarMaster, upscaleStoredAvatar } from './avatars'
-import { carryStoredProductsToMeta, ingestProductScans } from './products'
+import { carryStoredProductsToMeta, ingestProductScans, pruneProductScans } from './products'
 import { poseAssetFramesSchema, sceneWearablesSchema } from './native-types'
 import { hipRefPrefixFor } from '#/lib/scene-subfolder.ts'
 import { sweepExportJunctions, sweepHoudiniProjectDirs } from './houdini'
@@ -250,7 +250,7 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
    *  hold something. The user's own output; theirs to look at and delete. */
   keptProjectDirs: Array<string>
   /** App-internal files this generation relocated out of the character folder
-   *  into `.dcsmeta/characters/<folder>` (the one-time v0.69 move) — reported
+   *  into `.dcsmeta/characters/<folder>` (the one-time v0.68 move) — reported
    *  per character by Refresh assets. Empty once a character has migrated. */
   movedInternals: Array<string>
 }> {
@@ -278,17 +278,6 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
     if (location) cacheCharacterLocation(lib, id, location)
   }
   if (!location || !character) throw new Error(`Character ${id} not found`)
-  // Scene-suffixed PoseAsset names of EVERY stored override (active or not) at a
-  // given character name. Two consumers: the stale-artifact sweep further down,
-  // and the internals relocation right below — which may only touch names the
-  // studio itself wrote.
-  const overrideCsvNames = (name: string) =>
-    character.sceneOverrides.map((o) =>
-      poseAssetFileName({ ...character, name }, sceneOverrideSlug(o.scenePath)),
-    )
-  // The legacy-cased CSV (<name>_PoseAsset.csv) older versions wrote, before the
-  // file became <name>_pose_asset.csv.
-  const legacyPose = poseAssetFileName(character).replace(/_pose_asset\.csv$/, '_PoseAsset.csv')
   // Where this character's app-internal files live: the project's hidden meta
   // folder, keyed on the character's own folder (`.dcsmeta/characters/Ita`).
   // Everything the studio writes for itself goes there — the run log, the
@@ -297,16 +286,20 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   const metaDir = storage.characterMetaDir(project.path, location.relFolder, character.id)
   // …and the one-time move of the copies older builds left in the character
   // folder root. Runs before anything is written, on every generation, so a
-  // character migrates on its next save and a whole library on one Refresh.
-  const movedInternals = await migrateCharacterInternals(location.folderAbs, metaDir, [
-    ...CHARACTER_INTERNAL_FILES,
-    legacyPose,
-    poseAssetFileName(character),
-    ...overrideCsvNames(character.name),
-    ...(previousName
-      ? [poseAssetFileName({ ...character, name: previousName }), ...overrideCsvNames(previousName)]
-      : []),
-  ])
+  // character migrates on its next save and a whole library on one Refresh
+  // (relocateCharacterInternals is also called on Refresh's SKIP path, so a
+  // character with nothing stale still sheds its leftovers).
+  const movedInternals = await relocateCharacterInternals(
+    project.path,
+    location,
+    character,
+    previousName,
+  )
+  // Scene-suffixed PoseAsset names of EVERY stored override (active or not) at a
+  // given character name, and the legacy-cased CSV older versions wrote — the
+  // stale-artifact sweep's share of the owned-names rule the relocation uses.
+  const overrideCsvNames = (name: string) => overrideCsvNamesFor(character, name)
+  const legacyPose = legacyPoseName(character)
   // A scene-less character (created without a Daz scene; the editor is locked
   // until the primary is linked) generates NOTHING — its artifacts would embed
   // an empty scene. Every generation path funnels through here (save, create,
@@ -633,21 +626,74 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
 
 /**
  * Move the app's own per-character files out of the character folder root into
- * `.dcsmeta/characters/<folder>` — the one-time v0.69 relocation, run on every
+ * `.dcsmeta/characters/<folder>` — the one-time v0.68 relocation, run on every
  * generation because that is the one place every character passes through.
  *
  * `owned` is the exact list of names the studio writes for THIS character (see
  * {@link relocatableInternals}); nothing else in the folder is touched, so a
  * file the user put there can't be swept up by it. A destination that already
  * holds the name means this character has migrated and something wrote the old
- * path again (an older build sharing the project) — the character-folder copy
- * is then dropped rather than overwriting the current one.
+ * path again (an older build sharing the project) — whichever copy is NEWER
+ * wins (by mtime), because the old-path copy is then the fresher state that
+ * build produced (a just-written run log, a regenerated CSV) and dropping it
+ * would silently keep stale data authoritative. Unreadable mtimes fall back to
+ * keeping the destination.
  *
  * Best effort throughout: a locked file (Daz mid-write, a CSV open in Excel)
  * stays put and the next generation retries it. Returns what actually moved.
  * Unguarded by `isTauri()` on purpose — the first `readDir` throws in a browser
  * build and lands in the same catch, which keeps the rule under test.
  */
+/** Scene-suffixed PoseAsset names of EVERY stored override (active or not) at a
+ *  given character name. Feeds the owned-names rule: the internals relocation
+ *  and the stale-artifact sweep may only touch names the studio itself wrote. */
+function overrideCsvNamesFor(character: Character, name: string): Array<string> {
+  return character.sceneOverrides.map((o) =>
+    poseAssetFileName({ ...character, name }, sceneOverrideSlug(o.scenePath)),
+  )
+}
+
+/** The legacy-cased CSV (`<name>_PoseAsset.csv`) older versions wrote, before
+ *  the file became `<name>_pose_asset.csv`. */
+function legacyPoseName(character: Character): string {
+  return poseAssetFileName(character).replace(/_pose_asset\.csv$/, '_PoseAsset.csv')
+}
+
+/**
+ * The one-time move of app-internal files out of the character folder into its
+ * `.dcsmeta/characters/<folder>` home. Shared by every generation AND by
+ * Refresh assets' skip path — a character with nothing stale would otherwise
+ * keep its leftovers until some other cause regenerated it.
+ */
+async function relocateCharacterInternals(
+  projectPath: string,
+  location: storage.CharacterLocation,
+  character: Character,
+  previousName?: string,
+): Promise<Array<string>> {
+  const metaDir = storage.characterMetaDir(projectPath, location.relFolder, character.id)
+  return migrateCharacterInternals(location.folderAbs, metaDir, [
+    ...CHARACTER_INTERNAL_FILES,
+    legacyPoseName(character),
+    poseAssetFileName(character),
+    ...overrideCsvNamesFor(character, character.name),
+    ...(previousName
+      ? [
+          poseAssetFileName({ ...character, name: previousName }),
+          ...overrideCsvNamesFor(character, previousName),
+        ]
+      : []),
+  ])
+}
+
+/** Whether `a` was modified more recently than `b`. Missing mtimes → false —
+ *  the caller keeps its destination copy when age cannot be compared. */
+async function newerThan(a: string, b: string): Promise<boolean> {
+  const [sa, sb] = await Promise.all([stat(a), stat(b)])
+  if (!sa.mtime || !sb.mtime) return false
+  return sa.mtime.getTime() > sb.mtime.getTime()
+}
+
 async function migrateCharacterInternals(
   charFolderAbs: string,
   metaDir: string,
@@ -664,8 +710,16 @@ async function migrateCharacterInternals(
         try {
           const from = joinPath(charFolderAbs, name)
           const to = joinPath(metaDir, name)
-          if (await exists(to)) await remove(from)
-          else await rename(from, to)
+          if (await exists(to)) {
+            if (await newerThan(from, to)) {
+              await remove(to)
+              await rename(from, to)
+            } else {
+              await remove(from)
+            }
+          } else {
+            await rename(from, to)
+          }
           return name
         } catch {
           return '' // locked / in use — it relocates on a later generation
@@ -1049,7 +1103,11 @@ async function refreshAllAssetsInner(refreshOpts: {
       : null
   const catalog = await fetchPoseAssetsCurrent()
   const activeRelease = catalog.error ? '' : catalog.version
-  const opts = { hasDazLibrary, hasDthRelease: activeRelease !== '' }
+  const opts = {
+    hasDazLibrary,
+    hasDthRelease: activeRelease !== '',
+    dimManifestsFolder: settings.dimManifestsFolder,
+  }
   const app = { schema: CHARACTER_SCHEMA_VERSION, runtime: RUNTIME_VERSION, dthRelease: activeRelease }
 
   // Pass 1 — gather every character with its staleness, so we can tell a targeted
@@ -1142,9 +1200,9 @@ async function refreshAllAssetsInner(refreshOpts: {
   }
 
   // The per-character runtime probes are independent small reads — batch them.
-  const runtimeVersions = await mapWithConcurrency(gathered, RUNTIME_READ_CONCURRENCY, (g) =>
+  const runtimeInfos = await mapWithConcurrency(gathered, RUNTIME_READ_CONCURRENCY, (g) =>
     hasDazLibrary
-      ? storage.readScriptRuntimeVersion(settings.dazLibraryFolder, g.project.name, g.character)
+      ? storage.readScriptRuntimeInfo(settings.dazLibraryFolder, g.project.name, g.character)
       : Promise.resolve(null),
   )
   const items = gathered.map((g, i) => {
@@ -1153,9 +1211,10 @@ async function refreshAllAssetsInner(refreshOpts: {
       project: g.project.name,
       character: g.character.name,
       schemaVersion: g.character.schemaVersion,
-      runtimeVersion: runtimeVersions[i],
+      runtimeVersion: runtimeInfos[i]?.version ?? null,
       generatedDthVersion: g.character.generatedDthVersion,
       hasScene: Boolean(g.character.scenePath),
+      scanDimPath: runtimeInfos[i]?.scanDimPath ?? null,
     }
     return { ...g, targets: characterStaleTargets(status, app, opts) }
   })
@@ -1191,6 +1250,11 @@ async function refreshAllAssetsInner(refreshOpts: {
     const regenDaz = force || targets.runtime || targets.schema
     const regenHoudini = force || targets.csv || targets.schema
     if (!regenSchema && !regenDaz && !regenHoudini) {
+      // Not stale ≠ nothing to do: a character skipped here would keep any
+      // old-path internals (e.g. a scene-less one, whose runtime/csv can never
+      // read stale) until some other cause regenerated it. The relocation is
+      // idempotent and cheap — one readDir when there is nothing to move.
+      await relocateCharacterInternals(project.path, item.location, character)
       skipped += 1
       continue
     }
@@ -1231,6 +1295,12 @@ async function refreshAllAssetsInner(refreshOpts: {
       // the "bring everything in line" button, and a batch that scanned ten
       // characters would otherwise wait for each one's page to be opened.
       await ingestProductScans(project, location.relFolder, character.id)
+      // And drop stored scans for scenes this character no longer links — the
+      // same prune every save runs, so Refresh converges the store too.
+      await pruneProductScans(project, location.relFolder, character.id, [
+        fresh.scenePath,
+        ...fresh.extraScenes,
+      ])
       // v26 layout migration: move root-dwelling scene files into their
       // per-scene subfolders (primary → "primary", extras → sanitized names).
       // Soft-fails — a scene locked by an open Daz must not fail the whole
@@ -1363,6 +1433,10 @@ export interface CharacterAssetStatus {
    *  without a scene, editor locked) generates nothing, so its script/CSV can
    *  never be stale — only its schema counts. */
   hasScene: boolean
+  /** The DIM manifests folder baked into the script's product-scan block; ''
+   *  when the script scans nothing, `null` when no script exists. Compared
+   *  against the CURRENT setting — see {@link characterStaleTargets}. */
+  scanDimPath: string | null
 }
 
 export interface AssetVersionReport {
@@ -1396,11 +1470,30 @@ export interface StaleTargets {
   csv: boolean
 }
 
+/** Judging opts for {@link characterStaleTargets}: which app-side inputs exist,
+ *  plus the CURRENT DIM manifests folder (settings) for the scan-arming check. */
+export interface StaleJudgeOpts {
+  hasDazLibrary: boolean
+  hasDthRelease: boolean
+  /** `settings.dimManifestsFolder` — '' when unset. */
+  dimManifestsFolder: string
+}
+
+/** Path equality the way the scan config compares: trimmed, forward slashes,
+ *  case-insensitive (Windows paths). */
+function samePath(a: string, b: string): boolean {
+  const norm = (p: string) => p.trim().replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+  return norm(a) === norm(b)
+}
+
 /**
  * Which artifacts are out of date versus what the app now produces:
  *  - `schema`: JSON below CHARACTER_SCHEMA_VERSION.
- *  - `runtime`: script missing or older than RUNTIME_VERSION — judged only when a
- *    DAZ library is configured (no library → no scripts to compare).
+ *  - `runtime`: script missing or older than RUNTIME_VERSION, or its baked
+ *    product-scan arming no longer matches the DIM manifests setting (set after
+ *    generation, cleared, or the folder moved — a stale baked path reads a dead
+ *    product database and replaces good results with all-unmatched noise).
+ *    Judged only when a DAZ library is configured (no library → no scripts).
  *  - `csv`: the CSV's DTH *era* differs from the active release's era — judged only
  *    when a DTH release is configured. Needs NO DAZ library: the CSV and its
  *    provenance live in the project folder / JSON.
@@ -1410,14 +1503,16 @@ export interface StaleTargets {
 export function characterStaleTargets(
   c: CharacterAssetStatus,
   app: AssetVersionReport['app'],
-  opts: { hasDazLibrary: boolean; hasDthRelease: boolean },
+  opts: StaleJudgeOpts,
 ): StaleTargets {
   return {
     schema: c.schemaVersion < app.schema,
     runtime:
       c.hasScene &&
       opts.hasDazLibrary &&
-      (c.runtimeVersion === null || c.runtimeVersion < app.runtime),
+      (c.runtimeVersion === null ||
+        c.runtimeVersion < app.runtime ||
+        !samePath(c.scanDimPath ?? '', opts.dimManifestsFolder)),
     csv:
       c.hasScene &&
       opts.hasDthRelease &&
@@ -1429,7 +1524,7 @@ export function characterStaleTargets(
 export function isCharacterStale(
   c: CharacterAssetStatus,
   app: AssetVersionReport['app'],
-  opts: { hasDazLibrary: boolean; hasDthRelease: boolean },
+  opts: StaleJudgeOpts,
 ): boolean {
   const t = characterStaleTargets(c, app, opts)
   return t.schema || t.runtime || t.csv
@@ -1466,9 +1561,9 @@ export async function detectAssetVersions(): Promise<AssetVersionReport> {
     for (const character of chars) gathered.push({ project, character })
   }
   // Independent small reads — batched (the sequential awaits dominated big libraries).
-  const runtimeVersions = await mapWithConcurrency(gathered, RUNTIME_READ_CONCURRENCY, (g) =>
+  const runtimeInfos = await mapWithConcurrency(gathered, RUNTIME_READ_CONCURRENCY, (g) =>
     hasDazLibrary
-      ? storage.readScriptRuntimeVersion(settings.dazLibraryFolder, g.project.name, g.character)
+      ? storage.readScriptRuntimeInfo(settings.dazLibraryFolder, g.project.name, g.character)
       : Promise.resolve(null),
   )
   const characters: Array<CharacterAssetStatus> = gathered.map((g, i) => ({
@@ -1476,13 +1571,18 @@ export async function detectAssetVersions(): Promise<AssetVersionReport> {
     project: g.project.name,
     character: g.character.name,
     schemaVersion: g.character.schemaVersion,
-    runtimeVersion: runtimeVersions[i],
+    runtimeVersion: runtimeInfos[i]?.version ?? null,
     generatedDthVersion: g.character.generatedDthVersion,
     hasScene: Boolean(g.character.scenePath),
+    scanDimPath: runtimeInfos[i]?.scanDimPath ?? null,
   }))
 
   const staleCount = characters.filter((c) =>
-    isCharacterStale(c, app, { hasDazLibrary, hasDthRelease }),
+    isCharacterStale(c, app, {
+      hasDazLibrary,
+      hasDthRelease,
+      dimManifestsFolder: settings.dimManifestsFolder,
+    }),
   ).length
   return {
     app,

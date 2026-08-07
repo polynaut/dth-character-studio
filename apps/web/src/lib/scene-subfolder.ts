@@ -22,18 +22,16 @@ export const PRIMARY_SCENE_SUBFOLDER = 'primary'
 export const EXPORTS_FOLDER = 'dth-exports'
 
 /**
- * The character's ONE Houdini project folder, below its Houdini subfolder:
- * `<character folder>/<project houdiniSubdir>/houdini-project/`. Fixed name,
- * created once by the first "Generate project" and REUSED by every later one —
- * all of a character's `.hiplc` files Set-Project to the same folder, so
- * `$JOB` means one thing for the character.
+ * RETIRED (v0.68) — nothing creates this folder anymore. It was the fixed-name
+ * per-character "project" folder (`<char>/<houdiniSubdir>/houdini-project/`)
+ * every generated `.hiplc` Set-Projected to; since v0.64 `$JOB` is the
+ * CHARACTER folder, and the folder itself only ever stayed empty (Houdini's
+ * own output is `$HIP`-relative and landed beside the scenes).
  *
- * It holds no exports — the real export root lives beside the scenes
- * (`<char>/<dazSubdir>/dth-exports`), reached from a `.hip` by plain `..`
- * navigation. (Earlier versions planted `dth-exports` JUNCTIONS here and
- * beside the `.hip`s; killed in favor of relative paths — reparse points and
- * Perforce/backup tooling never got along, and the doubled folder confused
- * every file picker. The junction sweep in Refresh assets removes leftovers.)
+ * The constant survives solely for the SWEEPS: `sweepHoudiniProjectDirs`
+ * removes empty leftovers (a non-empty one — real pre-v0.64 `$JOB` output —
+ * is kept and reported), and `sweepExportJunctions` still looks inside for
+ * leftover `dth-exports` junctions so the folder can empty and then go.
  */
 export const HOUDINI_PROJECT_FOLDER = 'houdini-project'
 

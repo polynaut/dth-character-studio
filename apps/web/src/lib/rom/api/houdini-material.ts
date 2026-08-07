@@ -8,7 +8,7 @@ import { HOUDINI_SCRIPTS_FOLDER } from '../houdini-jobs'
 import { normalizePath } from '#/lib/path.ts'
 import { stripTrailingSeparators } from '#/lib/path-trim.ts'
 import { hipRefPrefixFor } from '#/lib/scene-subfolder.ts'
-import { buildHoudiniPrefill } from '../houdini-jobs'
+import { buildHoudiniPrefill, sceneDthPath } from '../houdini-jobs'
 import { characterScenesRoot } from './execute'
 import { normalizeRelFolder } from '../library'
 import {
@@ -799,23 +799,35 @@ export async function prefillHoudiniNetwork({
   }
   const { character, charFolder, scenesRootAbs, relative, finalExportAbs } =
     await prefillContext(input)
-  const targets = input.hipPaths.map((hipPath) => ({
-    hipPath,
-    values: buildHoudiniPrefill(character, {
-      hipRefPrefix: relative
-        ? hipRefPrefixFor([hipPath], charFolder, character.exportPath)
-        : '',
-      scenesRootAbs,
-      // The character's `export/` folder, per target for the same reason the
-      // import prefix is: how many `..` hops reach it depends on this `.hip`.
-      finalExportDir:
-        (relative ? hipRefPrefixFor([hipPath], charFolder, finalExportAbs) : '') || finalExportAbs,
-      // No scene picker here: this fills an EXISTING network, and which scene it
-      // imports is the network's own business. The primary is the only defensible
-      // default — and only BLANK parms are written, so a project already wired to
-      // another scene keeps every path it has.
-    }),
-  }))
+  const targets = input.hipPaths.map((hipPath) => {
+    const valuesFor = (scenePath?: string) =>
+      buildHoudiniPrefill(character, {
+        hipRefPrefix: relative
+          ? hipRefPrefixFor([hipPath], charFolder, character.exportPath)
+          : '',
+        scenesRootAbs,
+        scenePath,
+        // The character's `export/` folder, per target for the same reason the
+        // import prefix is: how many `..` hops reach it depends on this `.hip`.
+        finalExportDir:
+          (relative ? hipRefPrefixFor([hipPath], charFolder, finalExportAbs) : '') || finalExportAbs,
+      })
+    // No scene picker here — this fills an EXISTING network, and which scene it
+    // imports is the network's own business: op_prefill reads the network's set
+    // `import_character_dtu_file` and picks that scene's value set from
+    // `sceneValues` (keyed by the same absolute `.dth` path 456.py matches on),
+    // so a network wired to an outfit scene gets the OUTFIT's CSV offered to a
+    // blank parm, never the primary's. The primary `values` remain the fallback
+    // for a network with no import wired yet. Only BLANK parms are ever written.
+    const sceneValues = Object.fromEntries(
+      [character.scenePath, ...character.extraScenes].flatMap((scene) => {
+        if (!scene.trim()) return []
+        const dth = sceneDthPath(character, scene, scenesRootAbs)
+        return dth ? [[dth.toLowerCase(), valuesFor(scene)]] : []
+      }),
+    )
+    return { hipPath, values: valuesFor(undefined), sceneValues }
+  })
   return runMaterialUtil({ op: 'prefill', targets, dryRun: input.dryRun })
 }
 

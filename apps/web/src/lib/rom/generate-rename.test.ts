@@ -11,6 +11,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const files = new Map<string, string | Uint8Array>()
 const dirs = new Set<string>()
+/** Per-file mtimes for the stat mock (unset = epoch) — the both-exist branch of
+ *  the internals relocation keeps whichever copy is NEWER. */
+const mtimes = new Map<string, Date>()
+/** Paths whose rename fails (a locked file, Daz mid-write) — the relocation's
+ *  per-file catch must skip exactly these and still move the rest. */
+const lockedPaths = new Set<string>()
 
 function norm(p: string): string {
   let s = p.replace(/\\/g, '/')
@@ -82,6 +88,7 @@ vi.mock('@tauri-apps/plugin-fs', () => ({
   async rename(a: string, b: string) {
     a = norm(a)
     b = norm(b)
+    if (lockedPaths.has(a)) throw new Error(`EBUSY ${a}`)
     const remap = (k: string) => b + k.slice(a.length)
     for (const k of [...files.keys()]) {
       if (k === a || k.startsWith(`${a}/`)) {
@@ -98,7 +105,12 @@ vi.mock('@tauri-apps/plugin-fs', () => ({
   },
   async stat(p: string) {
     p = norm(p)
-    return { isDirectory: dirs.has(p), isFile: files.has(p), mtime: new Date(0), birthtime: new Date(0) }
+    return {
+      isDirectory: dirs.has(p),
+      isFile: files.has(p),
+      mtime: mtimes.get(p) ?? new Date(0),
+      birthtime: new Date(0),
+    }
   },
   async readDir(p: string) {
     p = norm(p)
@@ -129,6 +141,8 @@ import { generateCharacterFiles, removalSweepNames } from './api/generate'
 beforeEach(() => {
   files.clear()
   dirs.clear()
+  mtimes.clear()
+  lockedPaths.clear()
 })
 
 /** Seed a generatable character (same shape as staleness.test.ts: JCM off so no
@@ -268,18 +282,63 @@ describe('generateCharacterFiles relocates the app files into .dcsmeta', () => {
     expect(files.get(`${meta('/games/S', 'Kira')}/.last_rom_run.json`)).toBe('{"ok":true}')
   })
 
-  it('drops a character-folder copy rather than overwriting the migrated one', async () => {
+  it('drops a character-folder copy that is not newer than the migrated one', async () => {
     await storage.createProjectManifest('/games/T', 'T')
     const c = seedCharacter('/games/T', 'Kira', 'Kira')
     const dir = meta('/games/T', 'Kira')
     addDir(dir)
     files.set(`${dir}/.last_rom_run.json`, 'current')
-    // What an older build, sharing the project, would write to the old path.
+    mtimes.set(`${dir}/.last_rom_run.json`, new Date('2026-08-02T00:00:00Z'))
+    // What an older build, sharing the project, wrote to the old path — before
+    // the meta copy was last touched. (Uncomparable mtimes keep the meta copy
+    // too, the safe direction.)
     files.set('/games/T/Kira/.last_rom_run.json', 'stale')
+    mtimes.set('/games/T/Kira/.last_rom_run.json', new Date('2026-08-01T00:00:00Z'))
 
     await generateCharacterFiles({ data: { projectId: '/games/T', id: c.id } })
 
     expect(files.get(`${dir}/.last_rom_run.json`)).toBe('current')
     expect(files.has('/games/T/Kira/.last_rom_run.json')).toBe(false)
+  })
+
+  it('a locked file stays put without costing the others their move', async () => {
+    await storage.createProjectManifest('/games/V', 'V')
+    const c = seedCharacter('/games/V', 'Kira', 'Kira')
+    files.set('/games/V/Kira/.last_rom_run.json', 'log')
+    files.set('/games/V/Kira/.dth_execute_stamps.json', 'stamps')
+    lockedPaths.add('/games/V/Kira/.dth_execute_stamps.json')
+
+    await generateCharacterFiles({ data: { projectId: '/games/V', id: c.id } })
+
+    const dir = meta('/games/V', 'Kira')
+    // The unlocked file moved; the locked one waits for a later generation.
+    expect(files.get(`${dir}/.last_rom_run.json`)).toBe('log')
+    expect(files.get('/games/V/Kira/.dth_execute_stamps.json')).toBe('stamps')
+    expect(files.has(`${dir}/.dth_execute_stamps.json`)).toBe(false)
+
+    // …and that later generation completes the move once the lock is gone.
+    lockedPaths.clear()
+    await generateCharacterFiles({ data: { projectId: '/games/V', id: c.id } })
+    expect(files.get(`${dir}/.dth_execute_stamps.json`)).toBe('stamps')
+    expect(files.has('/games/V/Kira/.dth_execute_stamps.json')).toBe(false)
+  })
+
+  it('a NEWER character-folder copy replaces the stale migrated one', async () => {
+    await storage.createProjectManifest('/games/U', 'U')
+    const c = seedCharacter('/games/U', 'Kira', 'Kira')
+    const dir = meta('/games/U', 'Kira')
+    addDir(dir)
+    files.set(`${dir}/.last_rom_run.json`, 'stale-meta')
+    mtimes.set(`${dir}/.last_rom_run.json`, new Date('2026-08-01T00:00:00Z'))
+    // An older build ran a ROM AFTER this character migrated: its freshly
+    // written old-path log is the current state, and dropping it would keep
+    // stale data authoritative with no error.
+    files.set('/games/U/Kira/.last_rom_run.json', 'fresh')
+    mtimes.set('/games/U/Kira/.last_rom_run.json', new Date('2026-08-05T00:00:00Z'))
+
+    await generateCharacterFiles({ data: { projectId: '/games/U', id: c.id } })
+
+    expect(files.get(`${dir}/.last_rom_run.json`)).toBe('fresh')
+    expect(files.has('/games/U/Kira/.last_rom_run.json')).toBe(false)
   })
 })

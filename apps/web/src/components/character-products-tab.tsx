@@ -31,7 +31,7 @@ function dazProductUrl(sku: string): string {
  *
  * Read-only, deliberately. The results are picked up, parsed and stored without
  * being asked — every export run scans, and opening this page ingests whatever
- * Daz has left behind — so there is nothing here to approve. Before v0.70 this
+ * Daz has left behind — so there is nothing here to approve. Before v0.68 this
  * tab carried a "found vs stored" split with a Store button; the split existed
  * only because the storing was manual.
  *
@@ -129,8 +129,9 @@ function CharacterProductsTabImpl({
             the product database a scan matches against.{' '}
             <Link to="/settings" className="underline">
               Set it in Settings
-            </Link>{' '}
-            and the next export run fills this page in.
+            </Link>
+            ; the generated scripts then read as out of date, and once a save or Tools → Refresh
+            assets has renewed them, every export run fills this page in.
           </p>
         )}
 

@@ -3,8 +3,6 @@ import { expect, test } from '@playwright/test'
 import { P, buildSeed } from './fixtures.ts'
 import { installTauriMock } from './tauri-mock.ts'
 
-const OUT =
-  'C:/Users/jebba/AppData/Local/Temp/claude/D--Development-dth-character-studio/5c383248-8ec2-47c6-930f-324d9e751ecb/scratchpad'
 const FOOTER = 'div.fixed.inset-x-0.bottom-0'
 
 // The docked scene status bar: hidden while the Daz-scenes cards are on screen,
@@ -35,7 +33,6 @@ test('scene footer docks on scroll and switches scene', async ({ page }) => {
   await page.waitForTimeout(450)
   expect((await footer.boundingBox())!.y, 'shown when scrolled').toBeLessThan(vh)
   await expect(footer.getByText('primary'), 'primary tag').toBeVisible()
-  await page.screenshot({ path: OUT + '/footer-down.png' })
 
   // Click the extra scene's pill → it becomes the selected (prominent, ringed) scene.
   await footer.getByText('Beach', { exact: false }).click()
@@ -85,7 +82,6 @@ test('scene footer rail scrolls with many scenes', async ({ page }) => {
   const rail = page.locator(`${FOOTER} .overflow-x-auto`)
   const box = await rail.evaluate((el) => ({ sw: el.scrollWidth, cw: el.clientWidth }))
   expect(box.sw, 'rail overflows → scrollable').toBeGreaterThan(box.cw)
-  await page.screenshot({ path: OUT + '/footer-many.png' })
 })
 
 // The observer keys off the scene-cards GRID, not the whole panel: once the cards

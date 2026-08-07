@@ -248,7 +248,7 @@ describe('generated script artwork', () => {
   it('writes no artwork for a script that has none — the product scan', async () => {
     await setup()
     const c = seedCharacter({ exportPath: 'D:/exports' })
-    // A DIM manifests folder is what arms the product scan (since v0.70 — the
+    // A DIM manifests folder is what arms the product scan (since v0.68 — the
     // per-project toggle only decides whether the tab is shown), so setting it
     // is what makes the per-character scan script get emitted.
     await storage.saveSettings({

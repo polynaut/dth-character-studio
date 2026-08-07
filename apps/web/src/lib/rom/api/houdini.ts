@@ -84,7 +84,7 @@ export function generatedHoudiniScenePath(houdiniDir: string, sceneName: string)
  * Remove leftover `dth-exports` junctions from EXACTLY the places the old
  * junction feature created them: beside every linked `.hip` inside the
  * character folder (the {@link hipAnchorDirs} set), the character's houdini
- * folder itself, and the shared `houdini-project/` folder. Runs from the one
+ * folder itself, and the (retired) `houdini-project/` folder. Runs from the one
  * funnel every generation already goes through (`generateCharacterFiles`), so
  * existing projects lose their junctions on the next save/refresh without a
  * separate migration.
@@ -262,6 +262,22 @@ export async function generateHoudiniProject({
   const location = await locateCharacter(lib, id)
   const character = location ? await storage.getCharacter(lib, id, location.definitionAbs) : null
   if (!location || !character) throw new Error(`Character ${id} not found`)
+  // A picked scene that went stale while the dialog was open (renamed/unlinked
+  // in another window) must ERROR, not silently wire the primary: the user asked
+  // for a specific scene and would get a project that looks right and imports
+  // the wrong export set. (buildHoudiniPrefill's own primary fallback stays, as
+  // the pure-layer backstop for callers that pass nothing.)
+  if (dazScenePath.trim()) {
+    const wanted = dazScenePath.trim().replace(/\\/g, '/').toLowerCase()
+    const linked = [character.scenePath, ...character.extraScenes].map((s) =>
+      s.trim().replace(/\\/g, '/').toLowerCase(),
+    )
+    if (!linked.includes(wanted)) {
+      throw new Error(
+        `The picked Daz scene is not linked to this character anymore:\n${dazScenePath}\nReopen the dialog and pick again.`,
+      )
+    }
+  }
   // `$JOB` is the CHARACTER folder (v0.64), not the shared project folder.
   // Measured with `hou.text.collapseCommonVars` — the call Houdini's file picker
   // uses to turn a chosen path back into a variable: a path ABOVE `$HIP`
@@ -381,11 +397,9 @@ const removeInput = charScopeInput.extend({
  * folder (the generated layout) — anything else refuses, so a hand-linked
  * project can never be deleted through this path.
  *
- * The `houdini-project` folder is deliberately NOT touched: it is shared by
- * every one of the character's projects now (schema v29), so deleting it with
- * one project would break the others' `$JOB`. It holds no exports either — just
- * whatever Houdini itself writes — so leaving it costs nothing, and the next
- * Generate project reuses it.
+ * Only the `.hiplc` goes: the retired `houdini-project` folder (nothing
+ * creates it since v0.68) is `sweepHoudiniProjectDirs`' job — swept when
+ * empty, kept and reported when it holds real pre-v0.64 `$JOB` output.
  */
 export async function removeGeneratedHoudiniProject({ data }: { data: unknown }): Promise<void> {
   const { projectId, id, hipPath } = removeInput.parse(data)
@@ -524,7 +538,11 @@ export async function startHoudiniExport({
     resultPath,
     // A FALLBACK only: 456.py fills a node's blank export_directory with this
     // and restores whatever the user had set (their project, their choice).
-    exportDirectory: character.exportPath,
+    // The character's FINAL export folder — where Houdini WRITES for Unreal —
+    // never `character.exportPath`, which is the regenerable `dth-exports`
+    // intermediate the imports READ (the same wrong target Generate project
+    // used to bake; see buildHoudiniPrefill's exportDirectory note).
+    exportDirectory: joinPath(location.folderAbs, normalizeRelFolder(project.exportSubdir)),
     scenesRootAbs,
     // This Houdini instance exists to carry the batch — 456.py closes it again
     // after the final result lands ("Open only" never reaches this code path).

@@ -236,8 +236,9 @@ older runtimes as stale.
 - **THREE folders are seeded into every new character** (`seedCharacterFolders`),
   each named by a per-project manifest field: `dazSubdir` (`daz3d` — the Daz
   scenes, and the `dth-exports` root inside it), `houdiniSubdir` (`houdini`,
-  gated by `createHoudiniSubdir` — the `.hiplc` files + the shared
-  `houdini-project`), and `exportSubdir` (`export`) — the character's FINAL
+  gated by `createHoudiniSubdir` — the `.hiplc` files; a `houdini-project`
+  subfolder appeared inside it until v0.68, retired since — see the Generate
+  Houdini project entry), and `exportSubdir` (`export`) — the character's FINAL
   export folder, where what Houdini generates for Unreal lands. Generation
   re-creates that last one too, so characters predating the setting get theirs.
   DON'T confuse the two "export" folders: `<char>/<daz>/dth-exports` is the
@@ -307,14 +308,21 @@ older runtimes as stale.
   folder (`lib/houdini-version.ts` pairs install `Houdini X.Y.z` ↔ docs
   `houdiniX.Y`; no match = hard error + live Settings warning) — inherited
   env resolved the prefs elsewhere and no otls loaded (measured). It bakes
-  `$JOB = <character>/<houdiniSubdir>/houdini-project` (hou.putenv — the
-  programmatic Set Project, saved with the hip) and saves `<name>.hiplc` in
-  the houdini folder NEXT TO it: `houdini/<name>.hiplc` +
-  `houdini/houdini-project/`. That project folder is ONE per character with a
-  FIXED name (schema v29, `HOUDINI_PROJECT_FOLDER`): the first generate
-  creates it, every later one reuses it, so all of a character's projects
-  share a `$JOB`. Consequently `removeGeneratedHoudiniProject` deletes only
-  the `.hiplc` — deleting the shared folder would break the other projects.
+  `$JOB = <character folder>` (hou.putenv — the programmatic Set Project,
+  saved with the hip; the character folder since v0.64, because only a `$JOB`
+  ABOVE `$HIP` lets Houdini's file picker collapse hand-picked export paths to
+  `$JOB/…` and keep the project movable) and saves `<name>.hiplc` in the
+  houdini folder: `houdini/<name>.hiplc`. Every one of a character's scenes
+  sits in that one folder, so they share one `$HIP` and Houdini's own
+  `$HIP`-relative output (render/, geo/, backup/) collects there for free.
+  A dedicated `houdini-project/` subfolder (one per character, fixed name)
+  was created beside the scenes until v0.68 and could never attract any of
+  that output — `$HIP` is DERIVED from where the hip sits and Set Project
+  sets `$JOB`, not `$HIP` — so it stayed empty; `sweepHoudiniProjectDirs`
+  (api/houdini.ts) now removes the EMPTY leftovers on every generation (Rust
+  `remove_dir_if_empty`, symlink-refusing, houdini.rs), and a NON-empty one
+  (a pre-v0.64 project's real `$JOB` output) is kept and named in the Refresh
+  assets report. `removeGeneratedHoudiniProject` deletes only the `.hiplc`.
   Generated projects (hip directly in the houdini folder) are studio-managed;
   hand-linked ones stay unlink-only. Returns whether the network was created
   (HDA not visible to hython → empty scene, UI says "add it from the shelf");
@@ -336,7 +344,7 @@ older runtimes as stale.
   prefix as the CSVs (`$HIP/../<dazSubdir>/dth-exports/...` when the gate
   passes and the project's path style is `hip`), absolute otherwise.
   Two things that look like details and are not:
-  - **`scenePath` picks the scene** (v0.71 — the Generate dialog's picker, shown
+  - **`scenePath` picks the scene** (v0.68 — the Generate dialog's picker, shown
     only with more than one linked scene; an unknown value falls back to the
     primary). Every scene exports into its OWN `dth-exports/<subfolder>/` under
     a scene-carrying name, so the pick IS the wiring: before it, a multi-scene
@@ -348,7 +356,7 @@ older runtimes as stale.
     this is where Houdini WRITES for Unreal — the character's `export/` folder
     (the project's `exportSubdir`), resolved by the CALLER since only the host
     knows that subdir, and given its own `hipRefPrefixFor` against that folder
-    so it comes out `$HIP/../export/`. Until v0.71 it carried the export ROOT,
+    so it comes out `$HIP/../export/`. Until v0.68 it carried the export ROOT,
     quietly aiming Houdini's output into the throwaway tree. The Skin node's clothing-vs-body shape lists are NOT
   prefilled: they are black-boxed multiparms, the export files may not exist
   at generation time, and the node ships its own "Auto-Populate Skinned

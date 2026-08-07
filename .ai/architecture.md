@@ -222,8 +222,8 @@ rewritten before every Houdini run (`houdini-jobs.ts`). Generated Daz scripts in
 in `storage/projects.ts`. Everything the studio writes FOR ITSELF about one
 character: `.dth_execute_stamps.json`, `.dth_export_folders.json`,
 `.last_rom_run.json`, the Daz-written `dth_rom_run_log.json` transport, the
-generated `<Name>_pose_asset.csv` (plus per-scene variants), and — since v0.70 —
-`products.json`. They all sat in the character folder root until v0.69, mixed in
+generated `<Name>_pose_asset.csv` (plus per-scene variants), and — since v0.68 —
+`products.json`. They all sat in the character folder root until v0.68, mixed in
 with the user's scenes and `.hip`s (`products.json`'s data sat on the definition).
 
 Three consequences worth knowing before touching this:
@@ -246,7 +246,7 @@ Three consequences worth knowing before touching this:
   character (`relocatableInternals`) — never a `*_pose_asset.csv` pattern, which
   would also match a CSV the user copied back out of an export folder.
 
-### Houdini project scans are CACHED and checked (v0.71)
+### Houdini project scans are CACHED and checked
 
 - **Two stores, one format** (`lib/rom/houdini-project-cache.ts`): a character's
   own projects in its `.dcsmeta` folder, everything else (the Utils drawer's
@@ -290,7 +290,7 @@ Three consequences worth knowing before touching this:
   `geo/`, `render/` are `$HIP`-relative output belonging to the project it was
   produced in.
 
-### Daz product scanning (v0.70: unattended)
+### Daz product scanning (v0.68: unattended)
 
 - **`settings.dimManifestsFolder` arms it, not `project.dazProductsEnabled`.**
   That folder IS the product database, so it is the only prerequisite; the

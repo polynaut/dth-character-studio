@@ -208,6 +208,15 @@ GH_REPO=polynaut/dth-character-studio \
 - Dependabot PRs are exempt — which means product-relevant dependency bumps never
   release themselves. The `/dep-release` skill (`.claude/skills/dep-release`)
   finds and ships them.
+- **Never date a change by guessing its release version.** A comment or `.ai/`
+  line like "since v0.70" written while the PR is open is a guess: the release
+  train batches every merged changeset into ONE version, so four feature PRs
+  assuming their own bumps each ship under the same number and the guesses are
+  wrong forever. *Earned by:* the v0.68 train (#730–#735), which landed 14
+  references to v0.69–v0.71 — versions that will never carry those features —
+  across `.ai/` docs and code comments. If a version stamp is worth writing,
+  write the CURRENT unreleased target (the version PR's number) — or describe
+  the change by feature ("since the meta-folder move"), which can't go stale.
 - Never tag or publish by hand — see `.ai/release.md`.
 
 ## Character-schema change ritual
