@@ -1,4 +1,4 @@
-import { exists, mkdir, readTextFile, writeTextFile } from '@tauri-apps/plugin-fs'
+import { exists, mkdir, readTextFile } from '@tauri-apps/plugin-fs'
 import { isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
@@ -51,6 +51,14 @@ export async function fetchDetectedFiles({ data }: { data: unknown }): Promise<D
   const project = await resolveProject(projectId)
   const location = await locateCharacter(charsRoot(project), id)
   if (!location) return EMPTY
+  // THROW on an unreachable folder rather than answering "no files": the walk
+  // below tolerates unreadable SUBfolders (returns what it can), but a vanished
+  // root means the answer is unknowable — and the hook's contract is that an
+  // error keeps the last answer, so a share blip must not blank the banner and
+  // eat the session's dismiss.
+  if (!(await exists(location.folderAbs))) {
+    throw new Error(`Character folder not reachable: ${location.folderAbs}`)
+  }
   const [relFiles, ignored] = await Promise.all([
     storage.walkFiles(location.folderAbs, '', detectSkipDir),
     readIgnored(ignorePath(project.path, location.relFolder, id)),
@@ -89,5 +97,9 @@ export async function ignoreDetectedFiles({ data }: { data: unknown }): Promise<
     .filter((rel) => !seen.has(rel.toLowerCase()))
   if (fresh.length === 0) return
   await mkdir(storage.characterMetaDir(project.path, location.relFolder, id), { recursive: true })
-  await writeTextFile(storePath, detectedIgnoreJson([...existing, ...fresh]))
+  // Atomic like every other studio-written store: a crash mid-write must not
+  // cost the whole skip list (tolerant parsing would read garbage as "skip
+  // nothing" and re-offer every skipped file). Read-modify-write is unguarded —
+  // the wizard is the only writer and its busy flag serializes the clicks.
+  await storage.writeTextFileAtomic(storePath, detectedIgnoreJson([...existing, ...fresh]))
 }

@@ -81,6 +81,7 @@ export function parseDetectedIgnore(text: string): Array<string> {
   }
 }
 
+/** Pretty JSON + trailing newline — the shape every other studio-written JSON has. */
 export function detectedIgnoreJson(paths: Array<string>): string {
-  return JSON.stringify({ ignored: paths }, null, 2)
+  return `${JSON.stringify({ ignored: paths }, null, 2)}\n`
 }

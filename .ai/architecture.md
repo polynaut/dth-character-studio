@@ -222,8 +222,9 @@ rewritten before every Houdini run (`houdini-jobs.ts`). Generated Daz scripts in
 in `storage/projects.ts`. Everything the studio writes FOR ITSELF about one
 character: `.dth_execute_stamps.json`, `.dth_export_folders.json`,
 `.last_rom_run.json`, the Daz-written `dth_rom_run_log.json` transport, the
-generated `<Name>_pose_asset.csv` (plus per-scene variants), and — since v0.68 —
-`products.json`. They all sat in the character folder root until v0.68, mixed in
+generated `<Name>_pose_asset.csv` (plus per-scene variants), since v0.68
+`products.json`, and `detected-ignore.json` (the new-file wizard's permanent skip
+list). They all sat in the character folder root until v0.68, mixed in
 with the user's scenes and `.hip`s (`products.json`'s data sat on the definition).
 
 Three consequences worth knowing before touching this:
@@ -289,6 +290,31 @@ Three consequences worth knowing before touching this:
   exactly that and the drawer repairs it. Only the scene file moves — `backup/`,
   `geo/`, `render/` are `$HIP`-relative output belonging to the project it was
   produced in.
+
+### New-file detection
+
+Files saved into the character's folder (an outfit variant `.duf`, a new `.hip`)
+surface as a banner + add wizard instead of waiting for a manual pick/drop.
+
+- **The rule is pure subtraction** (`lib/rom/detected-files.ts`, vitest-covered):
+  everything on disk minus generated trees (`dth-exports/`, `rom-animations/`,
+  `*_ROM.duf`, Houdini `backup/`, `.dcsmeta/`), minus the LIVE draft's linked
+  lists, minus the permanent skip list. Stateless, so rescanning on every window
+  focus (`lib/use-detected-files.ts`) is idempotent — which is what lets the
+  wizard's page list update live while it is open.
+- **The skip list** is `detected-ignore.json` in the character's `.dcsmeta`
+  folder (folder-relative paths, tolerant parse, atomic write). Skip is
+  PERMANENT; the banner's ✕ is session-only. A manual pick/drop of a skipped
+  file still works — the list only mutes DETECTION.
+- **An unreachable character folder throws** in `fetchDetectedFiles` rather than
+  answering "no files" (the walk tolerates unreadable SUBfolders); the hook
+  keeps the last answer on error, so a share blip cannot blank the banner.
+- **The wizard links through the same builders as `DazSceneField`**
+  (`lib/scene-add.ts`: `addScenePatch` / `primaryLinkPatch` /
+  `useSceneAddValidation`) — extracted, not copied, so linking rules (hair
+  seeding, GEN/gender/genesis derivation, the not-already-linked check) cannot
+  drift. Scenes and `.hip`s are linked IN PLACE — they already live where they
+  belong, unlike the pick/drop flows which may import from outside.
 
 ### Daz product scanning (v0.68: unattended)
 
