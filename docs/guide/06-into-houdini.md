@@ -10,8 +10,10 @@ covers the network in depth; this page is just the hand-off.
 - Your character's **PoseAsset CSV** — delivered into each scene's export
   folder under the same scene-suffixed base name as everything beside it
   (`<Name>_<Scene>_pose_asset.csv`; the primary scene's is plain
-  `<Name>_pose_asset.csv`). Without direct export it's in the character's
-  folder in the project (as `<Name>_pose_asset.csv`).
+  `<Name>_pose_asset.csv`). Without direct export, take it from the studio's
+  own copy: `<Project>/.dcsmeta/characters/<Character>/<Name>_pose_asset.csv`.
+  That folder is hidden and belongs to the app — read from it, don't edit it;
+  the next Save overwrites what's there.
 - The exporter's **`<Name>.abc`** / **`<Name>.dth`** next to it.
 - For any **[Bone scale](./04-first-character.md)** frames, a
   **reference-skeleton FBX** each — the CSV already points at them, nothing to

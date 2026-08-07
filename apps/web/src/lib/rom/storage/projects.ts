@@ -1,9 +1,9 @@
-import { mkdir, readDir, readTextFile, rename } from '@tauri-apps/plugin-fs'
+import { exists, mkdir, readDir, readTextFile, rename } from '@tauri-apps/plugin-fs'
 
 import { newId } from '@dth/rom'
 
 import { characterFolderName, normalizeRelFolder } from '../library'
-import { basename, isDir, join, writeTextFileAtomic } from './fs'
+import { basename, dirname, isDir, join, writeTextFileAtomic } from './fs'
 import { dataPath, ensureAppDir } from './app-data'
 
 // --- Projects -------------------------------------------------------------
@@ -264,6 +264,74 @@ export function metaImagesDir(projectDir: string): string {
 /** Where a project's notes media (dropped images/files) lives (under `.dcsmeta`). */
 export function metaMediaDir(projectDir: string): string {
   return join(dcsmetaDir(projectDir), 'media')
+}
+
+/** Root of the per-character app-internal folders (under `.dcsmeta`). Its own
+ *  level, not `.dcsmeta/<name>` directly, so a character called "images" or
+ *  "media" can't collide with the two folders that were there first. */
+export function metaCharactersDir(projectDir: string): string {
+  return join(dcsmetaDir(projectDir), 'characters')
+}
+
+/**
+ * Where ONE character's app-internal files live: `.dcsmeta/characters/<its
+ * folder>` — the run log, the Execute stamps, the export-folder record and the
+ * PoseAsset CSV(s). None of them is user content; keeping them out of the
+ * character folder leaves that folder holding only what the user put there plus
+ * the definition.
+ *
+ * Keyed on the character's LIBRARY-RELATIVE folder (`Ita`, or `Group A/Ita` for
+ * a nested one), so the folder is readable when someone goes looking — and
+ * unique by construction, since two characters can't own the same folder. It is
+ * relative to the characters ROOT, not the project, so changing the project's
+ * `charactersSubdir` (which moves every character folder) leaves these put.
+ *
+ * A rename or move of the character folder has to move this folder with it —
+ * `saveCharacter` / `moveCharacter` / `deleteCharacter` in ./characters do,
+ * which is why they take the project dir.
+ *
+ * A loose definition dropped at the library root owns no folder (`relFolder`
+ * ''); it falls back to its id, the only thing that tells it from its siblings
+ * there. Those used to share ONE set of these files in the library root.
+ */
+export function characterMetaDir(
+  projectDir: string,
+  relFolder: string,
+  characterId: string,
+): string {
+  return join(metaCharactersDir(projectDir), relFolder.trim() || characterId)
+}
+
+/**
+ * Follow a character folder's rename/move with its meta folder, so the studio's
+ * own files stay attached to the character they describe.
+ *
+ * Best-effort by design, and safe to call for a no-op move: nothing to do when
+ * the key is unchanged or the source was never created (a character that has
+ * never generated has no meta folder). A destination that already exists is
+ * left alone rather than merged — the source then stays put and the next
+ * generation rebuilds what it needs at the new key, which loses at most a set of
+ * Execute stamps. Merging two sets of app state would be the worse trade.
+ */
+export async function moveCharacterMetaDir(
+  projectDir: string,
+  fromRelFolder: string,
+  toRelFolder: string,
+  characterId: string,
+): Promise<void> {
+  const from = characterMetaDir(projectDir, fromRelFolder, characterId)
+  const to = characterMetaDir(projectDir, toRelFolder, characterId)
+  // Case-only renames (kira → Kira) DO have to run: the folder should carry the
+  // character's casing, and `rename` re-cases in place on Windows.
+  if (from === to) return
+  try {
+    if (!(await isDir(from))) return
+    if (from.toLowerCase() !== to.toLowerCase() && (await exists(to))) return
+    await mkdir(dirname(to), { recursive: true })
+    await rename(from, to)
+  } catch {
+    // A locked meta folder must never fail the rename/move that triggered it.
+  }
 }
 
 // --- Recent projects (volatile app-data) ---------------------------------

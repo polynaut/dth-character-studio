@@ -20,7 +20,9 @@ Copy the list into the release PR (or an issue) and tick it there.
       passes validation.
 - [ ] **Generate**: `ROM_<Name>_<Genesis>.dsa` + `<Name>_pose_asset.csv` are
       written; the script lands under
-      `Scripts/DTH-Character-Studio/<project>/<character>/`.
+      `Scripts/DTH-Character-Studio/<project>/<character>/` and the CSV under
+      `<project>/.dcsmeta/characters/<character>/`. The character folder itself
+      holds no `.dth_*` / `.last_rom_run.json` / CSV files.
 - [ ] Run the script in Daz Studio — the ROM builds; the run report is clean
       (or lists exactly the expected failures, and the studio shows them).
 - [ ] Direct export with an export directory set — `.abc`, `.dth` and the CSV

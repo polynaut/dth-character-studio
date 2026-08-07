@@ -281,7 +281,8 @@ export function characterScriptName(character: Character, sceneSlug?: string): s
 }
 
 /** File name of the ROM run log the generated Daz script writes into the
- *  character folder (fixed name — the studio reads it back to surface errors). */
+ *  character's `.dcsmeta` folder (fixed name — the studio reads it back there to
+ *  surface errors, then deletes it). */
 export const ROM_RUN_LOG_FILE = 'dth_rom_run_log.json'
 
 /**
@@ -350,7 +351,7 @@ print("Hair items exported: " + dthGroomLabels.length);
  * native Daz API (no DTH runtime needed), so it works both appended to the ROM
  * script and as the body of a standalone Export script. Empty when no export dir
  * is set. The CSV copy is included only when the source folder is known
- * (charFolderAbs); the export ALWAYS nests under the open scene's own subfolder
+ * (`metaDirAbs`); the export ALWAYS nests under the open scene's own subfolder
  * ({@link sceneExportSubfolders} — resolved by the embedded map at run time).
  * The Export_Hair per-item pass rides right after the main export (same
  * action, same resolved dir) when `exportHairAssets` is on — the bulk script
@@ -359,7 +360,11 @@ print("Hair items exported: " + dthGroomLabels.length);
 function buildExportBlock(
   character: Character,
   frames: PresetFrames | undefined,
-  charFolderAbs: string | undefined,
+  /** The character's app-internal folder in the project's `.dcsmeta` — where the
+   *  studio keeps the generated PoseAsset CSV(s) this block delivers (and where
+   *  the run log below is written). Host-resolved; undefined in pure/web
+   *  contexts, which drops the copy. */
+  metaDirAbs: string | undefined,
   /** Scene → PoseAsset-CSV-name lookup: the ROM-override scenes whose delivered
    *  CSV is the scene-suffixed one. Empty ⇒ every scene rides the base CSV. */
   sceneCsvMap: Record<string, string> = {},
@@ -423,7 +428,7 @@ function buildExportBlock(
         dthRefDir = ${dazJson(hipRefPrefix)} + dthExportDir.substr(dthRefRootAbs.length);
     }`
     : `    var dthRefDir = dthExportDir;`
-  const csvCopyBlock = charFolderAbs
+  const csvCopyBlock = metaDirAbs
     ? `    // Copy the generated PoseAsset CSV next to the exporter output, resolving
     // the {{DTH_EXPORT_DIR}} + {{DTH_EXPORT_NAME}} tokens in any bone-scale
     // reference-FBX path to the export dir and figure name — the dir and name
@@ -431,14 +436,14 @@ function buildExportBlock(
     // so the next scene's export can reuse it.
 ${csvNameBlock}
 ${refDirBlock}
-    var dthCsvSrcDir = new DzDir(${dazJson(charFolderAbs.replace(/\\/g, '/'))});
+    var dthCsvSrcDir = new DzDir(${dazJson(metaDirAbs.replace(/\\/g, '/'))});
     if (dthCsvSrcDir.exists(dthCsvName)) {
         var dthCsvDstDir = new DzDir(dthExportDir);
         if (!dthCsvDstDir.exists()) dthCsvDstDir.mkpath(dthExportDir);
         // Delivered under the export set's own base name (dthExportName — the
         // same scene-suffixed base as the .abc/.dth/.fbx beside it), so one
-        // folder never mixes naming patterns. The SOURCE CSV in the character
-        // folder keeps its studio name.
+        // folder never mixes naming patterns. The SOURCE CSV in the studio's
+        // own .dcsmeta folder keeps its studio name.
         var dthCsvDstName = dthExportName + "_pose_asset.csv";
         var dthCsvDst = dthCsvDstDir.absoluteFilePath(dthCsvDstName);
         var dthCsvSrc = new DzFile(dthCsvSrcDir.absoluteFilePath(dthCsvName));
@@ -455,7 +460,7 @@ ${refDirBlock}
             } else print("Failed to write " + dthCsvName + " to " + dthCsvDst);
         } else print("Failed to read " + dthCsvName + " for copy.");
     } else {
-        print("PoseAsset CSV not found in the character folder — nothing to copy.");
+        print("PoseAsset CSV not found in " + ${dazJson(metaDirAbs.replace(/\\/g, '/'))} + " — nothing to copy.");
     }
 `
     : ''
@@ -558,8 +563,8 @@ ${hairPassBlock}    }
   //
   // The DIALOG only when a human ran it. A modal inside a Runner carrier warns
   // nobody and blocks the batch on a click that never comes.
-  const runLogPath = charFolderAbs
-    ? `${charFolderAbs.replace(/\\/g, '/')}/${ROM_RUN_LOG_FILE}`
+  const runLogPath = metaDirAbs
+    ? `${metaDirAbs.replace(/\\/g, '/')}/${ROM_RUN_LOG_FILE}`
     : ''
   const alertHelper = `var dthExportLogPath = ${dazJson(runLogPath)};
 // Append a problem to the studio's run log, preserving whatever the ROM run
@@ -758,7 +763,7 @@ function buildSceneConfigMap(
   baseConfig: Record<string, unknown>,
   romPaths: RomPaths,
   frames: PresetFrames | undefined,
-  charFolderAbs: string | undefined,
+  metaDirAbs: string | undefined,
   sceneRomPaths: Record<string, RomPaths>,
   sceneFrames: Record<string, PresetFrames>,
 ): Record<string, Record<string, unknown>> {
@@ -774,7 +779,7 @@ function buildSceneConfigMap(
       mergeSceneOverride(character, override),
       sceneRomPaths[key] ?? romPaths,
       sceneFrames[key] ?? frames,
-      charFolderAbs,
+      metaDirAbs,
     )
     for (const k of SCENE_CONFIG_DIFF_KEYS) {
       const value = merged[k]
@@ -827,7 +832,8 @@ export function buildSceneCsvMap(character: Character): Record<string, string> {
  * The FULL `dthCharacterConfig` object a character compiles to — every include
  * flag, preset-block length, rom path, inline extra-frame + art-direction dataset,
  * the identity dials, preserve lists and JCM mods. Pure derivation from
- * `(character, romPaths, frames, charFolderAbs)`, so it's computed ONCE for the
+ * `(character, romPaths, frames, metaDirAbs)` — the last only supplying the run-log
+ * path — so it's computed ONCE for the
  * base AND — over `mergeSceneOverride(...)` with the scene's re-resolved paths /
  * frames — per linked scene, whose config DELTA is the diff of the two
  * ({@link buildSceneConfigMap}). Keeping one builder is what lets a per-scene
@@ -838,7 +844,7 @@ export function buildCharacterConfig(
   character: Character,
   romPaths: RomPaths = {},
   frames?: PresetFrames,
-  charFolderAbs?: string,
+  metaDirAbs?: string,
 ): Record<string, unknown> {
   const { sections } = character
   // JCM custom mode: a user-supplied .duf path used as the base ROM, just like
@@ -871,8 +877,8 @@ export function buildCharacterConfig(
   const config: Record<string, unknown> = {
     genesis: character.genesis,
     gender: character.gender,
-    // Run-log metadata: the runtime writes dth_rom_run_log.json (character
-    // folder) after every run; the studio reads it back to surface problems.
+    // Run-log metadata: the runtime writes dth_rom_run_log.json (the character's
+    // .dcsmeta folder) after every run; the studio reads it back to surface problems.
     characterName: character.name,
     runtimeVersion: RUNTIME_VERSION,
     studioVersion: character.studioVersion ?? '',
@@ -898,8 +904,8 @@ export function buildCharacterConfig(
   // the two artifacts can't drift. Omitted only in pure/web contexts (no native
   // measurement); the runtime then fails loud rather than guessing.
   if (frames) config.presetFrames = frames
-  if (charFolderAbs) {
-    config.runLogPath = `${charFolderAbs.replace(/\\/g, '/')}/${ROM_RUN_LOG_FILE}`
+  if (metaDirAbs) {
+    config.runLogPath = `${metaDirAbs.replace(/\\/g, '/')}/${ROM_RUN_LOG_FILE}`
   }
   // Custom JCM path wins over the catalog-resolved one.
   const jcmRomPath = jcmCustomPath || romPaths.jcm
@@ -944,7 +950,7 @@ export function toCharacterScriptDsa(
   character: Character,
   romPaths: RomPaths = {},
   frames?: PresetFrames,
-  charFolderAbs?: string,
+  metaDirAbs?: string,
   sceneRomPaths: Record<string, RomPaths> = {},
   sceneFrames: Record<string, PresetFrames> = {},
   scenesRootAbs?: string,
@@ -959,7 +965,7 @@ export function toCharacterScriptDsa(
     false,
     romPaths,
     frames,
-    charFolderAbs,
+    metaDirAbs,
     sceneRomPaths,
     sceneFrames,
     scenesRootAbs,
@@ -983,7 +989,7 @@ export function toBulkRomExportScriptDsa(
   character: Character,
   romPaths: RomPaths = {},
   frames?: PresetFrames,
-  charFolderAbs?: string,
+  metaDirAbs?: string,
   sceneRomPaths: Record<string, RomPaths> = {},
   sceneFrames: Record<string, PresetFrames> = {},
   scenesRootAbs?: string,
@@ -998,7 +1004,7 @@ export function toBulkRomExportScriptDsa(
     true,
     romPaths,
     frames,
-    charFolderAbs,
+    metaDirAbs,
     sceneRomPaths,
     sceneFrames,
     scenesRootAbs,
@@ -1019,7 +1025,7 @@ export function toBuildRomAnimationScriptDsa(
   character: Character,
   romPaths: RomPaths = {},
   frames?: PresetFrames,
-  charFolderAbs?: string,
+  metaDirAbs?: string,
   sceneRomPaths: Record<string, RomPaths> = {},
   sceneFrames: Record<string, PresetFrames> = {},
   scenesRootAbs?: string,
@@ -1031,7 +1037,7 @@ export function toBuildRomAnimationScriptDsa(
     false,
     romPaths,
     frames,
-    charFolderAbs,
+    metaDirAbs,
     sceneRomPaths,
     sceneFrames,
     scenesRootAbs,
@@ -1114,12 +1120,14 @@ function buildRomScriptDsa(
   romPaths: RomPaths = {},
   frames?: PresetFrames,
   /**
-   * Absolute path of the character's folder — where the PoseAsset CSV is written
-   * at generation time. When provided (the desktop app), the generated script
-   * moves that CSV into the resolved export dir at run time. Omitted in pure/web
-   * contexts, where the move block is skipped.
+   * Absolute path of the character's app-internal folder in the project's
+   * `.dcsmeta` (`.dcsmeta/characters/<folder>`) — where the studio writes the
+   * PoseAsset CSV at generation time, and where the runtime writes its run log.
+   * When provided (the desktop app), the generated script copies that CSV into
+   * the resolved export dir at run time. Omitted in pure/web contexts, where
+   * both the copy block and the run log are skipped.
    */
-  charFolderAbs?: string,
+  metaDirAbs?: string,
   /**
    * Per-scene re-resolved rom paths / preset-block frames, keyed by the scene's
    * normalized (lowercased '/'-path) key — the HOST resolves these from
@@ -1139,7 +1147,7 @@ function buildRomScriptDsa(
   /** Scan-sync settings — see {@link IndexSyncOptions}. */
   indexSync?: IndexSyncOptions,
 ): GeneratedFile {
-  const config = buildCharacterConfig(character, romPaths, frames, charFolderAbs)
+  const config = buildCharacterConfig(character, romPaths, frames, metaDirAbs)
 
   // Per-scene overrides folded into the ONE script: each linked scene with an armed
   // panel contributes a run-time config DELTA (the diff of its full config vs the
@@ -1153,7 +1161,7 @@ function buildRomScriptDsa(
     config,
     romPaths,
     frames,
-    charFolderAbs,
+    metaDirAbs,
     sceneRomPaths,
     sceneFrames,
   )
@@ -1170,7 +1178,7 @@ function buildRomScriptDsa(
   const exportBlock =
     exportDir && character.exportWithRomScript !== false
       ? `            // Export to the DTH pipeline via the Exporter Plugin (v1.8.1+).
-${buildExportBlock(character, frames, charFolderAbs, sceneCsvMap, scenesRootAbs, bulk, hipRefPrefix)
+${buildExportBlock(character, frames, metaDirAbs, sceneCsvMap, scenesRootAbs, bulk, hipRefPrefix)
   .split('\n')
   .map((line) => (line ? `            ${line}` : line))
   .join('\n')}`
@@ -1382,7 +1390,7 @@ ${exportBlock}        }` : ''}
 export function toExportScriptDsa(
   character: Character,
   frames?: PresetFrames,
-  charFolderAbs?: string,
+  metaDirAbs?: string,
   /** See {@link sceneExportSubfolders}. */
   scenesRootAbs?: string,
   /** Emitted for the Runner's unattended export-only carrier — suppresses the
@@ -1415,7 +1423,7 @@ if (dthSceneLinkErr) {
 } else if (!dthFig) {
     MessageBox.critical("No ${character.genesis} figure found in the scene - load the character's scene and re-run.", "DTH Character Studio", "&OK");
 } else {
-${indentLines(indexSyncSnippet(indexSync))}${buildExportBlock(character, frames, charFolderAbs, buildSceneCsvMap(character), scenesRootAbs, unattended, hipRefPrefix)
+${indentLines(indexSyncSnippet(indexSync))}${buildExportBlock(character, frames, metaDirAbs, buildSceneCsvMap(character), scenesRootAbs, unattended, hipRefPrefix)
   .split('\n')
   .map((line) => (line ? `    ${line}` : line))
   .join('\n')}}
@@ -1444,7 +1452,7 @@ ${indentLines(indexSyncSnippet(indexSync))}${buildExportBlock(character, frames,
 export function toBulkExportOnlyScriptDsa(
   character: Character,
   frames?: PresetFrames,
-  charFolderAbs?: string,
+  metaDirAbs?: string,
   scenesRootAbs?: string,
   /** `$HIP`-anchored prefix for bone-scale reference paths ('' = absolute) —
    *  see {@link buildExportBlock}. */
@@ -1455,7 +1463,7 @@ export function toBulkExportOnlyScriptDsa(
   const built = toExportScriptDsa(
     { ...character, exportHairAssets: true },
     frames,
-    charFolderAbs,
+    metaDirAbs,
     scenesRootAbs,
     // The Runner executes this one — no modals.
     true,
@@ -1617,8 +1625,9 @@ export function generateAll(
   character: Character,
   romPaths: RomPaths,
   frames: PresetFrames,
-  /** Absolute character-folder path — see {@link toCharacterScriptDsa}. */
-  charFolderAbs?: string,
+  /** Absolute path of the character's `.dcsmeta` folder — see
+   *  {@link toCharacterScriptDsa}. The PoseAsset CSVs below are written there. */
+  metaDirAbs?: string,
   /** Active DTH release version at generation time (e.g. "2.4.3"). Only the CSV
    *  depends on the release — it selects the CSV era/variant (see
    *  {@link poseAssetCsvEra}); the Daz scripts are release-independent (tied to
@@ -1673,7 +1682,7 @@ export function generateAll(
       character,
       romPaths,
       frames,
-      charFolderAbs,
+      metaDirAbs,
       sceneRomPaths,
       sceneFrames,
       scenesRootAbs,
@@ -1681,7 +1690,7 @@ export function generateAll(
       indexSync,
     ),
     ...(split
-      ? [toExportScriptDsa(character, frames, charFolderAbs, scenesRootAbs, false, hipRefPrefix)]
+      ? [toExportScriptDsa(character, frames, metaDirAbs, scenesRootAbs, false, hipRefPrefix)]
       : []),
     // The hidden bulk script the Runner executes on DTH Export runs — always
     // ROM + always full export, so it only exists WITH an export dir.
@@ -1691,7 +1700,7 @@ export function generateAll(
             character,
             romPaths,
             frames,
-            charFolderAbs,
+            metaDirAbs,
             sceneRomPaths,
             sceneFrames,
             scenesRootAbs,
@@ -1703,7 +1712,7 @@ export function generateAll(
           toBulkExportOnlyScriptDsa(
             character,
             frames,
-            charFolderAbs,
+            metaDirAbs,
             scenesRootAbs,
             hipRefPrefix,
             indexSync,
@@ -1717,7 +1726,7 @@ export function generateAll(
       character,
       romPaths,
       frames,
-      charFolderAbs,
+      metaDirAbs,
       sceneRomPaths,
       sceneFrames,
       scenesRootAbs,

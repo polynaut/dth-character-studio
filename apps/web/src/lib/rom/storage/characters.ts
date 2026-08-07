@@ -33,7 +33,7 @@ import {
   writeTextFileAtomic,
 } from './fs'
 import { studioVersion } from './app-data'
-import { listRecents, readManifest } from './projects'
+import { listRecents, moveCharacterMetaDir, readManifest } from './projects'
 import { stripTrailingSeparators, trimSeparators } from '#/lib/path.ts'
 import type { Project } from './projects'
 
@@ -539,6 +539,17 @@ export async function saveCharacter(
 
   // A loose root-level definition's "folder" IS the library → relFolder ''.
   const relFolder = relativeInside(lib, finalFolderAbs) ?? ''
+  // The character's meta folder (`.dcsmeta/characters/<relFolder>`) is keyed on
+  // that path, so a rename has to carry it — otherwise the run log, the Execute
+  // stamps and the generated CSV are orphaned under the old name.
+  if (folderMove) {
+    await moveCharacterMetaDir(
+      project.path,
+      relativeInside(lib, folderMove.from) ?? '',
+      relFolder,
+      character.id,
+    )
+  }
   // The export root is DERIVED, not user data (schema v29): re-resolve it on
   // every save so it follows a folder rename and so pre-v29 characters (which
   // carry a hand-picked path) migrate the first time they're written — the

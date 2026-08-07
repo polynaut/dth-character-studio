@@ -208,10 +208,39 @@ folder's location is the project; the Home screen lists recents
 (`recents.json` in app-data). The OS file association opens a `.dcsp` in its own
 window (single-instance routes a second launch). Project folder holds the
 character folders (under `charactersSubdir` when set), `.dcsmeta/` (avatars,
-media), and `.assets/` (opt-in). App-data (`appLocalDataDir()`) holds only
+media, per-character app files), and `.assets/` (opt-in). App-data (`appLocalDataDir()`) holds only
 machine state: `settings.json`, `recents.json`, `network-drives.json`,
 the morph/bone index (`morphs_<G>.json` +
 `morphs_scenes_<G>.json`, read by `api/characters.ts`), scan output
 (`product-scans/`, `scan-frames/`), and `houdini-scripts/` — where `456.py` is
 rewritten before every Houdini run (`houdini-jobs.ts`). Generated Daz scripts install to
 `<Daz library>/Scripts/DTH-Character-Studio/<project>/<character>/`.
+
+### Where the app's own per-character files live
+
+`.dcsmeta/characters/<library-relative character folder>/` — `characterMetaDir`
+in `storage/projects.ts`. Everything the studio writes FOR ITSELF about one
+character: `.dth_execute_stamps.json`, `.dth_export_folders.json`,
+`.last_rom_run.json`, the Daz-written `dth_rom_run_log.json` transport, and the
+generated `<Name>_pose_asset.csv` (plus per-scene variants). They all sat in the
+character folder root until v0.69, mixed in with the user's scenes and `.hip`s.
+
+Three consequences worth knowing before touching this:
+
+- **The key is the character's folder path relative to the CHARACTERS ROOT**, not
+  the project — so changing `charactersSubdir` (which physically moves every
+  character folder) needs no meta-side work at all. A character folder RENAME or
+  MOVE does: `saveCharacter`, `moveCharacter` and `deleteCharacter` carry/remove
+  it via `moveCharacterMetaDir`. A loose definition at the library root owns no
+  folder and falls back to its id.
+- **Two of these paths are baked into the generated `.dsa`** — the CSV the export
+  block copies (`dthCsvSrcDir`) and the runtime's `runLogPath`. That is the whole
+  reason `dsa.ts` takes a `metaDirAbs` (it used to be `charFolderAbs` and mean the
+  character folder). Changing where they live means bumping `RUNTIME_VERSION`, or
+  no installed script ever learns the new path.
+- **The one-time relocation rides generation** (`migrateCharacterInternals` in
+  `api/generate.ts`), which is why the v59 runtime bump matters twice: it makes
+  every character stale, so one Refresh assets walks the whole library and moves
+  the files. It only ever touches names the studio itself writes for THAT
+  character (`relocatableInternals`) — never a `*_pose_asset.csv` pattern, which
+  would also match a CSV the user copied back out of an export folder.

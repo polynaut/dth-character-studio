@@ -54,10 +54,10 @@ test('project window: a scene override saves scene-specific artifacts', async ({
   await page.getByRole('button', { name: 'Save', exact: true }).click()
   await expect(page.getByText(/Saved “Kira”/)).toBeVisible()
   const written = await filesWritten(page)
-  expect(written).toContain(`${P.charFolder}/Kira_pose_asset.csv`)
+  expect(written).toContain(`${P.charMeta}/Kira_pose_asset.csv`)
   // The ROM-override scene still gets its OWN PoseAsset CSV (Houdini has no
   // runtime to select frames)…
-  expect(written).toContain(`${P.charFolder}/Kira_KiraBeach_pose_asset.csv`)
+  expect(written).toContain(`${P.charMeta}/Kira_KiraBeach_pose_asset.csv`)
   // …but there's now just ONE ROM script: it embeds every scene's override in a
   // dthSceneOverrides map and selects the open scene at run time, so the old
   // per-scene ROM_…_<Scene>.dsa is gone.
@@ -129,7 +129,7 @@ test('project window: editing a base row back to the base disarms the override',
   // gains a record for this scene.
   await expect(page.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0)
   const written = await filesWritten(page)
-  expect(written).not.toContain(`${P.charFolder}/Kira_KiraBeach_pose_asset.csv`)
+  expect(written).not.toContain(`${P.charMeta}/Kira_KiraBeach_pose_asset.csv`)
   const definition = JSON.parse((await fileContent(page, `${P.charFolder}/Kira.json`))!)
   const stored = definition.sceneOverrides.find(
     (o: { scenePath: string }) => o.scenePath === extraScene,

@@ -28,7 +28,7 @@ const romAnimation = (scene: string) => {
 }
 /** The handoff-stamps file the scene probe (fetchExecuteScenes) reads FIRST —
  *  holding it holds the whole probe with the dialog's status un-landed. */
-const STAMPS = `${P.charFolder}/.dth_execute_stamps.json`
+const STAMPS = `${P.charMeta}/.dth_execute_stamps.json`
 
 const unhandledCommands = (page: Page) =>
   page.evaluate(() => (window as any).__tauriMock.unhandled as Array<string>)

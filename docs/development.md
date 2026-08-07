@@ -55,7 +55,8 @@ Tauri plugins instead of a Node backend:
 - **Two storage roots** — machine-only app data (`settings.json`, the recently-
   opened `.dcsp` list, `network-drives.json`) lives in the per-user app-data
   folder (`appLocalDataDir()`); everything worth backing up — your **characters**,
-  generated artifacts, and avatars (under the hidden `.dcsmeta/`) — lives in each
+  generated artifacts, and the app's own per-character bookkeeping and avatars
+  (under the hidden `.dcsmeta/`) — lives in each
   **project's folder**, marked by its `.dcsp` file. There is no global project
   registry: a `.dcsp`'s location *is* the project.
 - **Custom Rust commands** — heavy work beyond the plugins (asset install/dedup,

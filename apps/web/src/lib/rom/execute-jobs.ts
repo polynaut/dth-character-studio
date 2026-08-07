@@ -39,9 +39,9 @@ export const RUNNING_JOB_PREFIX = 'running_'
 /** The renamed (in-progress) job file the studio polls for progress. */
 export const RUNNING_JOB_FILE = `${RUNNING_JOB_PREFIX}${EXPORTER_JOB_FILE}`
 
-/** Per-character stamp file (character folder, dot-prefixed like the run log):
- *  what Execute last handed off per scene, so Execute all can skip unchanged
- *  scenes. Machine-friendly bookkeeping, not user content. */
+/** Per-character stamp file (in the character's `.dcsmeta` folder, alongside the
+ *  run log): what Execute last handed off per scene, so Execute all can skip
+ *  unchanged scenes. Machine-friendly bookkeeping, not user content. */
 export const EXECUTE_STAMPS_FILE = '.dth_execute_stamps.json'
 
 /**
@@ -464,9 +464,9 @@ export function migratedExportFolder(rel: string): string {
   return rel.replace(/^.*?\/dth-export\//, '')
 }
 
-/** Per-character export-folder record (character folder, dot-prefixed like the
- *  run log): the export-dir-relative folders the last GENERATED layout
- *  comprises — what the housekeeping may delete once they fall out of it. */
+/** Per-character export-folder record (in the character's `.dcsmeta` folder,
+ *  alongside the run log): the export-dir-relative folders the last GENERATED
+ *  layout comprises — what the housekeeping may delete once they fall out of it. */
 export const EXPORT_FOLDERS_FILE = '.dth_export_folders.json'
 
 export interface ExportFoldersRecord {

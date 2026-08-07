@@ -733,6 +733,33 @@ describe('saveCharacter returns the post-save location', () => {
     // The location is live: the definition actually sits there.
     expect(files.has('/games/Nova/Nova Kira/Nova Kira.json')).toBe(true)
   })
+
+  it("carries the character's .dcsmeta folder through the rename", async () => {
+    const c = characterSchema.parse({
+      id: newId(),
+      name: 'Kira',
+      genesis: 'G9',
+      gender: 'female',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    })
+    addDir('/games/Nova/Kira')
+    files.set('/games/Nova/Kira/Kira.json', JSON.stringify(c))
+    // The app's own files for this character, keyed on its folder name.
+    addDir('/games/Nova/.dcsmeta/characters/Kira')
+    files.set('/games/Nova/.dcsmeta/characters/Kira/.last_rom_run.json', '{"ok":true}')
+    files.set('/games/Nova/.dcsmeta/characters/Kira/Kira_pose_asset.csv', 'csv')
+
+    await storage.saveCharacter(project, { ...c, name: 'Nova Kira' })
+
+    // Left behind, the run log and the CSV the export script copies would both
+    // be orphaned under a folder name no character answers to any more.
+    expect(files.get('/games/Nova/.dcsmeta/characters/Nova Kira/.last_rom_run.json')).toBe(
+      '{"ok":true}',
+    )
+    expect(files.has('/games/Nova/.dcsmeta/characters/Nova Kira/Kira_pose_asset.csv')).toBe(true)
+    expect(files.has('/games/Nova/.dcsmeta/characters/Kira/.last_rom_run.json')).toBe(false)
+  })
 })
 
 describe('known network drives (network-drives.json)', () => {
