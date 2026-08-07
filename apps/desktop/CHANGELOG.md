@@ -1,5 +1,41 @@
 # @dth/desktop
 
+## 0.66.0
+
+### Minor Changes
+
+- [#682](https://github.com/polynaut/dth-character-studio/pull/682) [`bd62ed5`](https://github.com/polynaut/dth-character-studio/commit/bd62ed51dc032390e0f4a7765e864100a2217025) Thanks [@polynaut](https://github.com/polynaut)! - Generate project hands over a **wired** network: the import file paths
+  (`.dth`, FBX, Alembic, ROM FBX), the PoseAsset **CSV path**, the **export
+  directory** and the **Skinning method** are prefilled for the primary scene —
+  `$HIP`-relative by default, absolute when the project opted out of junctions —
+  and the character name is set with them (prefilled paths may bypass the HDA's
+  auto-fill). Parameters your installed DazToHue doesn't have yet are skipped
+  one by one (the CSV path needs the release with the CSV-driven PoseAsset
+  node); prefilling can never fail a generation.
+
+- [#715](https://github.com/polynaut/dth-character-studio/pull/715) [`ce08aad`](https://github.com/polynaut/dth-character-studio/commit/ce08aad4c04f6a6c2eadebf9d148fc14ff3452a5) Thanks [@polynaut](https://github.com/polynaut)! - Houdini Utils → Defaults gains **Fill network**: the wiring Generate project
+  gives a new project, offered to the projects you already have. It fills the
+  DazToHue import file paths and export directory — and the PoseAsset CSV path
+  once your DazToHue version has one — with the same values, `$HIP`-relative per
+  the project's path style. Only **blank** parameters are written, so anything you
+  set by hand is listed as already-set and left alone, and a parameter your
+  installed DazToHue doesn't carry is **named** rather than silently skipped: the
+  row tells you why the CSV path isn't offered yet, and the same action starts
+  filling it the day a release adds it. Dry run and rolling backup as usual.
+
+### Patch Changes
+
+- [#713](https://github.com/polynaut/dth-character-studio/pull/713) [`ec95f9c`](https://github.com/polynaut/dth-character-studio/commit/ec95f9c0adbe5634ad00a28b1b48f77d9a657726) Thanks [@polynaut](https://github.com/polynaut)! - The material transfer now refuses a target built from a different figure instead
+  of merely noting it. A material setup only transfers within one Genesis version,
+  and the studio checks that without any generation knowledge: the Daz surfaces
+  your selected materials claim are matched against the ones the target actually
+  has. Some unclaimed is normal — the source wears a dress this character doesn't
+  — but when none match, the two nodes describe different figures and Transfer is
+  disabled with the target named, because the copied slots would name surfaces
+  that aren't there and every baker would bake nothing. A node with no material
+  slots yet is never blocked: there is nothing to contradict, and seeding one from
+  a template is what the drawer is for.
+
 ## 0.65.0
 
 ### Minor Changes
