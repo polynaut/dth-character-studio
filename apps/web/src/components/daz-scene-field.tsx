@@ -48,8 +48,8 @@ import {
   suggestSceneSubfolder,
 } from '#/lib/scene-subfolder.ts'
 import { browseStart, displayPath, extrasWithoutPrimary, normalizePath, parentDir } from '#/lib/path.ts'
+import { addScenePatch, primaryLinkPatch } from '#/lib/scene-add.ts'
 import { seedSceneHair } from '#/lib/groom-detect.ts'
-import { genesisFromFigureNode } from '@dth/rom'
 
 import type { CharacterLocation, SceneWearables } from '#/lib/rom/api.ts'
 import type { PersistCharacterPatch } from '#/lib/use-character-draft.ts'
@@ -794,21 +794,9 @@ export function DazSceneField({
               },
             })
           : scene
-        const patch: Partial<Character> = {
-          extraScenes: [...character.extraScenes, finalScene],
-        }
-        // Pre-select the added scene's own hair, exactly like creation and the
-        // first primary link. An outfit variant is THE case that brings its own
-        // hair, so skipping it here left every added scene one manual wand-click
-        // away from leaking that hair into the FBX. Scanned on the FINAL path —
-        // the record keys on it, and a copy-in changes it.
-        const seeded = seedSceneHair(
-          finalScene,
-          await sceneWearables({ data: { scenePath: finalScene } }),
-          character.sceneOverrides,
-        )
-        if (seeded) patch.sceneOverrides = seeded
-        return patch
+        // Append + pre-select the scene's own hair — the shared builder
+        // (lib/scene-add.ts), same rules as the detected-files wizard.
+        return addScenePatch(finalScene, character)
       },
       { toast: 'Added Daz scene' },
     )
@@ -850,75 +838,9 @@ export function DazSceneField({
               },
             })
           : scene
-        // A scene is linked at most once: if the new primary is already an extra
-        // (relinking the primary onto an existing outfit scene), drop it from the
-        // extras so it isn't both — else it shows as two cards and collides the
-        // footer's per-path key + view-transition-name.
-        const patch: Partial<Character> = {
-          scenePath: finalScene,
-          extraScenes: extrasWithoutPrimary(character.extraScenes, finalScene),
-        }
-        // Both link flavors re-derive the GEN section from the new scene's GP/DK
-        // geograft — same rule as creation (`primarySceneDerivation`). On a
-        // RELINK, gender is deliberately NOT touched: it was derived from a real
-        // scene once and never changes again. The FIRST link is that derivation:
-        // creation had no scene, so the scene now decides gender, genesis and
-        // the pre-selected hair exactly like a scene-ful create. Unreadable
-        // scene → keep the stored values.
-        const scan = await sceneWearables({ data: { scenePath: finalScene } })
-        const derived = primarySceneDerivation(scan, character)
-        if (derived.sections) {
-          patch.sections = derived.sections
-          const genEnabled = derived.sections.GEN.enabled
-          if (genEnabled !== character.sections.GEN.enabled) {
-            toast.info(
-              genEnabled
-                ? 'Genitalia section enabled — the scene contains a GP/DK geograft.'
-                : 'Genitalia section disabled — no GP/DK geograft in the scene.',
-            )
-          }
-        }
-        if (firstLink) {
-          if (derived.gender) patch.gender = derived.gender
-          const figure = scan.error === '' ? (scan.figures[0] ?? null) : null
-          const detected = figure ? genesisFromFigureNode(figure.id) : null
-          if (detected && detected.genesis !== character.genesis) {
-            patch.genesis = detected.genesis
-            toast.info(`Genesis set to ${detected.genesis} — read from the linked scene.`)
-          }
-          // Pre-select the scene's detected hair, the one shared rule.
-          const seeded = seedSceneHair(finalScene, scan, character.sceneOverrides)
-          if (seeded) patch.sceneOverrides = seeded
-        } else {
-          // RELINK of a MISSING primary: the per-scene hair record keys on the
-          // scene PATH, and a relink targets the SAME scene at a new path
-          // (moved/renamed outside the app) — so the old primary's record
-          // FOLLOWS the file, exactly like an in-app move/rename
-          // (`repointLinkedScene`); a curated hair list must not strand on the
-          // dead path, where the export would never match it again. When the
-          // target already has a record of its own (relinking ONTO an existing
-          // extra), that record wins and nothing repoints. A target with no
-          // record either way gets its detected hair seeded — the one shared
-          // rule (`seedSceneHair`), like every other scene-linking path.
-          const oldKey = normalizePath(character.scenePath).toLowerCase()
-          const newKey = normalizePath(finalScene).toLowerCase()
-          const targetHasRecord = character.sceneOverrides.some(
-            (o) => normalizePath(o.scenePath).toLowerCase() === newKey,
-          )
-          const repointed = targetHasRecord
-            ? character.sceneOverrides
-            : character.sceneOverrides.map((o) =>
-                normalizePath(o.scenePath).toLowerCase() === oldKey
-                  ? { ...o, scenePath: finalScene }
-                  : o,
-              )
-          if (repointed.some((o, i) => o !== character.sceneOverrides[i])) {
-            patch.sceneOverrides = repointed
-          }
-          const seeded = seedSceneHair(finalScene, scan, repointed)
-          if (seeded) patch.sceneOverrides = seeded
-        }
-        return patch
+        // GEN/gender/genesis derivation + hair rules live in the shared builder
+        // (lib/scene-add.ts) — the same rules the detected-files wizard links by.
+        return primaryLinkPatch(finalScene, character, firstLink, (m) => toast.info(m))
       },
       {
         toast: 'Linked Daz scene',
