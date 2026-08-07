@@ -9,6 +9,7 @@ import { normalizePath } from '#/lib/path.ts'
 import { hipRefPrefixFor } from '#/lib/scene-subfolder.ts'
 import { buildHoudiniPrefill } from '../houdini-jobs'
 import { characterScenesRoot } from './execute'
+import { normalizeRelFolder } from '../library'
 import { charsRoot, locateCharacter, resolveProject } from './core'
 import type { Character } from '@dth/rom'
 import { materialUtilReportSchema } from './native-types.ts'
@@ -464,7 +465,8 @@ export async function prefillHoudiniNetwork({
   if (!isTauri()) {
     throw new Error('Prefilling a DazToHue network needs the desktop app (it runs hython).')
   }
-  const { character, charFolder, scenesRootAbs, relative } = await prefillContext(input)
+  const { character, charFolder, scenesRootAbs, relative, finalExportAbs } =
+    await prefillContext(input)
   const targets = input.hipPaths.map((hipPath) => ({
     hipPath,
     values: buildHoudiniPrefill(character, {
@@ -472,6 +474,14 @@ export async function prefillHoudiniNetwork({
         ? hipRefPrefixFor([hipPath], charFolder, character.exportPath)
         : '',
       scenesRootAbs,
+      // The character's `export/` folder, per target for the same reason the
+      // import prefix is: how many `..` hops reach it depends on this `.hip`.
+      finalExportDir:
+        (relative ? hipRefPrefixFor([hipPath], charFolder, finalExportAbs) : '') || finalExportAbs,
+      // No scene picker here: this fills an EXISTING network, and which scene it
+      // imports is the network's own business. The primary is the only defensible
+      // default — and only BLANK parms are written, so a project already wired to
+      // another scene keeps every path it has.
     }),
   }))
   return runMaterialUtil({ op: 'prefill', targets, dryRun: input.dryRun })
@@ -486,6 +496,8 @@ async function prefillContext(input: { projectId: string; id: string }): Promise
    *  returns empty paths, which the Python then leaves alone. */
   scenesRootAbs: string | undefined
   relative: boolean
+  /** The character's FINAL export folder (`<char>/<exportSubdir>`), absolute. */
+  finalExportAbs: string
 }> {
   const project = await resolveProject(input.projectId)
   const lib = charsRoot(project)
@@ -498,6 +510,7 @@ async function prefillContext(input: { projectId: string; id: string }): Promise
     charFolder: location.folderAbs,
     scenesRootAbs: characterScenesRoot(character, location, project.dazSubdir ?? 'daz3d'),
     relative: project.houdiniPathStyle !== 'absolute',
+    finalExportAbs: joinPath(location.folderAbs, normalizeRelFolder(project.exportSubdir)),
   }
 }
 

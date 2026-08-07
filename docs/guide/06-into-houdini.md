@@ -50,13 +50,24 @@ folder**, so both the scene and the exports sit under it — and the **DazToHue
 network ready**. The network comes out
 **wired**: the import file paths (`.dth`, FBX, Alembic, ROM FBX), the
 **PoseAsset CSV path**, the **export directory** and the **Skinning method**
-(Linear / Dual Quaternion, from the ROM definition) are prefilled for the
-primary scene — relative to the scene (`$HIP/../daz3d/dth-exports/…`) by
-default, absolute when the project's
+(Linear / Dual Quaternion, from the ROM definition) are prefilled — relative to
+the scene (`$HIP/../daz3d/dth-exports/…`) by default, absolute when the
+project's
 [Houdini path style](./05-rom-in-daz.md#reference-skeleton-paths--hip-by-default)
 says so — and the **character name** is set with them. A parameter
 your installed DazToHue version doesn't have yet is simply skipped (the CSV
 path needs the release with the CSV-driven PoseAsset node).
+
+**Which scene?** A character with several Daz scenes gets a **Daz scene to
+import** picker in the dialog (a single-scene character isn't asked). Each scene
+exports into its own folder, so the pick decides which export set the imports
+point at — generate one project per scene to cover them all.
+
+The **export directory** is a different folder from the imports, on purpose:
+they read the Daz→Houdini intermediates under `dth-exports`, while Houdini
+writes its own Unreal-bound output to the character's **`export/`** folder
+(`$HIP/../export/`, or whatever the project's *Final export subfolder* is
+named). One `export/` per character, shared by every scene's project.
 Generate a second or third project and they all land in the same houdini folder,
 so they share both `$JOB` and `$HIP` — and with `$HIP` shared, Houdini's own
 output (renders, caches, backups) collects in that one folder rather than

@@ -324,7 +324,7 @@ older runtimes as stale.
   **The fresh network is PREFILLED** (`buildHoudiniPrefill`, houdini-jobs.ts —
   pure, unit-tested; applied by the hython script off the `DTH_PREFILL` env
   JSON, per-parm best-effort so an older HDA just skips what it lacks and
-  generation can never fail on it): the primary scene's import paths
+  generation can never fail on it): the CHOSEN scene's import paths
   (`import_character_{dtu,fbx,alembic,rom_fbx}_file` — the ROM FBX is the
   exporter's `<name>_experimental_rom.fbx`, measured on a real export), the
   PoseAsset CSV (`pose_asset_csv_file_path` — needs the CSV-path-driven
@@ -334,7 +334,22 @@ older runtimes as stale.
   HDA's auto-fill), and `import_skinning_method` (`characterSkinning`'s
   dqs→`dualquat` / linear→`linear`). Paths ride the same `hipRefPrefixFor`
   prefix as the CSVs (`$HIP/../<dazSubdir>/dth-exports/...` when the gate
-  passes and the project's path style is `hip`), absolute otherwise. The Skin node's clothing-vs-body shape lists are NOT
+  passes and the project's path style is `hip`), absolute otherwise.
+  Two things that look like details and are not:
+  - **`scenePath` picks the scene** (v0.71 — the Generate dialog's picker, shown
+    only with more than one linked scene; an unknown value falls back to the
+    primary). Every scene exports into its OWN `dth-exports/<subfolder>/` under
+    a scene-carrying name, so the pick IS the wiring: before it, a multi-scene
+    character's every generated project imported the primary's set and re-aiming
+    it was five hand edits. One project per scene.
+  - **`export_directory` is the OTHER end of the pipeline** and must never be
+    derived from the import paths. The imports READ the Daz→Houdini
+    intermediates under `dth-exports` (large, regenerable, not backed up);
+    this is where Houdini WRITES for Unreal — the character's `export/` folder
+    (the project's `exportSubdir`), resolved by the CALLER since only the host
+    knows that subdir, and given its own `hipRefPrefixFor` against that folder
+    so it comes out `$HIP/../export/`. Until v0.71 it carried the export ROOT,
+    quietly aiming Houdini's output into the throwaway tree. The Skin node's clothing-vs-body shape lists are NOT
   prefilled: they are black-boxed multiparms, the export files may not exist
   at generation time, and the node ships its own "Auto-Populate Skinned
   Shapes" button for exactly that job. Applied parms come back as the
