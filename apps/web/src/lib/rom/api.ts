@@ -24,8 +24,12 @@ export type {
 export { ProjectUnreachableError } from './storage'
 
 // --- core: active-project state + the session pose-asset catalog -----------
-export { fetchPoseAssets, rescanPoseAssets, setActiveProjectDir } from './api/core'
+export { fetchPoseAssets, getActiveProjectDir, rescanPoseAssets, setActiveProjectDir } from './api/core'
 export type { ProjectInfo } from './api/core'
+
+// --- new scenes: loose .duf files a character could adopt -------------------
+export { dismissNewScenes, fetchNewScenes } from './api/new-scenes.ts'
+export type { FoundScene } from './new-scenes.ts'
 
 // --- projects: .dcsp lifecycle + per-project settings -----------------------
 export {

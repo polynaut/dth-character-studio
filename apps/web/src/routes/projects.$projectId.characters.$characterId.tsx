@@ -31,6 +31,7 @@ import { RomEditorSection } from '#/components/character/rom-editor-section.tsx'
 import { CharacterOperationsSection } from '#/components/character/operations-section.tsx'
 import { RomRunLogReport } from '#/components/character/rom-run-log-report.tsx'
 import { SceneFooter, type SceneDockActions } from '#/components/character/scene-footer.tsx'
+import { clearSceneAddRequest, peekSceneAddRequest } from '#/lib/scene-add-request.ts'
 import { ScriptsSection } from '#/components/character/scripts-section.tsx'
 import { NotesEditor } from '#/components/notes-editor.tsx'
 import { DazSceneField } from '#/components/daz-scene-field.tsx'
@@ -234,6 +235,33 @@ function CharacterPage() {
   // Populated by DazSceneField with its add/unlink flows so the docked scene bar
   // can drive them (its "Add scene" button + per-card unlink).
   const sceneDockActions = useRef<SceneDockActions | null>(null)
+  // The new-scene prompt (root route) navigates here with a file in hand rather
+  // than adding it itself, so the dialog that opens is THIS page's real one —
+  // same validation, same copy-vs-link decision. The request is consumed as it
+  // is read, and the ref is only populated once DazSceneField has mounted, so
+  // this waits a frame rather than racing it.
+  useEffect(() => {
+    const scenePath = peekSceneAddRequest(character.id)
+    if (!scenePath) return
+    // Wait for DazSceneField to publish its actions rather than assuming this
+    // effect runs after it — and keep the request in the module until the
+    // dialog is actually opened, so StrictMode's mount/unmount/remount cannot
+    // consume it into a cancelled frame. Bounded: a page that never mounts the
+    // field (an unreadable character) must not poll forever.
+    let frame = 0
+    let left = 60
+    const tick = () => {
+      const actions = sceneDockActions.current
+      if (actions) {
+        clearSceneAddRequest()
+        actions.addPath(scenePath)
+        return
+      }
+      if ((left -= 1) > 0) frame = requestAnimationFrame(tick)
+    }
+    frame = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(frame)
+  }, [character.id])
   const [scenesOnScreen, setScenesOnScreen] = useState(true)
   useEffect(() => {
     // Measure the cards' viewport position directly rather than via an
