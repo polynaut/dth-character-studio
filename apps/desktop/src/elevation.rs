@@ -33,6 +33,58 @@ pub(crate) fn window_title(base: &str) -> String {
 
 const ADMIN_PREFIX: &str = "Administrator: ";
 
+/// Whether this window's process runs elevated — asked by the webview, which
+/// otherwise can't tell. It matters because Windows UIPI silently drops
+/// drag-and-drop from a normal-elevation Explorer into an elevated window: no
+/// event, no error, the drop just does nothing (issue #342). The frontend uses
+/// this to offer a normal restart after an elevated plugin install.
+#[tauri::command]
+pub fn elevated_session() -> bool {
+    is_elevated()
+}
+
+/// Relaunch the studio WITHOUT elevation, then quit this instance.
+///
+/// A plain relaunch inherits the elevated token, so the launch is delegated to
+/// `explorer.exe` — the user's medium-integrity shell starts the target like a
+/// double-click, exactly the delegation `shellopen.rs` uses (and why: the
+/// child gets the shell's integrity level and pristine environment). With a
+/// project open the target is its `.dcsp` (the file association reopens the
+/// project); a Home window relaunches the bare exe.
+///
+/// Best-effort by design: this instance exits right after handing off, and
+/// Explorer's launch takes long enough that the single-instance mutex is free
+/// by the time the new process checks it. If the new instance ever loses that
+/// race it simply exits — worst case the user starts the app by hand, which is
+/// exactly where they'd be without this command.
+#[tauri::command]
+pub fn relaunch_deelevated(app: tauri::AppHandle, project_file: String) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        let target = if project_file.is_empty() {
+            std::env::current_exe()
+                .map_err(|e| format!("couldn't resolve the app executable: {e}"))?
+                .to_string_lossy()
+                .into_owned()
+        } else {
+            project_file
+        };
+        // explorer.exe accepts BACKSLASH paths only (see shellopen.rs).
+        let windows_path = target.replace('/', "\\");
+        std::process::Command::new("explorer.exe")
+            .arg(&windows_path)
+            .spawn()
+            .map_err(|e| format!("couldn't hand the relaunch to Explorer: {e}"))?;
+        app.exit(0);
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (app, project_file);
+        Err("relaunch_deelevated is Windows-only".into())
+    }
+}
+
 #[cfg(windows)]
 fn detect_elevated() -> bool {
     use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
