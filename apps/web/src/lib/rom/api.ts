@@ -24,7 +24,12 @@ export type {
 export { ProjectUnreachableError } from './storage'
 
 // --- core: active-project state + the session pose-asset catalog -----------
-export { fetchPoseAssets, rescanPoseAssets, setActiveProjectDir } from './api/core'
+export {
+  fetchPoseAssets,
+  getActiveProjectDir,
+  rescanPoseAssets,
+  setActiveProjectDir,
+} from './api/core'
 export type { ProjectInfo } from './api/core'
 
 // --- projects: .dcsp lifecycle + per-project settings -----------------------
@@ -118,6 +123,13 @@ export {
   fetchProductScan,
   ingestProjectProductScans,
 } from './api/products'
+// --- detected files: new scenes/.hips found in the character folder ---------
+export {
+  fetchDetectedFiles,
+  fetchProjectDetectedFiles,
+  ignoreDetectedFiles,
+} from './api/detected-files'
+export type { DetectedFilesResult, ProjectDetectedCharacter } from './api/detected-files'
 // --- the Daz installation DIM already knows about ---------------------------
 export { detectDazInstalls } from './api/daz-install'
 // --- the Houdini versions SideFX registered ---------------------------------

@@ -425,6 +425,27 @@ export function installTauriMock(seed: TauriMockSeed): void {
           .filter((k) => k.startsWith(prefix) && k.toLowerCase().endsWith('.duf'))
           .map((k) => k.slice(prefix.length))
       }
+      case 'scan_files_by_ext': {
+        // The native detection walk: extensions matched case-insensitively,
+        // named directories pruned at ANY depth (the real one prunes before
+        // descending; here it is the same predicate applied to the path).
+        const folder = norm(args.folder)
+        const prefix = `${folder}/`
+        const exts = (args.exts as Array<string>).map((e) => `.${e.toLowerCase()}`)
+        const skip = (args.skipDirs as Array<string>).map((d) => d.toLowerCase())
+        return [...files.keys()]
+          .filter((k) => k.startsWith(prefix))
+          .map((k) => k.slice(prefix.length))
+          .filter((rel) => {
+            const lower = rel.toLowerCase()
+            if (!exts.some((ext) => lower.endsWith(ext))) return false
+            return !lower
+              .split('/')
+              .slice(0, -1)
+              .some((dir) => skip.includes(dir))
+          })
+          .sort()
+      }
       case 'pose_asset_frames':
         return (args.paths as Array<string>).map((path) => {
           const frames = seed.dufFrames[norm(path)]

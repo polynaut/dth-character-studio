@@ -30,7 +30,7 @@ export {
 } from './storage/app-data'
 
 // --- Generic folder file ops (Generate writes through these) ----------------
-export { removeFilesFromFolder, writeFilesToFolder, writeTextFileAtomic } from './storage/fs'
+export { removeFilesFromFolder, walkFiles, writeFilesToFolder, writeTextFileAtomic } from './storage/fs'
 export { scriptIconNames, writeScriptIcons } from './storage/script-icons'
 
 // --- App-global settings (settings.json) ------------------------------------

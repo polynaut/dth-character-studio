@@ -17,6 +17,7 @@ import { trackNavOrigin } from '#/lib/nav-origin.ts'
 import { onMenu, openExternal } from '#/lib/desktop.ts'
 import { ConfirmProvider } from '#/lib/use-confirm.tsx'
 import { UpdatePromptHost } from '#/components/update-prompt.tsx'
+import { ProjectDetectedFilesBanner } from '#/components/project-detected-files-banner.tsx'
 import { Button, TooltipHost, UiConfigProvider, installAltMenuGuard } from '@dth/ui'
 
 import type { ErrorComponentProps } from '@tanstack/react-router'
@@ -136,6 +137,12 @@ function RootComponent() {
   return (
     <UiConfigProvider value={{ onNavigate, onOpenExternal, onError }}>
       <ConfirmProvider>
+        {/* Above the page, not on one: a file saved into a character's folder
+            should be noticed wherever the user comes back to — the character
+            page's own banner only runs while that character is open (#740).
+            Renders nothing in a window with no project, and never for the
+            character already on screen. */}
+        <ProjectDetectedFilesBanner />
         <Outlet />
       </ConfirmProvider>
       {/* Dark severity toasts: app-surface card, a colored accent bar on the
