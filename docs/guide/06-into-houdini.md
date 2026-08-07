@@ -76,9 +76,12 @@ unlink-only.
 
 One one-time Settings entry powers it: the **Houdini installation folder**
 (Houdini's own install directory — its `bin\hython.exe` builds the scene
-headlessly). Its version must have a **matching Houdini documents folder**
-configured (`Houdini 22.0.x` ↔ `…\Documents\houdini22.0`) so the DazToHue
-assets load — Settings warns live when the pair doesn't match. The DazToHue
+headlessly), paired with the **matching Houdini documents folder**
+(`Houdini 22.0.x` ↔ `…\Documents\houdini22.0`) so the DazToHue assets load.
+Normally you never type either: activating a Houdini card in
+[**Settings → General**](./02-setup.md#houdini-installation--same-idea) fills
+both together, which is exactly why the cards exist. Fill them by hand on a
+machine with no card and Settings warns live when the pair doesn't match. The DazToHue
 network is created from your **installed DazToHue HDA** at generate time, so
 it's always the current plugin version — no template scene that could rot
 across Houdini or DazToHue updates. If the HDA isn't installed the project
