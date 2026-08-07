@@ -55,7 +55,11 @@ set in [Settings](./02-setup.md).
 - **Character morphs** — opens every linked Daz scene of every character and
   indexes the dials the base index *doesn't* have: fitted clothing, hair,
   third-party geografts and add-ons. Each find is filed under the scene it was
-  found in. One job per scene.
+  found in. One job per scene. A scene scan **needs** the base index of its
+  generation — it works out what a scene adds by subtracting it — so with no
+  base index the scan **stops and says so** rather than filing the entire stock
+  figure as this scene's contribution. Build **Base morphs** first and nothing
+  is lost: the next ROM or export run scans the scene by itself.
 - **Products** — runs the [Daz Products scan](./product-scanning.md) for the
   same scenes. Only available when the project has *Daz Products* switched on
   (**Settings → Project**); it shares the scene opens with the morph scan, so

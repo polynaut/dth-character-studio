@@ -177,6 +177,15 @@ batch and works through it unattended, reporting progress on the button.
   suggested while that scene is selected in the editor, so two jackets in two
   scenes stop competing for the same *Expand All*.
 
+> **Base morphs first — it isn't just an ordering preference.** A scene scan
+> works out what a scene *adds* by subtracting the base index, so without one
+> there is nothing to subtract. Rather than file the whole stock figure as
+> "what this scene adds", a scene scan with no base index for that generation
+> **stops and tells you**. Your ROM and export runs scan their scene
+> automatically, so they simply skip that step (a line in the Daz log, never a
+> failed export) until the base index exists — then the next run files it
+> correctly.
+
 From then on, every **Parameter name** field autocompletes after two typed
 characters — searchable by **internal name** *or* **Daz UI label** — and
 picking a suggestion fills in the exact internal name **and** the right node:

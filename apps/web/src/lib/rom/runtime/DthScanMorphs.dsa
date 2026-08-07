@@ -876,13 +876,41 @@ function dthSceneKey(sPath){
 	return String(sPath).replace(/^\s+|\s+$/g, "").replace(/\\/g, "/").toLowerCase();
 }
 
+/** Where a generation's BASE index (the stock figures' dials) lives. One
+ *  spelling, so the guard below and the reader can never disagree about it. */
+function dthBaseIndexPath(sOutDir, sGenesis){
+	return String(sOutDir).replace(/\\/g, "/").replace(/\/$/, "") +
+		"/morphs_" + sGenesis + ".json";
+}
+
+/**
+ * Whether a USABLE base index exists for this generation.
+ *
+ * The scene scan files "what this scene adds ON TOP of the stock figures", and
+ * it works that out by SUBTRACTING the base index. With no base index there is
+ * nothing to subtract, so the entire stock figure — thousands of dials — files
+ * itself as this scene's contribution, and the studio's Parameter-name
+ * autocomplete drowns in them with nothing anywhere saying why.
+ *
+ * Before runtime v55 that could only happen in the Tools batch, which enqueues
+ * the base row FIRST precisely to avoid it. Since v55 every ROM/export run
+ * scans the scene it just verified, so a plain export on a machine that never
+ * built the base index hit it silently — which is the bug this guards.
+ *
+ * An index holding ZERO morphs counts as MISSING: it cannot be a stock figure's
+ * dial list, and subtracting it would misfile in exactly the same way.
+ */
+function dthHasBaseIndex(sOutDir, sGenesis){
+	var oIndex = dthReadJson(dthBaseIndexPath(sOutDir, sGenesis));
+	return !!(oIndex && oIndex.morphs && oIndex.morphs.length > 0);
+}
+
 /** Every `node|name` key the BASE index already holds for a generation — what a
  *  scene scan filters itself against, so the scene index only ever carries what
  *  the stock figures genuinely don't have. */
 function dthBaseIndexKeys(sOutDir, sGenesis){
 	var oKeys = {};
-	var sPath = String(sOutDir).replace(/\\/g, "/").replace(/\/+$/, "") +
-		"/morphs_" + sGenesis + ".json";
+	var sPath = dthBaseIndexPath(sOutDir, sGenesis);
 	var oIndex = dthReadJson(sPath);
 	if(!oIndex || !oIndex.morphs){
 		print("No base index at", sPath, "- every scanned morph counts as new.");
@@ -1072,6 +1100,26 @@ function DthScanSceneMorphs(config){
 		MessageBox.information(sNoFigure, "DTH Character Studio", "&OK");
 		return;
 	}
+	// Without a base index there is nothing to subtract, so EVERY stock dial
+	// would file itself as something this scene adds (see dthHasBaseIndex).
+	// Refusing is the whole fix: a scene index written now would be wrong, and
+	// nothing downstream could tell it from a real one. Checked BEFORE the scan
+	// so the scene walk isn't paid for a result that gets thrown away.
+	//
+	// Nothing is lost by waiting: a later scan REPLACES this scene's
+	// contribution wholesale (dthWriteSceneIndex), so the first run after the
+	// base index exists files it correctly.
+	if(!dthHasBaseIndex(sOutDir, sGenesis)){
+		var sNoBase = "There is no " + dthGenesisLabel(sGenesis) + " base morph index on " +
+			"this machine, so there is nothing to compare this scene against — every " +
+			"stock figure dial would be filed as something this scene adds.\n\n" +
+			"Run Tools → Scan & index → Base morphs first. This scene is then scanned " +
+			"automatically by its next ROM or export run.";
+		if(bBulk) throw new Error(sNoBase);
+		MessageBox.information(sNoBase, "DTH Character Studio", "&OK");
+		return;
+	}
+
 	print("Scene scan:", sSceneName, "(" + sScenePath + ") as", sGenesis);
 
 	// Everything in the scene, then everything the base index already knows
