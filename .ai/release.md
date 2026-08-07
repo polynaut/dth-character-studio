@@ -102,9 +102,24 @@ Installed apps poll
 `tauri.conf.json` → `plugins.updater`). The web side triggers checks in
 `apps/web/src/lib/updater.ts`.
 
-## Housekeeping
+## Housekeeping — none, and it cannot exist in this form
 
-`release-housekeeping.yml` (daily cron) strips binary assets from old releases —
-keeps the newest 20, the first 3 ever, and every `x.y.0`; releases/tags/notes
-themselves are kept. The updater only ever reads the newest release, so this is
-safe.
+There WAS a `release-housekeeping.yml` (daily cron) that stripped binary assets
+from old releases. It was removed 2026-08-07 because it can never work here:
+
+```
+DELETE /releases/assets/<id>
+422 Validation Failed — "Cannot delete asset from an immutable release"
+```
+
+This repo's releases are **immutable** (see the note in `.ai/gotchas.md` — a
+published release and its `latest.json` cannot be edited afterward), and that
+covers their assets too. So every run failed on the first asset it tried to
+delete, having deleted nothing. A daily red cron that is impossible by
+construction is worse than no cron.
+
+Consequence, deliberately accepted: every release keeps its installers forever.
+If storage ever needs reclaiming, the only lever is deleting whole RELEASES —
+and that is the one thing this repo must be careful with, because a deleted
+release permanently burns its tag name (`.ai/gotchas.md`, the v0.44.7–v0.50.0
+episode).
