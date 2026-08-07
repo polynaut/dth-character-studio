@@ -5,6 +5,7 @@ import { z } from 'zod'
 
 import {
   dedupReportSchema,
+  houdiniInstallSchema,
   housekeepingResultSchema,
   installReportSchema,
   materialUtilReportSchema,
@@ -32,6 +33,7 @@ const CASES = [
   ['dedup-report.json', dedupReportSchema],
   ['remap-results.json', z.array(remapResultSchema)],
   ['material-util-report.json', materialUtilReportSchema],
+  ['houdini-installs.json', z.array(houdiniInstallSchema)],
 ] as const
 
 describe('native FFI contract fixtures', () => {

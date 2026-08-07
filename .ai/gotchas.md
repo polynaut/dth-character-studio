@@ -79,6 +79,25 @@ current code before relying on details, but assume the *lesson* still holds.
   blob never escapes. Parsing lives in `apps/web/src/lib/daz-install.ts` (pure,
   unit-tested), the file-finding in `lib/rom/api/daz-install.ts`. DIM keeps
   listing an app it has uninstalled, so every card is checked against the disk.
+- **SideFX registers every Houdini install — read the registry, don't probe
+  Program Files.** Measured 2026-08-07 on a machine with two installs:
+  `HKLM\SOFTWARE\Side Effects Software\Houdini` holds one REG_SZ per version,
+  value NAME = the four-part version, DATA = the install folder:
+  `20.5.0.864 → C:\Program Files\Side Effects Software\Houdini 20.5.864\`.
+  Three traps: (1) the same key carries **non-version values** (`LicenseServer`),
+  so filter by `<n>.<n>.<n>.<n>` shape; (2) the data ends with a **trailing
+  backslash** every TS-side join/compare assumes away; (3) the registry version
+  is NOT the folder's spelling — `22.0.0.368` vs `Houdini 22.0.368`, the third
+  component dropped — so never derive one from the other. Reading it is the only
+  reason `houdini_install.rs` is native (windows-sys + `Win32_System_Registry`,
+  no new crate); pairing/ordering is TS in `lib/houdini-install.ts`.
+  **The prefs folder lives in TWO possible roots.** `houdini<major>.<minor>` was
+  found under BOTH the (redirected) Documents folder `D:/User Data/Documents`
+  and `%USERPROFILE%` on the same machine — Houdini falls back to home — so a
+  detection that knows only `documentDir()` pairs half the installs with
+  nothing. Documents wins when both hold the same release. And a prefs folder
+  can outlive its install (`houdini21.0` with no Houdini 21 registered), so an
+  orphan is reported, never treated as an install.
 - **The DS6 Constant-keyframe workaround is dead — don't reintroduce it.** Runtime
   v17 stamped every ROM key CONSTANT on DS6 (a workaround for DS6 drifting Linear
   ROM keys). Rolled back in runtime v35: it didn't actually fix the drift and

@@ -31,6 +31,13 @@ export interface TauriMockSeed {
   /** What `publicDir()` resolves to — the DIM manifests' default home lives
    *  under its `Documents`. */
   publicDir?: string
+  /** What `documentDir()` / `homeDir()` resolve to — the two roots Houdini's
+   *  `houdini<major>.<minor>` preferences folders are looked for under. */
+  documentDir?: string
+  homeDir?: string
+  /** What `houdini_installs` reports — the registry, as the studio sees it.
+   *  Omit for a machine with no Houdini installed. */
+  houdiniInstalls?: Array<{ version: string; path: string }>
   /** The `.dcsp` this "window" was opened with — '' for a Home window. */
   activeProjectFile: string
   /** What `getVersion()` reports. */
@@ -291,8 +298,13 @@ export function installTauriMock(seed: TauriMockSeed): void {
         // BaseDirectory: 3 = Config (Windows Roaming), 9 = Public, 15 =
         // AppLocalData. Only these three are asked for; anything else keeps the
         // app-data answer this fake gave before there was more than one.
+        // 6 = Document and 21 = Home are where Houdini's `houdini<X>.<Y>` prefs
+        // folders live — both, because Houdini falls back to home when it can't
+        // use Documents (and Documents is routinely redirected off C:).
         if (args.directory === 3) return seed.roamingDir ?? 'C:/Users/dev/AppData/Roaming'
         if (args.directory === 9) return seed.publicDir ?? 'C:/Users/Public'
+        if (args.directory === 6) return seed.documentDir ?? 'C:/Users/dev/Documents'
+        if (args.directory === 21) return seed.homeDir ?? 'C:/Users/dev'
         return seed.appDataDir
       case 'plugin:app|version':
         return seed.version
@@ -523,6 +535,10 @@ export function installTauriMock(seed: TauriMockSeed): void {
           })),
         }
       }
+      case 'houdini_installs':
+        // The Windows registry read (houdini_install.rs) has nothing to stand
+        // in for it here, so a spec states what the machine has.
+        return seed.houdiniInstalls ?? []
       case 'restore_houdini_backup': {
         // The revert a failed run offers: a plain file copy in the real Rust,
         // so the fake does exactly that against its in-memory files. Refusing

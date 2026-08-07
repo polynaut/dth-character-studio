@@ -309,10 +309,24 @@ const DS4_DIR = 'C:/Program Files/DAZ 3D/DAZStudio4'
 const DAZ_LIBRARY = 'D:/DAZ 3D/My DAZ 3D Library'
 const DIM_MANIFESTS = 'D:/DAZ 3D/Install Manager/ManifestFiles'
 
+/** …and two registered Houdini installs, with the prefs folders they pair to. */
+const H22_DIR = 'C:/Program Files/Side Effects Software/Houdini 22.0.368'
+const H20_DIR = 'C:/Program Files/Side Effects Software/Houdini 20.5.864'
+const HOUDINI_DOCS_ROOT = 'C:/Users/You/Documents'
+
 function dimSeed() {
   const dazAppData = `${DIM_ROAMING}/DAZ 3D`
   const seed = buildSeed()
   seed.roamingDir = DIM_ROAMING
+  seed.documentDir = HOUDINI_DOCS_ROOT
+  seed.houdiniInstalls = [
+    { version: '20.5.0.864', path: H20_DIR },
+    { version: '22.0.0.368', path: H22_DIR },
+  ]
+  seed.files[`${H22_DIR}/bin/hython.exe`] = 'hython22'
+  seed.files[`${H20_DIR}/bin/hython.exe`] = 'hython20'
+  seed.files[`${HOUDINI_DOCS_ROOT}/houdini22.0/houdini.env`] = 'env22'
+  seed.files[`${HOUDINI_DOCS_ROOT}/houdini20.5/houdini.env`] = 'env20'
   seed.files[`${dazAppData}/dzInstall.ini`] =
     `[General]\nInstalledApplications=dzStudio6InstallDir-64 dzStudio4InstallDir-64\n\n` +
     `[ApplicationPath]\ndzStudio6InstallDir-64=${DS6_DIR}\ndzStudio4InstallDir-64=${DS4_DIR}\n`
@@ -342,6 +356,15 @@ async function openDazSettings(page: Page) {
 test('settings-daz-install', async ({ page }) => {
   await openDazSettings(page)
   await shoot(page, join(OUT, 'settings-daz-install.png'), card(page, 'Daz installation'))
+})
+
+test('settings-houdini-install', async ({ page }) => {
+  await openDazSettings(page)
+  // Activated too, so the shot shows the pair it derives — the install folder
+  // and the matching houdini<major>.<minor>, which is the whole point.
+  await page.getByRole('button', { name: /Houdini 22\.0\.368/ }).click()
+  await card(page, 'Houdini installation').getByText('Paths from this installation').waitFor()
+  await shoot(page, join(OUT, 'settings-houdini-install.png'), card(page, 'Houdini installation'))
 })
 
 test('settings-dth-release', async ({ page }) => {

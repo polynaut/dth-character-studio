@@ -115,6 +115,8 @@ export {
 export { clearProductScan, detectDimManifestsFolder, fetchProductScan } from './api/products'
 // --- the Daz installation DIM already knows about ---------------------------
 export { detectDazInstalls } from './api/daz-install'
+// --- the Houdini versions SideFX registered ---------------------------------
+export { detectHoudiniInstalls } from './api/houdini-install'
 export type { ProductScanFile } from './api/products'
 
 // --- execute: DTH Exporter job-file handoff + Daz launch ---------------------

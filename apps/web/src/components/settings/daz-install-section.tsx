@@ -1,6 +1,7 @@
-import { AlertTriangle, Check, Loader2, RefreshCw, Pencil } from 'lucide-react'
+import { AlertTriangle, Loader2, RefreshCw, Pencil } from 'lucide-react'
 
 import { Button, InfoPopup } from '@dth/ui'
+import { InstallCard } from '#/components/settings/install-card.tsx'
 import { PathCode } from '#/components/path-code.tsx'
 import { displayPath } from '#/lib/path.ts'
 import dazLogo from '#/assets/daz-logo.png'
@@ -104,62 +105,20 @@ export function DazInstallSection({
         </p>
       ) : (
         <div className="flex flex-wrap gap-3">
-          {apps.map((app) => {
-            const active = app.key === activeKey
-            return (
-              <button
-                key={app.key}
-                type="button"
-                // A missing folder is shown and refused, rather than hidden: the
-                // user is far better placed than the studio to know whether it
-                // was uninstalled or is on a drive that isn't mounted today.
-                disabled={!app.exists || busyKey !== ''}
-                onClick={() => onActivate(app.key)}
-                className={`flex min-w-[16rem] flex-1 items-start gap-3 rounded-lg border p-3 text-left transition-colors ${
-                  active
-                    ? 'border-primary bg-primary/10'
-                    : app.exists
-                      ? 'hover:bg-accent/50'
-                      : 'cursor-not-allowed opacity-60'
-                }`}
-              >
-                <img src={dazLogo} alt="" aria-hidden className="size-8 shrink-0 object-contain" />
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-2">
-                    <span className="font-medium">{app.name}</span>
-                    {!active && activeKey === '' && app.key === recommendedKey && (
-                      <span className="text-xs text-muted-foreground">recommended</span>
-                    )}
-                    {/* The state AND the invitation, right-aligned so the column
-                        of them reads down the card list. An inactive card that
-                        showed nothing here was the whole problem. */}
-                    <span className="ml-auto shrink-0">
-                      {active ? (
-                        <span className="flex items-center gap-1 text-xs font-medium text-primary">
-                          <Check className="size-3.5" /> Active
-                        </span>
-                      ) : app.exists ? (
-                        <span className="rounded-md border border-primary/40 px-2 py-0.5 text-xs font-medium text-primary">
-                          {busyKey === app.key ? 'Activating…' : 'Activate'}
-                        </span>
-                      ) : null}
-                    </span>
-                  </span>
-                  <span
-                    className="mt-0.5 block truncate text-xs text-muted-foreground"
-                    title={app.path}
-                  >
-                    {displayPath(app.path)}
-                  </span>
-                  {!app.exists && (
-                    <span className="mt-1 flex items-center gap-1 text-xs text-amber-500">
-                      <AlertTriangle className="size-3 shrink-0" /> folder not found
-                    </span>
-                  )}
-                </span>
-              </button>
-            )
-          })}
+          {apps.map((app) => (
+            <InstallCard
+              key={app.key}
+              logo={dazLogo}
+              title={app.name}
+              path={displayPath(app.path)}
+              active={app.key === activeKey}
+              exists={app.exists}
+              busy={busyKey === app.key}
+              recommended={activeKey === '' && app.key === recommendedKey}
+              disabled={busyKey !== ''}
+              onActivate={() => onActivate(app.key)}
+            />
+          ))}
         </div>
       )}
 

@@ -95,8 +95,21 @@ export const studioSettingsSchema = z.object({
    * `bin/hython.exe` powers the character page's "Generate project" (creating
    * a ready-made DazToHue Houdini project; the network is instantiated from
    * the INSTALLED DazToHue HDA — no template scene to rot across versions).
+   *
+   * DERIVED while `houdiniInstallKey` is set, together with
+   * `houdiniDocsFolder`; the user's own to edit otherwise.
    */
   houdiniInstallFolder: str,
+  /**
+   * Which detected Houdini the two Houdini paths were derived from — SideFX's
+   * four-part version (`22.0.0.368`), which is the registry's own key for it.
+   * Empty = none activated, and both fields are plain editable ones.
+   *
+   * `extraHoudiniDocsFolders` is deliberately NOT part of this: it exists so an
+   * older Houdini can keep an older DTH release, which is a decision about the
+   * OTHER versions and stays the user's.
+   */
+  houdiniInstallKey: str,
   /**
    * LEGACY (pre-v0.61): how the bone-scale **reference-skeleton FBX** paths in
    * the PoseAsset CSV were anchored, back when this was one app-global knob.

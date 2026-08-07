@@ -100,4 +100,7 @@ windows-sys = { version = "0.61", features = [
   # Writing a directory junction's reparse point (see junction.rs).
   "Win32_Storage_FileSystem",
   "Win32_System_IO",
+  # Reading the installed Houdini versions SideFX registers under
+  # HKLM\SOFTWARE\Side Effects Software\Houdini (see houdini_install.rs).
+  "Win32_System_Registry",
 ] }

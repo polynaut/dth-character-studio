@@ -31,6 +31,13 @@ fn pose_asset_frames_matches_the_shared_fixture() {
 }
 
 #[test]
+fn houdini_installs_matches_the_shared_fixture() {
+    round_trip::<Vec<crate::houdini_install::HoudiniInstall>>(include_str!(
+        "../../../contracts/houdini-installs.json"
+    ));
+}
+
+#[test]
 fn scene_wearables_matches_the_shared_fixture() {
     round_trip::<crate::poses::SceneWearables>(include_str!(
         "../../../contracts/scene-wearables.json"

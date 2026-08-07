@@ -141,6 +141,8 @@ describe('settings (settings.json)', () => {
     houdiniDocsFolder: '',
     extraHoudiniDocsFolders: [],
     houdiniInstallFolder: '',
+    // No Houdini activated either — both Houdini paths are the user's to edit.
+    houdiniInstallKey: '',
     dimManifestsFolder: '',
     dazAssetsFolders: [],
     dazMorphsSource: '',
@@ -188,6 +190,7 @@ describe('settings (settings.json)', () => {
       houdiniDocsFolder: 'D:/Documents/houdini20.5',
       extraHoudiniDocsFolders: ['D:/Documents/houdini19.5'],
       houdiniInstallFolder: 'C:/Program Files/Side Effects Software/Houdini 22.0.368',
+      houdiniInstallKey: '22.0.0.368',
       dimManifestsFolder: 'C:/Users/Public/Documents/DAZ 3D/InstallManager/ManifestFiles',
       dazAssetsFolders: ['X:/assets/a', 'X:/assets/b'],
       dazMorphsSource: 'X:/morphs',
