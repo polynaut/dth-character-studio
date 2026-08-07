@@ -337,7 +337,10 @@ function SettingsPage() {
     }
     let cancelled = false
     setReleasesLoading(true)
-    const timer = setTimeout(async () => {
+    // Named + `void`d rather than an async callback handed to setTimeout: the
+    // timer discards what it returns either way, and this says so. Every
+    // outcome is already handled below, so there is nothing left to await.
+    async function inspect() {
       try {
         const result = await listDthReleases({ data: { folder } })
         if (!cancelled) setReleases(result)
@@ -355,7 +358,8 @@ function SettingsPage() {
       } finally {
         if (!cancelled) setReleasesLoading(false)
       }
-    }, 350)
+    }
+    const timer = setTimeout(() => void inspect(), 350)
     return () => {
       cancelled = true
       clearTimeout(timer)
@@ -373,7 +377,8 @@ function SettingsPage() {
     }
     let cancelled = false
     setExporterLoading(true)
-    const timer = setTimeout(async () => {
+    // Named + `void`d, same as the releases effect above.
+    async function inspect() {
       try {
         const result = await listDthExporterReleases({ data: { folder } })
         if (!cancelled) setExporter(result)
@@ -389,7 +394,8 @@ function SettingsPage() {
       } finally {
         if (!cancelled) setExporterLoading(false)
       }
-    }, 350)
+    }
+    const timer = setTimeout(() => void inspect(), 350)
     return () => {
       cancelled = true
       clearTimeout(timer)
@@ -727,7 +733,7 @@ function SettingsPage() {
                 <Button
                   variant="outline"
                   onClick={() =>
-                    runInstall(
+                    void runInstall(
                       (args) => installDthRelease({ data: { ...args.data, target: 'daz' } }),
                       true,
                       setReleaseInstalling,
@@ -740,7 +746,7 @@ function SettingsPage() {
                 </Button>
                 <Button
                   onClick={() =>
-                    runInstall(
+                    void runInstall(
                       (args) => installDthRelease({ data: { ...args.data, target: 'daz' } }),
                       false,
                       setReleaseInstalling,
@@ -793,7 +799,7 @@ function SettingsPage() {
                 <Button
                   variant="outline"
                   onClick={() =>
-                    runInstall(
+                    void runInstall(
                       (args) => installDthRelease({ data: { ...args.data, target: 'houdini' } }),
                       true,
                       setReleaseInstalling,
@@ -806,7 +812,7 @@ function SettingsPage() {
                 </Button>
                 <Button
                   onClick={() =>
-                    runInstall(
+                    void runInstall(
                       (args) => installDthRelease({ data: { ...args.data, target: 'houdini' } }),
                       false,
                       setReleaseInstalling,
@@ -853,7 +859,7 @@ function SettingsPage() {
                   <Button
                     variant="outline"
                     onClick={() =>
-                      runInstall(
+                      void runInstall(
                         (args) =>
                           installDthRelease({
                             data: { ...args.data, target: 'houdini', houdiniDocsFolder: folder },
@@ -869,7 +875,7 @@ function SettingsPage() {
                   </Button>
                   <Button
                     onClick={() =>
-                      runInstall(
+                      void runInstall(
                         (args) =>
                           installDthRelease({
                             data: { ...args.data, target: 'houdini', houdiniDocsFolder: folder },
@@ -1069,14 +1075,16 @@ function SettingsPage() {
             <div className="flex gap-2">
               <Button
                 variant="outline"
-                onClick={() => runInstall(installDthPlugin, true, setPluginInstalling, setPluginReport)}
+                onClick={() =>
+                  void runInstall(installDthPlugin, true, setPluginInstalling, setPluginReport)
+                }
                 disabled={!canInstallPlugin || pluginInstalling}
               >
                 {pluginInstalling ? 'Working…' : 'Dry run'}
               </Button>
               <Button
                 onClick={() =>
-                  runInstall(
+                  void runInstall(
                     installDthPlugin,
                     false,
                     setPluginInstalling,
@@ -1164,14 +1172,16 @@ function SettingsPage() {
             <div className="flex gap-2">
               <Button
                 variant="outline"
-                onClick={() => runInstall(installDthRunner, true, setRunnerInstalling, setRunnerReport)}
+                onClick={() =>
+                  void runInstall(installDthRunner, true, setRunnerInstalling, setRunnerReport)
+                }
                 disabled={!canInstallRunner || runnerInstalling}
               >
                 {runnerInstalling ? 'Working…' : 'Dry run'}
               </Button>
               <Button
                 onClick={() =>
-                  runInstall(
+                  void runInstall(
                     installDthRunner,
                     false,
                     setRunnerInstalling,
@@ -1367,7 +1377,7 @@ function SettingsPage() {
                   variant="outline"
                   size="sm"
                   className="mt-2"
-                  onClick={onDetectDimFolder}
+                  onClick={() => void onDetectDimFolder()}
                   disabled={detectingDim}
                 >
                   {detectingDim ? 'Detecting…' : 'Detect installed location'}

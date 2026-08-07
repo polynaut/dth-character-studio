@@ -467,7 +467,12 @@ function ProjectCharactersPage() {
           the character without one: its folder is set up for you to save the scene into.
         </p>
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="button" variant="outline" className="shrink-0" onClick={onPickScene}>
+          <Button
+            type="button"
+            variant="outline"
+            className="shrink-0"
+            onClick={() => void onPickScene()}
+          >
             <FolderOpen /> {scenePath.trim() ? 'Choose another…' : 'Choose Daz scene…'}
           </Button>
           {scenePath.trim() && (
@@ -534,7 +539,9 @@ function ProjectCharactersPage() {
                       value={name}
                       aria-invalid={nameError ? true : undefined}
                       onChange={(e) => setName(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && onCreate()}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') void onCreate()
+                      }}
                     />
                   </div>
                 </Field>
@@ -951,7 +958,9 @@ function ProjectCharactersPage() {
           }
           busy={deleting}
           error={deleteError}
-          onConfirm={onBulkDelete}
+          // Fire and forget on purpose: the dialog's `busy`/`error` props are
+          // how progress and failure come back, so it never awaits this.
+          onConfirm={(opts) => void onBulkDelete(opts)}
           onClose={() => setConfirmOpen(false)}
         />
       )}

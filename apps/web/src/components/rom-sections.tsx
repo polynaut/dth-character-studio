@@ -995,16 +995,17 @@ export const RomSections = memo(function RomSections({
                           variant="outline"
                           size="sm"
                           className="shrink-0"
-                          onClick={async () => {
+                          onClick={() =>
                             // Re-browsing opens at the preset already chosen (the
                             // file preselected), else in the DTH releases folder
                             // the rest of the presets come from.
-                            const picked = await pickDufPath(
+                            void pickDufPath(
                               'Select a custom JCM pose preset (.duf)',
                               browseStart(mergedConfig.customAssetPath, dthPosesFolder),
-                            )
-                            if (picked) patchSectionForScene(section, { customAssetPath: picked })
-                          }}
+                            ).then((picked) => {
+                              if (picked) patchSectionForScene(section, { customAssetPath: picked })
+                            })
+                          }
                         >
                           <FolderOpen /> Browse
                         </Button>

@@ -92,7 +92,7 @@ export function StorageLocation({
           />
         </Field>
         <Field className="shrink-0">
-          <Button variant="outline" onClick={onMove} disabled={!canMove}>
+          <Button variant="outline" onClick={() => void onMove()} disabled={!canMove}>
             <FolderInput /> Move
           </Button>
         </Field>

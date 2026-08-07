@@ -143,7 +143,12 @@ function HomePage() {
     setPanelOpen(true)
   }
 
-  const { id: dropId, isOver: dropOver } = useFileDrop({ acceptFolders: true, onDrop })
+  const { id: dropId, isOver: dropOver } = useFileDrop({
+    acceptFolders: true,
+    // The zone fires and forgets (`onDrop: (paths) => void`), and the handler
+    // reports its own failures — say so rather than handing it a promise.
+    onDrop: (paths) => void onDrop(paths),
+  })
 
   return (
     <main data-filedrop-id={dropId} className="relative min-h-screen p-8">
@@ -169,7 +174,7 @@ function HomePage() {
         <Button variant="outline" size="sm" onClick={openCreatePanel}>
           <FolderPlus /> New project
         </Button>
-        <Button variant="outline" size="sm" onClick={onOpenExisting}>
+        <Button variant="outline" size="sm" onClick={() => void onOpenExisting()}>
           <FolderOpen /> Open project…
         </Button>
         <span className="text-sm text-muted-foreground">
@@ -234,7 +239,7 @@ function HomePage() {
               type="button"
               variant="outline"
               className="shrink-0"
-              onClick={onChooseFolder}
+              onClick={() => void onChooseFolder()}
               disabled={busy}
             >
               <FolderOpen /> {path ? 'Choose another…' : 'Choose folder…'}
@@ -253,10 +258,12 @@ function HomePage() {
                   placeholder="e.g. Project Nova"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && onCreate()}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') void onCreate()
+                  }}
                 />
               </div>
-              <Button onClick={onCreate} disabled={busy || !name.trim()}>
+              <Button onClick={() => void onCreate()} disabled={busy || !name.trim()}>
                 <FolderPlus /> Create
               </Button>
             </div>
