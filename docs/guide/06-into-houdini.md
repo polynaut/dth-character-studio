@@ -95,8 +95,10 @@ If you reuse the same skin across characters, you were rebuilding all of it by
 hand.
 
 The **Utils** button on a Houdini project card (the 🔧 that appears on hover)
-opens a drawer that copies a material node's **complete setup** — material
-slots, UV channels and texture bakers — from one project into another.
+opens a drawer with three tabs. It opens on **General** — the health check of
+the projects themselves, described [below](#the-general-tab) — while
+**Material** and **Skeleton** copy a node's **complete setup** from one project
+into another: material slots, UV channels and texture bakers.
 
 <p align="center">
   <img width="900" alt="the Utils drawer: target projects, source project and what to copy" src="screenshots/houdini-utils-drawer.png" />
@@ -247,10 +249,16 @@ Only paths **under** your Daz library are rewritten. A texture living somewhere
 else can't be made portable, so it stays absolute and the report lists it — the
 copy is only as movable as those paths.
 
-Every project the transfer writes is saved once, after its previous state is
-kept as `backup/<name>_dthbak.hiplc` (one rolling backup, beside Houdini's own).
-**Close the target projects in Houdini first** — Houdini writes the entire scene
-when you save, so an open copy would overwrite the transfer.
+Every project the transfer writes is saved once. **Close the target projects in
+Houdini first** — Houdini writes the entire scene when you save, so an open copy
+would overwrite the transfer.
+
+> **Every run that writes takes a backup first**, and you never have to think
+> about it: one rolling `backup/<name>_dthbak.hiplc` beside Houdini's own,
+> silently replaced each run. It only ever surfaces when something **fails** —
+> the failed entry in the report grows an **Undo this run** button that puts
+> that project back exactly as it was. A run that worked has nothing to undo,
+> so it says nothing.
 
 ### The Skeleton tab
 
@@ -266,11 +274,19 @@ list you append to (22 renames onto 22 existing ones would be 44 rules, not a
 merged setup), so this tab has no *Replace at target* toggle. The counts beside
 each section are how much is actually set there, not how many parameters exist.
 
-### The Defaults tab
+### The General tab
 
-Per-project Houdini settings the studio knows the right value for. Each row
-shows what the project carries **now** beside what the studio expects, and
-whether the two match.
+The tab the drawer opens on, and the only one useful without a second project
+picked: what each linked project carries **now**, and what the studio can put
+right. Every check is one row — its name on the left, the verdict on the right,
+the value beneath — and the three fixes sit in the footer, in the order they
+have to be run.
+
+<p align="center">
+  <img width="900" alt="the General tab: one row per check, verdicts aligned right, the three fixes in the footer" src="screenshots/houdini-utils-general.png" />
+  <br>
+  <sub><em>A project made before v0.64: <code>$JOB</code> still points below the exports, everything else passes.</em></sub>
+</p>
 
 **Project folder (`$JOB`)** is the one you can repair. `$JOB` is saved *inside*
 each `.hip`, so a project keeps whatever it was created with — and projects made
@@ -318,8 +334,9 @@ already written.
 > `$JOB` it reports *0* paths it can fix; after the `$JOB` repair, the same file
 > reports *2*.
 
-Both offer a **Dry run** and take the same rolling backup. Running twice changes
-nothing the second time.
+Both offer a **Dry run**, and both take the same silent backup described above —
+so a failed run can be undone from its own report. Running twice changes nothing
+the second time.
 
 **Scene location (`$HIP`)** is reported, never rewritten: `$HIP` is simply
 wherever the `.hip` sits, so "repairing" it would mean moving your scene file —
@@ -344,9 +361,8 @@ Two things make it safe to run on a project you set up by hand:
 **Repair `$JOB`** is enabled only when at least one project actually differs,
 and it touches only those — a project already on the right folder is listed and
 left alone, so running it twice rewrites nothing the second time. It offers the
-same **Dry run** as the transfer, and takes the same rolling
-`backup/<name>_dthbak.hiplc` before saving. A project the scan couldn't read is
-never repaired: its `$JOB` is *unknown*, not wrong.
+same **Dry run** as the transfer, and the same backup before saving. A project
+the scan couldn't read is never repaired: its `$JOB` is *unknown*, not wrong.
 
 ### Scanning
 
@@ -358,7 +374,7 @@ projects nobody touched costs nothing. Reading a `.hip` the first time takes a
 few seconds; a transfer rewrites its targets, so exactly those are read again
 and their neighbours aren't. One scan serves all three tabs — the `$JOB` and
 `$HIP` values are read in the same pass as the nodes — so switching between
-Material, Skeleton and Defaults is instant.
+General, Material and Skeleton is instant.
 
 ## `$DAZ3D_LIB` — your Daz library, as a variable
 

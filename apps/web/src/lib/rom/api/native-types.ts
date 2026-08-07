@@ -255,7 +255,7 @@ export const materialNodeInfoSchema = z.object({
 })
 
 /** How portable a project's stored file references are. Computed by the SAME
- *  helpers the `repath` op runs (in dry mode), so the Defaults tab can never
+ *  helpers the `repath` op runs (in dry mode), so the General tab can never
  *  promise a number the action then doesn't deliver. */
 export const projectRefInfoSchema = z.object({
   /** Absolute references under `$HIP`/`$JOB`/`$DAZ3D_LIB` — expressible

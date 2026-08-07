@@ -376,7 +376,7 @@ current code before relying on details, but assume the *lesson* still holds.
   one saved without ever setting `$JOB` reloads carrying Houdini's default (the
   process CWD), so "unset" is not a state the UI has to render — and
   `hou.putenv('JOB', …)` + `hou.hipFile.save()` persists across a reload, which
-  is what makes the Defaults tab's repair possible at all. Consequence for the
+  is what makes the General tab's repair possible at all. Consequence for the
   product: v0.64's `$JOB` fix (#700) reached only NEWLY GENERATED projects;
   every existing one keeps the pre-v0.64 `<char>/houdini/houdini-project`
   forever unless something rewrites it, which is why the repair exists (#701).

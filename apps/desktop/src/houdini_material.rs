@@ -113,7 +113,7 @@ pub struct MaterialScanProject {
     pub nodes: Vec<MaterialNodeInfo>,
     /// The `$JOB` this scene carries — scene state saved with the `.hip`, so a
     /// project keeps whatever it was created with. Read in the SAME pass as the
-    /// nodes: opening a `.hip` costs tens of seconds and the Defaults tab must
+    /// nodes: opening a `.hip` costs tens of seconds and the General tab must
     /// not pay it twice. Empty only when the project could not be read.
     pub job: String,
     /// The folder the `.hip` sits in — i.e. `$HIP`, which is derived rather
@@ -443,4 +443,120 @@ pub fn run_houdini_material_util(
 
     serde_json::from_str::<MaterialUtilReport>(&text)
         .map_err(|e| format!("Could not read the material report: {e}"))
+}
+
+/// Which project to put back, and from which backup.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RestoreBackupRequest {
+    /// The `.hip` to overwrite — the file the failed run was saving.
+    pub hip_path: String,
+    /// The backup to copy back. Always the studio's own `…_dthbak` file, taken
+    /// by `material_utils.py` immediately before the save that failed.
+    pub backup_path: String,
+}
+
+/// Put a project back the way it was before a run that failed.
+///
+/// Every real run takes one rolling backup before saving, and the UI never
+/// mentions it while things work — a "backup written" line on every successful
+/// run is noise that teaches the eye to skip the one line that matters. The
+/// backup surfaces exactly once, as the offer to revert a failed run, and this
+/// is that revert.
+///
+/// A plain file copy rather than a Houdini round trip, deliberately: hython
+/// would spend tens of seconds opening and re-saving a scene that is already
+/// correct on disk, and that re-save would be one more chance to damage the
+/// thing being rescued.
+#[tauri::command(async)]
+pub fn restore_houdini_backup(request: RestoreBackupRequest) -> Result<(), String> {
+    let backup = std::path::Path::new(&request.backup_path);
+    let hip = std::path::Path::new(&request.hip_path);
+    if hip.as_os_str().is_empty() {
+        return Err("No project file was given to restore.".into());
+    }
+    // Only ever the studio's own backup. This overwrites a user's scene file,
+    // so the one thing that must be impossible is a stale or hand-edited report
+    // pointing it at some other path.
+    let is_studio_backup = backup
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .is_some_and(|stem| stem.ends_with("_dthbak"));
+    if !is_studio_backup {
+        return Err(format!(
+            "Not a backup this studio wrote, so nothing was restored:\n{}",
+            request.backup_path
+        ));
+    }
+    if !backup.is_file() {
+        return Err(format!(
+            "The backup is no longer there, so nothing was restored:\n{}",
+            request.backup_path
+        ));
+    }
+    std::fs::copy(backup, hip)
+        .map(|_| ())
+        .map_err(|e| format!("Could not restore {}: {e}", request.hip_path))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::testutil::unique_temp_dir;
+
+    fn request(hip: &std::path::Path, backup: &std::path::Path) -> RestoreBackupRequest {
+        RestoreBackupRequest {
+            hip_path: hip.to_string_lossy().into_owned(),
+            backup_path: backup.to_string_lossy().into_owned(),
+        }
+    }
+
+    #[test]
+    fn restores_the_pre_run_state_over_the_project() {
+        let dir = unique_temp_dir("restore_backup");
+        std::fs::create_dir_all(dir.join("backup")).unwrap();
+        let hip = dir.join("Ita.hiplc");
+        let backup = dir.join("backup/Ita_dthbak.hiplc");
+        std::fs::write(&hip, b"half-written").unwrap();
+        std::fs::write(&backup, b"before the run").unwrap();
+
+        restore_houdini_backup(request(&hip, &backup)).unwrap();
+
+        assert_eq!(std::fs::read(&hip).unwrap(), b"before the run");
+        // The backup stays: it is rolling, and a restore is not a reason to
+        // spend the one copy the next failure would need.
+        assert!(backup.is_file());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn refuses_a_path_that_is_not_a_studio_backup() {
+        let dir = unique_temp_dir("restore_foreign");
+        std::fs::create_dir_all(&dir).unwrap();
+        let hip = dir.join("Ita.hiplc");
+        let other = dir.join("SomeoneElses.hiplc");
+        std::fs::write(&hip, b"current").unwrap();
+        std::fs::write(&other, b"unrelated scene").unwrap();
+
+        let error = restore_houdini_backup(request(&hip, &other)).unwrap_err();
+
+        assert!(error.contains("Not a backup this studio wrote"), "{error}");
+        assert_eq!(std::fs::read(&hip).unwrap(), b"current");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn reports_a_backup_that_is_gone_instead_of_truncating_the_project() {
+        let dir = unique_temp_dir("restore_missing");
+        std::fs::create_dir_all(&dir).unwrap();
+        let hip = dir.join("Ita.hiplc");
+        std::fs::write(&hip, b"current").unwrap();
+
+        let error =
+            restore_houdini_backup(request(&hip, &dir.join("backup/Ita_dthbak.hiplc"))).unwrap_err();
+
+        assert!(error.contains("no longer there"), "{error}");
+        assert_eq!(std::fs::read(&hip).unwrap(), b"current");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

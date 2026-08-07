@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { AlertTriangle, FolderOpen, Loader2, RefreshCw, Wrench } from 'lucide-react'
+import {
+  AlertTriangle,
+  FolderOpen,
+  Loader2,
+  RefreshCw,
+  Route,
+  Undo2,
+  Wand2,
+  Wrench,
+} from 'lucide-react'
 import { toast } from 'sonner'
 
 import {
@@ -26,6 +35,7 @@ import {
   prefillHoudiniNetwork,
   repairHoudiniDefaults,
   repathHoudiniReferences,
+  restoreHoudiniBackup,
   scanHoudiniMaterials,
   transferHoudiniMaterials,
 } from '#/lib/rom/api.ts'
@@ -162,11 +172,46 @@ function nodeLabel(node: MaterialNodeInfo): { primary: string; secondary: string
 }
 
 /**
- * The drawer's tabs. Two transfer a NODE KIND between projects; `defaults` acts
- * on the project files themselves — the per-project Houdini settings the studio
- * knows the right value for.
+ * The drawer's tabs. `general` acts on the project FILES themselves — the
+ * per-project Houdini settings the studio knows the right value for; the other
+ * two transfer a NODE KIND between projects.
+ *
+ * `general` leads and opens first: it is the tab that answers "is this project
+ * healthy?", it needs no second project picked to be useful, and every one of
+ * its findings comes free with the scan the drawer runs anyway.
  */
-type DrawerTab = NodeKind | 'defaults'
+type DrawerTab = NodeKind | 'general'
+
+/** The three file-level actions of the General tab. One report slot is shared
+ *  between them — see {@link ActionReport}. */
+type GeneralAction = 'defaults' | 'repath' | 'prefill'
+
+/**
+ * The result of the last General-tab action, and which one produced it.
+ *
+ * ONE slot, not one per action: three reports stacked below the project cards
+ * was the tab's worst noise — each repeating the same file names, two of them
+ * describing runs the user had already read and moved on from.
+ */
+interface ActionReport {
+  kind: GeneralAction
+  report: MaterialUtilReport
+}
+
+/**
+ * The revert offer the reports share.
+ *
+ * A backup is taken before every real save and never mentioned while things
+ * work. It surfaces exactly once — beside an entry that FAILED — because that
+ * is the only moment it is worth anything.
+ */
+interface RestoreProps {
+  /** The `.hip` being restored right now, '' when idle. */
+  busy: string
+  /** Files already put back this session — the offer becomes a confirmation. */
+  done: ReadonlySet<string>
+  onRestore: (hipPath: string, backupPath: string) => void
+}
 
 /** A scan result plus the request that produced it, so a stale list is never
  *  shown against a changed selection. */
@@ -222,9 +267,9 @@ export function HoudiniUtilsPanel({
   const [sections, setSections] = useState<ReadonlySet<MaterialSection>>(
     new Set(MATERIAL_SECTIONS),
   )
-  /** Which drawer tab is open. The first two pick a NODE KIND to transfer;
-   *  `defaults` acts on the project FILES themselves and has no node list. */
-  const [tab, setTab] = useState<DrawerTab>('material')
+  /** Which drawer tab is open. `general` acts on the project FILES themselves
+   *  and has no node list; the other two pick a NODE KIND to transfer. */
+  const [tab, setTab] = useState<DrawerTab>('general')
   const kind: NodeKind = tab === 'skeleton' ? 'skeleton' : 'material'
   const [skelSections, setSkelSections] = useState<ReadonlySet<SkeletonSection>>(
     new Set(SKELETON_SECTIONS),
@@ -246,13 +291,21 @@ export function HoudiniUtilsPanel({
   const busy = running !== ''
   const [report, setReport] = useState<MaterialUtilReport | null>(null)
 
-  // --- the Defaults tab ----------------------------------------------------
+  // --- the General tab -----------------------------------------------------
   const [defaultsOpen, setDefaultsOpen] = useState(false)
-  const [defaultsReport, setDefaultsReport] = useState<MaterialUtilReport | null>(null)
   const [repathOpen, setRepathOpen] = useState(false)
-  const [repathReport, setRepathReport] = useState<MaterialUtilReport | null>(null)
   const [prefillOpen, setPrefillOpen] = useState(false)
-  const [prefillReport, setPrefillReport] = useState<MaterialUtilReport | null>(null)
+  /** The last file-level action's result — one slot for all three (see
+   *  {@link ActionReport}), so a fresh run replaces the previous answer instead
+   *  of stacking another panel below it. */
+  const [actionReport, setActionReport] = useState<ActionReport | null>(null)
+
+  // --- reverting a failed run ----------------------------------------------
+  /** The `.hip` currently being restored, '' when idle. */
+  const [restoring, setRestoring] = useState('')
+  /** Files already put back — a second click would restore the same bytes
+   *  again, so the offer turns into a statement instead. */
+  const [restored, setRestored] = useState<ReadonlySet<string>>(new Set())
 
   const targetsKey = targets.join('|')
 
@@ -326,6 +379,8 @@ export function HoudiniUtilsPanel({
     setBrowsedHip('')
     setSourceScan(EMPTY_SCAN)
     setReport(null)
+    setActionReport(null)
+    setRestored(new Set())
     setReplace(false)
   }, [open])
 
@@ -594,15 +649,50 @@ export function HoudiniUtilsPanel({
     [targetScan],
   )
 
+  /** How many of the tab's three actions have work waiting — the footer's
+   *  one-line verdict for the whole tab. */
+  const fixesAvailable = [
+    staleJobProjects.length > 0,
+    repath.targets.length > 0,
+    prefillTargets.length > 0,
+  ].filter(Boolean).length
+
+  /**
+   * Put one project back the way it was before the run that failed on it.
+   *
+   * Offered only from a failed entry (see {@link RestoreOffer}). The scan cache
+   * keys on mtime, so the rescan afterwards re-reads exactly this file and
+   * leaves its neighbours alone.
+   */
+  async function restoreBackup(hipPath: string, backupPath: string) {
+    setRestoring(hipPath)
+    try {
+      await restoreHoudiniBackup({ data: { hipPath, backupPath } })
+      setRestored((prev) => new Set(prev).add(hipPath))
+      toast.success(`${fileName(hipPath)} is back to the state it was in before the run.`)
+      void runScan(targets, setTargetScan)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+    } finally {
+      setRestoring('')
+    }
+  }
+
+  const restore: RestoreProps = {
+    busy: restoring,
+    done: restored,
+    onRestore: (hipPath, backupPath) => void restoreBackup(hipPath, backupPath),
+  }
+
   async function runPrefill(dryRun: boolean) {
     if (prefillTargets.length === 0 || !projectId) return
     setRunning(dryRun ? 'dry' : 'run')
-    setPrefillReport(null)
+    setActionReport(null)
     try {
       const result = await prefillHoudiniNetwork({
         data: { projectId, id: character.id, hipPaths: prefillTargets, dryRun },
       })
-      setPrefillReport(result)
+      setActionReport({ kind: 'prefill', report: result })
       if (!dryRun) {
         const failed = result.prefill.filter((r) => !r.ok)
         if (failed.length > 0) {
@@ -626,7 +716,7 @@ export function HoudiniUtilsPanel({
   async function runRepath(dryRun: boolean) {
     if (repath.targets.length === 0) return
     setRunning(dryRun ? 'dry' : 'run')
-    setRepathReport(null)
+    setActionReport(null)
     try {
       const result = await repathHoudiniReferences({
         data: {
@@ -634,7 +724,7 @@ export function HoudiniUtilsPanel({
           dryRun,
         },
       })
-      setRepathReport(result)
+      setActionReport({ kind: 'repath', report: result })
       if (!dryRun) {
         const failed = result.repath.filter((r) => !r.ok)
         if (failed.length > 0) {
@@ -661,7 +751,7 @@ export function HoudiniUtilsPanel({
   async function runDefaults(dryRun: boolean) {
     if (staleJobProjects.length === 0) return
     setRunning(dryRun ? 'dry' : 'run')
-    setDefaultsReport(null)
+    setActionReport(null)
     try {
       const result = await repairHoudiniDefaults({
         data: {
@@ -669,7 +759,7 @@ export function HoudiniUtilsPanel({
           dryRun,
         },
       })
-      setDefaultsReport(result)
+      setActionReport({ kind: 'defaults', report: result })
       if (!dryRun) {
         const failed = result.defaults.filter((d) => !d.ok)
         const changed = result.defaults.filter((d) => d.ok && d.changed).length
@@ -722,24 +812,23 @@ export function HoudiniUtilsPanel({
             setSelectedTargets(new Set())
             setSelectedSource('')
             setReport(null)
-            setDefaultsReport(null)
+            setActionReport(null)
           }}
         >
           <TabsList>
+            <TabsTrigger value="general">General</TabsTrigger>
             <TabsTrigger value="material">Material</TabsTrigger>
             <TabsTrigger value="skeleton">Skeleton</TabsTrigger>
-            <TabsTrigger value="defaults">Defaults</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="defaults" className="space-y-6">
-            <DefaultsTab
+          <TabsContent value="general" className="space-y-6">
+            <GeneralTab
               scan={targetScan}
               charFolder={charFolder}
               houdiniDir={houdiniDir}
-              report={defaultsReport}
-              repathReport={repathReport}
+              result={actionReport}
               repathReason={repath.reason}
-              prefillReport={prefillReport}
+              restore={restore}
               onRescan={() => void runScan(targets, setTargetScan)}
             />
           </TabsContent>
@@ -1110,20 +1199,25 @@ export function HoudiniUtilsPanel({
               )}
             </section>
 
-            {report && <TransferReport report={report} labelFor={labelFor} />}
+            {report && <TransferReport report={report} labelFor={labelFor} restore={restore} />}
           </TabsContent>
         </Tabs>
 
         {/* The panel's own footer action — the modal owns the actual run. */}
-        {tab === 'defaults' ? (
-          <div className="mt-6 flex items-center justify-end gap-3 border-t pt-4">
-            <span className="text-xs text-muted-foreground">
+        {tab === 'general' ? (
+          <div className="mt-6 flex flex-wrap items-center justify-end gap-3 border-t pt-4">
+            {/* One summary for THREE actions: the old line described only the
+                $JOB repair, which read as the whole tab's verdict. Each button
+                still carries its own reason in its tooltip and disabled state. */}
+            <span className="mr-auto text-xs text-muted-foreground">
               {targetScan.loading
                 ? 'Reading the projects…'
-                : staleJobProjects.length === 0
-                  ? 'Every project is already on the right folder.'
-                  : `${staleJobProjects.length} project${staleJobProjects.length === 1 ? '' : 's'} to repair`}
+                : fixesAvailable === 0
+                  ? 'Nothing to fix — every check already passes.'
+                  : `${fixesAvailable} of 3 fixes available`}
             </span>
+            {/* Ordered the way they must be RUN: repathing collapses against
+                whatever $JOB the scene carries, so the repair comes first. */}
             <Button
               variant="outline"
               disabled={busy || staleJobProjects.length === 0 || !charFolder}
@@ -1135,13 +1229,14 @@ export function HoudiniUtilsPanel({
                     : undefined
               }
               onClick={() => {
-                setDefaultsReport(null)
+                setActionReport(null)
                 setDefaultsOpen(true)
               }}
             >
               <Wrench /> Repair $JOB
             </Button>
             <Button
+              variant="outline"
               disabled={busy || repath.targets.length === 0 || !charFolder}
               // The gate's reason is ALSO rendered in the row above; a disabled
               // button whose cause is only in a tooltip is a dead end.
@@ -1149,11 +1244,11 @@ export function HoudiniUtilsPanel({
                 !charFolder ? 'The character folder could not be resolved' : repath.reason || undefined
               }
               onClick={() => {
-                setRepathReport(null)
+                setActionReport(null)
                 setRepathOpen(true)
               }}
             >
-              <Wrench /> Make paths portable
+              <Route /> Make paths portable
             </Button>
             <Button
               variant="outline"
@@ -1164,11 +1259,11 @@ export function HoudiniUtilsPanel({
                   : undefined
               }
               onClick={() => {
-                setPrefillReport(null)
+                setActionReport(null)
                 setPrefillOpen(true)
               }}
             >
-              <Wrench /> Fill network
+              <Wand2 /> Fill network
             </Button>
           </div>
         ) : (
@@ -1241,11 +1336,12 @@ export function HoudiniUtilsPanel({
 
           <p className="text-xs text-muted-foreground">
             A real run saves each project. Close them in Houdini first — Houdini writes the whole
-            scene on save and would overwrite this. The previous state is kept as{' '}
-            <code>backup/&lt;name&gt;_dthbak.hiplc</code>.
+            scene on save and would overwrite this.
           </p>
 
-          {defaultsReport && <DefaultsReport report={defaultsReport} />}
+          {actionReport?.kind === 'defaults' && (
+            <DefaultsReport report={actionReport.report} restore={restore} />
+          )}
 
           <div className="flex justify-end gap-2">
             <Button variant="ghost" disabled={busy} onClick={() => setDefaultsOpen(false)}>
@@ -1295,11 +1391,12 @@ export function HoudiniUtilsPanel({
 
           <p className="text-xs text-muted-foreground">
             A real run saves each project. Close them in Houdini first — Houdini writes the whole
-            scene on save and would overwrite this. The previous state is kept as{' '}
-            <code>backup/&lt;name&gt;_dthbak.hiplc</code>.
+            scene on save and would overwrite this.
           </p>
 
-          {prefillReport && <PrefillReport report={prefillReport} />}
+          {actionReport?.kind === 'prefill' && (
+            <PrefillReport report={actionReport.report} restore={restore} />
+          )}
 
           <div className="flex justify-end gap-2">
             <Button variant="ghost" disabled={busy} onClick={() => setPrefillOpen(false)}>
@@ -1362,11 +1459,12 @@ export function HoudiniUtilsPanel({
 
           <p className="text-xs text-muted-foreground">
             A real run saves each project. Close them in Houdini first — Houdini writes the whole
-            scene on save and would overwrite this. The previous state is kept as{' '}
-            <code>backup/&lt;name&gt;_dthbak.hiplc</code>.
+            scene on save and would overwrite this.
           </p>
 
-          {repathReport && <RepathReport report={repathReport} />}
+          {actionReport?.kind === 'repath' && (
+            <RepathReport report={actionReport.report} restore={restore} />
+          )}
 
           <div className="flex justify-end gap-2">
             <Button variant="ghost" disabled={busy} onClick={() => setRepathOpen(false)}>
@@ -1478,11 +1576,10 @@ export function HoudiniUtilsPanel({
 
           <p className="text-xs text-muted-foreground">
             A real run saves each target project. Close them in Houdini first — Houdini writes the
-            whole scene on save and would overwrite this. The previous state is kept as{' '}
-            <code>backup/&lt;name&gt;_dthbak.hiplc</code>.
+            whole scene on save and would overwrite this.
           </p>
 
-          {report && <TransferReport report={report} labelFor={labelFor} />}
+          {report && <TransferReport report={report} labelFor={labelFor} restore={restore} />}
 
           <div className="flex justify-end gap-2">
             <Button variant="ghost" disabled={busy} onClick={() => setConfirmOpen(false)}>
@@ -1502,52 +1599,61 @@ export function HoudiniUtilsPanel({
 }
 
 /**
- * The Defaults tab: per-project Houdini settings the studio knows the right
- * value for, each showing its CURRENT value beside the expected one.
+ * The General tab: what each linked project carries today, and what the studio
+ * can put right — the drawer's first tab, and the only one that is useful
+ * without a second project picked.
  *
  * `$JOB` is scene state saved with the `.hip`, so v0.64's fix reached only
  * newly generated projects — every project that already existed still carries
  * `<char>/houdini/houdini-project`, which sits BELOW the exports and can
  * therefore never let Houdini collapse a picked export to a variable. This tab
- * is that migration.
+ * is that migration, plus the two checks that go with it.
  *
  * The values come from the drawer's existing scan, which reads them in the same
  * pass as the nodes — opening a `.hip` costs tens of seconds and switching tab
  * must not pay it again.
+ *
+ * Presentation rule: every check is ONE row of the same shape — name on the
+ * left, verdict on the right, detail beneath. Five rows that each invented
+ * their own layout was the whole reason this tab read as noise.
  */
-function DefaultsTab({
+function GeneralTab({
   scan,
   charFolder,
   houdiniDir,
-  report,
-  repathReport,
+  result,
   repathReason,
-  prefillReport,
+  restore,
   onRescan,
 }: {
   scan: ScanState
   charFolder: string
   houdiniDir: string
-  report: MaterialUtilReport | null
-  repathReport: MaterialUtilReport | null
+  /** The last action's report — one slot for all three (see {@link ActionReport}). */
+  result: ActionReport | null
   /** Why the repath action is unavailable, '' when it can run. */
   repathReason: string
-  prefillReport: MaterialUtilReport | null
+  restore: RestoreProps
   onRescan: () => void
 }) {
   return (
     <div className="space-y-4">
-      <p className="text-xs text-muted-foreground">
-        Per-project Houdini settings the studio knows the right value for. <code>$JOB</code> is
-        saved inside each <code>.hip</code>, so a project keeps whatever it was created with —
-        projects made before v0.64 still point it at the shared{' '}
-        <code>houdini/houdini-project</code> folder, which sits below your exports. Houdini only
-        turns a path you pick into a variable when it sits under <code>$HIP</code> or{' '}
-        <code>$JOB</code>, so those projects write an absolute path every time you choose an
-        export by hand.
-      </p>
-
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <Label className="flex w-fit items-center gap-1 text-base font-semibold">
+          Project checks
+          {/* The full `$JOB` story lives here rather than above the cards: it
+              explains WHY the row exists, which is worth one click and not
+              worth six lines of prose on every visit. */}
+          <InfoPopup label="Project checks — more information">
+            <code>$JOB</code> is saved inside each <code>.hip</code>, so a project keeps whatever
+            it was created with — projects made before v0.64 still point it at the shared{' '}
+            <code>houdini/houdini-project</code> folder, which sits below your exports. Houdini
+            only turns a path you pick into a variable when it sits under <code>$HIP</code> or{' '}
+            <code>$JOB</code>, so those projects write an absolute path every time you choose an
+            export by hand. Repairing <code>$JOB</code> fixes what you pick from now on;{' '}
+            <strong>Make paths portable</strong> fixes what is already stored.
+          </InfoPopup>
+        </Label>
         <span className="text-xs text-muted-foreground">
           {scan.projects.length} project{scan.projects.length === 1 ? '' : 's'} read
         </span>
@@ -1576,39 +1682,38 @@ function DefaultsTab({
               {!project.ok ? (
                 <p className="text-xs text-destructive">{project.error}</p>
               ) : (
-                <ul className="space-y-2">
+                <ul className="space-y-2.5">
                   {defaultsRowsFor(project, charFolder, houdiniDir).map((row) => (
-                    <li key={row.key} className="text-xs">
-                      <p className="flex items-center gap-2">
-                        <span className="font-medium">{row.label}</span>
-                        {row.status === 'matches' ? (
-                          <span className="text-muted-foreground">matches</span>
-                        ) : row.status === 'unknown' ? (
-                          // Not "differs": nobody read it, so nothing is known
-                          // to be wrong — and the repair skips it.
-                          <span className="text-muted-foreground">could not be read</span>
-                        ) : (
-                          <span className="flex items-center gap-1 text-amber-500">
-                            <AlertTriangle className="size-3 shrink-0" />
-                            differs
-                          </span>
-                        )}
-                      </p>
-                      {/* The current value is shown, not hidden in a tooltip: a
-                          row the user can't action needs its reason VISIBLE,
-                          and a row they can needs to show what it replaces. */}
-                      <p className="truncate text-muted-foreground" title={row.current}>
-                        now: <code>{displayPath(row.current) || '—'}</code>
-                      </p>
-                      {row.status === 'differs' && (
-                        <p className="truncate text-muted-foreground" title={row.expected}>
-                          studio expects: <code>{displayPath(row.expected) || '—'}</code>
-                        </p>
+                    <CheckRow
+                      key={row.key}
+                      label={row.label}
+                      // `unknown` is NOT a warning: nobody read the value, so
+                      // nothing is known to be wrong — and the repair skips it.
+                      warn={row.status === 'differs'}
+                      verdict={
+                        row.status === 'matches'
+                          ? 'matches'
+                          : row.status === 'unknown'
+                            ? 'could not be read'
+                            : 'differs'
+                      }
+                    >
+                      {/* Values stay VISIBLE rather than moving into a tooltip:
+                          a row the user can't action needs its reason on
+                          screen, and a row they can needs to show what a run
+                          would replace. A matching row is just the one path. */}
+                      {row.status === 'differs' ? (
+                        <>
+                          <PathLine label="now" value={row.current} />
+                          <PathLine label="studio expects" value={row.expected} />
+                          {!row.actionable && <p>{row.reason}</p>}
+                        </>
+                      ) : row.status === 'unknown' ? (
+                        <p>The scan could not read this value, so nothing here is repaired.</p>
+                      ) : (
+                        <PathLine value={row.current} />
                       )}
-                      {row.status === 'differs' && !row.actionable && (
-                        <p className="text-muted-foreground">{row.reason}</p>
-                      )}
-                    </li>
+                    </CheckRow>
                   ))}
                   <RefRows refs={project.refs} reason={repathReason} />
                   <PrefillRow prefill={project.prefill} />
@@ -1619,10 +1724,58 @@ function DefaultsTab({
         </div>
       )}
 
-      {report && <DefaultsReport report={report} />}
-      {repathReport && <RepathReport report={repathReport} />}
-      {prefillReport && <PrefillReport report={prefillReport} />}
+      {/* ONE report slot for the tab's three actions — see {@link ActionReport}. */}
+      {result?.kind === 'defaults' && <DefaultsReport report={result.report} restore={restore} />}
+      {result?.kind === 'repath' && <RepathReport report={result.report} restore={restore} />}
+      {result?.kind === 'prefill' && <PrefillReport report={result.report} restore={restore} />}
     </div>
+  )
+}
+
+/**
+ * One project check: its name, a right-aligned verdict, and the detail beneath.
+ *
+ * The aligned verdict column is what makes a card scannable — a status that
+ * sits wherever its label happens to end turns five checks into five unrelated
+ * sentences, which is exactly how this tab read before.
+ */
+function CheckRow({
+  label,
+  warn,
+  verdict,
+  children,
+}: {
+  label: string
+  /** true = something to fix here (amber + the warning mark). */
+  warn: boolean
+  verdict: string
+  children?: ReactNode
+}) {
+  return (
+    <li className="text-xs">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="font-medium">{label}</span>
+        {warn ? (
+          <span className="flex shrink-0 items-center gap-1 text-amber-500">
+            <AlertTriangle className="size-3 shrink-0" />
+            {verdict}
+          </span>
+        ) : (
+          <span className="shrink-0 text-muted-foreground">{verdict}</span>
+        )}
+      </div>
+      {children ? <div className="mt-0.5 space-y-0.5 text-muted-foreground">{children}</div> : null}
+    </li>
+  )
+}
+
+/** A folder value inside a check row — one truncated line, full path on hover. */
+function PathLine({ label, value }: { label?: string; value: string }) {
+  return (
+    <p className="truncate" title={value}>
+      {label ? `${label}: ` : ''}
+      <code>{displayPath(value) || '—'}</code>
+    </p>
   )
 }
 
@@ -1644,51 +1797,41 @@ function RefRows({
   const clean = refs.collapsible === 0 && refs.broken.length === 0
   return (
     <>
-      <li className="text-xs">
-        <p className="flex items-center gap-2">
-          <span className="font-medium">Reference paths</span>
-          {refs.collapsible === 0 ? (
-            <span className="text-muted-foreground">
-              {refs.foreign > 0 ? 'nothing more to make portable' : 'all relative'}
-            </span>
-          ) : (
-            <span className="flex items-center gap-1 text-amber-500">
-              <AlertTriangle className="size-3 shrink-0" />
-              {refs.collapsible} absolute
-            </span>
-          )}
-        </p>
+      <CheckRow
+        label="Reference paths"
+        warn={refs.collapsible > 0}
+        verdict={
+          refs.collapsible > 0
+            ? `${refs.collapsible} absolute`
+            : refs.foreign > 0
+              ? 'nothing more to make portable'
+              : 'all relative'
+        }
+      >
         {refs.collapsible > 0 && (
-          <p className="text-muted-foreground">
+          <p>
             {refs.collapsible} path{refs.collapsible === 1 ? '' : 's'} can be stored relative to{' '}
             <code>$HIP</code>, <code>$JOB</code> or <code>$DAZ3D_LIB</code>.
           </p>
         )}
         {refs.foreign > 0 && (
-          <p className="text-muted-foreground">
+          <p>
             {refs.foreign} live outside those roots and cannot be made portable — they stay
             absolute.
           </p>
         )}
-      </li>
-      <li className="text-xs">
-        <p className="flex items-center gap-2">
-          <span className="font-medium">Import references</span>
-          {refs.broken.length === 0 ? (
-            <span className="text-muted-foreground">all resolve</span>
-          ) : (
-            <span className="flex items-center gap-1 text-amber-500">
-              <AlertTriangle className="size-3 shrink-0" />
-              {refs.broken.length} broken
-            </span>
-          )}
-        </p>
+      </CheckRow>
+      <CheckRow
+        label="Import references"
+        warn={refs.broken.length > 0}
+        verdict={refs.broken.length === 0 ? 'all resolve' : `${refs.broken.length} broken`}
+      >
         {refs.broken.length > 0 && (
-          <p className="text-muted-foreground">
+          <p className="truncate" title={refs.broken.join(', ')}>
             {refs.broken.join(', ')} — rebuilt from the same node&apos;s other export files.
           </p>
         )}
-      </li>
+      </CheckRow>
       {/* The gate's reason belongs beside the rows it blocks, not only on the
           disabled button. */}
       {!clean && reason !== '' && <li className="text-xs text-amber-500">{reason}</li>}
@@ -1710,35 +1853,78 @@ function PrefillRow({ prefill }: { prefill: ProjectPrefillInfo }) {
   const short = (label: string) => label.split(' ').pop() ?? label
   if (prefill.fillable.length === 0 && prefill.missing.length === 0) return null
   return (
-    <li className="text-xs">
-      <p className="flex items-center gap-2">
-        <span className="font-medium">DazToHue network</span>
-        {prefill.fillable.length === 0 ? (
-          <span className="text-muted-foreground">nothing left to fill</span>
-        ) : (
-          <span className="flex items-center gap-1 text-amber-500">
-            <AlertTriangle className="size-3 shrink-0" />
-            {prefill.fillable.length} blank
-          </span>
-        )}
-      </p>
+    <CheckRow
+      label="DazToHue network"
+      warn={prefill.fillable.length > 0}
+      verdict={
+        prefill.fillable.length === 0
+          ? 'nothing left to fill'
+          : `${prefill.fillable.length} blank`
+      }
+    >
       {prefill.fillable.length > 0 && (
-        <p className="text-muted-foreground">
+        <p className="truncate" title={prefill.fillable.join(', ')}>
           The studio knows these: {prefill.fillable.map(short).join(', ')}.
         </p>
       )}
       {prefill.missing.length > 0 && (
-        <p className="text-muted-foreground">
+        <p>
           Your DazToHue version has no {prefill.missing.map(short).join(', ')} — it will be filled
           automatically once a release adds it.
         </p>
       )}
-    </li>
+    </CheckRow>
+  )
+}
+
+/**
+ * The revert offer, and the only place a backup is ever mentioned.
+ *
+ * Every real run takes one rolling backup before it saves. Saying so on each
+ * successful run — which is what this drawer used to do, four times over —
+ * teaches the eye to skip the line, so the backup stays silent until it is
+ * worth something: an entry that FAILED, on a file the run had already started
+ * writing. Anything that failed earlier carries no `backupPath` and gets no
+ * offer, because there is nothing it could undo.
+ */
+function RestoreOffer({
+  hipPath,
+  backupPath,
+  restore,
+}: {
+  hipPath: string
+  /** '' = nothing was written for this file, so nothing to put back. */
+  backupPath: string
+  restore: RestoreProps
+}) {
+  if (!backupPath) return null
+  if (restore.done.has(hipPath)) {
+    return <p className="mt-1 text-muted-foreground">Restored to the state before this run.</p>
+  }
+  return (
+    <div className="mt-1.5">
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={restore.busy !== ''}
+        title={`Put ${fileName(hipPath)} back the way it was before this run. Close it in Houdini first — an open copy would save over the restore.`}
+        onClick={() => restore.onRestore(hipPath, backupPath)}
+      >
+        {restore.busy === hipPath ? <Loader2 className="animate-spin" /> : <Undo2 />} Undo this
+        run
+      </Button>
+    </div>
   )
 }
 
 /** What a prefill did, or would do, per project. */
-function PrefillReport({ report }: { report: MaterialUtilReport }) {
+function PrefillReport({
+  report,
+  restore,
+}: {
+  report: MaterialUtilReport
+  restore: RestoreProps
+}) {
   const short = (label: string) => label.split(' ').pop() ?? label
   return (
     <div className="rounded-md border p-3">
@@ -1758,7 +1944,6 @@ function PrefillReport({ report }: { report: MaterialUtilReport }) {
                   {entry.skippedSet.length > 0
                     ? ` · ${entry.skippedSet.length} already set, left alone`
                     : ''}
-                  {entry.backupPath ? ' · backup written' : ''}
                 </p>
                 {entry.filled.map((parm) => (
                   <p key={parm.label} className="truncate text-muted-foreground" title={parm.value}>
@@ -1772,7 +1957,14 @@ function PrefillReport({ report }: { report: MaterialUtilReport }) {
                 )}
               </>
             ) : (
-              <p className="text-destructive">{entry.error}</p>
+              <>
+                <p className="text-destructive">{entry.error}</p>
+                <RestoreOffer
+                  hipPath={entry.hipPath}
+                  backupPath={entry.backupPath}
+                  restore={restore}
+                />
+              </>
             )}
           </li>
         ))}
@@ -1782,7 +1974,13 @@ function PrefillReport({ report }: { report: MaterialUtilReport }) {
 }
 
 /** What a repath did, or would do, per project. */
-function RepathReport({ report }: { report: MaterialUtilReport }) {
+function RepathReport({
+  report,
+  restore,
+}: {
+  report: MaterialUtilReport
+  restore: RestoreProps
+}) {
   return (
     <div className="rounded-md border p-3">
       <p className="mb-2 text-sm font-medium">
@@ -1801,7 +1999,6 @@ function RepathReport({ report }: { report: MaterialUtilReport }) {
                   {entry.repaired.length > 0
                     ? ` · ${entry.repaired.length} broken import${entry.repaired.length === 1 ? '' : 's'} repaired`
                     : ''}
-                  {entry.backupPath ? ' · backup written' : ''}
                 </p>
                 {entry.repaired.map((fix) => (
                   <p key={fix.label} className="truncate text-muted-foreground" title={fix.from}>
@@ -1821,7 +2018,14 @@ function RepathReport({ report }: { report: MaterialUtilReport }) {
                 )}
               </>
             ) : (
-              <p className="text-destructive">{entry.error}</p>
+              <>
+                <p className="text-destructive">{entry.error}</p>
+                <RestoreOffer
+                  hipPath={entry.hipPath}
+                  backupPath={entry.backupPath}
+                  restore={restore}
+                />
+              </>
             )}
           </li>
         ))}
@@ -1831,7 +2035,13 @@ function RepathReport({ report }: { report: MaterialUtilReport }) {
 }
 
 /** What a `$JOB` repair did, or would do, per project. */
-function DefaultsReport({ report }: { report: MaterialUtilReport }) {
+function DefaultsReport({
+  report,
+  restore,
+}: {
+  report: MaterialUtilReport
+  restore: RestoreProps
+}) {
   return (
     <div className="rounded-md border p-3">
       <p className="mb-2 text-sm font-medium">
@@ -1849,14 +2059,20 @@ function DefaultsReport({ report }: { report: MaterialUtilReport }) {
                   <>
                     <code>{displayPath(entry.previousJob) || '—'}</code> →{' '}
                     <code>{displayPath(entry.job)}</code>
-                    {entry.backupPath ? ' · backup written' : ''}
                   </>
                 ) : (
                   'Already on the right folder — left untouched.'
                 )}
               </p>
             ) : (
-              <p className="text-destructive">{entry.error}</p>
+              <>
+                <p className="text-destructive">{entry.error}</p>
+                <RestoreOffer
+                  hipPath={entry.hipPath}
+                  backupPath={entry.backupPath}
+                  restore={restore}
+                />
+              </>
             )}
           </li>
         ))}
@@ -2114,11 +2330,23 @@ function MaterialNodeRow({
 function TransferReport({
   report,
   labelFor,
+  restore,
 }: {
   report: MaterialUtilReport
   /** Network-box name for a node — falls back to the node path when unscanned. */
   labelFor: (hipPath: string, nodePath: string) => string
+  restore: RestoreProps
 }) {
+  // A failed SAVE marks every target node in that file, and they all share the
+  // one rolling backup — so the revert is offered once per FILE, not once per
+  // node, or a three-node project would grow three buttons that do the same
+  // thing. Keyed on the first failing entry for each path.
+  const offerAt = new Map<string, number>()
+  report.targets.forEach((target, index) => {
+    if (!target.ok && target.backupPath && !offerAt.has(target.hipPath)) {
+      offerAt.set(target.hipPath, index)
+    }
+  })
   return (
     <div className="rounded-md border p-3">
       <p className="mb-2 text-sm font-medium">
@@ -2143,7 +2371,7 @@ function TransferReport({
         </p>
       )}
       <ul className="space-y-2 text-xs">
-        {report.targets.map((target) => (
+        {report.targets.map((target, index) => (
           <li key={`${target.hipPath}|${target.nodePath}`}>
             <p className="truncate" title={`${target.hipPath} — ${target.nodePath}`}>
               <strong>{labelFor(target.hipPath, target.nodePath)}</strong> —{' '}
@@ -2158,7 +2386,6 @@ function TransferReport({
                         `${SECTION_LABELS[s.key as MaterialSection]?.label ?? s.key} ${s.before} → ${s.after}`,
                     )
                     .join(' · ')}
-                  {target.backupPath ? ' · backup written' : ''}
                 </p>
                 {/* Named, not just counted: a slot that vanished without being
                     named reads as data loss even when it was the correct
@@ -2175,7 +2402,16 @@ function TransferReport({
                   ))}
               </>
             ) : (
-              <p className="text-destructive">{target.error}</p>
+              <>
+                <p className="text-destructive">{target.error}</p>
+                {offerAt.get(target.hipPath) === index && (
+                  <RestoreOffer
+                    hipPath={target.hipPath}
+                    backupPath={target.backupPath}
+                    restore={restore}
+                  />
+                )}
+              </>
             )}
             {target.unclaimedSurfaces.length > 0 && (
               <p className="flex items-start gap-1 text-amber-500">
