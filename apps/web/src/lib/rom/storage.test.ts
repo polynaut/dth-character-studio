@@ -132,6 +132,9 @@ describe('settings (settings.json)', () => {
     dthExporterFolder: '',
     currentDthExporterVersion: '',
     dazInstallFolder: '',
+    // No Daz installation activated yet, so the three Daz paths above/below are
+    // the user's own to edit (see `dazInstallKey`).
+    dazInstallKey: '',
     // Fresh install writes Houdini paths $HIP-relative — the setting only ever
     // turns that OFF.
     houdiniPathStyle: 'hip',
@@ -180,6 +183,7 @@ describe('settings (settings.json)', () => {
       dthExporterFolder: 'X:/dth/exporter',
       currentDthExporterVersion: '1.0.0.1',
       dazInstallFolder: 'C:/Program Files/DAZ 3D/DAZStudio4',
+      dazInstallKey: 'dzstudio4installdir-64',
       houdiniPathStyle: 'absolute',
       houdiniDocsFolder: 'D:/Documents/houdini20.5',
       extraHoudiniDocsFolders: ['D:/Documents/houdini19.5'],

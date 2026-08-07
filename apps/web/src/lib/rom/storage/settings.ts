@@ -59,8 +59,24 @@ export const studioSettingsSchema = z.object({
    * Where Daz Studio is installed (e.g. `C:/Program Files/DAZ 3D/DAZStudio4`).
    * Optional — the DTH install drops the exporter plugin DLLs into its `plugins`
    * subfolder.
+   *
+   * DERIVED while `dazInstallKey` is set (see there); the user's own to edit
+   * otherwise. Everything downstream reads this field either way, so activating
+   * an installation changes where the value comes from, never what reads it.
    */
   dazInstallFolder: str,
+  /**
+   * Which detected Daz installation the three Daz paths were derived from —
+   * DIM's own key for it (`dzStudio6InstallDir-64`), which survives the folder
+   * moving. Empty = none activated, and `dazLibraryFolder` / `dazInstallFolder`
+   * / `dimManifestsFolder` are plain editable fields as they always were.
+   *
+   * The KEY is stored rather than a snapshot of the paths so a re-detect can
+   * tell "the same installation, moved" from "a different installation", and so
+   * a machine that no longer has it can say so instead of silently activating
+   * something else (`deriveDazPaths`, `lib/daz-install.ts`).
+   */
+  dazInstallKey: str,
   /**
    * The Houdini documents folder (e.g. `D:/User Data/Documents/houdini20.5`).
    * Optional — the DTH install merges the release's Houdini assets

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { CircleCheck, Download, Plus } from 'lucide-react'
+import { AlertTriangle, CircleCheck, Download, Plus } from 'lucide-react'
+import type { ReactNode } from 'react'
 
 import { Button, Field, InfoPopup, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, Tabs, TabsContent, TabsList, TabsTrigger } from '@dth/ui'
 import { FormHeader } from '#/components/form-header.tsx'
 import {
+  detectDazInstalls,
   detectDimManifestsFolder,
   fetchActiveProject,
   fetchAppDataFolder,
@@ -31,6 +33,8 @@ import { houdiniVersionFromInstall, matchingHoudiniDocsFolder } from '#/lib/houd
 import { GuideLink } from '#/components/guide-link.tsx'
 import { PathCode } from '#/components/path-code.tsx'
 import { FolderField, InstallReportList } from '#/components/install-controls.tsx'
+import { DazInstallSection } from '#/components/settings/daz-install-section.tsx'
+import { defaultDazApp, deriveDazPaths } from '#/lib/daz-install.ts'
 import { HousekeepingSection } from '#/components/settings/housekeeping-section.tsx'
 import { NetworkDrivesSection } from '#/components/settings/network-drives-section.tsx'
 import {
@@ -44,6 +48,7 @@ import type {
   ReleasesState,
 } from '#/components/settings/release-pickers.tsx'
 import type { InstallReport, RunnerStatus } from '#/lib/rom/api.ts'
+import type { DazInstallScan } from '#/lib/daz-install.ts'
 
 export const Route = createFileRoute('/settings')({
   // Settings is reachable from several places; an optional `from` label lets the
@@ -226,6 +231,82 @@ function SettingsPage() {
   }, [project])
   const [savingProject, setSavingProject] = useState(false)
   const [detectingDim, setDetectingDim] = useState(false)
+
+  // --- the Daz installation DIM already knows about -------------------------
+  const [dazScan, setDazScan] = useState<DazInstallScan | null>(null)
+  const [dazScanning, setDazScanning] = useState(true)
+  /** The card mid-activation — the write is a disk round trip, not instant. */
+  const [activating, setActivating] = useState('')
+
+  const rescanDazInstalls = useCallback(async () => {
+    setDazScanning(true)
+    try {
+      setDazScan(await detectDazInstalls())
+    } catch {
+      // Detection is an offer, never a requirement: a machine with no DIM (or
+      // an unreadable one) keeps the manual fields and says so in the section.
+      setDazScan(null)
+    } finally {
+      setDazScanning(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void rescanDazInstalls()
+  }, [rescanDazInstalls])
+
+  /**
+   * Activate one installation: derive the three paths and WRITE them.
+   *
+   * Auto-saving is the point — the paths are a consequence of the choice, so
+   * leaving them pending behind a Save button would mean a first run where the
+   * user picks their install and the app still behaves as if nothing is set.
+   * The router invalidate afterwards refreshes the loader baseline, so this
+   * does not leave the page looking dirty.
+   */
+  async function onActivateDazInstall(key: string) {
+    if (!dazScan) return
+    const derived = deriveDazPaths(dazScan, key)
+    if (!derived) return
+    setActivating(key)
+    const next = { ...settings, ...derived, dazInstallKey: key }
+    try {
+      await saveSettings({ data: { settings: next, baseline: initial } })
+      setSettings(next)
+      await router.invalidate()
+      const app = dazScan.apps.find((candidate) => candidate.key === key)
+      // Name what is still missing rather than reporting a clean success: DIM
+      // can know the Studio folder and nothing about a library.
+      const gaps = [
+        derived.dazLibraryFolder ? '' : 'the content library',
+        derived.dimManifestsFolder ? '' : 'the product database',
+      ].filter(Boolean)
+      toast.success(
+        `${app?.name ?? 'Installation'} activated.` +
+          (gaps.length > 0 ? ` DIM had no value for ${gaps.join(' or ')} — set it below.` : ''),
+      )
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    } finally {
+      setActivating('')
+    }
+  }
+
+  /** Hand the three paths back to the user, keeping their current values. */
+  async function onSetDazPathsManually() {
+    const next = { ...settings, dazInstallKey: '' }
+    try {
+      await saveSettings({ data: { settings: next, baseline: initial } })
+      setSettings(next)
+      await router.invalidate()
+      toast.success('The Daz paths are yours to edit — they keep their current values.')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  /** true = the paths below are derived, so they are shown read-only. */
+  const dazDerived = settings.dazInstallKey !== ''
 
   async function onDetectDimFolder() {
     setDetectingDim(true)
@@ -491,6 +572,10 @@ function SettingsPage() {
     settings.dthExporterFolder !== initial.dthExporterFolder ||
     settings.currentDthExporterVersion !== initial.currentDthExporterVersion ||
     settings.dazInstallFolder !== initial.dazInstallFolder ||
+    // `dimManifestsFolder` is deliberately NOT here: the Project tab owns its
+    // manual edit (and `projectDirty` tracks that), while activating an
+    // installation writes it straight to disk — neither route leaves it pending.
+    settings.dazInstallKey !== initial.dazInstallKey ||
     settings.houdiniDocsFolder !== initial.houdiniDocsFolder ||
     settings.houdiniInstallFolder !== initial.houdiniInstallFolder ||
     JSON.stringify(settings.extraHoudiniDocsFolders) !==
@@ -650,6 +735,35 @@ function SettingsPage() {
         </TabsList>
 
         <TabsContent value="general" className="space-y-5">
+          {/* First, because everything below it depends on which Daz is meant —
+              and on a fresh install this is the only thing the user has to do
+              before the release install becomes possible. */}
+          <section className="space-y-4 rounded-lg border bg-card p-5">
+            <DazInstallSection
+              scan={dazScan}
+              loading={dazScanning}
+              activeKey={settings.dazInstallKey}
+              derived={
+                dazDerived
+                  ? {
+                      dazLibraryFolder: settings.dazLibraryFolder,
+                      dazInstallFolder: settings.dazInstallFolder,
+                      dimManifestsFolder: settings.dimManifestsFolder,
+                    }
+                  : null
+              }
+              busyKey={activating}
+              // Pointed at, not auto-activated: nothing is written until the
+              // user picks (their spec, and the right call — a first run that
+              // silently adopts an installation is a first run that decided for
+              // them). Newest Studio wins, so DS6 on a DS4+DS6 machine.
+              recommendedKey={dazScan ? (defaultDazApp(dazScan.apps)?.key ?? '') : ''}
+              onRescan={() => void rescanDazInstalls()}
+              onActivate={(key) => void onActivateDazInstall(key)}
+              onSetManually={() => void onSetDazPathsManually()}
+            />
+          </section>
+
           <section className="space-y-4 rounded-lg border bg-card p-5">
             <div>
               <h2 className="font-semibold">Setup DTH Release</h2>
@@ -703,27 +817,45 @@ function SettingsPage() {
             )}
 
             <div>
-              <FolderField
-                label="My DAZ 3D Library"
-                value={settings.dazLibraryFolder}
-                placeholder="C:\Users\you\Documents\DAZ 3D\Studio\My Library"
-                onChange={(value) => setSettings((s) => ({ ...s, dazLibraryFolder: value }))}
-                help={
-                  <>
-                    Your Daz content library — where the release's content is installed.
-                    {settings.dazLibraryFolder && (
-                      <>
-                        {' '}
-                        Generated character scripts install to{' '}
-                        <PathCode
-                          path={displayPath(`${settings.dazLibraryFolder}/Scripts/DTH-Character-Studio`)}
-                        />
-                        .
-                      </>
-                    )}
-                  </>
-                }
-              />
+              {/* Derived from the active installation, and shown there — an
+                  editable copy of a derived value is a value that can silently
+                  disagree with what it came from. */}
+              {dazDerived ? (
+                <DerivedFieldNote label="My DAZ 3D Library" value={settings.dazLibraryFolder}>
+                  {settings.dazLibraryFolder && (
+                    <>
+                      {' '}
+                      Generated character scripts install to{' '}
+                      <PathCode
+                        path={displayPath(`${settings.dazLibraryFolder}/Scripts/DTH-Character-Studio`)}
+                      />
+                      .
+                    </>
+                  )}
+                </DerivedFieldNote>
+              ) : (
+                <FolderField
+                  label="My DAZ 3D Library"
+                  value={settings.dazLibraryFolder}
+                  placeholder="C:\Users\you\Documents\DAZ 3D\Studio\My Library"
+                  onChange={(value) => setSettings((s) => ({ ...s, dazLibraryFolder: value }))}
+                  help={
+                    <>
+                      Your Daz content library — where the release's content is installed.
+                      {settings.dazLibraryFolder && (
+                        <>
+                          {' '}
+                          Generated character scripts install to{' '}
+                          <PathCode
+                            path={displayPath(`${settings.dazLibraryFolder}/Scripts/DTH-Character-Studio`)}
+                          />
+                          .
+                        </>
+                      )}
+                    </>
+                  }
+                />
+              )}
               {!canInstallDaz && (
                 <p className="mt-2 text-sm text-muted-foreground">
                   Set {dazBlockers.join(', ')} to enable this install.
@@ -1020,22 +1152,33 @@ function SettingsPage() {
               />
             </div>
 
-            <FolderField
-              label="Daz Studio install folder"
-              value={settings.dazInstallFolder}
-              placeholder="C:\Program Files\DAZ 3D\DAZStudio4"
-              onChange={(value) => setSettings((s) => ({ ...s, dazInstallFolder: value }))}
-              help={
-                <>
-                  Where Daz Studio is installed. The DLLs go into its
-                  <span className="font-mono"> /plugins</span> subfolder. Usually{' '}
-                  <span className="font-mono">{'C:\\Program Files\\DAZ 3D\\DAZStudio4'}</span> (Daz
-                  Studio 4, sometimes with a <span className="font-mono">64-bit</span> suffix) or{' '}
-                  <span className="font-mono">{'C:\\Program Files\\DAZ 3D\\DAZStudio6'}</span> (Daz
-                  Studio 6).
-                </>
-              }
-            />
+            {dazDerived ? (
+              <DerivedFieldNote
+                label="Daz Studio install folder"
+                value={settings.dazInstallFolder}
+              >
+                {' '}
+                The Exporter Plugin DLLs go into its
+                <span className="font-mono"> /plugins</span> subfolder.
+              </DerivedFieldNote>
+            ) : (
+              <FolderField
+                label="Daz Studio install folder"
+                value={settings.dazInstallFolder}
+                placeholder="C:\Program Files\DAZ 3D\DAZStudio4"
+                onChange={(value) => setSettings((s) => ({ ...s, dazInstallFolder: value }))}
+                help={
+                  <>
+                    Where Daz Studio is installed. The DLLs go into its
+                    <span className="font-mono"> /plugins</span> subfolder. Usually{' '}
+                    <span className="font-mono">{'C:\\Program Files\\DAZ 3D\\DAZStudio4'}</span> (Daz
+                    Studio 4, sometimes with a <span className="font-mono">64-bit</span> suffix) or{' '}
+                    <span className="font-mono">{'C:\\Program Files\\DAZ 3D\\DAZStudio6'}</span> (Daz
+                    Studio 6).
+                  </>
+                }
+              />
+            )}
 
             {canInstallPlugin ? (
               <div className="space-y-1 text-sm text-muted-foreground">
@@ -1363,30 +1506,83 @@ function SettingsPage() {
                 </Select>
               </div>
               <div>
-                <FolderField
-                  label="DAZ Install Manager manifests folder (optional)"
-                  value={settings.dimManifestsFolder}
-                  placeholder="E:\DAZ 3D\Install Manager\ManifestFiles"
-                  onChange={(value) => setSettings((s) => ({ ...s, dimManifestsFolder: value }))}
-                  // No "i" popup here — the Enable-Daz-Products popup above links the
-                  // guide, which covers the DIM manifests folder too.
-                  help={null}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="mt-2"
-                  onClick={() => void onDetectDimFolder()}
-                  disabled={detectingDim}
-                >
-                  {detectingDim ? 'Detecting…' : 'Detect installed location'}
-                </Button>
+                {/* Derived with the rest once an installation is active — the
+                    manual field and its probe stay for a machine without DIM. */}
+                {dazDerived ? (
+                  <DerivedFieldNote
+                    label="DAZ Install Manager manifests folder"
+                    value={settings.dimManifestsFolder}
+                  />
+                ) : (
+                  <>
+                    <FolderField
+                      label="DAZ Install Manager manifests folder (optional)"
+                      value={settings.dimManifestsFolder}
+                      placeholder="E:\DAZ 3D\Install Manager\ManifestFiles"
+                      onChange={(value) =>
+                        setSettings((s) => ({ ...s, dimManifestsFolder: value }))
+                      }
+                      // No "i" popup here — the Enable-Daz-Products popup above links the
+                      // guide, which covers the DIM manifests folder too.
+                      help={null}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="mt-2"
+                      onClick={() => void onDetectDimFolder()}
+                      disabled={detectingDim}
+                    >
+                      {detectingDim ? 'Detecting…' : 'Detect installed location'}
+                    </Button>
+                  </>
+                )}
               </div>
             </section>
           </TabsContent>
         )}
       </Tabs>
     </main>
+  )
+}
+
+/**
+ * A path that is DERIVED from the active Daz installation, shown where its
+ * editable field used to be.
+ *
+ * Read-only on purpose: the value follows from the card above, and an editable
+ * copy is one that can quietly disagree with what produced it. The way to edit
+ * it is to stop deriving it — "Set the paths manually", in the section above.
+ * An empty one is called out rather than left blank, because "DIM had nothing
+ * for this" is a different problem from "you haven't set it yet".
+ */
+function DerivedFieldNote({
+  label,
+  value,
+  children,
+}: {
+  label: string
+  value: string
+  children?: ReactNode
+}) {
+  return (
+    <div>
+      <Label className="mb-1 block">{label}</Label>
+      {value ? (
+        <p className="text-sm text-muted-foreground">
+          <PathCode path={displayPath(value)} />
+          {children}
+        </p>
+      ) : (
+        <p className="flex items-start gap-1.5 text-sm text-amber-500">
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+          <span>
+            The DAZ Install Manager has no value for this. Use{' '}
+            <strong>Set the paths manually</strong> above to fill it in yourself.
+          </span>
+        </p>
+      )}
+    </div>
   )
 }

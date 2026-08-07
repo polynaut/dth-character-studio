@@ -24,6 +24,13 @@ export interface TauriMockSeed {
   dufFrames: Record<string, number>
   /** What `appLocalDataDir()` resolves to. */
   appDataDir: string
+  /** What `configDir()` resolves to — Windows `%APPDATA%` (Roaming), where the
+   *  DAZ Install Manager keeps the settings the studio reads. Optional: a spec
+   *  that omits it gets a plausible default and simply has no DIM files there. */
+  roamingDir?: string
+  /** What `publicDir()` resolves to — the DIM manifests' default home lives
+   *  under its `Documents`. */
+  publicDir?: string
   /** The `.dcsp` this "window" was opened with — '' for a Home window. */
   activeProjectFile: string
   /** What `getVersion()` reports. */
@@ -281,6 +288,11 @@ export function installTauriMock(seed: TauriMockSeed): void {
 
       // --- other plugins ---------------------------------------------------
       case 'plugin:path|resolve_directory':
+        // BaseDirectory: 3 = Config (Windows Roaming), 9 = Public, 15 =
+        // AppLocalData. Only these three are asked for; anything else keeps the
+        // app-data answer this fake gave before there was more than one.
+        if (args.directory === 3) return seed.roamingDir ?? 'C:/Users/dev/AppData/Roaming'
+        if (args.directory === 9) return seed.publicDir ?? 'C:/Users/Public'
         return seed.appDataDir
       case 'plugin:app|version':
         return seed.version

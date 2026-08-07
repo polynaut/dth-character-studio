@@ -113,6 +113,8 @@ export {
   saveNotes,
 } from './api/notes'
 export { clearProductScan, detectDimManifestsFolder, fetchProductScan } from './api/products'
+// --- the Daz installation DIM already knows about ---------------------------
+export { detectDazInstalls } from './api/daz-install'
 export type { ProductScanFile } from './api/products'
 
 // --- execute: DTH Exporter job-file handoff + Daz launch ---------------------
