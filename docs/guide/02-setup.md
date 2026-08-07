@@ -136,6 +136,11 @@ automatic direct export.
      <sub><em>Open DTH Character Studio as administrator to install into a protected folder.</em></sub>
    </p>
 
+   Once the elevated install succeeds, the app offers **Restart normally** —
+   take it: while the studio runs as administrator, Windows silently blocks
+   drag-and-drop from Explorer into its window (nothing happens, no error).
+   The restart reopens your project without elevation and drops work again.
+
 ## Install the DTH Character Studio Runner Plugin
 
 The **Runner plugin** ships **inside the app** — nothing to download. It lets

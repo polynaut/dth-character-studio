@@ -40,6 +40,7 @@ import { HoudiniInstallSection } from '#/components/settings/houdini-install-sec
 import { defaultHoudiniInstall, deriveHoudiniPaths } from '#/lib/houdini-install.ts'
 import { HousekeepingSection } from '#/components/settings/housekeeping-section.tsx'
 import { NetworkDrivesSection } from '#/components/settings/network-drives-section.tsx'
+import { PostInstallElevationNotice } from '#/components/settings/post-install-elevation-notice.tsx'
 import {
   ExporterReleasePicker,
   ReleasePicker,
@@ -1452,6 +1453,8 @@ function SettingsPage() {
                 administrator, then try again.
               </p>
             )}
+
+            <PostInstallElevationNotice report={pluginReport} />
           </section>
 
           {/* The Runner plugin ships INSIDE the app (fetched from
@@ -1550,6 +1553,8 @@ function SettingsPage() {
                 DLLs.)
               </p>
             )}
+
+            <PostInstallElevationNotice report={runnerReport} />
           </section>
 
           {/* Renders its own card, or nothing when no network drives are

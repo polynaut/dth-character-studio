@@ -89,6 +89,34 @@ export async function housekeepingSweep(): Promise<HousekeepingResult> {
   }
 }
 
+// --- Elevation ------------------------------------------------------------
+
+/** Whether this window runs elevated (UAC). False in a browser / off Windows.
+ *  Matters because Windows UIPI silently kills drag-and-drop from a
+ *  normal-elevation Explorer into an elevated window — the UI warns off this. */
+export async function isElevatedSession(): Promise<boolean> {
+  if (!isTauri()) return false
+  try {
+    return z.boolean().parse(await invoke('elevated_session'))
+  } catch {
+    // Can't ask → assume not elevated, same call the native probe makes.
+    return false
+  }
+}
+
+/**
+ * Restart the studio WITHOUT elevation (the native side hands the launch to
+ * Explorer and exits this instance). Reopens the window's current project via
+ * its `.dcsp` file association; a Home window relaunches bare.
+ */
+export async function relaunchDeelevated(): Promise<void> {
+  // Not desktop.activeProjectFile — desktop.ts imports this api barrel, so the
+  // window's project file is asked here directly (same command, primitive).
+  const projectFile =
+    z.string().nullable().parse(await invoke('active_project_file').catch(() => null)) ?? ''
+  await invoke('relaunch_deelevated', { projectFile })
+}
+
 // --- Network drives -------------------------------------------------------
 
 /** UNC a mapped network drive points to ("X:\…" → "\\host\share"), or '' when

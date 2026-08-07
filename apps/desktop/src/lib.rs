@@ -164,6 +164,8 @@ pub fn run() {
             install::unreal_dth_present,
             drives::unc_for_path,
             drives::ensure_network_drives,
+            elevation::elevated_session,
+            elevation::relaunch_deelevated,
             poses::pose_asset_frames,
             poses::scene_wearables,
             housekeeping::housekeeping_sweep,

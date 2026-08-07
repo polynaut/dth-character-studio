@@ -57,6 +57,8 @@ export interface TauriMockSeed {
   /** The base figure node a scene reports (`scene_wearables`) — the create
    *  dialog's Genesis/gender auto-select source. Default: null (none found). */
   sceneFigure?: { id: string; label: string } | null
+  /** What `elevated_session` answers — an elevated (UAC) window. Default false. */
+  elevated?: boolean
   /** Absolute paths whose fs commands are HELD — the invoke neither resolves
    *  nor rejects until the spec calls `__tauriMock.releaseHeld()` (which also
    *  stops holding future calls). Lets a spec freeze an async probe mid-flight
@@ -468,6 +470,30 @@ export function installTauriMock(seed: TauriMockSeed): void {
         }
       case 'housekeeping_sweep':
         return { filesDeleted: 0, bytesFreed: 0 }
+      case 'elevated_session':
+        return seed.elevated ?? false
+      case 'relaunch_deelevated':
+        // The real command exits the app — here the spec just reads the call
+        // (and its projectFile arg) out of `calls`.
+        return null
+      case 'install_dth_plugin': {
+        // Canned success: the copy itself is native Rust; the smoke pins the
+        // UI around the report (toast, step list, post-install notices).
+        const req = (args as { request: { dryRun?: boolean; label?: string } }).request
+        return {
+          dryRun: req.dryRun ?? false,
+          steps: [
+            {
+              label: req.label ?? 'DTH Exporter Plugin',
+              files: 1,
+              status: 'ok',
+              detail: '',
+              filesList: ['dth_exporter.dll'],
+            },
+          ],
+          totalFiles: 1,
+        }
+      }
       case 'unc_for_path':
         return null
       case 'ensure_network_drives':
