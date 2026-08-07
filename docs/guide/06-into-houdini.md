@@ -243,14 +243,57 @@ list you append to (22 renames onto 22 existing ones would be 44 rules, not a
 merged setup), so this tab has no *Replace at target* toggle. The counts beside
 each section are how much is actually set there, not how many parameters exist.
 
+### The Defaults tab
+
+Per-project Houdini settings the studio knows the right value for. Each row
+shows what the project carries **now** beside what the studio expects, and
+whether the two match.
+
+**Project folder (`$JOB`)** is the one you can repair. `$JOB` is saved *inside*
+each `.hip`, so a project keeps whatever it was created with — and projects made
+before v0.64 point it at the shared `houdini/houdini-project` folder, which sits
+*below* your exports. Houdini only turns a path you pick into a variable when
+that path is under `$HIP` or `$JOB`, so in those projects choosing an export by
+hand writes an **absolute** path, and the project quietly stops being movable.
+
+Measured with the call Houdini's own file picker uses:
+
+| `$JOB` | picking an export gives you |
+| --- | --- |
+| `<character>/houdini/houdini-project` | `D:\…\Ita\daz3d\dth-exports\primary\Ita.fbx` |
+| `<character>` — what **Repair `$JOB`** writes | `$JOB/daz3d/dth-exports/primary/Ita.fbx` |
+
+`$HIP` still wins for paths inside the houdini folder, so this disturbs nothing
+that already works.
+
+> **It fixes what you pick from now on.** Repointing `$JOB` does not rewrite
+> references that are *already* stored absolute — those stay exactly as they
+> are. It makes a project *capable* of being movable; it does not retroactively
+> move it.
+
+**Scene location (`$HIP`)** is reported, never rewritten: `$HIP` is simply
+wherever the `.hip` sits, so "repairing" it would mean moving your scene file —
+your call, not something the studio can do safely while the project may be open
+or under version control.
+
+**Repair `$JOB`** is enabled only when at least one project actually differs,
+and it touches only those — a project already on the right folder is listed and
+left alone, so running it twice rewrites nothing the second time. It offers the
+same **Dry run** as the transfer, and takes the same rolling
+`backup/<name>_dthbak.hiplc` before saving. A project the scan couldn't read is
+never repaired: its `$JOB` is *unknown*, not wrong.
+
+### Scanning
+
 Like Generate project, this runs Houdini's `hython`, so it needs the **Houdini
 installation folder** and its matching documents folder in Settings. The drawer
 scans when it opens, after a run, and when you press **Rescan** — but a project
 is only re-read when its file changed since the last look, so coming back to
 projects nobody touched costs nothing. Reading a `.hip` the first time takes a
 few seconds; a transfer rewrites its targets, so exactly those are read again
-and their neighbours aren't. One scan serves both tabs, so switching between
-Material and Skeleton is instant.
+and their neighbours aren't. One scan serves all three tabs — the `$JOB` and
+`$HIP` values are read in the same pass as the nodes — so switching between
+Material, Skeleton and Defaults is instant.
 
 ## `$DAZ3D_LIB` — your Daz library, as a variable
 

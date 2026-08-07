@@ -23,9 +23,11 @@ import {
 import {
   MATERIAL_SECTIONS,
   SKELETON_SECTIONS,
+  repairHoudiniDefaults,
   scanHoudiniMaterials,
   transferHoudiniMaterials,
 } from '#/lib/rom/api.ts'
+import { defaultsRowsFor, projectsNeedingRepair } from '#/lib/rom/houdini-defaults.ts'
 import type {
   CharacterWithProject,
   MaterialNodeInfo,
@@ -155,6 +157,13 @@ function nodeLabel(node: MaterialNodeInfo): { primary: string; secondary: string
     : { primary: node.name, secondary: '' }
 }
 
+/**
+ * The drawer's tabs. Two transfer a NODE KIND between projects; `defaults` acts
+ * on the project files themselves — the per-project Houdini settings the studio
+ * knows the right value for.
+ */
+type DrawerTab = NodeKind | 'defaults'
+
 /** A scan result plus the request that produced it, so a stale list is never
  *  shown against a changed selection. */
 interface ScanState {
@@ -173,12 +182,18 @@ export function HoudiniUtilsPanel({
   initialHipPath,
   /** The owning project — used to offer its Houdini template attachments. */
   projectId,
+  /** The character's own folder — what `$JOB` should be (v0.64). */
+  charFolder = '',
+  /** Where the studio puts a generated scene — all `$HIP` is compared against. */
+  houdiniDir = '',
 }: {
   open: boolean
   onClose: () => void
   character: Character
   initialHipPath?: string
   projectId?: string
+  charFolder?: string
+  houdiniDir?: string
 }) {
   // --- target side: this character's own projects ---------------------------
   const targets = character.houdiniProjects
@@ -203,8 +218,10 @@ export function HoudiniUtilsPanel({
   const [sections, setSections] = useState<ReadonlySet<MaterialSection>>(
     new Set(MATERIAL_SECTIONS),
   )
-  /** Which tab (and therefore which node kind) the drawer is working on. */
-  const [kind, setKind] = useState<NodeKind>('material')
+  /** Which drawer tab is open. The first two pick a NODE KIND to transfer;
+   *  `defaults` acts on the project FILES themselves and has no node list. */
+  const [tab, setTab] = useState<DrawerTab>('material')
+  const kind: NodeKind = tab === 'skeleton' ? 'skeleton' : 'material'
   const [skelSections, setSkelSections] = useState<ReadonlySet<SkeletonSection>>(
     new Set(SKELETON_SECTIONS),
   )
@@ -224,6 +241,10 @@ export function HoudiniUtilsPanel({
   const [running, setRunning] = useState<'' | 'dry' | 'run'>('')
   const busy = running !== ''
   const [report, setReport] = useState<MaterialUtilReport | null>(null)
+
+  // --- the Defaults tab ----------------------------------------------------
+  const [defaultsOpen, setDefaultsOpen] = useState(false)
+  const [defaultsReport, setDefaultsReport] = useState<MaterialUtilReport | null>(null)
 
   const targetsKey = targets.join('|')
 
@@ -514,6 +535,47 @@ export function HoudiniUtilsPanel({
     }
   }
 
+  /** Projects whose `$JOB` differs from the character folder — what a repair
+   *  would actually write. A project the scan couldn't read is never queued:
+   *  its `$JOB` is unknown, not wrong. */
+  const staleJobProjects = useMemo(
+    () => projectsNeedingRepair(targetScan.projects, charFolder),
+    [targetScan, charFolder],
+  )
+
+  async function runDefaults(dryRun: boolean) {
+    if (staleJobProjects.length === 0) return
+    setRunning(dryRun ? 'dry' : 'run')
+    setDefaultsReport(null)
+    try {
+      const result = await repairHoudiniDefaults({
+        data: {
+          targets: staleJobProjects.map((hipPath) => ({ hipPath, jobDir: charFolder })),
+          dryRun,
+        },
+      })
+      setDefaultsReport(result)
+      if (!dryRun) {
+        const failed = result.defaults.filter((d) => !d.ok)
+        const changed = result.defaults.filter((d) => d.ok && d.changed).length
+        if (failed.length > 0) {
+          toast.error(`${failed.length} of ${result.defaults.length} projects failed — see below.`)
+        } else {
+          toast.success(
+            `$JOB repaired on ${changed} project${changed === 1 ? '' : 's'}. Paths you pick from now on stay relative.`,
+          )
+          setDefaultsOpen(false)
+        }
+        // The files changed on disk — their scanned $JOB is now stale.
+        void runScan(targets, setTargetScan)
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+    } finally {
+      setRunning('')
+    }
+  }
+
   return (
     <>
       <SidePanel
@@ -536,25 +598,37 @@ export function HoudiniUtilsPanel({
         }
       >
         <Tabs
-          value={kind}
+          value={tab}
           onValueChange={(next) => {
             // Node lists, sections and selections are all per-kind — carrying a
             // material selection into the skeleton tab would offer a target the
             // run can't use.
-            setKind(next as NodeKind)
+            setTab(next as DrawerTab)
             setSelectedTargets(new Set())
             setSelectedSource('')
             setReport(null)
+            setDefaultsReport(null)
           }}
         >
           <TabsList>
             <TabsTrigger value="material">Material</TabsTrigger>
             <TabsTrigger value="skeleton">Skeleton</TabsTrigger>
+            <TabsTrigger value="defaults">Defaults</TabsTrigger>
           </TabsList>
 
-          {/* One body for both tabs: the flow is identical and only the section
-              list and the material picker differ, so `value={kind}` keeps the
-              single content always mounted for whichever tab is active. */}
+          <TabsContent value="defaults" className="space-y-6">
+            <DefaultsTab
+              scan={targetScan}
+              charFolder={charFolder}
+              houdiniDir={houdiniDir}
+              report={defaultsReport}
+              onRescan={() => void runScan(targets, setTargetScan)}
+            />
+          </TabsContent>
+
+          {/* One body for both transfer tabs: the flow is identical and only the
+              section list and the material picker differ, so `value={kind}`
+              keeps the single content mounted for whichever is active. */}
           <TabsContent value={kind} className="space-y-6">
             <p className="text-xs text-muted-foreground">
               Copy the texture-baker setup of one material node onto this character&apos;s
@@ -903,6 +977,33 @@ export function HoudiniUtilsPanel({
         </Tabs>
 
         {/* The panel's own footer action — the modal owns the actual run. */}
+        {tab === 'defaults' ? (
+          <div className="mt-6 flex items-center justify-end gap-3 border-t pt-4">
+            <span className="text-xs text-muted-foreground">
+              {targetScan.loading
+                ? 'Reading the projects…'
+                : staleJobProjects.length === 0
+                  ? 'Every project is already on the right folder.'
+                  : `${staleJobProjects.length} project${staleJobProjects.length === 1 ? '' : 's'} to repair`}
+            </span>
+            <Button
+              disabled={busy || staleJobProjects.length === 0 || !charFolder}
+              title={
+                !charFolder
+                  ? 'The character folder could not be resolved'
+                  : staleJobProjects.length === 0
+                    ? 'Nothing differs — every project already points $JOB at the character folder'
+                    : undefined
+              }
+              onClick={() => {
+                setDefaultsReport(null)
+                setDefaultsOpen(true)
+              }}
+            >
+              <Wrench /> Repair $JOB
+            </Button>
+          </div>
+        ) : (
         <div className="mt-6 flex items-center justify-end gap-3 border-t pt-4">
           {sourceNode && !sourceHasBakers && (
             <span className="flex items-center gap-1.5 text-xs text-amber-500">
@@ -933,7 +1034,62 @@ export function HoudiniUtilsPanel({
             <Wrench /> Transfer
           </Button>
         </div>
+        )}
       </SidePanel>
+
+      {defaultsOpen && (
+        <Modal
+          open
+          onClose={() => setDefaultsOpen(false)}
+          dismissible={!busy}
+          title="Repair $JOB on these projects?"
+        >
+          <div className="space-y-2 text-sm">
+            <p>
+              Point <code>$JOB</code> at <strong>{displayPath(charFolder)}</strong> in{' '}
+              <strong>{staleJobProjects.length}</strong> project
+              {staleJobProjects.length === 1 ? '' : 's'}.
+            </p>
+            <ul className="max-h-32 list-inside list-disc overflow-y-auto text-xs text-muted-foreground">
+              {staleJobProjects.map((hip) => (
+                <li key={hip}>
+                  <code>{fileName(hip)}</code>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* The honest limit, stated where the decision is made — this makes a
+              project CAPABLE of being movable; it does not move anything that
+              is already stored absolute. */}
+          <p className="rounded-md border p-3 text-xs text-muted-foreground">
+            This fixes paths you pick <strong>from now on</strong>: Houdini will collapse an
+            export you choose to <code>$JOB/…</code> instead of writing it absolute. Paths already
+            stored absolute stay exactly as they are — repointing <code>$JOB</code> does not
+            rewrite existing references.
+          </p>
+
+          <p className="text-xs text-muted-foreground">
+            A real run saves each project. Close them in Houdini first — Houdini writes the whole
+            scene on save and would overwrite this. The previous state is kept as{' '}
+            <code>backup/&lt;name&gt;_dthbak.hiplc</code>.
+          </p>
+
+          {defaultsReport && <DefaultsReport report={defaultsReport} />}
+
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" disabled={busy} onClick={() => setDefaultsOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="outline" disabled={busy} onClick={() => void runDefaults(true)}>
+              {running === 'dry' ? <Loader2 className="animate-spin" /> : null} Dry run
+            </Button>
+            <Button disabled={busy} onClick={() => void runDefaults(false)}>
+              {running === 'run' ? <Loader2 className="animate-spin" /> : null} Run
+            </Button>
+          </div>
+        </Modal>
+      )}
 
       {confirmOpen && sourceNode && (
         <Modal
@@ -1051,6 +1207,155 @@ export function HoudiniUtilsPanel({
         </Modal>
       )}
     </>
+  )
+}
+
+/**
+ * The Defaults tab: per-project Houdini settings the studio knows the right
+ * value for, each showing its CURRENT value beside the expected one.
+ *
+ * `$JOB` is scene state saved with the `.hip`, so v0.64's fix reached only
+ * newly generated projects — every project that already existed still carries
+ * `<char>/houdini/houdini-project`, which sits BELOW the exports and can
+ * therefore never let Houdini collapse a picked export to a variable. This tab
+ * is that migration.
+ *
+ * The values come from the drawer's existing scan, which reads them in the same
+ * pass as the nodes — opening a `.hip` costs tens of seconds and switching tab
+ * must not pay it again.
+ */
+function DefaultsTab({
+  scan,
+  charFolder,
+  houdiniDir,
+  report,
+  onRescan,
+}: {
+  scan: ScanState
+  charFolder: string
+  houdiniDir: string
+  report: MaterialUtilReport | null
+  onRescan: () => void
+}) {
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-muted-foreground">
+        Per-project Houdini settings the studio knows the right value for. <code>$JOB</code> is
+        saved inside each <code>.hip</code>, so a project keeps whatever it was created with —
+        projects made before v0.64 still point it at the shared{' '}
+        <code>houdini/houdini-project</code> folder, which sits below your exports. Houdini only
+        turns a path you pick into a variable when it sits under <code>$HIP</code> or{' '}
+        <code>$JOB</code>, so those projects write an absolute path every time you choose an
+        export by hand.
+      </p>
+
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-muted-foreground">
+          {scan.projects.length} project{scan.projects.length === 1 ? '' : 's'} read
+        </span>
+        <Button variant="ghost" size="sm" disabled={scan.loading} onClick={onRescan}>
+          <RefreshCw className={scan.loading ? 'animate-spin' : ''} /> Rescan
+        </Button>
+      </div>
+
+      {scan.loading ? (
+        <p className="flex items-center gap-2 rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+          <Loader2 className="size-3.5 animate-spin" />
+          Opening the project in Houdini — this takes a moment per file.
+        </p>
+      ) : scan.error ? (
+        <p className="rounded-md border border-destructive/50 p-3 text-xs text-destructive">
+          {scan.error}
+        </p>
+      ) : scan.projects.length === 0 ? (
+        <p className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+          No Houdini projects linked to this character.
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {scan.projects.map((project) => (
+            <ProjectCard key={project.hipPath} project={project}>
+              {!project.ok ? (
+                <p className="text-xs text-destructive">{project.error}</p>
+              ) : (
+                <ul className="space-y-2">
+                  {defaultsRowsFor(project, charFolder, houdiniDir).map((row) => (
+                    <li key={row.key} className="text-xs">
+                      <p className="flex items-center gap-2">
+                        <span className="font-medium">{row.label}</span>
+                        {row.status === 'matches' ? (
+                          <span className="text-muted-foreground">matches</span>
+                        ) : row.status === 'unknown' ? (
+                          // Not "differs": nobody read it, so nothing is known
+                          // to be wrong — and the repair skips it.
+                          <span className="text-muted-foreground">could not be read</span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-amber-500">
+                            <AlertTriangle className="size-3 shrink-0" />
+                            differs
+                          </span>
+                        )}
+                      </p>
+                      {/* The current value is shown, not hidden in a tooltip: a
+                          row the user can't action needs its reason VISIBLE,
+                          and a row they can needs to show what it replaces. */}
+                      <p className="truncate text-muted-foreground" title={row.current}>
+                        now: <code>{displayPath(row.current) || '—'}</code>
+                      </p>
+                      {row.status === 'differs' && (
+                        <p className="truncate text-muted-foreground" title={row.expected}>
+                          studio expects: <code>{displayPath(row.expected) || '—'}</code>
+                        </p>
+                      )}
+                      {row.status === 'differs' && !row.actionable && (
+                        <p className="text-muted-foreground">{row.reason}</p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </ProjectCard>
+          ))}
+        </div>
+      )}
+
+      {report && <DefaultsReport report={report} />}
+    </div>
+  )
+}
+
+/** What a `$JOB` repair did, or would do, per project. */
+function DefaultsReport({ report }: { report: MaterialUtilReport }) {
+  return (
+    <div className="rounded-md border p-3">
+      <p className="mb-2 text-sm font-medium">
+        {report.dryRun ? 'Dry run — nothing was written' : 'Repair complete'}
+      </p>
+      <ul className="space-y-2 text-xs">
+        {report.defaults.map((entry) => (
+          <li key={entry.hipPath}>
+            <p className="truncate" title={entry.hipPath}>
+              <strong>{fileName(entry.hipPath)}</strong>
+            </p>
+            {entry.ok ? (
+              <p className="text-muted-foreground">
+                {entry.changed ? (
+                  <>
+                    <code>{displayPath(entry.previousJob) || '—'}</code> →{' '}
+                    <code>{displayPath(entry.job)}</code>
+                    {entry.backupPath ? ' · backup written' : ''}
+                  </>
+                ) : (
+                  'Already on the right folder — left untouched.'
+                )}
+              </p>
+            ) : (
+              <p className="text-destructive">{entry.error}</p>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }
 

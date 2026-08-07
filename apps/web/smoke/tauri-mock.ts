@@ -63,6 +63,9 @@ export interface TauriMockSeed {
    *  A path with no entry scans as a readable project with NO nodes, which is
    *  exactly what a scene that never got a DTH network looks like. */
   materialScan?: Record<string, Array<Record<string, unknown>>>
+  /** The `$JOB` a scanned project reports — the Defaults tab's input. Omit and
+   *  the project reads as unreadable, which the tab reports and never repairs. */
+  materialJob?: Record<string, string>
 }
 
 /** What the spec reads back via `page.evaluate` from `window.__tauriMock`. */
@@ -390,6 +393,7 @@ export function installTauriMock(seed: TauriMockSeed): void {
           error: '',
           projects: [],
           targets: [],
+          defaults: [],
           sourceBakers: 0,
           sourceLayers: 0,
           sourceBakerNames: [],
@@ -409,6 +413,29 @@ export function installTauriMock(seed: TauriMockSeed): void {
               ok: true,
               error: '',
               nodes: seed.materialScan?.[norm(hipPath)] ?? [],
+              // $JOB/$HIP come off the same scan in the real Python. The seed
+              // may name a $JOB; without one the project reads as already
+              // correct, so the Defaults tab is quiet unless a spec asks for it.
+              job: seed.materialJob?.[norm(hipPath)] ?? '',
+              hipDir: norm(hipPath).replace(/\/[^/]*$/, ''),
+            })),
+          }
+        }
+        if (request.op === 'defaults') {
+          // Same posture as the transfer below: the call and its request file
+          // are what a spec asserts — nothing here pretends a .hip was written.
+          return {
+            ...base,
+            defaults: (
+              request.targets as Array<{ hipPath: string; jobDir: string }>
+            ).map((t) => ({
+              hipPath: t.hipPath,
+              ok: true,
+              error: '',
+              previousJob: seed.materialJob?.[norm(t.hipPath)] ?? '',
+              job: t.jobDir,
+              changed: true,
+              backupPath: '',
             })),
           }
         }
@@ -428,6 +455,7 @@ export function installTauriMock(seed: TauriMockSeed): void {
             missingMaterials: [],
             missingGroups: [],
             missingUvSources: [],
+            unclaimedSurfaces: [],
             backupPath: '',
           })),
         }

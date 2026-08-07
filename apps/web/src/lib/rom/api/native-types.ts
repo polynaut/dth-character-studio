@@ -260,6 +260,33 @@ export const materialScanProjectSchema = z.object({
   ok: z.boolean(),
   error: z.string(),
   nodes: z.array(materialNodeInfoSchema),
+  /** The `$JOB` this scene carries — scene state saved with the `.hip`, so a
+   *  project keeps whatever it was created with. Read in the same pass as the
+   *  nodes (opening a `.hip` costs tens of seconds). Empty only when the
+   *  project could not be read. */
+  job: z.string(),
+  /** The folder the `.hip` sits in, i.e. `$HIP` — derived, never rewritten. */
+  hipDir: z.string(),
+})
+
+/** What the `defaults` operation did (or would do) to one project's `$JOB`.
+ *
+ *  Houdini's file picker collapses a chosen path to a variable only when it
+ *  sits under `$HIP` or `$JOB`. A pre-v0.64 project carries
+ *  `<char>/houdini/houdini-project` — BELOW the exports, so it could never
+ *  help and every hand-picked export came back absolute. */
+export const houdiniDefaultsResultSchema = z.object({
+  hipPath: z.string(),
+  ok: z.boolean(),
+  error: z.string(),
+  /** The `$JOB` the scene carried before the run. */
+  previousJob: z.string(),
+  /** The `$JOB` it carries now — for a dry run, what it WOULD carry. */
+  job: z.string(),
+  /** false = already correct, so nothing was written. */
+  changed: z.boolean(),
+  /** Pre-repair backup (empty for a dry run, and when nothing changed). */
+  backupPath: z.string(),
 })
 
 /** What one transferred section did to a target node. */
@@ -319,6 +346,8 @@ export const materialUtilReportSchema = z.object({
   error: z.string(),
   projects: z.array(materialScanProjectSchema),
   targets: z.array(materialTransferTargetSchema),
+  /** Populated by `defaults` — one entry per project it was asked about. */
+  defaults: z.array(houdiniDefaultsResultSchema),
   sourceBakers: z.number(),
   sourceLayers: z.number(),
   sourceBakerNames: z.array(z.string()),
@@ -354,4 +383,5 @@ export type MaterialNodeInfo = z.infer<typeof materialNodeInfoSchema>
 export type MaterialSectionResult = z.infer<typeof materialSectionResultSchema>
 export type MaterialScanProject = z.infer<typeof materialScanProjectSchema>
 export type MaterialTransferTarget = z.infer<typeof materialTransferTargetSchema>
+export type HoudiniDefaultsResult = z.infer<typeof houdiniDefaultsResultSchema>
 export type MaterialUtilReport = z.infer<typeof materialUtilReportSchema>
