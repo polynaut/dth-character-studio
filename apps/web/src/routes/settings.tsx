@@ -656,6 +656,93 @@ function SettingsPage() {
     'You have unsaved settings — leave and lose them?',
   )
 
+  /**
+   * Keep the DERIVED install paths in step with what the machine now says.
+   *
+   * Activating a card resolves three Daz paths (two Houdini ones) and writes
+   * them, and they are read-only for as long as that installation stays active.
+   * But the source can move afterwards — point DIM at a different content
+   * library, or Houdini gets reinstalled — and a stored snapshot would then
+   * quietly disagree with the machine while the UI still called it derived. So
+   * every scan re-derives and writes back the drift; re-clicking the active card
+   * is no longer the only way to pick up a change.
+   *
+   * Three rules keep this from being a footgun:
+   *
+   *  - **Only while an installation is ACTIVE.** With the paths handed back
+   *    (`…InstallKey` cleared by "Set the paths manually") they are the user's,
+   *    and nothing here touches them.
+   *  - **Never writes an EMPTY value over a set one.** DIM dropping its manifest
+   *    override shouldn't blank a working path — the explicit activation says so
+   *    out loud in its toast, but a silent sync has no way to.
+   *  - **Never persists somebody else's pending edits.** With other fields
+   *    unsaved, the fresh values still land in the form (so the user's own Save
+   *    carries them) but the disk write waits for a clean page.
+   *
+   * A stored key matching no install is the "machine changed" case the sections
+   * already report — `derive…` returns null and this leaves everything alone,
+   * rather than re-deriving from some other installation.
+   */
+  // What the sync effect below READS but must not re-run for. Refreshed after
+  // every render, and declared BEFORE the effect that consumes it so its values
+  // are always this render's (effects fire in declaration order).
+  const syncInputs = useRef({ settings, initial, dirty, projectDirty })
+  useEffect(() => {
+    syncInputs.current = { settings, initial, dirty, projectDirty }
+  })
+
+  useEffect(() => {
+    const now = syncInputs.current
+    const stored = now.settings
+    const drift: Partial<typeof stored> = {}
+    const daz =
+      dazScan && stored.dazInstallKey ? deriveDazPaths(dazScan, stored.dazInstallKey) : null
+    if (daz) {
+      if (daz.dazInstallFolder && daz.dazInstallFolder !== stored.dazInstallFolder) {
+        drift.dazInstallFolder = daz.dazInstallFolder
+      }
+      if (daz.dazLibraryFolder && daz.dazLibraryFolder !== stored.dazLibraryFolder) {
+        drift.dazLibraryFolder = daz.dazLibraryFolder
+      }
+      if (daz.dimManifestsFolder && daz.dimManifestsFolder !== stored.dimManifestsFolder) {
+        drift.dimManifestsFolder = daz.dimManifestsFolder
+      }
+    }
+    const houdini =
+      houdiniScan && stored.houdiniInstallKey
+        ? deriveHoudiniPaths(houdiniScan, stored.houdiniInstallKey)
+        : null
+    if (houdini) {
+      if (
+        houdini.houdiniInstallFolder &&
+        houdini.houdiniInstallFolder !== stored.houdiniInstallFolder
+      ) {
+        drift.houdiniInstallFolder = houdini.houdiniInstallFolder
+      }
+      if (houdini.houdiniDocsFolder && houdini.houdiniDocsFolder !== stored.houdiniDocsFolder) {
+        drift.houdiniDocsFolder = houdini.houdiniDocsFolder
+      }
+    }
+    if (Object.keys(drift).length === 0) return
+    const next = { ...stored, ...drift }
+    setSettings(next)
+    if (now.dirty || now.projectDirty) return
+    void (async () => {
+      try {
+        await saveSettings({ data: { settings: next, baseline: now.initial } })
+        await router.invalidate()
+        toast.info('Updated the paths from your Daz / Houdini installation — they had changed.')
+      } catch {
+        // The form already shows the truth; a failed write retries next visit.
+      }
+    })()
+    // Keyed on a fresh SCAN only — everything else comes in through the ref
+    // above. Listing `settings`/`dirty` would re-fire this on every keystroke,
+    // and its own setSettings would then chase itself; a scan is the only thing
+    // that can produce new information here. (`router` is stable, so naming it
+    // satisfies the dependency check without ever re-triggering.)
+  }, [dazScan, houdiniScan, router])
+
   // Re-scan the active release's poses and refresh dependent routes. The studio
   // keeps the pose list in memory (no on-disk cache), so this just re-runs the
   // native scan and updates it — done whenever the release settings are applied:
@@ -1576,10 +1663,13 @@ function SettingsPage() {
               </div>
               <div className="flex items-center justify-between gap-3 border-t pt-4 text-sm">
                 <span className="flex items-center gap-1 font-medium">
-                  Enable Daz Products
-                  <InfoPopup label="Enable Daz Products — more information" className="-translate-y-px">
-                    Adds per-character product scanning — a generated{' '}
-                    <strong>Scan_Products</strong> script finds the Daz products a scene uses.{' '}
+                  Show the Daz Products tab
+                  <InfoPopup label="Show the Daz Products tab — more information" className="-translate-y-px">
+                    Whether this project's characters get a <strong>Products</strong> tab showing
+                    the Daz products each scene uses. It does NOT control the scanning: with a{' '}
+                    <strong>DAZ Install Manager manifests folder</strong> set below, every export
+                    run scans and the results are filed either way — this only decides whether you
+                    see them.{' '}
                     <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/product-scanning.html#daz-product-scanning">
                       Open guide
                     </GuideLink>
@@ -1590,9 +1680,9 @@ function SettingsPage() {
                   onCheckedChange={(v) => patchProject({ dazProductsEnabled: v })}
                 />
               </div>
-              {/* Directly under the Daz Products toggle it belongs to — this
-                  folder is what that scan resolves product names from, so the
-                  two read as one setting rather than two neighbours. */}
+              {/* Directly under the tab toggle it reads with — this folder is
+                  what actually arms the scan, so the two belong together even
+                  though only one of them is per-project. */}
               <div>
                 {/* Derived with the rest once an installation is active — the
                     manual field and its probe stay for a machine without DIM. */}

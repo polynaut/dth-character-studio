@@ -1,52 +1,37 @@
 # Daz product scanning
 
 Product scanning answers "**which Daz products does this character actually use?**"
-— it generates a small Daz script that analyses the open scene, matches the used
-assets to your installed products, and writes a CSV the studio reads back so you can
-review and **store the product list on the character** (product name, SKU, artist,
-version). Useful for provenance, licensing notes, or rebuilding a character later.
+— the studio analyses each scene as it exports it, matches the used assets to your
+installed products, and files the result (product name, SKU, artist, version)
+against the character. Useful for provenance, licensing notes, or rebuilding a
+character later.
 
 &nbsp;
 
 > [!NOTE]
-> It's **opt-in, per project**, and completely optional — it never affects ROM
-> generation.
+> It runs on its own and it never affects ROM generation. Nothing to start, and
+> nothing to confirm afterwards.
 
 &nbsp;
 
 ---
 
-## Enable it
-
-Open **Settings → Project** and turn on **Enable Daz Products**, then Save (stored in
-the project's `.dcsp`). With it on:
-
-- each character generates a **`Scan_Products_<Name>.dsa`** script alongside its ROM
-  script, and
-- the character page gains a **Products** tab.
-
-<p align="center">
-  <img width="900" alt="Settings → Project → Enable Daz Products" src="screenshots/settings-daz-products.png" />
-  <br>
-  <sub><em>Enable Daz Products in Settings → Project.</em></sub>
-</p>
-
-## Set the DIM manifests folder (for names, SKUs, artists)
+## Set the DIM manifests folder — that's the switch
 
 **Usually already done.** Activating a Daz installation in
 [Settings → General](./02-setup.md#daz-installation--pick-it-once) fills this
 from DIM's own settings, and it then shows read-only there.
 
-Otherwise, at the bottom of the **Settings → Project** tab, set the
-**DAZ Install Manager manifests folder** — the
+Otherwise set the **DAZ Install Manager manifests folder** in **Settings** — the
 `ManifestFiles` folder DIM writes (a folder of `.dsx` files; see DIM → Advanced
-Settings → "Download/Install"). The scan reads it to resolve used assets to real
-**product names, SKUs and artists**. **Detect installed location** auto-finds it.
+Settings → "Download/Install"). **Detect installed location** auto-finds it.
 
-- It's a **machine-wide** setting (shared by all projects), even though it sits on
-  the Project tab.
-- **Leave it empty and the scan still runs** — it just lists the used assets without
-  naming products. A reminder appears on the Products tab when it's unset.
+That folder **is** the product database, so it is also what arms the scanning:
+with it set, every export run scans the scene it just built and files the result.
+With it empty, nothing is scanned — there would be nothing to match against.
+
+- It's a **machine-wide** setting (shared by all projects).
+- Scanning happens whether or not you look at it (see the tab toggle below).
 
 <p align="center">
   <img width="900" alt="DIM manifests folder field + Detect button" src="screenshots/settings-dim-manifests.png" />
@@ -54,54 +39,55 @@ Settings → "Download/Install"). The scan reads it to resolve used assets to re
   <sub><em>The DIM manifests folder field with its Detect button.</em></sub>
 </p>
 
+## Show the Products tab (per project)
+
+**Settings → Project → Show the Daz Products tab** decides whether this project's
+characters get a **Products** tab. That is *all* it decides — the scanning and
+the filing happen either way, so turning the tab on later shows you results
+that were already collected.
+
+<p align="center">
+  <img width="900" alt="Settings → Project → Show the Daz Products tab" src="screenshots/settings-daz-products.png" />
+  <br>
+  <sub><em>The tab toggle in Settings → Project.</em></sub>
+</p>
+
 ---
 
-## Run a scan
+## When a scan happens
 
-Most of the time you never run one by hand: **every ROM/export run scans the
-scene it just built**, and
-[**Tools → Scan & index → Scan project**](./tools.md#tab-1--scan-amp-index)
-covers every scene of every character in one unattended batch. The manual run
-below stays for a one-off scene:
-
-1. In the studio, **Save** the character (generates/updates its scan script).
-2. Open the character's **scene in Daz Studio**.
-3. In Daz's Content Library, run **`Scan_Products_<Name>`** (installed beside the ROM
-   script under `Scripts/DTH-Character-Studio/<Project>/<Character>/`).
-4. It analyses the **currently-open** scene and writes a CSV named after that scene.
-
-<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
-<p align="center">
-  <img width="900" alt="running the scan in Daz" src="ADD_IMAGE_URL" />
-  <br>
-  <sub><em>Running the product scan on the open scene in Daz.</em></sub>
-</p>
--->
+- **Every ROM/export run** scans the scene it just built.
+- [**Tools → Scan & index → Scan project**](./tools.md#tab-1--scan-amp-index)
+  covers every scene of every character in one unattended batch.
+- **By hand**, for a one-off scene: open the scene in Daz Studio and run
+  **`Scan_Products_<Name>`** from the Content Library (installed beside the ROM
+  script under `Scripts/DTH-Character-Studio/<Project>/<Character>/`). The studio
+  picks that up next time you open the character — or press **Check for new
+  results** on the Products tab.
 
 &nbsp;
 
 > [!NOTE]
-> **Per-scene by design** — each scene's scan writes its own CSV; the studio
-> merges them, attributing each product to the scene(s) it appeared in. Every
-> ROM/export run (and the Tools batch) covers its own scene, so a scene only
-> needs the manual script when you want it scanned without building anything.
+> **Per-scene by design.** Each scene is filed separately and a re-scan replaces
+> only that scene's entry, so scanning one outfit never disturbs the products
+> you mapped for the others. The tab shows them merged, attributing each product
+> to the scene(s) it appeared in.
 
 &nbsp;
 
 Matching tries the strongest signals first — the asset's own file, its
 textures, SKU, product keywords — falling back to a content-library match for
 manual installs without a DIM manifest (that's the **Match** column on the
-Products tab). Scans are stored under the app's data folder, keyed to
-project + character, and **age out after 30 days** (they're also removed when
-you delete the character) — see
-[Storage & housekeeping](./02-setup.md#the-app-data-tab).
+Products tab).
+
+Results are stored with the studio's other per-character files, in the project's
+hidden `.dcsmeta/characters/<Character>/products.json`. They travel with the
+project and go when you delete the character. The Daz-written CSVs are transport
+only: they're parsed and deleted the moment the studio picks them up.
 
 ---
 
-## Review results (Products tab)
-
-Switch to the character's **Products** tab. **Check for scan results** re-reads the
-CSVs from disk.
+## Read the results (Products tab)
 
 <p align="center">
   <img width="900" alt="Products tab, matched products table" src="screenshots/products-tab.png" />
@@ -109,24 +95,25 @@ CSVs from disk.
   <sub><em>The matched products table on the character's Products tab.</em></sub>
 </p>
 
+- **Scanned scenes** — one row per scene, with its counts and when it was last
+  scanned. The panel below is these merged.
 - **Matched products** — a table of **Product · Used as · SKU · Artist · Version ·
   Match** (with a per-scene filter when a character has several scanned scenes).
   Expand a row to see the exact assets behind the match. When the SKU is a Daz store
   id, the product name links to its Daz **product page**.
-- **Store on character** — writes the current product list onto the character's
-  definition (no script regeneration). A banner tells you when a newer scan on disk
-  differs from what's stored, with **Update stored products** to re-sync.
 - **Unmatched** — a collapsible list of assets the scan couldn't tie to a product
-  (still shown with artist/version from their own files). Common when the DIM folder
-  is unset or for hand-installed content.
-- **Clear** — discards the on-disk scan CSVs for this character (your *stored*
-  products stay on the character).
+  (still shown with artist/version from their own files). Common for hand-installed
+  content.
+- **Check for new results** — re-reads, picking up anything a manual Daz run left
+  behind.
+- **Clear** — throws the stored results away. The next export run rebuilds them.
 
 ## Gotchas
 
-- No DIM folder → everything lists as unmatched (the scan still works, just
-  unnamed).
-- **Stored ≠ scanned** — storing snapshots the current scan; later scans can
-  drift until you re-store (the amber banner flags it).
+- **No DIM folder → no scanning at all.** That folder is the product database;
+  without it there is nothing to match against.
+- A product installed **outside DIM** matches by its content-library folder
+  instead, so it has no SKU — the name and artist come from the content's own
+  files.
 
 [← Guide overview](./README.md)

@@ -80,7 +80,8 @@ offsets byte-identically — if a generation change moves them, the change is wr
 - **Every ROM/export run SCANS its scene** (runtime v55) — how the index stays
   current through the app's CORE flow, with no Tools pass to remember. The
   generated scripts call `DthScanSceneMorphsQuiet` (and `DthScanProductsQuiet`
-  when the PROJECT has Daz Products on) right after the wrong-scene guard and
+  when a DIM manifests folder is set — runtime v60; it used to be the per-project
+  Daz Products toggle, which now only shows the tab) right after the wrong-scene guard and
   BEFORE the ROM build: the scene is pristine there, which is the truest picture
   of what it wears. Emitted by `indexSyncSnippet` from the `IndexSyncOptions`
   the web layer supplies (`api/generate.ts`), so a pure/web build emits nothing.

@@ -145,7 +145,10 @@ Two scopes now:
   save input. Adding one = add the schema field + its UI in the Settings route. Settings/Tools gate
   "save before action" on a `dirty` flag — include a new field there or its value never reaches disk.
 - **Per-project** (the `.dcsp` manifest: the subdirs + `charactersSubdir`, the
-  `assetsEnabled`/`dazProductsEnabled` opt-ins, `houdiniPathStyle`,
+  `assetsEnabled`/`dazProductsEnabled` opt-ins (`dazProductsEnabled` only shows the
+  character page's Products TAB — the Daz-product scan itself is armed by
+  `settings.dimManifestsFolder`, and its results live in the character's
+  `.dcsmeta` folder), `houdiniPathStyle`,
   `unrealProjects`) → the `DcspManifest` type + `readManifest`/`writeManifest` in
   `storage/projects.ts`, saved via `api.saveProjectSettings` and edited from the **Settings → Project tab**
   (shown only inside a project window). `assetsEnabled` is opt-in (default off → characters only).

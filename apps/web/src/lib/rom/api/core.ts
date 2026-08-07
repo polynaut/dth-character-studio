@@ -10,7 +10,6 @@ import { basename, dirname, join } from '../storage/fs'
 // below — erased at compile time, so they can't create a runtime import cycle
 // (characters.ts / products.ts import core.ts for real).
 import type { BoneIndexEntry, MorphIndexEntry } from './characters'
-import type { ProductScanResult } from './products'
 
 // Shared plumbing for the api/ modules: path helpers, the per-window active
 // project state, project→record resolution, the shared zod input schemas, and
@@ -279,7 +278,3 @@ export async function locateCharacter(
   if (location) characterLocationCache.set(key, location)
   return location
 }
-
-/** Merged product-scan result per scan dir, keyed on the dir's CSV listing
- *  (names + mtimes + sizes) — see {@link import('./products').fetchProductScan}. */
-export const productScanCache = new Map<string, { signature: string; result: ProductScanResult }>()

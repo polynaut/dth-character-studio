@@ -1,6 +1,6 @@
 import { Fragment, memo, useState } from 'react'
 import { Link, useRouter } from '@tanstack/react-router'
-import { Check, ChevronDown, ChevronRight, ExternalLink, RefreshCw, Save } from 'lucide-react'
+import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { PathCode } from '#/components/path-code.tsx'
@@ -12,7 +12,6 @@ import { displayPath } from '#/lib/path.ts'
 import { characterSlug } from '@dth/rom'
 
 import type { RootedDir } from '#/lib/character-paths.ts'
-import type { PersistCharacterPatch } from '#/lib/use-character-draft.ts'
 import type { Character } from '@dth/rom'
 
 /**
@@ -27,10 +26,14 @@ function dazProductUrl(sku: string): string {
 }
 
 /**
- * The character editor's "Products" tab body: the per-scene scan files on disk
- * plus the merged "Matched products" review panel. The tab owns its view state
- * (scene filter, expanded rows) and the store/clear actions; storing hands the
- * saved character back to the route via `onStored`.
+ * The character editor's "Products" tab body: what the Daz product scan found,
+ * per scanned scene and merged.
+ *
+ * Read-only, deliberately. The results are picked up, parsed and stored without
+ * being asked — every export run scans, and opening this page ingests whatever
+ * Daz has left behind — so there is nothing here to approve. Before v0.70 this
+ * tab carried a "found vs stored" split with a Store button; the split existed
+ * only because the storing was manual.
  *
  * Memoized over what it actually READS (see the comparator on the export): the
  * route keeps it mounted-but-hidden behind the other tabs, and keyed on the whole
@@ -43,23 +46,19 @@ function CharacterProductsTabImpl({
   productScan,
   dimManifestsFolder,
   scriptsPath,
-  persistPatch,
 }: {
   projectId: string
   character: Character
-  /** The character's product scan as loaded by the route (`fetchProductScan`). */
+  /** The character's stored product results as loaded by the route
+   *  (`fetchProductScan`, which ingests any fresh Daz output first). */
   productScan: Awaited<ReturnType<typeof fetchProductScan>> | null
-  /** settings.dimManifestsFolder — empty shows the "set it in Settings" notice. */
+  /** settings.dimManifestsFolder — empty means no scan can name products. */
   dimManifestsFolder: string
   /** Where the generated scripts land in the Daz library (null until "My DAZ 3D
    *  Library" is set) — rendered as the dim-root/bright-remainder chip. */
   scriptsPath: RootedDir | null
-  /** The draft hook's immediate-persist primitive — storing the scan goes
-   *  through it so validation, single-flight and regeneration are never skipped. */
-  persistPatch: PersistCharacterPatch
 }) {
   const router = useRouter()
-  const [storingProducts, setStoringProducts] = useState(false)
   const [clearingScan, setClearingScan] = useState(false)
   // Keyed by a stable product id (sku||name, lowercased) — not the row index — so
   // a row stays expanded when the scene filter changes the visible rows.
@@ -67,27 +66,8 @@ function CharacterProductsTabImpl({
   // The Products view can be scoped to one scene; null = all scenes (merged).
   const [sceneFilter, setSceneFilter] = useState<string | null>(null)
 
-  // Store the most recent product scan onto the character, via the draft hook's
-  // persist primitive: it persists the WHOLE draft (any pending edits included),
-  // so it must run the same validation/single-flight as Save — and regenerate,
-  // keeping the on-disk artifacts in sync with the just-persisted definition.
-  async function storeProducts() {
-    if (!productScan?.scan) return
-    const count = productScan.scan.products.length
-    setStoringProducts(true)
-    await persistPatch(
-      {
-        products: productScan.scan.products,
-        productsUnmatched: productScan.scan.unmatched,
-        productsScannedAt: new Date().toISOString(),
-      },
-      { toast: `Stored ${count} product${count === 1 ? '' : 's'} on “${character.name}”` },
-    )
-    setStoringProducts(false)
-  }
-
-  // Discard the unstored scan results (the per-scene CSVs) so the review panel
-  // clears. Leaves any products already stored on the character untouched.
+  // Throw the stored results away. They are fully re-derivable — the next export
+  // run rebuilds them — so this needs no confirmation and no undo.
   async function clearScan() {
     if (!productScan?.exists) return
     setClearingScan(true)
@@ -95,7 +75,7 @@ function CharacterProductsTabImpl({
       await clearProductScan({ data: { projectId, id: character.id } })
       setExpandedProducts(new Set())
       void router.invalidate()
-      toast.success('Cleared scan results')
+      toast.success('Cleared the scanned products')
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
     } finally {
@@ -121,18 +101,8 @@ function CharacterProductsTabImpl({
       ? mergedScan.unmatched.filter((a) => a.scenes.includes(sceneFilter))
       : mergedScan.unmatched
   const multiScene = scanScenes.length > 1 && !sceneFilterActive
-  // The per-scene CSV files on disk, and whether the products stored on the
-  // character still reflect them: "up to date" when something is stored and no
-  // CSV is newer than the last store (ISO mtimes compare lexicographically). This
-  // is why the store button can sit idle even though scan files are still present.
-  const scanFiles = productScan?.files ?? []
-  const newestScanMtime = scanFiles.reduce((max, f) => (f.modifiedAt > max ? f.modifiedAt : max), '')
-  const scanUpToDate =
-    !!mergedScan &&
-    character.products.length > 0 &&
-    !!character.productsScannedAt &&
-    newestScanMtime !== '' &&
-    newestScanMtime <= character.productsScannedAt
+  // One row per scanned scene, as stored — what the merged panel below is made of.
+  const scanScenesStored = productScan?.scenes ?? []
   const sceneChipClass = (active: boolean) =>
     `rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
       active
@@ -146,67 +116,60 @@ function CharacterProductsTabImpl({
         <h2 className="mb-3 flex w-fit items-center gap-1 text-xl font-semibold">
           Daz Products
           <InfoPopup label="Daz Products — more information">
-            Open this character's scene in Daz and run the generated{' '}
-            <code>Scan_Products_{characterSlug(character)}.dsa</code>. It analyses the open scene,
-            matches the used assets to your installed products, and writes a CSV the studio reads
-            back here — review the results below and store them on the character.
+            Every export run scans the scene it just built, matches the assets it uses against your
+            installed products, and files the result here — no button to press. You can also run the
+            generated <code>Scan_Products_{characterSlug(character)}.dsa</code> by hand with a scene
+            open in Daz; the studio picks that up the same way, next time you open this page.
           </InfoPopup>
         </h2>
 
         {!dimManifestsFolder.trim() && (
           <p className="mb-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-sm">
-            No DAZ Install Manager manifests folder is set, so a scan can list used assets but
-            can't name products.{' '}
+            No DAZ Install Manager manifests folder is set, so nothing is scanned — that folder is
+            the product database a scan matches against.{' '}
             <Link to="/settings" className="underline">
-              Set it in Settings → Project
-            </Link>
-            .
+              Set it in Settings
+            </Link>{' '}
+            and the next export run fills this page in.
           </p>
         )}
 
         <p className="mb-2 text-sm text-muted-foreground">
-          Run <code>Scan_Products_{characterSlug(character)}.dsa</code> with this character's scene
-          open in Daz, then check for results. Results are kept per scene — open each outfit/look
-          variant and run it again to map products to every scene.
+          Results are kept per scene, so each outfit/look variant maps its own products — a re-scan
+          of one scene replaces only that scene's entry. You can also run{' '}
+          <code>Scan_Products_{characterSlug(character)}.dsa</code> by hand from here:
         </p>
         {scriptsPath && <DirPathChip dir={scriptsPath.dir} roots={[scriptsPath.root]} />}
 
-        <div className="mt-3 flex items-center gap-2">
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => void router.invalidate()}>
-            Check for scan results
+            Check for new results
           </Button>
           <Button
             variant="outline"
             size="sm"
             onClick={() => void clearScan()}
             disabled={!productScan?.exists || clearingScan}
-            title="Discard the scan results (leaves products already stored on the character untouched)"
+            title="Throw the scanned products away — the next export run rebuilds them"
           >
             {clearingScan ? 'Clearing…' : 'Clear'}
           </Button>
-          {character.products.length > 0 && (
+          {productScan?.scannedAt && (
             <span className="text-sm text-muted-foreground">
-              Stored: {character.products.length} product
-              {character.products.length === 1 ? '' : 's'}
-              {character.productsScannedAt
-                ? ` (${new Date(character.productsScannedAt).toLocaleString()})`
-                : ''}
+              Last scanned {new Date(productScan.scannedAt).toLocaleString()}
             </span>
           )}
         </div>
 
-        {scanFiles.length > 0 ? (
+        {scanScenesStored.length > 0 ? (
           <div className="mt-4 rounded-md border p-3">
             <div className="mb-1 font-medium">
-              {scanFiles.length} scanned scene{scanFiles.length === 1 ? '' : 's'} on disk
+              {scanScenesStored.length} scanned scene{scanScenesStored.length === 1 ? '' : 's'}
             </div>
             <p className="mb-2 text-xs text-muted-foreground">
-              One CSV per scanned scene, written here by the Daz script — the Products panel below
-              is these files merged. <strong>Check for scan results</strong> re-reads them;{' '}
-              <strong>Clear</strong> deletes them (products already stored on the character are
-              kept).
+              The Products panel below is these merged. <strong>Clear</strong> discards the lot.
             </p>
-            {productScan?.dir && <PathCode path={productScan.dir} />}
+            {productScan?.path && <PathCode path={productScan.path} />}
             <div className="mt-3 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -214,13 +177,12 @@ function CharacterProductsTabImpl({
                     <th className="pr-3 pb-1 font-medium">Scene</th>
                     <th className="pr-3 pb-1 font-medium">Products</th>
                     <th className="pr-3 pb-1 font-medium">Unmatched</th>
-                    <th className="pr-3 pb-1 font-medium">Last written</th>
-                    <th className="pr-3 pb-1 font-medium">File</th>
+                    <th className="pr-3 pb-1 font-medium">Scanned</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {scanFiles.map((f) => (
-                    <tr key={f.name} className="border-t align-top">
+                  {scanScenesStored.map((f) => (
+                    <tr key={f.scenePath || f.scene} className="border-t align-top">
                       <td className="py-1 pr-3">
                         <div className="text-foreground/90">{f.scene || '(unsaved scene)'}</div>
                         {f.scenePath && (
@@ -232,10 +194,7 @@ function CharacterProductsTabImpl({
                       <td className="py-1 pr-3 text-muted-foreground">{f.products}</td>
                       <td className="py-1 pr-3 text-muted-foreground">{f.unmatched || '—'}</td>
                       <td className="py-1 pr-3 text-muted-foreground">
-                        {f.modifiedAt ? new Date(f.modifiedAt).toLocaleString() : '—'}
-                      </td>
-                      <td className="py-1 pr-3">
-                        <code className="text-xs text-muted-foreground/70">{f.name}</code>
+                        {f.scannedAt ? new Date(f.scannedAt).toLocaleString() : '—'}
                       </td>
                     </tr>
                   ))}
@@ -245,7 +204,7 @@ function CharacterProductsTabImpl({
           </div>
         ) : (
           <p className="mt-3 text-sm text-muted-foreground">
-            No scan results found yet. Run the script in Daz, then click “Check for scan results”.
+            Nothing scanned yet. Run a DTH Export (or the script above) and the results appear here.
           </p>
         )}
       </section>
@@ -267,60 +226,7 @@ function CharacterProductsTabImpl({
                       ? ` · ${scanScenes[0]}`
                       : ''}
               </span>
-              <Button
-                onClick={() => void storeProducts()}
-                disabled={storingProducts || scanUpToDate}
-                title={
-                  scanUpToDate
-                    ? 'The stored products already match the scan files on disk — nothing to update'
-                    : undefined
-                }
-              >
-                {scanUpToDate ? <Check /> : <Save />}{' '}
-                {storingProducts
-                  ? 'Storing…'
-                  : scanUpToDate
-                    ? 'Stored — up to date'
-                    : character.products.length
-                      ? 'Update stored products'
-                      : 'Store on character'}
-              </Button>
             </div>
-
-            {character.products.length > 0 && (
-              <div
-                className={`mb-3 flex items-start gap-1.5 rounded-md border p-2 text-sm ${
-                  scanUpToDate
-                    ? 'border-emerald-500/40 bg-emerald-500/10'
-                    : 'border-amber-500/40 bg-amber-500/10'
-                }`}
-              >
-                {scanUpToDate ? (
-                  <Check className="mt-0.5 size-4 shrink-0 text-emerald-500" />
-                ) : (
-                  <RefreshCw className="mt-0.5 size-4 shrink-0 text-amber-500" />
-                )}
-                <span>
-                  {scanUpToDate ? (
-                    <>
-                      Up to date — the {character.products.length} stored product
-                      {character.products.length === 1 ? '' : 's'} match the scan files on disk.
-                    </>
-                  ) : (
-                    <>
-                      The scan on disk has changed since you last stored
-                      {character.productsScannedAt
-                        ? ` (saved ${new Date(character.productsScannedAt).toLocaleString()})`
-                        : ''}
-                      : {mergedScan?.products.length ?? 0} product
-                      {(mergedScan?.products.length ?? 0) === 1 ? '' : 's'} found now vs{' '}
-                      {character.products.length} stored. Click{' '}
-                      <strong>Update stored products</strong> to save the latest results.
-                    </>
-                  )}
-                </span>
-              </div>
-            )}
 
             {scanScenes.length > 1 && (
               <div className="mb-3 flex flex-wrap items-center gap-1.5">
@@ -551,10 +457,10 @@ function CharacterProductsTabImpl({
 
 /**
  * The draft `character` is a fresh object on every ROM keystroke while this tab
- * sits hidden — compare only the fields the tab reads (products,
- * productsScannedAt, name via `characterSlug`, id) plus the other props.
- * `scriptsPath` is rebuilt by the route each render, so it compares by value;
- * `persistPatch`/`productScan` are stable (useCallback / loader data).
+ * sits hidden — compare only the fields the tab reads (id, and name via
+ * `characterSlug`) plus the other props. The results themselves no longer live on
+ * the character at all; they come in through `productScan` (loader data, stable).
+ * `scriptsPath` is rebuilt by the route each render, so it compares by value.
  */
 export const CharacterProductsTab = memo(
   CharacterProductsTabImpl,
@@ -562,14 +468,11 @@ export const CharacterProductsTab = memo(
     prev.projectId === next.projectId &&
     prev.productScan === next.productScan &&
     prev.dimManifestsFolder === next.dimManifestsFolder &&
-    prev.persistPatch === next.persistPatch &&
     (prev.scriptsPath === next.scriptsPath ||
       (prev.scriptsPath !== null &&
         next.scriptsPath !== null &&
         prev.scriptsPath.dir === next.scriptsPath.dir &&
         prev.scriptsPath.root === next.scriptsPath.root)) &&
     prev.character.id === next.character.id &&
-    prev.character.name === next.character.name &&
-    prev.character.products === next.character.products &&
-    prev.character.productsScannedAt === next.character.productsScannedAt,
+    prev.character.name === next.character.name,
 )

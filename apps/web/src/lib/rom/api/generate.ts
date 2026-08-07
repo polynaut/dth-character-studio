@@ -41,6 +41,7 @@ import * as storage from '../storage'
 import { relativeInside } from '../storage/fs'
 import { copyDazScene } from './attachments'
 import { clearImageSrcCache, rebuildAvatarMaster, upscaleStoredAvatar } from './avatars'
+import { carryStoredProductsToMeta, ingestProductScans } from './products'
 import { poseAssetFramesSchema, sceneWearablesSchema } from './native-types'
 import { hipRefPrefixFor } from '#/lib/scene-subfolder.ts'
 import { sweepExportJunctions, sweepHoudiniProjectDirs } from './houdini'
@@ -348,10 +349,13 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   // are release-independent — tied to RUNTIME_VERSION only).
   const activeRelease = catalog.error ? '' : catalog.version
   const settings = await storage.getSettings()
-  // When the project enables Daz Products, also emit the per-character product-scan
-  // script. The "on" flag + the DIM folder + the derived per-scene output folder
-  // reach the pure core only here, as the trailing generateAll argument.
-  const scanProducts = project.dazProductsEnabled
+  // The product scan is armed by the DIM manifests folder alone: that folder IS
+  // the product database, so having it means the scan can name products, and not
+  // having it means the scan could only ever list raw assets. The per-project
+  // "Daz Products" toggle no longer gates the scanning — it only decides whether
+  // the character page shows the tab that reads the results. So a scan runs, and
+  // its results are picked up, whether or not anybody is looking at them.
+  const scanProducts = settings.dimManifestsFolder.trim()
     ? {
         dimManifestPath: settings.dimManifestsFolder,
         outputDir: await storage.productScanDir(project.id, character.id),
@@ -1216,9 +1220,17 @@ async function refreshAllAssetsInner(refreshOpts: {
       // state. Independent of the DAZ library. Only save if the FRESH read is
       // still stale — a mid-sweep editor save may have migrated it already.
       if (regenSchema && fresh.schemaVersion < CHARACTER_SCHEMA_VERSION) {
+        // BEFORE the save, which strips the pre-v30 product fields: carry them
+        // into the character's meta folder. The raw definition on disk is the
+        // only place they still exist at this point.
+        await carryStoredProductsToMeta(project, location.relFolder, character.id, location.definitionAbs)
         await storage.saveCharacter(project, fresh, lib, { location, character: fresh })
         counts.migrated += 1
       }
+      // Take in anything the Daz product scan left for this character. Refresh is
+      // the "bring everything in line" button, and a batch that scanned ten
+      // characters would otherwise wait for each one's page to be opened.
+      await ingestProductScans(project, location.relFolder, character.id)
       // v26 layout migration: move root-dwelling scene files into their
       // per-scene subfolders (primary → "primary", extras → sanitized names).
       // Soft-fails — a scene locked by an open Daz must not fail the whole

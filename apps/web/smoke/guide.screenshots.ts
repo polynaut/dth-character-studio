@@ -851,7 +851,7 @@ test('settings-daz-products', async ({ page }) => {
   await shootStrip(
     page,
     join(OUT, 'settings-daz-products.png'),
-    projectRow(page, 'Enable Daz Products'),
+    projectRow(page, 'Show the Daz Products tab'),
     page.getByRole('button', { name: /Detect installed location/ }),
   )
 })

@@ -16,7 +16,7 @@ guide-site guards fail the PR), plus `smoke`, `rust` (clippy `-D warnings` +
   `migrate.test.ts` has a case per schema version; `types.test.ts` pins schema
   behavior (healing, bounds, section modes); `index-sync.test.ts` pins that
   every generated ROM/export script emits `DthScanSceneMorphsQuiet` (and
-  `DthScanProductsQuiet` with Daz Products on) and their ORDER relative to the
+  `DthScanProductsQuiet` with a DIM manifests folder set) and their ORDER relative to the
   wrong-scene guard; plus timeline/validation/daz-csv/product-scan/
   scene-override tests. **If you change generation, these tests are the spec.**
 - **`apps/web`** — storage/CRUD over an in-memory fs mock, pure helpers,
