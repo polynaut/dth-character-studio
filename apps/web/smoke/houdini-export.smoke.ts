@@ -157,7 +157,11 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
     { dth: `${P.exportDir}/KiraDefault_G9_GP/Kira.dth`, label: 'KiraDefault_G9_GP' },
   ])
   expect(job.resultPath).toBe(HOUDINI_RESULT)
-  expect(job.exportDirectory).toBe(P.exportDir)
+  // The blank-parm fallback aims at the character's FINAL export folder (where
+  // Houdini writes for Unreal) — never the regenerable `dth-exports`
+  // intermediate the imports read (P.exportDir), which "Export too" used to
+  // send even after Generate project stopped baking it.
+  expect(job.exportDirectory).toBe(`${P.charFolder}/export`)
   // The batch's Houdini instance closes itself again when the exports are done.
   expect(job.closeWhenDone).toBe(true)
 

@@ -8,7 +8,7 @@ import type { MergedProductScan, ProductScan } from '@dth/rom'
  * A character's Daz-product scan results, as stored by the studio.
  *
  * They live in `.dcsmeta/characters/<folder>/products.json` — app data, not part
- * of the definition. Before v0.70 the merged list was written onto the character
+ * of the definition. Before v0.68 the merged list was written onto the character
  * JSON by a "review, then store" dialog; the scan is now picked up, written and
  * the source CSVs deleted, all without asking, so there is no found-vs-stored
  * split left to review and no reason to bloat a shareable definition with a few
@@ -83,6 +83,12 @@ function scanKey(scan: { sceneName: string; scenePath: string }): string {
  * run log follows, and the reason a one-scene re-scan can't wipe the products of
  * the five scenes you scanned last week.
  *
+ * Matching is by key, with one fallback: when either side has no scene path but
+ * the scene NAMES agree, they are the same scene. The carry-over rebuilds scans
+ * with '' paths (pre-v30 definitions kept no scene paths), while a fresh Daz
+ * scan always carries the full `.duf` path — without the fallback a carried
+ * entry could never be replaced and would shadow its scene forever.
+ *
  * Incoming order wins for the entries it carries; the rest keep their place, so
  * the file doesn't reshuffle on every pickup. `scannedAt` stamps both the
  * replaced entries and the file.
@@ -93,28 +99,73 @@ export function withScans(
   scannedAt: string,
 ): CharacterProductsFile {
   if (incoming.length === 0) return store
-  const replaced = new Map(
+  // Dedupe incoming by key first (later wins), like repeated pickups would.
+  const byKey = new Map(
     incoming.map((scan) => [scanKey(scan), { ...scan, scannedAt } satisfies StoredProductScan]),
   )
+  const fresh = [...byKey.values()]
+  const consumed = new Set<StoredProductScan>()
+  const matchFor = (existing: StoredProductScan): StoredProductScan | undefined => {
+    const key = scanKey(existing)
+    const name = existing.sceneName.trim().toLowerCase()
+    let byName: StoredProductScan | undefined
+    for (const scan of fresh) {
+      if (consumed.has(scan)) continue
+      if (scanKey(scan) === key) return scan
+      if (
+        !byName &&
+        name &&
+        name === scan.sceneName.trim().toLowerCase() &&
+        (existing.scenePath === '' || scan.scenePath === '')
+      ) {
+        byName = scan
+      }
+    }
+    return byName
+  }
   const scans: Array<StoredProductScan> = []
   for (const existing of store.scans) {
-    const fresh = replaced.get(scanKey(existing))
-    if (fresh) {
-      scans.push(fresh)
-      replaced.delete(scanKey(existing))
+    const match = matchFor(existing)
+    if (match) {
+      scans.push(match)
+      consumed.add(match)
     } else {
       scans.push(existing)
     }
   }
   // Scenes scanned for the first time append in the order they came in.
-  for (const scan of incoming) {
-    const fresh = replaced.get(scanKey(scan))
-    if (fresh) {
-      scans.push(fresh)
-      replaced.delete(scanKey(scan))
-    }
+  for (const scan of fresh) {
+    if (!consumed.has(scan)) scans.push(scan)
   }
   return { version: 1, scannedAt, scans }
+}
+
+/**
+ * Drop stored scenes the character no longer links — a path-keyed entry whose
+ * scene was deleted, unlinked or relinked elsewhere. Without this, an entry
+ * outlives its scene forever and keeps its products in the merged view.
+ * Results are re-derivable (re-scan), so pruning beats hoarding.
+ *
+ * ONLY path-keyed entries are judged: a path-less entry is either the ''
+ * unsaved-scene bucket or a carried pre-v30 scan whose path was unrecoverable —
+ * neither can be verified against the scene list, and guessing by name could
+ * discard the very data the carry preserved. A carried entry becomes path-keyed
+ * (and thus prunable) the first time its scene is scanned again.
+ *
+ * Returns the SAME object when nothing changed, so callers can skip the write.
+ */
+export function withoutUnlinkedScenes(
+  store: CharacterProductsFile,
+  linkedScenePaths: ReadonlyArray<string>,
+): CharacterProductsFile {
+  const paths = new Set(
+    linkedScenePaths.map((p) => p.trim().replace(/\\/g, '/').toLowerCase()).filter(Boolean),
+  )
+  const scans = store.scans.filter((s) => {
+    const path = s.scenePath.trim().replace(/\\/g, '/').toLowerCase()
+    return !path || paths.has(path)
+  })
+  return scans.length === store.scans.length ? store : { ...store, scans }
 }
 
 /** The display view: every stored scene merged, exactly like the loose per-scene

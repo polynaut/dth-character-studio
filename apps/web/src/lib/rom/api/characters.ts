@@ -52,7 +52,7 @@ import {
   resolveProject,
 } from './core'
 import { copyTipImage, findTipImage, removeCharacterAvatars, writeAvatarBytes } from './avatars'
-import { carryStoredProductsToMeta } from './products'
+import { carryStoredProductsToMeta, pruneProductScans } from './products'
 import { sceneWearables } from './generate'
 import { seedSceneHair } from '#/lib/groom-detect.ts'
 import { primarySceneDerivation } from '#/lib/scene-compat.ts'
@@ -293,9 +293,17 @@ export async function fetchRomRunLog({ data }: { data: unknown }): Promise<RomRu
   const location = await locateCharacter(charsRoot(project), id)
   if (!location) return null
   const folder = storage.characterMetaDir(project.path, location.relFolder, id)
-  const dazPath = joinPath(folder, ROM_RUN_LOG_FILE)
+  let dazPath = joinPath(folder, ROM_RUN_LOG_FILE)
   const storePath = joinPath(folder, LAST_ROM_RUN_FILE)
   try {
+    if (ingest && !(await exists(dazPath))) {
+      // A pre-v59 script (generated before the meta move) still writes the
+      // transport into the CHARACTER folder — without this fallback its run
+      // report (failed morphs included) stays invisible until the next
+      // save/Refresh regenerates the script. Same ingest-and-delete either way.
+      const legacyPath = joinPath(location.folderAbs, ROM_RUN_LOG_FILE)
+      if (await exists(legacyPath)) dazPath = legacyPath
+    }
     if (ingest && (await exists(dazPath))) {
       const text = await readTextFile(dazPath)
       let log: RomRunLog
@@ -384,6 +392,12 @@ export async function saveCharacter({ data }: { data: unknown }): Promise<Charac
   // id, so a rename simply overwrites the stale old-path entry.
   const saved = await storage.saveCharacter(project, parsed, lib)
   cacheCharacterLocation(lib, saved.character.id, saved.location)
+  // The save is the only moment the scene list changes — drop stored product
+  // scans for scenes no longer linked, or they shadow the merged view forever.
+  await pruneProductScans(project, saved.location.relFolder, saved.character.id, [
+    saved.character.scenePath,
+    ...saved.character.extraScenes,
+  ])
   return saved.character
 }
 
@@ -428,7 +442,7 @@ async function migrateExportRoot(
     if (!newRoot || normalizePathLower(newRoot) === normalizePathLower(oldRoot)) return
 
     // The record lives in the character's meta folder — but this save can be the
-    // FIRST one after the v0.69 relocation, and the relocation itself only runs
+    // FIRST one after the v0.68 relocation, and the relocation itself only runs
     // on generation (which comes after this). So fall back to the old spot in
     // the character folder; missing it here would strand exactly the gigabytes
     // this function exists to carry.

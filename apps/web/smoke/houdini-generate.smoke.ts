@@ -97,7 +97,7 @@ test('Houdini is told to write into the character export folder, not dth-exports
 }) => {
   // The two are different ends of the pipeline: `dth-exports` holds the
   // Daz→Houdini intermediates the imports READ (large, regenerable, not backed
-  // up), while `export/` is what Houdini produces for Unreal. Until v0.71 this
+  // up), while `export/` is what Houdini produces for Unreal. Until v0.68 this
   // parm carried the export ROOT, quietly aiming Houdini's output into the
   // throwaway tree.
   const dialog = await openGenerateDialog(page)
