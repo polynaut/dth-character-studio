@@ -98,6 +98,9 @@ export interface TauriMockState {
 
 export function installTauriMock(seed: TauriMockSeed): void {
   const files = new Map(Object.entries(seed.files))
+  /** Every file's mtime in the fake world — see `stat`. Exposed so a spec can
+   *  seed an mtime-keyed cache entry that reads as fresh. */
+  const FAKE_MTIME_MS = 1767225600000 // 2026-01-01T00:00:00Z
   const extraDirs = new Set<string>()
   const calls: Array<{ cmd: string; args: unknown }> = []
   const unhandled: Array<string> = []
@@ -188,15 +191,23 @@ export function installTauriMock(seed: TauriMockSeed): void {
   const statOf = (p: string) => {
     if (!isFile(p) && !isDir(p)) throw new Error(`[tauri-mock] no such path: ${p}`)
     const file = isFile(p)
-    const now = Date.now()
+    // A FIXED stamp, not Date.now(): a file's mtime must not change just because
+    // somebody looked at it. With a fresh value per call every mtime-keyed cache
+    // in the studio missed on every read — which looks exactly like a cache that
+    // works, and hid the fact that none of them were ever exercised here.
+    const now = FAKE_MTIME_MS
     return {
       isFile: file,
       isDirectory: !file,
       isSymlink: false,
       size: file ? sizeOf(files.get(p)!) : 0,
-      mtime: now,
-      atime: now,
-      birthtime: now,
+      // DATES, like the real plugin returns — the studio's mtime caches all call
+      // `.getTime()`/`.toISOString()` on these, so numbers made every one of them
+      // silently inert in the fake (a cache that never hits looks like a cache
+      // that works).
+      mtime: new Date(now),
+      atime: new Date(now),
+      birthtime: new Date(now),
       readonly: false,
     }
   }

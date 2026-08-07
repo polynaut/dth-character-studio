@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, Sparkles } from 'lucide-react'
+import { AlertTriangle, Plus, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { DirPathChip, displayDirOf } from '#/components/dir-path-chip.tsx'
@@ -24,12 +24,14 @@ import {
 } from '@dth/ui'
 import houdiniLogo from '#/assets/houdini-logo.svg'
 import {
+  fetchHoudiniProjectStatus,
   fileExists,
   generatedHoudiniScenePath,
   generateHoudiniProject,
   openScene,
   removeGeneratedHoudiniProject,
   revealPath,
+  scanCharacterHoudiniProjects,
 } from '#/lib/rom/api.ts'
 import { pickHipPath } from '#/lib/desktop.ts'
 import { browseStart, displayPath, normalizePath, parentDir } from '#/lib/path.ts'
@@ -60,6 +62,7 @@ import type { Character } from '@dth/rom'
 function HoudiniCard({
   hipPath,
   avatarSrc,
+  warning,
   onOpen,
   onRemove,
   onUtils,
@@ -67,6 +70,10 @@ function HoudiniCard({
   hipPath: string
   /** Gender-based placeholder avatar (a Houdini project has no thumbnail). */
   avatarSrc: string
+  /** What the last background scan found wrong with this project; '' = healthy,
+   *  or not scanned yet. Everything it can report has a repair in the Utils
+   *  drawer, which is what the badge points at. */
+  warning?: string
   onOpen: (e: React.MouseEvent) => void
   /** When set, a hover ✕ unlinks the project from the character. */
   onRemove?: () => void
@@ -97,6 +104,21 @@ function HoudiniCard({
           aria-hidden
           className="pointer-events-none absolute bottom-0 left-0 size-6 object-contain drop-shadow-[0_4px_4px_rgba(0,0,0,0.6)]"
         />
+      }
+      // The scan verdict, pinned bottom-left: a project that will fail when it
+      // opens should say so here, not the first time an import comes up empty
+      // in Houdini. Everything it reports is repairable in the Utils drawer.
+      extra={
+        warning ? (
+          <span
+            className="flex items-center gap-1 text-xs text-amber-500"
+            title={warning}
+            aria-label={`Needs attention: ${warning}`}
+          >
+            <AlertTriangle className="size-3.5 shrink-0" />
+            Needs attention
+          </span>
+        ) : undefined
       }
       altHeld={altHeld}
       openTitle="Open in Houdini"
@@ -171,11 +193,41 @@ export function HoudiniProjectsField({
   // generate creates (or reuses) by itself.
   const canGenerate = character.exportPath.trim() !== ''
 
+  const projectsKey = projects.join('|')
+  // What the last background scan found wrong with each project, by normalized
+  // path. Two things happen on every mount and whenever the linked set changes:
+  // a background sweep is kicked off (cheap once the cache is warm — an unchanged
+  // `.hip` never starts a process), and the STORED verdicts are read back. The
+  // read is instant and needs no Houdini; the sweep fills the store for next
+  // time, which is why a first-ever open shows no badges and a later one does.
+  const [warnings, setWarnings] = useState<ReadonlyMap<string, string>>(new Map())
+  useRefetchOnFocus(
+    () => {
+      void (async () => {
+        // Kick the sweep off first, un-awaited: reading the store must not wait
+        // on hython, and the sweep coalesces per character anyway.
+        void scanCharacterHoudiniProjects({ data: { projectId, id: character.id } })
+        const status = await fetchHoudiniProjectStatus({
+          data: { projectId, id: character.id },
+        })
+        setWarnings(
+          new Map(
+            status
+              .filter((s) => !s.ok)
+              .map((s) => [normalizePath(s.hipPath).toLowerCase(), s.summary]),
+          ),
+        )
+      })()
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [projectsKey, projectId, character.id],
+    { immediate: true },
+  )
+
   // A linked `.hip` deleted/moved on disk must not keep masquerading as a
   // healthy card — probe each link and re-probe on window focus (tabbing back
   // from Explorer/Houdini is exactly when files change).
   const [missingSet, setMissingSet] = useState<ReadonlySet<string>>(new Set())
-  const projectsKey = projects.join('|')
   useRefetchOnFocus(
     () => {
       void (async () => {
@@ -350,6 +402,7 @@ export function HoudiniProjectsField({
                 key={hip}
                 hipPath={hip}
                 avatarSrc={placeholderSrc}
+                warning={warnings.get(normalizePath(hip).toLowerCase()) ?? ''}
                 onOpen={(e) => void onOpen(hip, e)}
                 onRemove={() => askRemove(hip)}
                 onUtils={() => setUtilsFor(hip)}

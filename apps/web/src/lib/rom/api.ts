@@ -176,10 +176,17 @@ export {
   repairHoudiniDefaults,
   repathHoudiniReferences,
   restoreHoudiniBackup,
+  fetchHoudiniProjectStatus,
+  scanCharacterHoudiniProjects,
   scanHoudiniMaterials,
   transferHoudiniMaterials,
 } from './api/houdini-material'
-export type { MaterialSection, NodeKind, SkeletonSection } from './api/houdini-material'
+export type {
+  HoudiniProjectStatus,
+  MaterialSection,
+  NodeKind,
+  SkeletonSection,
+} from './api/houdini-material'
 export type {
   HoudiniDefaultsResult,
   MaterialNodeInfo,
