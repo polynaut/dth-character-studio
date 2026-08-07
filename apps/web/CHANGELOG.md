@@ -1,7 +1,148 @@
 # @dth/web
 
-## 0.67.0
+## 0.68.0
 
+### Minor Changes
+
+- [#738](https://github.com/polynaut/dth-character-studio/pull/738) [`54f6ab2`](https://github.com/polynaut/dth-character-studio/commit/54f6ab27884dedd4c868cb62b50df31f8a2c8a9f) Thanks [@polynaut](https://github.com/polynaut)! - New Daz script: **Kill_Animation** — rescue an old scene that is only a ROM
+
+  A scene the studio can use needs an empty timeline, which makes an old character
+  that survives _only_ as its full ROM animation unusable as it stands. The new
+  bundled `Kill_Animation` script is the way back: open the old scene, run
+  `Scan_Frames` to capture the ROM frame by frame, then run this to get the
+  character back on its own. It deletes every key in the scene and puts the
+  animation range back to the default 0–30 frames — the figure keeps its shape,
+  its clothes and the pose it holds at frame 0; only the timeline goes. It shows
+  you what it found and asks before deleting anything, never saves the scene
+  itself, and names any property that refused to give up its keys rather than
+  reporting a clean run over a scene that still has animation in it. Installs into
+  `Scripts/DTH-Character-Studio` on the next Save or Tools → Refresh assets.
+
+- [#735](https://github.com/polynaut/dth-character-studio/pull/735) [`b8120a4`](https://github.com/polynaut/dth-character-studio/commit/b8120a49f9489e084c02d9b2b825bb3eb615586f) Thanks [@polynaut](https://github.com/polynaut)! - Generate project: pick the scene, and Houdini writes where you meant
+
+  Two things a generated Houdini project got wrong on a character with more than
+  one Daz scene.
+
+  **It always imported the primary.** Every scene exports into its own folder, so
+  an outfit variant's project came out wired to the primary's `.dth`/FBX/Alembic/
+  ROM-FBX/CSV — five paths to re-pick by hand inside Houdini. The Generate dialog
+  now has a **Daz scene to import** picker (only when there's a choice; it defaults
+  to the primary), and the network is wired to that scene's export set. Generate
+  one project per scene.
+
+  **Its export directory pointed at `dth-exports`.** That's the Daz→Houdini
+  intermediate folder — large, regenerable, the one you don't back up. Houdini's
+  own Unreal-bound output now goes where the guide always said it would: the
+  character's **`export/`** folder (`$HIP/../export/`, or whatever your project's
+  _Final export subfolder_ is called). One per character, shared by every scene's
+  project.
+
+  Existing projects are untouched: both the studio and the Houdini-side runner
+  only ever fill a **blank** export directory, so a project you already wired keeps
+  exactly what it has. **Utils → Fill network** uses the corrected value too.
+
+- [#736](https://github.com/polynaut/dth-character-studio/pull/736) [`c05c9a3`](https://github.com/polynaut/dth-character-studio/commit/c05c9a3283d519c59462cf2b7c0210aaa647860d) Thanks [@polynaut](https://github.com/polynaut)! - Houdini Utils: run DazToHue's own **Refresh Assets** from the General tab
+
+  A `.hip` keeps the DazToHue asset definitions it was built with, so switching
+  your installed DazToHue release leaves every project you already have on the old
+  ones. The General tab now runs DazToHue's own **Refresh Assets** shelf tool
+  against every project the scan could open, instead of you opening each one in
+  Houdini by hand. It is an action rather than a check — nothing records which
+  release a project's assets came from, so nothing can tell you one needs it — and
+  the report says only what was observed: the tool that ran, and whether the scene
+  came back modified. A project reporting no change is left alone rather than
+  re-saved, and a run takes the same rolling backup as the tab's other actions.
+
+- [#736](https://github.com/polynaut/dth-character-studio/pull/736) [`c05c9a3`](https://github.com/polynaut/dth-character-studio/commit/c05c9a3283d519c59462cf2b7c0210aaa647860d) Thanks [@polynaut](https://github.com/polynaut)! - Houdini projects: checked in the background, and copyable at last
+
+  Linking a Houdini project used to be the only option. Copying one was refused,
+  because a copied `.hip` arrives broken in ways the studio couldn't see: it
+  carries the source's `$JOB` and its absolute file references, so it quietly
+  imports the character it was copied _from_. Now the studio can see all of that —
+  so copying is offered.
+
+  **Projects are scanned in the background.** Opening a character (or changing its
+  project list) scans its Houdini projects and caches the result, so the Utils
+  drawer opens on data that is already there instead of starting hython and making
+  you wait. Only projects inside the character's folder are scanned — one linked
+  from your own tree is yours, and the studio has no opinion to offer about it. At
+  most two run at once, and a project whose file hasn't changed since the last look
+  costs nothing at all.
+
+  **A project that needs attention says so on its card**, with the reason in the
+  tooltip: `$JOB` pointing at another character, import paths that don't resolve,
+  parameters still blank. Everything it reports has a repair in the Utils drawer.
+  It stays quiet about a project it hasn't scanned yet — no scan is not a fault.
+
+  **Add project can now copy** (or move) the file into the character's Houdini
+  folder instead of linking it where it lies. Linking stays the default. A name
+  already in that folder is refused rather than overwritten.
+
+  **The PoseAsset CSV path gets its own row in the General tab**, because "not
+  filled in yet" and "your DazToHue version hasn't got that parameter" are
+  different answers and only the first is something you can fix.
+
+  One thing the checks deliberately do _not_ cover: material texture paths. A clean
+  card means `$JOB`, the DazToHue imports and the blank parameters are fine — not
+  that every path in the scene resolves.
+
+- [#737](https://github.com/polynaut/dth-character-studio/pull/737) [`050773c`](https://github.com/polynaut/dth-character-studio/commit/050773c713a5391705361d2c52b36e3a0051e1d7) Thanks [@polynaut](https://github.com/polynaut)! - The studio notices new files you save into a character's folder
+
+  Save an outfit variant from Daz (or a new Houdini project) anywhere into the
+  character's folder, tab back to the studio, and it now tells you: a banner on
+  the character page reports the new `.duf` / `.hip` files the moment the window
+  regains focus (and on opening the page). **Review** opens a wizard with one
+  page per file — the same validation the Add-scene dialog runs (generation,
+  one figure, empty timeline, geograft vs the primary, not-already-linked), then
+  **Add** links it in place; a character without a primary scene gets **Set as
+  primary** instead, deriving gender/genesis/GEN exactly like the link flow.
+  Houdini projects link in place as always.
+
+  **Skip is permanent** — a skipped file lands in the character's `.dcsmeta`
+  skip list and is never offered again (a manual pick/drop still works). The
+  banner's ✕ just hides it for the session. Files you save while the wizard is
+  open append as new pages on the next focus; generated output (`dth-exports`,
+  ROM animations, Houdini `backup/`) is never offered.
+
+  It doesn't matter which page you tab back to. If the studio is showing the
+  project page — or Settings, or Tools — a banner at the top of the window names
+  the character whose folder the file landed in and takes you there, where the
+  wizard above does the rest.
+
+### Patch Changes
+
+- [#734](https://github.com/polynaut/dth-character-studio/pull/734) [`e80da9f`](https://github.com/polynaut/dth-character-studio/commit/e80da9f2278897f9c920851754dd3b19d7dc60c2) Thanks [@polynaut](https://github.com/polynaut)! - Daz and Houdini paths follow their installation when it moves
+
+  Activating an installation in Settings derives its paths and writes them, and
+  they're shown read-only from then on. But the derivation was a one-time snapshot:
+  point the DAZ Install Manager at a different content library afterwards, and the
+  studio quietly carried on generating into the old one. Nothing said so, and the
+  only cure was re-clicking a card labelled "Active" — which invites nobody to click
+  it.
+
+  The paths are now re-derived whenever the installations are scanned, so a fresh
+  Settings visit (or **Rescan**) picks the change up on its own. Same for Houdini.
+
+  Two things it deliberately won't do: it never writes an empty value over a working
+  path — DIM dropping its manifests override shouldn't blank a path you depend on —
+  and it never persists your other unsaved edits, so with a dirty page the fresh
+  values land in the form and wait for your Save.
+
+- [#743](https://github.com/polynaut/dth-character-studio/pull/743) [`92a2376`](https://github.com/polynaut/dth-character-studio/commit/92a23768e53700de8b75381843b795aca1048c6a) Thanks [@polynaut](https://github.com/polynaut)! - Generation stops walking scene folders one at a time
+
+  The pass that renames the pre-v48 `.ROM_Animations` folder runs on every
+  generation, and it checked each of the character's scene folders in sequence —
+  up to three round trips per folder, on whatever share the character lives on.
+  The folders are independent, so they are now checked together. Nothing about
+  what it does changes: still idempotent, still leaves both folders alone if both
+  exist, still best-effort so a locked folder can never fail the generation that
+  triggered it.
+
+- Updated dependencies [[`54f6ab2`](https://github.com/polynaut/dth-character-studio/commit/54f6ab27884dedd4c868cb62b50df31f8a2c8a9f), [`e3fb935`](https://github.com/polynaut/dth-character-studio/commit/e3fb935a8c8d37c77f8fe43d6d9ea2d3d88a7c4c), [`b1bb992`](https://github.com/polynaut/dth-character-studio/commit/b1bb992d48b68f97ee27d94e1161a33e5771736f), [`e80da9f`](https://github.com/polynaut/dth-character-studio/commit/e80da9f2278897f9c920851754dd3b19d7dc60c2)]:
+  - @dth/rom@0.68.0
+  - @dth/ui@0.68.0
+
+## 0.67.0
 
 ### Patch Changes
 
