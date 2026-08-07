@@ -665,9 +665,10 @@ export async function createCharacterAt(
  * {@link characterExportRoot}): fixed, not chosen, and created for every
  * foldered character regardless of the Houdini settings — the exporter's output
  * is Daz-side output. The Houdini folder is still seeded to nudge the user into
- * putting their `.hiplc` there, but it no longer holds exports; a
- * `houdini-project` folder appears inside it on the first "Generate project",
- * with a `dth-exports` junction back to the export root.
+ * putting their `.hiplc` there, but it no longer holds exports — generated
+ * scenes land directly in it, nothing else appears (the `houdini-project`
+ * subfolder and the `dth-exports` junction are both retired; leftover ones are
+ * swept on generation).
  *
  * Best-effort and only for characters that own a folder: never scatter a seed
  * folder into the project root (a loose definition's "folder" is the whole

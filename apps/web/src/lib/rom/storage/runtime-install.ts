@@ -271,28 +271,43 @@ export async function copyRuntimeFiles(
   await writeTextFile(markerPath, stamp)
 }
 
+/** What {@link readScriptRuntimeInfo} learns from the script on disk. */
+export interface ScriptRuntimeInfo {
+  /** The `// DTH-Runtime: vN` integer; `0` when the script predates the marker. */
+  version: number
+  /** The DIM manifests folder the script's product-scan block was generated
+   *  with; '' when the script scans nothing (generated while the setting was
+   *  unset). Staleness compares it against the CURRENT setting — a scan block
+   *  baked for a folder that moved (or for none at all) reads a dead database
+   *  and would replace good results with all-unmatched noise. */
+  scanDimPath: string
+}
+
 /**
- * Read the `// DTH-Runtime: vN` marker from a character's generated Daz script to
- * learn which runtime produced the scripts on disk: the integer `N`; `0` when a
- * script exists but predates the marker (an older runtime); `null` when no script
- * exists yet. The DTH release is no longer stamped here — the scripts are
- * release-independent (tied to RUNTIME_VERSION only); the release the PoseAsset
- * CSV was generated for lives in the character JSON's `generatedDthVersion`.
+ * Read a character's generated Daz script to learn what produced the scripts on
+ * disk: the `// DTH-Runtime: vN` runtime marker plus the baked product-scan
+ * arming (see {@link ScriptRuntimeInfo}); `null` when no script exists yet. The
+ * DTH release is no longer stamped here — the scripts are release-independent
+ * (tied to RUNTIME_VERSION only); the release the PoseAsset CSV was generated
+ * for lives in the character JSON's `generatedDthVersion`.
  */
-export async function readScriptRuntimeVersion(
+export async function readScriptRuntimeInfo(
   dazLibraryFolder: string,
   projectName: string,
   character: Character,
-): Promise<number | null> {
+): Promise<ScriptRuntimeInfo | null> {
   const dir = studioCharScriptsDir(dazLibraryFolder, projectName, character.name)
   const base = characterScriptName(character)
   // The main ROM script is either combined (`<base>.dsa`) or, when the export is
-  // split out, `ROM_<base>.dsa`. Either carries the runtime marker in its header.
+  // split out, `ROM_<base>.dsa`. Either carries the runtime marker in its header
+  // and, when armed, the embedded `dthProductScanConfig` scan block.
   for (const name of [`${base}.dsa`, `ROM_${base}.dsa`]) {
     const path = join(dir, name)
     if (await exists(path)) {
-      const runtime = /DTH-Runtime:\s*v(\d+)/.exec(await readTextFile(path))
-      return runtime ? Number(runtime[1]) : 0
+      const text = await readTextFile(path)
+      const runtime = /DTH-Runtime:\s*v(\d+)/.exec(text)
+      const dim = /"dimManifestPath":\s*"([^"]*)"/.exec(text)
+      return { version: runtime ? Number(runtime[1]) : 0, scanDimPath: dim ? dim[1] : '' }
     }
   }
   return null

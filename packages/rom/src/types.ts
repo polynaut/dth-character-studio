@@ -1417,10 +1417,11 @@ export const CHARACTER_SCHEMA_VERSION = 30
  *       shows the tab). Projects with the toggle off therefore emit the scan
  *       config and the `Scan_Products_<Name>.dsa` for the first time, so the
  *       generated content changed and every character must regenerate.
- * v61 — TAKEN by the release train's product-scan hardening (PR #739: the CSV
- *       writer's closing `end` row). Numbered there first; this branch skips
- *       to 62 so the two can merge in either order without a dev install
- *       stamped v61 by one build silently skipping the other's files.
+ * v61 — the product-scan CSV writer closes each file with an `end` row, and the
+ *       studio's pickup consumes a CSV immediately only when that row is present
+ *       (proof the write finished; a terminator-less file must first sit
+ *       unmodified past a settle window). Ships in the same release as v60 —
+ *       the bump exists for pre-release installs already stamped v60.
  * v62 — a new VISIBLE script joins the Content Library: `Kill_Animation.dsa`
  *       (+ its `DthKillAnimation.dsa` runtime and its artwork). It strips every
  *       key off the open scene and puts the timeline back to a default 0-30, so

@@ -215,8 +215,10 @@ def export_one(node, fallback_directory):
     original = directory_parm.evalAsString()
     # RESPECT what the user configured: the project is theirs, and its export
     # directory is a deliberate choice. Only fill a blank one, and only when the
-    # job supplied something to fill it with.
-    directory = original or fallback_directory
+    # job supplied something to fill it with. Blank means blank AFTER strip —
+    # the same rule material_utils' prefill uses, so "  " can't dodge the fill
+    # and then be skipped below.
+    directory = (original.strip() and original) or fallback_directory
     if not directory.strip():
         entry["status"] = "skipped"
         entry["error"] = "no export directory set on the node, and the job supplied none"

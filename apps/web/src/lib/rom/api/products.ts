@@ -1,4 +1,4 @@
-import { exists, mkdir, readDir, readTextFile, remove } from '@tauri-apps/plugin-fs'
+import { exists, mkdir, readDir, readTextFile, remove, stat } from '@tauri-apps/plugin-fs'
 import { isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
@@ -16,6 +16,7 @@ import {
   parseCharacterProductsText,
   PRODUCTS_FILE,
   withScans,
+  withoutUnlinkedScenes,
 } from '../character-products.ts'
 import { charScopeInput, charsRoot, joinPath, locateCharacter, resolveProject } from './core'
 
@@ -119,7 +120,13 @@ export async function fetchProductScan({ data }: { data: unknown }): Promise<Pro
   }
   if (!location) return empty
   const path = productsPath(project, location.relFolder, id)
-  if (ingest) await ingestProductScans(project, location.relFolder, id)
+  // Carry BEFORE ingest: a pre-v30 definition's stored products must reach the
+  // store before a leftover drop-folder CSV creates it — the carry bails once the
+  // store exists, and ingest-first would make that partial store permanent.
+  if (ingest) {
+    await carryStoredProductsToMeta(project, location.relFolder, id, location.definitionAbs)
+    await ingestProductScans(project, location.relFolder, id)
+  }
   const store = await readProducts(path)
   if (store.scans.length === 0) return { ...empty, path }
   return {
@@ -137,6 +144,19 @@ export async function fetchProductScan({ data }: { data: unknown }): Promise<Pro
   }
 }
 
+/** One pickup at a time per character: route load and window focus both trigger
+ *  ingestion, and two interleaved read-modify-write passes over the same store —
+ *  each ending in a delete — could lose a scene (A's write clobbered by B's,
+ *  A's CSV already gone). Concurrent callers share the running pass; a CSV
+ *  landing mid-pass waits for the next one. In-process only — a second window on
+ *  the same project could still race, but windows are one-per-project. */
+const inflightIngests = new Map<string, Promise<number>>()
+
+/** How long a terminator-less CSV must sit unmodified before the pickup trusts
+ *  it as finished: pre-v61 scripts wrote no `end` row, so age is the only signal
+ *  separating their finished CSVs from a write still in flight. */
+const LEGACY_CSV_SETTLE_MS = 10_000
+
 /**
  * Pick up whatever the Daz script has written for one character: parse every CSV
  * in its drop folder, fold each scanned scene into the store, and delete the CSVs
@@ -144,13 +164,31 @@ export async function fetchProductScan({ data }: { data: unknown }): Promise<Pro
  *
  * Ordering is the whole safety story — the store is written FIRST and only the
  * CSVs whose contents reached it are deleted. A failed write leaves every CSV on
- * disk for the next pickup; a CSV that won't parse is left alone too (it may be a
- * partial write Daz is still finishing, and a later pickup gets the whole file).
+ * disk for the next pickup. The parser is TOTAL (truncated text parses to a
+ * partial scan, it never throws), so "won't parse" cannot gate consumption;
+ * what does: a v61+ CSV is consumed only with its closing `end` row present, and
+ * an older, terminator-less CSV only when it names its scene and has sat
+ * unmodified past the settle window. Anything else is left for the next pickup.
  *
  * Returns how many scenes were taken in. Best-effort throughout: this runs on a
  * route load, and an unreadable drop folder must never break opening a character.
  */
-export async function ingestProductScans(
+export function ingestProductScans(
+  project: ProjectInfo,
+  relFolder: string,
+  characterId: string,
+): Promise<number> {
+  const key = `${project.id}|${characterId}`
+  const running = inflightIngests.get(key)
+  if (running) return running
+  const pass = runIngestPass(project, relFolder, characterId).finally(() => {
+    inflightIngests.delete(key)
+  })
+  inflightIngests.set(key, pass)
+  return pass
+}
+
+async function runIngestPass(
   project: ProjectInfo,
   relFolder: string,
   characterId: string,
@@ -167,10 +205,19 @@ export async function ingestProductScans(
     const parsed = (
       await Promise.all(
         names.map(async (name) => {
+          const path = joinPath(dir, name)
           try {
-            return { name, scan: parseProductScanCsv(await readTextFile(joinPath(dir, name))) }
+            const { complete, ...scan } = parseProductScanCsv(await readTextFile(path))
+            if (!complete) {
+              // Truncated before its scene row: never consumable — an empty scan
+              // stored under the '' key would replace a real unsaved-scene entry.
+              if (!scan.sceneName && !scan.scenePath) return null
+              const { mtime } = await stat(path)
+              if (!mtime || Date.now() - mtime.getTime() < LEGACY_CSV_SETTLE_MS) return null
+            }
+            return { name, scan }
           } catch {
-            return null // unreadable or mid-write — left on disk for the next pickup
+            return null // unreadable (or unstatable) — left on disk for the next pickup
           }
         }),
       )
@@ -214,9 +261,18 @@ export async function ingestProjectProductScans({ data }: { data: unknown }): Pr
     const project = await resolveProject(projectId)
     const scan = await storage.scanCharacterLibrary(charsRoot(project))
     const counts = await Promise.all(
-      scan.entries.map((entry) =>
-        ingestProductScans(project, entry.location.relFolder, entry.character.id),
-      ),
+      scan.entries.map(async (entry) => {
+        // Same carry-before-ingest order as fetchProductScan, for the same
+        // reason: ingest creating the store first would strand a pre-v30
+        // definition's products behind the carry's exists-bail.
+        await carryStoredProductsToMeta(
+          project,
+          entry.location.relFolder,
+          entry.character.id,
+          entry.location.definitionAbs,
+        )
+        return ingestProductScans(project, entry.location.relFolder, entry.character.id)
+      }),
     )
     return counts.reduce((a, b) => a + b, 0)
   } catch {
@@ -249,6 +305,10 @@ export async function carryStoredProductsToMeta(
     const raw: unknown = JSON.parse(await readTextFile(definitionAbs))
     if (!raw || typeof raw !== 'object') return false
     const record = raw as Record<string, unknown>
+    // v30 stripped the product fields from the definition — a definition at (or
+    // past) it can have nothing to carry, so skip the field parsing it would pay
+    // on every save/pickup of a never-scanned character.
+    if (typeof record.schemaVersion === 'number' && record.schemaVersion >= 30) return false
     // PARSED, not cast. This is raw definition JSON of unknown age, and the first
     // cut of this function crashed on exactly that — a record written before
     // per-scene attribution existed carries no `scenes` array. A row that fails
@@ -271,6 +331,30 @@ export async function carryStoredProductsToMeta(
     return true
   } catch {
     return false
+  }
+}
+
+/**
+ * Drop stored scenes the character no longer links (see
+ * {@link withoutUnlinkedScenes}). Runs on save — the only moment a character's
+ * scene list changes — with the freshly saved scene list. Best-effort: a failed
+ * prune costs nothing but a stale row until the next save.
+ */
+export async function pruneProductScans(
+  project: ProjectInfo,
+  relFolder: string,
+  characterId: string,
+  linkedScenePaths: ReadonlyArray<string>,
+): Promise<void> {
+  try {
+    const path = productsPath(project, relFolder, characterId)
+    if (!(await exists(path))) return
+    const store = await readProducts(path)
+    const pruned = withoutUnlinkedScenes(store, linkedScenePaths)
+    if (pruned === store) return
+    await storage.writeTextFileAtomic(path, characterProductsJson(pruned))
+  } catch {
+    // best-effort — a stale entry survives until the next save
   }
 }
 

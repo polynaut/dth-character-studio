@@ -136,7 +136,7 @@ export {
   GENESIS_INDEX_SCRIPT,
   SCAN_SCENE_BULK_SCRIPT,
   copyRuntimeFiles,
-  readScriptRuntimeVersion,
+  readScriptRuntimeInfo,
   studioCharScriptsDir,
   studioProjectScriptsDir,
   studioScriptsDir,

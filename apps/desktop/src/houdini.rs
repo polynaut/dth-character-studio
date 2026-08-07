@@ -389,4 +389,25 @@ mod remove_dir_if_empty_tests {
         assert!(temp.exists());
         std::fs::remove_file(&temp).unwrap();
     }
+
+    /// The data-loss vector the symlink_metadata guard exists for: a link named
+    /// `houdini-project` must be refused UNFOLLOWED — through the link its
+    /// (empty-looking or full) target could be judged, and the link's removal
+    /// semantics differ per platform. Unix-only: creating a Windows junction
+    /// needs elevation/mklink, but the guard is the same `is_symlink()` branch.
+    #[cfg(unix)]
+    #[test]
+    fn refuses_a_symlink_without_following_it() {
+        let root = std::env::temp_dir().join("dth_rmdir_symlink");
+        let _ = std::fs::remove_dir_all(&root);
+        let target = root.join("target");
+        std::fs::create_dir_all(&target).unwrap();
+        std::fs::write(target.join("keep.txt"), b"x").unwrap();
+        let link = root.join("houdini-project");
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+        assert_eq!(remove_dir_if_empty(request(&link)).unwrap(), "not-a-directory");
+        assert!(link.exists(), "the link itself must survive");
+        assert!(target.join("keep.txt").exists(), "the target must be untouched");
+        std::fs::remove_dir_all(&root).unwrap();
+    }
 }

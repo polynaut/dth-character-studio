@@ -23,13 +23,14 @@ nothing left to keep in sync.
 - **Results are kept per scene**, so re-scanning one outfit replaces only that
   outfit's entry and leaves the others alone. The tab shows them merged.
 - **The Daz-written CSVs are deleted once they're read** — they were only ever a
-  transport, and they used to pile up in the app's data folder until a 30-day
-  age-out swept them.
+  transport, so they no longer pile up in the app's data folder waiting for the
+  30-day age-out. (That sweep still runs, as the backstop for anything a pickup
+  can't take: files from a crashed scan, and the diagnostic reports.)
 - **Results moved off the character definition** into
   `<project>/.dcsmeta/characters/<Character>/products.json`, with the studio's other
   per-character files. A few hundred rows of machine-derived data had no business in
   a file meant to be read and shared. Products already stored on a character are
   carried over automatically the first time it is saved or refreshed — nothing to do.
 
-Script runtime v60: every character regenerates on the next **Tools → Refresh
+Script runtime v61: every character regenerates on the next **Tools → Refresh
 assets**, which is what teaches the existing scripts to scan.

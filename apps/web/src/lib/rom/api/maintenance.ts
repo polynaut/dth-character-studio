@@ -18,7 +18,12 @@ export type { HousekeepingResult, RemapResult }
 // user's explicit request. deleteCharacter also prunes a character's scan
 // folder + avatar so nothing orphans going forward.
 
-/** Days a product-scan file is kept before the launch/manual sweep ages it out. */
+/** Days a product-scan file is kept before the launch/manual sweep ages it out.
+ *  Still load-bearing under the unattended pickup (which deletes what it
+ *  ingests): this sweep is the ONLY GC for what ingestion deliberately leaves —
+ *  CSVs it will never consume (truncated before their scene row), settling
+ *  terminator-less files of characters whose page is never opened, and the
+ *  `_diagnostic-*.txt` reports the Daz script writes beside the CSVs. */
 export const PRODUCT_SCAN_RETENTION_DAYS = 30
 
 /** Days a Scan_Frames keyframe CSV is kept before the sweep ages it out —

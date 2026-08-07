@@ -7,6 +7,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const files = new Map<string, string | Uint8Array>()
 const dirs = new Set<string>()
+/** Per-file mtimes for the stat mock. Unset = epoch, i.e. long settled — the
+ *  terminator-less legacy pickup path trusts only files past its settle window. */
+const mtimes = new Map<string, Date>()
 
 function norm(p: string): string {
   let s = p.replace(/\\/g, '/')
@@ -87,7 +90,12 @@ vi.mock('@tauri-apps/plugin-fs', () => ({
   },
   async stat(p: string) {
     p = norm(p)
-    return { isDirectory: dirs.has(p), isFile: files.has(p), mtime: new Date(0), size: 0 }
+    return {
+      isDirectory: dirs.has(p),
+      isFile: files.has(p),
+      mtime: mtimes.get(p) ?? new Date(0),
+      size: 0,
+    }
   },
   async readDir(p: string) {
     p = norm(p)
@@ -122,9 +130,13 @@ const META = `${PROJECT}/.dcsmeta/characters/Kira`
 beforeEach(() => {
   files.clear()
   dirs.clear()
+  mtimes.clear()
 })
 
-/** A character with its definition on disk; returns its id. */
+/** A character with its definition on disk; returns its id. The scenes the CSV
+ *  fixtures scan are LINKED — real scans can only come from linked scenes (the
+ *  script's scene guard refuses foreign ones), and the save-time prune drops
+ *  stored results for scenes a character doesn't link. */
 function seedCharacter(): string {
   const c = characterSchema.parse({
     id: newId(),
@@ -134,6 +146,10 @@ function seedCharacter(): string {
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     scenePath: `${PROJECT}/Kira/daz3d/Kira.duf`,
+    extraScenes: [
+      `${PROJECT}/Kira/daz3d/KiraDefault.duf`,
+      `${PROJECT}/Kira/daz3d/KiraSummer.duf`,
+    ],
   })
   addDir(`${PROJECT}/Kira`)
   files.set(
@@ -143,15 +159,27 @@ function seedCharacter(): string {
   return c.id
 }
 
-/** One scanned scene, in the CSV shape the Daz script writes. The SKU column is
- *  left empty on purpose so `mergeProductScans` keys each row on its NAME —
- *  giving two different products the same SKU would (correctly) merge them. */
+/** One scanned scene, in the CSV shape the v61+ Daz script writes — closed by
+ *  the `end` row the pickup requires before it may consume (and delete) a file.
+ *  The SKU column is left empty on purpose so `mergeProductScans` keys each row
+ *  on its NAME — giving two different products the same SKU would (correctly)
+ *  merge them. */
 function scanCsv(scene: string, products: Array<string>): string {
+  return [...scanCsvLines(scene, products), 'end'].join('\n')
+}
+
+/** The same scan WITHOUT the closing `end` row — what a pre-v61 script wrote,
+ *  and what a v61 file looks like while Daz is still writing it. */
+function legacyScanCsv(scene: string, products: Array<string>): string {
+  return scanCsvLines(scene, products).join('\n')
+}
+
+function scanCsvLines(scene: string, products: Array<string>): Array<string> {
   return [
     'row_type,name,sku,artist,version,product_type,match_method,technical_name,asset_type,source_file,usage,used_by',
     `scene,${scene},${PROJECT}/Kira/daz3d/${scene}.duf`,
     ...products.map((p) => `product,${p},,Meipe,1.0,Anatomy,File Match,,,,Figure,Node`),
-  ].join('\n')
+  ]
 }
 
 /** Where Daz drops its output for this character. */
@@ -198,20 +226,61 @@ describe('product pickup', () => {
     expect(result.scenes.map((s) => s.scene)).toEqual(['KiraDefault', 'KiraSummer'])
   })
 
-  it('leaves a CSV it cannot parse on disk, and still takes in the good ones', async () => {
+  it('leaves an empty/truncated-before-scene CSV on disk, and still takes in the good ones', async () => {
     await storage.createProjectManifest(PROJECT, 'Nova')
     const id = seedCharacter()
     const drop = await dropDir(id)
     addDir(drop)
     files.set(`${drop}/good.csv`, scanCsv('KiraDefault', ['Golden Palace']))
-    // A row-typeless file parses to a scan with no scene and no products — the
-    // pickup must not treat that as "this scene now has nothing".
+    // The parser is TOTAL: an empty file "parses" to a scan with no scene and no
+    // products. Consuming it would store junk under the '' key (replacing a real
+    // unsaved-scene entry) and DELETE the file — the only copy of the results if
+    // it was a scan Daz had not finished writing. It must stay on disk.
     files.set(`${drop}/empty.csv`, '')
 
     const result = await fetchProductScan({ data: { projectId: PROJECT, id } })
 
     expect(result.scan?.products.map((p) => p.name)).toEqual(['Golden Palace'])
+    expect(result.scenes.map((s) => s.scene)).toEqual(['KiraDefault'])
     expect(files.has(`${drop}/good.csv`)).toBe(false)
+    expect(files.has(`${drop}/empty.csv`)).toBe(true)
+  })
+
+  it('a terminator-less CSV still fresh on disk waits; a settled one is consumed', async () => {
+    await storage.createProjectManifest(PROJECT, 'Nova')
+    const id = seedCharacter()
+    const drop = await dropDir(id)
+    addDir(drop)
+    // No `end` row on either: a pre-v61 script's output — or a v61 write still
+    // in flight. Age is the only signal separating the two.
+    files.set(`${drop}/fresh.csv`, legacyScanCsv('KiraSummer', ['Beachwear']))
+    mtimes.set(`${drop}/fresh.csv`, new Date()) // just modified — may be mid-write
+    files.set(`${drop}/settled.csv`, legacyScanCsv('KiraDefault', ['Golden Palace']))
+
+    const result = await fetchProductScan({ data: { projectId: PROJECT, id } })
+
+    expect(result.scenes.map((s) => s.scene)).toEqual(['KiraDefault'])
+    expect(files.has(`${drop}/settled.csv`)).toBe(false)
+    expect(files.has(`${drop}/fresh.csv`)).toBe(true)
+    // Once settled, the next pickup takes it.
+    mtimes.delete(`${drop}/fresh.csv`)
+    const later = await fetchProductScan({ data: { projectId: PROJECT, id } })
+    expect(later.scenes.map((s) => s.scene).sort()).toEqual(['KiraDefault', 'KiraSummer'])
+    expect(files.has(`${drop}/fresh.csv`)).toBe(false)
+  })
+
+  it('a CSV with the end row is consumed immediately, however fresh', async () => {
+    await storage.createProjectManifest(PROJECT, 'Nova')
+    const id = seedCharacter()
+    const drop = await dropDir(id)
+    addDir(drop)
+    files.set(`${drop}/a.csv`, scanCsv('KiraDefault', ['Golden Palace']))
+    mtimes.set(`${drop}/a.csv`, new Date()) // the end row proves the write finished
+
+    const result = await fetchProductScan({ data: { projectId: PROJECT, id } })
+
+    expect(result.scenes.map((s) => s.scene)).toEqual(['KiraDefault'])
+    expect(files.has(`${drop}/a.csv`)).toBe(false)
   })
 
   it('ingest: false (the hover preload) reads without consuming anything', async () => {
@@ -291,6 +360,103 @@ describe('product pickup', () => {
     await saveCharacter({ data: { projectId: PROJECT, character: { ...raw, id } } })
 
     // The scan is better data than a v29 snapshot — the carry must not clobber it.
+    const stored = parseCharacterProductsText(files.get(`${META}/products.json`) as string)
+    expect(stored.scans.map((s) => s.sceneName)).toEqual(['KiraDefault'])
+  })
+
+  it('the carry runs BEFORE route-load ingest — leftover CSVs cannot strand the definition products', async () => {
+    await storage.createProjectManifest(PROJECT, 'Nova')
+    const id = seedCharacter()
+    // A pre-v30 definition holding products for a scene whose CSV is long gone…
+    const raw = JSON.parse(files.get(`${PROJECT}/Kira/Kira.json`) as string)
+    files.set(
+      `${PROJECT}/Kira/Kira.json`,
+      JSON.stringify({
+        ...raw,
+        schemaVersion: 29,
+        products: [{ name: 'Golden Palace', scenes: ['KiraDefault'] }],
+      }),
+    )
+    // …plus a leftover CSV for a DIFFERENT scene still sitting in the drop
+    // folder (the old model kept consumed CSVs around for up to 30 days).
+    const drop = await dropDir(id)
+    addDir(drop)
+    files.set(`${drop}/b.csv`, scanCsv('KiraSummer', ['Beachwear']))
+
+    // First page open after the update: ingest-first would create the store from
+    // the leftover alone, and the carry (which bails once a store exists) would
+    // then silently discard KiraDefault's products forever.
+    const result = await fetchProductScan({ data: { projectId: PROJECT, id } })
+
+    expect(result.scenes.map((s) => s.scene).sort()).toEqual(['KiraDefault', 'KiraSummer'])
+    expect(result.scan?.products.map((p) => p.name)).toEqual(['Beachwear', 'Golden Palace'])
+  })
+
+  it('a fresh scan replaces the carried (path-less) entry for the same scene, not duplicates it', async () => {
+    await storage.createProjectManifest(PROJECT, 'Nova')
+    const id = seedCharacter()
+    const raw = JSON.parse(files.get(`${PROJECT}/Kira/Kira.json`) as string)
+    files.set(
+      `${PROJECT}/Kira/Kira.json`,
+      JSON.stringify({
+        ...raw,
+        schemaVersion: 29,
+        products: [{ name: 'Old Thing', scenes: ['KiraDefault'] }],
+      }),
+    )
+    await saveCharacter({ data: { projectId: PROJECT, character: { ...raw, id } } })
+
+    // The carried entry has no scene path (unrecoverable from a merged v29
+    // snapshot); the fresh Daz scan of the same scene carries the full path.
+    const drop = await dropDir(id)
+    addDir(drop)
+    files.set(`${drop}/a.csv`, scanCsv('KiraDefault', ['New Thing']))
+    const result = await fetchProductScan({ data: { projectId: PROJECT, id } })
+
+    expect(result.scenes.map((s) => s.scene)).toEqual(['KiraDefault'])
+    expect(result.scan?.products.map((p) => p.name)).toEqual(['New Thing'])
+    const stored = parseCharacterProductsText(files.get(`${META}/products.json`) as string)
+    expect(stored.scans).toHaveLength(1)
+    expect(stored.scans[0].scenePath).toBe(`${PROJECT}/Kira/daz3d/KiraDefault.duf`)
+  })
+
+  it('concurrent pickups coalesce — both scenes land, nothing is lost to the race', async () => {
+    await storage.createProjectManifest(PROJECT, 'Nova')
+    const id = seedCharacter()
+    const drop = await dropDir(id)
+    addDir(drop)
+    files.set(`${drop}/a.csv`, scanCsv('KiraDefault', ['Golden Palace']))
+    files.set(`${drop}/b.csv`, scanCsv('KiraSummer', ['Beachwear']))
+
+    // Route load and window focus firing together: two interleaved
+    // read-modify-write passes (each ending in a delete) could clobber one
+    // scene's write while its CSV is already gone. Coalescing pins them to one.
+    const [first, second] = await Promise.all([
+      fetchProductScan({ data: { projectId: PROJECT, id } }),
+      fetchProductScan({ data: { projectId: PROJECT, id } }),
+    ])
+
+    for (const result of [first, second]) {
+      expect(result.scenes.map((s) => s.scene).sort()).toEqual(['KiraDefault', 'KiraSummer'])
+    }
+    expect(files.has(`${drop}/a.csv`)).toBe(false)
+    expect(files.has(`${drop}/b.csv`)).toBe(false)
+  })
+
+  it('a save prunes stored results for scenes the character no longer links', async () => {
+    await storage.createProjectManifest(PROJECT, 'Nova')
+    const id = seedCharacter()
+    const drop = await dropDir(id)
+    addDir(drop)
+    files.set(`${drop}/a.csv`, scanCsv('KiraDefault', ['Golden Palace']))
+    files.set(`${drop}/b.csv`, scanCsv('KiraSummer', ['Beachwear']))
+    await fetchProductScan({ data: { projectId: PROJECT, id } })
+
+    // The user unlinks the summer scene, then saves.
+    const raw = JSON.parse(files.get(`${PROJECT}/Kira/Kira.json`) as string)
+    raw.extraScenes = [`${PROJECT}/Kira/daz3d/KiraDefault.duf`]
+    await saveCharacter({ data: { projectId: PROJECT, character: { ...raw, id } } })
+
     const stored = parseCharacterProductsText(files.get(`${META}/products.json`) as string)
     expect(stored.scans.map((s) => s.sceneName)).toEqual(['KiraDefault'])
   })

@@ -1204,6 +1204,28 @@ def _prefill_scan():
     return info
 
 
+def _wired_scene_dth():
+    """The scene the open hip's network imports, as a normalized lowercase
+    absolute `.dth` path — read (expanded) off the first DazToHueImport node
+    whose dtu parm is set. '' when no import is wired yet."""
+    for node in hou.node("/").allSubChildren():
+        name = node.type().name().lower()
+        if "daztohueimport" not in name or "groom" in name:
+            continue
+        parm = node.parm("import_character_dtu_file")
+        if parm is None:
+            continue
+        try:
+            value = str(parm.evalAsString() or "").strip()
+        except Exception:
+            value = ""
+        if value:
+            # Expansion of a `$HIP`-relative parm leaves `..` hops — collapse
+            # them, or the path can never match the studio's absolute key.
+            return _norm_path(os.path.normpath(value)).lower()
+    return ""
+
+
 def op_prefill(request):
     """Fill the blank DazToHue parms the studio already knows the answer to.
 
@@ -1218,7 +1240,11 @@ def op_prefill(request):
 
     Values arrive PER TARGET: `$HIP`-relative paths depend on how deep that
     particular `.hip` sits, which differs between a generated project and a
-    hand-made one.
+    hand-made one. A target may also carry `sceneValues` — per-scene value sets
+    keyed by absolute `.dth` path — and the set matching the network's own wired
+    import wins over the default (primary) `values`: a project wired to an
+    outfit scene must be offered the OUTFIT's paths, not the primary's. One
+    scene per hip — read off the first wired import node.
     """
     dry_run = bool(request.get("dryRun"))
     results = []
@@ -1236,6 +1262,11 @@ def op_prefill(request):
         }
         try:
             _load(path)
+            scene_values = target.get("sceneValues") or {}
+            if scene_values:
+                picked = scene_values.get(_wired_scene_dth())
+                if picked:
+                    values = picked
             changed = 0
             for node in hou.node("/").allSubChildren():
                 for parm_name, key in _prefill_parms_for(node):
