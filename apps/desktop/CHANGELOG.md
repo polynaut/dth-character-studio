@@ -1,5 +1,109 @@
 # @dth/desktop
 
+## 0.68.0
+
+### Minor Changes
+
+- [#730](https://github.com/polynaut/dth-character-studio/pull/730) [`5e4d104`](https://github.com/polynaut/dth-character-studio/commit/5e4d10433b4ef6f7b0d6924cb396a1daf96c561b) Thanks [@polynaut](https://github.com/polynaut)! - **The `houdini-project` folder is retired, and the empty ones are cleaned up.**
+  It was created inside every character's houdini folder to be the shared
+  **Set Project** target — the one project folder all of a character's scenes
+  would share. It could never do that job: Houdini writes its own output (renders,
+  caches, backups) relative to **`$HIP`**, and `$HIP` is _derived_ from the folder
+  the `.hip` sits in. Set Project sets `$JOB`, not `$HIP`. So the output always
+  landed beside the scenes and the folder stayed empty.
+
+  Nothing is lost, because the houdini folder was already doing it: every one of a
+  character's scenes lives there, so they already share one `$HIP` and their output
+  already collects in that single folder.
+
+  **Existing folders are removed on the next save or Refresh assets — but only
+  when empty.** A project made before v0.64 _did_ have `$JOB` pointed at this
+  folder, so Houdini may have written real caches or renders into it. That is your
+  output, not the studio's, so a non-empty one is left exactly where it is and
+  named in the Refresh assets report for you to look at.
+
+  **Settings/Utils → General no longer reports `$HIP`.** It is derived from the
+  scene's own location and can never be anything else, so the row was a check that
+  could not fail beside an action that could not run. `$JOB` — the one the studio
+  can actually repair — is now the only row.
+
+- [#733](https://github.com/polynaut/dth-character-studio/pull/733) [`e3fb935`](https://github.com/polynaut/dth-character-studio/commit/e3fb935a8c8d37c77f8fe43d6d9ea2d3d88a7c4c) Thanks [@polynaut](https://github.com/polynaut)! - The app's own files leave your character folders
+
+  A character folder collected five files nobody put there: `.dth_execute_stamps.json`,
+  `.dth_export_folders.json`, `.last_rom_run.json`, the Daz-written
+  `dth_rom_run_log.json`, and the generated `<Name>_pose_asset.csv`. All of them are
+  the studio talking to itself, and they sat right next to your Daz scenes and
+  Houdini projects.
+
+  They now live in the project's hidden meta folder, one folder per character:
+  `<project>/.dcsmeta/characters/<Character>/` — beside the avatars and note media
+  that were already there. Your character folder holds the definition and your own
+  files, nothing else.
+
+  **The move happens on its own.** Every save relocates that character's files; one
+  **Tools → Refresh assets** does the whole library (the script runtime bumped to
+  v59, so every character reads as out of date until it has run). The relocation
+  only ever touches names the studio itself wrote for that character — a CSV you
+  copied back out of an export folder is left exactly where you put it.
+
+  If you take the PoseAsset CSV by hand (no direct export), it is now at
+  `<project>/.dcsmeta/characters/<Character>/<Name>_pose_asset.csv`.
+
+- [#734](https://github.com/polynaut/dth-character-studio/pull/734) [`e80da9f`](https://github.com/polynaut/dth-character-studio/commit/e80da9f2278897f9c920851754dd3b19d7dc60c2) Thanks [@polynaut](https://github.com/polynaut)! - Daz product scanning runs itself
+
+  Scanning your products used to be a chore with three steps: switch the feature on
+  per project, run a script in Daz, then come back, look at what was found and press
+  **Store on character**. The middle step is the only one that ever needed you.
+
+  Now: **set the DAZ Install Manager manifests folder in Settings, and that's it.**
+  That folder is the product database, so having it is the only thing a scan needs —
+  every export run scans the scene it just built, the studio picks the results up on
+  its own and files them against the character. The review dialog, the Store button
+  and the "your stored list is older than the scan" banner are all gone; there is
+  nothing left to keep in sync.
+
+  - **The per-project "Daz Products" switch is now "Show the Daz Products tab".** It
+    only decides whether the character page shows the tab. Scanning and filing happen
+    either way, so switching it on later shows you results already collected.
+  - **Results are kept per scene**, so re-scanning one outfit replaces only that
+    outfit's entry and leaves the others alone. The tab shows them merged.
+  - **The Daz-written CSVs are deleted once they're read** — they were only ever a
+    transport, so they no longer pile up in the app's data folder waiting for the
+    30-day age-out. (That sweep still runs, as the backstop for anything a pickup
+    can't take: files from a crashed scan, and the diagnostic reports.)
+  - **Results moved off the character definition** into
+    `<project>/.dcsmeta/characters/<Character>/products.json`, with the studio's other
+    per-character files. A few hundred rows of machine-derived data had no business in
+    a file meant to be read and shared. Products already stored on a character are
+    carried over automatically the first time it is saved or refreshed — nothing to do.
+
+  Script runtime v61: every character regenerates on the next **Tools → Refresh
+  assets**, which is what teaches the existing scripts to scan.
+
+- [#742](https://github.com/polynaut/dth-character-studio/pull/742) [`1707389`](https://github.com/polynaut/dth-character-studio/commit/1707389db6f60914db6c9dd7c2b2d24d2fdb8a06) Thanks [@polynaut](https://github.com/polynaut)! - After an elevated install, one click back to normal — drag-and-drop works again
+
+  Installing the Exporter or Runner plugin into Program Files means running the
+  studio as administrator — and Windows then silently blocks drag-and-drop from
+  Explorer into the elevated window: drops just do nothing, with no error. The
+  moment an elevated install succeeds, the studio now says so and offers
+  **Restart normally**: the launch is handed to Explorer (so the new instance
+  runs at your normal level, like a double-click), the current project reopens
+  via its `.dcsp`, and drops work again. Nothing shows on a dry run, a failed
+  install, or a normal-elevation session.
+
+### Patch Changes
+
+- [#739](https://github.com/polynaut/dth-character-studio/pull/739) [`b1bb992`](https://github.com/polynaut/dth-character-studio/commit/b1bb992d48b68f97ee27d94e1161a33e5771736f) Thanks [@polynaut](https://github.com/polynaut)! - Hardening for this release's features, from an adversarial review before it
+  shipped: the product-scan pickup can no longer consume a CSV Daz is still
+  writing (the writer now closes each file with an end marker, runtime v61), a
+  pre-update character's stored products survive leftover scan files, re-scans
+  replace carried-over entries instead of duplicating them, changing the DIM
+  manifests folder now marks generated scripts out of date, "Export too" fills a
+  blank export directory with the character's `export/` folder (not the
+  `dth-exports` intermediate), Fill network offers a wired network its OWN
+  scene's paths, and a stale scene pick in Generate project errors instead of
+  silently wiring the primary.
+
 ## 0.67.0
 
 ### Minor Changes
