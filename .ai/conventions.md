@@ -127,6 +127,23 @@ GH_REPO=polynaut/dth-character-studio \
   accurate. Machine-checked by `.claude/hooks/check-branch-upstream.mjs` (see Working
   rules) — this bullet is the rule's single full statement; CLAUDE.md and Working
   rules only point here.
+- **The ad-hoc token push uses BASIC auth, and must disable askpass.** Measured
+  2026-08-07: `http.…extraheader=AUTHORIZATION: Bearer <PAT>` gets a flat **401**
+  from github.com's git endpoint (`www-authenticate: Basic realm="GitHub"`) —
+  the token works for `gh api`, not for git HTTP. Worse than the failure is what
+  follows it: git falls back to VS Code's `askpass.sh`, which waits for input
+  that never comes, so the push simply HANGS for minutes and reports nothing.
+  The shape that works, and that fails fast when it doesn't:
+
+  ```sh
+  AUTH=$(printf 'x-access-token:%s' "$(gh auth token)" | base64 -w0)
+  GIT_TERMINAL_PROMPT=0 GIT_ASKPASS= git -c core.askPass= -c credential.helper= \
+    -c "http.https://github.com/.extraheader=AUTHORIZATION: Basic $AUTH" \
+    push https://github.com/polynaut/dth-character-studio.git HEAD:<branch>
+  ```
+
+  The three prompt-killers are not optional: without them a wrong credential is
+  a hang, not an error, and a hang costs the whole turn's timeout to diagnose.
 - **Lint gate is oxlint** (type-aware): `pnpm lint` from the **repo root**.
   Notable: `typescript/no-floating-promises` is an **error**, `import/no-cycle`
   is an error; promise rules are relaxed in tests. Config: `.oxlintrc.json`.
