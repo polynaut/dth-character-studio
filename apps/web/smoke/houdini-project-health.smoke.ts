@@ -69,29 +69,42 @@ test('a wired project shows no badge', async ({ page }) => {
   await expect(page.getByText('Needs attention')).toHaveCount(0)
 })
 
+/** A second linked project OUTSIDE the character folder — the sweep never
+ *  scans those, so only a store entry or a drawer scan can answer for it. */
+const OUTSIDE = 'D:/Templates/G9_Skin_Base.hiplc'
+const HOUDINI_INSTALL = 'C:/Program Files/Side Effects Software/Houdini 22.0.368'
+
+/** A minimal material node the drawer's node picker will name on screen. */
+const node = (networkBox: string) => ({
+  path: '/obj/DazToHue/DazToHueMaterial',
+  name: 'DazToHueMaterial',
+  nodeType: 'material',
+  networkBox,
+  materials: 0,
+  uvChannels: 0,
+  bakers: 0,
+  layers: 0,
+  bakerNames: [],
+  materialNames: [],
+  slots: [],
+  sectionCounts: [],
+})
+
+/** Link OUTSIDE as the demo character's second project. */
+function linkOutside(seed: { files: Record<string, string> }) {
+  seed.files[OUTSIDE] = 'hip-fixture'
+  const charPath = `${P.charFolder}/Kira.json`
+  const char = JSON.parse(seed.files[charPath] ?? '{}')
+  char.houdiniProjects = [P.houdini, OUTSIDE]
+  seed.files[charPath] = JSON.stringify(char)
+}
+
 test('the drawer merges the store with a scan of what it does not cover', async ({ page }) => {
   // One linked project the store answers for (inside the character folder,
-  // fresh entry) and one it can never answer for (linked from outside — the
+  // fresh entry) and one it cannot answer for yet (linked from outside — the
   // sweep skips those by design). The drawer must show BOTH: the cache is only
   // an answer for the projects it covers, and a partial cache silently hiding
   // a linked project from the node lists and the repairs was a real bug.
-  const OUTSIDE = 'D:/Templates/G9_Skin_Base.hiplc'
-  const HOUDINI_INSTALL = 'C:/Program Files/Side Effects Software/Houdini 22.0.368'
-  const node = (networkBox: string) => ({
-    path: '/obj/DazToHue/DazToHueMaterial',
-    name: 'DazToHueMaterial',
-    nodeType: 'material',
-    networkBox,
-    materials: 0,
-    uvChannels: 0,
-    bakers: 0,
-    layers: 0,
-    bakerNames: [],
-    materialNames: [],
-    slots: [],
-    sectionCounts: [],
-  })
-
   const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true, houdiniProject: true })
   // hython configured, so the drawer CAN scan the uncovered link itself.
   const settingsPath = `${P.appData}/settings.json`
@@ -101,11 +114,7 @@ test('the drawer merges the store with a scan of what it does not cover', async 
     houdiniDocsFolder: 'C:/Users/dev/Documents/houdini22.0',
   })
   seed.files[`${HOUDINI_INSTALL}/bin/hython.exe`] = 'hython-exe-fixture'
-  seed.files[OUTSIDE] = 'hip-fixture'
-  const charPath = `${P.charFolder}/Kira.json`
-  const char = JSON.parse(seed.files[charPath] ?? '{}')
-  char.houdiniProjects = [P.houdini, OUTSIDE]
-  seed.files[charPath] = JSON.stringify(char)
+  linkOutside(seed)
   // The fake hython only knows the OUTSIDE project's nodes. If the drawer
   // re-scanned the inside one instead of taking the store's word, its card
   // would come back empty and 'CachedBox' would be missing below.
@@ -148,6 +157,49 @@ test('the drawer merges the store with a scan of what it does not cover', async 
       page.evaluate((p) => ((window as any).__tauriMock.files.get(p) ?? '') as string, STORE),
     )
     .toContain('g9_skin_base')
+})
+
+test('a store that covers every linked project serves the drawer without a scan', async ({
+  page,
+}) => {
+  // Both projects fresh in the store — the outside one earned by a previous
+  // drawer open (the sweep's prune keeps everything still LINKED, it does not
+  // throw drawer-earned scans away). No hython is configured here, so if the
+  // drawer tried to scan ANYTHING the picker would show an error instead of
+  // these nodes.
+  const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true, houdiniProject: true })
+  linkOutside(seed)
+  seed.files[STORE] = JSON.stringify({
+    version: 1,
+    projects: {
+      [P.houdini.toLowerCase()]: {
+        key: `${P.houdini.toLowerCase()}|__MTIME__`,
+        scannedAt: '2026-08-07T00:00:00.000Z',
+        project: scan({ nodes: [node('CachedBox')] }),
+      },
+      [OUTSIDE.toLowerCase()]: {
+        key: `${OUTSIDE.toLowerCase()}|__MTIME__`,
+        scannedAt: '2026-08-07T00:00:00.000Z',
+        project: scan({ hipPath: OUTSIDE, nodes: [node('OutsideBox')] }),
+      },
+    },
+  })
+  await page.addInitScript(installTauriMock, seed)
+  await page.addInitScript((storePath: string) => {
+    const mock = (window as any).__tauriMock
+    const raw = mock.files.get(storePath) as string
+    mock.files.set(storePath, raw.split('__MTIME__').join(String(mock.mtimeMs)))
+  }, STORE)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await expect(page.getByText(/custom ROM frames/)).toBeVisible()
+
+  await page.getByRole('button', { name: /^Utils/ }).first().click()
+  const drawer = page.getByRole('dialog')
+  await drawer.getByRole('tab', { name: 'Material' }).click()
+
+  await expect(drawer.getByText('CachedBox')).toBeVisible()
+  await expect(drawer.getByText('OutsideBox')).toBeVisible()
 })
 
 test('unresolved imports and blank parms are both named', async ({ page }) => {

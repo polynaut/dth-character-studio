@@ -268,7 +268,9 @@ Three consequences worth knowing before touching this:
   since the last sweep — then merges, so a partial cache never hides a linked
   project from the node lists or the repairs. Target scans pass the character
   scope, so drawer-earned results land in the character's store, not the shared
-  source store. It briefly POLLED for the sweep instead; that is wrong, because
+  source store — including an outside link's, which the sweep's prune keeps
+  (the keep-list is everything still LINKED), so it costs one scan, not one per
+  open. It briefly POLLED for the sweep instead; that is wrong, because
   waiting is only safe if a sweep is guaranteed to deliver and it is not
   (external project, no Houdini configured).
 - **The cache may never fail a scan.** Resolving the store path was once

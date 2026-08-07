@@ -953,7 +953,7 @@ export function HoudiniUtilsPanel({
           )
           setRefreshOpen(false)
         }
-        void runScan(targets, setTargetScan)
+        void scanTargets()
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))

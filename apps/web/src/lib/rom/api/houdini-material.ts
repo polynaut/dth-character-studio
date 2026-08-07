@@ -6,6 +6,7 @@ import * as storage from '../storage'
 import { houdiniVersionFromInstall, matchingHoudiniDocsFolder } from '#/lib/houdini-version.ts'
 import { HOUDINI_SCRIPTS_FOLDER } from '../houdini-jobs'
 import { normalizePath } from '#/lib/path.ts'
+import { stripTrailingSeparators } from '#/lib/path-trim.ts'
 import { hipRefPrefixFor } from '#/lib/scene-subfolder.ts'
 import { buildHoudiniPrefill } from '../houdini-jobs'
 import { characterScenesRoot } from './execute'
@@ -144,7 +145,13 @@ function queueScanStoreWrite(
   mutate: (store: HoudiniScanStore) => HoudiniScanStore,
 ): Promise<void> {
   const next = (scanStoreWrites.get(path) ?? Promise.resolve()).then(async () => {
-    await writeScanStore(path, mutate(await readScanStore(path)))
+    try {
+      await writeScanStore(path, mutate(await readScanStore(path)))
+    } catch {
+      // The cache may never fail a scan — and a rejection here would also
+      // poison the queue for every later write on this path. A write that
+      // cannot be prepared is dropped; its entry is a rescan later.
+    }
   })
   scanStoreWrites.set(path, next)
   return next
@@ -462,10 +469,13 @@ export async function scanCharacterHoudiniProjects({ data }: { data: unknown }):
       const { character, charFolder } = await prefillContext({ projectId, id })
       const inside = character.houdiniProjects.filter((hip) => insideFolder(hip, charFolder))
       // Prune first, so unlinking a project drops its entry even when nothing
-      // needs re-scanning.
+      // needs re-scanning. The keep-list is everything still LINKED, not just
+      // what the sweep scans: the drawer stores its own scans of outside-folder
+      // links here too, and pruning those would throw away an earned scan of a
+      // project the character still uses.
       const storePath = await scanStorePath(projectId, id)
       await queueScanStoreWrite(storePath, (store) =>
-        withScanResults(store, [], new Date().toISOString(), inside),
+        withScanResults(store, [], new Date().toISOString(), character.houdiniProjects),
       )
       // A worker pool at the concurrency cap — as one project finishes the next
       // starts, rather than waiting for a whole batch. Each trip goes through
@@ -495,7 +505,9 @@ export async function scanCharacterHoudiniProjects({ data }: { data: unknown }):
 
 /** Whether `hip` lives inside `folder` (separator- and case-insensitive). */
 function insideFolder(hip: string, folder: string): boolean {
-  const norm = (p: string) => p.trim().replace(/\\/g, '/').toLowerCase().replace(/\/+$/, '')
+  // path-trim, not /\/+$/ — that regex shape is the polynomial-ReDoS CodeQL
+  // alert this repo has reintroduced twice already (.ai/gotchas.md).
+  const norm = (p: string) => stripTrailingSeparators(p.trim().replace(/\\/g, '/').toLowerCase())
   const root = norm(folder)
   return root !== '' && norm(hip).startsWith(`${root}/`)
 }
@@ -504,10 +516,12 @@ function insideFolder(hip: string, folder: string): boolean {
  * The character's projects as the store has them — no hython, no waiting.
  *
  * This is what the Utils drawer opens on: it reads what the background sweep
- * left and scans only what the store doesn't cover — it never WAITS on the
- * sweep, because a sweep is not guaranteed to deliver (no Houdini configured,
- * a project outside the character folder — the sweep skips those by design,
- * see {@link scanCharacterHoudiniProjects}).
+ * and the drawer's own previous scans left, and scans only what the store
+ * doesn't cover — it never WAITS on the sweep, because a sweep is not
+ * guaranteed to deliver (no Houdini configured, a project outside the
+ * character folder — the sweep skips those by design, see
+ * {@link scanCharacterHoudiniProjects}, but the drawer's scan of one lands
+ * here too, so the next open is served from the store).
  *
  * Stale entries are skipped rather than served: a `.hip` saved in Houdini since
  * the last sweep has a new mtime, so it simply isn't in the answer, and the
@@ -521,12 +535,12 @@ export async function fetchCachedHoudiniScans({
   const { projectId, id } = characterScopeInput.parse(data)
   if (!isTauri()) return []
   try {
-    const { character, charFolder } = await prefillContext({ projectId, id })
+    const { character } = await prefillContext({ projectId, id })
     const stored = await readScanStore(await scanStorePath(projectId, id))
     const hits = await Promise.all(
-      character.houdiniProjects
-        .filter((hipPath) => insideFolder(hipPath, charFolder))
-        .map(async (hipPath) => freshScan(stored, hipPath, await scanKey(hipPath))),
+      character.houdiniProjects.map(async (hipPath) =>
+        freshScan(stored, hipPath, await scanKey(hipPath)),
+      ),
     )
     return hits.filter((p): p is MaterialScanProject => p !== null)
   } catch {
