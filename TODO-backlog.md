@@ -119,30 +119,8 @@ actually executed.
 ```
 
 
-**C11. Houdini presets as an asset type**
-
-```text
-Support Houdini presets as an attachable asset type, so a specific skeleton (jiggle)
-setup can be stored and reused per project or per character.
-```
-
 ### Daz integration
 
-**C12. Geograft-shell visibility auto-fix**
-
-```text
-Assets that add extra shells on top of GP/DK geografts don't work well: the manual fix
-is going into every GP/DK shell -> Parameters -> Visibility and turning "Off" all
-entries added by the extra shell items (e.g. an additional geograft's own shell). Build
-an auto-fix:
-1. Check whether we can scan a Daz asset file for the nodes it adds to the GP/DK
-   visibility listing.
-2. If yes, build an index over the user's library of all assets that (a) add shells and
-   (b) what those added nodes are named.
-3. Using that index, auto-fix a character: if it has GP/DK and one of these shell
-   assets attached, automatically turn "Off" all of that asset's listed nodes in the
-   GP/DK shells.
-```
 
 **C13. Auto-detect newly saved Daz scenes**
 
@@ -200,27 +178,7 @@ Add project-level "Backup" and "Restore" operations:
   projects are created) to start a restore.
 ```
 
-**C19. Move character metadata out of the character root**
-
-```text
-Move the CSV that always sits in the character root into a hidden per-character
-metadata folder (align the naming with the existing ".dcsmeta" convention) — and any
-other meta files too, so the character folder always looks clean in Explorer. Note: the
-generated Daz script bakes the CSV's absolute path, so the migration must regenerate
-scripts, not just move the file. Handle existing characters on read/refresh.
-```
-
 ### Installation & environment
-
-**C20. Auto-detect installed Daz Studio / Houdini versions**
-
-```text
-Build detection of which Daz Studios and Houdinis are installed on the system, so the
-studio can derive all needed paths on its own (the Daz Install Manager settings
-basically know everything). Then improve the Settings UI: the user just picks a version
-of each tool, like "Daz Studio 6" and "Houdini 22", and all manual folder settings
-vanish.
-```
 
 **C21. One-click Unreal Engine plugin install** `[external]`
 
