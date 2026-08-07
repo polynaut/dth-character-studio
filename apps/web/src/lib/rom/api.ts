@@ -158,6 +158,7 @@ export type {
 export {
   dismissHoudiniRun,
   fetchHoudiniRunProgress,
+  copyHoudiniProject,
   generatedHoudiniScenePath,
   generateHoudiniProject,
   removeGeneratedHoudiniProject,
@@ -173,15 +174,25 @@ export {
   SKELETON_SECTIONS,
   discardHoudiniBackups,
   prefillHoudiniNetwork,
+  refreshHoudiniAssets,
   repairHoudiniDefaults,
   repathHoudiniReferences,
   restoreHoudiniBackup,
+  fetchCachedHoudiniScans,
+  fetchHoudiniProjectStatus,
+  scanCharacterHoudiniProjects,
   scanHoudiniMaterials,
   transferHoudiniMaterials,
 } from './api/houdini-material'
-export type { MaterialSection, NodeKind, SkeletonSection } from './api/houdini-material'
+export type {
+  HoudiniProjectStatus,
+  MaterialSection,
+  NodeKind,
+  SkeletonSection,
+} from './api/houdini-material'
 export type {
   HoudiniDefaultsResult,
+  HoudiniRefreshResult,
   MaterialNodeInfo,
   MaterialSectionResult,
   MaterialSlotInfo,

@@ -1,4 +1,4 @@
-import { exists, mkdir, readTextFile, remove } from '@tauri-apps/plugin-fs'
+import { copyFile, exists, mkdir, readTextFile, remove } from '@tauri-apps/plugin-fs'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
@@ -29,6 +29,7 @@ import type { Character } from '@dth/rom'
 import houdiniRunnerScript from '../houdini-runtime/456.py?raw'
 import { characterScenesRoot } from './execute'
 import { normalizeRelFolder } from '../library'
+import { normalizePathLower } from '#/lib/path.ts'
 import { charScopeInput, charsRoot, joinPath, locateCharacter, resolveProject } from './core'
 
 // "Generate project": create a ready-made DazToHue Houdini project for a
@@ -160,6 +161,65 @@ export async function sweepHoudiniProjectDirs(
     // locked or unreadable — the next generation sweeps again
   }
   return empty
+}
+
+const copyProjectInput = charScopeInput.extend({
+  /** The `.hip`/`.hiplc` to bring in. */
+  hipPath: z.string().min(1),
+  /** true = MOVE it (the original is removed once the copy is on disk). */
+  deleteOriginal: z.boolean().default(false),
+})
+
+/**
+ * Copy (or move) a Houdini project into the character's houdini folder.
+ *
+ * Linking in place used to be the only option, because a copied `.hip` arrives
+ * BROKEN in ways the studio had no way to see or repair: it carries the source's
+ * `$JOB` and its absolute file references, so its imports point at the character
+ * it was copied FROM. That is no longer true — the background scan finds exactly
+ * those faults, the card says so, and the Utils drawer repairs all of them
+ * (`Repair $JOB`, `Make paths portable`, `Fill network`). So the copy is offered,
+ * and the caller is expected to point the user at those.
+ *
+ * Only the scene file moves. Houdini's own output beside it (`backup/`, `geo/`,
+ * `render/`) belongs to the project it was produced in and is `$HIP`-relative —
+ * dragging it along would put another character's caches in this one's folder.
+ *
+ * Refuses to overwrite: the destination name is the source's, and an existing
+ * file there is someone else's project. Returns the new absolute path.
+ */
+export async function copyHoudiniProject({ data }: { data: unknown }): Promise<string> {
+  const { projectId, id, hipPath, deleteOriginal } = copyProjectInput.parse(data)
+  if (!isTauri()) throw new Error('Copying a Houdini project needs the desktop app.')
+  const project = await resolveProject(projectId)
+  const lib = charsRoot(project)
+  const location = await locateCharacter(lib, id)
+  if (!location) throw new Error(`Character ${id} not found`)
+  const destDir = characterHoudiniDir(location.folderAbs, project.houdiniSubdir)
+  const name = hipPath.replace(/\\/g, '/').split('/').pop() ?? ''
+  if (!name) throw new Error('That path has no file name.')
+  const dest = joinPath(destDir, name)
+  if (normalizePathLower(dest) === normalizePathLower(hipPath)) return hipPath
+  if (await exists(dest)) {
+    throw new Error(
+      `A project called "${name}" is already in this character's Houdini folder:
+${dest}
+Rename one of them, or link the existing file instead.`,
+    )
+  }
+  await mkdir(destDir, { recursive: true })
+  // Native whole-file copy — a `.hip` runs to hundreds of MB and round-tripping
+  // the bytes through the webview would double that in memory.
+  await copyFile(hipPath, dest)
+  if (deleteOriginal) {
+    try {
+      await remove(hipPath)
+    } catch {
+      // Leave a stray original rather than failing an operation that succeeded:
+      // the copy is on disk and is what the character now links.
+    }
+  }
+  return dest
 }
 
 export interface GeneratedHoudiniProject {

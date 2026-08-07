@@ -246,6 +246,50 @@ Three consequences worth knowing before touching this:
   character (`relocatableInternals`) — never a `*_pose_asset.csv` pattern, which
   would also match a CSV the user copied back out of an export folder.
 
+### Houdini project scans are CACHED and checked
+
+- **Two stores, one format** (`lib/rom/houdini-project-cache.ts`): a character's
+  own projects in its `.dcsmeta` folder, everything else (the Utils drawer's
+  template SOURCES, routinely outside any character) in one shared app-data file.
+  Keyed on `<path>|<mtime>`, so a `.hip` saved in Houdini invalidates itself.
+  Pruning is opt-in — the character store drops unlinked projects; the source
+  store is cumulative on purpose, since a template stays cached across the
+  characters it is copied into.
+- **`scanCharacterHoudiniProjects` is the only thing that scans a character's own
+  projects UNPROMPTED.** Character-folder projects ONLY (a project linked from
+  the user's own tree has no `$JOB` expectation and no repair), a worker pool
+  capped at 2 hython processes, coalesced per character, and silent — a
+  background job must never toast at somebody who didn't ask. Store writes are
+  serialized per file and fold into a fresh read (`queueScanStoreWrite`): a scan
+  holds no store open across its hython run, so two workers finishing together
+  append instead of last-writer-wins.
+- **The drawer reads the store** (`fetchCachedHoudiniScans`) **and scans only
+  what it doesn't cover** — an outside-folder link (never swept), a `.hip` saved
+  since the last sweep — then merges, so a partial cache never hides a linked
+  project from the node lists or the repairs. Target scans pass the character
+  scope, so drawer-earned results land in the character's store, not the shared
+  source store — including an outside link's, which the sweep's prune keeps
+  (the keep-list is everything still LINKED), so it costs one scan, not one per
+  open. It briefly POLLED for the sweep instead; that is wrong, because
+  waiting is only safe if a sweep is guaranteed to deliver and it is not
+  (external project, no Houdini configured).
+- **The cache may never fail a scan.** Resolving the store path was once
+  unguarded and took the drawer's whole project list down with it. A broken cache
+  degrades to "no cache", never to "no scan".
+- **`validateHoudiniProject`** (`lib/rom/houdini-validate.ts`) is a pure function
+  over the scan the studio already has — `$JOB`, `refs.broken`,
+  `prefill.fillable`. An UNSCANNED project is never a fault (else every page load
+  flashes warnings), and an unreadable one reports only that. It does NOT cover
+  material textures: `refs.broken` is deliberately scoped to the DazToHue import
+  parms, because a healthy project reports several of Houdini's own scratch files
+  as missing.
+- **That check is what unlocked COPYING a project** (`copyHoudiniProject`,
+  api/houdini.ts). It was refused for years because a copy carries the source's
+  `$JOB` and absolute references; it is offered now because the card flags
+  exactly that and the drawer repairs it. Only the scene file moves — `backup/`,
+  `geo/`, `render/` are `$HIP`-relative output belonging to the project it was
+  produced in.
+
 ### Daz product scanning (v0.68: unattended)
 
 - **`settings.dimManifestsFolder` arms it, not `project.dazProductsEnabled`.**

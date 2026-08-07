@@ -1,4 +1,4 @@
-import { exists, mkdir, readDir, remove, stat } from '@tauri-apps/plugin-fs'
+import { exists, mkdir, readDir, readTextFile, remove, stat } from '@tauri-apps/plugin-fs'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
@@ -6,10 +6,21 @@ import * as storage from '../storage'
 import { houdiniVersionFromInstall, matchingHoudiniDocsFolder } from '#/lib/houdini-version.ts'
 import { HOUDINI_SCRIPTS_FOLDER } from '../houdini-jobs'
 import { normalizePath } from '#/lib/path.ts'
+import { stripTrailingSeparators } from '#/lib/path-trim.ts'
 import { hipRefPrefixFor } from '#/lib/scene-subfolder.ts'
 import { buildHoudiniPrefill, sceneDthPath } from '../houdini-jobs'
 import { characterScenesRoot } from './execute'
 import { normalizeRelFolder } from '../library'
+import {
+  HOUDINI_SCAN_FILE,
+  emptyScanStore,
+  freshScan,
+  houdiniScanStoreJson,
+  parseScanStore,
+  withScanResults,
+} from '../houdini-project-cache.ts'
+import type { HoudiniScanStore } from '../houdini-project-cache.ts'
+import { validateHoudiniProject } from '../houdini-validate.ts'
 import { charsRoot, locateCharacter, resolveProject } from './core'
 import type { Character } from '@dth/rom'
 import { materialUtilReportSchema } from './native-types.ts'
@@ -63,7 +74,88 @@ const nodeRef = z.object({
 const scanInput = z.object({
   /** The `.hip`/`.hiplc` files to scan (deduped by the caller). */
   hipPaths: z.array(z.string().min(1)),
+  /** Which store the results are persisted to. With BOTH set it is that
+   *  character's own store (in its `.dcsmeta` folder); otherwise the shared
+   *  source store in app-data — see `scanStorePath`. */
+  projectId: z.string().default(''),
+  characterId: z.string().default(''),
 })
+
+/**
+ * Where a scan store lives.
+ *
+ * A character's own projects go with its other app data, so they travel with the
+ * project folder and are pruned when a project is unlinked. Everything else —
+ * the TEMPLATE projects setups get copied from, which usually sit outside any
+ * character folder and get reused across characters — goes to one shared store
+ * in app-data. Same file format (`houdini-project-cache.ts`), separate files, so
+ * a character's cache never fills up with projects that aren't its own.
+ */
+async function scanStorePath(projectId: string, characterId: string): Promise<string> {
+  if (projectId && characterId) {
+    const project = await resolveProject(projectId)
+    const location = await locateCharacter(charsRoot(project), characterId)
+    if (location) {
+      return joinPath(
+        storage.characterMetaDir(project.path, location.relFolder, characterId),
+        HOUDINI_SCAN_FILE,
+      )
+    }
+  }
+  return storage.dataPath(HOUDINI_SOURCE_SCAN_FILE)
+}
+
+/** The shared store for projects that belong to no character (Utils sources). */
+const HOUDINI_SOURCE_SCAN_FILE = 'houdini-source-scans.json'
+
+async function readScanStore(path: string): Promise<HoudiniScanStore> {
+  try {
+    if (await exists(path)) return parseScanStore(await readTextFile(path))
+  } catch {
+    // unreadable store — treat as empty; the scan below refills it
+  }
+  return emptyScanStore()
+}
+
+async function writeScanStore(path: string, store: HoudiniScanStore): Promise<void> {
+  try {
+    await mkdir(path.replace(/[\\/][^\\/]*$/, ''), { recursive: true })
+    await storage.writeTextFileAtomic(path, houdiniScanStoreJson(store))
+  } catch {
+    // A cache that cannot be written is a cache miss next time, nothing worse.
+  }
+}
+
+/** Pending store writes, per file — see {@link queueScanStoreWrite}. */
+const scanStoreWrites = new Map<string, Promise<void>>()
+
+/**
+ * Serialize writes to one store file, each folding into a FRESH read.
+ *
+ * A scan holds the store open across a whole hython run (tens of seconds), so
+ * two projects scanned concurrently — the sweep runs two workers — would each
+ * write a store based on what it read at the start, and the last writer would
+ * drop the other's entry. Re-reading at write time, in a per-file queue, makes
+ * concurrent results append instead of overwrite. (Two WINDOWS can still race
+ * on the shared source store — the atomic write keeps that to a lost entry,
+ * never a corrupt file, and a lost entry is just a rescan later.)
+ */
+function queueScanStoreWrite(
+  path: string,
+  mutate: (store: HoudiniScanStore) => HoudiniScanStore,
+): Promise<void> {
+  const next = (scanStoreWrites.get(path) ?? Promise.resolve()).then(async () => {
+    try {
+      await writeScanStore(path, mutate(await readScanStore(path)))
+    } catch {
+      // The cache may never fail a scan — and a rejection here would also
+      // poison the queue for every later write on this path. A write that
+      // cannot be prepared is dropped; its entry is a rescan later.
+    }
+  })
+  scanStoreWrites.set(path, next)
+  return next
+}
 
 /**
  * The three transferable parts of a material setup.
@@ -246,7 +338,7 @@ export async function scanHoudiniMaterials({
 }: {
   data: unknown
 }): Promise<Array<MaterialScanProject>> {
-  const { hipPaths } = scanInput.parse(data)
+  const { hipPaths, projectId, characterId } = scanInput.parse(data)
   if (hipPaths.length === 0) return []
   if (!isTauri()) {
     throw new Error('Scanning Houdini projects needs the desktop app (it runs hython).')
@@ -254,12 +346,28 @@ export async function scanHoudiniMaterials({
   // Serve unchanged files from cache and only send the rest to hython. When
   // everything is cached this returns without starting a process at all —
   // reopening the drawer on projects nobody touched is then instant.
+  //
+  // TWO layers, same mtime key: the in-memory Map answers within a session, the
+  // on-disk store survives a restart and is shared between windows. The disk
+  // read costs one small JSON; the miss it saves costs a whole hython start.
+  // The persistent layer must never be able to FAIL a scan: it is an
+  // optimisation, and a broken cache degrading to "no cache" is correct where
+  // degrading to "no scan" is not. (Learned the hard way — an unguarded store
+  // path resolution took the Utils drawer's whole project list down with it.)
+  let storePath = ''
+  let stored = emptyScanStore()
+  try {
+    storePath = await scanStorePath(projectId, characterId)
+    stored = await readScanStore(storePath)
+  } catch {
+    storePath = ''
+  }
   const keys = await Promise.all(hipPaths.map(scanKey))
   const cached = new Map<string, MaterialScanProject>()
   const stale: Array<string> = []
   hipPaths.forEach((hipPath, i) => {
     const key = keys[i]
-    const hit = key ? scanCache.get(key) : undefined
+    const hit = (key ? scanCache.get(key) : undefined) ?? freshScan(stored, hipPath, key)
     if (hit) cached.set(hipPath, hit)
     else stale.push(hipPath)
   })
@@ -287,11 +395,20 @@ export async function scanHoudiniMaterials({
   // Re-key AFTER the scan: hython read the file at that moment, so the mtime
   // taken before it is the one this result describes. Only ok results are
   // cached — a failure is a reason to look again, not a fact to remember.
+  const persist: Array<{ hipPath: string; key: string; project: MaterialScanProject }> = []
   fresh.forEach((project) => {
     const i = hipPaths.findIndex((p) => normalizePath(p) === normalizePath(project.hipPath))
     const cacheAt = i >= 0 ? keys[i] : ''
-    if (cacheAt && project.ok) cacheScan(cacheAt, project)
+    if (cacheAt && project.ok) {
+      cacheScan(cacheAt, project)
+      persist.push({ hipPath: hipPaths[i], key: cacheAt, project })
+    }
   })
+  if (persist.length > 0 && storePath) {
+    await queueScanStoreWrite(storePath, (store) =>
+      withScanResults(store, persist, new Date().toISOString()),
+    )
+  }
 
   const byPath = new Map(fresh.map((p) => [normalizePath(p.hipPath).toLowerCase(), p]))
   return hipPaths
@@ -301,6 +418,176 @@ export async function scanHoudiniMaterials({
 
 /** Scans in flight, keyed by their file list — see {@link scanHoudiniMaterials}. */
 const inFlightScans = new Map<string, Promise<Array<MaterialScanProject>>>()
+
+/**
+ * How many hython processes a background sweep may run at once.
+ *
+ * Not unbounded, even though the projects are independent: each one is a whole
+ * Houdini interpreter loading the DazToHue otls, so a character with five
+ * projects would spike five of them the first time its page is opened. Two keeps
+ * the machine usable while the user carries on working — which is the entire
+ * point of scanning in the background rather than on demand.
+ */
+const BACKGROUND_SCAN_CONCURRENCY = 2
+
+/** Characters whose background sweep is already running — a second trigger (the
+ *  route's focus refetch, a fast re-navigation) joins it instead of starting
+ *  another set of hython processes. */
+const sweeps = new Map<string, Promise<void>>()
+
+const characterScopeInput = z.object({
+  projectId: z.string().min(1),
+  id: z.string().min(1),
+})
+
+/**
+ * Scan this character's own Houdini projects in the background, filling the
+ * store the cards and the Utils drawer read.
+ *
+ * Fire-and-forget: it resolves when the sweep is done, but every caller is
+ * expected to ignore that — the results land in the store, and the UI reads the
+ * store. Anything that goes wrong (no Houdini configured, an unreadable `.hip`)
+ * stays silent here; a background job must never toast at somebody who didn't
+ * ask for it. The Utils drawer is where problems are reported and repaired.
+ *
+ * **Only projects INSIDE the character folder.** A `.hip` the user linked from
+ * their own tree is theirs: the studio has no `$JOB` expectation for it, cannot
+ * repair it, and scanning it would cost a hython start to produce a verdict
+ * nobody can act on.
+ *
+ * Already-fresh projects cost nothing — `scanHoudiniMaterials` short-circuits on
+ * the mtime key before starting a process — so calling this on every character
+ * page load is cheap once the cache is warm.
+ */
+export async function scanCharacterHoudiniProjects({ data }: { data: unknown }): Promise<void> {
+  const { projectId, id } = characterScopeInput.parse(data)
+  if (!isTauri()) return
+  const running = sweeps.get(`${projectId}|${id}`)
+  if (running) return running
+  const sweep = (async () => {
+    try {
+      const { character, charFolder } = await prefillContext({ projectId, id })
+      const inside = character.houdiniProjects.filter((hip) => insideFolder(hip, charFolder))
+      // Prune first, so unlinking a project drops its entry even when nothing
+      // needs re-scanning. The keep-list is everything still LINKED, not just
+      // what the sweep scans: the drawer stores its own scans of outside-folder
+      // links here too, and pruning those would throw away an earned scan of a
+      // project the character still uses.
+      const storePath = await scanStorePath(projectId, id)
+      await queueScanStoreWrite(storePath, (store) =>
+        withScanResults(store, [], new Date().toISOString(), character.houdiniProjects),
+      )
+      // A worker pool at the concurrency cap — as one project finishes the next
+      // starts, rather than waiting for a whole batch. Each trip goes through
+      // `scanHoudiniMaterials`, so the mtime short-circuit, the in-flight
+      // coalescing and the store write all still apply.
+      let next = 0
+      const worker = async (): Promise<void> => {
+        const i = next++
+        if (i >= inside.length) return
+        await scanHoudiniMaterials({
+          data: { hipPaths: [inside[i]], projectId, characterId: id },
+        }).catch(() => [])
+        return worker()
+      }
+      await Promise.all(
+        Array.from({ length: Math.min(BACKGROUND_SCAN_CONCURRENCY, inside.length) }, worker),
+      )
+    } catch {
+      // Silent by design — see the doc comment.
+    } finally {
+      sweeps.delete(`${projectId}|${id}`)
+    }
+  })()
+  sweeps.set(`${projectId}|${id}`, sweep)
+  return sweep
+}
+
+/** Whether `hip` lives inside `folder` (separator- and case-insensitive). */
+function insideFolder(hip: string, folder: string): boolean {
+  // path-trim, not /\/+$/ — that regex shape is the polynomial-ReDoS CodeQL
+  // alert this repo has reintroduced twice already (.ai/gotchas.md).
+  const norm = (p: string) => stripTrailingSeparators(p.trim().replace(/\\/g, '/').toLowerCase())
+  const root = norm(folder)
+  return root !== '' && norm(hip).startsWith(`${root}/`)
+}
+
+/**
+ * The character's projects as the store has them — no hython, no waiting.
+ *
+ * This is what the Utils drawer opens on: it reads what the background sweep
+ * and the drawer's own previous scans left, and scans only what the store
+ * doesn't cover — it never WAITS on the sweep, because a sweep is not
+ * guaranteed to deliver (no Houdini configured, a project outside the
+ * character folder — the sweep skips those by design, see
+ * {@link scanCharacterHoudiniProjects}, but the drawer's scan of one lands
+ * here too, so the next open is served from the store).
+ *
+ * Stale entries are skipped rather than served: a `.hip` saved in Houdini since
+ * the last sweep has a new mtime, so it simply isn't in the answer, and the
+ * caller sees it as "not scanned yet" while the sweep catches up.
+ */
+export async function fetchCachedHoudiniScans({
+  data,
+}: {
+  data: unknown
+}): Promise<Array<MaterialScanProject>> {
+  const { projectId, id } = characterScopeInput.parse(data)
+  if (!isTauri()) return []
+  try {
+    const { character } = await prefillContext({ projectId, id })
+    const stored = await readScanStore(await scanStorePath(projectId, id))
+    const hits = await Promise.all(
+      character.houdiniProjects.map(async (hipPath) =>
+        freshScan(stored, hipPath, await scanKey(hipPath)),
+      ),
+    )
+    return hits.filter((p): p is MaterialScanProject => p !== null)
+  } catch {
+    return []
+  }
+}
+
+/** One project's stored verdict, for the character page's cards. */
+export interface HoudiniProjectStatus {
+  hipPath: string
+  /** false only when a scan EXISTS and found something wrong — an unscanned
+   *  project is never reported as unhealthy (see `validateHoudiniProject`). */
+  ok: boolean
+  /** Tooltip text; '' when healthy or not scanned yet. */
+  summary: string
+  /** Whether a scan has been stored for this project at all. */
+  scanned: boolean
+}
+
+/**
+ * The stored verdict for each of a character's Houdini projects — read only, no
+ * hython. Projects outside the character folder are reported as unscanned:
+ * nothing scans them, so nothing can judge them.
+ */
+export async function fetchHoudiniProjectStatus({
+  data,
+}: {
+  data: unknown
+}): Promise<Array<HoudiniProjectStatus>> {
+  const { projectId, id } = characterScopeInput.parse(data)
+  if (!isTauri()) return []
+  try {
+    const { character, charFolder } = await prefillContext({ projectId, id })
+    const stored = await readScanStore(await scanStorePath(projectId, id))
+    return Promise.all(
+      character.houdiniProjects.map(async (hipPath) => {
+        const scan = insideFolder(hipPath, charFolder)
+          ? freshScan(stored, hipPath, await scanKey(hipPath))
+          : null
+        const health = validateHoudiniProject(scan, charFolder)
+        return { hipPath, ok: health.ok, summary: health.summary, scanned: scan !== null }
+      }),
+    )
+  } catch {
+    return []
+  }
+}
 
 /**
  * Scanned projects, keyed by path + mtime.
@@ -423,6 +710,51 @@ export async function repathHoudiniReferences({
     throw new Error('Repathing Houdini references needs the desktop app (it runs hython).')
   }
   return runMaterialUtil({ op: 'repath', ...input })
+}
+
+const refreshInput = z.object({
+  hipPaths: z.array(z.string().min(1)).min(1),
+  /** true = load each project and run the tool, but never save. */
+  dryRun: z.boolean(),
+})
+
+/**
+ * Run the DazToHue shelf's own "Refresh Assets" tool against each project.
+ *
+ * A `.hip` stores the DazToHue asset definitions it was built with, so
+ * switching the installed DazToHue release leaves every existing project on the
+ * old ones. "Refresh Assets" is the vendor's answer to that, and until now the
+ * only way to reach it was to open each project in Houdini by hand.
+ *
+ * The studio does not reimplement what the tool does — it EXECUTES the shelf
+ * tool's own script, the same strategy `create_houdini_project` uses to build a
+ * network, and for the same reason: the script is the ground truth of what the
+ * installed release means by a refresh, so this tracks every release without a
+ * code change here.
+ *
+ * Two honest limits, both surfaced in the drawer rather than buried:
+ *
+ * - **No detection.** Nothing in a scanned project says whether it needs this,
+ *   and nothing afterwards says whether it helped — so this is never a check
+ *   with a verdict, only an action the user chooses.
+ * - **A weaker dry run.** It still loads each project and runs the tool; it
+ *   simply never saves. Third-party code is being executed, so "the project
+ *   file was not saved" is the guarantee — not "nothing was written".
+ */
+export async function refreshHoudiniAssets({
+  data,
+}: {
+  data: unknown
+}): Promise<MaterialUtilReport> {
+  const input = refreshInput.parse(data)
+  if (!isTauri()) {
+    throw new Error('Refreshing DazToHue assets needs the desktop app (it runs hython).')
+  }
+  return runMaterialUtil({
+    op: 'refresh',
+    targets: input.hipPaths.map((hipPath) => ({ hipPath })),
+    dryRun: input.dryRun,
+  })
 }
 
 const prefillInput = z.object({

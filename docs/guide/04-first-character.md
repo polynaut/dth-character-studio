@@ -84,7 +84,11 @@ generation they are shown greyed out):
   Houdini project(s), or let
   [**Generate project**](./06-into-houdini.md#generate-the-houdini-project-automatically)
   build one. Click a card to open it in Houdini, **Alt+click** to reveal its
-  folder.
+  folder. Projects are linked where they lie by default; switch **Copy into the
+  character's Houdini folder** on to bring one in instead (with an optional
+  *Move*), and see
+  [project checks](./06-into-houdini.md#project-checks--what-the-card-warns-about)
+  for what a copied project needs afterwards.
 
 </td></tr></table>
 </details>

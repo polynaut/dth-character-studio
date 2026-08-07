@@ -987,3 +987,24 @@ current code before relying on details, but assume the *lesson* still holds.
   each moved definition directly (no `saveCharacter`, no re-derive), and
   `exportPath` staying stale until "some later save" was enough for a
   same-batch regenerate to aim reference paths at the old location (#647).
+
+## The smoke fake's `stat` mtime (measured 2026-08-07)
+
+`tauri-mock`'s `stat` must return a **`Date`**, stamped **once when the fake is
+installed** — not a number, and not a fixed date in the past. Both wrong forms
+shipped within an hour of each other:
+
+- A **number** (`Date.now()`) means every `.getTime()` in the studio throws, so
+  no mtime-keyed cache is ever exercised in smoke. A cache that never hits looks
+  exactly like a cache that works.
+- A **fixed past date** makes every file in the fake world read as months old,
+  and `sweepStaleRunFiles` (material-util run files, 1h cutoff) compares against
+  the REAL clock — so it deleted the request file the studio had just written,
+  hython got nothing, and the Utils drawer reported "0 projects read".
+
+Stable-but-current satisfies both. It is exposed as `__tauriMock.mtimeMs` so a
+spec can seed an mtime-keyed cache entry that reads as fresh.
+
+The wider lesson: three fixes were aimed at plausible causes before anyone dumped
+the drawer's own text, which had the error string in it the whole time. When a UI
+assertion fails, print what the UI actually says before theorising.

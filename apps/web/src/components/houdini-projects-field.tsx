@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, Sparkles } from 'lucide-react'
+import { AlertTriangle, Plus, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { DirPathChip, displayDirOf } from '#/components/dir-path-chip.tsx'
@@ -19,17 +19,21 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  Switch,
   useModifierHeld,
   useRefetchOnFocus,
 } from '@dth/ui'
 import houdiniLogo from '#/assets/houdini-logo.svg'
 import {
+  copyHoudiniProject,
+  fetchHoudiniProjectStatus,
   fileExists,
   generatedHoudiniScenePath,
   generateHoudiniProject,
   openScene,
   removeGeneratedHoudiniProject,
   revealPath,
+  scanCharacterHoudiniProjects,
 } from '#/lib/rom/api.ts'
 import { pickHipPath } from '#/lib/desktop.ts'
 import { browseStart, displayPath, normalizePath, parentDir } from '#/lib/path.ts'
@@ -60,6 +64,7 @@ import type { Character } from '@dth/rom'
 function HoudiniCard({
   hipPath,
   avatarSrc,
+  warning,
   onOpen,
   onRemove,
   onUtils,
@@ -67,6 +72,10 @@ function HoudiniCard({
   hipPath: string
   /** Gender-based placeholder avatar (a Houdini project has no thumbnail). */
   avatarSrc: string
+  /** What the last background scan found wrong with this project; '' = healthy,
+   *  or not scanned yet. Everything it can report has a repair in the Utils
+   *  drawer, which is what the badge points at. */
+  warning?: string
   onOpen: (e: React.MouseEvent) => void
   /** When set, a hover ✕ unlinks the project from the character. */
   onRemove?: () => void
@@ -97,6 +106,21 @@ function HoudiniCard({
           aria-hidden
           className="pointer-events-none absolute bottom-0 left-0 size-6 object-contain drop-shadow-[0_4px_4px_rgba(0,0,0,0.6)]"
         />
+      }
+      // The scan verdict, pinned bottom-left: a project that will fail when it
+      // opens should say so here, not the first time an import comes up empty
+      // in Houdini. Everything it reports is repairable in the Utils drawer.
+      extra={
+        warning ? (
+          <span
+            className="flex items-center gap-1 text-xs text-amber-500"
+            title={warning}
+            aria-label={`Needs attention: ${warning}`}
+          >
+            <AlertTriangle className="size-3.5 shrink-0" />
+            Needs attention
+          </span>
+        ) : undefined
       }
       altHeld={altHeld}
       openTitle="Open in Houdini"
@@ -149,6 +173,12 @@ export function HoudiniProjectsField({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [generateOpen, setGenerateOpen] = useState(false)
+  // Bring an added project INTO the character's Houdini folder rather than
+  // linking it where it lies. Off by default: linking in place is what this
+  // field has always done, and a copy is the choice that moves files.
+  const [copyIn, setCopyIn] = useState(false)
+  /** With copy on: remove the original once the copy is on disk. */
+  const [moveIn, setMoveIn] = useState(false)
   // Remove dialog: "Keep houdini files" ON (the safe default) = unlink only;
   // OFF = also delete the scene file + the Houdini project folder from disk.
   // Only offered for GENERATED projects (living directly in the export dir) —
@@ -171,11 +201,41 @@ export function HoudiniProjectsField({
   // generate creates (or reuses) by itself.
   const canGenerate = character.exportPath.trim() !== ''
 
+  const projectsKey = projects.join('|')
+  // What the last background scan found wrong with each project, by normalized
+  // path. Two things happen on every mount and whenever the linked set changes:
+  // a background sweep is kicked off (cheap once the cache is warm — an unchanged
+  // `.hip` never starts a process), and the STORED verdicts are read back. The
+  // read is instant and needs no Houdini; the sweep fills the store for next
+  // time, which is why a first-ever open shows no badges and a later one does.
+  const [warnings, setWarnings] = useState<ReadonlyMap<string, string>>(new Map())
+  useRefetchOnFocus(
+    () => {
+      void (async () => {
+        // Kick the sweep off first, un-awaited: reading the store must not wait
+        // on hython, and the sweep coalesces per character anyway.
+        void scanCharacterHoudiniProjects({ data: { projectId, id: character.id } })
+        const status = await fetchHoudiniProjectStatus({
+          data: { projectId, id: character.id },
+        })
+        setWarnings(
+          new Map(
+            status
+              .filter((s) => !s.ok)
+              .map((s) => [normalizePath(s.hipPath).toLowerCase(), s.summary]),
+          ),
+        )
+      })()
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [projectsKey, projectId, character.id],
+    { immediate: true },
+  )
+
   // A linked `.hip` deleted/moved on disk must not keep masquerading as a
   // healthy card — probe each link and re-probe on window focus (tabbing back
   // from Explorer/Houdini is exactly when files change).
   const [missingSet, setMissingSet] = useState<ReadonlySet<string>>(new Set())
-  const projectsKey = projects.join('|')
   useRefetchOnFocus(
     () => {
       void (async () => {
@@ -231,16 +291,58 @@ export function HoudiniProjectsField({
     // De-dupe case-insensitively on the normalised path (Windows): dropping
     // `d:/x.hip` after `D:\x.hip` was picked must not link the same project twice.
     const linked = new Set(character.houdiniProjects.map((p) => normalizePath(p).toLowerCase()))
-    const fresh = paths.filter((p) => !linked.has(normalizePath(p).toLowerCase()))
+    let fresh = paths.filter((p) => !linked.has(normalizePath(p).toLowerCase()))
     if (fresh.length === 0) return
     setBusy(true)
     setError('')
+    // COPY (or move) the file in first, when asked — what the character links is
+    // then the copy. A copied `.hip` arrives carrying the source's `$JOB` and
+    // absolute references, so the toast points at the Utils drawer; the card's
+    // checks will be flagging it as soon as the background sweep has run.
+    let copied = 0
+    if (copyIn && projectId) {
+      // Sequential on purpose, not for politeness: the copy refuses a name
+      // already in the folder, and two dropped files sharing a basename would
+      // both pass that check at once if they ran together. A failure stops the
+      // batch but keeps what already came in — with Move on, those originals
+      // are gone, so a copy that made it MUST get its card or the user loses
+      // track of their own file.
+      const bringIn = async (
+        rest: Array<string>,
+        done: Array<string>,
+      ): Promise<{ done: Array<string>; failed: string }> => {
+        const [head, ...tail] = rest
+        if (head === undefined) return { done, failed: '' }
+        try {
+          const dest = await copyHoudiniProject({
+            data: { projectId, id: character.id, hipPath: head, deleteOriginal: moveIn },
+          })
+          return bringIn(tail, [...done, dest])
+        } catch (e) {
+          return { done, failed: e instanceof Error ? e.message : String(e) }
+        }
+      }
+      const brought = await bringIn(fresh, [])
+      if (brought.failed) setError(brought.failed)
+      copied = brought.done.length
+      fresh = brought.done
+      if (fresh.length === 0) {
+        setBusy(false)
+        return
+      }
+    }
     await persistPatch(
       { houdiniProjects: [...character.houdiniProjects, ...fresh] },
       {
         toast:
           toastTitle ??
-          (fresh.length === 1 ? 'Linked Houdini project' : `Linked ${fresh.length} Houdini projects`),
+          (copied > 0
+            ? `${moveIn ? 'Moved' : 'Copied'} ${copied} Houdini project${
+                copied === 1 ? '' : 's'
+              } in — open Utils to repoint anything the copy left behind`
+            : fresh.length === 1
+              ? 'Linked Houdini project'
+              : `Linked ${fresh.length} Houdini projects`),
       },
     )
     setBusy(false)
@@ -350,6 +452,7 @@ export function HoudiniProjectsField({
                 key={hip}
                 hipPath={hip}
                 avatarSrc={placeholderSrc}
+                warning={warnings.get(normalizePath(hip).toLowerCase()) ?? ''}
                 onOpen={(e) => void onOpen(hip, e)}
                 onRemove={() => askRemove(hip)}
                 onUtils={() => setUtilsFor(hip)}
@@ -358,9 +461,27 @@ export function HoudiniProjectsField({
           )}
         </div>
       )}
+      {/* Copying a project used to be refused outright: a copied `.hip` carries
+          the source's $JOB and its absolute references, so it imports the
+          character it came FROM, and the studio had no way to see or fix that.
+          It can now — the background scan finds exactly those faults, the card
+          flags them and the Utils drawer repairs them — so the choice is
+          offered, with linking still the default. */}
+      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        <label className="flex items-center gap-1.5">
+          <Switch checked={copyIn} onCheckedChange={setCopyIn} disabled={busy} />
+          Copy into the character&apos;s Houdini folder
+        </label>
+        {copyIn && (
+          <label className="flex items-center gap-1.5">
+            <Switch checked={moveIn} onCheckedChange={setMoveIn} disabled={busy} />
+            Move (remove the original)
+          </label>
+        )}
+      </div>
       <div className={`flex flex-wrap gap-2 ${hasProjects ? 'mt-3' : ''}`}>
         <Button variant="outline" size="sm" disabled={busy} onClick={() => void onAddPick()}>
-          <Plus /> {busy ? 'Linking…' : 'Add project'}
+          <Plus /> {busy ? 'Working…' : 'Add project'}
         </Button>
         {/* Generate: hython creates a ready-made DazToHue project from the
             user's template, with $JOB baked to <exportDir>/<projectFolder> —

@@ -6,7 +6,7 @@ the polling: this one is synchronous and the studio waits for the process).
 
     hython material_utils.py <requestFile> <resultFile>
 
-Five operations:
+Six operations:
 
   scan      list every DazToHueMaterial node in a set of `.hip` files, with the
             counts the panel shows (materials / UV channels / bakers / layers)
@@ -25,6 +25,8 @@ Five operations:
             each absolute one relative to `$HIP`/`$JOB`/`$DAZ3D_LIB`, and
             rebuild any DazToHue import path whose file isn't there
             (`op_repath`).
+  refresh   run the DazToHue shelf's own "Refresh Assets" tool against a
+            project, the way a user would from inside Houdini (`op_refresh`).
 
 Copying only the bakers produces a setup that imports cleanly and bakes NOTHING:
 a baker names its material (`MI_Skin`) and its layers name geometry groups and
@@ -52,8 +54,8 @@ Facts measured against DazToHue 2.5 / Houdini 22.0 rather than assumed:
     so every traversal is guarded.
 
 Nothing here writes to a source file, and a target `.hip` is only ever saved by
-a real (non-dry) run of `transfer` / `defaults` / `repath` — each after a single
-rolling backup beside Houdini's own.
+a real (non-dry) run of `transfer` / `defaults` / `prefill` / `repath` /
+`refresh` — each after a single rolling backup beside Houdini's own.
 """
 
 import json
@@ -1440,6 +1442,167 @@ def op_defaults(request):
     return {"op": "defaults", "projects": [], "targets": [], "defaults": results, "dryRun": dry_run}
 
 
+# --- running the DazToHue shelf's own "Refresh Assets" ------------------------
+#
+# Same strategy as `create_houdini_project` (houdini.rs), for the same reason:
+# the shelf tool's script IS the ground truth of what "refresh the assets" means
+# in this DazToHue release, so executing it tracks every release automatically
+# instead of the studio reimplementing a guess at it. Nothing here knows what
+# the tool does — which is exactly why it can't fall out of date.
+
+#: The tool to run, as a normalized label (`Refresh Assets` → `refreshassets`).
+REFRESH_TOOL_TOKEN = "refreshassets"
+#: What marks a shelf — and, in the fallback, a tool — as DazToHue's.
+DTH_TOOL_TOKEN = "daztohue"
+
+
+def _normalize_label(text):
+    """Lowercase alphanumerics only: `Refresh  Assets!` → `refreshassets`.
+
+    Neither the exact spacing nor the capitalisation of a shelf tool's label is
+    a contract, so neither is matched on.
+    """
+    return "".join(ch for ch in (text or "").lower() if ch.isalnum())
+
+
+def _tool_label(tool):
+    """A shelf tool's human name — its label, or its internal name."""
+    for read in (tool.label, tool.name):
+        try:
+            value = read()
+        except Exception:
+            continue
+        if value:
+            return value
+    return ""
+
+
+def _tool_haystack(tool):
+    """Label AND internal name, normalized and joined — what a match looks in.
+
+    Takes a shelf as happily as a tool: both carry `label()` and `name()`.
+    """
+    parts = []
+    for read in (tool.label, tool.name):
+        try:
+            parts.append(_normalize_label(read()))
+        except Exception:
+            pass
+    return " ".join(parts)
+
+
+def _shelf_tools():
+    """`(tools on a DazToHue shelf, every tool)`.
+
+    The shelf is checked FIRST because a label like "Refresh Assets" is generic
+    enough that another package could carry one — and a stray tool of that name
+    doing something else to the user's scene is the one outcome worth ruling
+    out. Every tool is the fallback, since a user can drag the tool onto a shelf
+    of their own and the DazToHue shelf then no longer holds it.
+    """
+    try:
+        every = list(hou.shelves.tools().values())
+    except Exception:
+        return ([], [])
+    dth = []
+    try:
+        for shelf in hou.shelves.shelves().values():
+            if DTH_TOOL_TOKEN not in _tool_haystack(shelf):
+                continue
+            dth.extend(shelf.tools())
+    except Exception:
+        dth = []
+    return (dth, every)
+
+
+def _refresh_tool():
+    """The "Refresh Assets" shelf tool, or None plus what WAS on offer.
+
+    The second half of that answer is the point: this studio has never measured
+    the tool's exact label, so a miss must be diagnosable rather than a flat
+    "not found" — the same reason `create_houdini_project` reports every
+    DazToHue node type hython could see. The list is scoped to DazToHue's own
+    tools; naming all several hundred of Houdini's would tell nobody anything.
+    """
+    dth, every = _shelf_tools()
+    for pool in (dth, every):
+        for tool in pool:
+            if REFRESH_TOOL_TOKEN in _tool_haystack(tool):
+                return (tool, [])
+    offered = dth or [t for t in every if DTH_TOOL_TOKEN in _tool_haystack(t)]
+    return (None, sorted({label for label in map(_tool_label, offered) if label}))
+
+
+def op_refresh(request):
+    """Run "Refresh Assets" on each project, the way a user would in Houdini.
+
+    Why it exists: a `.hip` stores the DazToHue asset definitions it was built
+    with, so switching the installed DazToHue release leaves every existing
+    project on the old ones. The shelf tool is the vendor's own answer to that,
+    and until now the only way to reach it was to open each project by hand.
+
+    Deliberately NOT modelled as a check with a verdict: nothing in a scanned
+    project says whether it needs this, and nothing afterwards says whether it
+    worked. So it is offered as an action the user chooses, and reported by what
+    actually happened rather than by a promise.
+
+    `changed` is `hou.hipFile.hasUnsavedChanges()` read after the tool ran — the
+    scene reporting itself modified. It is NOT a claim about what the tool
+    touched, and a project that reports no change is saved not at all rather
+    than rewritten for nothing.
+
+    A dry run still loads each project and runs the tool; it simply never saves.
+    That is a weaker promise than the other operations' dry runs and the drawer
+    says so: this executes third-party code, so "the file was not saved" is the
+    honest guarantee — not "nothing was written".
+    """
+    dry_run = bool(request.get("dryRun"))
+    # Shelf tools are process state, not scene state — resolved once, before any
+    # project is opened, so a missing tool costs no `.hip` load at all.
+    tool, offered = _refresh_tool()
+    results = []
+    for target in request.get("targets", []):
+        path = target.get("hipPath", "")
+        result = {
+            "hipPath": path,
+            "ok": True,
+            "error": "",
+            "tool": "",
+            "changed": False,
+            "availableTools": [],
+            "backupPath": "",
+        }
+        if tool is None:
+            result["ok"] = False
+            result["error"] = (
+                'No "Refresh Assets" tool was found on the DazToHue shelf. hython '
+                "reads the shelves from the Houdini documents folder set in "
+                "Settings — check that DazToHue is installed for this Houdini "
+                "version."
+            )
+            result["availableTools"] = offered
+            results.append(result)
+            continue
+        try:
+            result["tool"] = _tool_label(tool)
+            _load(path)
+            # `kwargs` empty, as in `create_houdini_project`: a shelf script that
+            # reaches for the pane it was clicked in has none here, and that
+            # surfaces as this project's own error rather than taking the run down.
+            exec(tool.script(), {"hou": hou, "kwargs": {}})
+            changed = bool(hou.hipFile.hasUnsavedChanges())
+            result["changed"] = changed
+            if changed and not dry_run:
+                result["backupPath"] = _backup(path)
+                hou.hipFile.save(path)
+        except Exception as exc:
+            result["ok"] = False
+            result["changed"] = False
+            result["error"] = str(exc).strip() or exc.__class__.__name__
+        results.append(result)
+    return {"op": "refresh", "projects": [], "targets": [], "refresh": results, "dryRun": dry_run}
+
+
 def _backup(path):
     """One rolling backup per project, inside Houdini's own `backup/` folder.
 
@@ -1851,6 +2014,7 @@ OPS = {
     "defaults": op_defaults,
     "repath": op_repath,
     "prefill": op_prefill,
+    "refresh": op_refresh,
 }
 
 
@@ -1896,6 +2060,7 @@ def main():
     payload.setdefault("defaults", [])
     payload.setdefault("repath", [])
     payload.setdefault("prefill", [])
+    payload.setdefault("refresh", [])
 
     # Write-then-rename: the studio reads this the moment hython exits, and a
     # half-written JSON would parse as a corrupt result rather than a failure.

@@ -158,6 +158,26 @@
       "backupPath": "D:/chars/Ita/houdini/backup/Ita_dthbak.hiplc"
     }
   ],
+  "refresh": [
+    {
+      "hipPath": "D:/chars/Ita/houdini/Ita.hiplc",
+      "ok": true,
+      "error": "",
+      "tool": "Refresh Assets",
+      "changed": true,
+      "availableTools": [],
+      "backupPath": "D:/chars/Ita/houdini/backup/Ita_dthbak.hiplc"
+    },
+    {
+      "hipPath": "D:/chars/Ita/houdini/Ita_Yoga.hiplc",
+      "ok": false,
+      "error": "No \"Refresh Assets\" tool was found on the DazToHue shelf.",
+      "tool": "",
+      "changed": false,
+      "availableTools": ["DazToHue", "Open Documentation"],
+      "backupPath": ""
+    }
+  ],
   "sourceBakers": 4,
   "sourceLayers": 30,
   "sourceBakerNames": ["T_Skin_Colour", "T_Skin_Normal"],

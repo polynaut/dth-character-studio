@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   AlertTriangle,
+  Blocks,
   FolderOpen,
   Loader2,
   RefreshCw,
@@ -34,10 +35,13 @@ import {
   MATERIAL_SECTIONS,
   SKELETON_SECTIONS,
   prefillHoudiniNetwork,
+  refreshHoudiniAssets,
   repairHoudiniDefaults,
   repathHoudiniReferences,
   discardHoudiniBackups,
   restoreHoudiniBackup,
+  fetchCachedHoudiniScans,
+  scanCharacterHoudiniProjects,
   scanHoudiniMaterials,
   transferHoudiniMaterials,
 } from '#/lib/rom/api.ts'
@@ -184,9 +188,14 @@ function nodeLabel(node: MaterialNodeInfo): { primary: string; secondary: string
  */
 type DrawerTab = NodeKind | 'general'
 
-/** The three file-level actions of the General tab. One report slot is shared
- *  between them — see {@link ActionReport}. */
-type GeneralAction = 'defaults' | 'repath' | 'prefill'
+/** The file-level actions of the General tab. One report slot is shared between
+ *  them — see {@link ActionReport}.
+ *
+ *  The first three are FIXES: each has a check that detected it and goes quiet
+ *  once it passes. `refresh` is not — nothing in a scanned project reveals
+ *  whether its DazToHue assets are stale, so it is always on offer and never
+ *  counted among the fixes. */
+type GeneralAction = 'defaults' | 'repath' | 'prefill' | 'refresh'
 
 /**
  * The result of the last General-tab action, and which one produced it.
@@ -221,6 +230,7 @@ function backupsIn(report: MaterialUtilReport): Array<RunBackup> {
     ...report.defaults,
     ...report.repath,
     ...report.prefill,
+    ...report.refresh,
   ].map(({ hipPath, backupPath, ok }) => ({ hipPath, backupPath, ok }))
   return rows.filter((row) => row.backupPath !== '')
 }
@@ -249,6 +259,7 @@ interface ScanState {
 }
 
 const EMPTY_SCAN: ScanState = { loading: false, error: '', projects: [] }
+
 
 export function HoudiniUtilsPanel({
   open,
@@ -319,6 +330,7 @@ export function HoudiniUtilsPanel({
   const [defaultsOpen, setDefaultsOpen] = useState(false)
   const [repathOpen, setRepathOpen] = useState(false)
   const [prefillOpen, setPrefillOpen] = useState(false)
+  const [refreshOpen, setRefreshOpen] = useState(false)
   /** The last file-level action's result — one slot for all three (see
    *  {@link ActionReport}), so a fresh run replaces the previous answer instead
    *  of stacking another panel below it. */
@@ -350,9 +362,16 @@ export function HoudiniUtilsPanel({
 
   const targetsKey = targets.join('|')
 
+  /** The store scope for TARGET scans — the character's own store, so what the
+   *  drawer earns (the fallback scan, every post-repair rescan) lands where the
+   *  card badge and the next open read it. Source scans stay unscoped and go to
+   *  the shared source store. */
+  const targetScope = projectId ? { projectId, characterId: character.id } : undefined
+
   async function runScan(
     hipPaths: Array<string>,
     set: (next: ScanState) => void,
+    scope?: { projectId: string; characterId: string },
   ): Promise<Array<MaterialScanProject>> {
     if (hipPaths.length === 0) {
       set(EMPTY_SCAN)
@@ -360,7 +379,7 @@ export function HoudiniUtilsPanel({
     }
     set({ loading: true, error: '', projects: [] })
     try {
-      const projects = await scanHoudiniMaterials({ data: { hipPaths } })
+      const projects = await scanHoudiniMaterials({ data: { hipPaths, ...scope } })
       set({ loading: false, error: '', projects })
       return projects
     } catch (error) {
@@ -370,13 +389,70 @@ export function HoudiniUtilsPanel({
     }
   }
 
-  // Scan the character's projects when the drawer opens. Opening a `.hip` costs
+  /** Every scan of the character's own projects goes through this, so they all
+   *  persist under the character's store. */
+  function scanTargets(): Promise<Array<MaterialScanProject>> {
+    return runScan(targets, setTargetScan, targetScope)
+  }
+
+  /**
+   * The character's own projects: the store first, a scan only for what it
+   * doesn't cover.
+   *
+   * The background sweep (`scanCharacterHoudiniProjects`) fills the store for
+   * character-folder projects, so the common open is instant. What the store
+   * cannot answer — a project linked from outside the character folder (never
+   * swept, by design) or a `.hip` saved since the last sweep — is scanned HERE
+   * and merged: a partial cache must not hide a linked project from the node
+   * lists and the repairs. It never WAITS on the sweep either, because a sweep
+   * is not guaranteed to deliver (no Houdini configured, external project).
+   */
+  async function loadCachedTargets(): Promise<Array<MaterialScanProject>> {
+    if (targets.length === 0) {
+      setTargetScan(EMPTY_SCAN)
+      return []
+    }
+    if (!projectId) return scanTargets()
+    setTargetScan({ loading: true, error: '', projects: [] })
+    // Nudge the sweep in case this drawer was reached without the page mounting
+    // one (it coalesces, so an already-running sweep is joined, not doubled).
+    void scanCharacterHoudiniProjects({ data: { projectId, id: character.id } })
+    const cached = await fetchCachedHoudiniScans({ data: { projectId, id: character.id } })
+    const covered = new Set(cached.map((p) => normalizePath(p.hipPath).toLowerCase()))
+    const uncovered = targets.filter((t) => !covered.has(normalizePath(t).toLowerCase()))
+    if (uncovered.length === 0) {
+      setTargetScan({ loading: false, error: '', projects: cached })
+      return cached
+    }
+    try {
+      const fresh = await scanHoudiniMaterials({
+        data: { hipPaths: uncovered, projectId, characterId: character.id },
+      })
+      // Present in linked order, the way a full scan would.
+      const byPath = new Map(
+        [...cached, ...fresh].map((p) => [normalizePath(p.hipPath).toLowerCase(), p]),
+      )
+      const projects = targets
+        .map((t) => byPath.get(normalizePath(t).toLowerCase()))
+        .filter((p): p is MaterialScanProject => p !== undefined)
+      setTargetScan({ loading: false, error: '', projects })
+      return projects
+    } catch (error) {
+      // The cached half is still good — show it next to the error rather than
+      // trading known projects for a message.
+      const message = error instanceof Error ? error.message : String(error)
+      setTargetScan({ loading: false, error: message, projects: cached })
+      return cached
+    }
+  }
+
+  // Read the character's projects when the drawer opens. Opening a `.hip` costs
   // real seconds, so this deliberately does NOT re-run on every render — only on
   // open, on an explicit rescan, and when the linked set changes.
   useEffect(() => {
     if (!open) return
     void (async () => {
-      const projects = await runScan(targets, setTargetScan)
+      const projects = await loadCachedTargets()
       // Preselect the card's own nodes — the panel was opened FROM that project.
       const from = initialHipPath
       if (!from) return
@@ -660,7 +736,7 @@ export function HoudiniUtilsPanel({
           setConfirmOpen(false)
         }
         // The targets changed on disk — their counts are now stale.
-        void runScan(targets, setTargetScan)
+        void scanTargets()
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
@@ -693,8 +769,21 @@ export function HoudiniUtilsPanel({
     [targetScan],
   )
 
-  /** How many of the tab's three actions have work waiting — the footer's
-   *  one-line verdict for the whole tab. */
+  /** Every project the scan could open — what a refresh would be run against.
+   *
+   *  No condition to filter on, unlike the three fixes above: a `.hip` carries
+   *  no record of which DazToHue release its assets came from, so "needs
+   *  refreshing" is not something the studio can detect. Every readable project
+   *  is therefore a candidate and the user decides. */
+  const refreshTargets = useMemo(
+    () => targetScan.projects.filter((p) => p.ok).map((p) => p.hipPath),
+    [targetScan],
+  )
+
+  /** How many of the tab's three CHECKS have a fix waiting — the footer's
+   *  one-line verdict for the whole tab. Refresh assets is not among them: it
+   *  answers to no check, so counting it would put a number on the tab that
+   *  never reaches zero. */
   const fixesAvailable = [
     staleJobProjects.length > 0,
     repath.targets.length > 0,
@@ -750,7 +839,7 @@ export function HoudiniUtilsPanel({
         return next
       })
       toast.success(`${fileName(hipPath)} is back to the state it was in before the run.`)
-      void runScan(targets, setTargetScan)
+      void scanTargets()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
     } finally {
@@ -823,7 +912,48 @@ export function HoudiniUtilsPanel({
           )
           setPrefillOpen(false)
         }
-        void runScan(targets, setTargetScan)
+        void scanTargets()
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+    } finally {
+      setRunning('')
+    }
+  }
+
+  /**
+   * Run the DazToHue shelf's "Refresh Assets" on every readable project.
+   *
+   * Reported by what happened, never by a promise: the studio executes the
+   * shelf tool's own script and cannot know what it did, so the toast counts
+   * the projects the SCENE reported as modified and says nothing about the
+   * rest. A dry run loads and runs but never saves — see `refreshHoudiniAssets`
+   * for why that is a weaker guarantee than the other dry runs.
+   */
+  async function runRefresh(dryRun: boolean) {
+    if (refreshTargets.length === 0) return
+    setRunning(dryRun ? 'dry' : 'run')
+    setActionReport(null)
+    try {
+      const result = await refreshHoudiniAssets({
+        data: { hipPaths: refreshTargets, dryRun },
+      })
+      setActionReport({ kind: 'refresh', report: result })
+      if (!dryRun) {
+        noteBackups(result)
+        const failed = result.refresh.filter((r) => !r.ok)
+        if (failed.length > 0) {
+          toast.error(`${failed.length} of ${result.refresh.length} projects failed — see below.`)
+        } else {
+          const changed = result.refresh.filter((r) => r.changed).length
+          toast.success(
+            changed === 0
+              ? 'Refreshed — no project reported a change, so nothing was re-saved.'
+              : `${changed} project${changed === 1 ? '' : 's'} refreshed and saved.`,
+          )
+          setRefreshOpen(false)
+        }
+        void scanTargets()
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
@@ -859,7 +989,7 @@ export function HoudiniUtilsPanel({
           )
           setRepathOpen(false)
         }
-        void runScan(targets, setTargetScan)
+        void scanTargets()
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
@@ -893,7 +1023,7 @@ export function HoudiniUtilsPanel({
           setDefaultsOpen(false)
         }
         // The files changed on disk — their scanned $JOB is now stale.
-        void runScan(targets, setTargetScan)
+        void scanTargets()
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
@@ -951,7 +1081,7 @@ export function HoudiniUtilsPanel({
               result={actionReport}
               repathReason={repath.reason}
               restore={restore}
-              onRescan={() => void runScan(targets, setTargetScan)}
+              onRescan={() => void scanTargets()}
             />
           </TabsContent>
 
@@ -985,7 +1115,7 @@ export function HoudiniUtilsPanel({
                   variant="ghost"
                   size="sm"
                   disabled={targetScan.loading || targets.length === 0}
-                  onClick={() => void runScan(targets, setTargetScan)}
+                  onClick={() => void scanTargets()}
                 >
                   <RefreshCw className={targetScan.loading ? 'animate-spin' : ''} /> Rescan
                 </Button>
@@ -1328,16 +1458,37 @@ export function HoudiniUtilsPanel({
         {/* The panel's own footer action — the modal owns the actual run. */}
         {tab === 'general' ? (
           <div className="mt-6 flex flex-wrap items-center justify-end gap-3 border-t pt-4">
-            {/* One summary for THREE actions: the old line described only the
-                $JOB repair, which read as the whole tab's verdict. Each button
-                still carries its own reason in its tooltip and disabled state. */}
+            {/* One summary for the tab's three CHECKS: the old line described
+                only the $JOB repair, which read as the whole tab's verdict.
+                Refresh assets is counted nowhere here — it answers to no check
+                — and each button still carries its own reason in its tooltip. */}
             <span className="mr-auto text-xs text-muted-foreground">
               {targetScan.loading
                 ? 'Reading the projects…'
                 : fixesAvailable === 0
                   ? 'Nothing to fix — every check already passes.'
-                  : `${fixesAvailable} of 3 fixes available`}
+                  : `${fixesAvailable} of 3 checks need fixing`}
             </span>
+            {/* First, because it can change WHICH parameters a project has: an
+                asset refresh replaces the stored DazToHue definitions with the
+                installed ones, and the rescan afterwards is what lets "Fill
+                network" see a parameter a newer release added. (Reasoned from
+                what an HDA refresh is, not measured here.) */}
+            <Button
+              variant="outline"
+              disabled={busy || refreshTargets.length === 0}
+              title={
+                refreshTargets.length === 0
+                  ? 'No project could be read'
+                  : 'Run the DazToHue shelf’s own Refresh Assets on every project the scan could open'
+              }
+              onClick={() => {
+                setActionReport(null)
+                setRefreshOpen(true)
+              }}
+            >
+              <Blocks /> Refresh assets
+            </Button>
             {/* Ordered the way they must be RUN: repathing collapses against
                 whatever $JOB the scene carries, so the repair comes first. */}
             <Button
@@ -1542,6 +1693,62 @@ export function HoudiniUtilsPanel({
               {running === 'dry' ? <Loader2 className="animate-spin" /> : null} Dry run
             </Button>
             <Button disabled={busy} onClick={() => void runDefaults(false)}>
+              {running === 'run' ? <Loader2 className="animate-spin" /> : null} Run
+            </Button>
+          </div>
+        </Modal>
+      )}
+
+      {refreshOpen && (
+        <Modal
+          open
+          onClose={() => setRefreshOpen(false)}
+          dismissible={!busy}
+          title="Refresh the DazToHue assets?"
+        >
+          <div className="space-y-2 text-sm">
+            <p>
+              Run the DazToHue shelf&apos;s own <strong>Refresh Assets</strong> tool on{' '}
+              <strong>{refreshTargets.length}</strong> project
+              {refreshTargets.length === 1 ? '' : 's'} — the same tool you would press inside
+              Houdini after switching DazToHue release.
+            </p>
+            <ul className="max-h-32 list-inside list-disc overflow-y-auto text-xs text-muted-foreground">
+              {refreshTargets.map((hip) => (
+                <li key={hip}>
+                  <code>{fileName(hip)}</code>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* The honest limits, stated where the decision is made. This action
+              runs code the studio did not write and cannot inspect, so it
+              promises what it can observe and nothing more. */}
+          <p className="rounded-md border p-3 text-xs text-muted-foreground">
+            The studio runs DazToHue&apos;s own tool rather than doing the refresh itself, so it
+            can&apos;t tell you in advance what will change — and no check anywhere says a project
+            needs this. A project is only saved if the scene reports itself modified afterwards.
+          </p>
+
+          <p className="text-xs text-muted-foreground">
+            A real run saves each changed project. Close them in Houdini first — Houdini writes the
+            whole scene on save and would overwrite this. A <strong>dry run</strong> still opens
+            each project and runs the tool; it just never saves the file.
+          </p>
+
+          {actionReport?.kind === 'refresh' && (
+            <RefreshReport report={actionReport.report} restore={restore} />
+          )}
+
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" disabled={busy} onClick={() => setRefreshOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="outline" disabled={busy} onClick={() => void runRefresh(true)}>
+              {running === 'dry' ? <Loader2 className="animate-spin" /> : null} Dry run
+            </Button>
+            <Button disabled={busy} onClick={() => void runRefresh(false)}>
               {running === 'run' ? <Loader2 className="animate-spin" /> : null} Run
             </Button>
           </div>
@@ -1879,13 +2086,10 @@ function GeneralTab({
                       // `unknown` is NOT a warning: nobody read the value, so
                       // nothing is known to be wrong — and the repair skips it.
                       warn={row.status === 'differs'}
-                      verdict={
-                        row.status === 'matches'
-                          ? 'matches'
-                          : row.status === 'unknown'
-                            ? 'could not be read'
-                            : 'differs'
-                      }
+                      // Spelled by the row: "unknown" means nobody could read
+                      // the $JOB, but for the CSV path it means the installed
+                      // DazToHue has no such parameter — different answers.
+                      verdict={row.verdict}
                     >
                       {/* Values stay VISIBLE rather than moving into a tooltip:
                           a row the user can't action needs its reason on
@@ -1917,6 +2121,7 @@ function GeneralTab({
       {result?.kind === 'defaults' && <DefaultsReport report={result.report} restore={restore} />}
       {result?.kind === 'repath' && <RepathReport report={result.report} restore={restore} />}
       {result?.kind === 'prefill' && <PrefillReport report={result.report} restore={restore} />}
+      {result?.kind === 'refresh' && <RefreshReport report={result.report} restore={restore} />}
     </div>
   )
 }
@@ -2148,6 +2353,67 @@ function PrefillReport({
             ) : (
               <>
                 <p className="text-destructive">{entry.error}</p>
+                <RestoreOffer
+                  hipPath={entry.hipPath}
+                  backupPath={entry.backupPath}
+                  restore={restore}
+                />
+              </>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+/**
+ * What an asset refresh did, per project.
+ *
+ * Deliberately thin on claims: the studio executed DazToHue's own tool and has
+ * no view of what it changed, so the row reports the tool that ran and whether
+ * the scene came back modified — the two things actually observed.
+ *
+ * The "tool not found" case gets the most words, because it is the one failure
+ * the user can act on: the shelves come from the Houdini documents folder in
+ * Settings, and naming the DazToHue tools that WERE there turns a dead end into
+ * a diagnosis.
+ */
+function RefreshReport({
+  report,
+  restore,
+}: {
+  report: MaterialUtilReport
+  restore: RestoreProps
+}) {
+  return (
+    <div className="rounded-md border p-3">
+      <p className="mb-2 text-sm font-medium">
+        {report.dryRun ? 'Dry run — no project file was saved' : 'Assets refreshed'}
+      </p>
+      <ul className="space-y-2 text-xs">
+        {report.refresh.map((entry) => (
+          <li key={entry.hipPath}>
+            <p className="truncate" title={entry.hipPath}>
+              <strong>{fileName(entry.hipPath)}</strong>
+            </p>
+            {entry.ok ? (
+              <p className="text-muted-foreground">
+                {entry.tool ? <code>{entry.tool}</code> : 'The shelf tool'} ran ·{' '}
+                {entry.changed
+                  ? report.dryRun
+                    ? 'the scene reported changes (not saved)'
+                    : 'the scene reported changes and was saved'
+                  : 'the scene reported no change, so it was left as it is'}
+              </p>
+            ) : (
+              <>
+                <p className="text-destructive">{entry.error}</p>
+                {entry.availableTools.length > 0 && (
+                  <p className="text-muted-foreground">
+                    On the DazToHue shelf hython could see: {entry.availableTools.join(', ')}.
+                  </p>
+                )}
                 <RestoreOffer
                   hipPath={entry.hipPath}
                   backupPath={entry.backupPath}
