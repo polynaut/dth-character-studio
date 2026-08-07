@@ -21,6 +21,8 @@ import {
   resolvePresetFrames,
 } from '#/lib/rom/api.ts'
 import { CharacterProductsTab } from '#/components/character-products-tab.tsx'
+import { DetectedFilesBanner } from '#/components/character/detected-files-banner.tsx'
+import { DetectedFilesWizard } from '#/components/character/detected-files-wizard.tsx'
 import { EditorHeader } from '#/components/character/editor-header.tsx'
 import { ExportSettingsSection } from '#/components/character/export-settings-section.tsx'
 import { FrameZeroFields } from '#/components/character/frame-zero-fields.tsx'
@@ -39,6 +41,7 @@ import { characterFolderDisplay, characterScriptsDisplay } from '#/lib/character
 import { displayPath, parentDir } from '#/lib/path.ts'
 import { repointCharacterPaths } from '#/lib/rom/storage.ts'
 import { useCharacterDraft } from '#/lib/use-character-draft.ts'
+import { useDetectedFiles } from '#/lib/use-detected-files.ts'
 import { useFolderMove } from '#/lib/use-folder-move.tsx'
 import { useRomRunLog } from '#/lib/use-rom-run-log.ts'
 import { useSceneSelection } from '#/lib/use-scene-selection.ts'
@@ -266,6 +269,12 @@ function CharacterPage() {
   // frame numbers would mark the wrong rows.
   const runLog = useRomRunLog(projectId, initial.id, initialRomRunLog, sceneSel.effectiveScene)
 
+  // New files saved into the character's folder (unlinked scenes/.hips) —
+  // rescanned on focus; a banner offers the add wizard (lib/use-detected-files).
+  const detect = useDetectedFiles(projectId, character)
+  const [reviewOpen, setReviewOpen] = useState(false)
+  const detectedCount = detect.detected.scenes.length + detect.detected.houdini.length
+
   /** A failed morph clicked in the report: switch to the scene that produced it
    *  FIRST (revealing a frame in another scene's grid would scroll to a pose
    *  that isn't the one that failed), then send the reveal signal. An untagged
@@ -483,6 +492,14 @@ function CharacterPage() {
       )}
 
       <div className={onProductsTab || activeTab === 'notes' ? 'hidden' : undefined}>
+      {detectedCount > 0 && !detect.bannerDismissed && !reviewOpen && (
+        <DetectedFilesBanner
+          scenes={detect.detected.scenes.length}
+          houdini={detect.detected.houdini.length}
+          onReview={() => setReviewOpen(true)}
+          onDismiss={detect.dismissBanner}
+        />
+      )}
       {!sceneLinked && (
         <div className="mb-6 flex items-center gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
           <span aria-hidden className="text-amber-500">
@@ -654,6 +671,18 @@ function CharacterPage() {
       />
       </div>
       </div>
+
+      {reviewOpen && (
+        <DetectedFilesWizard
+          projectId={projectId}
+          character={character}
+          persistPatch={draft.persistPatch}
+          detected={detect.detected}
+          onIgnore={detect.ignore}
+          onActed={detect.refresh}
+          onClose={() => setReviewOpen(false)}
+        />
+      )}
 
       {/* Docked scene status bar — outside contain-editor-body so its `fixed`
           positioning is relative to the viewport, not the contained subtree. */}

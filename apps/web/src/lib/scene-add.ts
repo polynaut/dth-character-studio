@@ -1,9 +1,21 @@
-import { sceneWearables } from '#/lib/rom/api.ts'
-import { primarySceneDerivation } from '#/lib/scene-compat.ts'
+import { useEffect, useState } from 'react'
+
+import { fetchCharactersWithProblems, sceneWearables } from '#/lib/rom/api.ts'
+import {
+  charactersLinkedScenes,
+  primarySceneDerivation,
+  sceneCompatFailed,
+  sceneCompatHardFailed,
+  sceneCompatRows,
+  sceneCreateRows,
+  sceneNotLinkedRow,
+} from '#/lib/scene-compat.ts'
 import { seedSceneHair } from '#/lib/groom-detect.ts'
 import { extrasWithoutPrimary, normalizePath } from '#/lib/path.ts'
 import { genesisFromFigureNode } from '@dth/rom'
 
+import type { LinkedSceneOwner, SceneCheckRow } from '#/lib/scene-compat.ts'
+import type { SceneWearables } from '#/lib/rom/api.ts'
 import type { Character } from '@dth/rom'
 
 /**
@@ -14,6 +26,106 @@ import type { Character } from '@dth/rom'
  * toast-free: user-facing notices go through `onNotice` so the caller keeps
  * owning presentation.
  */
+
+/**
+ * The add/link validation for ONE candidate scene — the wizard's per-page reads
+ * (`DazSceneField`'s own dialog keeps its interleaved state machine). Mode
+ * `'add'` runs the extra-scene checks against the primary (the geograft
+ * reference); `'primary'` runs the create-subset (one figure, empty timeline)
+ * — a scene-less character has no reference to compare against. Both get the
+ * HARD "not already linked" row: other characters from a fresh library walk,
+ * this character's own from the live draft. Reads are superseded on a
+ * candidate change; a failed walk leaves the cross-character check unverified
+ * rather than the dialog on "checking…" forever.
+ */
+export function useSceneAddValidation({
+  projectId,
+  character,
+  scenePath,
+  mode,
+}: {
+  projectId: string
+  character: Character
+  /** The candidate scene — '' renders no rows (an inactive page). */
+  scenePath: string
+  mode: 'add' | 'primary'
+}): {
+  rows: Array<SceneCheckRow>
+  checking: boolean
+  hardBlocked: boolean
+  blocked: boolean
+  force: boolean
+  setForce: (force: boolean) => void
+} {
+  const [scan, setScan] = useState<SceneWearables | null>(null)
+  const [primaryScan, setPrimaryScan] = useState<SceneWearables | null>(null)
+  const [owners, setOwners] = useState<Array<LinkedSceneOwner> | null>(null)
+  const [force, setForce] = useState(false)
+  const primary = character.scenePath
+  const needsPrimary = mode === 'add' && primary !== ''
+  useEffect(() => {
+    setScan(null)
+    setPrimaryScan(null)
+    setOwners(null)
+    setForce(false)
+    if (!scenePath) return
+    let cancelled = false
+    void sceneWearables({ data: { scenePath } }).then((s) => {
+      if (!cancelled) setScan(s)
+    })
+    if (needsPrimary) {
+      void sceneWearables({ data: { scenePath: primary } }).then((s) => {
+        if (!cancelled) setPrimaryScan(s)
+      })
+    }
+    void fetchCharactersWithProblems({ data: { projectId } })
+      .then(({ characters }) => {
+        if (!cancelled) {
+          setOwners(charactersLinkedScenes(characters.filter((c) => c.id !== character.id)))
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setOwners([])
+      })
+    return () => {
+      cancelled = true
+    }
+    // primary/needsPrimary changes re-validate via the character draft below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scenePath, mode, projectId, character.id, primary])
+  const linkedScenes = [character.scenePath, ...character.extraScenes].filter(Boolean)
+  const rows: Array<SceneCheckRow> = scenePath
+    ? [
+        ...(mode === 'add'
+          ? sceneCompatRows({ scan, primaryScan, character })
+          : sceneCreateRows(scan)),
+        sceneNotLinkedRow(
+          scenePath,
+          owners === null
+            ? null
+            : [
+                ...owners,
+                ...linkedScenes.map((path) => ({
+                  path,
+                  character: character.name,
+                  characterId: character.id,
+                })),
+              ],
+        ),
+      ]
+    : []
+  const checking =
+    scenePath !== '' && (scan === null || owners === null || (needsPrimary && primaryScan === null))
+  const hardBlocked = sceneCompatHardFailed(rows)
+  return {
+    rows,
+    checking,
+    hardBlocked,
+    blocked: checking || hardBlocked || (sceneCompatFailed(rows) && !force),
+    force,
+    setForce,
+  }
+}
 
 /** The add-an-extra-scene patch: append + pre-select the scene's own hair (the
  *  one shared rule — see `seedSceneHair`; scanned on the FINAL path, the record
