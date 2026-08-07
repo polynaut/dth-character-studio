@@ -333,6 +333,29 @@ export const prefillResultSchema = z.object({
   backupPath: z.string(),
 })
 
+/** What the `refresh` op did (or would do) to one project.
+ *
+ *  It runs the DazToHue shelf's own "Refresh Assets" tool — the vendor's answer
+ *  to a `.hip` still holding the asset definitions it was built with after the
+ *  installed DazToHue release changed. Nothing in a scanned project says whether
+ *  it needs that, so this is an action the user picks, never a check. */
+export const houdiniRefreshResultSchema = z.object({
+  hipPath: z.string(),
+  ok: z.boolean(),
+  error: z.string(),
+  /** The shelf tool that ran, by label. Empty when none was found. */
+  tool: z.string(),
+  /** Whether the scene reported unsaved changes once the tool had run. NOT a
+   *  claim about what it touched — an unchanged project is never re-saved. */
+  changed: z.boolean(),
+  /** The DazToHue shelf tools that WERE there, when the refresh one wasn't —
+   *  the studio has not measured that tool's exact label, so a miss has to say
+   *  what it did find. */
+  availableTools: z.array(z.string()),
+  /** Pre-refresh backup (empty for a dry run, and when nothing changed). */
+  backupPath: z.string(),
+})
+
 /** One scanned `.hip` (`ok: false` = unreadable; the scan itself still succeeds). */
 export const materialScanProjectSchema = z.object({
   hipPath: z.string(),
@@ -434,6 +457,8 @@ export const materialUtilReportSchema = z.object({
   repath: z.array(repathResultSchema),
   /** Populated by `prefill` — one entry per project it was asked about. */
   prefill: z.array(prefillResultSchema),
+  /** Populated by `refresh` — one entry per project it was asked about. */
+  refresh: z.array(houdiniRefreshResultSchema),
   sourceBakers: z.number(),
   sourceLayers: z.number(),
   sourceBakerNames: z.array(z.string()),
@@ -474,4 +499,8 @@ export type ProjectRefInfo = z.infer<typeof projectRefInfoSchema>
 export type RepathResult = z.infer<typeof repathResultSchema>
 export type ProjectPrefillInfo = z.infer<typeof projectPrefillInfoSchema>
 export type PrefillResult = z.infer<typeof prefillResultSchema>
+/** Named for Houdini on purpose: the studio's OWN "Refresh assets" sweep
+ *  (Tools tab) already owns the plain `RefreshResult`, and the two have nothing
+ *  to do with each other. */
+export type HoudiniRefreshResult = z.infer<typeof houdiniRefreshResultSchema>
 export type MaterialUtilReport = z.infer<typeof materialUtilReportSchema>

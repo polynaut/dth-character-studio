@@ -698,6 +698,51 @@ export async function repathHoudiniReferences({
   return runMaterialUtil({ op: 'repath', ...input })
 }
 
+const refreshInput = z.object({
+  hipPaths: z.array(z.string().min(1)).min(1),
+  /** true = load each project and run the tool, but never save. */
+  dryRun: z.boolean(),
+})
+
+/**
+ * Run the DazToHue shelf's own "Refresh Assets" tool against each project.
+ *
+ * A `.hip` stores the DazToHue asset definitions it was built with, so
+ * switching the installed DazToHue release leaves every existing project on the
+ * old ones. "Refresh Assets" is the vendor's answer to that, and until now the
+ * only way to reach it was to open each project in Houdini by hand.
+ *
+ * The studio does not reimplement what the tool does — it EXECUTES the shelf
+ * tool's own script, the same strategy `create_houdini_project` uses to build a
+ * network, and for the same reason: the script is the ground truth of what the
+ * installed release means by a refresh, so this tracks every release without a
+ * code change here.
+ *
+ * Two honest limits, both surfaced in the drawer rather than buried:
+ *
+ * - **No detection.** Nothing in a scanned project says whether it needs this,
+ *   and nothing afterwards says whether it helped — so this is never a check
+ *   with a verdict, only an action the user chooses.
+ * - **A weaker dry run.** It still loads each project and runs the tool; it
+ *   simply never saves. Third-party code is being executed, so "the project
+ *   file was not saved" is the guarantee — not "nothing was written".
+ */
+export async function refreshHoudiniAssets({
+  data,
+}: {
+  data: unknown
+}): Promise<MaterialUtilReport> {
+  const input = refreshInput.parse(data)
+  if (!isTauri()) {
+    throw new Error('Refreshing DazToHue assets needs the desktop app (it runs hython).')
+  }
+  return runMaterialUtil({
+    op: 'refresh',
+    targets: input.hipPaths.map((hipPath) => ({ hipPath })),
+    dryRun: input.dryRun,
+  })
+}
+
 const prefillInput = z.object({
   projectId: z.string().min(1),
   /** The character whose values are filled in — its export layout is the

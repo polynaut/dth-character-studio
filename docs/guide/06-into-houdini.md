@@ -336,11 +336,11 @@ each section are how much is actually set there, not how many parameters exist.
 The tab the drawer opens on, and the only one useful without a second project
 picked: what each linked project carries **now**, and what the studio can put
 right. Every check is one row — its name on the left, the verdict on the right,
-the value beneath — and the three fixes sit in the footer, in the order they
-have to be run.
+the value beneath — and the fixes sit in the footer, in the order they have to
+be run. (**Refresh assets** leads them but answers to no check; see below.)
 
 <p align="center">
-  <img width="900" alt="the General tab: one row per check, verdicts aligned right, the three fixes in the footer" src="screenshots/houdini-utils-general.png" />
+  <img width="900" alt="the General tab: one row per check, verdicts aligned right, the fixes in the footer" src="screenshots/houdini-utils-general.png" />
   <br>
   <sub><em>A project made before v0.64: <code>$JOB</code> still points below the exports, everything else passes.</em></sub>
 </p>
@@ -395,11 +395,6 @@ Both offer a **Dry run**, and both take the same silent backup described above �
 so a failed run can be undone from its own report. Running twice changes nothing
 the second time.
 
-**Scene location (`$HIP`)** is reported, never rewritten: `$HIP` is simply
-wherever the `.hip` sits, so "repairing" it would mean moving your scene file —
-your call, not something the studio can do safely while the project may be open
-or under version control.
-
 **Fill network** gives an *existing* project the same wiring
 [Generate project](#generate-the-houdini-project-automatically) gives a new one:
 the import file paths, the export directory and — once your DazToHue has it —
@@ -420,6 +415,34 @@ and it touches only those — a project already on the right folder is listed an
 left alone, so running it twice rewrites nothing the second time. It offers the
 same **Dry run** as the transfer, and the same backup before saving. A project
 the scan couldn't read is never repaired: its `$JOB` is *unknown*, not wrong.
+
+**Refresh assets** is the odd one out, and deliberately so. A `.hip` stores the
+DazToHue asset definitions it was built with, so switching your installed
+DazToHue release leaves every project you already have on the old ones —
+DazToHue's own answer to that is the **Refresh Assets** tool on its shelf. This
+button runs *that tool*, on every project the scan could open, without you
+opening each one in Houdini.
+
+Three things it does **not** do, because it can't:
+
+- **It isn't a check.** Nothing in a project says which DazToHue release its
+  assets came from, so nothing can tell you a project needs this. It is always
+  on offer and never counted among the three checks above — you run it when you
+  know you changed DazToHue.
+- **It can't preview.** The studio runs DazToHue's tool rather than doing the
+  refresh itself, so it has no idea in advance what will change. The **Dry run**
+  still opens each project and runs the tool — it simply never saves the file.
+  That is a weaker promise than the other dry runs' *nothing was written*, and
+  the dialog says so.
+- **It won't tell you it worked.** The report names the shelf tool that ran and
+  whether the scene came back *modified* — nothing more, because nothing more
+  was observed. A project that reports no change is left alone rather than
+  re-saved.
+
+If the tool isn't found, the report names the DazToHue shelf tools that *were*
+there. hython reads the shelves from the Houdini **documents folder** in
+Settings, so that list is usually the fastest way to see that DazToHue isn't
+installed for the Houdini version the studio is pointed at.
 
 ### Scanning
 

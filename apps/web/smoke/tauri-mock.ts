@@ -80,6 +80,23 @@ export interface TauriMockSeed {
   /** The `$JOB` a scanned project reports — the General tab's input. Omit and
    *  the project reads as unreadable, which the tab reports and never repairs. */
   materialJob?: Record<string, string>
+  /** What the DazToHue shelf's "Refresh Assets" answered for a project, per
+   *  `.hip` path. The real op executes a shelf tool that nothing here can
+   *  impersonate, so a spec states the outcome; omit and the tool ran and the
+   *  scene came back modified. */
+  materialRefresh?: Record<
+    string,
+    {
+      ok?: boolean
+      error?: string
+      /** The shelf tool's label, as the report shows it. */
+      tool?: string
+      /** Whether the scene reported unsaved changes once the tool had run. */
+      changed?: boolean
+      /** What the DazToHue shelf carried, when the refresh tool wasn't on it. */
+      availableTools?: Array<string>
+    }
+  >
 }
 
 /** What the spec reads back via `page.evaluate` from `window.__tauriMock`. */
@@ -89,6 +106,12 @@ export interface TauriMockState {
    *  spec can seed an mtime-keyed cache entry that reads as fresh. */
   mtimeMs: number
   calls: Array<{ cmd: string; args: unknown }>
+  /** Every material-utility request the studio wrote, parsed, oldest first.
+   *
+   * Kept here because the studio DELETES its request file as soon as the run
+   * returns (per-run names, swept in a `finally`), so a spec asserting what was
+   * asked for cannot read it back off the fake filesystem afterwards. */
+  materialRequests: Array<Record<string, unknown>>
   unhandled: Array<string>
   /** What `daz_studio_running` reports — false until a spec flips it (the way
    *  a spec keeps a claimed batch's Daz "alive" while driving its progress). */
@@ -113,6 +136,7 @@ export function installTauriMock(seed: TauriMockSeed): void {
   const FAKE_MTIME_MS = Date.now()
   const extraDirs = new Set<string>()
   const calls: Array<{ cmd: string; args: unknown }> = []
+  const materialRequests: Array<Record<string, unknown>> = []
   const unhandled: Array<string> = []
   // The single object both the command switch and the spec hold — mutating
   // `state.houdiniRunning` from a spec is how a run goes live and then exits.
@@ -121,6 +145,7 @@ export function installTauriMock(seed: TauriMockSeed): void {
     /** The mtime every file reports — a spec seeding an mtime-keyed cache needs it. */
     mtimeMs: FAKE_MTIME_MS,
     calls,
+    materialRequests,
     unhandled,
     houdiniRunning: seed.houdiniRunning ?? false,
     releaseHeld: () => {
@@ -450,6 +475,9 @@ export function installTauriMock(seed: TauriMockSeed): void {
         // the op and its arguments come from there, never from a second source
         // of truth that could drift from what the app actually asked for.
         const request = JSON.parse(mustRead(norm(args.request.requestPath)))
+        // Kept for the spec: the studio removes this file the moment the run
+        // returns, so asserting what it asked for has to happen here.
+        materialRequests.push(request)
         // What `_backup` in material_utils.py leaves on disk before a real
         // save: one rolling copy per project, inside Houdini's own `backup/`
         // folder. Modelled (file and all) rather than reported as an empty
@@ -475,6 +503,7 @@ export function installTauriMock(seed: TauriMockSeed): void {
           defaults: [],
           repath: [],
           prefill: [],
+          refresh: [],
           sourceBakers: 0,
           sourceLayers: 0,
           sourceBakerNames: [],
@@ -533,6 +562,31 @@ export function installTauriMock(seed: TauriMockSeed): void {
               foreign: [],
               backupPath: backupFor(t.hipPath),
             })),
+          }
+        }
+        if (request.op === 'refresh') {
+          // The real op executes the DazToHue shelf tool, which nothing here
+          // impersonates. A spec names the outcome instead: `materialRefresh`
+          // is what the shelf answered per project — absent means it ran and
+          // the scene came back modified, which is the ordinary case.
+          return {
+            ...base,
+            refresh: (request.targets as Array<{ hipPath: string }>).map((t) => {
+              const over = seed.materialRefresh?.[norm(t.hipPath)] ?? {}
+              const ok = over.ok ?? true
+              const changed = ok && (over.changed ?? true)
+              return {
+                hipPath: t.hipPath,
+                ok,
+                error: over.error ?? '',
+                tool: ok ? (over.tool ?? 'Refresh Assets') : '',
+                changed,
+                availableTools: over.availableTools ?? [],
+                // Mirrors the Python: a backup is taken only when the scene
+                // actually reported changes and the run is for real.
+                backupPath: changed ? backupFor(t.hipPath) : '',
+              }
+            }),
           }
         }
         if (request.op === 'defaults') {

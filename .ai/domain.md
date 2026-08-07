@@ -354,6 +354,32 @@ older runtimes as stale.
   at generation time, and the node ships its own "Auto-Populate Skinned
   Shapes" button for exactly that job. Applied parms come back as the
   report's third segment (`prefilled` on `GeneratedHoudiniProject`).
+- **Running a DazToHue shelf tool is now a shared strategy, used twice.**
+  `create_houdini_project` (houdini.rs) builds a network by `exec`-ing the
+  `daztohue` shelf tool's own script; `op_refresh` (material_utils.py, v0.72)
+  does the same with **Refresh Assets** — the vendor's answer to a `.hip` still
+  carrying the asset definitions it was built with after the installed DazToHue
+  release changed. Neither reimplements what the tool does: the tool's script IS
+  the ground truth for that release, so both track a new DazToHue automatically.
+  What that costs, and what the code therefore has to do:
+  - **The exact tool label is UNMEASURED.** `_refresh_tool` matches a
+    normalized label/name containing `refreshassets`, preferring a shelf whose
+    own name says DazToHue, and on a miss reports the DazToHue tools it DID see
+    — the same diagnosis posture as the generator's `visible` node-type list. A
+    miss must be actionable, not a flat "not found".
+  - **Nothing detects staleness, before or after.** A `.hip` records no DazToHue
+    release, so the refresh is an ACTION on every readable project and never a
+    check with a verdict (and it is excluded from the General tab's "N of 3
+    checks" count for that reason). Backlog C9 wants a studio-side record of the
+    release each generated project was made with; that is the only route to a
+    real staleness warning.
+  - **`changed` is `hou.hipFile.hasUnsavedChanges()` read after the tool ran**,
+    and a project is saved only when it says yes. That is an observation about
+    the scene, NOT a claim about what the third-party tool touched — the UI
+    copy is worded to match, and the dry run promises "the file was not saved"
+    rather than "nothing was written".
+  - **Untested against a real DazToHue shelf** as of v0.72 — the smoke specs
+    drive the studio's half against a fake that never runs a shelf tool.
 - **The project folder is DELIBERATELY empty**, and that is
   not an oversight to fix. `hou.putenv` sets the `$JOB` VARIABLE and nothing
   else; Houdini's File → Set Project additionally materializes the standard

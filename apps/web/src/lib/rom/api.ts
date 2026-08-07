@@ -174,6 +174,7 @@ export {
   SKELETON_SECTIONS,
   discardHoudiniBackups,
   prefillHoudiniNetwork,
+  refreshHoudiniAssets,
   repairHoudiniDefaults,
   repathHoudiniReferences,
   restoreHoudiniBackup,
@@ -191,6 +192,7 @@ export type {
 } from './api/houdini-material'
 export type {
   HoudiniDefaultsResult,
+  HoudiniRefreshResult,
   MaterialNodeInfo,
   MaterialSectionResult,
   MaterialSlotInfo,

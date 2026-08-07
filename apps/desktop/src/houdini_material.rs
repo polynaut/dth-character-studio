@@ -219,6 +219,36 @@ pub struct RepathResult {
     pub backup_path: String,
 }
 
+/// What `refresh` did (or would do) to one project.
+///
+/// The operation runs the DazToHue shelf's own "Refresh Assets" tool against
+/// the project — the vendor's answer to a `.hip` still carrying the asset
+/// definitions it was built with after the installed DazToHue release changed.
+/// Nothing in a scanned project reveals whether it needs that, so this is an
+/// action the user chooses rather than a check with a verdict.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HoudiniRefreshResult {
+    pub hip_path: String,
+    pub ok: bool,
+    pub error: String,
+    /// The shelf tool that was run, by its label. Empty when none was found.
+    pub tool: String,
+    /// Whether the scene reported unsaved changes once the tool had run
+    /// (`hou.hipFile.hasUnsavedChanges()`). NOT a claim about what the tool
+    /// touched — a project reporting no change is left unsaved rather than
+    /// rewritten for nothing.
+    pub changed: bool,
+    /// The DazToHue shelf tools that WERE found, when the refresh tool was not.
+    /// The studio has never measured that tool's exact label, so a miss has to
+    /// be diagnosable — the same posture as `create_houdini_project` reporting
+    /// every DazToHue node type hython could see.
+    pub available_tools: Vec<String>,
+    /// Where the pre-refresh state was backed up (empty for a dry run, and for
+    /// a project the tool left unchanged).
+    pub backup_path: String,
+}
+
 /// What the `defaults` operation did (or would do) to one project's `$JOB`.
 ///
 /// `$JOB` decides whether Houdini's file picker can collapse a chosen path to a
@@ -310,7 +340,7 @@ pub struct MaterialTransferTarget {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MaterialUtilReport {
-    /// `scan`, `transfer`, `defaults`, `repath` or `prefill`.
+    /// `scan`, `transfer`, `defaults`, `repath`, `prefill` or `refresh`.
     pub op: String,
     /// false = the operation itself failed (bad request, source node missing);
     /// per-project and per-target failures are reported in their own `ok`.
@@ -326,6 +356,8 @@ pub struct MaterialUtilReport {
     pub repath: Vec<RepathResult>,
     /// Populated by `prefill` — one entry per project it was asked about.
     pub prefill: Vec<PrefillResult>,
+    /// Populated by `refresh` — one entry per project it was asked about.
+    pub refresh: Vec<HoudiniRefreshResult>,
     pub source_bakers: u32,
     pub source_layers: u32,
     pub source_baker_names: Vec<String>,
