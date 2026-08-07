@@ -56,11 +56,13 @@ keeping their current values.
    folder holding several versions; then pick the **active** one in the
    dropdown. A release added later must be selected (and installed) yourself —
    the selection never changes on its own.
-2. **My DAZ 3D Library** — your Daz content library (where Daz Studio loads
-   content from, e.g. `…\Documents\DAZ 3D\Studio\My Library`). Already filled if
-   you activated a Daz installation above. Press **Install** below it to copy
-   the release's Daz content into the library; **Dry run** previews what would
-   be copied.
+2. **Where it installs** — your Daz content library. With an installation
+   activated above there is no field here at all: the line above the buttons
+   names the destination it derives. Press **Install** to copy the release's Daz
+   content into the library; **Dry run** previews what would be copied.
+
+   Without an activated installation this is a **My DAZ 3D Library** field you
+   fill in yourself (e.g. `…\Documents\DAZ 3D\Studio\My Library`).
 3. **Houdini documents folder** *(optional)* — your Houdini user folder
    (e.g. `…\Documents\houdini20.5`). Press its **Install** to merge the
    release's Houdini assets (otls, presets, toolbar) into it. Skip this if
@@ -83,10 +85,10 @@ automatic direct export.
      <sub><em>Point it at the extracted DTH Exporter Plugin download.</em></sub>
    </p>
 
-2. **Daz Studio install folder** — where Daz Studio itself is installed
-   (e.g. `C:\Program Files\DAZ 3D\DAZStudio4`). Already filled if you activated
-   a Daz installation above, and it is the card you activated that decides
-   *which* Daz Studio the plugin installs into.
+2. **Which Daz Studio it installs into** — the card you activated decides, and
+   the line above the buttons names the folder. Without an activated
+   installation, a **Daz Studio install folder** field is there for you to fill
+   in (e.g. `C:\Program Files\DAZ 3D\DAZStudio4`).
 3. Press **Install**. Daz Studio usually sits in an admin-protected folder on
    `C:` — the app tells you when that's the case: close Daz, then reopen
    DTH Character Studio as administrator and install again.
