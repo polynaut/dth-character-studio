@@ -749,7 +749,10 @@ async function migrateCharacterInternals(
  */
 async function migrateRomAnimationFolders(character: Character): Promise<void> {
   if (!isTauri()) return
+  // The distinct scene DIRECTORIES first — several scenes routinely share one,
+  // and this pass is per folder, not per scene.
   const seen = new Set<string>()
+  const dirs: Array<string> = []
   for (const scene of [character.scenePath, ...character.extraScenes]) {
     const norm = scene.trim().replace(/\\/g, '/')
     const slash = norm.lastIndexOf('/')
@@ -757,16 +760,25 @@ async function migrateRomAnimationFolders(character: Character): Promise<void> {
     const dir = norm.slice(0, slash)
     if (!dir || seen.has(dir.toLowerCase())) continue
     seen.add(dir.toLowerCase())
-    try {
-      const from = `${dir}/${LEGACY_ROM_ANIMATIONS_FOLDER}`
-      const to = `${dir}/${ROM_ANIMATIONS_FOLDER}`
-      if (!(await exists(from))) continue
-      if (await exists(to)) continue
-      await rename(from, to)
-    } catch {
-      // a locked / in-use folder just keeps the old name until the next run
-    }
+    dirs.push(dir)
   }
+  // Independent folders — renamed concurrently, each failing on its own, the
+  // same shape as `relocateCharacterInternals` above. Done in sequence this was
+  // up to three round trips PER scene folder, on every generation, and the
+  // folders it walks sit on whatever share the character does.
+  await Promise.all(
+    dirs.map(async (dir) => {
+      try {
+        const from = `${dir}/${LEGACY_ROM_ANIMATIONS_FOLDER}`
+        const to = `${dir}/${ROM_ANIMATIONS_FOLDER}`
+        if (!(await exists(from))) return
+        if (await exists(to)) return
+        await rename(from, to)
+      } catch {
+        // a locked / in-use folder just keeps the old name until the next run
+      }
+    }),
+  )
 }
 
 /**
