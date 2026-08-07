@@ -1,0 +1,196 @@
+import { AlertTriangle, Check, Loader2, RefreshCw, Pencil } from 'lucide-react'
+
+import { Button, InfoPopup } from '@dth/ui'
+import { PathCode } from '#/components/path-code.tsx'
+import { displayPath } from '#/lib/path.ts'
+import dazLogo from '#/assets/daz-logo.png'
+
+import type { DazInstallScan, DerivedDazPaths } from '#/lib/daz-install.ts'
+
+/**
+ * The Daz installation, picked once instead of typed three times.
+ *
+ * Everything the studio needs about Daz — the content library, the Studio
+ * install folder, the DIM manifest database — is already recorded by the DAZ
+ * Install Manager. This section reads it (`lib/daz-install.ts`), shows each
+ * installed Daz Studio as a card, and DERIVES the three paths from whichever
+ * one the user activates. Activating writes them straight to disk: the paths
+ * are a consequence of the choice, so there is nothing left to "save".
+ *
+ * The read-only display is the point — a derived value you can edit is a value
+ * that silently disagrees with what it was derived from. The escape hatch is
+ * explicit instead: **Set the paths manually** deactivates the installation and
+ * hands the three fields back, for the machine DIM doesn't describe (a portable
+ * install, a library on a share, no DIM at all).
+ */
+export function DazInstallSection({
+  scan,
+  loading,
+  activeKey,
+  derived,
+  busyKey,
+  recommendedKey,
+  onRescan,
+  onActivate,
+  onSetManually,
+}: {
+  scan: DazInstallScan | null
+  loading: boolean
+  /** The activated installation's key, '' when the paths are the user's own. */
+  activeKey: string
+  /** What the active installation currently resolves to — the read-only list. */
+  derived: DerivedDazPaths | null
+  /** The card mid-activation, '' when idle. */
+  busyKey: string
+  /** The one to suggest while nothing is active — newest Studio present. */
+  recommendedKey: string
+  onRescan: () => void
+  onActivate: (key: string) => void
+  onSetManually: () => void
+}) {
+  const apps = scan?.apps ?? []
+  // A stored installation this machine no longer has. Never silently swapped
+  // for another: the paths on disk still point at the old one, and only the
+  // user can say whether that is a reinstall or the wrong machine.
+  const activeMissing = activeKey !== '' && !apps.some((app) => app.key === activeKey)
+
+  // A plain div, not a <section>: the Settings route wraps this in the card
+  // <section> every other block on that page uses, and nesting two would make
+  // "the Daz installation card" ambiguous to anything selecting by section.
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        {/* An h2 like every other card on this page — the section headings are
+            what the page (and the guide's screenshots) navigate by. */}
+        <h2 className="flex items-center gap-1 font-semibold">
+          Daz installation
+          <InfoPopup label="Daz installation — more information">
+            The DAZ Install Manager already knows where your Daz Studio, your content library
+            and its product database live — it writes them to{' '}
+            <span className="font-mono">%APPDATA%\DAZ 3D</span>. Activating an installation here
+            reads those and fills the three paths below, so there is nothing to type and nothing
+            to keep in step. They stay read-only while an installation is active; use{' '}
+            <strong>Set the paths manually</strong> for a machine DIM doesn&apos;t describe.
+          </InfoPopup>
+        </h2>
+        {scan?.account ? (
+          <span className="text-xs text-muted-foreground">DIM account: {scan.account}</span>
+        ) : null}
+        <Button variant="ghost" size="sm" disabled={loading} onClick={onRescan}>
+          <RefreshCw className={loading ? 'animate-spin' : ''} /> Rescan
+        </Button>
+      </div>
+
+      {loading ? (
+        <p className="flex items-center gap-2 rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" /> Reading the DAZ Install Manager…
+        </p>
+      ) : apps.length === 0 ? (
+        <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+          {scan?.dimFound
+            ? 'The DAZ Install Manager is here, but lists no installed Daz Studio. Set the paths below yourself.'
+            : 'No DAZ Install Manager settings found on this machine — set the paths below yourself.'}
+        </p>
+      ) : (
+        <div className="flex flex-wrap gap-3">
+          {apps.map((app) => {
+            const active = app.key === activeKey
+            return (
+              <button
+                key={app.key}
+                type="button"
+                // A missing folder is shown and refused, rather than hidden: the
+                // user is far better placed than the studio to know whether it
+                // was uninstalled or is on a drive that isn't mounted today.
+                disabled={!app.exists || busyKey !== ''}
+                onClick={() => onActivate(app.key)}
+                className={`flex min-w-[16rem] flex-1 items-start gap-3 rounded-lg border p-3 text-left transition-colors ${
+                  active
+                    ? 'border-primary bg-primary/10'
+                    : app.exists
+                      ? 'hover:bg-accent/50'
+                      : 'cursor-not-allowed opacity-60'
+                }`}
+              >
+                <img src={dazLogo} alt="" aria-hidden className="size-8 shrink-0 object-contain" />
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2">
+                    <span className="font-medium">{app.name}</span>
+                    {active ? (
+                      <span className="flex items-center gap-1 text-xs font-medium text-primary">
+                        <Check className="size-3.5" /> Active
+                      </span>
+                    ) : activeKey === '' && app.key === recommendedKey ? (
+                      <span className="text-xs text-muted-foreground">recommended</span>
+                    ) : null}
+                  </span>
+                  <span
+                    className="mt-0.5 block truncate text-xs text-muted-foreground"
+                    title={app.path}
+                  >
+                    {displayPath(app.path)}
+                  </span>
+                  {!app.exists && (
+                    <span className="mt-1 flex items-center gap-1 text-xs text-amber-500">
+                      <AlertTriangle className="size-3 shrink-0" /> folder not found
+                    </span>
+                  )}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {activeMissing && (
+        <p className="flex items-start gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-sm text-amber-500">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+          <span>
+            The installation these paths came from isn&apos;t on this machine any more. They are
+            still set to what it had — activate one above, or set them manually.
+          </span>
+        </p>
+      )}
+
+      {activeKey !== '' && derived && (
+        <div className="rounded-md border p-3">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-medium">Paths from this installation</p>
+            <Button variant="ghost" size="sm" onClick={onSetManually}>
+              <Pencil /> Set the paths manually
+            </Button>
+          </div>
+          <dl className="space-y-1.5 text-xs">
+            <DerivedPath label="My DAZ 3D Library" value={derived.dazLibraryFolder} />
+            <DerivedPath label="Daz Studio install folder" value={derived.dazInstallFolder} />
+            <DerivedPath label="DIM product database" value={derived.dimManifestsFolder} />
+            {/* Reported, never applied: the download folder is a fine ASSET
+                SOURCE, but that list is the user's own curation (Tools → Daz
+                assets) and rewriting it from here would be the exact surprise
+                this section exists to remove. */}
+            {scan?.paths.downloads ? (
+              <DerivedPath label="DIM downloads" value={scan.paths.downloads} note="not used automatically" />
+            ) : null}
+          </dl>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** One read-only derived path — or a named reason it is empty. */
+function DerivedPath({ label, value, note }: { label: string; value: string; note?: string }) {
+  return (
+    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+      <dt className="w-44 shrink-0 text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 flex-1">
+        {value ? (
+          <PathCode path={displayPath(value)} />
+        ) : (
+          <span className="text-amber-500">the DAZ Install Manager has no value for this</span>
+        )}
+        {note && value ? <span className="ml-2 text-muted-foreground">· {note}</span> : null}
+      </dd>
+    </div>
+  )
+}

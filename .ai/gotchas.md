@@ -56,6 +56,29 @@ current code before relying on details, but assume the *lesson* still holds.
 
 ## Daz Studio integration (measured behavior)
 
+- **The DAZ Install Manager already knows every Daz path, and stores them at a
+  FIXED location — never search the disk for DIM.** Measured on DIM 1.4.1.96
+  (2026-08-07), three plain INI files under `%APPDATA%/DAZ 3D`
+  (`configDir()` in Tauri; `BaseDirectory.Config = 3`), independent of where DIM
+  itself was installed:
+  - `dzInstall.ini` → `[General] InstalledApplications` (space-separated keys)
+    + `[ApplicationPath] dzStudio6InstallDir-64=C:/Program Files/DAZ 3D/DAZStudio6`.
+    This is how the studio tells DS4 from DS6 without probing Program Files.
+  - `InstallManager/Settings/AppSettings.ini` → `CurrentUser`, which NAMES the
+    next file. It is the account TITLE, not the literal "Account".
+  - `InstallManager/UserAccounts/<CurrentUser>.ini` → `CurInstallPath` (the
+    library), `OverrideManifestDir`, `DownloadPath`, `Software64Path`, and
+    `[InstallPaths]` as a Qt list (`size=N`, `<i>\InstallPath`).
+  Three traps, each paid for: (1) **`Override*` keys only exist once the user
+  changed them** — absence is the DEFAULT install, whose manifests live under
+  Public Documents, so absence must not read as "not configured"; (2) a second
+  section (`[ApplicationTags]`) carries its own `size=`, so a section-blind INI
+  parse reads 37 content libraries; (3) **the account INI holds the user's
+  credentials** (`Account=<256 hex>` next to `RememberPassword=true`), which is
+  why `parseDimAccountIni` is a named whitelist and has a test asserting the
+  blob never escapes. Parsing lives in `apps/web/src/lib/daz-install.ts` (pure,
+  unit-tested), the file-finding in `lib/rom/api/daz-install.ts`. DIM keeps
+  listing an app it has uninstalled, so every card is checked against the disk.
 - **The DS6 Constant-keyframe workaround is dead — don't reintroduce it.** Runtime
   v17 stamped every ROM key CONSTANT on DS6 (a workaround for DS6 drifting Linear
   ROM keys). Rolled back in runtime v35: it didn't actually fix the drift and

@@ -33,7 +33,11 @@ the project's `.dcsp`). With it on:
 
 ## Set the DIM manifests folder (for names, SKUs, artists)
 
-At the bottom of the same **Settings → Project** tab, set the
+**Usually already done.** Activating a Daz installation in
+[Settings → General](./02-setup.md#daz-installation--pick-it-once) fills this
+from DIM's own settings, and it then shows read-only there.
+
+Otherwise, at the bottom of the **Settings → Project** tab, set the
 **DAZ Install Manager manifests folder** — the
 `ManifestFiles` folder DIM writes (a folder of `.dsx` files; see DIM → Advanced
 Settings → "Download/Install"). The scan reads it to resolve used assets to real
