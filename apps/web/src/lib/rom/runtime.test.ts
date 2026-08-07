@@ -54,7 +54,7 @@ const RUNTIME_ASSETS = [
 
 // Bump this together with RUNTIME_VERSION whenever a runtime file legitimately
 // changes (this run prints the new value in the failure message).
-const EXPECTED_RUNTIME_HASH = '3f90cdf189c9aa70efddc651891b529db552cf66febdd72fb2f18bab0e4ba8d1'
+const EXPECTED_RUNTIME_HASH = '71c68b161b9b4d91b37a5feeff1a95f2e3462715506877981c6f53b96de62c05'
 
 function runtimeHash(): string {
   const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
@@ -895,6 +895,21 @@ describe('kill animation (DthKillAnimation.dsa)', () => {
     expect(kill.dthKillAnimSummary({ cleared: 0, keys: 0, frames: 0 })).toContain(
       'already empty',
     )
+  })
+
+  it('an all-failed run does NOT borrow the "already empty" wording', () => {
+    // cleared 0 with failures means the scene is still animated — the real run
+    // subtracts failed properties from cleared/keys, so this is exactly the
+    // report an all-failed run hands in. "Already empty" here would tell the
+    // user a still-animated scene is clean.
+    const summary = kill.dthKillAnimSummary({
+      cleared: 0,
+      keys: 0,
+      frames: 88,
+      failed: ['Genesis9:/Hip/YRotate'],
+    })
+    expect(summary).toContain('kept its keys')
+    expect(summary).not.toContain('already empty')
   })
 
   it('singularises what it removed, because the report is the only receipt', () => {

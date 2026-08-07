@@ -32,6 +32,16 @@ include(dir_self.filePath(".DthKillAnimation.dsa"));
 	var oFound = DthKillAnimation({ dryRun: true });
 
 	if (oFound.cleared == 0) {
+		// cleared 0 with a failure is NOT an empty timeline - the dry pass
+		// could not read the scene (e.g. its time step). Saying "already
+		// empty" there would tell the user a still-animated scene is clean.
+		if (oFound.failed.length > 0) {
+			MessageBox.information(
+				"Could not read this scene's timeline (" + oFound.failed[0] + ").\n\n"
+				+ "Nothing was changed.",
+				"Kill animation", "&OK");
+			return;
+		}
 		MessageBox.information(
 			"No animation in this scene - the timeline is already empty.\n\n"
 			+ "Nothing was changed.",

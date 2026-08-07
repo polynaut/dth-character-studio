@@ -1417,7 +1417,11 @@ export const CHARACTER_SCHEMA_VERSION = 30
  *       shows the tab). Projects with the toggle off therefore emit the scan
  *       config and the `Scan_Products_<Name>.dsa` for the first time, so the
  *       generated content changed and every character must regenerate.
- * v61 — a new VISIBLE script joins the Content Library: `Kill_Animation.dsa`
+ * v61 — TAKEN by the release train's product-scan hardening (PR #739: the CSV
+ *       writer's closing `end` row). Numbered there first; this branch skips
+ *       to 62 so the two can merge in either order without a dev install
+ *       stamped v61 by one build silently skipping the other's files.
+ * v62 — a new VISIBLE script joins the Content Library: `Kill_Animation.dsa`
  *       (+ its `DthKillAnimation.dsa` runtime and its artwork). It strips every
  *       key off the open scene and puts the timeline back to a default 0-30, so
  *       an old scene that survives only as its full ROM animation can be
@@ -1427,7 +1431,7 @@ export const CHARACTER_SCHEMA_VERSION = 30
  *       whole install while the marker matches, so without it no existing
  *       library would ever see the file.
  */
-export const RUNTIME_VERSION = 61
+export const RUNTIME_VERSION = 62
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

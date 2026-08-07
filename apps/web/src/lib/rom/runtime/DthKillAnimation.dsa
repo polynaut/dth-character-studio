@@ -28,9 +28,12 @@
 // is expected to confirm first (Kill_Animation.dsa does), and the scene is NOT
 // saved - the user decides that with Save As.
 //
-// UNVERIFIED against a real Daz Studio as shipped (2026-08-07): written against
-// the same APIs the rest of this runtime uses, but never run. Every Daz call is
-// wrapped so a wrong assumption surfaces as a reported failure rather than a
+// VERIFIED live in Daz Studio (2026-08-07, first run on a real old ROM scene):
+// the scene came back character-only with a 0-30 timeline and passed the
+// add-scene check (see .ai/gotchas.md). One thing that run does NOT settle:
+// whether `deleteAllKeys()` or the per-key fallback did the deleting - the PAIR
+// is verified, not either route alone, so both stay. Every Daz call is wrapped
+// so a wrong assumption surfaces as a reported failure rather than a
 // half-cleared scene, and the run VERIFIES itself - a property whose keys are
 // still there afterwards is counted as failed and named.
 //
@@ -72,16 +75,25 @@ function dthKillAnimFrameSpan(aKeyTimes, timeStep){
 /**
  * The one-line verdict for a finished run - what the wrapper puts in its dialog.
  *
- * Pure so the wording is testable: the three outcomes read very differently to a
+ * Pure so the wording is testable: the outcomes read very differently to a
  * user ("there was nothing to do" is not a success message), and getting that
  * wrong is how a destructive tool starts looking like it did nothing.
+ *
+ * `cleared`/`keys` are what was actually REMOVED (a real run subtracts the
+ * properties that kept their keys - see the failure branch in
+ * DthKillAnimation), so "removed" here never claims a failed property. A run
+ * that removed nothing BECAUSE everything failed says so, rather than
+ * borrowing the "already empty" wording for a scene that is still animated.
  */
 function dthKillAnimSummary(oReport){
 	var iCleared = oReport.cleared || 0;
 	var iKeys = oReport.keys || 0;
 	var iFrames = oReport.frames || 0;
+	var iFailed = (oReport.failed || []).length;
 	if (iCleared == 0) {
-		return "No animation found - this scene's timeline was already empty.";
+		return iFailed > 0
+			? "Nothing could be removed - every animated property kept its keys."
+			: "No animation found - this scene's timeline was already empty.";
 	}
 	return "Removed " + iKeys + " key" + (iKeys == 1 ? "" : "s")
 		+ " from " + iCleared + " propert" + (iCleared == 1 ? "y" : "ies")
@@ -222,6 +234,12 @@ function DthKillAnimation(options){
 					|| dthKillAnimSafe(function(){ return String(oProp.getLabel()); }, "(unnamed)");
 				print("DTH kill animation: FAILED to clear keys on", sName);
 				oReport.failed.push(sName);
+				// The receipt counts what was REMOVED: a property that kept its
+				// keys must not appear in "removed N keys from C properties" -
+				// it is named in `failed` instead. (A dry run never gets here,
+				// so its counts stay "what a real run would remove".)
+				oReport.cleared--;
+				oReport.keys -= aTimes.length;
 				continue;
 			}
 			if (vKeep === null) continue;

@@ -1,5 +1,6 @@
 ---
 '@dth/web': minor
+'@dth/rom': minor
 ---
 
 New Daz script: **Kill_Animation** — rescue an old scene that is only a ROM
