@@ -1,5 +1,112 @@
 # @dth/desktop
 
+## 0.67.0
+
+### Minor Changes
+
+- [#724](https://github.com/polynaut/dth-character-studio/pull/724) [`0543470`](https://github.com/polynaut/dth-character-studio/commit/0543470a60fc36c9f8a8659efa451772721998bc) Thanks [@polynaut](https://github.com/polynaut)! - **Settings → General now finds your Daz installation instead of asking for it.**
+  Every Daz Studio the DAZ Install Manager has installed appears as a card at the
+  top of the tab. Click one and three paths are derived from it and saved
+  immediately — **My DAZ 3D Library**, the **Daz Studio install folder** and the
+  **DIM manifests folder** — then shown read-only underneath, because a derived
+  path you can edit is one that can quietly disagree with what produced it.
+
+  DIM records all of this in `%APPDATA%\DAZ 3D`, at a fixed location whatever
+  folder DIM itself lives in, so nothing is searched for and nothing is guessed.
+  The old manifests detection walked `<A..Z>:/DAZ 3D/Install Manager/ManifestFiles`
+  and took the first hit; it survives only as the last of three fallbacks.
+
+  With both Daz Studio 4 and 6 installed, both get a card and the newest is marked
+  _recommended_ — but nothing is activated until you click, so a first run still
+  starts with empty paths and adopts them the moment you choose. Only the install
+  folder follows the card; the library and product database belong to DIM, not to
+  one Studio version. **Set the paths manually** hands the three fields back with
+  their current values, for a machine DIM doesn't describe — and a machine with no
+  DIM at all keeps the editable fields it always had.
+
+- [#728](https://github.com/polynaut/dth-character-studio/pull/728) [`ab7cc1a`](https://github.com/polynaut/dth-character-studio/commit/ab7cc1aa83f64a9dd3e86acd2fa0ac9a36f2bbc3) Thanks [@polynaut](https://github.com/polynaut)! - **Settings → General now finds your Houdini too**, the same way it finds Daz.
+  SideFX registers every installed version, so each one gets a card — activating
+  one fills the **installation folder** and its matching
+  `houdini<major>.<minor>` **documents folder** together, and saves them.
+
+  Filling them together is the point rather than a convenience: the studio runs
+  `hython` with that documents folder as its preferences directory, and pointed at
+  another version's it loads the wrong DazToHue assets — or none — so every node
+  comes back as an unknown type. Pairing by hand is exactly how that goes wrong.
+
+  The newest install _with_ a documents folder is recommended: one whose folder
+  doesn't exist yet is still offered, with the missing folder named on its card
+  (Houdini creates it on first launch — start it once and press **Rescan**).
+  A `houdini<major>.<minor>` folder no installed version claims is reported below
+  the cards instead of dropped; it's usually left behind by an uninstall. Extra
+  Houdini documents folders stay yours to manage — that list exists so an older
+  Houdini can keep an older DTH release.
+
+- [#719](https://github.com/polynaut/dth-character-studio/pull/719) [`9076da4`](https://github.com/polynaut/dth-character-studio/commit/9076da496ff7eb28df6fe93b1459232db384e5da) Thanks [@polynaut](https://github.com/polynaut)! - Houdini Utils: **Defaults** is now **General**, and it leads. It is the tab the
+  drawer opens on — the one that answers "are these projects healthy?" without
+  needing a second project picked — and its checks were rebuilt as one row shape:
+  name on the left, verdict on the right, the value beneath. The `$JOB` essay
+  moved into the section's info popup, the three actions carry their own icons in
+  the order they must be run, and the footer states the whole tab's verdict rather
+  than only the `$JOB` repair's. Three stacked result panels are now one slot, so
+  a fresh run replaces the last answer instead of piling another report under it.
+
+  **Backups became a safety net instead of a status line.** Every run that writes
+  still takes one rolling `backup/<name>_dthbak.hiplc` first, but no report says
+  so any more — "· backup written" on every success only taught the eye to skip
+  the line. It surfaces exactly once, where it is worth something: a failed entry
+  now offers **Undo this run**, which puts that project back the way it was before
+  the run (a plain file copy — no Houdini round trip). A failed save carries its
+  backup into the report so the offer is there when it matters.
+
+- [#721](https://github.com/polynaut/dth-character-studio/pull/721) [`3382ce2`](https://github.com/polynaut/dth-character-studio/commit/3382ce20b0e4ba47be8c675a23e40388c736d086) Thanks [@polynaut](https://github.com/polynaut)! - Houdini Utils backups now last as long as the drawer. They are an undo buffer
+  for one sitting, not an archive — each is a full copy of the project (~8 MB for
+  a real `.hiplc`), one lands beside every project a run writes, and nothing else
+  in the studio would ever collect them.
+
+  Closing the drawer now lists the copies this session made and asks: **Remove**
+  clears them, **Keep them** doesn't, **Cancel** goes back. If a run failed and
+  hasn't been undone the prompt says so in amber — that copy is the only way back.
+  Only the studio's own `_dthbak` files are ever deleted; Houdini's own backups
+  sit in the same folder and are never touched, and a file Houdini is holding open
+  is reported as kept rather than silently counted as removed.
+
+### Patch Changes
+
+- [#726](https://github.com/polynaut/dth-character-studio/pull/726) [`73157f8`](https://github.com/polynaut/dth-character-studio/commit/73157f8f71a50ae4a982463669c7117d192228cf) Thanks [@polynaut](https://github.com/polynaut)! - The Daz installation cards now say what to do with them. They only changed on
+  hover, so two correctly-detected installations read as a status display and the
+  paths below stayed empty — the click that fills them was never asked for.
+
+  Each installation that isn't active now carries a visible **Activate** button,
+  and while none is active the section says so in a line: _"Pick the installation
+  your Daz paths should come from — they are filled in and saved the moment you
+  do."_
+
+- [#725](https://github.com/polynaut/dth-character-studio/pull/725) [`8216631`](https://github.com/polynaut/dth-character-studio/commit/8216631f24a49a773a7dce3ee5b09f466e96d07a) Thanks [@polynaut](https://github.com/polynaut)! - With a Daz installation activated, **Setup DTH Release** and **Setup DTH
+  Exporter Plugin** no longer repeat its paths. The library and Studio folder were
+  still echoed there read-only — the same values the Daz installation card already
+  lists, shown a second time where they could only ever agree, in the shape of a
+  field with nothing left to choose.
+
+  Each install now states its destination in one line above its buttons —
+  _"Installs into `D:/DAZ 3D/My DAZ 3D Library`, from the Daz installation
+  above"_ — which is the part that genuinely belongs next to a Dry run / Install.
+  Without an activated installation both sections keep the editable fields
+  unchanged.
+
+- [#727](https://github.com/polynaut/dth-character-studio/pull/727) [`1189f4c`](https://github.com/polynaut/dth-character-studio/commit/1189f4c570cdb158ba665b70547baca418557e01) Thanks [@polynaut](https://github.com/polynaut)! - Settings → Project: **Houdini path style** moves to the bottom of the tab, and
+  the **DAZ Install Manager manifests folder** moves up under the **Enable Daz
+  Products** toggle it belongs to. The manifests folder is what that scan resolves
+  product names from, so the two now read as one setting instead of being split by
+  an unrelated dropdown — and the path style, the only setting on the tab that
+  changes what generation _writes_, sits last behind its own rule.
+
+- [#723](https://github.com/polynaut/dth-character-studio/pull/723) [`006962b`](https://github.com/polynaut/dth-character-studio/commit/006962b3654c8c57d8d95705856ac46fd07f5cbf) Thanks [@polynaut](https://github.com/polynaut)! - Internal: the 36 event handlers that handed a promise to a prop typed
+  `() => void` now say `void` out loud. Every sink was checked first — React's
+  `onClick`, `BulkDeleteDialog.onConfirm`, `useFileDrop.onDrop`, the Tools section
+  props, `setTimeout` — and none of them awaits, so each edit is runtime-identical
+  and the discard is now visible instead of implied. No behaviour change.
+
 ## 0.66.0
 
 ### Minor Changes
