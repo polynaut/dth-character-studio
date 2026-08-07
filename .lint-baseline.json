@@ -1,8 +1,6 @@
 {
-  "oxc/no-map-spread": 9,
   "eslint/no-await-in-loop": 134,
-  "eslint/no-underscore-dangle": 43,
+  "oxc/no-map-spread": 9,
   "react/no-unstable-nested-components": 24,
-  "import/no-unassigned-import": 2,
   "typescript/no-misused-promises": 36
 }

@@ -31,13 +31,36 @@
     // high-count INTENTIONAL patterns (see the note in
     // validate-pull-request.yml) — they stay advisory warnings on purpose:
     // sequential awaits are deliberate fs ordering, the react-markdown
-    // component maps are nested by design, the __TAURI_*/__tauriMock globals
-    // are the Tauri contract, and the map-spreads keep records immutable.
+    // component maps are nested by design, and the map-spreads keep records
+    // immutable.
     "no-await-in-loop": "warn",
     "oxc/no-map-spread": "warn",
     "react/no-unstable-nested-components": "warn",
-    "no-underscore-dangle": "warn",
-    "import/no-unassigned-import": "warn"
+
+    // A stylesheet import has nothing to assign — that IS the import. Both hits
+    // were `main.tsx`'s CSS entry points, so the rule keeps its teeth for an
+    // unassigned JS import (which really is usually a leftover).
+    "import/no-unassigned-import": ["warn", { "allow": ["**/*.css"] }],
+
+    // Named, not baselined. Every dangling-underscore hit in this repo was one
+    // of five globals the code does not get to rename — two are Tauri's own,
+    // three are the deliberate test/debug contract between the app and the
+    // Playwright fake — so the rule was reporting vocabulary it hadn't been
+    // told, not a style problem. Listing them puts the judgement here (where a
+    // SIXTH name still has to argue for itself) instead of in a baseline count
+    // that silently absorbs the next one.
+    "no-underscore-dangle": [
+      "warn",
+      {
+        "allow": [
+          "__TAURI_INTERNALS__",
+          "__TAURI_EVENT_PLUGIN_INTERNALS__",
+          "__tauriMock",
+          "__dthHideDevtools",
+          "__dthToast"
+        ]
+      }
+    ]
   },
   "overrides": [
     {

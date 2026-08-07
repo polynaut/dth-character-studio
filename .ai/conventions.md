@@ -134,6 +134,15 @@ GH_REPO=polynaut/dth-character-studio \
   with the named intentionally-tolerated rules pinned back to `warn` (each with
   an explanatory comment) — documented patterns stay advisory while everything
   else in the category gates. Don't weaken a category to warn to admit one rule.
+  **Before paying a warning off with a baseline bump, ask whether the rule is
+  missing VOCABULARY rather than finding debt.** Two of the six baselined rules
+  were that: every `no-underscore-dangle` hit was one of five globals the code
+  cannot rename (`__TAURI_INTERNALS__`, `__tauriMock`, …) and both
+  `no-unassigned-import` hits were `main.tsx`'s CSS entry points. Naming them in
+  the rule's `allow` removed 45 warnings and left the judgement where the next
+  reader will see it — a SIXTH global now has to argue for itself, which a
+  baseline count would have silently absorbed. Bump the count only for a rule
+  whose instances are genuinely a pattern you keep choosing.
 - **Routing is file-based** (TanStack Router). `routeTree.gen.ts` is generated —
   run `pnpm generate-routes` after adding/removing a route FILE (not needed for
   tabs inside an existing route).
