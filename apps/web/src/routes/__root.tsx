@@ -17,7 +17,6 @@ import { trackNavOrigin } from '#/lib/nav-origin.ts'
 import { onMenu, openExternal } from '#/lib/desktop.ts'
 import { ConfirmProvider } from '#/lib/use-confirm.tsx'
 import { UpdatePromptHost } from '#/components/update-prompt.tsx'
-import { NewScenesPrompt } from '#/components/new-scenes-prompt.tsx'
 import { Button, TooltipHost, UiConfigProvider, installAltMenuGuard } from '@dth/ui'
 
 import type { ErrorComponentProps } from '@tanstack/react-router'
@@ -138,10 +137,6 @@ function RootComponent() {
     <UiConfigProvider value={{ onNavigate, onOpenExternal, onError }}>
       <ConfirmProvider>
         <Outlet />
-        {/* Mounted at the ROOT, not on a page: a scene saved out of Daz should
-            be noticed wherever the user happens to come back to. It no-ops in a
-            window with no project (Home) and outside the desktop app. */}
-        <NewScenesPrompt />
       </ConfirmProvider>
       {/* Dark severity toasts: app-surface card, a colored accent bar on the
           left edge (with a soft glow of the same hue, via --glow), a solid

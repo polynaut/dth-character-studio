@@ -99,10 +99,6 @@ export interface TauriMockState {
 export function installTauriMock(seed: TauriMockSeed): void {
   const files = new Map(Object.entries(seed.files))
   const extraDirs = new Set<string>()
-  /** Every file's mtime in the fake world — see `statOf`. Stable per page so an
-   *  mtime-keyed record can match itself, and stamped from the REAL clock so
-   *  age-based sweeps still see the world as fresh. */
-  const FAKE_MTIME_MS = Date.now()
   const calls: Array<{ cmd: string; args: unknown }> = []
   const unhandled: Array<string> = []
   // The single object both the command switch and the spec hold — mutating
@@ -192,13 +188,7 @@ export function installTauriMock(seed: TauriMockSeed): void {
   const statOf = (p: string) => {
     if (!isFile(p) && !isDir(p)) throw new Error(`[tauri-mock] no such path: ${p}`)
     const file = isFile(p)
-    // STAMPED ONCE (see FAKE_MTIME_MS), not per call. A fresh `Date.now()` on
-    // every stat is not filesystem behaviour: an unchanged file keeps its mtime,
-    // and anything mtime-KEYED — a cache entry, a "you already declined this
-    // version" record — could never match itself on a second read. Not a fixed
-    // date in the past either: age-based housekeeping compares against the real
-    // clock and would sweep the world's own files out from under it.
-    const now = FAKE_MTIME_MS
+    const now = Date.now()
     return {
       isFile: file,
       isDirectory: !file,

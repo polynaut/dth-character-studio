@@ -17,25 +17,6 @@ themed variants. Instead of duplicating the character, link every scene to the
 one definition: the ROM stays shared, and the per-scene bits (hair, overrides)
 attach to their scene.
 
-### The studio notices a scene you just saved
-
-You do not have to come back and remember. **Save As** a new `.duf` into a
-character's scenes folder, switch back to the studio, and it says so: a prompt
-lists what it found and which character's folder it landed in. **Add** takes you
-to that character and opens the ordinary Add-scene dialog on the file — same
-checks, same copy-vs-link decision as if you had browsed for it yourself.
-
-It only looks when you **return to the window**, never on launch, and it stays
-quiet about anything already linked and about the ROM animations the studio
-generates itself. **Not now** stops it asking about those files — until you save
-over one in Daz, which brings the offer back, because a file you have just
-re-saved is exactly the one you might have fixed.
-
-> This is what makes the
-> [`Kill_Animation`](./05-rom-in-daz.md#rescuing-an-old-scene-that-is-only-a-rom-animation)
-> recovery a straight line: clean the old scene, Save As into the character
-> folder, switch to the studio, and the offer is already waiting.
-
 **Add scene** (or dropping a `.duf` on the cards) links another scene. It's
 validated first — same Genesis generation, one character, empty timeline, and
 the **same GP/DK geograft as the primary**, so every scene produces the

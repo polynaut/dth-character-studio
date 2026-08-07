@@ -21,11 +21,6 @@ const primaryTag = <PrimaryBadge dense />
 export interface SceneDockActions {
   /** Pick + link another Daz scene (same flow as the up-page "Add scene"). */
   add: () => void
-  /** The same add flow for a scene the studio ALREADY has a path for — the
-   *  new-scene prompt's route in, skipping the file picker it would otherwise
-   *  open on a file the user just saved. Validation is unchanged: it lands in
-   *  the same dialog, with the same checks and the same "Add anyway" escape. */
-  addPath: (scenePath: string) => void
   /** Open a scene in Daz (plain click) or reveal it in Explorer (Alt+click) — the
    *  field's onOpen owns the "Daz already running" warning. */
   open: (scenePath: string, e: ReactMouseEvent) => void

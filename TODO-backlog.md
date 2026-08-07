@@ -122,6 +122,14 @@ actually executed.
 ### Daz integration
 
 
+**C13. Auto-detect newly saved Daz scenes**
+
+```text
+When the user keeps working on a Daz scene (outfit) and saves it as a NEW file into the
+character's Daz folder, the studio should auto-detect the new file when it regains
+focus and offer the "add scene to character" dialog for it.
+```
+
 **C14. Skip Export_Hair for identical hair**
 
 ```text
