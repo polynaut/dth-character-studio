@@ -8,6 +8,7 @@ import { FormHeader } from '#/components/form-header.tsx'
 import {
   detectDazInstalls,
   detectDimManifestsFolder,
+  detectHoudiniInstalls,
   fetchActiveProject,
   fetchAppDataFolder,
   fetchPoseAssets,
@@ -35,6 +36,8 @@ import { PathCode } from '#/components/path-code.tsx'
 import { FolderField, InstallReportList } from '#/components/install-controls.tsx'
 import { DazInstallSection } from '#/components/settings/daz-install-section.tsx'
 import { defaultDazApp, deriveDazPaths } from '#/lib/daz-install.ts'
+import { HoudiniInstallSection } from '#/components/settings/houdini-install-section.tsx'
+import { defaultHoudiniInstall, deriveHoudiniPaths } from '#/lib/houdini-install.ts'
 import { HousekeepingSection } from '#/components/settings/housekeeping-section.tsx'
 import { NetworkDrivesSection } from '#/components/settings/network-drives-section.tsx'
 import {
@@ -49,6 +52,7 @@ import type {
 } from '#/components/settings/release-pickers.tsx'
 import type { InstallReport, RunnerStatus } from '#/lib/rom/api.ts'
 import type { DazInstallScan } from '#/lib/daz-install.ts'
+import type { HoudiniInstallScan } from '#/lib/houdini-install.ts'
 
 export const Route = createFileRoute('/settings')({
   // Settings is reachable from several places; an optional `from` label lets the
@@ -307,6 +311,70 @@ function SettingsPage() {
 
   /** true = the paths below are derived, so they are shown read-only. */
   const dazDerived = settings.dazInstallKey !== ''
+
+  // --- the Houdini versions SideFX registered -------------------------------
+  const [houdiniScan, setHoudiniScan] = useState<HoudiniInstallScan | null>(null)
+  const [houdiniScanning, setHoudiniScanning] = useState(true)
+  const [activatingHoudini, setActivatingHoudini] = useState('')
+
+  const rescanHoudiniInstalls = useCallback(async () => {
+    setHoudiniScanning(true)
+    try {
+      setHoudiniScan(await detectHoudiniInstalls())
+    } catch {
+      setHoudiniScan(null)
+    } finally {
+      setHoudiniScanning(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void rescanHoudiniInstalls()
+  }, [rescanHoudiniInstalls])
+
+  /** Activate one Houdini: install folder + its paired documents folder, saved
+   *  on the spot — same contract as the Daz side. */
+  async function onActivateHoudini(version: string) {
+    if (!houdiniScan) return
+    const derived = deriveHoudiniPaths(houdiniScan, version)
+    if (!derived) return
+    setActivatingHoudini(version)
+    const next = { ...settings, ...derived, houdiniInstallKey: version }
+    try {
+      await saveSettings({ data: { settings: next, baseline: initial } })
+      setSettings(next)
+      await router.invalidate()
+      const install = houdiniScan.installs.find((candidate) => candidate.version === version)
+      toast.success(
+        `${install?.name ?? 'Houdini'} activated.` +
+          // Named rather than silently empty: without a prefs folder hython
+          // loads no DazToHue otls, so this is the difference between a working
+          // Generate project and one that reports an empty scene.
+          (derived.houdiniDocsFolder
+            ? ''
+            : ' No documents folder found — start this Houdini once, or set it below.'),
+      )
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    } finally {
+      setActivatingHoudini('')
+    }
+  }
+
+  async function onSetHoudiniPathsManually() {
+    const next = { ...settings, houdiniInstallKey: '' }
+    try {
+      await saveSettings({ data: { settings: next, baseline: initial } })
+      setSettings(next)
+      await router.invalidate()
+      toast.success('The Houdini paths are yours to edit — they keep their current values.')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  /** true = the Houdini paths follow an activated installation. */
+  const houdiniDerived = settings.houdiniInstallKey !== ''
 
   async function onDetectDimFolder() {
     setDetectingDim(true)
@@ -765,6 +833,29 @@ function SettingsPage() {
           </section>
 
           <section className="space-y-4 rounded-lg border bg-card p-5">
+            <HoudiniInstallSection
+              scan={houdiniScan}
+              loading={houdiniScanning}
+              activeKey={settings.houdiniInstallKey}
+              derived={
+                houdiniDerived
+                  ? {
+                      houdiniInstallFolder: settings.houdiniInstallFolder,
+                      houdiniDocsFolder: settings.houdiniDocsFolder,
+                    }
+                  : null
+              }
+              busyKey={activatingHoudini}
+              recommendedKey={
+                houdiniScan ? (defaultHoudiniInstall(houdiniScan.installs)?.version ?? '') : ''
+              }
+              onRescan={() => void rescanHoudiniInstalls()}
+              onActivate={(version) => void onActivateHoudini(version)}
+              onSetManually={() => void onSetHoudiniPathsManually()}
+            />
+          </section>
+
+          <section className="space-y-4 rounded-lg border bg-card p-5">
             <div>
               <h2 className="font-semibold">Setup DTH Release</h2>
               <p className="mt-1 text-sm text-muted-foreground">
@@ -913,18 +1004,29 @@ function SettingsPage() {
             </div>
 
             <div className="border-t pt-4">
-              <FolderField
-                label="Houdini documents folder (optional)"
-                value={settings.houdiniDocsFolder}
-                placeholder="C:\Users\you\Documents\houdini20.5"
-                onChange={(value) => setSettings((s) => ({ ...s, houdiniDocsFolder: value }))}
-                help={
-                  <>
-                    Your Houdini user folder. The install merges the release's Houdini assets
-                    (otls/presets/toolbar) into it.
-                  </>
-                }
-              />
+              {/* Derived with the installation, and listed in its card — same
+                  rule as the Daz half: no second copy, just the destination. */}
+              {houdiniDerived ? (
+                <DerivedTarget
+                  value={settings.houdiniDocsFolder}
+                  missing="Houdini documents folder"
+                >
+                  The release&apos;s Houdini assets (otls/presets/toolbar) merge into it.
+                </DerivedTarget>
+              ) : (
+                <FolderField
+                  label="Houdini documents folder (optional)"
+                  value={settings.houdiniDocsFolder}
+                  placeholder="C:\Users\you\Documents\houdini20.5"
+                  onChange={(value) => setSettings((s) => ({ ...s, houdiniDocsFolder: value }))}
+                  help={
+                    <>
+                      Your Houdini user folder. The install merges the release's Houdini assets
+                      (otls/presets/toolbar) into it.
+                    </>
+                  }
+                />
+              )}
               {!canInstallHoudini && (
                 <p className="mt-2 text-sm text-muted-foreground">
                   Set {houdiniBlockers.join(', ')} to enable this install.
@@ -1077,19 +1179,29 @@ function SettingsPage() {
               </p>
             </div>
 
-            <FolderField
-              label="Houdini installation folder (optional)"
-              value={settings.houdiniInstallFolder}
-              placeholder="C:\Program Files\Side Effects Software\Houdini 22.0.368"
-              onChange={(value) => setSettings((s) => ({ ...s, houdiniInstallFolder: value }))}
-              help={
-                <>
-                  Where Houdini itself is installed — its <code>bin\hython.exe</code> creates the
-                  project. Must have a matching Houdini documents folder configured above
-                  (prefs are per version: <code>Houdini 22.0.x</code> ↔ <code>houdini22.0</code>).
-                </>
-              }
-            />
+            {houdiniDerived ? (
+              <DerivedTarget
+                value={settings.houdiniInstallFolder}
+                missing="Houdini installation folder"
+              >
+                Its <code>bin\hython.exe</code> creates the project.
+              </DerivedTarget>
+            ) : (
+              <FolderField
+                label="Houdini installation folder (optional)"
+                value={settings.houdiniInstallFolder}
+                placeholder="C:\Program Files\Side Effects Software\Houdini 22.0.368"
+                onChange={(value) => setSettings((s) => ({ ...s, houdiniInstallFolder: value }))}
+                help={
+                  <>
+                    Where Houdini itself is installed — its <code>bin\hython.exe</code> creates
+                    the project. Must have a matching Houdini documents folder configured above
+                    (prefs are per version: <code>Houdini 22.0.x</code> ↔{' '}
+                    <code>houdini22.0</code>).
+                  </>
+                }
+              />
+            )}
             {/* The install ↔ documents pairing is load-bearing: hython gets the
                 MATCHING docs folder as HOUDINI_USER_PREF_DIR — mismatched, the
                 DazToHue otls never load. Warn live; Generate refuses too. */}

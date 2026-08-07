@@ -44,6 +44,36 @@ the three paths stay ordinary editable fields, exactly as before. The same
 applies on purpose after activating: **Set the paths manually** hands them back,
 keeping their current values.
 
+## Houdini installation — same idea
+
+Directly below, and the same deal: SideFX registers every installed Houdini, so
+each one gets a card. Activating one fills **both** Houdini paths at once —
+the installation folder and the matching
+`houdini<major>.<minor>` documents folder.
+
+<p align="center">
+  <img width="900" alt="Houdini installation cards with the install and documents folders they derive" src="screenshots/settings-houdini-install.png" />
+  <br>
+  <sub><em>Houdini 22.0.368 activated — its installation folder and the matching <code>houdini22.0</code> documents folder, filled together.</em></sub>
+</p>
+
+**Filling them together is the point, not a convenience.** The studio runs
+Houdini's `hython` with that documents folder as its preferences directory;
+pointed at another version's, it loads the wrong DazToHue assets — or none — and
+every DazToHue node comes back as an unknown type. Pairing them by hand is
+exactly how that goes wrong, so the card does it for you.
+
+> **An install whose documents folder doesn't exist yet** is still offered, with
+> the missing folder named on the card. Houdini creates it on first launch, so
+> the usual fix is to start that Houdini once and press **Rescan**. The
+> *recommended* card skips it in the meantime.
+
+**Extra Houdini folders stay yours.** The list further down is untouched by
+activating — it exists so an older Houdini can keep an older DTH release, which
+is a decision about the *other* versions. A `houdini<major>.<minor>` folder with
+no installed Houdini behind it is reported below the cards rather than dropped;
+it's usually left over from an uninstall.
+
 ## Setup DTH Release
 
 <p align="center">

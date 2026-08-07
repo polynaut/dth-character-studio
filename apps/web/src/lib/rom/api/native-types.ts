@@ -115,6 +115,15 @@ export const dedupReportSchema = z.object({
 /** One measured `.duf` (mirrors Rust `PoseAssetFrames`). The measurement feeds
  *  the frame-alignment invariant, so its shape is guarded extra hard: parsed at
  *  the boundary here AND pinned by contracts/pose-asset-frames.json. */
+/** One Houdini install as `houdini_installs` reports it, straight out of
+ *  `HKLM\SOFTWARE\Side Effects Software\Houdini`. The four-part `version` is
+ *  the registry's value NAME; `path` is its data with the trailing separator
+ *  trimmed. Pairing it with a prefs folder happens in `lib/houdini-install.ts`. */
+export const houdiniInstallSchema = z.object({
+  version: z.string(),
+  path: z.string(),
+})
+
 export const poseAssetFramesSchema = z.object({
   path: z.string(),
   /** Frames the asset occupies (0 when it couldn't be measured — see `error`). */
