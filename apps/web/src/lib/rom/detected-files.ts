@@ -29,8 +29,17 @@ const HIP_EXT = /\.(hip|hipnc|hiplc)$/i
  *  walk that feeds {@link detectNewFiles} — pruning at walk time saves the IPC. */
 export function detectSkipDir(name: string): boolean {
   const dir = name.toLowerCase()
-  return dir === '.dcsmeta' || dir === 'dth-exports' || dir === 'rom-animations' || dir === 'backup'
+  return DETECT_SKIP_DIRS.includes(dir)
 }
+
+/** The same list the NATIVE walk is given (`scan_files_by_ext`), which prunes
+ *  before descending — reading a character's whole export tree only to discard
+ *  it is the expensive half of a sweep, and the sweep runs on every focus. */
+export const DETECT_SKIP_DIRS = ['.dcsmeta', 'dth-exports', 'rom-animations', 'backup']
+
+/** The extensions worth walking for, without the dot — what the native scan is
+ *  asked for. `.duf` scenes and every Houdini scene flavour. */
+export const DETECT_EXTS = ['duf', 'hip', 'hipnc', 'hiplc']
 
 export function detectNewFiles({
   relFiles,
@@ -66,6 +75,45 @@ export function detectNewFiles({
   scenes.sort()
   houdini.sort()
   return { scenes, houdini }
+}
+
+/**
+ * Split one whole-project file list among the characters that own the folders.
+ *
+ * The project-wide sweep walks the characters ROOT once (one native call rather
+ * than one per character), so every hit arrives root-relative and has to be
+ * handed back to a character before {@link detectNewFiles} can judge it.
+ *
+ * **Longest folder wins.** Character folders can nest — `charactersSubdir` is a
+ * plain root, and nothing stops `Kira/Variants/Kira Young/`. Matching shortest-
+ * first would let the outer character claim the inner one's scenes and offer
+ * them on the wrong page. A file under no character folder belongs to nobody
+ * and is dropped: the root can hold anything, and "somewhere in the project" is
+ * not something the wizard could link.
+ *
+ * Returns each owner's files as CHARACTER-folder-relative paths, in the order
+ * the owners were given.
+ */
+export function attributeToOwners(
+  relFiles: Array<string>,
+  owners: Array<{ id: string; relFolder: string }>,
+): Map<string, Array<string>> {
+  const ranked = owners
+    .map((owner) => ({ owner, prefix: `${normalizePathLower(owner.relFolder)}/` }))
+    .sort((a, b) => b.prefix.length - a.prefix.length)
+  const byOwner = new Map<string, Array<string>>()
+  for (const rel of relFiles) {
+    const lower = normalizePathLower(rel)
+    const hit = ranked.find((r) => r.prefix !== '/' && lower.startsWith(r.prefix))
+    if (!hit) continue
+    const list = byOwner.get(hit.owner.id)
+    // Sliced by the matched prefix's LENGTH, not by the raw relFolder: the
+    // stored spelling can differ in case or separator from the walk's.
+    const relToChar = rel.slice(hit.prefix.length)
+    if (list) list.push(relToChar)
+    else byOwner.set(hit.owner.id, [relToChar])
+  }
+  return byOwner
 }
 
 /** The skip list read tolerantly: missing/garbled file or entries = just fewer

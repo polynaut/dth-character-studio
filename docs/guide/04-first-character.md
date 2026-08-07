@@ -96,6 +96,10 @@ generation they are shown greyed out):
   without a primary scene gets **Set as primary**). **Skip** ignores a file
   permanently (it can still be added by pick/drop later); the banner's ✕ only
   hides it for the session.
+  It does not matter which page you tab back to, either: if the studio is
+  showing the project page — or Settings, or Tools — a banner at the top of the
+  window names the character whose folder the file landed in and takes you
+  there.
 
 </td></tr></table>
 </details>

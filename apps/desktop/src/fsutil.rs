@@ -44,6 +44,16 @@ pub(crate) trait DirVisitor {
     /// the error; lenient ones count it (an incomplete inventory must be VISIBLE
     /// — dedup refuses to quarantine groups scanned with read errors).
     fn unreadable(&mut self, path: &Path, e: std::io::Error) -> std::io::Result<()>;
+    /// Don't descend into this directory. Distinct from returning `Err` from
+    /// `enter_dir`, which ABORTS the whole walk — this prunes one subtree and
+    /// carries on. Defaults to false, so every existing visitor is unchanged.
+    ///
+    /// Pruning at walk time rather than filtering the results is the point for a
+    /// scan: a character's `dth-exports` holds the FBX/Alembic output, and
+    /// reading all of it to then throw it away is the expensive half of the walk.
+    fn skip_dir(&self, _name: &std::ffi::OsStr) -> bool {
+        false
+    }
 }
 
 /// Recursively walk `root` (which must be a directory), reporting every entry to
@@ -69,6 +79,9 @@ fn walk_below<V: DirVisitor>(dir: &Path, rel: &Path, v: &mut V) -> std::io::Resu
         let child_rel = rel.join(entry.file_name());
         match entry.file_type() {
             Ok(t) if t.is_dir() => {
+                if v.skip_dir(&entry.file_name()) {
+                    continue;
+                }
                 v.enter_dir(&entry, &child_rel)?;
                 walk_below(&entry.path(), &child_rel, v)?;
             }
@@ -112,6 +125,54 @@ impl DirVisitor for LockedFiles {
         // surface that error.
         Ok(())
     }
+}
+
+/// Every file under `folder` whose extension is one of `exts`, as paths relative
+/// to it ('/'-separated, sorted), with the named directories pruned.
+///
+/// The native half of "what has the user saved into this project since we last
+/// looked?" — the detection sweep runs on every window focus, and doing it from
+/// JS costs one `readDir` IPC PER DIRECTORY, which is what makes a per-character
+/// scan sluggish on a network share and a whole-project scan untenable. This is
+/// one call for an entire tree.
+///
+/// `skip_dirs` are matched case-insensitively against a directory's own NAME at
+/// any depth (`dth-exports`, `.dcsmeta`, `rom-animations`, `backup`) and pruned
+/// before descending — reading a character's whole FBX/Alembic export tree only
+/// to discard it is the expensive half of the walk.
+///
+/// Lenient, like `scan_duf_files`: an unreadable subfolder is skipped rather
+/// than failing the scan, since one locked directory must not blind the sweep.
+/// Extensions are given WITHOUT the dot (`["duf", "hip", "hiplc"]`).
+#[tauri::command(async)]
+pub fn scan_files_by_ext(folder: String, exts: Vec<String>, skip_dirs: Vec<String>) -> Vec<String> {
+    struct Collect {
+        exts: Vec<String>,
+        skip: Vec<String>,
+        out: Vec<String>,
+    }
+    impl DirVisitor for Collect {
+        fn file(&mut self, _entry: &fs::DirEntry, rel: &Path) -> std::io::Result<()> {
+            let matches = rel.extension().is_some_and(|ext| {
+                self.exts.iter().any(|want| ext.eq_ignore_ascii_case(want.as_str()))
+            });
+            if matches {
+                self.out.push(rel.to_string_lossy().replace('\\', "/"));
+            }
+            Ok(())
+        }
+        fn unreadable(&mut self, _path: &Path, _e: std::io::Error) -> std::io::Result<()> {
+            Ok(())
+        }
+        fn skip_dir(&self, name: &std::ffi::OsStr) -> bool {
+            let lower = name.to_string_lossy().to_lowercase();
+            self.skip.iter().any(|s| s.eq_ignore_ascii_case(&lower))
+        }
+    }
+    let mut v = Collect { exts, skip: skip_dirs, out: Vec::new() };
+    let _ = walk_dir(Path::new(&folder), &mut v); // visitor never errors
+    v.out.sort();
+    v.out
 }
 
 /// The files under `dir` currently locked by another process (open in Daz Studio
@@ -411,6 +472,50 @@ pub(crate) fn join_rel(base: &Path, rel: &str) -> PathBuf {
 mod tests {
     use super::*;
     use crate::testutil::unique_temp_dir;
+
+    #[test]
+    fn scan_files_by_ext_matches_extensions_and_prunes_named_dirs() {
+        let root = unique_temp_dir("scan-ext");
+        let make = |rel: &str| {
+            let path = root.join(rel);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(&path, b"x").unwrap();
+        };
+        make("daz3d/primary/Kira.duf");
+        make("daz3d/Kira_Yoga.DUF"); // extension compare is case-insensitive
+        make("houdini/Kira.hiplc");
+        make("Kira.json"); // not a wanted extension
+        // Pruned subtrees: the generated export tree, the app's own meta folder,
+        // Houdini's auto-backups — reading them is the expensive half of a walk.
+        make("daz3d/dth-exports/primary/Kira.duf");
+        make(".dcsmeta/characters/Kira/anything.duf");
+        make("houdini/backup/Kira_bak.hiplc");
+
+        let found = scan_files_by_ext(
+            root.to_string_lossy().into_owned(),
+            vec!["duf".into(), "hip".into(), "hiplc".into()],
+            vec!["dth-exports".into(), ".dcsmeta".into(), "backup".into()],
+        );
+        assert_eq!(
+            found,
+            vec![
+                "daz3d/Kira_Yoga.DUF".to_string(),
+                "daz3d/primary/Kira.duf".to_string(),
+                "houdini/Kira.hiplc".to_string(),
+            ]
+        );
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn scan_files_by_ext_survives_a_missing_folder() {
+        // A character folder on a disconnected share: an empty answer, never a
+        // failure that would blank the caller's last result.
+        let missing = unique_temp_dir("scan-ext-missing").join("nope");
+        let found =
+            scan_files_by_ext(missing.to_string_lossy().into_owned(), vec!["duf".into()], vec![]);
+        assert!(found.is_empty());
+    }
 
     #[test]
     fn join_rel_uses_components() {

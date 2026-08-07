@@ -19,3 +19,8 @@ skip list and is never offered again (a manual pick/drop still works). The
 banner's ✕ just hides it for the session. Files you save while the wizard is
 open append as new pages on the next focus; generated output (`dth-exports`,
 ROM animations, Houdini `backup/`) is never offered.
+
+It doesn't matter which page you tab back to. If the studio is showing the
+project page — or Settings, or Tools — a banner at the top of the window names
+the character whose folder the file landed in and takes you there, where the
+wizard above does the rest.

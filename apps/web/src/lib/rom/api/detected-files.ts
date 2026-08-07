@@ -1,12 +1,14 @@
 import { exists, mkdir, readTextFile } from '@tauri-apps/plugin-fs'
-import { isTauri } from '@tauri-apps/api/core'
+import { invoke, isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
 import * as storage from '../storage'
 import {
   DETECTED_IGNORE_FILE,
+  DETECT_EXTS,
+  DETECT_SKIP_DIRS,
+  attributeToOwners,
   detectNewFiles,
-  detectSkipDir,
   detectedIgnoreJson,
   parseDetectedIgnore,
 } from '../detected-files.ts'
@@ -45,6 +47,30 @@ async function readIgnored(path: string): Promise<Array<string>> {
   return []
 }
 
+/**
+ * Every candidate file under `folder`, folder-relative — ONE native walk.
+ *
+ * Replaces a JS `walkFiles`, which costs a `readDir` IPC per directory: fine
+ * once, sluggish per character on a network share, and untenable for the
+ * project-wide sweep below. The generated trees are pruned natively, before
+ * they are read.
+ */
+async function scanCandidates(folder: string): Promise<Array<string>> {
+  try {
+    return z
+      .array(z.string())
+      .parse(
+        await invoke('scan_files_by_ext', {
+          folder,
+          exts: DETECT_EXTS,
+          skipDirs: DETECT_SKIP_DIRS,
+        }),
+      )
+  } catch {
+    return [] // folder gone, share offline, permissions — the caller keeps its last answer
+  }
+}
+
 export async function fetchDetectedFiles({ data }: { data: unknown }): Promise<DetectedFilesResult> {
   const { projectId, id, linkedScenes, linkedHoudini } = detectInput.parse(data)
   if (!isTauri()) return EMPTY
@@ -60,7 +86,7 @@ export async function fetchDetectedFiles({ data }: { data: unknown }): Promise<D
     throw new Error(`Character folder not reachable: ${location.folderAbs}`)
   }
   const [relFiles, ignored] = await Promise.all([
-    storage.walkFiles(location.folderAbs, '', detectSkipDir),
+    scanCandidates(location.folderAbs),
     readIgnored(ignorePath(project.path, location.relFolder, id)),
   ])
   const detected = detectNewFiles({
@@ -102,4 +128,89 @@ export async function ignoreDetectedFiles({ data }: { data: unknown }): Promise<
   // nothing" and re-offer every skipped file). Read-modify-write is unguarded —
   // the wizard is the only writer and its busy flag serializes the clicks.
   await storage.writeTextFileAtomic(storePath, detectedIgnoreJson([...existing, ...fresh]))
+}
+
+/** One character's share of the project-wide sweep. */
+export interface ProjectDetectedCharacter {
+  characterId: string
+  characterName: string
+  /** ABSOLUTE paths, each list sorted (same shape as {@link DetectedFilesResult}). */
+  scenes: Array<string>
+  houdini: Array<string>
+}
+
+const projectScopeInput = z.object({ projectId: z.string().min(1) })
+
+/**
+ * The same detection, across EVERY character in the project.
+ *
+ * Why it exists: the per-character scan above only runs while that character's
+ * page is mounted, so a Save As out of Daz while the studio was showing the
+ * project page — or Settings, or Tools — went unnoticed until the user happened
+ * to open that character (issue #740).
+ *
+ * ONE native walk for the whole characters tree, not one per character: the
+ * sweep runs on every window focus, and a walk per character folder is what
+ * makes that untenable on a network share. Each hit is attributed back to its
+ * owner by the LONGEST matching character folder — longest wins so a character
+ * whose folder nests inside another's cannot have its files claimed by the
+ * outer one.
+ *
+ * Files under no character folder are dropped: the characters root can hold
+ * anything, and "somewhere in the project" is not something this can offer to
+ * link.
+ */
+export async function fetchProjectDetectedFiles({
+  data,
+}: {
+  data: unknown
+}): Promise<Array<ProjectDetectedCharacter>> {
+  const { projectId } = projectScopeInput.parse(data)
+  if (!isTauri()) return []
+  const project = await resolveProject(projectId)
+  const root = charsRoot(project)
+  // Same rule as the per-character scan: THROW on an unreachable root rather
+  // than answering "nothing found". The hook keeps its last answer on an error,
+  // so a share blip must not blank the banner — and here it would eat the
+  // session's dismiss for every character at once.
+  if (!(await exists(root))) {
+    throw new Error(`Characters folder not reachable: ${root}`)
+  }
+  const [relFiles, scan] = await Promise.all([
+    scanCandidates(root),
+    storage.scanCharacterLibrary(root),
+  ])
+  if (relFiles.length === 0) return []
+
+  // Attribution is a pure rule (longest folder wins, nested characters keep
+  // their own files) — see `attributeToOwners`.
+  const byOwner = attributeToOwners(
+    relFiles,
+    scan.entries.map(({ character, location }) => ({
+      id: character.id,
+      relFolder: location.relFolder,
+    })),
+  )
+  if (byOwner.size === 0) return []
+  const owners = scan.entries.filter(({ character }) => byOwner.has(character.id))
+
+  const results = await Promise.all(
+    owners
+      .map(async ({ character, location }): Promise<ProjectDetectedCharacter> => {
+        const detected = detectNewFiles({
+          relFiles: byOwner.get(character.id) ?? [],
+          charFolder: location.folderAbs,
+          linkedScenes: [character.scenePath, ...character.extraScenes].filter(Boolean),
+          linkedHoudini: character.houdiniProjects,
+          ignored: await readIgnored(ignorePath(project.path, location.relFolder, character.id)),
+        })
+        return {
+          characterId: character.id,
+          characterName: character.name,
+          scenes: detected.scenes.map((rel) => joinPath(location.folderAbs, rel)),
+          houdini: detected.houdini.map((rel) => joinPath(location.folderAbs, rel)),
+        }
+      }),
+  )
+  return results.filter((r) => r.scenes.length > 0 || r.houdini.length > 0)
 }

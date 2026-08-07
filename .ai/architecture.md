@@ -309,6 +309,22 @@ surface as a banner + add wizard instead of waiting for a manual pick/drop.
 - **An unreachable character folder throws** in `fetchDetectedFiles` rather than
   answering "no files" (the walk tolerates unreadable SUBfolders); the hook
   keeps the last answer on error, so a share blip cannot blank the banner.
+- **Detection is PROJECT-WIDE as well** (`fetchProjectDetectedFiles` +
+  `ProjectDetectedFilesBanner`, mounted at the root). The per-character hook only
+  runs while that page is mounted, so a Save As while the studio showed the
+  project page went unnoticed (#740). The root banner adds nothing itself — Open
+  navigates to the owning character, whose wizard does the work — and excludes
+  the character already on screen. Focus REGAIN only: firing on mount would make
+  every launch pay for a whole-project walk before the first paint.
+- **One native walk, not one per character.** `scan_files_by_ext` (fsutil.rs)
+  walks a whole tree in ONE call with the generated directories pruned before
+  descending — `DirVisitor::skip_dir`, additive with a `false` default and
+  distinct from an `Err` from `enter_dir`, which aborts the walk instead of
+  pruning a subtree. A JS `walkFiles` costs a readDir IPC PER DIRECTORY, which
+  is what made a per-focus project sweep untenable on a share; the per-character
+  scan uses the native call too. Attribution back to owners is pure
+  (`attributeToOwners`) and LONGEST-folder-wins, so a character nested inside
+  another keeps its own files.
 - **The wizard links through the same builders as `DazSceneField`**
   (`lib/scene-add.ts`: `addScenePatch` / `primaryLinkPatch` /
   `useSceneAddValidation`) — extracted, not copied, so linking rules (hair
