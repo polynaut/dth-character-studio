@@ -213,3 +213,43 @@ describe('planRepath', () => {
     expect(plan.reason).toBe('')
   })
 })
+
+// The PoseAsset CSV-path row. It exists because "not filled in" and "your
+// DazToHue hasn't got that parameter" are different answers, and only the first
+// one is something the user can act on.
+describe('defaultsRowsFor — the CSV path row', () => {
+  const CHAR = 'D:/proj/Kira'
+  const scanned = (fillable: Array<string>, missing: Array<string>) => ({
+    job: CHAR,
+    prefill: { fillable, missing },
+  })
+
+  it('is absent when the scan says nothing about prefill at all', () => {
+    // An older scan shape (or a project that failed to open) must not invent a
+    // verdict about a parameter nobody looked at.
+    expect(defaultsRowsFor({ job: CHAR }, CHAR).map((r) => r.key)).toEqual(['job'])
+  })
+
+  it('reports a blank parm as actionable — Fill network writes it', () => {
+    const row = defaultsRowsFor(scanned(['pose_asset_csv_file_path'], []), CHAR)[1]
+    expect(row.key).toBe('csv')
+    expect(row.status).toBe('differs')
+    expect(row.verdict).toBe('not filled in')
+    expect(row.actionable).toBe(true)
+  })
+
+  it('reports a DazToHue without the parm as NOT actionable, and says why', () => {
+    const row = defaultsRowsFor(scanned([], ['pose_asset_csv_file_path']), CHAR)[1]
+    expect(row.status).toBe('unknown')
+    expect(row.verdict).toBe('your DazToHue has no such parameter')
+    expect(row.actionable).toBe(false)
+    expect(row.reason).toMatch(/Update DazToHue/)
+  })
+
+  it('reports a filled parm as matching', () => {
+    const row = defaultsRowsFor(scanned([], []), CHAR)[1]
+    expect(row.status).toBe('matches')
+    expect(row.matches).toBe(true)
+    expect(row.actionable).toBe(false)
+  })
+})

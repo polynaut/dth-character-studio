@@ -29,7 +29,7 @@
 
 /** A folder-valued setting the studio can check, and sometimes repair. */
 export interface DefaultsRow {
-  key: 'job'
+  key: 'job' | 'csv'
   label: string
   /** What the scene carries today ('' when the scan could not read it). */
   current: string
@@ -41,6 +41,10 @@ export interface DefaultsRow {
    * looked at — so the row says so and the action skips it.
    */
   status: 'matches' | 'differs' | 'unknown'
+  /** What the status reads as on screen. Spelled per row because "unknown"
+   *  means different things: nobody could READ the $JOB, versus a DazToHue
+   *  release that simply has no such parameter. */
+  verdict: string
   matches: boolean
   /** Whether the studio can write this. */
   actionable: boolean
@@ -75,31 +79,57 @@ export function sameFolder(a: string, b: string): boolean {
  * next to an action that could never run.
  */
 export function defaultsRowsFor(
-  scanned: { job: string },
+  scanned: { job: string; prefill?: { fillable: ReadonlyArray<string>; missing: ReadonlyArray<string> } },
   charFolder: string,
 ): Array<DefaultsRow> {
-  const row = (
-    key: DefaultsRow['key'],
-    label: string,
-    current: string,
-    expected: string,
-    actionable: boolean,
-    reason: string,
-  ): DefaultsRow => {
-    const matches = sameFolder(current, expected)
-    return {
-      key,
-      label,
-      current,
-      expected,
-      status: current.trim() === '' ? 'unknown' : matches ? 'matches' : 'differs',
+  const matches = sameFolder(scanned.job, charFolder)
+  const jobStatus = scanned.job.trim() === '' ? 'unknown' : matches ? 'matches' : 'differs'
+  const rows: Array<DefaultsRow> = [
+    {
+      key: 'job',
+      label: 'Project folder ($JOB)',
+      current: scanned.job,
+      expected: charFolder,
+      status: jobStatus,
+      verdict: jobStatus === 'unknown' ? 'could not be read' : jobStatus,
       matches,
-      actionable,
-      reason,
-    }
+      actionable: true,
+      reason: '',
+    },
+  ]
+  // The PoseAsset CSV path — reported only once the scan has an opinion about
+  // it. Three states, and the middle one is why this row exists at all: the
+  // parameter arrived in a later DazToHue, so "not filled in" and "your version
+  // hasn't got it" are different answers and only one of them is actionable.
+  const prefill = scanned.prefill
+  if (prefill) {
+    const missing = prefill.missing.includes(CSV_PARM)
+    const fillable = prefill.fillable.includes(CSV_PARM)
+    rows.push({
+      key: 'csv',
+      label: 'PoseAsset CSV path',
+      current: missing ? '' : fillable ? '(not set)' : '(set)',
+      expected: 'the character’s generated CSV',
+      status: missing ? 'unknown' : fillable ? 'differs' : 'matches',
+      verdict: missing
+        ? 'your DazToHue has no such parameter'
+        : fillable
+          ? 'not filled in'
+          : 'filled in',
+      matches: !missing && !fillable,
+      // Fill network writes it — but only when the parm is actually there.
+      actionable: fillable,
+      reason: missing
+        ? 'Update DazToHue to the release with the CSV-path-driven PoseAsset node.'
+        : '',
+    })
   }
-  return [row('job', 'Project folder ($JOB)', scanned.job, charFolder, true, '')]
+  return rows
 }
+
+/** The DazToHue PoseAsset node's CSV-path parameter (absent before the
+ *  CSV-path-driven release — `PREFILL_PARMS` in material_utils.py). */
+export const CSV_PARM = 'pose_asset_csv_file_path'
 
 /** What the scan reports about a project's stored file references. */
 export interface ScannedRefs {

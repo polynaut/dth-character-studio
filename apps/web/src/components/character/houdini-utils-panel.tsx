@@ -1915,13 +1915,10 @@ function GeneralTab({
                       // `unknown` is NOT a warning: nobody read the value, so
                       // nothing is known to be wrong — and the repair skips it.
                       warn={row.status === 'differs'}
-                      verdict={
-                        row.status === 'matches'
-                          ? 'matches'
-                          : row.status === 'unknown'
-                            ? 'could not be read'
-                            : 'differs'
-                      }
+                      // Spelled by the row: "unknown" means nobody could read
+                      // the $JOB, but for the CSV path it means the installed
+                      // DazToHue has no such parameter — different answers.
+                      verdict={row.verdict}
                     >
                       {/* Values stay VISIBLE rather than moving into a tooltip:
                           a row the user can't action needs its reason on
