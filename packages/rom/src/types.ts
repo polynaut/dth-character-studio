@@ -1382,8 +1382,19 @@ export const CHARACTER_SCHEMA_VERSION = 29
  *       junction-leftover sweep). Without the bump nothing read as stale and
  *       no refresh was forced. Lesson: a change to what the generators EMIT
  *       bumps this version even when the runtime files' API is untouched.
+ * v58 — the scene morph scan REFUSES to file anything when the generation has
+ *       no base index (`dthHasBaseIndex`, DthScanMorphs.dsa). The scan reports
+ *       what a scene adds ON TOP of the stock figures by subtracting that
+ *       index; with nothing to subtract, the whole stock figure filed itself
+ *       as the scene's contribution and the Parameter-name autocomplete
+ *       drowned in it with nothing saying why. Harmless before v55 (only the
+ *       Tools batch scanned scenes, and it enqueues the base row first on
+ *       purpose) — v55 put the scene scan on EVERY ROM/export run, which put
+ *       it in front of anyone who had never built the index. Nothing is lost
+ *       by refusing: a later scan replaces a scene's contribution wholesale,
+ *       so the first run after the base index exists files it correctly.
  */
-export const RUNTIME_VERSION = 57
+export const RUNTIME_VERSION = 58
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

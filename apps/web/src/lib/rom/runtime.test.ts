@@ -50,7 +50,7 @@ const RUNTIME_ASSETS = [
 
 // Bump this together with RUNTIME_VERSION whenever a runtime file legitimately
 // changes (this run prints the new value in the failure message).
-const EXPECTED_RUNTIME_HASH = 'c703078fd78203325f9135f75ddee8aad7d4fa0a12b45a21cd75e9a5e5810c5c'
+const EXPECTED_RUNTIME_HASH = 'a1841719dc62cb1548e71bacabd99879eebaa1bc1c15226b01989e7d58a9723f'
 
 function runtimeHash(): string {
   const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
@@ -456,6 +456,7 @@ describe('Build_Genesis_Index pre-flight', () => {
 interface SceneScanModule {
   dthSceneKey: (path: string) => string
   dthBaseIndexKeys: (outDir: string, genesis: string) => Record<string, boolean>
+  dthHasBaseIndex: (outDir: string, genesis: string) => boolean
   dthWriteSceneIndex: (
     outDir: string,
     genesis: string,
@@ -472,7 +473,7 @@ interface SceneIndexFile {
   morphs: Array<{ node: string; label: string; name: string; scenes: Array<string> }>
 }
 
-const SCENE_EXPORTS = 'dthSceneKey, dthBaseIndexKeys, dthWriteSceneIndex'
+const SCENE_EXPORTS = 'dthSceneKey, dthBaseIndexKeys, dthHasBaseIndex, dthWriteSceneIndex'
 
 /** Load DthScanMorphs.dsa over an in-memory filesystem, so the index reads and
  *  writes are real code paths against fake files. */
@@ -539,9 +540,60 @@ describe('scene morph scan (DthScanMorphs.dsa)', () => {
     ])
     const scan = loadSceneScan(files)
     expect(scan.dthBaseIndexKeys(OUT, 'G9')['Genesis9|body_bs_BodyTone']).toBe(true)
-    // No base index at all: every scanned morph counts as new (the studio's
-    // reader refuses to serve a scene index without a base one anyway).
+    // No base index at all: this function still reports an empty filter set —
+    // the REFUSAL to scan on that basis is dthHasBaseIndex's job, below.
     expect(Object.keys(scan.dthBaseIndexKeys(OUT, 'G8'))).toEqual([])
+  })
+
+  /**
+   * The guard behind DthScanSceneMorphs' refusal.
+   *
+   * With no base index there is nothing to subtract, so the whole stock figure
+   * files itself as "what this scene adds". Before runtime v55 only the Tools
+   * batch could reach that (it enqueues the base row first on purpose); since
+   * v55 every ROM/export run scans the open scene, so a plain export on a
+   * machine that never built the index hit it silently.
+   */
+  describe('dthHasBaseIndex', () => {
+    const withBase = () =>
+      new Map([
+        [
+          `${OUT}/morphs_G9.json`,
+          JSON.stringify({ morphs: [morph('Genesis9', 'body_bs_BodyTone')] }),
+        ],
+      ])
+
+    it('is true for a generation whose base index holds morphs', () => {
+      expect(loadSceneScan(withBase()).dthHasBaseIndex(OUT, 'G9')).toBe(true)
+    })
+
+    it('is false when the file is not there at all', () => {
+      expect(loadSceneScan(withBase()).dthHasBaseIndex(OUT, 'G8')).toBe(false)
+    })
+
+    it('is false for an index holding ZERO morphs', () => {
+      // It cannot be a stock figure's dial list, and subtracting it would
+      // misfile in exactly the same way as having no file — so it must not
+      // read as "present".
+      const files = new Map([[`${OUT}/morphs_G9.json`, JSON.stringify({ morphs: [] })]])
+      expect(loadSceneScan(files).dthHasBaseIndex(OUT, 'G9')).toBe(false)
+    })
+
+    it('is false for a file that is not valid JSON', () => {
+      const files = new Map([[`${OUT}/morphs_G9.json`, '{ truncated']])
+      expect(loadSceneScan(files).dthHasBaseIndex(OUT, 'G9')).toBe(false)
+    })
+
+    it('is false for JSON with no morphs array', () => {
+      const files = new Map([[`${OUT}/morphs_G9.json`, JSON.stringify({ version: 3 })]])
+      expect(loadSceneScan(files).dthHasBaseIndex(OUT, 'G9')).toBe(false)
+    })
+
+    it('reads the same path the filter set reads, trailing separator or not', () => {
+      const files = withBase()
+      expect(loadSceneScan(files).dthHasBaseIndex(`${OUT}/`, 'G9')).toBe(true)
+      expect(loadSceneScan(files).dthHasBaseIndex(OUT.replace(/\//g, '\\'), 'G9')).toBe(true)
+    })
   })
 
   it('files a scene’s finds under that scene', () => {

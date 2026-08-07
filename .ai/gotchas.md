@@ -698,18 +698,26 @@ current code before relying on details, but assume the *lesson* still holds.
   - `fetchMorphIndex` returns EMPTY when the base file is missing, even if a
     scene index exists — a scene index alone means the generation was never
     indexed, and offering only clothing dials would be worse than silence.
-  - The scan filters itself against the base index IN DAZ, so **the base row
-    must run before the scene rows** in a bulk batch (`startProjectScan`
-    enqueues it first). Run a scene scan on a machine with no base index and the
-    whole stock figure gets filed as "what this scene adds". And this is no
-    longer a Tools-only concern: since runtime v55 EVERY generated ROM/export
-    script calls `DthScanSceneMorphsQuiet` right after the wrong-scene guard
-    (`indexSyncSnippet` in `packages/rom/src/dsa.ts`, pinned by
-    `index-sync.test.ts`), best-effort and never-throwing — and
-    `dthBaseIndexKeys` (`DthScanMorphs.dsa`) has NO missing-base guard, it
-    just logs "every scanned morph counts as new". So on a machine that never
-    built the base index, a plain export silently files the whole stock
-    figure under that scene.
+  - The scan filters itself against the base index IN DAZ — it reports what a
+    scene adds by SUBTRACTING that index — so **the base row must run before
+    the scene rows** in a bulk batch (`startProjectScan` enqueues it first).
+    With nothing to subtract, the whole stock figure files itself as "what this
+    scene adds". That was harmless while only the Tools batch scanned scenes;
+    runtime v55 put the scene scan on EVERY generated ROM/export script
+    (`DthScanSceneMorphsQuiet`, right after the wrong-scene guard —
+    `indexSyncSnippet` in `packages/rom/src/dsa.ts`, pinned by
+    `index-sync.test.ts`), which put it in front of anyone who had never built
+    the index: a plain export silently filed thousands of stock G9 dials under
+    that scene and the autocomplete drowned in them. **Fixed in runtime v58**
+    (#675): `dthHasBaseIndex` gates `DthScanSceneMorphs`, which now refuses
+    rather than misfiles — a `throw` under `bulk` (so the quiet wrapper logs
+    and the export row still succeeds), a dialog interactively. An index
+    holding ZERO morphs counts as missing, since subtracting it misfiles
+    identically. Nothing is lost by refusing: a later scan REPLACES a scene's
+    contribution wholesale (next bullet), so the first run after the base index
+    exists files it correctly. `dthBaseIndexKeys` itself still returns an empty
+    filter set for a missing index — the refusal is the caller's, deliberately,
+    so the two concerns stay separable.
   - A re-scan REPLACES that scene's contribution (`dthWriteSceneIndex` strips
     the scene out of every stored entry first, dropping entries left with no
     scene). Without that, clothing removed from a scene would haunt its
