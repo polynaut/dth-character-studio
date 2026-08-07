@@ -139,8 +139,17 @@ if (addedChangesets.length === 0) {
 const BUMP = /^\s*['"]?@?[\w./-]+['"]?\s*:\s*(patch|minor|major)\s*$/gm
 const MARKER = /^\s*#.*\bbump\s*:/im
 
-let sawPatchOnly = false
+// The question is whether the PR declares the capability ANYWHERE, not whether
+// every changeset does. A PR may legitimately carry a feature changeset AND a
+// separate one for a fix it happened to make — the release is a minor either
+// way, and failing that would be a gate crying wolf on correct work.
+//
+// It also keeps a stacked PR honest: a branch whose base lags `main` picks up
+// other PRs' changesets in `base...HEAD`, and judging by "is any of them a
+// patch" made someone else's fix fail THIS PR. Measured on #715, which declared
+// its own minor and was failed by #713's (correct) patch changeset riding along.
 const offenders = []
+let declared = false
 for (const file of addedChangesets) {
   let front = ''
   try {
@@ -150,16 +159,19 @@ for (const file of addedChangesets) {
   }
   const bumps = [...front.matchAll(BUMP)].map((m) => m[1])
   if (bumps.length === 0) continue // empty changeset — not this gate's business
-  if (bumps.some((b) => b === 'minor' || b === 'major')) continue // already declared
+  if (bumps.some((b) => b === 'minor' || b === 'major')) {
+    declared = true
+    break
+  }
   if (MARKER.test(front)) {
     console.log(`${file}: patch is marked deliberate — accepted.`)
-    continue
+    declared = true
+    break
   }
-  sawPatchOnly = true
   offenders.push(file)
 }
 
-if (!sawPatchOnly) {
+if (declared || offenders.length === 0) {
   console.log('Bump type matches what this PR adds.')
   process.exit(0)
 }
