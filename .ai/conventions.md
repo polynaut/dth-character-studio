@@ -151,6 +151,29 @@ GH_REPO=polynaut/dth-character-studio \
   amplified everywhere users read.
 - Docs/CI-only PRs satisfy the gate with an **empty** changeset
   (`pnpm changeset --empty`).
+- **A new capability is a `minor`; a fix to an existing one is a `patch`.** The
+  precedent is the Utils drawer (#690 → v0.64.0). Two CI checks split the work
+  that used to be left to judgement: `require-real-changeset.mjs` proves a
+  changeset exists and bumps something, and `changeset-bump-type.mjs` proves the
+  TYPE matches — it fails a patch-only PR that adds a route file, an export from
+  the `lib/rom/api.ts` barrel, or a `#[tauri::command]`. *Earned by:* the
+  Defaults tab (#706) and Make paths portable (#709) both shipping as `patch`;
+  two features would have released under a patch version and read as bug fixes
+  in four CHANGELOGs, caught only because a human read the version PR (#710).
+  It is a heuristic, so it has an escape hatch — a YAML comment in the
+  changeset's own frontmatter, which forces the judgement to be made and leaves
+  it where the next reader looks (the same shape as bumping `.lint-baseline.json`
+  for a deliberate lint warning):
+
+  ```markdown
+  ---
+  # bump: patch is deliberate — moved an existing command, no new capability
+  '@dth/web': patch
+  ---
+  ```
+
+  A frontmatter comment never reaches a CHANGELOG (only the body does) and
+  Changesets parses it fine — both verified before the check was written.
 - A changeset may name several packages, but **identical text is written into
   every named CHANGELOG** — `pnpm version-packages` runs
   `scripts/dedupe-changelogs.mjs` afterwards, which drops duplicated entries

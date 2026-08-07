@@ -164,6 +164,15 @@ jobs:
       - name: Require a REAL changeset when shipped code changed
         if: env.EXEMPT != 'true'
         run: node scripts/require-real-changeset.mjs origin/${{ github.base_ref }}
+      # …and the bump TYPE is the next thing left to judgement. The Defaults tab
+      # and "Make paths portable" both shipped as `patch`; two features would
+      # have released under a patch version and read as bug fixes in four
+      # CHANGELOGs, caught only by a human reading the version PR (#710).
+      # Signals are structural and few — measured over the last 30 commits on
+      # main it flagged exactly those two and nothing else.
+      - name: Require a MINOR when the PR adds a capability
+        if: env.EXEMPT != 'true'
+        run: node scripts/changeset-bump-type.mjs origin/${{ github.base_ref }}
 
   # The Rust backend wasn't built/tested on PRs — a broken crate (or a reverted
   # alloc pin) only surfaced at release time on main. This job catches both.
