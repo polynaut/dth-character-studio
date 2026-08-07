@@ -163,6 +163,7 @@ export {
   NODE_KINDS,
   SKELETON_SECTIONS,
   repairHoudiniDefaults,
+  repathHoudiniReferences,
   scanHoudiniMaterials,
   transferHoudiniMaterials,
 } from './api/houdini-material'
@@ -175,6 +176,8 @@ export type {
   MaterialScanProject,
   MaterialTransferTarget,
   MaterialUtilReport,
+  ProjectRefInfo,
+  RepathResult,
 } from './api/native-types.ts'
 
 // --- generate: artifact generation + refresh sweep + version detection ------

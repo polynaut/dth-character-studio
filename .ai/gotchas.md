@@ -318,6 +318,36 @@ current code before relying on details, but assume the *lesson* still holds.
   channels": measured, a G9 skin does and clothing does not. Slot-to-baker
   matching goes through the node's `material_prefix` — the slot is `Skin`, the
   baker names it `MI_Skin`.
+- **`hou.text.collapseCommonVars` is CASE- and SEPARATOR-sensitive, so it is the
+  wrong tool for making a project's stored paths portable.** Measured
+  2026-08-07: with `$DAZ3D_LIB = D:/DAZ 3D/My DAZ 3D Library`, the exact-case
+  path collapsed to `$DAZ3D_LIB/…` while the SAME path lowercased
+  (`d:/daz 3d/…`) and the backslash spelling both came back untouched. That is
+  not academic — a real project stored **83 of its 131** texture paths
+  lowercase, so using that call would have silently made 48 portable and
+  reported the other 83 as "cannot be made portable" while the studio could
+  plainly see the root. `_collapse_ref` (`material_utils.py`) therefore does its
+  own case-insensitive, separator-normalized prefix match (the same fold
+  `_rewrite_lib_paths` already used), longest root first so `$HIP`
+  (`<char>/houdini`) wins inside the houdini folder and `$JOB` (`<char>`) wins
+  above it. Windows resolves the collapsed path fine either way — verified by
+  re-reading all 131 and confirming every one still points at a file that
+  exists. Use the call for a picker preview, never for a rewrite.
+- **"The file doesn't exist" is NOT a usable definition of a broken reference in
+  a `.hip`.** Measured on a healthy project: walking every FileReference parm
+  and testing existence flagged four of HOUDINI'S OWN scratch files —
+  `rendergallerysource` (`$HIP/galleries/…/rendergallery.db`), the PDG
+  `taskgraphfile` and `checkpointfile`, and `tempdircustom`. None is broken;
+  they simply don't exist until used. So breakage detection is scoped to the
+  DazToHue import parms the studio understands (`DTH_IMPORT_FILE_PARMS`).
+  The repair for those needs no scene lookup, which matters because the
+  node → scene mapping is genuinely ambiguous (a project can hold several
+  import nodes naming the same files): a Daz export writes `.dth` + `.fbx` +
+  `.abc` side by side with the SAME basename, so a sibling that still resolves
+  yields both the folder and the stem — and the derived path is only written
+  when it actually exists. Related dry-run trap: the repaired value is stored
+  in its already-collapsed form, because collapsing it in the following pass
+  made a real run report one more rewrite than its own dry run.
 - **`$JOB` is SCENE state saved inside the `.hip`, and a load OVERWRITES the
   process value — so it leaks between files in one hython run.** Measured
   2026-08-07: seeding a sentinel then loading a project replaced it with that

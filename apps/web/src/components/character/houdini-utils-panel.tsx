@@ -24,10 +24,11 @@ import {
   MATERIAL_SECTIONS,
   SKELETON_SECTIONS,
   repairHoudiniDefaults,
+  repathHoudiniReferences,
   scanHoudiniMaterials,
   transferHoudiniMaterials,
 } from '#/lib/rom/api.ts'
-import { defaultsRowsFor, projectsNeedingRepair } from '#/lib/rom/houdini-defaults.ts'
+import { defaultsRowsFor, planRepath, projectsNeedingRepair } from '#/lib/rom/houdini-defaults.ts'
 import type {
   CharacterWithProject,
   MaterialNodeInfo,
@@ -245,6 +246,8 @@ export function HoudiniUtilsPanel({
   // --- the Defaults tab ----------------------------------------------------
   const [defaultsOpen, setDefaultsOpen] = useState(false)
   const [defaultsReport, setDefaultsReport] = useState<MaterialUtilReport | null>(null)
+  const [repathOpen, setRepathOpen] = useState(false)
+  const [repathReport, setRepathReport] = useState<MaterialUtilReport | null>(null)
 
   const targetsKey = targets.join('|')
 
@@ -543,6 +546,47 @@ export function HoudiniUtilsPanel({
     [targetScan, charFolder],
   )
 
+  /** What a repath would do, and whether it may run yet (see `planRepath`). */
+  const repath = useMemo(
+    () => planRepath(targetScan.projects, charFolder),
+    [targetScan, charFolder],
+  )
+
+  async function runRepath(dryRun: boolean) {
+    if (repath.targets.length === 0) return
+    setRunning(dryRun ? 'dry' : 'run')
+    setRepathReport(null)
+    try {
+      const result = await repathHoudiniReferences({
+        data: {
+          targets: repath.targets.map((hipPath) => ({ hipPath, jobDir: charFolder })),
+          dryRun,
+        },
+      })
+      setRepathReport(result)
+      if (!dryRun) {
+        const failed = result.repath.filter((r) => !r.ok)
+        if (failed.length > 0) {
+          toast.error(`${failed.length} of ${result.repath.length} projects failed — see below.`)
+        } else {
+          const collapsed = result.repath.reduce((n, r) => n + r.collapsed, 0)
+          const repaired = result.repath.reduce((n, r) => n + r.repaired.length, 0)
+          toast.success(
+            `${collapsed} reference${collapsed === 1 ? '' : 's'} made portable` +
+              (repaired > 0 ? `, ${repaired} broken one${repaired === 1 ? '' : 's'} repaired` : '') +
+              '.',
+          )
+          setRepathOpen(false)
+        }
+        void runScan(targets, setTargetScan)
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+    } finally {
+      setRunning('')
+    }
+  }
+
   async function runDefaults(dryRun: boolean) {
     if (staleJobProjects.length === 0) return
     setRunning(dryRun ? 'dry' : 'run')
@@ -622,6 +666,8 @@ export function HoudiniUtilsPanel({
               charFolder={charFolder}
               houdiniDir={houdiniDir}
               report={defaultsReport}
+              repathReport={repathReport}
+              repathReason={repath.reason}
               onRescan={() => void runScan(targets, setTargetScan)}
             />
           </TabsContent>
@@ -987,6 +1033,7 @@ export function HoudiniUtilsPanel({
                   : `${staleJobProjects.length} project${staleJobProjects.length === 1 ? '' : 's'} to repair`}
             </span>
             <Button
+              variant="outline"
               disabled={busy || staleJobProjects.length === 0 || !charFolder}
               title={
                 !charFolder
@@ -1001,6 +1048,20 @@ export function HoudiniUtilsPanel({
               }}
             >
               <Wrench /> Repair $JOB
+            </Button>
+            <Button
+              disabled={busy || repath.targets.length === 0 || !charFolder}
+              // The gate's reason is ALSO rendered in the row above; a disabled
+              // button whose cause is only in a tooltip is a dead end.
+              title={
+                !charFolder ? 'The character folder could not be resolved' : repath.reason || undefined
+              }
+              onClick={() => {
+                setRepathReport(null)
+                setRepathOpen(true)
+              }}
+            >
+              <Wrench /> Make paths portable
             </Button>
           </div>
         ) : (
@@ -1085,6 +1146,73 @@ export function HoudiniUtilsPanel({
               {running === 'dry' ? <Loader2 className="animate-spin" /> : null} Dry run
             </Button>
             <Button disabled={busy} onClick={() => void runDefaults(false)}>
+              {running === 'run' ? <Loader2 className="animate-spin" /> : null} Run
+            </Button>
+          </div>
+        </Modal>
+      )}
+
+      {repathOpen && (
+        <Modal
+          open
+          onClose={() => setRepathOpen(false)}
+          dismissible={!busy}
+          title="Make stored paths portable?"
+        >
+          <div className="space-y-2 text-sm">
+            <p>
+              Rewrite <strong>{repath.collapsible}</strong> reference
+              {repath.collapsible === 1 ? '' : 's'} to sit under <code>$HIP</code>,{' '}
+              <code>$JOB</code> or <code>$DAZ3D_LIB</code>
+              {repath.broken > 0 && (
+                <>
+                  , and rebuild <strong>{repath.broken}</strong> broken DazToHue import
+                  reference{repath.broken === 1 ? '' : 's'}
+                </>
+              )}{' '}
+              across <strong>{repath.targets.length}</strong> project
+              {repath.targets.length === 1 ? '' : 's'}.
+            </p>
+            <ul className="max-h-32 list-inside list-disc overflow-y-auto text-xs text-muted-foreground">
+              {repath.targets.map((hip) => (
+                <li key={hip}>
+                  <code>{fileName(hip)}</code>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <p className="rounded-md border p-3 text-xs text-muted-foreground">
+            A broken import path is only rebuilt when the file it should point at is{' '}
+            <strong>actually there</strong> — derived from the same node&apos;s other export
+            files, which sit beside it with the same name. Nothing is guessed.
+            {repath.foreign > 0 && (
+              <>
+                {' '}
+                <strong>{repath.foreign}</strong> path
+                {repath.foreign === 1 ? '' : 's'} live outside your Daz library and this
+                character&apos;s folders — those cannot be made portable and stay exactly as they
+                are; the report names them.
+              </>
+            )}
+          </p>
+
+          <p className="text-xs text-muted-foreground">
+            A real run saves each project. Close them in Houdini first — Houdini writes the whole
+            scene on save and would overwrite this. The previous state is kept as{' '}
+            <code>backup/&lt;name&gt;_dthbak.hiplc</code>.
+          </p>
+
+          {repathReport && <RepathReport report={repathReport} />}
+
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" disabled={busy} onClick={() => setRepathOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="outline" disabled={busy} onClick={() => void runRepath(true)}>
+              {running === 'dry' ? <Loader2 className="animate-spin" /> : null} Dry run
+            </Button>
+            <Button disabled={busy} onClick={() => void runRepath(false)}>
               {running === 'run' ? <Loader2 className="animate-spin" /> : null} Run
             </Button>
           </div>
@@ -1229,12 +1357,17 @@ function DefaultsTab({
   charFolder,
   houdiniDir,
   report,
+  repathReport,
+  repathReason,
   onRescan,
 }: {
   scan: ScanState
   charFolder: string
   houdiniDir: string
   report: MaterialUtilReport | null
+  repathReport: MaterialUtilReport | null
+  /** Why the repath action is unavailable, '' when it can run. */
+  repathReason: string
   onRescan: () => void
 }) {
   return (
@@ -1312,6 +1445,7 @@ function DefaultsTab({
                       )}
                     </li>
                   ))}
+                  <RefRows refs={project.refs} reason={repathReason} />
                 </ul>
               )}
             </ProjectCard>
@@ -1320,6 +1454,126 @@ function DefaultsTab({
       )}
 
       {report && <DefaultsReport report={report} />}
+      {repathReport && <RepathReport report={repathReport} />}
+    </div>
+  )
+}
+
+/**
+ * The two reference rows: how portable this project's stored paths are, and
+ * whether any DazToHue import points at a file that isn't there.
+ *
+ * Repairing `$JOB` only helps paths picked AFTERWARDS — these are the ones
+ * already written down, and fixing them is what turns "capable of being
+ * movable" into movable.
+ */
+function RefRows({
+  refs,
+  reason,
+}: {
+  refs: { collapsible: number; foreign: number; broken: ReadonlyArray<string> }
+  reason: string
+}) {
+  const clean = refs.collapsible === 0 && refs.broken.length === 0
+  return (
+    <>
+      <li className="text-xs">
+        <p className="flex items-center gap-2">
+          <span className="font-medium">Reference paths</span>
+          {refs.collapsible === 0 ? (
+            <span className="text-muted-foreground">
+              {refs.foreign > 0 ? 'nothing more to make portable' : 'all relative'}
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 text-amber-500">
+              <AlertTriangle className="size-3 shrink-0" />
+              {refs.collapsible} absolute
+            </span>
+          )}
+        </p>
+        {refs.collapsible > 0 && (
+          <p className="text-muted-foreground">
+            {refs.collapsible} path{refs.collapsible === 1 ? '' : 's'} can be stored relative to{' '}
+            <code>$HIP</code>, <code>$JOB</code> or <code>$DAZ3D_LIB</code>.
+          </p>
+        )}
+        {refs.foreign > 0 && (
+          <p className="text-muted-foreground">
+            {refs.foreign} live outside those roots and cannot be made portable — they stay
+            absolute.
+          </p>
+        )}
+      </li>
+      <li className="text-xs">
+        <p className="flex items-center gap-2">
+          <span className="font-medium">Import references</span>
+          {refs.broken.length === 0 ? (
+            <span className="text-muted-foreground">all resolve</span>
+          ) : (
+            <span className="flex items-center gap-1 text-amber-500">
+              <AlertTriangle className="size-3 shrink-0" />
+              {refs.broken.length} broken
+            </span>
+          )}
+        </p>
+        {refs.broken.length > 0 && (
+          <p className="text-muted-foreground">
+            {refs.broken.join(', ')} — rebuilt from the same node&apos;s other export files.
+          </p>
+        )}
+      </li>
+      {/* The gate's reason belongs beside the rows it blocks, not only on the
+          disabled button. */}
+      {!clean && reason !== '' && <li className="text-xs text-amber-500">{reason}</li>}
+    </>
+  )
+}
+
+/** What a repath did, or would do, per project. */
+function RepathReport({ report }: { report: MaterialUtilReport }) {
+  return (
+    <div className="rounded-md border p-3">
+      <p className="mb-2 text-sm font-medium">
+        {report.dryRun ? 'Dry run — nothing was written' : 'Paths updated'}
+      </p>
+      <ul className="space-y-2 text-xs">
+        {report.repath.map((entry) => (
+          <li key={entry.hipPath}>
+            <p className="truncate" title={entry.hipPath}>
+              <strong>{fileName(entry.hipPath)}</strong>
+            </p>
+            {entry.ok ? (
+              <>
+                <p className="text-muted-foreground">
+                  {entry.collapsed} reference{entry.collapsed === 1 ? '' : 's'} made portable
+                  {entry.repaired.length > 0
+                    ? ` · ${entry.repaired.length} broken import${entry.repaired.length === 1 ? '' : 's'} repaired`
+                    : ''}
+                  {entry.backupPath ? ' · backup written' : ''}
+                </p>
+                {entry.repaired.map((fix) => (
+                  <p key={fix.label} className="truncate text-muted-foreground" title={fix.from}>
+                    {fix.label}: <code>{fix.to}</code>
+                  </p>
+                ))}
+                {entry.foreign.length > 0 && (
+                  <p className="flex items-start gap-1 text-amber-500">
+                    <AlertTriangle className="mt-0.5 size-3 shrink-0" />
+                    <span>
+                      {entry.foreign.length} path{entry.foreign.length === 1 ? '' : 's'} stay
+                      absolute — outside your Daz library and this character&apos;s folders:{' '}
+                      {entry.foreign.slice(0, 3).join(', ')}
+                      {entry.foreign.length > 3 ? ` (+${entry.foreign.length - 3} more)` : ''}
+                    </span>
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className="text-destructive">{entry.error}</p>
+            )}
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }

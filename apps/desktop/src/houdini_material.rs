@@ -119,6 +119,60 @@ pub struct MaterialScanProject {
     /// The folder the `.hip` sits in — i.e. `$HIP`, which is derived rather
     /// than stored, so it is reported and never rewritten.
     pub hip_dir: String,
+    /// What a repath would do to this project's stored file references.
+    pub refs: ProjectRefInfo,
+}
+
+/// How portable a project's stored file references are.
+///
+/// Computed by the SAME helpers `repath` runs (in dry mode), so the Defaults
+/// tab can never promise a number the action then doesn't deliver.
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectRefInfo {
+    /// Absolute references that sit under `$HIP` / `$JOB` / `$DAZ3D_LIB` and
+    /// can therefore be expressed relative to one of them.
+    pub collapsible: u32,
+    /// Absolute references under NONE of those roots. They cannot be made
+    /// portable, so they are reported rather than silently left looking
+    /// handled — the same posture as the material transfer's `foreignPaths`.
+    pub foreign: u32,
+    /// DazToHue import references whose file is not there, as `<node> <parm>`.
+    /// Scoped to those parms on purpose: "the file is missing" is NOT a usable
+    /// definition of broken in general — measured, a healthy project reports
+    /// four of Houdini's own scratch files (`rendergallery.db`, the PDG
+    /// taskgraph/checkpoint) that simply do not exist until used.
+    pub broken: Vec<String>,
+}
+
+/// One import reference a repath rebuilt.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RepairedRef {
+    /// `<node path> <parm name>`.
+    pub label: String,
+    #[serde(rename = "from")]
+    pub from_path: String,
+    #[serde(rename = "to")]
+    pub to_path: String,
+}
+
+/// What `repath` did (or would do) to one project.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RepathResult {
+    pub hip_path: String,
+    pub ok: bool,
+    pub error: String,
+    /// References rewritten from an absolute path to a `$VAR`-relative one.
+    pub collapsed: u32,
+    /// Broken DazToHue import references rebuilt from a sibling that resolved.
+    pub repaired: Vec<RepairedRef>,
+    /// Absolute references left alone because they sit under no known root.
+    pub foreign: Vec<String>,
+    /// Where the pre-repath state was backed up (empty for a dry run, and when
+    /// nothing needed changing).
+    pub backup_path: String,
 }
 
 /// What the `defaults` operation did (or would do) to one project's `$JOB`.
@@ -212,7 +266,7 @@ pub struct MaterialTransferTarget {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MaterialUtilReport {
-    /// `scan`, `transfer` or `defaults`.
+    /// `scan`, `transfer`, `defaults` or `repath`.
     pub op: String,
     /// false = the operation itself failed (bad request, source node missing);
     /// per-project and per-target failures are reported in their own `ok`.
@@ -224,6 +278,8 @@ pub struct MaterialUtilReport {
     pub targets: Vec<MaterialTransferTarget>,
     /// Populated by `defaults` — one entry per project it was asked about.
     pub defaults: Vec<HoudiniDefaultsResult>,
+    /// Populated by `repath` — one entry per project it was asked about.
+    pub repath: Vec<RepathResult>,
     pub source_bakers: u32,
     pub source_layers: u32,
     pub source_baker_names: Vec<String>,

@@ -112,6 +112,76 @@ export function defaultsRowsFor(
   ]
 }
 
+/** What the scan reports about a project's stored file references. */
+export interface ScannedRefs {
+  collapsible: number
+  foreign: number
+  broken: ReadonlyArray<string>
+}
+
+/** A project as the Defaults tab sees it. */
+export interface ScannedProject {
+  hipPath: string
+  ok: boolean
+  job: string
+  refs: ScannedRefs
+}
+
+/**
+ * What a repath would do across the selected projects, and whether it may run.
+ *
+ * **Gated on `$JOB` being correct**, and that is not a formality: a path is
+ * collapsed against whatever `$JOB` the scene currently carries, so repathing a
+ * project whose `$JOB` is still the pre-v0.64 `houdini/houdini-project` would
+ * store every export path relative to the wrong folder. Measured on a real
+ * project: with the stale `$JOB` the scan reports 0 collapsible references and
+ * 2 foreign ones; after the `$JOB` repair the same file reports 2 collapsible
+ * and 0 foreign. Same file, opposite answer — so the order is load-bearing, and
+ * the row says so rather than letting the user find out.
+ *
+ * The Python refuses a mismatch too; this is what stops the user reaching it.
+ */
+export function planRepath(
+  projects: ReadonlyArray<ScannedProject>,
+  charFolder: string,
+): {
+  /** Projects a run would be sent — readable, `$JOB` correct, something to do. */
+  targets: Array<string>
+  collapsible: number
+  broken: number
+  foreign: number
+  /** Projects held back because their `$JOB` still differs. */
+  blockedByJob: Array<string>
+  reason: string
+} {
+  const readable = projects.filter((project) => project.ok)
+  const blockedByJob = readable
+    .filter((project) => project.job.trim() !== '' && !sameFolder(project.job, charFolder))
+    .map((project) => project.hipPath)
+  const eligible = readable.filter(
+    (project) => project.job.trim() !== '' && sameFolder(project.job, charFolder),
+  )
+  const targets = eligible
+    .filter((project) => project.refs.collapsible > 0 || project.refs.broken.length > 0)
+    .map((project) => project.hipPath)
+  const sum = (pick: (refs: ScannedRefs) => number) =>
+    eligible.reduce((total, project) => total + pick(project.refs), 0)
+
+  return {
+    targets,
+    collapsible: sum((refs) => refs.collapsible),
+    broken: sum((refs) => refs.broken.length),
+    foreign: sum((refs) => refs.foreign),
+    blockedByJob,
+    reason:
+      blockedByJob.length > 0
+        ? 'Repair $JOB first — until then these paths would be stored relative to the old project folder.'
+        : targets.length === 0
+          ? 'Every reference is already relative, and nothing is broken.'
+          : '',
+  }
+}
+
 /**
  * The projects a repair would actually write — those whose `$JOB` differs.
  *
