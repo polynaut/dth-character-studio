@@ -7,7 +7,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 DTH Character Studio: a declarative tool for the **DazToHue** (Daz Studio → Houdini → Unreal)
 workflow. From one character definition it generates **both** sides of a Range of Motion (ROM):
 a Daz Studio apply-script (`.dsa`) and the Houdini **PoseAsset** import CSV. Ships as a Tauri 2
-desktop app on Windows; the frontend also runs standalone in a browser.
+desktop app on **Windows and macOS** (Apple Silicon, every release) — but the automation that
+drives Daz and Houdini is **Windows-only**: the `#[cfg(windows)]` blocks in `apps/desktop/src`
+(Daz launch, install detection, elevation, drives) plus the hardcoded `bin/hython.exe` in
+`lib/rom/api/houdini{,-material}.ts`. Definition + generation are pure TS and platform-neutral.
+The frontend also runs standalone in a browser.
 
 ## Commands
 

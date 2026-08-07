@@ -29,9 +29,11 @@ Houdini again when they're done — with **Skip Daz — use last exports** for a
 Houdini-only pass.
 
 > [!TIP]
-> Use Houdini's **File → Set Project** on the character's
-> **[`houdini-project` folder](./05-rom-in-daz.md#where-the-houdini-project-fits)**
-> so `$JOB` means one thing per character. The exports live on the Daz side,
+> Use Houdini's **File → Set Project** on the
+> **[character folder](./05-rom-in-daz.md#where-the-houdini-project-fits)**
+> itself — the one holding both `daz3d/` and `houdini/` — so `$JOB` covers the
+> exports as well as the scene. (Not the `houdini-project` folder: it sits
+> *below* the exports, so `$JOB` there can never reach them.) The exports live on the Daz side,
 > one `..` up from the scene: in the file picker, navigate to
 > `../daz3d/dth-exports/` and tick **Make path relative to current directory**
 > — the import reads `$HIP/../daz3d/dth-exports/primary/<Name>.dth` and the
@@ -41,9 +43,10 @@ Houdini-only pass.
 
 The character page's **Houdini projects → Generate project** creates the whole
 project for you: a new scene named after the character (editable in the dialog,
-which refuses a name that already exists), saved in the houdini folder **next
-to** the `houdini-project` folder it Set-Projects into, with **Set Project
-already baked in** and the **DazToHue network ready**. The network comes out
+which refuses a name that already exists), saved in the character's houdini
+folder, with **Set Project already baked in** — `$JOB` on the **character
+folder**, so both the scene and the exports sit under it — and the **DazToHue
+network ready**. The network comes out
 **wired**: the import file paths (`.dth`, FBX, Alembic, ROM FBX), the
 **PoseAsset CSV path**, the **export directory** and the **Skinning method**
 (Linear / Dual Quaternion, from the ROM definition) are prefilled for the
@@ -63,22 +66,27 @@ open with the same `$JOB`.
 </p>
 
 ```
-houdini/
-├─ PlaygroundAssets_Ita.hiplc   ← the generated scene (imports ../daz3d/dth-exports/…)
-└─ houdini-project/             ← $JOB (Set Project), shared by every project
+Ita/                            ← $JOB (Set Project), baked into every scene
+├─ daz3d/                       ← the exports live here, under $JOB
+└─ houdini/                     ← $HIP
+   ├─ PlaygroundAssets_Ita.hiplc   ← the generated scene (imports ../daz3d/dth-exports/…)
+   └─ houdini-project/             ← Houdini's own working folder, shared by every project
 ```
 
 Removing a **generated** project asks about its files: with **Keep houdini
 files** on it is only unlinked; turned off, its scene file is deleted too. The
 shared `houdini-project` folder always stays — the character's other projects
-open with it, and it holds no exports. Hand-linked projects are always
+use it, and it holds no exports. Hand-linked projects are always
 unlink-only.
 
 One one-time Settings entry powers it: the **Houdini installation folder**
 (Houdini's own install directory — its `bin\hython.exe` builds the scene
-headlessly). Its version must have a **matching Houdini documents folder**
-configured (`Houdini 22.0.x` ↔ `…\Documents\houdini22.0`) so the DazToHue
-assets load — Settings warns live when the pair doesn't match. The DazToHue
+headlessly), paired with the **matching Houdini documents folder**
+(`Houdini 22.0.x` ↔ `…\Documents\houdini22.0`) so the DazToHue assets load.
+Normally you never type either: activating a Houdini card in
+[**Settings → General**](./02-setup.md#houdini-installation--same-idea) fills
+both together, which is exactly why the cards exist. Fill them by hand on a
+machine with no card and Settings warns live when the pair doesn't match. The DazToHue
 network is created from your **installed DazToHue HDA** at generate time, so
 it's always the current plugin version — no template scene that could rot
 across Houdini or DazToHue updates. If the HDA isn't installed the project

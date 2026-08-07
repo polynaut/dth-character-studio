@@ -100,17 +100,24 @@ project folder is something you back up, sync or put in version control, and
 on the Daz side, one `..` away from your `.hip`:
 
 ```
-<character>/
+<character>/                ← $JOB (Set Project) — it holds BOTH sides
   daz3d/
     Kira.duf
     dth-exports/          ← the exports
       primary/  Kira.abc  Kira.dth  Kira_pose_asset.csv
       summertide/
-  houdini/
+  houdini/                ← $HIP — wherever the .hip sits
     Kira.hiplc            ← imports read ../daz3d/dth-exports/…
-    houdini-project/      ← $JOB (File → Set Project)
+    houdini-project/      ← Houdini's own working folder (NOT $JOB)
   export/                 ← the FINAL files, for Unreal
 ```
+
+**`$JOB` is the character folder, not the `houdini-project` folder.** Houdini
+only collapses a path you pick into a variable when it sits under `$HIP` or
+`$JOB` — so `$JOB` has to be the one folder containing *both* `houdini/` and
+`daz3d/`, or picking an export writes an absolute path and the project stops
+being movable. `houdini-project/` is created beside the scene and shared by the
+character's projects, but you never Set Project on it.
 
 Those three folders are created with every new character. The last one,
 **`export/`**, is the end of the pipeline — what Houdini generates for Unreal
@@ -126,9 +133,9 @@ picker gives you the portable `$HIP/../…` form. Everything the studio writes
 is an ordinary file or folder — nothing needs special treatment from Perforce,
 Git or backup tools.
 
-**Generate project** creates the `houdini-project` folder. It is shared: the
-first generated project creates it, every later one reuses it, so all of a
-character's projects open with the same `$JOB`.
+**Generate project** bakes `$JOB` in for you, and creates the `houdini-project`
+folder. That folder is shared — the first generated project creates it, every
+later one reuses it.
 
 ### Reference-skeleton paths — `$HIP` by default
 
