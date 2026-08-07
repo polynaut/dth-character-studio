@@ -817,23 +817,13 @@ function SettingsPage() {
             )}
 
             <div>
-              {/* Derived from the active installation, and shown there — an
-                  editable copy of a derived value is a value that can silently
-                  disagree with what it came from. */}
-              {dazDerived ? (
-                <DerivedFieldNote label="My DAZ 3D Library" value={settings.dazLibraryFolder}>
-                  {settings.dazLibraryFolder && (
-                    <>
-                      {' '}
-                      Generated character scripts install to{' '}
-                      <PathCode
-                        path={displayPath(`${settings.dazLibraryFolder}/Scripts/DTH-Character-Studio`)}
-                      />
-                      .
-                    </>
-                  )}
-                </DerivedFieldNote>
-              ) : (
+              {/* No field at all once an installation is active: the library is
+                  derived, and the Daz installation card above already lists it.
+                  A second copy here is the same path shown twice — it can only
+                  ever agree, and it puts a control where there is no choice to
+                  make. What DOES belong at the moment of installing is the
+                  DESTINATION, which is the line below the buttons' gate. */}
+              {!dazDerived && (
                 <FolderField
                   label="My DAZ 3D Library"
                   value={settings.dazLibraryFolder}
@@ -855,6 +845,19 @@ function SettingsPage() {
                     </>
                   }
                 />
+              )}
+              {dazDerived && (
+                <DerivedTarget
+                  value={settings.dazLibraryFolder}
+                  missing="library"
+                  className={canInstallDaz ? '' : 'mt-2'}
+                >
+                  Generated character scripts go to{' '}
+                  <PathCode
+                    path={displayPath(`${settings.dazLibraryFolder}/Scripts/DTH-Character-Studio`)}
+                  />
+                  .
+                </DerivedTarget>
               )}
               {!canInstallDaz && (
                 <p className="mt-2 text-sm text-muted-foreground">
@@ -1152,15 +1155,14 @@ function SettingsPage() {
               />
             </div>
 
+            {/* Same rule as the library above — the active installation IS the
+                answer to "which Daz Studio", so the field would be a control
+                with nothing to control. The destination shows with the buttons. */}
             {dazDerived ? (
-              <DerivedFieldNote
-                label="Daz Studio install folder"
-                value={settings.dazInstallFolder}
-              >
-                {' '}
+              <DerivedTarget value={settings.dazInstallFolder} missing="Daz Studio install folder">
                 The Exporter Plugin DLLs go into its
                 <span className="font-mono"> /plugins</span> subfolder.
-              </DerivedFieldNote>
+              </DerivedTarget>
             ) : (
               <FolderField
                 label="Daz Studio install folder"
@@ -1548,14 +1550,57 @@ function SettingsPage() {
 }
 
 /**
- * A path that is DERIVED from the active Daz installation, shown where its
- * editable field used to be.
+ * Where an install is about to write, when that destination is DERIVED.
  *
- * Read-only on purpose: the value follows from the card above, and an editable
- * copy is one that can quietly disagree with what produced it. The way to edit
- * it is to stop deriving it — "Set the paths manually", in the section above.
- * An empty one is called out rather than left blank, because "DIM had nothing
- * for this" is a different problem from "you haven't set it yet".
+ * A sentence, not a field, and deliberately not a labelled read-only copy: the
+ * Daz installation card above already lists these paths, so repeating one here
+ * would show the same value twice where it can only ever agree — and put a
+ * control where there is no choice left to make. What genuinely belongs next to
+ * a Dry run / Install button is the destination, so that is all this is.
+ *
+ * An empty value is called out instead, because "DIM had nothing for this" is a
+ * different problem from "you haven't set it yet" and has a different fix.
+ */
+function DerivedTarget({
+  value,
+  missing,
+  className = '',
+  children,
+}: {
+  value: string
+  /** What DIM had no value for, named in the warning. */
+  missing: string
+  className?: string
+  children?: ReactNode
+}) {
+  if (!value) {
+    return (
+      <p className="mt-2 flex items-start gap-1.5 text-sm text-amber-500">
+        <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+        <span>
+          The DAZ Install Manager has no {missing} path, so there is nothing to install into. Use{' '}
+          <strong>Set the paths manually</strong> in the Daz installation section to fill it in
+          yourself.
+        </span>
+      </p>
+    )
+  }
+  return (
+    <p className={`text-sm text-muted-foreground ${className}`}>
+      Installs into <PathCode path={displayPath(value)} />, from the Daz installation above.{' '}
+      {children}
+    </p>
+  )
+}
+
+/**
+ * A DERIVED path echoed on another tab, where the Daz installation card is not
+ * on screen to read it from.
+ *
+ * Read-only for the same reason the fields it replaces are gone: an editable
+ * copy of a derived value is one that can quietly disagree with what produced
+ * it. The way to edit it is to stop deriving it — "Set the paths manually", on
+ * the General tab.
  */
 function DerivedFieldNote({
   label,

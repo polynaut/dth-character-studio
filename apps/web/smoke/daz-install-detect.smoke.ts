@@ -115,6 +115,14 @@ test('activating an installation derives the paths and saves them itself', async
   // …and the derived paths are shown read-only, with the manual field gone.
   await expect(page.getByText('Paths from this installation')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Set the paths manually' })).toBeVisible()
+  // Gone from "Setup DTH Release" entirely, not echoed there read-only: the
+  // card above already lists it, and a second copy can only ever agree.
+  await expect(page.getByLabel('My DAZ 3D Library')).toHaveCount(0)
+  await expect(page.getByLabel('Daz Studio install folder')).toHaveCount(0)
+  // Each install still says where it will write — that part does belong beside
+  // its buttons. Two of them: the release into the library, the plugin into the
+  // Daz Studio folder.
+  await expect(page.getByText(/Installs into.*from the Daz installation above/)).toHaveCount(2)
 })
 
 test('activating the other card re-derives from it', async ({ page }) => {

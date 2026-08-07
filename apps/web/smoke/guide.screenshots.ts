@@ -300,46 +300,55 @@ function projectRow(page: Page, label: string): Locator {
   return page.locator('div.border-t', { hasText: label })
 }
 
-test('settings-daz-install', async ({ page }) => {
-  // A machine with DIM and both Daz Studios — the case the cards exist for.
-  // Seeded as DIM's own INI files (`%APPDATA%/DAZ 3D`), which is what the app
-  // really reads, so the shot can never show a layout the code doesn't produce.
-  const roaming = 'C:/Users/You/AppData/Roaming'
-  const dazAppData = `${roaming}/DAZ 3D`
-  const ds6 = 'C:/Program Files/DAZ 3D/DAZStudio6'
-  const ds4 = 'C:/Program Files/DAZ 3D/DAZStudio4'
-  const library = 'D:/DAZ 3D/My DAZ 3D Library'
-  const manifests = 'D:/DAZ 3D/Install Manager/ManifestFiles'
+/** A machine with DIM and both Daz Studios — the case the cards exist for.
+ *  Seeded as DIM's own INI files (`%APPDATA%/DAZ 3D`), which is what the app
+ *  really reads, so a shot can never show a layout the code doesn't produce. */
+const DIM_ROAMING = 'C:/Users/You/AppData/Roaming'
+const DS6_DIR = 'C:/Program Files/DAZ 3D/DAZStudio6'
+const DS4_DIR = 'C:/Program Files/DAZ 3D/DAZStudio4'
+const DAZ_LIBRARY = 'D:/DAZ 3D/My DAZ 3D Library'
+const DIM_MANIFESTS = 'D:/DAZ 3D/Install Manager/ManifestFiles'
+
+function dimSeed() {
+  const dazAppData = `${DIM_ROAMING}/DAZ 3D`
   const seed = buildSeed()
-  seed.roamingDir = roaming
+  seed.roamingDir = DIM_ROAMING
   seed.files[`${dazAppData}/dzInstall.ini`] =
     `[General]\nInstalledApplications=dzStudio6InstallDir-64 dzStudio4InstallDir-64\n\n` +
-    `[ApplicationPath]\ndzStudio6InstallDir-64=${ds6}\ndzStudio4InstallDir-64=${ds4}\n`
+    `[ApplicationPath]\ndzStudio6InstallDir-64=${DS6_DIR}\ndzStudio4InstallDir-64=${DS4_DIR}\n`
   seed.files[`${dazAppData}/InstallManager/Settings/AppSettings.ini`] =
     '[General]\nCurrentUser=Account\n'
   seed.files[`${dazAppData}/InstallManager/UserAccounts/Account.ini`] =
-    `[General]\nCurInstallPath=${library}\nOverrideManifestDir=${manifests}\n` +
+    `[General]\nCurInstallPath=${DAZ_LIBRARY}\nOverrideManifestDir=${DIM_MANIFESTS}\n` +
     'DownloadPath=D:/DAZ 3D/Install Manager/Downloads\n'
-  seed.files[`${ds6}/DAZStudio.exe`] = 'ds6'
-  seed.files[`${ds4}/DAZStudio.exe`] = 'ds4'
-  seed.files[`${library}/readme.txt`] = 'library'
-  seed.files[`${manifests}/IM00012345_1_Product.dsx`] = '<dsx/>'
-  await prime(page, seed)
+  seed.files[`${DS6_DIR}/DAZStudio.exe`] = 'ds6'
+  seed.files[`${DS4_DIR}/DAZStudio.exe`] = 'ds4'
+  seed.files[`${DAZ_LIBRARY}/readme.txt`] = 'library'
+  seed.files[`${DIM_MANIFESTS}/IM00012345_1_Product.dsx`] = '<dsx/>'
+  return seed
+}
+
+/** Settings → General with DAZ Studio 6 activated — the state the guide's
+ *  setup page describes, and the one most machines land in. */
+async function openDazSettings(page: Page) {
+  await prime(page, dimSeed())
   await page.goto('/')
   await page.getByRole('heading', { name: 'DTH Character Studio' }).waitFor()
   await page.getByRole('link', { name: 'Settings' }).click()
-  // Activated, so the shot documents the state the guide describes: cards on
-  // top, the paths they derive read-only underneath.
   await page.getByRole('button', { name: /DAZ Studio 6/ }).click()
   await page.getByText('Paths from this installation').waitFor()
+}
+
+test('settings-daz-install', async ({ page }) => {
+  await openDazSettings(page)
   await shoot(page, join(OUT, 'settings-daz-install.png'), card(page, 'Daz installation'))
 })
 
 test('settings-dth-release', async ({ page }) => {
-  await prime(page, buildSeed())
-  await page.goto('/')
-  await page.getByRole('heading', { name: 'DTH Character Studio' }).waitFor()
-  await page.getByRole('link', { name: 'Settings' }).click()
+  // Shot with an installation ACTIVE: the library path is derived from it, so
+  // this section carries no path field of its own — which is what the guide's
+  // step 2 now describes.
+  await openDazSettings(page)
   await shoot(page, join(OUT, 'settings-dth-release.png'), card(page, 'Setup DTH Release'))
 })
 
