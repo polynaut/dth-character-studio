@@ -359,4 +359,40 @@ a shell belongs to — a renamed graft node, say — it reports that shell as
 
 &nbsp;
 
+---
+
+## Rescuing an old scene that is only a ROM animation
+
+A scene the studio can use has an **empty timeline** — the generated ROM script
+fills the timeline itself, so a scene that already carries animation is refused
+by the add-scene check. Which is a problem when the only surviving copy of an
+old character *is* the scene with its full ROM baked in.
+
+The bundled **`Kill_Animation`** script is the way back. The order matters:
+
+1. **Open the old scene** in Daz Studio.
+2. **Run `Scan_Frames` first.** It writes the animation out frame by frame as a
+   CSV the studio can [import as a ROM definition](./custom-morphs.md) — do this
+   *before* the next step, because afterwards there is nothing left to scan.
+3. **Run `Kill_Animation`** from **Scripts › DTH-Character-Studio**. Nothing to
+   select. It shows you what it found — how many keys, how many frames — and
+   asks before deleting anything.
+4. **File ▸ Save As** into your character's folder in the studio project, and
+   add it as a scene. The timeline check passes now.
+
+What it changes is only the timeline. The character keeps its shape, its
+clothes, its hair and the pose it holds at **frame 0** — no node is deleted, no
+morph zeroed, no material touched. Every key goes, and the animation range goes
+back to **0–30 frames**, the timeline a fresh Daz scene opens with.
+
+> [!WARNING]
+> **There is no undo.** The script does not save the scene — that stays your
+> decision — but the keys are gone from the open scene the moment you confirm.
+> If the ROM in it still matters to you, run `Scan_Frames` first.
+
+If a property refuses to give up its keys, the script says so and **names it**,
+rather than reporting a clean run over a scene that still has animation in it.
+
+&nbsp;
+
 [← Your first character](./04-first-character.md) · [Next: Into Houdini →](./06-into-houdini.md)

@@ -1422,8 +1422,17 @@ export const CHARACTER_SCHEMA_VERSION = 30
  *       (proof the write finished; a terminator-less file must first sit
  *       unmodified past a settle window). Ships in the same release as v60 —
  *       the bump exists for pre-release installs already stamped v60.
+ * v62 — a new VISIBLE script joins the Content Library: `Kill_Animation.dsa`
+ *       (+ its `DthKillAnimation.dsa` runtime and its artwork). It strips every
+ *       key off the open scene and puts the timeline back to a default 0-30, so
+ *       an old scene that survives only as its full ROM animation can be
+ *       recovered into an addable character scene (the studio requires an empty
+ *       timeline). Nothing the generated per-character scripts emit changed —
+ *       the bump is what INSTALLS the new script: `copyRuntimeFiles` skips the
+ *       whole install while the marker matches, so without it no existing
+ *       library would ever see the file.
  */
-export const RUNTIME_VERSION = 61
+export const RUNTIME_VERSION = 62
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

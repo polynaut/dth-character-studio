@@ -265,6 +265,27 @@ current code before relying on details, but assume the *lesson* still holds.
   The ROM runtime is immune to leftover RANGE (it `setTotalFrames`-resets), but
   leftover wearable keys do ride the export silently — tolerated, the whole doc
   pipeline was built on such scenes.
+- **Stripping a scene's animation from script WORKS — verified live 2026-08-07**
+  on a real old ROM scene (`Kill_Animation` / `DthKillAnimation.dsa`, its first
+  run in Daz). The scene came back character-only with a 0–30 timeline and was
+  accepted by the add-scene check. Two things the design got right, and one that
+  stays unknown:
+  - **`Scene.setTime(0)` BEFORE deleting** is load-bearing, not hygiene: a
+    property with no keys keeps the value it currently evaluates to, so clearing
+    keys while the scene sits at frame 250 would bake a ROM pose in as the
+    scene's rest state.
+  - **Bones and morphs need separate walks.** ROM rotation lives on the figure's
+    BONES (child nodes — `Scene.getNodeList()` alone never reaches them; use
+    `getNodeChildren(true)`), and morph values live on the modifiers'
+    `getValueControl()`, which is NOT in `getPropertyList()`. Miss either and
+    the scene still fails the timeline check. Same split `DthScanFrames.dsa`
+    makes, for the same reason.
+  - **Which deletion route ran is still unmeasured.** The script tries
+    `DzProperty.deleteAllKeys()` and falls back to descending `deleteKey(i)`
+    (deleting a key renumbers the ones after it), and does not report which one
+    took — so "it works" confirms the PAIR, not `deleteAllKeys()` on its own.
+    Keep both, and keep the read-back that turns a wrong assumption into a named
+    failure rather than a silently still-animated scene.
 
 ## Desktop / Tauri
 

@@ -28,11 +28,13 @@ const RUNTIME_FILES = [
   'DthScanMorphs.dsa',
   'DthScanFrames.dsa',
   'DthShellSurfaces.dsa',
+  'DthKillAnimation.dsa',
   'Build_Genesis_Index.dsa',
   'Build_Genesis_Index_Bulk.dsa',
   'Scan_Scene_Bulk.dsa',
   'Scan_Frames.dsa',
   'Fix_Graft_Shell_Surfaces.dsa',
+  'Kill_Animation.dsa',
 ]
 
 // The visible scripts' Content Library artwork, installed beside them. Hashed as
@@ -46,11 +48,13 @@ const RUNTIME_ASSETS = [
   'Scan_Frames.tip.png',
   'Fix_Graft_Shell_Surfaces.png',
   'Fix_Graft_Shell_Surfaces.tip.png',
+  'Kill_Animation.png',
+  'Kill_Animation.tip.png',
 ]
 
 // Bump this together with RUNTIME_VERSION whenever a runtime file legitimately
 // changes (this run prints the new value in the failure message).
-const EXPECTED_RUNTIME_HASH = 'c910e7bff023ffe439637ca63981c9a5d4094bd34e7b34b00acc28130b3d5429'
+const EXPECTED_RUNTIME_HASH = '7c1a9f20696aaa49f486034673d73f659847dbb90efad76ba583a686f2df9618'
 
 function runtimeHash(): string {
   const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
@@ -828,5 +832,92 @@ describe('geoshell surface hygiene (DthShellSurfaces.dsa)', () => {
     ).toBe('')
     // Nothing close enough to be evidence.
     expect(shell.dthShellOwnerByPrefix('GP_Shell', ['stx_genesis_9_navel_71']).name).toBe('')
+  })
+})
+
+/**
+ * Kill_Animation's pure half (DthKillAnimation.dsa).
+ *
+ * The script itself is unverifiable here — it deletes keys through the Daz API,
+ * which does not exist in this process. What IS testable is the arithmetic the
+ * user is shown before agreeing to lose their animation, and the wording of the
+ * three outcomes: a destructive tool that says "removed 0 keys" where it means
+ * "there was nothing to remove" is how one stops being trusted.
+ */
+interface KillAnimModule {
+  dthKillAnimFrameSpan: (times: Array<number>, timeStep: number) => number
+  dthKillAnimSummary: (report: Record<string, unknown>) => string
+  DTH_KILL_ANIM_DEFAULT_FRAMES: number
+}
+
+const KILL_ANIM_EXPORTS =
+  'dthKillAnimFrameSpan, dthKillAnimSummary, DTH_KILL_ANIM_DEFAULT_FRAMES'
+
+function loadKillAnimation(): KillAnimModule {
+  const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
+  const src = readFileSync(join(dir, 'DthKillAnimation.dsa'), 'utf8')
+  // Same canary as the others: only `print` in the sandbox, so a Daz API touched
+  // at LOAD time throws here rather than failing silently inside Daz.
+  return runInNewContext(`${src}\n;({ ${KILL_ANIM_EXPORTS} })`, {
+    print: () => {},
+  }) as KillAnimModule
+}
+
+describe('kill animation (DthKillAnimation.dsa)', () => {
+  const kill = loadKillAnimation()
+  // One Daz frame at 30 fps, in ticks — the unit Scene.getTimeStep() returns.
+  const STEP = 4800
+
+  it('leaves a default Daz timeline behind', () => {
+    expect(kill.DTH_KILL_ANIM_DEFAULT_FRAMES).toBe(30)
+  })
+
+  it('counts frames the way the studio measures a scene (last key + 1, 0-based)', () => {
+    // poses.rs: max key time × 30 fps, + 1 for the 0-based count.
+    expect(kill.dthKillAnimFrameSpan([0, 10 * STEP, 103 * STEP], STEP)).toBe(104)
+    // A lone key at frame 0 is one frame — the normal saved-scene state, and
+    // exactly the `animationFrames <= 1` the add-scene check accepts.
+    expect(kill.dthKillAnimFrameSpan([0], STEP)).toBe(1)
+    expect(kill.dthKillAnimFrameSpan([], STEP)).toBe(0)
+  })
+
+  it('never divides by a time step it could not read', () => {
+    // getTimeStep() failing comes back as 0 through the safe-wrapper; a NaN or
+    // an Infinity in the confirm dialog is worse than a plain 0.
+    expect(kill.dthKillAnimFrameSpan([10 * STEP], 0)).toBe(0)
+  })
+
+  it('ignores a key time it cannot read rather than poisoning the count', () => {
+    expect(kill.dthKillAnimFrameSpan([0, Number.NaN, 5 * STEP], STEP)).toBe(6)
+  })
+
+  it('says "nothing to do" instead of reporting a successful deletion of nothing', () => {
+    expect(kill.dthKillAnimSummary({ cleared: 0, keys: 0, frames: 0 })).toContain(
+      'already empty',
+    )
+  })
+
+  it('an all-failed run does NOT borrow the "already empty" wording', () => {
+    // cleared 0 with failures means the scene is still animated — the real run
+    // subtracts failed properties from cleared/keys, so this is exactly the
+    // report an all-failed run hands in. "Already empty" here would tell the
+    // user a still-animated scene is clean.
+    const summary = kill.dthKillAnimSummary({
+      cleared: 0,
+      keys: 0,
+      frames: 88,
+      failed: ['Genesis9:/Hip/YRotate'],
+    })
+    expect(summary).toContain('kept its keys')
+    expect(summary).not.toContain('already empty')
+  })
+
+  it('singularises what it removed, because the report is the only receipt', () => {
+    expect(kill.dthKillAnimSummary({ cleared: 1, keys: 1, frames: 1 })).toBe(
+      'Removed 1 key from 1 property (1 frame of animation).',
+    )
+    expect(kill.dthKillAnimSummary({ cleared: 812, keys: 9431, frames: 617 })).toBe(
+      'Removed 9431 keys from 812 properties (617 frames of animation).',
+    )
   })
 })

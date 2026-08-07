@@ -1,0 +1,279 @@
+// DAZ Studio version 4.0.0+ filetype DAZ Script
+
+// DTH Character Studio - strip a scene's animation back to a default timeline.
+//
+// The case this exists for: an OLD scene that only survives as the full ROM
+// animation. The studio requires a character scene with an EMPTY timeline (the
+// generated ROM script fills the timeline itself, so existing keys would blend
+// into the exported frames), which makes such a scene unusable as-is. The
+// recovery is: open it, run Scan_Frames to capture the ROM frame-by-frame, then
+// run this to get a character-only scene back, then Save As into the character
+// folder.
+//
+// WHAT IT DOES, exactly:
+//   - sets the scene time to frame 0 FIRST, so every property is evaluated at
+//     its rest state before anything is deleted,
+//   - deletes every key from every property of every node in the scene - node
+//     properties (including the bone transforms the ROM rotates) and the morph
+//     modifiers' value controls,
+//   - restores each property's frame-0 value where the value moved,
+//   - sets the animation AND play range back to 0-30 frames, the default a new
+//     Daz scene opens with.
+//
+// WHAT IT DOES NOT DO: it does not touch what is IN the scene. No node is
+// deleted, no morph is zeroed, no material changes. The figure keeps its shape,
+// its clothes and its pose-at-frame-0 - only the timeline goes.
+//
+// This is DESTRUCTIVE and there is no undo for it worth relying on: the caller
+// is expected to confirm first (Kill_Animation.dsa does), and the scene is NOT
+// saved - the user decides that with Save As.
+//
+// VERIFIED live in Daz Studio (2026-08-07, first run on a real old ROM scene):
+// the scene came back character-only with a 0-30 timeline and passed the
+// add-scene check (see .ai/gotchas.md). One thing that run does NOT settle:
+// whether `deleteAllKeys()` or the per-key fallback did the deleting - the PAIR
+// is verified, not either route alone, so both stay. Every Daz call is wrapped
+// so a wrong assumption surfaces as a reported failure rather than a
+// half-cleared scene, and the run VERIFIES itself - a property whose keys are
+// still there afterwards is counted as failed and named.
+//
+// The logic functions below are PURE (no Daz API at load time or inside them),
+// which is what lets runtime.test.ts drive them directly - keep them that way.
+
+/** The timeline a default Daz scene opens with: frames 0..30. */
+var DTH_KILL_ANIM_DEFAULT_FRAMES = 30;
+
+/** Guard for every Daz API call - a wrong assumption becomes `fallback`, never
+ *  a script abort that leaves the scene half-cleared. */
+function dthKillAnimSafe(fn, fallback){ try { return fn(); } catch(e) { return fallback; } }
+
+/**
+ * Frames a set of key TIMES occupies: the last key's frame, plus one for the
+ * 0-based count. 0 when there are no keys.
+ *
+ * Mirrors how the studio measures a scene's timeline (`animation_frames` in
+ * poses.rs: max key time x 30 fps, + 1) so the number this reports and the
+ * number the add-scene dialog complains about describe the same thing. NOT
+ * byte-identical: the studio counts only value-CHANGING keys on the character's
+ * own nodes, ignoring the stray keys products leave on their wearables' bones,
+ * while this counts every key it is about to delete. So this figure can be the
+ * larger of the two - it is "what was on the timeline", not "what the studio
+ * would have objected to".
+ */
+function dthKillAnimFrameSpan(aKeyTimes, timeStep){
+	if (!aKeyTimes || aKeyTimes.length == 0) return 0;
+	if (!timeStep || timeStep <= 0) return 0;
+	var tMax = 0;
+	for (var i = 0; i < aKeyTimes.length; i++) {
+		var t = Number(aKeyTimes[i]);
+		if (isNaN(t)) continue;
+		if (t > tMax) tMax = t;
+	}
+	return Math.floor(tMax / timeStep) + 1;
+}
+
+/**
+ * The one-line verdict for a finished run - what the wrapper puts in its dialog.
+ *
+ * Pure so the wording is testable: the outcomes read very differently to a
+ * user ("there was nothing to do" is not a success message), and getting that
+ * wrong is how a destructive tool starts looking like it did nothing.
+ *
+ * `cleared`/`keys` are what was actually REMOVED (a real run subtracts the
+ * properties that kept their keys - see the failure branch in
+ * DthKillAnimation), so "removed" here never claims a failed property. A run
+ * that removed nothing BECAUSE everything failed says so, rather than
+ * borrowing the "already empty" wording for a scene that is still animated.
+ */
+function dthKillAnimSummary(oReport){
+	var iCleared = oReport.cleared || 0;
+	var iKeys = oReport.keys || 0;
+	var iFrames = oReport.frames || 0;
+	var iFailed = (oReport.failed || []).length;
+	if (iCleared == 0) {
+		return iFailed > 0
+			? "Nothing could be removed - every animated property kept its keys."
+			: "No animation found - this scene's timeline was already empty.";
+	}
+	return "Removed " + iKeys + " key" + (iKeys == 1 ? "" : "s")
+		+ " from " + iCleared + " propert" + (iCleared == 1 ? "y" : "ies")
+		+ " (" + iFrames + " frame" + (iFrames == 1 ? "" : "s") + " of animation).";
+}
+
+/**
+ * Every node the run touches: each scene node AND its whole descendant tree.
+ *
+ * The descendants are the point - a figure's BONES are child nodes, and the ROM
+ * animation lives on their rotations. `Scene.getNodeList()` alone would reach
+ * the figure and miss every bone under it.
+ *
+ * A node reachable twice (listed AND a descendant of another listed node) is
+ * simply visited twice; the second visit finds no keys left and contributes
+ * nothing, which is cheaper than maintaining an identity set in DAZ Script.
+ */
+function dthKillAnimNodes(){
+	var aOut = [];
+	var aRoots = dthKillAnimSafe(function(){ return Scene.getNodeList(); }, []);
+	for (var i = 0; i < aRoots.length; i++) {
+		var oNode = aRoots[i];
+		if (!oNode) continue;
+		aOut.push(oNode);
+		var aKids = dthKillAnimSafe(function(){ return oNode.getNodeChildren(true); }, []);
+		for (var k = 0; k < aKids.length; k++) if (aKids[k]) aOut.push(aKids[k]);
+	}
+	return aOut;
+}
+
+/** Every keyable property on one node: its own property list plus the value
+ *  control of each morph modifier on its object (those are NOT in the property
+ *  list - DthScanFrames.dsa walks the two separately for the same reason). */
+function dthKillAnimNodeProps(oNode){
+	var aOut = [];
+	var aProps = dthKillAnimSafe(function(){ return oNode.getPropertyList(); }, []);
+	for (var i = 0; i < aProps.length; i++) if (aProps[i]) aOut.push(aProps[i]);
+	var oObj = dthKillAnimSafe(function(){ return oNode.getObject(); }, null);
+	if (!oObj) return aOut;
+	var n = dthKillAnimSafe(function(){ return oObj.getNumModifiers(); }, 0);
+	for (var m = 0; m < n; m++) {
+		var oMod = dthKillAnimSafe(function(){ return oObj.getModifier(m); }, null);
+		if (!oMod) continue;
+		if (!dthKillAnimSafe(function(){ return oMod.inherits("DzMorph"); }, false)) continue;
+		var oCtl = dthKillAnimSafe(function(){ return oMod.getValueControl(); }, null);
+		if (oCtl) aOut.push(oCtl);
+	}
+	return aOut;
+}
+
+/** Every key time on a property, as plain numbers (ticks). */
+function dthKillAnimKeyTimes(oProp){
+	var aOut = [];
+	var n = dthKillAnimSafe(function(){ return oProp.getNumKeys(); }, 0);
+	for (var i = 0; i < n; i++) {
+		var t = dthKillAnimSafe(function(){ return Number(oProp.getKeyTime(i).valueOf()); }, null);
+		if (t !== null && !isNaN(t)) aOut.push(t);
+	}
+	return aOut;
+}
+
+/**
+ * Delete every key from one property. Returns true when it has none left.
+ *
+ * Two routes because only one of them is certain: `deleteAllKeys()` is the
+ * documented one-shot, and the per-key fallback covers a build (or property
+ * type) that does not expose it. Both are followed by a READ-BACK - the caller
+ * reports a property that still has keys rather than assuming the call worked.
+ * Descending order in the fallback is deliberate: deleting a key renumbers the
+ * ones after it.
+ */
+function dthKillAnimClearKeys(oProp){
+	if (dthKillAnimSafe(function(){ return typeof oProp.deleteAllKeys == "function"; }, false)) {
+		dthKillAnimSafe(function(){ oProp.deleteAllKeys(); return true; }, false);
+	}
+	if (dthKillAnimSafe(function(){ return oProp.getNumKeys(); }, 0) > 0
+		&& dthKillAnimSafe(function(){ return typeof oProp.deleteKey == "function"; }, false)) {
+		var n = dthKillAnimSafe(function(){ return oProp.getNumKeys(); }, 0);
+		for (var i = n - 1; i >= 0; i--) {
+			dthKillAnimSafe(function(){ oProp.deleteKey(i); return true; }, false);
+		}
+	}
+	return dthKillAnimSafe(function(){ return oProp.getNumKeys(); }, 0) == 0;
+}
+
+/**
+ * Strip the animation off the open scene and reset the timeline.
+ *
+ * `options.frames` is the timeline to leave behind (default 30, a fresh Daz
+ * scene). `options.dryRun` reports what a real run would delete and writes
+ * nothing - the way to see how much animation a scene carries before agreeing
+ * to lose it.
+ *
+ * Returns { nodes, props, cleared, keys, frames, failed: [names], restored,
+ *           rangeFrames, dryRun }.
+ */
+function DthKillAnimation(options){
+	var oOpt = options || {};
+	var iFrames = typeof oOpt["frames"] == "number" ? oOpt["frames"] : DTH_KILL_ANIM_DEFAULT_FRAMES;
+	var bDry = !!oOpt["dryRun"];
+	var oReport = { nodes: 0, props: 0, cleared: 0, keys: 0, frames: 0,
+					failed: [], restored: 0, rangeFrames: iFrames, dryRun: bDry };
+
+	var timeStep = dthKillAnimSafe(function(){ return Number(Scene.getTimeStep().valueOf()); }, 0);
+	if (!timeStep || timeStep <= 0) {
+		print("DTH kill animation: could not read the scene's time step - nothing done.");
+		oReport.failed.push("Scene.getTimeStep()");
+		return oReport;
+	}
+
+	// Frame 0 BEFORE anything is deleted: a property with no keys keeps the
+	// value it currently evaluates to, so clearing keys while the scene sits at
+	// frame 250 would bake a ROM pose in as the scene's rest state.
+	if (!bDry) dthKillAnimSafe(function(){ Scene.setTime(0); return true; }, false);
+
+	var aNodes = dthKillAnimNodes();
+	oReport.nodes = aNodes.length;
+	var aAllTimes = [];
+
+	for (var i = 0; i < aNodes.length; i++) {
+		var aProps = dthKillAnimNodeProps(aNodes[i]);
+		oReport.props += aProps.length;
+		for (var p = 0; p < aProps.length; p++) {
+			var oProp = aProps[p];
+			var aTimes = dthKillAnimKeyTimes(oProp);
+			if (aTimes.length == 0) continue;
+			for (var t = 0; t < aTimes.length; t++) aAllTimes.push(aTimes[t]);
+			oReport.keys += aTimes.length;
+			oReport.cleared++;
+			if (bDry) continue;
+
+			// The value to keep. Read at time 0 explicitly rather than trusting
+			// the scene time above, and guarded: a property type without a
+			// time-indexed getValue simply opts out of the restore.
+			var vKeep = dthKillAnimSafe(function(){ return oProp.getValue(0); }, null);
+			if (!dthKillAnimClearKeys(oProp)) {
+				var sName = dthKillAnimSafe(function(){ return String(oProp.getPath()); }, "")
+					|| dthKillAnimSafe(function(){ return String(oProp.getLabel()); }, "(unnamed)");
+				print("DTH kill animation: FAILED to clear keys on", sName);
+				oReport.failed.push(sName);
+				// The receipt counts what was REMOVED: a property that kept its
+				// keys must not appear in "removed N keys from C properties" -
+				// it is named in `failed` instead. (A dry run never gets here,
+				// so its counts stay "what a real run would remove".)
+				oReport.cleared--;
+				oReport.keys -= aTimes.length;
+				continue;
+			}
+			if (vKeep === null) continue;
+			var vNow = dthKillAnimSafe(function(){ return oProp.getValue(); }, null);
+			if (vNow === null || vNow == vKeep) continue;
+			// The value moved when the keys went - put frame 0 back.
+			if (dthKillAnimSafe(function(){ oProp.setValue(vKeep); return true; }, false)) {
+				oReport.restored++;
+			}
+		}
+	}
+
+	oReport.frames = dthKillAnimFrameSpan(aAllTimes, timeStep);
+
+	if (!bDry) {
+		// Both ranges: setAnimRange alone leaves the scrubber bounded by the old
+		// play range (the same pairing setTotalFrames does in DthUtils.dsa).
+		var oRange = dthKillAnimSafe(function(){
+			return new DzTimeRange(0, iFrames * timeStep);
+		}, null);
+		if (oRange) {
+			dthKillAnimSafe(function(){ Scene.setAnimRange(oRange); return true; }, false);
+			dthKillAnimSafe(function(){ Scene.setPlayRange(oRange); return true; }, false);
+		} else {
+			oReport.failed.push("DzTimeRange(0, " + iFrames + " frames)");
+		}
+		dthKillAnimSafe(function(){ Scene.setTime(0); return true; }, false);
+		var iNow = dthKillAnimSafe(function(){
+			return Math.floor(Number(Scene.getAnimRange().end.valueOf()) / timeStep);
+		}, -1);
+		if (iNow >= 0) oReport.rangeFrames = iNow;
+	}
+
+	print("DTH kill animation:", dthKillAnimSummary(oReport),
+		"Timeline now 0-" + oReport.rangeFrames + ".");
+	return oReport;
+}
