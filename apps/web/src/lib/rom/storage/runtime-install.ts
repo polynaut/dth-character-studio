@@ -140,9 +140,6 @@ const VISIBLE_SCRIPT_ICONS: Record<string, string> = {
   'Scan_Frames.tip.png': scanFramesTip,
   'Fix_Graft_Shell_Surfaces.png': fixGraftShellSurfacesIcon,
   'Fix_Graft_Shell_Surfaces.tip.png': fixGraftShellSurfacesTip,
-  // PLACEHOLDER artwork (generated, not drawn) — a plain tile in the family's
-  // palette so the Content Library shows an icon rather than a broken image.
-  // Swap in real illustration when there is some; nothing else has to change.
   'Kill_Animation.png': killAnimationIcon,
   'Kill_Animation.tip.png': killAnimationTip,
 }
