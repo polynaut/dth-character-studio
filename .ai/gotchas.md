@@ -318,6 +318,23 @@ current code before relying on details, but assume the *lesson* still holds.
   channels": measured, a G9 skin does and clothing does not. Slot-to-baker
   matching goes through the node's `material_prefix` — the slot is `Skin`, the
   baker names it `MI_Skin`.
+- **`$JOB` is SCENE state saved inside the `.hip`, and a load OVERWRITES the
+  process value — so it leaks between files in one hython run.** Measured
+  2026-08-07: seeding a sentinel then loading a project replaced it with that
+  project's own `$JOB`, and loading a SECOND project showed the first one's
+  value right up until its load landed. Any batch that reports per-file `$JOB`
+  must therefore reseed a sentinel before EVERY load (`_load` in
+  `material_utils.py` does) or it will attribute one project's value to the
+  next. Two more measured facts: **every scene answers with something** — even
+  one saved without ever setting `$JOB` reloads carrying Houdini's default (the
+  process CWD), so "unset" is not a state the UI has to render — and
+  `hou.putenv('JOB', …)` + `hou.hipFile.save()` persists across a reload, which
+  is what makes the Defaults tab's repair possible at all. Consequence for the
+  product: v0.64's `$JOB` fix (#700) reached only NEWLY GENERATED projects;
+  every existing one keeps the pre-v0.64 `<char>/houdini/houdini-project`
+  forever unless something rewrites it, which is why the repair exists (#701).
+  It only helps paths picked AFTERWARDS — references already stored absolute
+  are untouched, so say "capable of being movable", never "movable".
 - **A DazToHue material slot is a CLAIM on Daz surfaces, and a surface can
   belong to exactly one slot — so slots merge BY SURFACE, never by name and
   never wholesale.** Measured 2026-08-07: `material_group#` is a plain STRING of

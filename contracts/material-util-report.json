@@ -7,6 +7,8 @@
       "hipPath": "D:/chars/Kira/houdini/Kira.hiplc",
       "ok": true,
       "error": "",
+      "job": "D:/chars/Kira",
+      "hipDir": "D:/chars/Kira/houdini",
       "nodes": [
         {
           "path": "/obj/DazToHue/DazToHueMaterial",
@@ -67,6 +69,8 @@
       "hipPath": "D:/chars/Gone/houdini/Gone.hiplc",
       "ok": false,
       "error": "Unable to open file",
+      "job": "",
+      "hipDir": "",
       "nodes": []
     }
   ],
@@ -94,6 +98,26 @@
       "missingUvSources": ["uv_geoshell"],
       "unclaimedSurfaces": ["@fbx_material_name=GPVagina"],
       "backupPath": "D:/chars/Ita/houdini/backup/Ita_dthbak.hiplc"
+    }
+  ],
+  "defaults": [
+    {
+      "hipPath": "D:/chars/Ita/houdini/Ita.hiplc",
+      "ok": true,
+      "error": "",
+      "previousJob": "D:/chars/Ita/houdini/houdini-project",
+      "job": "D:/chars/Ita",
+      "changed": true,
+      "backupPath": "D:/chars/Ita/houdini/backup/Ita_dthbak.hiplc"
+    },
+    {
+      "hipPath": "D:/chars/Ita/houdini/Ita_Yoga.hiplc",
+      "ok": true,
+      "error": "",
+      "previousJob": "D:/chars/Ita",
+      "job": "D:/chars/Ita",
+      "changed": false,
+      "backupPath": ""
     }
   ],
   "sourceBakers": 4,

@@ -413,6 +413,11 @@ export function HoudiniProjectsField({
           character={character}
           initialHipPath={utilsFor}
           projectId={projectId}
+          // The Defaults tab checks each project against these two: `$JOB`
+          // should be the CHARACTER folder (v0.64), and `$HIP` is only ever
+          // compared with where the studio puts a generated scene.
+          charFolder={charFolder}
+          houdiniDir={houdiniDir}
           onClose={() => setUtilsFor('')}
         />
       )}

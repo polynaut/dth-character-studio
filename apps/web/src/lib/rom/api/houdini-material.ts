@@ -333,6 +333,47 @@ async function scanKey(hipPath: string): Promise<string> {
   }
 }
 
+const defaultsInput = z.object({
+  targets: z
+    .array(
+      z.object({
+        hipPath: z.string().min(1),
+        /** The folder `$JOB` should carry — the CHARACTER folder, the same
+         *  value `create_houdini_project` bakes into a new project. */
+        jobDir: z.string().min(1),
+      }),
+    )
+    .min(1),
+  /** true = report what WOULD change and write nothing. */
+  dryRun: z.boolean(),
+})
+
+/**
+ * Repoint each project's `$JOB` at the folder the studio expects.
+ *
+ * `$JOB` is scene state saved with the `.hip`, so an EXISTING project keeps
+ * whatever it was created with — v0.64 fixed only newly generated ones. This is
+ * that migration: without it, a hand-picked export path in an old project keeps
+ * coming back absolute, because Houdini collapses a path above `$HIP` to a
+ * variable only when it sits under `$JOB` (and the old value sat BELOW the
+ * exports).
+ *
+ * Writes a `.hip`, so it carries the transfer's guarantees: a dry run that
+ * changes nothing, and one rolling backup beside Houdini's own before any save.
+ * A project already on the right folder is reported and left untouched.
+ */
+export async function repairHoudiniDefaults({
+  data,
+}: {
+  data: unknown
+}): Promise<MaterialUtilReport> {
+  const input = defaultsInput.parse(data)
+  if (!isTauri()) {
+    throw new Error('Repairing Houdini project settings needs the desktop app (it runs hython).')
+  }
+  return runMaterialUtil({ op: 'defaults', ...input })
+}
+
 /**
  * Whether two node references point at the SAME material node.
  *

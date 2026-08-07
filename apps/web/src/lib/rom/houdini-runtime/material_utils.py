@@ -6,14 +6,18 @@ the polling: this one is synchronous and the studio waits for the process).
 
     hython material_utils.py <requestFile> <resultFile>
 
-Two operations:
+Three operations:
 
   scan      list every DazToHueMaterial node in a set of `.hip` files, with the
-            counts the panel shows (materials / UV channels / bakers / layers).
+            counts the panel shows (materials / UV channels / bakers / layers)
+            — plus each scene's `$JOB` and `$HIP`, read in the same pass.
   transfer  copy one source node's material SETUP onto one or more target nodes
             — any combination of the material slots, the UV channels and the
             texture bakers — appending or replacing, with a dry-run mode that
             changes nothing and reports what a real run would do.
+  defaults  repoint a project's `$JOB` at the folder the studio expects, so a
+            hand-picked export collapses to a variable instead of an absolute
+            path (`op_defaults`).
 
 Copying only the bakers produces a setup that imports cleanly and bakes NOTHING:
 a baker names its material (`MI_Skin`) and its layers name geometry groups and
@@ -663,8 +667,29 @@ def _dth_nodes(root="/"):
     return [n for n in children if n.type().name() in wanted]
 
 
+# `$JOB` is process state, and a `.hip` load OVERWRITES it — so after opening
+# several projects in one hython run, an unread value would silently be the
+# PREVIOUS file's (measured: loading Kira after Ita left Ita's `$JOB` visible
+# until the load replaced it). Seeding this before every load makes each
+# reported value provably the one that file carries.
+JOB_SENTINEL = "Z:/__dth_no_job__"
+
+
 def _load(path):
+    hou.putenv("JOB", JOB_SENTINEL)
     hou.hipFile.load(path, suppress_save_prompt=True, ignore_load_warnings=True)
+
+
+def _scene_job():
+    """The `$JOB` the open scene carries, '' when it carries none.
+
+    Measured 2026-08-07: every scene answers with something — even one saved
+    without ever setting `$JOB` reloads carrying Houdini's default — so the
+    empty string is a guard for a case that has not been observed, not a state
+    the UI has to render.
+    """
+    value = hou.getenv("JOB") or ""
+    return "" if value == JOB_SENTINEL else _norm_path(value)
 
 
 def _network_box_label(node):
@@ -919,15 +944,77 @@ def _node_info(node):
 def op_scan(request):
     projects = []
     for path in request.get("hipPaths", []):
-        entry = {"hipPath": path, "ok": True, "error": "", "nodes": []}
+        entry = {"hipPath": path, "ok": True, "error": "", "nodes": [], "job": "", "hipDir": ""}
         try:
             _load(path)
             entry["nodes"] = [_node_info(n) for n in _dth_nodes()]
+            # Read in the SAME pass as the nodes — opening a `.hip` costs tens
+            # of seconds, and the Defaults tab must not pay it a second time.
+            entry["job"] = _scene_job()
+            entry["hipDir"] = _norm_path(hou.getenv("HIP") or "")
         except Exception as exc:
             entry["ok"] = False
             entry["error"] = str(exc).strip() or exc.__class__.__name__
         projects.append(entry)
     return {"op": "scan", "projects": projects, "targets": []}
+
+
+def op_defaults(request):
+    """Repoint each project's `$JOB` at the folder the studio expects.
+
+    `$JOB` is scene state saved with the `.hip` (`hou.putenv`, the programmatic
+    File → Set Project), so an EXISTING project keeps whatever it was created
+    with — which is the whole reason this exists. Houdini collapses a picked
+    path to a variable only when it sits under `$HIP` or `$JOB`, so a `$JOB` on
+    `<char>/houdini/houdini-project` (below the exports) can never help and a
+    hand-picked export comes back ABSOLUTE.
+
+    Only ever repairs what DIFFERS: a project already on the right folder is
+    reported and left untouched, so a run never rewrites a `.hip` for nothing.
+    Same guarantees as the transfer — dry run, and one rolling backup beside
+    Houdini's own before any save.
+    """
+    dry_run = bool(request.get("dryRun"))
+    results = []
+    for target in request.get("targets", []):
+        path = target.get("hipPath", "")
+        want = _norm_path(target.get("jobDir", ""))
+        result = {
+            "hipPath": path,
+            "ok": True,
+            "error": "",
+            "previousJob": "",
+            "job": want,
+            "changed": False,
+            "backupPath": "",
+        }
+        if not want:
+            result["ok"] = False
+            result["error"] = "No project folder was given for this scene."
+            results.append(result)
+            continue
+        try:
+            _load(path)
+            current = _scene_job()
+            result["previousJob"] = current
+            # Case-insensitive: these are Windows paths, and a case-only
+            # difference is the same folder — rewriting for it would churn the
+            # file forever.
+            if current.lower() == want.lower():
+                result["job"] = current
+                results.append(result)
+                continue
+            result["changed"] = True
+            if not dry_run:
+                result["backupPath"] = _backup(path)
+                hou.putenv("JOB", want)
+                hou.hipFile.save(path)
+        except Exception as exc:
+            result["ok"] = False
+            result["changed"] = False
+            result["error"] = str(exc).strip() or exc.__class__.__name__
+        results.append(result)
+    return {"op": "defaults", "projects": [], "targets": [], "defaults": results, "dryRun": dry_run}
 
 
 def _backup(path):
@@ -1317,7 +1404,7 @@ def op_transfer_skeleton(request):
     }
 
 
-OPS = {"scan": op_scan, "transfer": op_transfer}
+OPS = {"scan": op_scan, "transfer": op_transfer, "defaults": op_defaults}
 
 
 def main():
@@ -1359,6 +1446,7 @@ def main():
     payload.setdefault("foreignPaths", [])
     payload.setdefault("dryRun", False)
     payload.setdefault("replace", False)
+    payload.setdefault("defaults", [])
 
     # Write-then-rename: the studio reads this the moment hython exits, and a
     # half-written JSON would parse as a corrupt result rather than a failure.

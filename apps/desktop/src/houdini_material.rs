@@ -111,6 +111,39 @@ pub struct MaterialScanProject {
     pub ok: bool,
     pub error: String,
     pub nodes: Vec<MaterialNodeInfo>,
+    /// The `$JOB` this scene carries — scene state saved with the `.hip`, so a
+    /// project keeps whatever it was created with. Read in the SAME pass as the
+    /// nodes: opening a `.hip` costs tens of seconds and the Defaults tab must
+    /// not pay it twice. Empty only when the project could not be read.
+    pub job: String,
+    /// The folder the `.hip` sits in — i.e. `$HIP`, which is derived rather
+    /// than stored, so it is reported and never rewritten.
+    pub hip_dir: String,
+}
+
+/// What the `defaults` operation did (or would do) to one project's `$JOB`.
+///
+/// `$JOB` decides whether Houdini's file picker can collapse a chosen path to a
+/// variable: a path above `$HIP` collapses only when it sits under `$JOB`. A
+/// pre-v0.64 project carries `<char>/houdini/houdini-project`, which is BELOW
+/// the exports and so can never help — every hand-picked export came back
+/// absolute. Repointing it at the character folder is that migration.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HoudiniDefaultsResult {
+    pub hip_path: String,
+    pub ok: bool,
+    pub error: String,
+    /// The `$JOB` the scene carried before the run.
+    pub previous_job: String,
+    /// The `$JOB` it carries now — for a dry run, what it WOULD carry.
+    pub job: String,
+    /// false = already correct, so nothing was written. A project on the right
+    /// folder is reported and left alone rather than rewritten for nothing.
+    pub changed: bool,
+    /// Where the pre-repair state was backed up (empty for a dry run, and for
+    /// a project that needed no change).
+    pub backup_path: String,
 }
 
 /// What one transferred section did to a target node.
@@ -179,7 +212,7 @@ pub struct MaterialTransferTarget {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MaterialUtilReport {
-    /// `scan` or `transfer`.
+    /// `scan`, `transfer` or `defaults`.
     pub op: String,
     /// false = the operation itself failed (bad request, source node missing);
     /// per-project and per-target failures are reported in their own `ok`.
@@ -189,6 +222,8 @@ pub struct MaterialUtilReport {
     pub projects: Vec<MaterialScanProject>,
     /// Populated by `transfer`.
     pub targets: Vec<MaterialTransferTarget>,
+    /// Populated by `defaults` — one entry per project it was asked about.
+    pub defaults: Vec<HoudiniDefaultsResult>,
     pub source_bakers: u32,
     pub source_layers: u32,
     pub source_baker_names: Vec<String>,
