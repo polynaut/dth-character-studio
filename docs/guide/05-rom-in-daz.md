@@ -106,18 +106,22 @@ on the Daz side, one `..` away from your `.hip`:
     dth-exports/          ← the exports
       primary/  Kira.abc  Kira.dth  Kira_pose_asset.csv
       summertide/
-  houdini/                ← $HIP — wherever the .hip sits
+  houdini/                ← $HIP — every scene of this character lives here
     Kira.hiplc            ← imports read ../daz3d/dth-exports/…
-    houdini-project/      ← Houdini's own working folder (NOT $JOB)
+    Kira_Look.hiplc
+    render/ geo/ backup/  ← Houdini's own output, shared by both scenes
   export/                 ← the FINAL files, for Unreal
 ```
 
-**`$JOB` is the character folder, not the `houdini-project` folder.** Houdini
-only collapses a path you pick into a variable when it sits under `$HIP` or
-`$JOB` — so `$JOB` has to be the one folder containing *both* `houdini/` and
-`daz3d/`, or picking an export writes an absolute path and the project stops
-being movable. `houdini-project/` is created beside the scene and shared by the
-character's projects, but you never Set Project on it.
+**`$JOB` is the character folder.** Houdini only collapses a path you pick into
+a variable when it sits under `$HIP` or `$JOB` — so `$JOB` has to be the one
+folder containing *both* `houdini/` and `daz3d/`, or picking an export writes an
+absolute path and the project stops being movable.
+
+**The `houdini/` folder is the shared project folder.** Every one of a
+character's scenes lives in it, so they all share one `$HIP` — and Houdini
+writes its own output (renders, caches, backups) relative to `$HIP`, so all of
+it collects there instead of scattering per scene.
 
 Those three folders are created with every new character. The last one,
 **`export/`**, is the end of the pipeline — what Houdini generates for Unreal
@@ -133,9 +137,18 @@ picker gives you the portable `$HIP/../…` form. Everything the studio writes
 is an ordinary file or folder — nothing needs special treatment from Perforce,
 Git or backup tools.
 
-**Generate project** bakes `$JOB` in for you, and creates the `houdini-project`
-folder. That folder is shared — the first generated project creates it, every
-later one reuses it.
+**Generate project** bakes `$JOB` in for you, so a generated scene needs no
+Set Project at all.
+
+> [!NOTE]
+> **Upgrading?** Versions before v0.68 also made a `houdini-project` subfolder,
+> meant to be the Set Project target. It could never do that job: Houdini writes
+> its own output relative to `$HIP`, and `$HIP` is always the folder the `.hip`
+> sits in — Set Project sets `$JOB`, not `$HIP` — so the folder stayed empty
+> while the output landed beside the scenes. **The next save removes it, but
+> only when it is empty**; one holding files from an older project is left alone
+> and named in **Tools → Refresh assets**, for you to look at and clear
+> yourself.
 
 ### Reference-skeleton paths — `$HIP` by default
 

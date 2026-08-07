@@ -74,9 +74,6 @@ export function DazInstallSection({
             <strong>Set the paths manually</strong> for a machine DIM doesn&apos;t describe.
           </InfoPopup>
         </h2>
-        {scan?.account ? (
-          <span className="text-xs text-muted-foreground">DIM account: {scan.account}</span>
-        ) : null}
         <Button variant="ghost" size="sm" disabled={loading} onClick={onRescan}>
           <RefreshCw className={loading ? 'animate-spin' : ''} /> Rescan
         </Button>

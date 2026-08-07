@@ -32,8 +32,7 @@ Houdini-only pass.
 > Use Houdini's **File → Set Project** on the
 > **[character folder](./05-rom-in-daz.md#where-the-houdini-project-fits)**
 > itself — the one holding both `daz3d/` and `houdini/` — so `$JOB` covers the
-> exports as well as the scene. (Not the `houdini-project` folder: it sits
-> *below* the exports, so `$JOB` there can never reach them.) The exports live on the Daz side,
+> exports as well as the scene. The exports live on the Daz side,
 > one `..` up from the scene: in the file picker, navigate to
 > `../daz3d/dth-exports/` and tick **Make path relative to current directory**
 > — the import reads `$HIP/../daz3d/dth-exports/primary/<Name>.dth` and the
@@ -56,8 +55,10 @@ default, absolute when the project's
 says so — and the **character name** is set with them. A parameter
 your installed DazToHue version doesn't have yet is simply skipped (the CSV
 path needs the release with the CSV-driven PoseAsset node).
-The project folder is shared: generate a second or third project and they all
-open with the same `$JOB`.
+Generate a second or third project and they all land in the same houdini folder,
+so they share both `$JOB` and `$HIP` — and with `$HIP` shared, Houdini's own
+output (renders, caches, backups) collects in that one folder rather than
+scattering per scene.
 
 <p align="center">
   <img width="900" alt="the Generate Houdini project dialog" src="screenshots/houdini-generate-dialog.png" />
@@ -68,16 +69,15 @@ open with the same `$JOB`.
 ```
 Ita/                            ← $JOB (Set Project), baked into every scene
 ├─ daz3d/                       ← the exports live here, under $JOB
-└─ houdini/                     ← $HIP
+└─ houdini/                     ← $HIP, and the shared project folder
    ├─ PlaygroundAssets_Ita.hiplc   ← the generated scene (imports ../daz3d/dth-exports/…)
-   └─ houdini-project/             ← Houdini's own working folder, shared by every project
+   └─ render/ geo/ backup/         ← Houdini's own output, shared by every scene here
 ```
 
 Removing a **generated** project asks about its files: with **Keep houdini
 files** on it is only unlinked; turned off, its scene file is deleted too. The
-shared `houdini-project` folder always stays — the character's other projects
-use it, and it holds no exports. Hand-linked projects are always
-unlink-only.
+houdini folder itself always stays — the character's other scenes live in it,
+and it holds no exports. Hand-linked projects are always unlink-only.
 
 One one-time Settings entry powers it: the **Houdini installation folder**
 (Houdini's own install directory — its `bin\hython.exe` builds the scene

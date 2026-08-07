@@ -8,7 +8,6 @@
       "ok": true,
       "error": "",
       "job": "D:/chars/Kira",
-      "hipDir": "D:/chars/Kira/houdini",
       "refs": { "collapsible": 131, "foreign": 0, "broken": [] },
       "prefill": {
         "fillable": ["/obj/DazToHue/DazToHueImport import_character_rom_fbx_file"],
@@ -75,7 +74,6 @@
       "ok": false,
       "error": "Unable to open file",
       "job": "",
-      "hipDir": "",
       "refs": { "collapsible": 0, "foreign": 0, "broken": [] },
       "prefill": { "fillable": [], "missing": [] },
       "nodes": []

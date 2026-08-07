@@ -80,7 +80,9 @@ export interface DazInstallScan {
   /** The manifest folder actually resolved — the override, the Public-Documents
    *  default, or the legacy drive probe (see `api/daz-install.ts`). */
   manifests: string
-  /** Whose account these paths are, for the card's subtitle. */
+  /** Which DIM account these paths came from. Not shown — the name means
+   *  nothing to the user — but it is what selected the INI they were read
+   *  from, so it stays for diagnosis. */
   account: string
 }
 

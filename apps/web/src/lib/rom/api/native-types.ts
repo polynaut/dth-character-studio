@@ -344,8 +344,6 @@ export const materialScanProjectSchema = z.object({
    *  nodes (opening a `.hip` costs tens of seconds). Empty only when the
    *  project could not be read. */
   job: z.string(),
-  /** The folder the `.hip` sits in, i.e. `$HIP` — derived, never rewritten. */
-  hipDir: z.string(),
   /** What a repath would do to this project's stored file references. */
   refs: projectRefInfoSchema,
   /** Which DazToHue parms the studio could fill here, and which this DazToHue

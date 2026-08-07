@@ -260,8 +260,6 @@ export function HoudiniUtilsPanel({
   projectId,
   /** The character's own folder — what `$JOB` should be (v0.64). */
   charFolder = '',
-  /** Where the studio puts a generated scene — all `$HIP` is compared against. */
-  houdiniDir = '',
 }: {
   open: boolean
   onClose: () => void
@@ -269,7 +267,6 @@ export function HoudiniUtilsPanel({
   initialHipPath?: string
   projectId?: string
   charFolder?: string
-  houdiniDir?: string
 }) {
   // --- target side: this character's own projects ---------------------------
   const targets = character.houdiniProjects
@@ -951,7 +948,6 @@ export function HoudiniUtilsPanel({
             <GeneralTab
               scan={targetScan}
               charFolder={charFolder}
-              houdiniDir={houdiniDir}
               result={actionReport}
               repathReason={repath.reason}
               restore={restore}
@@ -1815,7 +1811,6 @@ export function HoudiniUtilsPanel({
 function GeneralTab({
   scan,
   charFolder,
-  houdiniDir,
   result,
   repathReason,
   restore,
@@ -1823,7 +1818,6 @@ function GeneralTab({
 }: {
   scan: ScanState
   charFolder: string
-  houdiniDir: string
   /** The last action's report — one slot for all three (see {@link ActionReport}). */
   result: ActionReport | null
   /** Why the repath action is unavailable, '' when it can run. */
@@ -1878,7 +1872,7 @@ function GeneralTab({
                 <p className="text-xs text-destructive">{project.error}</p>
               ) : (
                 <ul className="space-y-2.5">
-                  {defaultsRowsFor(project, charFolder, houdiniDir).map((row) => (
+                  {defaultsRowsFor(project, charFolder).map((row) => (
                     <CheckRow
                       key={row.key}
                       label={row.label}

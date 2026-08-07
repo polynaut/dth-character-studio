@@ -116,12 +116,50 @@ export async function sweepExportJunctions(
   return removed
 }
 
+/**
+ * Remove the leftover `houdini-project/` folder (retired in v0.68).
+ *
+ * It was created as the shared "project folder" every generated scene would
+ * `Set Project` to. That could never work as intended: Houdini's own output
+ * (render/, geo/, backup/) is written relative to **`$HIP`**, and `$HIP` is
+ * DERIVED from the folder the `.hip` sits in — Set Project sets `$JOB`, not
+ * `$HIP`. So the output always landed beside the scenes in the houdini folder
+ * (which is itself shared by every scene of the character, giving exactly the
+ * one-folder tidiness the subfolder was meant to provide) and `houdini-project`
+ * stayed empty.
+ *
+ * **Only ever removes it when EMPTY.** A pre-v0.64 project had `$JOB` pointed
+ * at this folder, so Houdini may genuinely have written caches or renders into
+ * it — that is the user's own output and deleting it is not the studio's call.
+ * A non-empty one is left exactly where it is and reported, so the user can
+ * look before deciding. Same shape as the junction sweep: best-effort, run from
+ * the generation funnel, no separate migration step.
+ */
+export async function sweepHoudiniProjectDirs(
+  charFolderAbs: string,
+  houdiniSubdir?: string,
+): Promise<{ removed: Array<string>; kept: Array<string> }> {
+  const empty = { removed: [], kept: [] }
+  if (!charFolderAbs || !isTauri()) return empty
+  const projectDir = characterHoudiniProjectDir(charFolderAbs, houdiniSubdir)
+  if (!projectDir) return empty
+  try {
+    // A primitive return — z.enum, not a bare invoke<T>() cast (no fixture
+    // needed; see the FFI ritual in .ai/conventions.md).
+    const state = z
+      .enum(['removed', 'absent', 'not-empty', 'not-a-directory'])
+      .parse(await invoke('remove_dir_if_empty', { request: { dirPath: projectDir } }))
+    if (state === 'removed') return { removed: [projectDir], kept: [] }
+    if (state === 'not-empty') return { removed: [], kept: [projectDir] }
+  } catch {
+    // locked or unreadable — the next generation sweeps again
+  }
+  return empty
+}
+
 export interface GeneratedHoudiniProject {
   /** Absolute path of the saved `.hiplc` — the caller links it. */
   scenePath: string
-  /** The project folder `$JOB` was baked to (shared by the character's
-   *  projects — this generate may have reused an existing one). */
-  projectDir: string
   /** Whether the DazToHue network was created from the installed HDA (false =
    *  hython couldn't see the HDA — the scene saved empty, `$JOB` still baked;
    *  the user adds the network from the DazToHue shelf). */
@@ -170,11 +208,18 @@ export async function generateHoudiniProject({
   // pick yields `$JOB/daz3d/dth-exports/…`, while `$HIP` still wins for paths
   // inside the houdini folder.
   //
-  // Layout: the scene FILE lives in the character's houdini folder, NEXT TO the
-  // one shared project folder Houdini writes its own caches/backups into:
+  // Layout: the scene FILE lives in the character's houdini folder, which IS
+  // the shared project folder — every one of a character's scenes sits there,
+  // so they all share one `$HIP` and Houdini's own `$HIP`-relative output
+  // (render/, geo/, backup/) collects in that single folder for free:
   //   <character>/                      ← $JOB (v0.64)
-  //   houdini/<name>.hiplc              ← the scene (one per generate)
-  //   houdini/houdini-project/          ← Houdini's own caches/backups, shared
+  //   houdini/<name>.hiplc              ← the scenes (one per generate)
+  //   houdini/render|geo|backup/        ← Houdini's own output, shared
+  // A dedicated `houdini-project/` subfolder was created here until v0.68 and
+  // could never attract any of that: `$HIP` is DERIVED from where the `.hip`
+  // sits and cannot be pointed elsewhere (Set Project sets `$JOB`, not `$HIP`),
+  // so the folder stayed empty while the output landed beside the scenes.
+  // {@link sweepHoudiniProjectDirs} removes the empty leftovers.
   // The export root is reached from the scene by plain relative navigation
   // (`$HIP/../<dazSubdir>/dth-exports/…` — the emitted swap is buildExportBlock
   // in @dth/rom dsa.ts, the prefix rule is `hipRefPrefixFor`). No junctions
@@ -182,7 +227,6 @@ export async function generateHoudiniProject({
   const charFolder = location?.folderAbs ?? ''
   if (!charFolder) throw new Error(`Character ${id} not found`)
   const houdiniDir = characterHoudiniDir(charFolder, project.houdiniSubdir)
-  const projectDir = characterHoudiniProjectDir(charFolder, project.houdiniSubdir)
   const scenePath = generatedHoudiniScenePath(houdiniDir, sceneName)
   if (!scenePath) throw new Error('The project name cannot be empty.')
   if (await exists(scenePath)) {
@@ -190,10 +234,6 @@ export async function generateHoudiniProject({
       `A scene with that name already exists:\n${scenePath}\nPick a different name, or open the existing project instead.`,
     )
   }
-
-  // Created by whichever generate runs first; every later one finds it and
-  // reuses it, so all of a character's projects share one $JOB.
-  await mkdir(projectDir, { recursive: true })
 
   // The matching Houdini documents folder doubles as HOUDINI_USER_PREF_DIR
   // for hython — without it, hython inherits the studio's environment and can
@@ -235,7 +275,6 @@ export async function generateHoudiniProject({
     await invoke('create_houdini_project', {
       request: {
         hythonPath,
-        projectDir,
         jobDir: charFolder,
         scenePath,
         houdiniPrefDir,
@@ -246,7 +285,6 @@ export async function generateHoudiniProject({
   const [created = 'none', visible = 'none', prefilledRaw = 'none'] = report.split('|')
   return {
     scenePath,
-    projectDir,
     networkAdded: created !== 'none',
     visibleTypes: visible === 'none' ? [] : visible.split(',').filter(Boolean),
     prefilled: prefilledRaw === 'none' ? [] : prefilledRaw.split(',').filter(Boolean),

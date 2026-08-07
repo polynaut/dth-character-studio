@@ -1006,7 +1006,6 @@ def op_scan(request):
             "error": "",
             "nodes": [],
             "job": "",
-            "hipDir": "",
             "refs": {"collapsible": 0, "foreign": 0, "broken": []},
             "prefill": {"fillable": [], "missing": []},
         }
@@ -1016,7 +1015,6 @@ def op_scan(request):
             # Read in the SAME pass as the nodes — opening a `.hip` costs tens
             # of seconds, and the General tab must not pay it a second time.
             entry["job"] = _scene_job()
-            entry["hipDir"] = _norm_path(hou.getenv("HIP") or "")
             entry["refs"] = _project_ref_info()
             entry["prefill"] = _prefill_scan()
         except Exception as exc:

@@ -367,6 +367,22 @@ test('settings-houdini-install', async ({ page }) => {
   await shoot(page, join(OUT, 'settings-houdini-install.png'), card(page, 'Houdini installation'))
 })
 
+/** Both detections in one frame, each with a card ACTIVATED — the state the
+ *  setup page's opening describes. The two separate shots below/above show each
+ *  section's detail; this one exists to show that Settings → General *opens*
+ *  with your machine already found, which is the point of the cards. */
+test('settings-installations', async ({ page }) => {
+  await openDazSettings(page)
+  await page.getByRole('button', { name: /Houdini 22\.0\.368/ }).click()
+  await card(page, 'Houdini installation').getByText('Paths from this installation').waitFor()
+  await shootStrip(
+    page,
+    join(OUT, 'settings-installations.png'),
+    card(page, 'Daz installation'),
+    card(page, 'Houdini installation'),
+  )
+})
+
 test('settings-dth-release', async ({ page }) => {
   // Shot with an installation ACTIVE: the library path is derived from it, so
   // this section carries no path field of its own — which is what the guide's
