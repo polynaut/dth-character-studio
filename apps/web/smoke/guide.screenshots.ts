@@ -404,6 +404,20 @@ const HOUDINI_DOCS = 'C:/Users/You/Documents/houdini22.0'
  *  of its own (the fixture world has exactly one). */
 const SOURCE_HIP = 'D:/DTH Projects/Demo/Ita/houdini/Ita.hiplc'
 
+/** A material slot's surface claims, in the shape the node stores them —
+ *  `material_group#` is a space-separated list of group expressions, and the
+ *  drawer counts and merges by those. */
+const surfaces = (names: Array<string>): Array<string> =>
+  names.map((name) => `@fbx_material_name=${name}`)
+
+/** The 15 Daz surfaces a Genesis 9 skin merges — measured on a real project,
+ *  and the number the guide quotes beside this screenshot. */
+const G9_SKIN_SURFACES = [
+  'Body', 'Fingernails', 'Toenails', 'Legs', 'MouthCavity', 'Arms', 'Head',
+  'GPTorso', 'GPVagina', 'GPLabiaMinora', 'GPUrethra', 'GPRectum', 'GPTorsoBack',
+  'Mouth', 'Teeth',
+]
+
 /** The source node: a dressed character's finished material setup. The slot
  *  numbers are the ones docs/guide/06-into-houdini.md quotes, so the shot and
  *  the prose beside it can't drift apart. */
@@ -419,10 +433,10 @@ const SOURCE_NODE = {
   bakerNames: ['T_Skin_Colour', 'T_Skin_Normal'],
   materialNames: ['MI_Skin', 'Skin'],
   slots: [
-    { name: 'Skin', displayName: 'MI_Skin', surfaces: 15, bakers: 4, layers: 30, channelUvs: ['uv_geoshell'] },
-    { name: 'Dress', displayName: 'MI_Dress', surfaces: 1, bakers: 4, layers: 4, channelUvs: [] },
-    { name: 'YogaPants', displayName: 'MI_YogaPants', surfaces: 2, bakers: 2, layers: 2, channelUvs: [] },
-    { name: 'HighBoots', displayName: 'MI_HighBoots', surfaces: 7, bakers: 1, layers: 7, channelUvs: [] },
+    { name: 'Skin', displayName: 'MI_Skin', surfaces: surfaces(G9_SKIN_SURFACES), bakers: 4, layers: 30, channelUvs: ['uv_geoshell'] },
+    { name: 'Dress', displayName: 'MI_Dress', surfaces: surfaces(['Dress']), bakers: 4, layers: 4, channelUvs: [] },
+    { name: 'YogaPants', displayName: 'MI_YogaPants', surfaces: surfaces(['Trousers', 'Waist']), bakers: 2, layers: 2, channelUvs: [] },
+    { name: 'HighBoots', displayName: 'MI_HighBoots', surfaces: surfaces(['Eyelets', 'Lace', 'Inside', 'BaseLeather', 'Overlays', 'SoleBase', 'SoleBottom']), bakers: 1, layers: 7, channelUvs: [] },
   ],
   sectionCounts: [],
 }

@@ -205,8 +205,11 @@ export const materialSlotInfoSchema = z.object({
   name: z.string(),
   /** Name as a baker spells it, with the node's prefix (`MI_Skin`). */
   displayName: z.string(),
-  /** Daz surfaces merged into this slot (a G9 skin merges ~15). */
-  surfaces: z.number(),
+  /** The Daz surfaces merged into this slot, as the RAW group expressions the
+   *  node stores (`@fbx_material_name=Body`) — a G9 skin merges ~15. Raw
+   *  because these are also the merge rule's input: the panel compares claims
+   *  verbatim to preview what a transfer replaces (`houdini-material-merge.ts`). */
+  surfaces: z.array(z.string()),
   bakers: z.number(),
   layers: z.number(),
   /** UV names this slot's bakers read that only a UV channel produces. Empty =
@@ -265,8 +268,14 @@ export const materialSectionResultSchema = z.object({
   key: z.string(),
   before: z.number(),
   after: z.number(),
-  /** Instances an append skipped as already-defined (material slots only). */
-  skipped: z.number(),
+  /** Target material slots this run removed, by name: those whose surfaces the
+   *  incoming slots now claim, plus any whose NAME an incoming slot carries.
+   *  A surface belongs to exactly one slot, so making room is part of
+   *  installing one. Empty for the other sections. */
+  evicted: z.array(z.string()),
+  /** Target slots that survived but lost the surfaces that moved — dropping
+   *  them whole would orphan the surfaces nothing else claims. */
+  trimmed: z.array(z.string()),
 })
 
 /** What a transfer did — or, in a dry run, would do — to one target node. */
@@ -291,6 +300,13 @@ export const materialTransferTargetSchema = z.object({
    *  channels aren't part of this run — the answer to "do I need the UV
    *  channels too?". Empty for a clothing material. */
   missingUvSources: z.array(z.string()),
+  /** Surfaces the incoming slots claim that NO slot on this target claims
+   *  today. A few is ordinary (the source wears something the target doesn't);
+   *  ALL of them on a large set means the two nodes describe different figures
+   *  — what copying a G9 skin onto a G8 character would look like. The studio
+   *  has not measured how generations name surfaces, so this is the symptom,
+   *  not a generation check. */
+  unclaimedSurfaces: z.array(z.string()),
   /** Rolling pre-transfer backup (empty for a dry run). */
   backupPath: z.string(),
 })

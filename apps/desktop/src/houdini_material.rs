@@ -30,9 +30,15 @@ pub struct MaterialSlotInfo {
     pub name: String,
     /// Name as a baker spells it, i.e. with the node's prefix (`MI_Skin`).
     pub display_name: String,
-    /// Daz surfaces merged into this slot — a G9 skin merges ~15, which is
+    /// The Daz surfaces merged into this slot, as the RAW group expressions the
+    /// node stores (`@fbx_material_name=Body`) — a G9 skin merges ~15, which is
     /// exactly the hand-work that makes the setup worth copying.
-    pub surfaces: u32,
+    ///
+    /// Raw rather than parsed because these are also the merge rule's input: a
+    /// slot is a CLAIM on surfaces, and the panel compares claims verbatim to
+    /// preview what a transfer would replace at each target
+    /// (`lib/rom/houdini-material-merge.ts`).
+    pub surfaces: Vec<String>,
     pub bakers: u32,
     pub layers: u32,
     /// UV names this slot's bakers read that only a UV CHANNEL produces
@@ -116,10 +122,15 @@ pub struct MaterialSectionResult {
     /// Instance count before and after (for a dry run, what it WOULD become).
     pub before: u32,
     pub after: u32,
-    /// Instances an append skipped because the target already defines that name
-    /// — material slots only, where two slots claiming the same surfaces would
-    /// be worse than not copying.
-    pub skipped: u32,
+    /// Target material slots this run removed, by name — the ones whose Daz
+    /// surfaces the incoming slots now claim, plus any whose NAME an incoming
+    /// slot carries. A surface belongs to exactly one slot, so making room is
+    /// part of installing one; empty for the other sections.
+    pub evicted: Vec<String>,
+    /// Target slots that survived but lost the surfaces that moved — the
+    /// partial overlap. Dropping them whole would orphan the surfaces nothing
+    /// else claims.
+    pub trimmed: Vec<String>,
 }
 
 /// What a transfer did (or, in a dry run, would do) to one target node.
@@ -151,6 +162,15 @@ pub struct MaterialTransferTarget {
     /// the channels are NOT part of this run — so "do I need the UV channels
     /// too?" is answered instead of guessed. Empty for a clothing material.
     pub missing_uv_sources: Vec<String>,
+    /// Surfaces the incoming slots claim that NO slot on this target claims
+    /// today.
+    ///
+    /// A few is ordinary — the source wears something the target does not. ALL
+    /// of them, on a large set, means the two nodes describe different figures;
+    /// copying a Genesis 9 skin onto a Genesis 8 character would look exactly
+    /// like this. The studio has NOT measured how the generations name their
+    /// surfaces, so this reports the symptom rather than asserting a rule.
+    pub unclaimed_surfaces: Vec<String>,
     /// Where the pre-transfer state was backed up (empty for a dry run).
     pub backup_path: String,
 }
