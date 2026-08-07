@@ -254,6 +254,45 @@ export const materialNodeInfoSchema = z.object({
   sectionCounts: z.array(sectionCountInfoSchema),
 })
 
+/** How portable a project's stored file references are. Computed by the SAME
+ *  helpers the `repath` op runs (in dry mode), so the Defaults tab can never
+ *  promise a number the action then doesn't deliver. */
+export const projectRefInfoSchema = z.object({
+  /** Absolute references under `$HIP`/`$JOB`/`$DAZ3D_LIB` — expressible
+   *  relative to one of them. */
+  collapsible: z.number(),
+  /** Absolute references under none of those roots: reported, never touched. */
+  foreign: z.number(),
+  /** DazToHue import references whose file is not there, as `<node> <parm>`.
+   *  Scoped to those parms because "the file is missing" is NOT a usable
+   *  definition of broken in general — measured, a healthy project reports four
+   *  of Houdini's own scratch files that simply don't exist until used. */
+  broken: z.array(z.string()),
+})
+
+/** One import reference a repath rebuilt. */
+export const repairedRefSchema = z.object({
+  /** `<node path> <parm name>`. */
+  label: z.string(),
+  from: z.string(),
+  to: z.string(),
+})
+
+/** What the `repath` op did (or would do) to one project. */
+export const repathResultSchema = z.object({
+  hipPath: z.string(),
+  ok: z.boolean(),
+  error: z.string(),
+  /** References rewritten from an absolute path to a `$VAR`-relative one. */
+  collapsed: z.number(),
+  /** Broken DazToHue import references rebuilt from a sibling that resolved. */
+  repaired: z.array(repairedRefSchema),
+  /** Absolute references left alone because they sit under no known root. */
+  foreign: z.array(z.string()),
+  /** Pre-repath backup (empty for a dry run, and when nothing changed). */
+  backupPath: z.string(),
+})
+
 /** One scanned `.hip` (`ok: false` = unreadable; the scan itself still succeeds). */
 export const materialScanProjectSchema = z.object({
   hipPath: z.string(),
@@ -267,6 +306,8 @@ export const materialScanProjectSchema = z.object({
   job: z.string(),
   /** The folder the `.hip` sits in, i.e. `$HIP` — derived, never rewritten. */
   hipDir: z.string(),
+  /** What a repath would do to this project's stored file references. */
+  refs: projectRefInfoSchema,
 })
 
 /** What the `defaults` operation did (or would do) to one project's `$JOB`.
@@ -348,6 +389,8 @@ export const materialUtilReportSchema = z.object({
   targets: z.array(materialTransferTargetSchema),
   /** Populated by `defaults` — one entry per project it was asked about. */
   defaults: z.array(houdiniDefaultsResultSchema),
+  /** Populated by `repath` — one entry per project it was asked about. */
+  repath: z.array(repathResultSchema),
   sourceBakers: z.number(),
   sourceLayers: z.number(),
   sourceBakerNames: z.array(z.string()),
@@ -384,4 +427,6 @@ export type MaterialSectionResult = z.infer<typeof materialSectionResultSchema>
 export type MaterialScanProject = z.infer<typeof materialScanProjectSchema>
 export type MaterialTransferTarget = z.infer<typeof materialTransferTargetSchema>
 export type HoudiniDefaultsResult = z.infer<typeof houdiniDefaultsResultSchema>
+export type ProjectRefInfo = z.infer<typeof projectRefInfoSchema>
+export type RepathResult = z.infer<typeof repathResultSchema>
 export type MaterialUtilReport = z.infer<typeof materialUtilReportSchema>

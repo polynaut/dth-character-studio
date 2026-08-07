@@ -6,7 +6,7 @@ the polling: this one is synchronous and the studio waits for the process).
 
     hython material_utils.py <requestFile> <resultFile>
 
-Three operations:
+Four operations:
 
   scan      list every DazToHueMaterial node in a set of `.hip` files, with the
             counts the panel shows (materials / UV channels / bakers / layers)
@@ -18,6 +18,10 @@ Three operations:
   defaults  repoint a project's `$JOB` at the folder the studio expects, so a
             hand-picked export collapses to a variable instead of an absolute
             path (`op_defaults`).
+  repath    make the references a project ALREADY stores portable — express
+            each absolute one relative to `$HIP`/`$JOB`/`$DAZ3D_LIB`, and
+            rebuild any DazToHue import path whose file isn't there
+            (`op_repath`).
 
 Copying only the bakers produces a setup that imports cleanly and bakes NOTHING:
 a baker names its material (`MI_Skin`) and its layers name geometry groups and
@@ -44,8 +48,9 @@ Facts measured against DazToHue 2.5 / Houdini 22.0 rather than assumed:
   * Walking a project's nodes can raise `hou.PermissionError` on locked assets,
     so every traversal is guarded.
 
-Nothing here writes to a source file, and a target is only ever saved by a real
-(non-dry) transfer — after a single rolling backup beside Houdini's own.
+Nothing here writes to a source file, and a target `.hip` is only ever saved by
+a real (non-dry) run of `transfer` / `defaults` / `repath` — each after a single
+rolling backup beside Houdini's own.
 """
 
 import json
@@ -140,6 +145,24 @@ INTRINSIC_UV_NAMES = frozenset(("", "uv", "uv_original"))
 # is what makes a copied setup survive a moved library — or a second machine
 # whose library sits on another drive.
 LIB_VAR = "$DAZ3D_LIB"
+
+# The roots a stored path can be expressed relative to, in the order a TIE is
+# broken. Longest match actually wins (see `_ref_roots`); this order only
+# decides between roots of EQUAL length, where `$HIP` is the safer answer — it
+# travels with the scene file itself, while `$JOB` is a setting that can be
+# repointed out from under it.
+REF_ROOT_VARS = ("$HIP", "$JOB", LIB_VAR)
+
+# The DazToHueImport file parms, with the extension each one holds. A Daz export
+# writes all three beside each other with the SAME basename
+# (`primary/Ita.dth` + `.fbx` + `.abc`, measured), which is what lets a broken
+# one be rebuilt from a sibling that still resolves — no scene lookup, and no
+# guess: the derived file has to actually exist before it is written.
+DTH_IMPORT_FILE_PARMS = (
+    ("import_character_dtu_file", ".dth"),
+    ("import_character_fbx_file", ".fbx"),
+    ("import_character_alembic_file", ".abc"),
+)
 
 
 def _norm_path(value):
@@ -944,7 +967,15 @@ def _node_info(node):
 def op_scan(request):
     projects = []
     for path in request.get("hipPaths", []):
-        entry = {"hipPath": path, "ok": True, "error": "", "nodes": [], "job": "", "hipDir": ""}
+        entry = {
+            "hipPath": path,
+            "ok": True,
+            "error": "",
+            "nodes": [],
+            "job": "",
+            "hipDir": "",
+            "refs": {"collapsible": 0, "foreign": 0, "broken": []},
+        }
         try:
             _load(path)
             entry["nodes"] = [_node_info(n) for n in _dth_nodes()]
@@ -952,11 +983,241 @@ def op_scan(request):
             # of seconds, and the Defaults tab must not pay it a second time.
             entry["job"] = _scene_job()
             entry["hipDir"] = _norm_path(hou.getenv("HIP") or "")
+            entry["refs"] = _project_ref_info()
         except Exception as exc:
             entry["ok"] = False
             entry["error"] = str(exc).strip() or exc.__class__.__name__
         projects.append(entry)
     return {"op": "scan", "projects": projects, "targets": []}
+
+
+# --- reference paths ---------------------------------------------------------
+#
+# A project is movable only when every reference is expressed relative to
+# something that travels with it. Repointing `$JOB` (op_defaults) fixes what the
+# user picks AFTERWARDS; this fixes what is already stored.
+
+
+def _ref_roots():
+    """`[(var, normalized root)]`, longest root first.
+
+    Longest-match-wins is what makes nesting correct without a special case: on
+    a studio-generated project `$HIP` (`<char>/houdini`) sits INSIDE `$JOB`
+    (`<char>`), so a scene-local path collapses to `$HIP` and an export two
+    levels up to `$JOB` — which is exactly the split measured for the file
+    picker's own behaviour.
+    """
+    roots = []
+    for var in REF_ROOT_VARS:
+        value = _norm_path(hou.getenv(var[1:]) or "")
+        if value:
+            roots.append((var, value))
+    roots.sort(key=lambda pair: len(pair[1]), reverse=True)
+    return roots
+
+
+def _collapse_ref(value, roots):
+    """`D:/chars/Ita/daz3d/x.fbx` → `$JOB/daz3d/x.fbx`, or None to leave it.
+
+    Deliberately NOT `hou.text.collapseCommonVars`, which is what Houdini's file
+    picker uses. Measured 2026-08-07: that call is CASE- and SEPARATOR-sensitive
+    — on a real project 83 of 131 texture paths were stored lowercase
+    (`d:/daz 3d/…`) and it left every one of them alone, which would have
+    reported them as "cannot be made portable" while the studio could plainly
+    see the root. Windows paths are case-insensitive, so the compare is too —
+    the same fold `_rewrite_lib_paths` already applies.
+    """
+    if not value or value.startswith("$"):
+        return None  # already relative to something
+    if not _looks_absolute(value):
+        return None
+    norm = _norm_path(value)
+    lowered = norm.lower()
+    for var, root in roots:
+        if lowered == root.lower():
+            return var
+        if lowered.startswith(root.lower() + "/"):
+            return var + norm[len(root) :]
+    return None
+
+
+def _file_ref_parms(node):
+    """Every FILE-valued string parm on a node, with its raw stored value.
+
+    Restricted to file references on purpose: a path that is not one is not a
+    reference to make portable, and rewriting an arbitrary string that happens
+    to look like a path is how a tool starts corrupting scenes.
+    """
+    out = []
+    try:
+        parms = node.parms()
+    except (hou.OperationFailed, hou.PermissionError):
+        return out
+    for parm in parms:
+        try:
+            template = parm.parmTemplate()
+            if not isinstance(template, hou.StringParmTemplate):
+                continue
+            if template.stringType() != hou.stringParmType.FileReference:
+                continue
+            # An expression is what Houdini writes back, so rewriting the value
+            # it happens to evaluate to would simply be discarded.
+            if parm.expression():
+                continue
+        except hou.OperationFailed:
+            pass
+        except Exception:
+            continue
+        try:
+            raw = parm.unexpandedString()
+        except Exception:
+            continue
+        if raw:
+            out.append((parm, raw))
+    return out
+
+
+def _repair_import_refs(node, roots, dry_run):
+    """Rebuild a DazToHueImport path that points at a file which isn't there.
+
+    Pre-v0.63 projects hold a `.dth` addressed through the RETIRED `dth-exports`
+    junction (`$HIP/houdini-project/dth-exports/…`) while its `.fbx`/`.abc`
+    siblings name the real location — measured on a real project.
+
+    The fix comes from the node's OWN siblings, never from a scene: a Daz export
+    writes all three files together with the same basename, so a sibling that
+    still resolves gives both the folder and the stem. That matters because the
+    node → scene mapping is genuinely ambiguous (a project can hold several
+    import nodes naming the same files), and this needs none of it.
+
+    Only ever applied when the derived file EXISTS, so a repair is a verified
+    fact rather than a guess. Returns `[(label, old, new)]`.
+
+    The replacement is stored in its PORTABLE form straight away rather than
+    absolute, so the collapse pass has nothing left to do to it. That is not
+    cosmetic: collapsing it afterwards would make a real run report one more
+    rewrite than its own dry run did, and a dry run that undercounts is worse
+    than no dry run.
+    """
+    fixed = []
+    resolved = {}
+    broken = []
+    for name, ext in DTH_IMPORT_FILE_PARMS:
+        parm = node.parm(name)
+        if parm is None:
+            continue
+        try:
+            value = parm.eval()
+        except Exception:
+            continue
+        if not value:
+            continue
+        if os.path.exists(value):
+            resolved[ext] = value
+        else:
+            broken.append((parm, name, ext))
+    if not broken or not resolved:
+        return fixed
+    # Any sibling that resolves will do — they all live in the export folder.
+    donor = list(resolved.values())[0]
+    folder = os.path.dirname(donor)
+    stem = os.path.splitext(os.path.basename(donor))[0]
+    for parm, name, ext in broken:
+        candidate = _norm_path(os.path.join(folder, stem + ext))
+        if not os.path.exists(candidate):
+            continue
+        portable = _collapse_ref(candidate, roots) or candidate
+        old = parm.unexpandedString()
+        if not dry_run:
+            parm.set(portable)
+        fixed.append((node.path() + " " + name, old, portable))
+    return fixed
+
+
+def _project_ref_info():
+    """What a repath WOULD do to the open scene — read-only, for the scan.
+
+    Runs the exact helpers `op_repath` runs (with `dry_run`), so the tab can
+    never promise a number the action then doesn't deliver.
+    """
+    roots = _ref_roots()
+    info = {"collapsible": 0, "foreign": 0, "broken": []}
+    for node in hou.node("/").allSubChildren():
+        for label, _old, _new in _repair_import_refs(node, roots, True):
+            info["broken"].append(label)
+        for _parm, raw in _file_ref_parms(node):
+            if _collapse_ref(raw, roots) is not None:
+                info["collapsible"] += 1
+            elif raw and not raw.startswith("$") and _looks_absolute(raw):
+                info["foreign"] += 1
+    return info
+
+
+def op_repath(request):
+    """Make a project's stored references portable, and repair broken ones.
+
+    Two fixes in one pass because they touch the same parms and want the same
+    single backup: rebuild any DazToHueImport path whose file isn't there, then
+    express every absolute reference relative to `$HIP` / `$JOB` /
+    `$DAZ3D_LIB`.
+
+    `$JOB` must already be correct — the caller passes the folder it expects and
+    a mismatch is REFUSED rather than repathed, because collapsing against a
+    stale `$JOB` would bake the old project folder into every path it touched.
+    """
+    dry_run = bool(request.get("dryRun"))
+    results = []
+    for target in request.get("targets", []):
+        path = target.get("hipPath", "")
+        want = _norm_path(target.get("jobDir", ""))
+        result = {
+            "hipPath": path,
+            "ok": True,
+            "error": "",
+            "collapsed": 0,
+            "repaired": [],
+            "foreign": [],
+            "backupPath": "",
+        }
+        try:
+            _load(path)
+            current = _scene_job()
+            if want and current.lower() != want.lower():
+                raise hou.Error(
+                    "This project's $JOB is still %s — repair it first, or every "
+                    "path here would be stored relative to the old project folder." % current
+                )
+            roots = _ref_roots()
+            changed = 0
+            foreign = set()
+            for node in hou.node("/").allSubChildren():
+                for label, old, new in _repair_import_refs(node, roots, dry_run):
+                    result["repaired"].append({"label": label, "from": old, "to": new})
+                    changed += 1
+                for parm, raw in _file_ref_parms(node):
+                    collapsed = _collapse_ref(raw, roots)
+                    if collapsed is None:
+                        # Absolute and under none of the known roots: it cannot
+                        # be made portable, so it is REPORTED rather than
+                        # silently left looking handled.
+                        if raw and not raw.startswith("$") and _looks_absolute(raw):
+                            foreign.add(_norm_path(raw))
+                        continue
+                    if not dry_run:
+                        parm.set(collapsed)
+                    result["collapsed"] += 1
+                    changed += 1
+            result["foreign"] = sorted(foreign)
+            if changed and not dry_run:
+                result["backupPath"] = _backup(path)
+                hou.hipFile.save(path)
+        except Exception as exc:
+            result["ok"] = False
+            result["error"] = str(exc).strip() or exc.__class__.__name__
+            result["collapsed"] = 0
+            result["repaired"] = []
+        results.append(result)
+    return {"op": "repath", "projects": [], "targets": [], "repath": results, "dryRun": dry_run}
 
 
 def op_defaults(request):
@@ -1404,7 +1665,12 @@ def op_transfer_skeleton(request):
     }
 
 
-OPS = {"scan": op_scan, "transfer": op_transfer, "defaults": op_defaults}
+OPS = {
+    "scan": op_scan,
+    "transfer": op_transfer,
+    "defaults": op_defaults,
+    "repath": op_repath,
+}
 
 
 def main():
@@ -1447,6 +1713,7 @@ def main():
     payload.setdefault("dryRun", False)
     payload.setdefault("replace", False)
     payload.setdefault("defaults", [])
+    payload.setdefault("repath", [])
 
     # Write-then-rename: the studio reads this the moment hython exits, and a
     # half-written JSON would parse as a corrupt result rather than a failure.

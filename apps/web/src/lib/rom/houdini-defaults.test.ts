@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { defaultsRowsFor, projectsNeedingRepair, sameFolder } from './houdini-defaults.ts'
+import {
+  defaultsRowsFor,
+  planRepath,
+  projectsNeedingRepair,
+  sameFolder,
+} from './houdini-defaults.ts'
 
 /**
  * The `$JOB` values are REAL, read out of the two projects with hython:
@@ -114,5 +119,109 @@ describe('projectsNeedingRepair', () => {
 
   it('returns nothing once every project is repaired', () => {
     expect(projectsNeedingRepair([{ hipPath: 'a.hiplc', ok: true, job: ITA }], ITA)).toEqual([])
+  })
+})
+
+/**
+ * The repath gate.
+ *
+ * The two `refs` fixtures are the SAME real project measured twice with hython —
+ * before and after its `$JOB` was repaired. Same file, opposite answer, which is
+ * exactly why the order is enforced rather than suggested.
+ */
+describe('planRepath', () => {
+  const HIP = `${ITA_HIP_DIR}/PlaygroundAssets_Ita.hiplc`
+  const BROKEN_DTU = '/obj/DazToHue/DazToHueImport import_character_dtu_file'
+  /** Measured with the pre-v0.64 $JOB still in place. */
+  const STALE_REFS = { collapsible: 0, foreign: 2, broken: [BROKEN_DTU] }
+  /** The same file, measured again after the $JOB repair. */
+  const REPAIRED_REFS = { collapsible: 2, foreign: 0, broken: [BROKEN_DTU] }
+
+  it('refuses to run while $JOB is still stale, and says why', () => {
+    const plan = planRepath([{ hipPath: HIP, ok: true, job: ITA_STALE_JOB, refs: STALE_REFS }], ITA)
+
+    expect(plan.targets).toEqual([])
+    expect(plan.blockedByJob).toEqual([HIP])
+    expect(plan.reason).toContain('Repair $JOB first')
+    // Nothing is counted from a blocked project — its numbers describe a state
+    // the user is about to change.
+    expect(plan.collapsible).toBe(0)
+    expect(plan.broken).toBe(0)
+  })
+
+  it('runs once $JOB matches, counting what the same file then reports', () => {
+    const plan = planRepath([{ hipPath: HIP, ok: true, job: ITA, refs: REPAIRED_REFS }], ITA)
+
+    expect(plan.targets).toEqual([HIP])
+    expect(plan.blockedByJob).toEqual([])
+    expect(plan.collapsible).toBe(2)
+    expect(plan.broken).toBe(1)
+    expect(plan.foreign).toBe(0)
+    expect(plan.reason).toBe('')
+  })
+
+  it('sends only the projects with something to do', () => {
+    const clean = { collapsible: 0, foreign: 0, broken: [] }
+    const plan = planRepath(
+      [
+        { hipPath: 'a.hiplc', ok: true, job: ITA, refs: clean },
+        { hipPath: 'b.hiplc', ok: true, job: ITA, refs: REPAIRED_REFS },
+      ],
+      ITA,
+    )
+    expect(plan.targets).toEqual(['b.hiplc'])
+  })
+
+  it('says so when there is genuinely nothing left to fix', () => {
+    const clean = { collapsible: 0, foreign: 0, broken: [] }
+    const plan = planRepath([{ hipPath: 'a.hiplc', ok: true, job: ITA, refs: clean }], ITA)
+    expect(plan.targets).toEqual([])
+    expect(plan.reason).toContain('already relative')
+  })
+
+  it('counts a project with only BROKEN refs as work, not as clean', () => {
+    // Nothing to collapse, but a dangling import is still a repair.
+    const plan = planRepath(
+      [
+        {
+          hipPath: 'a.hiplc',
+          ok: true,
+          job: ITA,
+          refs: { collapsible: 0, foreign: 0, broken: [BROKEN_DTU] },
+        },
+      ],
+      ITA,
+    )
+    expect(plan.targets).toEqual(['a.hiplc'])
+    expect(plan.broken).toBe(1)
+  })
+
+  it('ignores a project the scan could not read', () => {
+    const plan = planRepath(
+      [{ hipPath: 'gone.hiplc', ok: false, job: '', refs: { collapsible: 9, foreign: 9, broken: [] } }],
+      ITA,
+    )
+    expect(plan.targets).toEqual([])
+    expect(plan.blockedByJob).toEqual([])
+    expect(plan.collapsible).toBe(0)
+  })
+
+  it('reports foreign paths without letting them block the run', () => {
+    // They cannot be made portable, but that is not a reason to withhold the
+    // fixes that CAN be applied.
+    const plan = planRepath(
+      [
+        {
+          hipPath: 'a.hiplc',
+          ok: true,
+          job: ITA,
+          refs: { collapsible: 3, foreign: 5, broken: [] },
+        },
+      ],
+      ITA,
+    )
+    expect(plan.targets).toEqual(['a.hiplc'])
+    expect(plan.foreign).toBe(5)
+    expect(plan.reason).toBe('')
   })
 })

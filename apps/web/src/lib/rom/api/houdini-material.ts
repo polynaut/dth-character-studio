@@ -374,6 +374,51 @@ export async function repairHoudiniDefaults({
   return runMaterialUtil({ op: 'defaults', ...input })
 }
 
+const repathInput = z.object({
+  targets: z
+    .array(
+      z.object({
+        hipPath: z.string().min(1),
+        /** The `$JOB` the project must ALREADY carry. The Python refuses a
+         *  mismatch rather than repathing against a stale root — see below. */
+        jobDir: z.string().min(1),
+      }),
+    )
+    .min(1),
+  dryRun: z.boolean(),
+})
+
+/**
+ * Make a project's stored references portable, and rebuild broken ones.
+ *
+ * The other half of the `$JOB` story: {@link repairHoudiniDefaults} fixes what
+ * the user picks AFTERWARDS, this fixes what is already stored. Every absolute
+ * reference under `$HIP` / `$JOB` / `$DAZ3D_LIB` is rewritten relative to it,
+ * and any DazToHue import path whose file is missing is rebuilt from a sibling
+ * that still resolves (only when the derived file actually exists).
+ *
+ * **`$JOB` must already be correct.** `jobDir` is the value the caller expects,
+ * and the Python REFUSES a project whose `$JOB` differs — collapsing against a
+ * stale root would bake the old project folder into every path it touched. The
+ * panel gates the action on the same condition, so the refusal is a backstop
+ * rather than the normal way to find out.
+ *
+ * Writes a `.hip`, so it carries the same guarantees as the transfer: a dry run
+ * that changes nothing and reports exactly what a real run would do, and one
+ * rolling backup beside Houdini's own before any save.
+ */
+export async function repathHoudiniReferences({
+  data,
+}: {
+  data: unknown
+}): Promise<MaterialUtilReport> {
+  const input = repathInput.parse(data)
+  if (!isTauri()) {
+    throw new Error('Repathing Houdini references needs the desktop app (it runs hython).')
+  }
+  return runMaterialUtil({ op: 'repath', ...input })
+}
+
 /**
  * Whether two node references point at the SAME material node.
  *

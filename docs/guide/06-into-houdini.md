@@ -267,9 +267,36 @@ Measured with the call Houdini's own file picker uses:
 that already works.
 
 > **It fixes what you pick from now on.** Repointing `$JOB` does not rewrite
-> references that are *already* stored absolute — those stay exactly as they
-> are. It makes a project *capable* of being movable; it does not retroactively
-> move it.
+> references that are *already* stored absolute — that is what **Make paths
+> portable** below is for.
+
+**Reference paths** and **Import references** are the other half. Repairing
+`$JOB` decides how *future* picks are written down; these two fix what is
+already written.
+
+**Make paths portable** does two things in one pass:
+
+- Rewrites every absolute reference that sits under `$HIP`, `$JOB` or
+  `$DAZ3D_LIB` so it is stored relative to that variable instead. On a real
+  project that was **131 texture paths**, all of them into the Daz library.
+  Anything under none of those roots can't be made portable — it stays exactly
+  as it is and the report names it.
+- Rebuilds a **DazToHue import** path that points at a file which isn't there.
+  Projects made before v0.63 address their `.dth` through the retired
+  `dth-exports` junction, so it dangles while the `.fbx` and `.abc` beside it
+  are fine. The replacement is derived from that same node's other export files
+  — they sit together with the same name — and is only written when the file it
+  would point at **actually exists**. Nothing is guessed.
+
+> **`$JOB` has to be right first**, and the button stays disabled until it is.
+> A path is made relative to whatever `$JOB` the scene currently carries, so
+> repathing a project that still has the old value would store every export
+> path against the wrong folder. Measured on one real project: with the stale
+> `$JOB` it reports *0* paths it can fix; after the `$JOB` repair, the same file
+> reports *2*.
+
+Both offer a **Dry run** and take the same rolling backup. Running twice changes
+nothing the second time.
 
 **Scene location (`$HIP`)** is reported, never rewritten: `$HIP` is simply
 wherever the `.hip` sits, so "repairing" it would mean moving your scene file —

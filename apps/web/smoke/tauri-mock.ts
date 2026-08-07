@@ -394,6 +394,7 @@ export function installTauriMock(seed: TauriMockSeed): void {
           projects: [],
           targets: [],
           defaults: [],
+          repath: [],
           sourceBakers: 0,
           sourceLayers: 0,
           sourceBakerNames: [],
@@ -417,7 +418,25 @@ export function installTauriMock(seed: TauriMockSeed): void {
               // may name a $JOB; without one the project reads as already
               // correct, so the Defaults tab is quiet unless a spec asks for it.
               job: seed.materialJob?.[norm(hipPath)] ?? '',
+              // No hython here to read real parms: a scanned project reports
+              // nothing to repath, so the Defaults tab's reference rows stay
+              // quiet unless a spec seeds them.
+              refs: { collapsible: 0, foreign: 0, broken: [] },
               hipDir: norm(hipPath).replace(/\/[^/]*$/, ''),
+            })),
+          }
+        }
+        if (request.op === 'repath') {
+          return {
+            ...base,
+            repath: (request.targets as Array<{ hipPath: string }>).map((t) => ({
+              hipPath: t.hipPath,
+              ok: true,
+              error: '',
+              collapsed: 0,
+              repaired: [],
+              foreign: [],
+              backupPath: '',
             })),
           }
         }
