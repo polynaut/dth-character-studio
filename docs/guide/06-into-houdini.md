@@ -200,12 +200,26 @@ A target slot claiming a *mix* of taken and untaken surfaces is not dropped; it
 keeps the ones nothing else claims.
 
 The confirm dialog lists what this replaces at each target **before** you run,
-and the report names it again afterwards. The eviction set is read out of the
-source's own slots at transfer time, so it needs no per-generation knowledge —
-but for that same reason the studio cannot tell a Genesis 9 skin from a Genesis
-8 one. If the copied materials claim surfaces that exist on *no* slot at the
-target, the drawer says so: a few is normal (the source wears something this
-character doesn't), all of them means you are copying between different figures.
+and the report names it again afterwards.
+
+### Same figure only — checked, not assumed
+
+A material setup only transfers within one Genesis version. The studio checks
+that without knowing anything about generations: the surfaces your **selected
+materials** claim are matched against the ones the target actually has.
+
+- **Some** unclaimed is normal — the source wears a dress this character
+  doesn't. You get a note, and the transfer runs.
+- **None** matching means the two nodes describe different figures, and
+  **Transfer is disabled**, with the target named. The copied slots would name
+  surfaces that aren't there and every baker would bake nothing. Deselect that
+  target, or pick a source built from the same figure.
+
+Because the match list comes from the source itself, this is right for every
+generation — including ones the studio has never been told about, and
+third-party figures. A target with **no** material slots yet (a fresh DazToHue
+network) is never blocked: there is nothing to contradict, and setting one up
+from a template is exactly what the drawer is for.
 
 ### Portable texture paths
 

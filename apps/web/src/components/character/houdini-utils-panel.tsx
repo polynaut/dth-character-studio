@@ -41,6 +41,7 @@ import type {
 } from '#/lib/rom/api.ts'
 import { fetchAllCharacters, listAssets } from '#/lib/rom/api.ts'
 import {
+  isFigureMismatch,
   mergeTouchCount,
   planSurfaceMerge,
   surfaceLabel,
@@ -468,11 +469,38 @@ export function HoudiniUtilsPanel({
    *  that does nothing. */
   const replaceApplies = sections.has('uvChannels') || sections.has('bakers')
 
+  /**
+   * Targets that describe a DIFFERENT FIGURE from the source.
+   *
+   * A material transfer only makes sense within one Genesis version, and this
+   * is how that is checked without any generation knowledge: nothing the
+   * selected materials claim exists at that target. Copying a Genesis 9 skin
+   * onto a node built from another figure evicts nothing, installs slots naming
+   * surfaces that aren't there, and leaves every baker baking nothing.
+   *
+   * Blocking rather than warning, for the same reason the UV-channel
+   * dependency above blocks: an advisory let the user run a transfer already
+   * known to be broken.
+   */
+  const mismatchedTargets = useMemo(() => {
+    if (kind !== 'material' || !sourceNode) return []
+    const incoming = pickedSlots(sourceNode.node, pickedMaterials)
+    if (incoming.length === 0) return []
+    const byKey = new Map<string, MaterialNodeInfo>()
+    for (const project of targetScan.projects) {
+      for (const node of project.nodes) byKey.set(nodeKey(project.hipPath, node.path), node)
+    }
+    return targetRefs.filter((ref) =>
+      isFigureMismatch(byKey.get(nodeKey(ref.hipPath, ref.nodePath))?.slots ?? [], incoming),
+    )
+  }, [kind, sourceNode, pickedMaterials, targetRefs, targetScan])
+
   const canTransfer =
     sourceNode !== null &&
     targetRefs.length > 0 &&
     activeSections.length > 0 &&
     uvStarvedMaterials.length === 0 &&
+    mismatchedTargets.length === 0 &&
     !busy
   const sourceHasBakers = (sourceNode?.node.bakers ?? 0) > 0
 
@@ -1006,6 +1034,26 @@ export function HoudiniUtilsPanel({
                   </span>
                 </p>
               )}
+              {/* Stated where the target list is, since deselecting a target is
+                  one of the two ways out. */}
+              {mismatchedTargets.length > 0 && (
+                <p className="mt-2 flex items-start gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-500">
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                  <span>
+                    <strong>
+                      {mismatchedTargets
+                        .map((t) => labelFor(t.hipPath, t.nodePath))
+                        .join(', ')}
+                    </strong>{' '}
+                    {mismatchedTargets.length === 1 ? 'has' : 'have'} none of the Daz surfaces
+                    these materials claim — the two nodes describe different figures, and a
+                    material setup only transfers within one Genesis version. The copied slots
+                    would name surfaces that aren&apos;t there and every baker would bake
+                    nothing. Deselect {mismatchedTargets.length === 1 ? 'it' : 'them'}, or pick a
+                    source built from the same figure. Transfer stays disabled until then.
+                  </span>
+                </p>
+              )}
               {kind === 'material' && !sections.has('materials') && sections.has('bakers') && (
                 <p className="mt-2 flex items-start gap-1.5 text-xs text-amber-500">
                   <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
@@ -1085,7 +1133,9 @@ export function HoudiniUtilsPanel({
                     ? 'Select at least one thing to copy'
                     : uvStarvedMaterials.length > 0
                       ? `${uvStarvedMaterials.map((s) => s.displayName).join(', ')} needs the UV channels — tick "UV channels", or deselect that material`
-                      : undefined
+                      : mismatchedTargets.length > 0
+                        ? `${mismatchedTargets.map((t) => labelFor(t.hipPath, t.nodePath)).join(', ')} has none of the surfaces these materials claim — different figures`
+                        : undefined
             }
             onClick={() => {
               setReport(null)

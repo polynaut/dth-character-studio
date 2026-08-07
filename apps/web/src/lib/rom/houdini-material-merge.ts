@@ -133,3 +133,36 @@ export function surfaceLabel(token: string): string {
 export function mergeTouchCount(plan: SurfaceMergePlan): number {
   return plan.evicted.length + plan.trimmed.length
 }
+
+/**
+ * Whether the two nodes describe DIFFERENT FIGURES — nothing the incoming
+ * materials claim exists at the target.
+ *
+ * This is the whole cross-generation question, answered without knowing
+ * anything about generations. A material transfer only makes sense within one
+ * Genesis version, and the check for that is not a table of which generation
+ * names its surfaces what — it is the SOURCE's own selected surfaces matched
+ * against the target's. Copying a Genesis 9 skin onto a node built from another
+ * figure evicts nothing, installs slots naming surfaces that do not exist there,
+ * and leaves every baker baking nothing.
+ *
+ * A FEW unclaimed surfaces is ordinary — the source wears something this
+ * character does not. ALL of them is the tell, and only then.
+ *
+ * Two cases are deliberately NOT a mismatch:
+ *  - a target with no slots at all (a fresh DTH network, nothing imported yet):
+ *    there is nothing to contradict, and setting such a node up from a template
+ *    is a normal thing to want.
+ *  - incoming slots that claim no surfaces: they say nothing either way.
+ */
+export function isFigureMismatch(
+  targetSlots: ReadonlyArray<MergeSlot>,
+  incoming: ReadonlyArray<MergeSlot>,
+): boolean {
+  if (targetSlots.length === 0) return false
+  const surfaces = new Set(incoming.flatMap((slot) => [...slot.surfaces]))
+  if (surfaces.size === 0) return false
+  // Reuses the rule rather than restating it — a second implementation of
+  // "does this surface exist there" is a second thing to keep in step.
+  return planSurfaceMerge(targetSlots, incoming).unclaimed.length === surfaces.size
+}
