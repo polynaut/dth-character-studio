@@ -760,6 +760,36 @@ describe('saveCharacter returns the post-save location', () => {
     expect(files.has('/games/Nova/.dcsmeta/characters/Nova Kira/Kira_pose_asset.csv')).toBe(true)
     expect(files.has('/games/Nova/.dcsmeta/characters/Kira/.last_rom_run.json')).toBe(false)
   })
+
+  it('a rename onto a DEAD character\'s leftover meta folder replaces it, never adopts it', async () => {
+    const c = characterSchema.parse({
+      id: newId(),
+      name: 'Kira',
+      genesis: 'G9',
+      gender: 'female',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    })
+    addDir('/games/Nova/Kira')
+    files.set('/games/Nova/Kira/Kira.json', JSON.stringify(c))
+    addDir('/games/Nova/.dcsmeta/characters/Kira')
+    files.set('/games/Nova/.dcsmeta/characters/Kira/.last_rom_run.json', '{"mine":true}')
+    // A character called Nova was deleted while its meta folder was locked (that
+    // removal is best-effort) — its state must not become the renamed Kira's:
+    // the wrong run report would show, and housekeeping would work off another
+    // character's export-folder record.
+    addDir('/games/Nova/.dcsmeta/characters/Nova')
+    files.set('/games/Nova/.dcsmeta/characters/Nova/.last_rom_run.json', '{"dead":true}')
+    files.set('/games/Nova/.dcsmeta/characters/Nova/.dth_export_folders.json', '["dead"]')
+
+    await storage.saveCharacter(project, { ...c, name: 'Nova' })
+
+    expect(files.get('/games/Nova/.dcsmeta/characters/Nova/.last_rom_run.json')).toBe(
+      '{"mine":true}',
+    )
+    expect(files.has('/games/Nova/.dcsmeta/characters/Nova/.dth_export_folders.json')).toBe(false)
+    expect(files.has('/games/Nova/.dcsmeta/characters/Kira/.last_rom_run.json')).toBe(false)
+  })
 })
 
 describe('known network drives (network-drives.json)', () => {

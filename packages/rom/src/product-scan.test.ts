@@ -119,13 +119,28 @@ describe('parseProductScanCsv', () => {
       scenePath: '',
       products: [],
       unmatched: [],
+      complete: false,
     })
     expect(parseProductScanCsv('')).toEqual({
       sceneName: '',
       scenePath: '',
       products: [],
       unmatched: [],
+      complete: false,
     })
+  })
+
+  it('reports `complete` only when the closing end row was written', () => {
+    // The v60+ writer closes with an `end` row; its absence is the ONLY signal
+    // that a file is truncated mid-write — truncated text still parses, so a
+    // consumer cannot rely on a parse failure that never happens.
+    const finished = [HEADER, 'scene,S,,,,,,,,,,', 'product,X,,,,,,,', 'end'].join('\n')
+    expect(parseProductScanCsv(finished).complete).toBe(true)
+    expect(parseProductScanCsv(finished).products.map((p) => p.name)).toEqual(['X'])
+    // Same file cut off mid-write: parses to a partial scan, not complete.
+    const truncated = [HEADER, 'scene,S,,,,,,,,,,', 'product,X,,,,'].join('\n')
+    expect(parseProductScanCsv(truncated).complete).toBe(false)
+    expect(parseProductScanCsv(truncated).products.map((p) => p.name)).toEqual(['X'])
   })
 })
 

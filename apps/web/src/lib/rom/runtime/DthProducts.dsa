@@ -1841,6 +1841,11 @@ function writeProductsCsv(outputCsvPath, matchResults, sceneName, scenePath) {
     );
   }
 
+  // Closing marker: the studio consumes (and then DELETES) a CSV only once this
+  // row is present — a file caught mid-write parses fine but stays on disk for
+  // the next pickup instead of being stored partial and destroyed.
+  lines.push("end");
+
   // Ensure the output folder exists (the studio derives it under app-local-data;
   // it may not exist on the first scan).
   var fileInfo = new DzFileInfo(outputCsvPath);

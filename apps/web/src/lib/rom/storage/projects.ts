@@ -1,4 +1,4 @@
-import { exists, mkdir, readDir, readTextFile, rename } from '@tauri-apps/plugin-fs'
+import { exists, mkdir, readDir, readTextFile, remove, rename } from '@tauri-apps/plugin-fs'
 
 import { newId } from '@dth/rom'
 
@@ -309,9 +309,11 @@ export function characterMetaDir(
  * Best-effort by design, and safe to call for a no-op move: nothing to do when
  * the key is unchanged or the source was never created (a character that has
  * never generated has no meta folder). A destination that already exists is
- * left alone rather than merged — the source then stays put and the next
- * generation rebuilds what it needs at the new key, which loses at most a set of
- * Execute stamps. Merging two sets of app state would be the worse trade.
+ * necessarily ORPHANED state — no live character can hold that folder key (the
+ * character-folder rename itself would have collided first; loose root-level
+ * definitions key by id, so they can't collide at all) — so it is removed and
+ * the move proceeds. Leaving it would both strand the source forever AND hand
+ * the renamed character a dead character's run log and export-folder record.
  */
 export async function moveCharacterMetaDir(
   projectDir: string,
@@ -326,7 +328,9 @@ export async function moveCharacterMetaDir(
   if (from === to) return
   try {
     if (!(await isDir(from))) return
-    if (from.toLowerCase() !== to.toLowerCase() && (await exists(to))) return
+    if (from.toLowerCase() !== to.toLowerCase() && (await exists(to))) {
+      await remove(to, { recursive: true })
+    }
     await mkdir(dirname(to), { recursive: true })
     await rename(from, to)
   } catch {

@@ -368,8 +368,16 @@ export function buildSeed(opts: SeedOptions = {}): TauriMockSeed {
     [DUF.dk]: 'duf-fixture',
     [DUF.phys]: 'duf-fixture',
     // A generated script on the CURRENT runtime, so the startup staleness probe
-    // (schema + runtime + CSV era) finds nothing to refresh.
-    [`${P.scriptsDir}/ROM_Kira_G9.dsa`]: `// DTH-Runtime: v${RUNTIME_VERSION}\n// e2e fixture — overwritten by the first real Save\n`,
+    // (schema + runtime + CSV era + scan arming) finds nothing to refresh. When
+    // the seed arms the product scan, the script carries the matching baked
+    // scan block a real current generation would have — a set DIM folder with
+    // no (or another) baked path reads as runtime-stale and the app would
+    // redirect to Refresh assets on startup.
+    [`${P.scriptsDir}/ROM_Kira_G9.dsa`]:
+      `// DTH-Runtime: v${RUNTIME_VERSION}\n// e2e fixture — overwritten by the first real Save\n` +
+      (opts.dimManifestsFolder
+        ? `var dthProductScanConfig = {\n    "dimManifestPath": ${JSON.stringify(opts.dimManifestsFolder)}\n};\n`
+        : ''),
   }
 
   // A per-scene product-scan CSV in the character's app-data scan folder

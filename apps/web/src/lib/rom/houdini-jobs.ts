@@ -241,7 +241,7 @@ export interface HoudiniPrefill {
  * `scenePath` picks it; omitted (or naming a scene this character doesn't link)
  * falls back to the PRIMARY, which every character has. A character with several
  * outfit scenes gets a project per scene, each wired to its own
- * `dth-exports/<subfolder>/` — before v0.71 every generated project pointed at
+ * `dth-exports/<subfolder>/` — before v0.68 every generated project pointed at
  * the primary's, and re-aiming it was a hand edit of five paths.
  *
  * With a `hipRefPrefix` (e.g. `$HIP/../daz3d/dth-exports`, computed by
@@ -254,7 +254,7 @@ export interface HoudiniPrefill {
  * derived from them: the imports read the Daz→Houdini intermediates under
  * `dth-exports`, while this is where Houdini WRITES for Unreal — the character's
  * own `export/` folder (the project's `exportSubdir`). It came from the caller
- * because only the host knows that subdir. Until v0.71 it was the export ROOT,
+ * because only the host knows that subdir. Until v0.68 it was the export ROOT,
  * which quietly aimed Houdini's output into the regenerable Daz-side tree.
  */
 export function buildHoudiniPrefill(

@@ -78,23 +78,39 @@ export function parseCsvRecords(text: string): Array<Array<string>> {
   return records
 }
 
+/** {@link parseProductScanCsv}'s result: the scan, plus whether the writer's
+ *  closing `end` row was seen — absent on a file Daz is still writing (or one
+ *  truncated by a crash), and on CSVs from pre-v61 runtimes, which never wrote
+ *  one. The flag exists only for the pickup's consume-or-wait decision; it is
+ *  never stored. */
+export interface ParsedProductScanCsv extends ProductScan {
+  complete: boolean
+}
+
 /**
  * Parse the CSV written by `DthScanProducts` (DthProducts.dsa). Columns are fixed:
  * `row_type,name,sku,artist,version,product_type,match_method,technical_name,asset_type,source_file,usage,used_by`.
  * Column 0 dispatches the row kind: `product` → a matched {@link ProductRecord},
- * `asset` → an {@link UnmatchedAsset}. The header row and blank lines are skipped;
- * unknown row types are ignored (forward-compatible — missing trailing columns
- * just default to '').
+ * `asset` → an {@link UnmatchedAsset}, `end` → the writer finished (`complete`).
+ * The header row and blank lines are skipped; unknown row types are ignored
+ * (forward-compatible — missing trailing columns just default to '').
+ *
+ * Total by design — truncated text parses to a partial scan rather than throwing.
+ * Callers deciding whether a file may be CONSUMED must check `complete` (and the
+ * scene row) instead of relying on a parse failure that cannot happen.
  */
-export function parseProductScanCsv(text: string): ProductScan {
+export function parseProductScanCsv(text: string): ParsedProductScanCsv {
   const products: Array<ProductRecord> = []
   const unmatched: Array<UnmatchedAsset> = []
   let sceneName = ''
   let scenePath = ''
+  let complete = false
   for (const cols of parseCsvRecords(text)) {
     const kind = (cols[0] ?? '').trim()
     if (kind === '' || kind === 'row_type') continue // blank line / header
-    if (kind === 'scene') {
+    if (kind === 'end') {
+      complete = true
+    } else if (kind === 'scene') {
       sceneName = (cols[1] ?? '').trim()
       scenePath = (cols[2] ?? '').trim()
     } else if (kind === 'product') {
@@ -125,7 +141,7 @@ export function parseProductScanCsv(text: string): ProductScan {
       })
     }
   }
-  return { sceneName, scenePath, products, unmatched }
+  return { sceneName, scenePath, products, unmatched, complete }
 }
 
 /** Union two "; "-joined lists, de-duplicated, order-preserving. '' inputs ignored. */

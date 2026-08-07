@@ -6,6 +6,7 @@ import {
   mergedProducts,
   parseCharacterProductsText,
   withScans,
+  withoutUnlinkedScenes,
 } from './character-products.ts'
 
 import type { ProductScan } from '@dth/rom'
@@ -79,6 +80,31 @@ describe('withScans', () => {
     expect(withScans(before, [], '2026-09-09T00:00:00.000Z')).toBe(before)
   })
 
+  it('a path-keyed scan replaces a path-less entry with the same scene NAME', () => {
+    // The carry rebuilds pre-v30 scans with '' paths (a merged definition kept
+    // only scene names); a fresh Daz scan always carries the full path. Without
+    // the name fallback the carried entry could never be replaced — every
+    // re-scan would append a duplicate and the stale products would sit in the
+    // merged view forever.
+    const carried = withScans(emptyCharacterProducts(), [scan('Default', ['Old Thing'])], AT)
+    const after = withScans(
+      carried,
+      [scan('Default', ['New Thing'], 'D:/p/Default.duf')],
+      '2026-08-08T10:00:00.000Z',
+    )
+    expect(after.scans).toHaveLength(1)
+    expect(after.scans[0].scenePath).toBe('D:/p/Default.duf')
+    expect(after.scans[0].products.map((p) => p.name)).toEqual(['New Thing'])
+  })
+
+  it('the name fallback never bridges two path-keyed entries', () => {
+    // Two scenes sharing a basename in different folders are different scenes;
+    // only a path-LESS side may match by name.
+    const before = withScans(emptyCharacterProducts(), [scan('Kira', ['A'], 'D:/p/one/Kira.duf')], AT)
+    const after = withScans(before, [scan('Kira', ['B'], 'D:/p/two/Kira.duf')], AT)
+    expect(after.scans).toHaveLength(2)
+  })
+
   it('merges every stored scene for display', () => {
     const store = withScans(
       emptyCharacterProducts(),
@@ -93,6 +119,38 @@ describe('withScans', () => {
       'Default',
       'Summertide',
     ])
+  })
+})
+
+describe('withoutUnlinkedScenes', () => {
+  const linked = ['D:/p/Kira/daz3d/Kira.duf', 'D:/p/Kira/daz3d/Beach.duf']
+
+  it('drops a path-keyed entry whose scene is no longer linked', () => {
+    const store = withScans(
+      emptyCharacterProducts(),
+      [scan('Kira', ['A'], 'D:/p/Kira/daz3d/Kira.duf'), scan('Old', ['B'], 'D:/p/Kira/daz3d/Old.duf')],
+      AT,
+    )
+    const pruned = withoutUnlinkedScenes(store, linked)
+    expect(pruned.scans.map((s) => s.sceneName)).toEqual(['Kira'])
+  })
+
+  it('keeps path-less entries — the unsaved bucket and carried pre-v30 scans are unverifiable', () => {
+    const store = withScans(
+      emptyCharacterProducts(),
+      [scan('SomethingCarried', ['A']), scan('', ['B'])],
+      AT,
+    )
+    expect(withoutUnlinkedScenes(store, linked)).toBe(store) // untouched → same object
+  })
+
+  it('matches linked paths case-insensitively and across slash styles', () => {
+    const store = withScans(
+      emptyCharacterProducts(),
+      [scan('Kira', ['A'], 'd:\\p\\kira\\daz3d\\KIRA.duf')],
+      AT,
+    )
+    expect(withoutUnlinkedScenes(store, linked)).toBe(store)
   })
 })
 
