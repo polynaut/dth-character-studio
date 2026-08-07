@@ -162,6 +162,7 @@ export {
   MATERIAL_SECTIONS,
   NODE_KINDS,
   SKELETON_SECTIONS,
+  discardHoudiniBackups,
   prefillHoudiniNetwork,
   repairHoudiniDefaults,
   repathHoudiniReferences,

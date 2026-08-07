@@ -259,6 +259,15 @@ would overwrite the transfer.
 > the failed entry in the report grows an **Undo this run** button that puts
 > that project back exactly as it was. A run that worked has nothing to undo,
 > so it says nothing.
+>
+> **They last as long as the drawer.** A backup is an undo buffer for this
+> sitting, not an archive — each is a full copy of the project, so leaving them
+> to pile up beside every project you ever touched is how a disk fills. When you
+> close the drawer it lists what it made and asks: **Remove** clears them,
+> **Keep them** doesn't. If a run failed and you haven't undone it, the prompt
+> says so — that copy is the only way back. Only the studio's own `_dthbak`
+> files are ever removed; Houdini's backups in the same folder are never
+> touched, and a file Houdini is holding open stays put.
 
 ### The Skeleton tab
 

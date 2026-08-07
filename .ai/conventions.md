@@ -292,6 +292,16 @@ which would be another chance to damage what is being rescued). A report that
 narrates the net on every happy path is noise; one that offers it on the
 unhappy path is a feature.
 
+**And a net has a lifetime.** The same backups are an undo buffer for the
+drawer session, not an archive: ~8 MB per project touched, one beside every
+project a run wrote, and nothing else in the app would ever collect them (the
+retention-bound rule — app-generated data needs a ceiling). So the drawer asks
+on CLOSE, listing what it made, and `discardHoudiniBackups` removes only paths
+matching `isStudioBackup` (`…_dthbak.<ext>`) — Houdini's own `_bak1.hip` sits in
+the same folder and must never be touched. It asks rather than sweeping: the one
+case where the copy is still worth its 8 MB is a failed run the user hasn't
+undone, which the prompt calls out in amber.
+
 Modal footers: the Cancel button is always `variant="ghost"`, first child of
 the right-aligned `flex justify-end gap-2` footer row — immediately left of the
 affirmative/primary action (e.g. `bulk-delete-dialog.tsx`,

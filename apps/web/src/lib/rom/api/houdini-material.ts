@@ -531,6 +531,61 @@ export async function restoreHoudiniBackup({ data }: { data: unknown }): Promise
 }
 
 /**
+ * Whether a path is one of the studio's own Houdini backups.
+ *
+ * The gate on every delete below. `_backup` (material_utils.py) writes exactly
+ * `<dir>/backup/<name>_dthbak<ext>`, so anything else reaching the discard —
+ * from a stale report, a hand-edited value, a future change to the Python —
+ * is refused rather than deleted. Houdini's OWN backups live in the same
+ * folder and are named `<name>_bak1.hip`; they must never be touched.
+ */
+export function isStudioBackup(path: string): boolean {
+  return /_dthbak\.[^./\\]+$/i.test(path.trim())
+}
+
+const discardInput = z.object({
+  /** The `…_dthbak` files to delete — anything else is skipped, not deleted. */
+  paths: z.array(z.string().min(1)),
+})
+
+/**
+ * Delete the backups one drawer session left behind.
+ *
+ * A backup is an UNDO BUFFER for this sitting, not an archive. Each one is a
+ * full copy of the project (~8 MB for a real `.hiplc`), one lands beside every
+ * project a run touches, and nothing else in the app would ever collect them —
+ * exactly the shape of app-generated data that quietly fills a disk. So the
+ * drawer offers to clear them on the way out, and this performs it.
+ *
+ * Never silent and never unasked: the panel puts this behind a confirm, because
+ * the one case where a backup still matters is a failed run the user has not
+ * undone yet.
+ *
+ * A file that cannot be removed (Houdini holding it open) is counted as kept
+ * rather than raising — the caller reports how many of how many went, and the
+ * next session offers the rest again.
+ */
+export async function discardHoudiniBackups({ data }: { data: unknown }): Promise<number> {
+  const { paths } = discardInput.parse(data)
+  if (!isTauri()) {
+    throw new Error('Removing Houdini project backups needs the desktop app.')
+  }
+  const removed = await Promise.all(
+    paths.filter(isStudioBackup).map(async (path) => {
+      try {
+        if (!(await exists(path))) return false
+        await remove(path)
+        return true
+      } catch {
+        // locked, or gone between the two calls — offered again next time
+        return false
+      }
+    }),
+  )
+  return removed.filter(Boolean).length
+}
+
+/**
  * Whether two node references point at the SAME material node.
  *
  * Path comparison is case- and separator-insensitive (Windows): the target list

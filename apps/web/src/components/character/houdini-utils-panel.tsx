@@ -6,6 +6,7 @@ import {
   Loader2,
   RefreshCw,
   Route,
+  Trash2,
   Undo2,
   Wand2,
   Wrench,
@@ -35,6 +36,7 @@ import {
   prefillHoudiniNetwork,
   repairHoudiniDefaults,
   repathHoudiniReferences,
+  discardHoudiniBackups,
   restoreHoudiniBackup,
   scanHoudiniMaterials,
   transferHoudiniMaterials,
@@ -198,6 +200,31 @@ interface ActionReport {
   report: MaterialUtilReport
 }
 
+/** One project a run backed up, and whether that run left it in a good state. */
+interface RunBackup {
+  hipPath: string
+  backupPath: string
+  ok: boolean
+}
+
+/**
+ * The backups a report says are now on disk, across all four operations.
+ *
+ * `backupPath` is empty for a dry run and for an entry that changed nothing, so
+ * this is exactly "what a real run wrote a copy of". A transfer reports one
+ * entry per NODE and several nodes share a file — the caller keys by `hipPath`,
+ * which is also what the Python's rolling `_backup` does.
+ */
+function backupsIn(report: MaterialUtilReport): Array<RunBackup> {
+  const rows: Array<RunBackup> = [
+    ...report.targets,
+    ...report.defaults,
+    ...report.repath,
+    ...report.prefill,
+  ].map(({ hipPath, backupPath, ok }) => ({ hipPath, backupPath, ok }))
+  return rows.filter((row) => row.backupPath !== '')
+}
+
 /**
  * The revert offer the reports share.
  *
@@ -307,6 +334,23 @@ export function HoudiniUtilsPanel({
    *  again, so the offer turns into a statement instead. */
   const [restored, setRestored] = useState<ReadonlySet<string>>(new Set())
 
+  // --- the session's backups -----------------------------------------------
+  /**
+   * What this sitting left on disk: `hipPath` → its backup file.
+   *
+   * A backup is an undo buffer for the drawer, not an archive — one full copy
+   * of the project per file a run touched, ~8 MB each, and nothing else in the
+   * app collects them. Keyed by project because `_backup` is rolling: a second
+   * run replaces the first, so remembering both would offer to delete a path
+   * that is no longer there.
+   */
+  const [sessionBackups, setSessionBackups] = useState<ReadonlyMap<string, string>>(new Map())
+  /** Projects whose last run FAILED and has not been undone — the only case
+   *  where a backup is still worth something on the way out. */
+  const [unresolved, setUnresolved] = useState<ReadonlySet<string>>(new Set())
+  const [cleanupOpen, setCleanupOpen] = useState(false)
+  const [discarding, setDiscarding] = useState(false)
+
   const targetsKey = targets.join('|')
 
   async function runScan(
@@ -381,6 +425,8 @@ export function HoudiniUtilsPanel({
     setReport(null)
     setActionReport(null)
     setRestored(new Set())
+    setSessionBackups(new Map())
+    setUnresolved(new Set())
     setReplace(false)
   }, [open])
 
@@ -584,6 +630,7 @@ export function HoudiniUtilsPanel({
       })
       setReport(result)
       if (!dryRun) {
+        noteBackups(result)
         const failed = result.targets.filter((t) => !t.ok)
         if (failed.length > 0) {
           toast.error(
@@ -658,6 +705,35 @@ export function HoudiniUtilsPanel({
   ].filter(Boolean).length
 
   /**
+   * Remember what a real run just backed up, and whether it is still needed.
+   *
+   * A file whose run FAILED goes on the unresolved list — that backup is the
+   * only way back, and the close prompt says so. A later run that succeeds on
+   * the same file takes it off again: its backup is now the state before THAT
+   * run, and there is nothing left to undo.
+   */
+  function noteBackups(result: MaterialUtilReport) {
+    const rows = backupsIn(result)
+    if (rows.length === 0) return
+    setSessionBackups((prev) => {
+      const next = new Map(prev)
+      for (const row of rows) next.set(row.hipPath, row.backupPath)
+      return next
+    })
+    // Per FILE, not per row: a transfer reports one entry per node, and one
+    // failed node means the file was left in a state the user may want back.
+    const failed = new Set(rows.filter((row) => !row.ok).map((row) => row.hipPath))
+    setUnresolved((prev) => {
+      const next = new Set(prev)
+      for (const row of rows) {
+        if (failed.has(row.hipPath)) next.add(row.hipPath)
+        else next.delete(row.hipPath)
+      }
+      return next
+    })
+  }
+
+  /**
    * Put one project back the way it was before the run that failed on it.
    *
    * Offered only from a failed entry (see {@link RestoreOffer}). The scan cache
@@ -669,6 +745,13 @@ export function HoudiniUtilsPanel({
     try {
       await restoreHoudiniBackup({ data: { hipPath, backupPath } })
       setRestored((prev) => new Set(prev).add(hipPath))
+      // Undone, so the copy has served its purpose — the close prompt no longer
+      // needs to argue for keeping it.
+      setUnresolved((prev) => {
+        const next = new Set(prev)
+        next.delete(hipPath)
+        return next
+      })
       toast.success(`${fileName(hipPath)} is back to the state it was in before the run.`)
       void runScan(targets, setTargetScan)
     } catch (error) {
@@ -684,6 +767,44 @@ export function HoudiniUtilsPanel({
     onRestore: (hipPath, backupPath) => void restoreBackup(hipPath, backupPath),
   }
 
+  /**
+   * Closing the drawer is where a session's backups get collected.
+   *
+   * They exist to undo a run that went wrong, and that question is only live
+   * while the drawer is open — once it closes, nothing in the app would ever
+   * mention them again and they would sit beside the projects forever. So the
+   * drawer asks on the way out. It ASKS rather than deleting: the one case
+   * where a copy is still worth 8 MB is a failed run the user hasn't undone.
+   */
+  function requestClose() {
+    if (sessionBackups.size === 0) {
+      onClose()
+      return
+    }
+    setCleanupOpen(true)
+  }
+
+  async function closeAndDiscard() {
+    const paths = [...sessionBackups.values()]
+    setDiscarding(true)
+    try {
+      const removed = await discardHoudiniBackups({ data: { paths } })
+      // Counted, not assumed: Houdini holding a file open is the ordinary way
+      // one survives, and "removed" would be a lie about the disk.
+      toast.success(
+        removed === paths.length
+          ? `${removed} backup${removed === 1 ? '' : 's'} removed.`
+          : `${removed} of ${paths.length} backups removed — the rest are in use and stay.`,
+      )
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+    } finally {
+      setDiscarding(false)
+      setCleanupOpen(false)
+      onClose()
+    }
+  }
+
   async function runPrefill(dryRun: boolean) {
     if (prefillTargets.length === 0 || !projectId) return
     setRunning(dryRun ? 'dry' : 'run')
@@ -694,6 +815,7 @@ export function HoudiniUtilsPanel({
       })
       setActionReport({ kind: 'prefill', report: result })
       if (!dryRun) {
+        noteBackups(result)
         const failed = result.prefill.filter((r) => !r.ok)
         if (failed.length > 0) {
           toast.error(`${failed.length} of ${result.prefill.length} projects failed — see below.`)
@@ -726,6 +848,7 @@ export function HoudiniUtilsPanel({
       })
       setActionReport({ kind: 'repath', report: result })
       if (!dryRun) {
+        noteBackups(result)
         const failed = result.repath.filter((r) => !r.ok)
         if (failed.length > 0) {
           toast.error(`${failed.length} of ${result.repath.length} projects failed — see below.`)
@@ -761,6 +884,7 @@ export function HoudiniUtilsPanel({
       })
       setActionReport({ kind: 'defaults', report: result })
       if (!dryRun) {
+        noteBackups(result)
         const failed = result.defaults.filter((d) => !d.ok)
         const changed = result.defaults.filter((d) => d.ok && d.changed).length
         if (failed.length > 0) {
@@ -785,7 +909,9 @@ export function HoudiniUtilsPanel({
     <>
       <SidePanel
         open={open}
-        onClose={busy ? () => {} : onClose}
+        // Not `onClose` directly: a session that wrote backups is asked about
+        // them on the way out (see `requestClose`).
+        onClose={busy ? () => {} : requestClose}
         // Names the KIND of thing being worked on, not just the character: the
         // drawer acts on Houdini projects, and "Utils — Ita" gave no clue which
         // of the character's many facets it touches.
@@ -1301,6 +1427,75 @@ export function HoudiniUtilsPanel({
         </div>
         )}
       </SidePanel>
+
+      {/* Asked on the way out, never on the way in: a backup is only ever
+          interesting while the drawer that made it is still open. */}
+      {cleanupOpen && (
+        <Modal
+          open
+          onClose={() => setCleanupOpen(false)}
+          dismissible={!discarding}
+          title="Remove this session's backups?"
+        >
+          <div className="space-y-2 text-sm">
+            <p>
+              Each run kept a copy of the project it was about to write, so a run that went
+              wrong could be undone from its report. Those copies are only useful while this
+              drawer is open — <strong>{sessionBackups.size}</strong> {' '}
+              {sessionBackups.size === 1 ? 'is' : 'are'} on disk now, one per project, beside
+              Houdini&apos;s own backups.
+            </p>
+            <ul className="max-h-32 list-inside list-disc overflow-y-auto text-xs text-muted-foreground">
+              {[...sessionBackups].map(([hipPath, backupPath]) => (
+                <li key={hipPath} className="truncate" title={backupPath}>
+                  <code>{fileName(backupPath)}</code>
+                  {unresolved.has(hipPath) ? ' — from the run that failed' : ''}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* The one case where a copy is still worth its 8 MB. Stated loudly,
+              because removing it is the point of no return for that project. */}
+          {unresolved.size > 0 && (
+            <p className="flex items-start gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-500">
+              <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+              <span>
+                <strong>{unresolved.size}</strong> run{unresolved.size === 1 ? '' : 's'} failed
+                and {unresolved.size === 1 ? 'has' : 'have'} not been undone. Removing{' '}
+                {unresolved.size === 1 ? 'that copy' : 'those copies'} throws away the only way
+                back — keep them if you still want the option.
+              </span>
+            </p>
+          )}
+
+          <p className="text-xs text-muted-foreground">
+            Only the studio&apos;s own <code>_dthbak</code> copies are removed. Houdini&apos;s
+            backups in the same folder are never touched, and a file Houdini is holding open
+            stays where it is.
+          </p>
+
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" disabled={discarding} onClick={() => setCleanupOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="outline"
+              disabled={discarding}
+              title="Leave the copies on disk — nothing else in the studio will ask about them again"
+              onClick={() => {
+                setCleanupOpen(false)
+                onClose()
+              }}
+            >
+              Keep them
+            </Button>
+            <Button disabled={discarding} onClick={() => void closeAndDiscard()}>
+              {discarding ? <Loader2 className="animate-spin" /> : <Trash2 />} Remove
+            </Button>
+          </div>
+        </Modal>
+      )}
 
       {defaultsOpen && (
         <Modal

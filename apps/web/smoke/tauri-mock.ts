@@ -387,6 +387,22 @@ export function installTauriMock(seed: TauriMockSeed): void {
         // the op and its arguments come from there, never from a second source
         // of truth that could drift from what the app actually asked for.
         const request = JSON.parse(mustRead(norm(args.request.requestPath)))
+        // What `_backup` in material_utils.py leaves on disk before a real
+        // save: one rolling copy per project, inside Houdini's own `backup/`
+        // folder. Modelled (file and all) rather than reported as an empty
+        // string, because the drawer's close prompt collects exactly these.
+        const backupFor = (hipPath: string): string => {
+          if (request.dryRun) return ''
+          const path = norm(hipPath)
+          const dir = path.replace(/\/[^/]*$/, '')
+          const name = path.slice(dir.length + 1)
+          const dot = name.lastIndexOf('.')
+          const stem = dot === -1 ? name : name.slice(0, dot)
+          const ext = dot === -1 ? '' : name.slice(dot)
+          const backup = `${dir}/backup/${stem}_dthbak${ext}`
+          files.set(backup, files.get(path) ?? 'hip-fixture')
+          return backup
+        }
         const base = {
           op: request.op,
           ok: true,
@@ -438,7 +454,7 @@ export function installTauriMock(seed: TauriMockSeed): void {
               filled: [],
               skippedMissing: [],
               skippedSet: [],
-              backupPath: '',
+              backupPath: backupFor(t.hipPath),
             })),
           }
         }
@@ -452,7 +468,7 @@ export function installTauriMock(seed: TauriMockSeed): void {
               collapsed: 0,
               repaired: [],
               foreign: [],
-              backupPath: '',
+              backupPath: backupFor(t.hipPath),
             })),
           }
         }
@@ -470,7 +486,7 @@ export function installTauriMock(seed: TauriMockSeed): void {
               previousJob: seed.materialJob?.[norm(t.hipPath)] ?? '',
               job: t.jobDir,
               changed: true,
-              backupPath: '',
+              backupPath: backupFor(t.hipPath),
             })),
           }
         }
@@ -491,7 +507,7 @@ export function installTauriMock(seed: TauriMockSeed): void {
             missingGroups: [],
             missingUvSources: [],
             unclaimedSurfaces: [],
-            backupPath: '',
+            backupPath: backupFor(t.hipPath),
           })),
         }
       }
