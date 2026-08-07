@@ -18,7 +18,8 @@ Exporter; Tools is for the extras beyond that.
 > [!NOTE]
 > Everything the Daz side needs ships **with the studio** — the runtime and the
 > visible scripts (`Build_Genesis_Index`, `Scan_Frames`,
-> [`Fix_Graft_Shell_Surfaces`](./05-rom-in-daz.md#geografts-under-a-golden-palace--dicktator-shell))
+> [`Fix_Graft_Shell_Surfaces`](./05-rom-in-daz.md#geografts-under-a-golden-palace--dicktator-shell),
+> [`Kill_Animation`](./05-rom-in-daz.md#rescuing-an-old-scene-that-is-only-a-rom-animation))
 > install into `Scripts/DTH-Character-Studio` automatically on Save / Refresh
 > assets. There is no separate scripts download anymore.
 

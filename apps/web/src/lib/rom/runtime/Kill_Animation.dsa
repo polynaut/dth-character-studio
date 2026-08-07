@@ -1,0 +1,80 @@
+// DAZ Studio version 4.0.0+ filetype DAZ Script
+
+// DTH Character Studio - remove a scene's animation and put the timeline back
+// to the default 0-30 frames.
+//
+// For an OLD scene that only exists as the full ROM animation. The studio needs
+// a character scene with an empty timeline, so such a scene can't be added
+// as-is. The recovery:
+//
+//   1. open the old scene in Daz,
+//   2. run Scan_Frames  - captures the ROM frame-by-frame into a CSV, so the
+//                         definition survives the animation you are about to
+//                         delete (do this FIRST - it can't be done after),
+//   3. run this         - leaves the character exactly as it is at frame 0,
+//                         with an empty timeline,
+//   4. File > Save As   - into the character's folder in your studio project.
+//
+// Nothing to select - it works on the whole scene. It does not change what is
+// IN the scene: no node is deleted, no morph zeroed, nothing re-posed. The
+// figure keeps its shape, its clothes and its frame-0 pose; only the keys go.
+//
+// It shows you what it found and asks before deleting anything, and it does NOT
+// save the scene - that stays your decision.
+
+var dir_self = new DzDir(new DzFileInfo(getScriptFileName()).path());
+include(dir_self.filePath(".DthKillAnimation.dsa"));
+
+(function(){
+	// Look before asking: the dry pass reads the timeline and writes nothing, so
+	// the question can name what is actually about to be lost instead of asking
+	// for a blank cheque.
+	var oFound = DthKillAnimation({ dryRun: true });
+
+	if (oFound.cleared == 0) {
+		MessageBox.information(
+			"No animation in this scene - the timeline is already empty.\n\n"
+			+ "Nothing was changed.",
+			"Kill animation", "&OK");
+		return;
+	}
+
+	var bGo = MessageBox.question(
+		"Remove " + oFound.keys + " key(s) from " + oFound.cleared + " propert"
+			+ (oFound.cleared == 1 ? "y" : "ies") + " - "
+			+ oFound.frames + " frame(s) of animation?\n\n"
+		+ "The character stays exactly as it is at frame 0: same shape, same "
+		+ "clothes, same pose. Only the timeline is emptied, and the range goes "
+		+ "back to 0-30 frames.\n\n"
+		+ "THIS CANNOT BE UNDONE. If this scene is the only copy of a ROM you "
+		+ "still want, close this and run Scan_Frames first.\n\n"
+		+ "The scene is not saved - use File > Save As afterwards.",
+		"Kill animation", "&Remove animation", "&Cancel") == 0;
+	if (!bGo) return;
+
+	var oReport = DthKillAnimation({});
+
+	var sMsg = dthKillAnimSummary(oReport)
+		+ "\n\nTimeline is now 0-" + oReport.rangeFrames + " frames.";
+	if (oReport.restored > 0) {
+		sMsg += "\n" + oReport.restored + " propert"
+			+ (oReport.restored == 1 ? "y" : "ies")
+			+ " had to be put back to the frame-0 value.";
+	}
+	// A property that would not let go of its keys is the one thing that leaves
+	// this scene still animated, so it is named rather than counted away.
+	if (oReport.failed.length > 0) {
+		sMsg += "\n\n" + oReport.failed.length + " propert"
+			+ (oReport.failed.length == 1 ? "y" : "ies")
+			+ " kept their keys - this scene still has animation on:";
+		for (var i = 0; i < oReport.failed.length && i < 12; i++) {
+			sMsg += "\n  " + oReport.failed[i];
+		}
+		if (oReport.failed.length > 12) {
+			sMsg += "\n  ... and " + (oReport.failed.length - 12) + " more (see the Daz log).";
+		}
+	} else {
+		sMsg += "\n\nSave it with File > Save As into your character's folder.";
+	}
+	MessageBox.information(sMsg, "Kill animation", "&OK");
+})();

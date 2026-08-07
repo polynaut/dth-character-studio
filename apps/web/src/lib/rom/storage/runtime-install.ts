@@ -16,11 +16,13 @@ import dthProductsRuntime from '../runtime/DthProducts.dsa?raw'
 import dthScanMorphsRuntime from '../runtime/DthScanMorphs.dsa?raw'
 import dthScanFramesRuntime from '../runtime/DthScanFrames.dsa?raw'
 import dthShellSurfacesRuntime from '../runtime/DthShellSurfaces.dsa?raw'
+import dthKillAnimationRuntime from '../runtime/DthKillAnimation.dsa?raw'
 import buildGenesisIndexScript from '../runtime/Build_Genesis_Index.dsa?raw'
 import buildGenesisIndexBulkScript from '../runtime/Build_Genesis_Index_Bulk.dsa?raw'
 import scanSceneBulkScript from '../runtime/Scan_Scene_Bulk.dsa?raw'
 import scanFramesScript from '../runtime/Scan_Frames.dsa?raw'
 import fixGraftShellSurfacesScript from '../runtime/Fix_Graft_Shell_Surfaces.dsa?raw'
+import killAnimationScript from '../runtime/Kill_Animation.dsa?raw'
 // Content Library artwork for the visible scripts (Daz's own convention:
 // `<name>.png` at 91×91 is the thumbnail, `<name>.tip.png` at 256×256 the hover
 // preview — verified against the stock Genesis 9 assets). `?inline` bundles them
@@ -32,6 +34,8 @@ import scanFramesIcon from '../runtime/Scan_Frames.png?inline'
 import scanFramesTip from '../runtime/Scan_Frames.tip.png?inline'
 import fixGraftShellSurfacesIcon from '../runtime/Fix_Graft_Shell_Surfaces.png?inline'
 import fixGraftShellSurfacesTip from '../runtime/Fix_Graft_Shell_Surfaces.tip.png?inline'
+import killAnimationIcon from '../runtime/Kill_Animation.png?inline'
+import killAnimationTip from '../runtime/Kill_Animation.tip.png?inline'
 
 import { dataUrlBytes, join } from './fs'
 import { dataDir } from './app-data'
@@ -63,6 +67,10 @@ const RUNTIME_FILES: Record<string, string> = {
   // below. Switches off the surfaces a later geograft (STX nipples/navel) adds,
   // switched ON, to an existing Golden Palace / Dicktator shell.
   'DthShellSurfaces.dsa': dthShellSurfacesRuntime,
+  // Timeline hygiene — included by the visible Kill_Animation.dsa below. Strips
+  // every key off a scene and puts the range back to a default 0-30, which is
+  // what turns an old ROM-animation scene back into an addable character scene.
+  'DthKillAnimation.dsa': dthKillAnimationRuntime,
 }
 
 /**
@@ -95,6 +103,11 @@ const VISIBLE_SCAN_SCRIPTS: Record<string, string> = {
   // on a Golden Palace / Dicktator geoshell (see DthShellSurfaces.dsa). Bakes in
   // no path — it reads and writes the open scene only.
   'Fix_Graft_Shell_Surfaces.dsa': fixGraftShellSurfacesScript,
+  // Also scene hygiene, and the only DESTRUCTIVE visible script: it deletes a
+  // scene's animation so an old ROM-animation scene can be added as a character
+  // scene (the studio requires an empty timeline). Asks first, saves nothing,
+  // bakes in no path.
+  'Kill_Animation.dsa': killAnimationScript,
 }
 
 /** Root-level scripts installed like the visible ones (as-is + app-data path
@@ -127,6 +140,11 @@ const VISIBLE_SCRIPT_ICONS: Record<string, string> = {
   'Scan_Frames.tip.png': scanFramesTip,
   'Fix_Graft_Shell_Surfaces.png': fixGraftShellSurfacesIcon,
   'Fix_Graft_Shell_Surfaces.tip.png': fixGraftShellSurfacesTip,
+  // PLACEHOLDER artwork (generated, not drawn) — a plain tile in the family's
+  // palette so the Content Library shows an icon rather than a broken image.
+  // Swap in real illustration when there is some; nothing else has to change.
+  'Kill_Animation.png': killAnimationIcon,
+  'Kill_Animation.tip.png': killAnimationTip,
 }
 
 

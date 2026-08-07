@@ -1417,8 +1417,17 @@ export const CHARACTER_SCHEMA_VERSION = 30
  *       shows the tab). Projects with the toggle off therefore emit the scan
  *       config and the `Scan_Products_<Name>.dsa` for the first time, so the
  *       generated content changed and every character must regenerate.
+ * v61 — a new VISIBLE script joins the Content Library: `Kill_Animation.dsa`
+ *       (+ its `DthKillAnimation.dsa` runtime and its artwork). It strips every
+ *       key off the open scene and puts the timeline back to a default 0-30, so
+ *       an old scene that survives only as its full ROM animation can be
+ *       recovered into an addable character scene (the studio requires an empty
+ *       timeline). Nothing the generated per-character scripts emit changed —
+ *       the bump is what INSTALLS the new script: `copyRuntimeFiles` skips the
+ *       whole install while the marker matches, so without it no existing
+ *       library would ever see the file.
  */
-export const RUNTIME_VERSION = 60
+export const RUNTIME_VERSION = 61
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a
