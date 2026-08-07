@@ -81,6 +81,17 @@ export function DazInstallSection({
         </Button>
       </div>
 
+      {/* The call to action, because a card that only CHANGES on hover reads as
+          a status display — measured the hard way: the section shipped, the
+          maintainer looked straight at two correct cards and asked why his
+          paths hadn't been filled in. Nothing had told him to click. */}
+      {!loading && apps.length > 0 && activeKey === '' && (
+        <p className="text-sm text-muted-foreground">
+          Pick the installation your Daz paths should come from — they are filled in and saved
+          the moment you do.
+        </p>
+      )}
+
       {loading ? (
         <p className="flex items-center gap-2 rounded-md border border-dashed p-3 text-sm text-muted-foreground">
           <Loader2 className="size-4 animate-spin" /> Reading the DAZ Install Manager…
@@ -116,13 +127,23 @@ export function DazInstallSection({
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-2">
                     <span className="font-medium">{app.name}</span>
-                    {active ? (
-                      <span className="flex items-center gap-1 text-xs font-medium text-primary">
-                        <Check className="size-3.5" /> Active
-                      </span>
-                    ) : activeKey === '' && app.key === recommendedKey ? (
+                    {!active && activeKey === '' && app.key === recommendedKey && (
                       <span className="text-xs text-muted-foreground">recommended</span>
-                    ) : null}
+                    )}
+                    {/* The state AND the invitation, right-aligned so the column
+                        of them reads down the card list. An inactive card that
+                        showed nothing here was the whole problem. */}
+                    <span className="ml-auto shrink-0">
+                      {active ? (
+                        <span className="flex items-center gap-1 text-xs font-medium text-primary">
+                          <Check className="size-3.5" /> Active
+                        </span>
+                      ) : app.exists ? (
+                        <span className="rounded-md border border-primary/40 px-2 py-0.5 text-xs font-medium text-primary">
+                          {busyKey === app.key ? 'Activating…' : 'Activate'}
+                        </span>
+                      ) : null}
+                    </span>
                   </span>
                   <span
                     className="mt-0.5 block truncate text-xs text-muted-foreground"
