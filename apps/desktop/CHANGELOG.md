@@ -1,5 +1,129 @@
 # @dth/desktop
 
+## 0.65.0
+
+### Minor Changes
+
+- [#706](https://github.com/polynaut/dth-character-studio/pull/706) [`79ed8ce`](https://github.com/polynaut/dth-character-studio/commit/79ed8ce6e76cdaf574ae9b78dec124383c2b935a) Thanks [@polynaut](https://github.com/polynaut)! - Houdini Utils gains a **Defaults** tab: per-project Houdini settings shown with
+  their current value beside what the studio expects. `$JOB` is saved inside each
+  `.hip`, so v0.64's fix reached only newly generated projects — every project
+  that already existed still points it at `houdini/houdini-project`, which sits
+  below the exports, so picking an export by hand keeps writing an absolute path.
+  **Repair $JOB** is that migration: it repoints only the projects that differ, at
+  the character folder, with a dry run and the same rolling
+  `backup/<name>_dthbak.hiplc` the transfer takes. It fixes paths you pick from
+  now on — references already stored absolute are untouched. `$HIP` is reported
+  rather than rewritten, since that would mean moving your scene file.
+
+- [#709](https://github.com/polynaut/dth-character-studio/pull/709) [`ca0662e`](https://github.com/polynaut/dth-character-studio/commit/ca0662e49e19229cd695912a8d8078f0ba16723a) Thanks [@polynaut](https://github.com/polynaut)! - Houdini Utils → Defaults gains **Make paths portable**, the other half of the
+  `$JOB` story: repairing `$JOB` fixes the paths you pick from now on, this fixes
+  the ones already stored. It rewrites every absolute reference sitting under
+  `$HIP`, `$JOB` or `$DAZ3D_LIB` to be relative to that variable (131 texture
+  paths on a real project), and rebuilds a DazToHue import path that points at a
+  file which isn't there — pre-v0.63 projects address their `.dth` through the
+  retired `dth-exports` junction, so it dangles while the `.fbx` beside it is
+  fine. The replacement is derived from that same node's other export files and
+  only written when the file actually exists, so nothing is guessed. Paths under
+  none of those roots can't be made portable and are reported rather than
+  silently left. The button stays disabled until `$JOB` is correct, because a
+  path is made relative to whatever `$JOB` the scene currently carries. Dry run
+  and rolling backup as usual.
+
+### Patch Changes
+
+- [#697](https://github.com/polynaut/dth-character-studio/pull/697) [`6e448a3`](https://github.com/polynaut/dth-character-studio/commit/6e448a3b77b337cd1168ad42986b1185b028827b) Thanks [@polynaut](https://github.com/polynaut)! - Guide: document the Utils drawer properly, and split Custom morphs onto its own page
+
+  The drawer shipped with 120 lines of prose and no images — including a
+  hand-typed ASCII stand-in for the material list. It now carries two generated
+  screenshots (the whole drawer, and the Materials list with its per-slot cost),
+  which the smoke fake can produce because it answers `run_houdini_material_util`
+  from seeded scan data.
+
+  Three prose corrections against what the code actually does now: scans are
+  served from an mtime cache, so "opening a `.hip` takes a few seconds per file"
+  only holds for the first read (and for a file a transfer just rewrote); a
+  parameter linked to another node arrives as its **value**, since a
+  `ch("…/DazToHueMaterial/…")` reference would silently rebind to the target
+  project's own node; and the Source row accepts a dropped `.hip` and lists the
+  project's Houdini templates.
+
+  `04-first-character.md` had grown to 581 lines. Custom morphs (pose rows,
+  combining morphs, bone scale, section/group tools, finding an internal Daz name)
+  moves to `custom-morphs.md` — 04 drops to 370 lines and keeps a pointer. The
+  in-app "Open guide" link beside **Parameter name** follows the section to its
+  new page, so it lands on the anchor instead of a page that no longer has it.
+
+- [#703](https://github.com/polynaut/dth-character-studio/pull/703) [`8eb0506`](https://github.com/polynaut/dth-character-studio/commit/8eb0506047c144d49fab175b41777f6c279f1922) Thanks [@polynaut](https://github.com/polynaut)! - Generated Houdini projects set `$JOB` to the character folder, so picked paths stay relative
+
+  Houdini only collapses a chosen path to a variable when it sits under `$HIP` or
+  `$JOB`. `$JOB` was the shared `houdini/houdini-project` folder — _below_ the
+  exports — so picking an export through its real location wrote an **absolute**
+  path and the project stopped being movable. The retired `dth-exports` junctions
+  had been hiding that by making exports look like they were below `$HIP`.
+
+  `$JOB` is now the character folder, which contains both `houdini/` and the Daz
+  export root, so the same pick yields `$JOB/daz3d/dth-exports/…`. Paths inside the
+  houdini folder still collapse to `$HIP`. New projects only — existing ones keep
+  the old value baked into the `.hip`.
+
+- [#704](https://github.com/polynaut/dth-character-studio/pull/704) [`f4ead67`](https://github.com/polynaut/dth-character-studio/commit/f4ead67fc366b8625bac8aa61e4602dfdbff7bd9) Thanks [@polynaut](https://github.com/polynaut)! - Houdini Utils: material slots now merge **by surface** instead of being replaced
+  wholesale or appended by name. A Daz surface can belong to only one material
+  slot, so copying a `Skin` that merges fifteen surfaces removes exactly the
+  fifteen slots at the target claiming those surfaces and leaves the clothing and
+  eye slots untouched — where "Replace at target" previously reduced a 25-slot
+  node to 1, and appending left the same surfaces claimed twice. A slot claiming a
+  mix of taken and untaken surfaces keeps the ones nothing else claims. The
+  confirm dialog now lists what will be replaced at each target before you run,
+  the report names it afterwards, and both warn when the copied materials claim
+  surfaces that exist on no slot at the target — the sign that the two nodes
+  describe different figures. The replace switch now covers UV channels and
+  texture bakers only.
+
+- [#703](https://github.com/polynaut/dth-character-studio/pull/703) [`8eb0506`](https://github.com/polynaut/dth-character-studio/commit/8eb0506047c144d49fab175b41777f6c279f1922) Thanks [@polynaut](https://github.com/polynaut)! - Utils: a copied parameter never carries a reference to the source project's nodes
+
+  The DazToHue HDA's own **Linking** feature rewrites a node's parameters to
+  `ch("<source>/<parm>")` so it mirrors another node. Copying _from_ a linked node
+  used to carry those expressions across files — and because DTH names every node
+  identically between projects, such a reference silently **rebinds** to the target
+  project's own node and reads wrong values without erroring.
+
+  Export now flattens any node-referencing expression to its evaluated value.
+  Expressions with no node reference still travel as expressions.
+
+- [#703](https://github.com/polynaut/dth-character-studio/pull/703) [`8eb0506`](https://github.com/polynaut/dth-character-studio/commit/8eb0506047c144d49fab175b41777f6c279f1922) Thanks [@polynaut](https://github.com/polynaut)! - Utils scans are cached by mtime, and CI fails on new lint warnings
+
+  Opening a `.hip` costs tens of seconds and the drawer is built for repeated use,
+  so scans are now served from a path + mtime cache — when every requested project
+  is unchanged the call returns without starting hython at all. A transfer rewrites
+  its target, so the next scan re-reads exactly that file and leaves its neighbours
+  cached.
+
+  The repo's advisory lint warnings are deliberate (see `.oxlintrc.json`), but at
+  that volume a _new_ one was invisible. `pnpm lint:budget` now pins the count per
+  rule and CI fails when a rule grows.
+
+- [#708](https://github.com/polynaut/dth-character-studio/pull/708) [`6d92d94`](https://github.com/polynaut/dth-character-studio/commit/6d92d94ba2473e571c59cfb7a589112e5a454cf5) Thanks [@polynaut](https://github.com/polynaut)! - A scene morph scan no longer files the entire stock figure under the scene when
+  the machine has no base index for that generation. The scan reports what a scene
+  _adds_ by subtracting the base index, so with nothing to subtract every stock
+  Genesis dial was landing in that scene's index — and since every ROM/export run
+  scans its scene, a plain export on a machine that had never built the base index
+  hit this silently, drowning the Parameter-name autocomplete with nothing saying
+  why. It now stops instead: Tools says to build **Base morphs** first, and an
+  export logs the skip without failing the row. Nothing is lost by waiting — a
+  later scan replaces a scene's contribution wholesale, so the first run after the
+  base index exists files it correctly.
+
+- [#703](https://github.com/polynaut/dth-character-studio/pull/703) [`8eb0506`](https://github.com/polynaut/dth-character-studio/commit/8eb0506047c144d49fab175b41777f6c279f1922) Thanks [@polynaut](https://github.com/polynaut)! - Utils: refuse a material transfer whose bakers would lose their UV source, and close the dialog when a run succeeds
+
+  Unticking **UV channels** while a material whose bakers read `uv_geoshell` is
+  selected produced a copy that cannot work — those bakers land pointing at a UV
+  name nothing at the target creates. Transfer is now disabled for that
+  combination, with the reason shown beside the checkbox that causes it.
+
+  The confirm dialog also closes itself after a successful real run; a failure
+  keeps it open with its error, and a run that succeeded with warnings says so in
+  the toast.
+
 ## 0.64.0
 
 ### Minor Changes

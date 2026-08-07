@@ -1,7 +1,15 @@
 # @dth/web
 
-## 0.64.0
+## 0.65.0
 
+
+### Patch Changes
+
+- Updated dependencies [[`6e448a3`](https://github.com/polynaut/dth-character-studio/commit/6e448a3b77b337cd1168ad42986b1185b028827b), [`79ed8ce`](https://github.com/polynaut/dth-character-studio/commit/79ed8ce6e76cdaf574ae9b78dec124383c2b935a), [`ca0662e`](https://github.com/polynaut/dth-character-studio/commit/ca0662e49e19229cd695912a8d8078f0ba16723a), [`8eb0506`](https://github.com/polynaut/dth-character-studio/commit/8eb0506047c144d49fab175b41777f6c279f1922), [`f4ead67`](https://github.com/polynaut/dth-character-studio/commit/f4ead67fc366b8625bac8aa61e4602dfdbff7bd9), [`8eb0506`](https://github.com/polynaut/dth-character-studio/commit/8eb0506047c144d49fab175b41777f6c279f1922), [`8eb0506`](https://github.com/polynaut/dth-character-studio/commit/8eb0506047c144d49fab175b41777f6c279f1922), [`6d92d94`](https://github.com/polynaut/dth-character-studio/commit/6d92d94ba2473e571c59cfb7a589112e5a454cf5), [`8eb0506`](https://github.com/polynaut/dth-character-studio/commit/8eb0506047c144d49fab175b41777f6c279f1922)]:
+  - @dth/rom@0.65.0
+  - @dth/ui@0.65.0
+
+## 0.64.0
 
 ### Patch Changes
 
