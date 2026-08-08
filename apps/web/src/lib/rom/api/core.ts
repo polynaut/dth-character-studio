@@ -278,3 +278,22 @@ export async function locateCharacter(
   if (location) characterLocationCache.set(key, location)
   return location
 }
+
+/**
+ * The ACTIVATED Daz installation's folder, for every launcher.
+ *
+ * Threaded into `launch_daz_studio` / `run_daz_script` so the Daz the studio
+ * starts is the one Settings activated. Without it those commands fall back to
+ * a hardcoded newest-first probe of the standard locations, which on a machine
+ * with both DS4 and DS6 installed could never start DS4 — while the Exporter
+ * plugin was being installed into whichever Settings said. '' when unset: the
+ * Rust side then probes, which is the right answer for a user who has activated
+ * nothing.
+ */
+export async function activeDazInstallFolder(): Promise<string> {
+  try {
+    return (await storage.getSettings()).dazInstallFolder.trim()
+  } catch {
+    return ''
+  }
+}

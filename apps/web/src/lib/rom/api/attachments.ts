@@ -7,7 +7,15 @@ import { characterSchema, dazJson, newId } from '@dth/rom'
 import * as storage from '../storage'
 import { normalizeRelFolder } from '../library'
 import { stripTrailingSeparators } from '#/lib/path.ts'
-import { basename, charactersRoot, charsRoot, joinPath, projectPath, resolveProject } from './core'
+import {
+  activeDazInstallFolder,
+  basename,
+  charactersRoot,
+  charsRoot,
+  joinPath,
+  projectPath,
+  resolveProject,
+} from './core'
 import { copyTipImage, sceneBase } from './avatars'
 
 import type { Character } from '@dth/rom'
@@ -305,7 +313,10 @@ async function openSceneInRunningDaz(scenePath: string): Promise<void> {
   bridgeSeq = (bridgeSeq + 1) % BRIDGE_POOL
   await writeTextFile(bridge, script)
   try {
-    const exe = await invoke<string>('run_daz_script', { scriptPath: bridge })
+    const exe = await invoke<string>('run_daz_script', {
+      scriptPath: bridge,
+      installFolder: await activeDazInstallFolder(),
+    })
     // Visible in the (now enabled) devtools console — tells us which instance we
     // asked to run the script when a running Daz doesn't react.
     console.info('[DTH] ran open-scene script via', exe, '→', bridge)
@@ -335,10 +346,40 @@ export async function openScene({ data }: { data: unknown }): Promise<void> {
     (await invoke<boolean>('daz_studio_running').catch(() => false))
   ) {
     await openSceneInRunningDaz(scenePath)
+  } else if (/\.duf$/i.test(scenePath)) {
+    await openSceneInActivatedDaz(scenePath)
   } else {
     await openLikeExplorer(scenePath)
   }
   await focusOpenedApp(scenePath)
+}
+
+/**
+ * Start the ACTIVATED Daz with the scene: `DAZStudio.exe "<scene>"`.
+ *
+ * A shell-open would hand the `.duf` to whichever Daz registered the file type
+ * last — so a machine with DS4 and DS6 installed opened scenes in DS6 no matter
+ * what Settings said, while the Exporter plugin was installed into the one the
+ * user had actually activated. Launching the executable is
+ * association-independent, and it is the same call `run_daz_script` has always
+ * made for `.dsa` files, for the same reason.
+ *
+ * Only for `.duf`: a `.hip`/`.uproject` has no "activated installation" to
+ * resolve, and those keep the Explorer delegation (which is what stops Houdini
+ * inheriting the studio's environment — see {@link openLikeExplorer}).
+ *
+ * Falls back to the association if the launch fails, so a Daz the studio cannot
+ * locate still opens the scene somehow rather than not at all.
+ */
+async function openSceneInActivatedDaz(scenePath: string): Promise<void> {
+  try {
+    await invoke<string>('launch_daz_studio', {
+      installFolder: await activeDazInstallFolder(),
+      scenePath,
+    })
+  } catch {
+    await openLikeExplorer(scenePath)
+  }
 }
 
 /**

@@ -36,6 +36,7 @@ import {
   locateCharacter,
   projectIdInput,
   resolveProject,
+  activeDazInstallFolder,
 } from './core'
 import type { ProjectInfo } from './core'
 
@@ -874,7 +875,10 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
   let dazLaunched = false
   let dazClosing = false
   if (!dazWasRunning) {
-    await invoke<string>('launch_daz_studio')
+    await invoke<string>('launch_daz_studio', {
+    installFolder: await activeDazInstallFolder(),
+    scenePath: '',
+  })
     dazLaunched = true
   } else {
     // A "running" Daz may actually be SHUTTING DOWN — the process lingers a
@@ -918,7 +922,10 @@ export async function launchDazForPendingJobs(): Promise<boolean> {
     if (!(await reclaimOrphanedBatch(paths))) return false
   }
   if (await invoke<boolean>('daz_studio_running').catch(() => false)) return true
-  await invoke<string>('launch_daz_studio')
+  await invoke<string>('launch_daz_studio', {
+    installFolder: await activeDazInstallFolder(),
+    scenePath: '',
+  })
   return true
 }
 
@@ -1009,7 +1016,10 @@ export async function generateRomAnimation({
   await storage.writeTextFileAtomic(paths.pending, jobFileJson([{ scenePath: scene, scriptPath }]))
   const startedAt = Date.now()
   const dazWasRunning = await invoke<boolean>('daz_studio_running').catch(() => false)
-  if (!dazWasRunning) await invoke<string>('launch_daz_studio')
+  if (!dazWasRunning) await invoke<string>('launch_daz_studio', {
+    installFolder: await activeDazInstallFolder(),
+    scenePath: '',
+  })
   return { romPath: romAnimationPath(scene), dazWasRunning, startedAt }
 }
 
@@ -1286,7 +1296,10 @@ export async function startProjectScan({ data }: { data: unknown }): Promise<Pro
   if (!dazWasRunning) {
     // A fresh launch claims the file on startup — no wait (Daz can take long to
     // come up; the panel's pending state covers it, with Abort as the out).
-    await invoke<string>('launch_daz_studio')
+    await invoke<string>('launch_daz_studio', {
+    installFolder: await activeDazInstallFolder(),
+    scenePath: '',
+  })
     return summary
   }
   // A "running" Daz may be SHUTTING DOWN (the process lingers, its Runner poller
