@@ -47,11 +47,11 @@ pub fn daz_studio_running() -> bool {
 // `(async)`: the running-instance probe shells out to PowerShell (a CIM query
 // takes noticeable time) — off the main thread.
 #[tauri::command(async)]
-pub fn run_daz_script(script_path: String) -> Result<String, String> {
+pub fn run_daz_script(script_path: String, install_folder: String) -> Result<String, String> {
     #[cfg(windows)]
     {
         let exe = running_daz_exe()
-            .or_else(installed_daz_exe)
+            .or_else(|| installed_daz_exe(&install_folder))
             .ok_or_else(|| "Could not locate the Daz Studio executable.".to_string())?;
         std::process::Command::new(&exe)
             .arg(&script_path)
@@ -61,7 +61,7 @@ pub fn run_daz_script(script_path: String) -> Result<String, String> {
     }
     #[cfg(not(windows))]
     {
-        let _ = script_path;
+        let _ = (script_path, install_folder);
         Err("Running a Daz script is only supported on Windows.".to_string())
     }
 }
@@ -75,19 +75,28 @@ pub fn run_daz_script(script_path: String) -> Result<String, String> {
 /// Returns the executable it launched (for logging, like `run_daz_script`).
 // `(async)`: the running-instance/install probes shell out — off the main thread.
 #[tauri::command(async)]
-pub fn launch_daz_studio() -> Result<String, String> {
+pub fn launch_daz_studio(install_folder: String, scene_path: String) -> Result<String, String> {
     #[cfg(windows)]
     {
         let exe = running_daz_exe()
-            .or_else(installed_daz_exe)
+            .or_else(|| installed_daz_exe(&install_folder))
             .ok_or_else(|| "Could not locate the Daz Studio executable.".to_string())?;
-        std::process::Command::new(&exe)
+        let mut command = std::process::Command::new(&exe);
+        // A scene, when the caller has one: `DAZStudio.exe "<scene>"` is how a
+        // fresh instance opens it, and it is ASSOCIATION-INDEPENDENT — unlike a
+        // shell-open, which hands the .duf to whichever Daz registered the file
+        // type last and so ignores the activated installation entirely.
+        if !scene_path.is_empty() {
+            command.arg(&scene_path);
+        }
+        command
             .spawn()
             .map_err(|e| format!("Failed to launch Daz Studio ({exe}): {e}"))?;
         Ok(exe)
     }
     #[cfg(not(windows))]
     {
+        let _ = (install_folder, scene_path);
         Err("Launching Daz Studio is only supported on Windows.".to_string())
     }
 }
@@ -118,7 +127,19 @@ fn running_daz_exe() -> Option<String> {
 /// fallback for when the running instance can't be queried — matching the running
 /// instance is preferred (see `run_daz_script`).
 #[cfg(windows)]
-fn installed_daz_exe() -> Option<String> {
+fn installed_daz_exe(preferred: &str) -> Option<String> {
+    // The ACTIVATED installation wins. Without this the probe below decides,
+    // and it decides by a hardcoded order — so a machine with both installed
+    // could never launch DAZStudio4 no matter what Settings said, and the
+    // Exporter plugin could be installed into one Daz while the other started.
+    if !preferred.is_empty() {
+        let exe = std::path::Path::new(preferred).join("DAZStudio.exe");
+        if exe.is_file() {
+            return exe.to_str().map(str::to_string);
+        }
+    }
+    // Nothing activated (or the folder has moved): the standard locations, newest
+    // first. A guess, and only ever reached when the user has expressed none.
     for var in ["PROGRAMFILES", "ProgramFiles(x86)"] {
         let Ok(base) = std::env::var(var) else { continue };
         for ver in ["DAZStudio6", "DAZStudio4"] {
