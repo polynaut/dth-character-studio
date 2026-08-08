@@ -879,7 +879,11 @@ export function DazSceneField({
   // additionally locks the toggle off entirely (deleteFileDisabled below).
   function askRemove(scene: string) {
     setError('')
-    setRemoveDeleteFile(false)
+    // Default follows WHERE the file is: a scene copied into the character
+    // folder is the studio's copy and goes with the card (the button reads
+    // "Remove"); a scene linked in place is the user's original and is only
+    // unlinked. The toggle overrides either way.
+    setRemoveDeleteFile(insideCharFolder(scene))
     setPendingRemove(scene)
   }
 
@@ -1461,6 +1465,7 @@ export function DazSceneField({
           // A scene linked in place (outside the character folder) is the user's
           // original — disable delete so it can only be unlinked, never removed.
           deleteFileDisabled={!insideCharFolder(pendingRemove)}
+          deleteLabel="Remove"
           busy={busy}
           error={error}
           onConfirm={() => void confirmRemove()}
