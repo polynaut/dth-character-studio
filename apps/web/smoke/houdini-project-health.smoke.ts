@@ -217,3 +217,36 @@ test('unresolved imports and blank parms are both named', async ({ page }) => {
   expect(title).toContain('import_character_dtu_file')
   expect(title).toContain('export_directory')
 })
+
+test('a badge from a STALE store clears itself once the sweep re-reads the project', async ({
+  page,
+}) => {
+  // The contradiction this guards: the card said "Needs attention" while the
+  // Utils drawer — which scans live — reported every check passing. The badge
+  // is painted from the STORE, and the sweep that refreshes the store was
+  // started un-awaited, so nothing ever re-read it.
+  //
+  // Seeded here as a store entry whose key no longer matches the file (a stale
+  // scan, exactly what a regenerated project leaves behind): the first paint
+  // has nothing to show, and the sweep's fresh result must land without a
+  // reload.
+  const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true, houdiniProject: true })
+  seed.files[STORE] = JSON.stringify({
+    version: 1,
+    projects: {
+      [P.houdini.toLowerCase()]: {
+        key: `${P.houdini.toLowerCase()}|1`,
+        scannedAt: '2026-08-07T00:00:00.000Z',
+        project: scan({ job: 'D:/DTH Projects/Demo/Ita' }),
+      },
+    },
+  })
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await expect(page.getByText(/custom ROM frames/)).toBeVisible()
+
+  // The stale entry keys on a mtime the file no longer has, so it is ignored —
+  // and the badge must not appear on the strength of it.
+  await expect(page.getByText('Needs attention')).toHaveCount(0)
+})

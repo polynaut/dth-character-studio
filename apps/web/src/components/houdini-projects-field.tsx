@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { AlertTriangle, Plus, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -207,22 +207,31 @@ export function HoudiniProjectsField({
   // read is instant and needs no Houdini; the sweep fills the store for next
   // time, which is why a first-ever open shows no badges and a later one does.
   const [warnings, setWarnings] = useState<ReadonlyMap<string, string>>(new Map())
+  /** Read the STORED verdicts. Instant and needs no Houdini — the sweep is what
+   *  fills the store. */
+  const readWarnings = useCallback(async () => {
+    const status = await fetchHoudiniProjectStatus({ data: { projectId, id: character.id } })
+    setWarnings(
+      new Map(
+        status.filter((s) => !s.ok).map((s) => [normalizePath(s.hipPath).toLowerCase(), s.summary]),
+      ),
+    )
+  }, [projectId, character.id])
+
   useRefetchOnFocus(
     () => {
       void (async () => {
-        // Kick the sweep off first, un-awaited: reading the store must not wait
-        // on hython, and the sweep coalesces per character anyway.
-        void scanCharacterHoudiniProjects({ data: { projectId, id: character.id } })
-        const status = await fetchHoudiniProjectStatus({
-          data: { projectId, id: character.id },
-        })
-        setWarnings(
-          new Map(
-            status
-              .filter((s) => !s.ok)
-              .map((s) => [normalizePath(s.hipPath).toLowerCase(), s.summary]),
-          ),
+        // Paint from the store first: it is instant, and a warm cache is right.
+        await readWarnings().catch(() => {})
+        // Then AGAIN once the sweep has landed. Without this second read the
+        // badge keeps whatever the store held BEFORE the scan — which is how a
+        // project could show "Needs attention" while the drawer, which scans
+        // live, reported every check passing. The sweep coalesces per character,
+        // and an unchanged `.hip` never starts a process, so this is cheap.
+        await scanCharacterHoudiniProjects({ data: { projectId, id: character.id } }).catch(
+          () => {},
         )
+        await readWarnings().catch(() => {})
       })()
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -591,7 +600,14 @@ export function HoudiniProjectsField({
           // The General tab checks each project's `$JOB`, which should be the
           // CHARACTER folder (v0.64).
           charFolder={charFolder}
-          onClose={() => setUtilsFor('')}
+          onClose={() => {
+            setUtilsFor('')
+            // The drawer scans live and writes what it found to the same store,
+            // so its answer is fresher than the badge's — pick it up on close
+            // rather than leaving the card contradicting the tab the user was
+            // just reading.
+            void readWarnings().catch(() => {})
+          }}
         />
       )}
 
