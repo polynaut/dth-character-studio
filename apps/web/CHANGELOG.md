@@ -1,5 +1,13 @@
 # @dth/web
 
+## 0.68.1
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @dth/rom@0.68.1
+  - @dth/ui@0.68.1
+
 ## 0.68.0
 
 ### Minor Changes
