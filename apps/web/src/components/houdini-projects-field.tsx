@@ -6,6 +6,7 @@ import { DirPathChip, displayDirOf } from '#/components/dir-path-chip.tsx'
 import { HoudiniUtilsPanel } from '#/components/character/houdini-utils-panel.tsx'
 import { Portrait } from '#/components/portrait.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
+import { SceneCopyDialog } from '#/components/scene-copy-dialog.tsx'
 import {
   Button,
   Input,
@@ -19,7 +20,6 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Switch,
   useModifierHeld,
   useRefetchOnFocus,
 } from '@dth/ui'
@@ -173,12 +173,10 @@ export function HoudiniProjectsField({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [generateOpen, setGenerateOpen] = useState(false)
-  // Bring an added project INTO the character's Houdini folder rather than
-  // linking it where it lies. Off by default: linking in place is what this
-  // field has always done, and a copy is the choice that moves files.
-  const [copyIn, setCopyIn] = useState(false)
-  /** With copy on: remove the original once the copy is on disk. */
-  const [moveIn, setMoveIn] = useState(false)
+  /** Picked/dropped `.hip`s that live OUTSIDE the character folder, waiting on
+   *  the copy-vs-link dialog. */
+  const [pendingAdd, setPendingAdd] = useState<Array<string>>([])
+  const [addDeleteOriginal, setAddDeleteOriginal] = useState(false)
   // Remove dialog: "Keep houdini files" ON (the safe default) = unlink only;
   // OFF = also delete the scene file + the Houdini project folder from disk.
   // Only offered for GENERATED projects (living directly in the export dir) —
@@ -287,7 +285,35 @@ export function HoudiniProjectsField({
   // Houdini projects are linked in place — store each `.hip` path as-is, skipping
   // any already linked. Shared by the Browse button, OS drag-and-drop and the
   // Generate dialog (which passes its own success toast).
-  async function addProjects(paths: Array<string>, toastTitle?: string) {
+  /**
+   * Link the paths that are already inside the character folder, and hold the
+   * rest for the copy-vs-link dialog.
+   *
+   * Same shape as the Daz-scene flow: the decision belongs AFTER the pick, on a
+   * file the studio can see the location of — a toggle asked up front had to be
+   * answered before knowing whether the file was even external, and for a `.hip`
+   * that already lives in the character's houdini folder there is nothing to
+   * decide.
+   */
+  function beginAdd(paths: Array<string>) {
+    const inside = paths.filter((p) => insideCharFolder(p))
+    const outside = paths.filter((p) => !insideCharFolder(p))
+    if (inside.length > 0) void addProjects(inside, { copy: false })
+    if (outside.length > 0) setPendingAdd(outside)
+  }
+
+  /** A picked `.hip` already under the character's own folder — copying it
+   *  would duplicate a file that is already where it belongs. */
+  function insideCharFolder(p: string): boolean {
+    const root = normalizePath(charFolder).toLowerCase()
+    return normalizePath(p).toLowerCase().startsWith(`${root}/`)
+  }
+
+  async function addProjects(
+    paths: Array<string>,
+    { copy, deleteOriginal = false }: { copy: boolean; deleteOriginal?: boolean },
+    toastTitle?: string,
+  ) {
     // De-dupe case-insensitively on the normalised path (Windows): dropping
     // `d:/x.hip` after `D:\x.hip` was picked must not link the same project twice.
     const linked = new Set(character.houdiniProjects.map((p) => normalizePath(p).toLowerCase()))
@@ -300,7 +326,7 @@ export function HoudiniProjectsField({
     // absolute references, so the toast points at the Utils drawer; the card's
     // checks will be flagging it as soon as the background sweep has run.
     let copied = 0
-    if (copyIn && projectId) {
+    if (copy && projectId) {
       // Sequential on purpose, not for politeness: the copy refuses a name
       // already in the folder, and two dropped files sharing a basename would
       // both pass that check at once if they ran together. A failure stops the
@@ -315,7 +341,7 @@ export function HoudiniProjectsField({
         if (head === undefined) return { done, failed: '' }
         try {
           const dest = await copyHoudiniProject({
-            data: { projectId, id: character.id, hipPath: head, deleteOriginal: moveIn },
+            data: { projectId, id: character.id, hipPath: head, deleteOriginal },
           })
           return bringIn(tail, [...done, dest])
         } catch (e) {
@@ -337,7 +363,7 @@ export function HoudiniProjectsField({
         toast:
           toastTitle ??
           (copied > 0
-            ? `${moveIn ? 'Moved' : 'Copied'} ${copied} Houdini project${
+            ? `${deleteOriginal ? 'Moved' : 'Copied'} ${copied} Houdini project${
                 copied === 1 ? '' : 's'
               } in — open Utils to repoint anything the copy left behind`
             : fresh.length === 1
@@ -356,7 +382,7 @@ export function HoudiniProjectsField({
       'Select a Houdini project (.hip)',
       browseStart(parentDir(character.houdiniProjects[0] ?? ''), houdiniDir),
     )
-    if (picked) await addProjects([picked])
+    if (picked) beginAdd([picked])
   }
 
   // A GENERATED project lives directly in the character's HOUDINI folder —
@@ -407,7 +433,7 @@ export function HoudiniProjectsField({
   return (
     <FileDropZone
       accept={['hip', 'hipnc', 'hiplc']}
-      onDrop={(paths) => void addProjects(paths)}
+      onDrop={(paths) => beginAdd(paths)}
       label="Drop Houdini project(s) to link"
       className="rounded-lg"
     >
@@ -461,24 +487,6 @@ export function HoudiniProjectsField({
           )}
         </div>
       )}
-      {/* Copying a project used to be refused outright: a copied `.hip` carries
-          the source's $JOB and its absolute references, so it imports the
-          character it came FROM, and the studio had no way to see or fix that.
-          It can now — the background scan finds exactly those faults, the card
-          flags them and the Utils drawer repairs them — so the choice is
-          offered, with linking still the default. */}
-      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-        <label className="flex items-center gap-1.5">
-          <Switch checked={copyIn} onCheckedChange={setCopyIn} disabled={busy} />
-          Copy into the character&apos;s Houdini folder
-        </label>
-        {copyIn && (
-          <label className="flex items-center gap-1.5">
-            <Switch checked={moveIn} onCheckedChange={setMoveIn} disabled={busy} />
-            Move (remove the original)
-          </label>
-        )}
-      </div>
       <div className={`flex flex-wrap gap-2 ${hasProjects ? 'mt-3' : ''}`}>
         <Button variant="outline" size="sm" disabled={busy} onClick={() => void onAddPick()}>
           <Plus /> {busy ? 'Working…' : 'Add project'}
@@ -502,6 +510,44 @@ export function HoudiniProjectsField({
       </div>
       {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
 
+      {pendingAdd.length > 0 && (
+        <SceneCopyDialog
+          title={
+            pendingAdd.length === 1
+              ? 'Copy this Houdini project in, or link it?'
+              : `Copy these ${pendingAdd.length} Houdini projects in, or link them?`
+          }
+          description={
+            <>
+              A copied project lands in this character&apos;s Houdini folder (
+              <code>{houdiniSubdir || 'houdini'}</code>) — there is no subfolder to
+              choose. Linking leaves the file exactly where it is and records a path
+              to it.
+            </>
+          }
+          filePath={pendingAdd.length === 1 ? pendingAdd[0] : undefined}
+          deleteOriginal={addDeleteOriginal}
+          onDeleteOriginalChange={setAddDeleteOriginal}
+          busy={busy}
+          error={error || undefined}
+          copyLabel={pendingAdd.length === 1 ? 'Copy in' : 'Copy them in'}
+          onCopy={() => {
+            const paths = pendingAdd
+            setPendingAdd([])
+            void addProjects(paths, { copy: true, deleteOriginal: addDeleteOriginal })
+          }}
+          onLink={() => {
+            const paths = pendingAdd
+            setPendingAdd([])
+            void addProjects(paths, { copy: false })
+          }}
+          onClose={() => {
+            setPendingAdd([])
+            setAddDeleteOriginal(false)
+          }}
+        />
+      )}
+
       {generateOpen && (
         <GenerateProjectDialog
           projectId={projectId}
@@ -512,6 +558,7 @@ export function HoudiniProjectsField({
           onGenerated={async (scenePath, networkAdded, visibleTypes, prefilled) => {
             await addProjects(
               [scenePath],
+              { copy: false },
               networkAdded
                 ? prefilled.length > 0
                   ? 'Houdini project generated — DazToHue network, Set Project and the import/export paths are baked in'
