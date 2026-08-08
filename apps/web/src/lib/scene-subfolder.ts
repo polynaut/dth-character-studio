@@ -121,17 +121,32 @@ export function hipAnchorDirs(
 }
 
 /**
- * The `$HIP`-anchored prefix that replaces the export ROOT in generated
- * reference-skeleton paths — e.g. `$HIP/../daz3d/dth-exports` for the
- * standard layout — or '' when only absolute paths are safe.
+ * The `$JOB`-anchored prefix that replaces the export ROOT in generated
+ * reference paths — e.g. `$JOB/daz3d/dth-exports` for the standard layout — or
+ * '' when only absolute paths are safe.
  *
- * One prefix must be right for EVERY linked `.hip`, so relative emission
- * requires: at least one linked project, all of them inside the character
- * folder, all in the SAME folder, and the export root reachable from it on
- * the same drive. Anything else — no projects yet, a hand-linked `.hip` in
- * the user's own tree, projects spread over two folders — falls back to
- * absolute. (This replaced the `dth-exports` junctions: same gate shape,
- * no reparse points.)
+ * **`$JOB` is the character folder** (baked by Generate project since v0.64,
+ * and repairable from the Utils drawer), so anything in the character's layout
+ * is one hop from it. That is also what Houdini itself writes: its file picker
+ * collapses a picked export to `$JOB/daz3d/dth-exports/…` (measured with
+ * `hou.text.collapseCommonVars`), so generated and hand-picked paths finally
+ * agree inside the same node.
+ *
+ * This used to emit `$HIP/../daz3d/dth-exports` instead, and not by preference:
+ * before v0.64 `$JOB` pointed at `<char>/houdini/houdini-project`, BELOW the
+ * exports, so it could not express them at all. The `$HIP` form encodes the
+ * `.hip`'s DEPTH — a project one folder deeper silently breaks every path — and
+ * needed every project to sit in ONE folder for a single prefix to be right.
+ * `$JOB` needs none of that, which is why the anchor-count gate is gone.
+ *
+ * What still forces absolute paths: no linked project at all, a project OUTSIDE
+ * the character folder (hand-linked in the user's own tree, where `$JOB` is
+ * whatever they set), or an export root outside the character folder — none of
+ * which `$JOB` can express safely.
+ *
+ * Projects generated before this change carry the old `$HIP/../…` paths. They
+ * still resolve; the card's checks flag them (`hip-relative`) and Utils →
+ * **Make paths portable** rewrites them.
  */
 export function hipRefPrefixFor(
   houdiniProjects: ReadonlyArray<string>,
@@ -142,25 +157,14 @@ export function hipRefPrefixFor(
   const exportRoot = stripTrailingSeparators(exportRootAbs.trim().replace(/\\/g, '/'))
   if (!folder || !exportRoot || houdiniProjects.length === 0) return ''
   const prefix = `${folder.toLowerCase()}/`
-  const inside = (hip: string) =>
-    hip.trim().replace(/\\/g, '/').toLowerCase().startsWith(prefix)
+  const inside = (p: string) => p.trim().replace(/\\/g, '/').toLowerCase().startsWith(prefix)
   if (!houdiniProjects.every(inside)) return ''
-  const anchors = hipAnchorDirs(houdiniProjects, charFolderAbs)
-  if (anchors.length !== 1) return ''
-  // `..` up from the anchor to the common ancestor, then down to the root.
-  const from = anchors[0].split('/')
-  const to = exportRoot.split('/')
-  if (from[0].toLowerCase() !== to[0].toLowerCase()) return '' // cross-drive
-  let common = 0
-  while (
-    common < from.length &&
-    common < to.length &&
-    from[common].toLowerCase() === to[common].toLowerCase()
-  ) {
-    common++
-  }
-  const parts = [...Array.from({ length: from.length - common }, () => '..'), ...to.slice(common)]
-  return parts.length === 0 ? '' : `$HIP/${parts.join('/')}`
+  // The export root has to be expressible FROM the character folder: `$JOB` is
+  // that folder, so anything outside it has no relative form at all.
+  if (!inside(exportRoot)) return ''
+  // Non-empty by construction: `inside` demands the `<folder>/` prefix and the
+  // trailing separators are already stripped, so the root is strictly deeper.
+  return `$JOB/${exportRoot.slice(folder.length + 1)}`
 }
 
 /** Tokens that carry no scene identity — generation markers and the DTH preset

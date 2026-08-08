@@ -42,8 +42,9 @@ import { charScopeInput, charsRoot, joinPath, locateCharacter, resolveProject } 
 // houdini.rs).
 //
 // The project folder holds no exports (schema v29) — those live in the
-// character's fixed Daz-side export root, reached from a `.hip` by plain `..`
-// navigation (`$HIP/../<dazSubdir>/dth-exports/…`). Earlier versions planted
+// character's fixed Daz-side export root, reached from the project folder by
+// plain relative navigation (`$JOB/<dazSubdir>/dth-exports/…`, runtime v63;
+// `$HIP/../…` before it). Earlier versions planted
 // `dth-exports` JUNCTIONS here and beside every `.hip`; the feature was killed
 // (v0.63) — reparse points fought Perforce/backup tooling and doubled the
 // folder in every picker — and {@link sweepExportJunctions} now REMOVES the
@@ -301,10 +302,10 @@ export async function generateHoudiniProject({
   // sits and cannot be pointed elsewhere (Set Project sets `$JOB`, not `$HIP`),
   // so the folder stayed empty while the output landed beside the scenes.
   // {@link sweepHoudiniProjectDirs} removes the empty leftovers.
-  // The export root is reached from the scene by plain relative navigation
-  // (`$HIP/../<dazSubdir>/dth-exports/…` — the emitted swap is buildExportBlock
-  // in @dth/rom dsa.ts, the prefix rule is `hipRefPrefixFor`). No junctions
-  // anywhere since v0.63.
+  // The export root is reached from the project folder by plain relative
+  // navigation (`$JOB/<dazSubdir>/dth-exports/…` — the emitted swap is
+  // buildExportBlock in @dth/rom dsa.ts, the prefix rule is `hipRefPrefixFor`).
+  // No junctions anywhere since v0.63.
   const charFolder = location?.folderAbs ?? ''
   if (!charFolder) throw new Error(`Character ${id} not found`)
   const houdiniDir = characterHoudiniDir(charFolder, project.houdiniSubdir)
@@ -338,8 +339,8 @@ export async function generateHoudiniProject({
   }
 
   // Everything the studio already knows, prefilled onto the fresh network so
-  // it comes out wired end-to-end: import/CSV/export paths (`$HIP/../…`
-  // relative when the project's path style allows — computed for THE hip being
+  // it comes out wired end-to-end: import/CSV/export paths (`$JOB/…` relative
+  // when the project's path style allows — computed for THE hip being
   // generated, which by construction sits in the houdini folder — else
   // absolute), the character name (prefilled paths may bypass the HDA's
   // auto-fill) and the skinning the ROM targets.
@@ -350,8 +351,8 @@ export async function generateHoudiniProject({
     : ''
   // Houdini's OWN output goes to the character's `export/` folder — the end of
   // the pipeline, not the `dth-exports` intermediates the imports read. Its
-  // prefix is computed against that folder, so it comes out `$HIP/../export`
-  // rather than sharing the imports' `$HIP/../daz3d/dth-exports`.
+  // prefix is computed against that folder, so it comes out `$JOB/export`
+  // rather than sharing the imports' `$JOB/daz3d/dth-exports`.
   const finalExportAbs = joinPath(charFolder, normalizeRelFolder(project.exportSubdir))
   const finalExportDir =
     (relative ? hipRefPrefixFor([scenePath], charFolder, finalExportAbs) : '') || finalExportAbs

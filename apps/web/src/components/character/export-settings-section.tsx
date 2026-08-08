@@ -38,7 +38,7 @@ export function ExportSettingsSection({ character }: { character: Character }) {
             Fixed, beside the character&apos;s Daz scenes. Each scene exports into its own
             subfolder here, named after the scene&apos;s folder (e.g. <code>primary</code>).
             A generated Houdini project reaches these files by a relative path
-            (<code>$HIP/../…</code>), so everything stays moveable.
+            (<code>$JOB/…</code>), so everything stays moveable.
           </p>
         </>
       ) : (

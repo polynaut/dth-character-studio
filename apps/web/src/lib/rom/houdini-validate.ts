@@ -26,7 +26,7 @@ import type { MaterialScanProject } from './api/native-types.ts'
 /** One thing wrong with a project. `code` is for tests and styling, `label` is
  *  what the card's tooltip shows. */
 export interface HoudiniProjectProblem {
-  code: 'unreadable' | 'job-unknown' | 'job-differs' | 'broken-refs' | 'blank-parms'
+  code: 'unreadable' | 'job-unknown' | 'job-differs' | 'broken-refs' | 'hip-relative' | 'blank-parms'
   label: string
 }
 
@@ -78,6 +78,22 @@ export function validateHoudiniProject(
     problems.push({
       code: 'broken-refs',
       label: `${n} import path${n === 1 ? ' does' : 's do'} not resolve: ${project.refs.broken.join(', ')}.`,
+    })
+  }
+
+  if (project.refs.hipRelative.length > 0) {
+    // NOT broken — these resolve today. They are flagged because `$HIP` encodes
+    // the scene's DEPTH (move the .hip one folder down and every one of them
+    // points elsewhere) and because Houdini's own picker writes `$JOB/…`, so a
+    // project mixes two spellings of the same folder. Everything the studio
+    // generates has been `$JOB`-anchored since runtime v63; Make paths portable
+    // re-anchors the rest.
+    const n = project.refs.hipRelative.length
+    problems.push({
+      code: 'hip-relative',
+      label:
+        `${n} path${n === 1 ? '' : 's'} still anchored on $HIP instead of $JOB — ` +
+        `Utils → Make paths portable rewrites ${n === 1 ? 'it' : 'them'}.`,
     })
   }
 

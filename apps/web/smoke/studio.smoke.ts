@@ -55,7 +55,7 @@ test('project window: character editor measures, edits and saves both artifacts'
   // This "window" was opened with the project's .dcsp — main.tsx reads it via
   // active_project_file and navigates into the project route on its own.
   // `houdiniProject` links the .hip + export root so the save exercises the
-  // $HIP-relative reference-path emission (asserted below).
+  // $JOB-relative reference-path emission (asserted below).
   await page.addInitScript(
     installTauriMock,
     buildSeed({ activeProjectFile: P.dcsp, houdiniProject: true }),
@@ -123,13 +123,13 @@ test('project window: character editor measures, edits and saves both artifacts'
   const definition = await fileContent(page, `${P.charFolder}/Kira.json`)
   expect(JSON.parse(definition!).generatedDthVersion).toBe('2.4.3')
   // The save's generation emitted the bone-scale reference-skeleton paths
-  // RELATIVE to the linked .hip: the script swaps the export root for
-  // `$HIP/../daz3d/dth-exports` — plain `..` navigation from `<char>/houdini/`
-  // to the export root beside the scenes (hipRefPrefixFor's rule; no junctions
-  // since v0.63). This pins the emit decision end-to-end: the manifest's
-  // default 'hip' style + the fixture's linked .hip inside the character
-  // folder reach the emitted script.
-  expect(dsa).toContain('"$HIP/../daz3d/dth-exports"')
+  // PROJECT-RELATIVE: the script swaps the export root for
+  // `$JOB/daz3d/dth-exports`. `$JOB` IS the character folder (runtime v63), so
+  // the export tree is one hop from it — and that is what Houdini's own picker
+  // writes, unlike the `$HIP/../…` this used to emit. Pins the emit decision
+  // end-to-end: the manifest's default 'hip' style + the fixture's linked .hip
+  // inside the character folder reach the emitted script.
+  expect(dsa).toContain('"$JOB/daz3d/dth-exports"')
   // …and the same funnel swept the retired junction feature's leftovers,
   // probing exactly where the old versions planted them (beside the linked
   // .hip here) — nothing to remove in the fixture world, but the sweep-on-
@@ -180,7 +180,7 @@ test('project window: inline rename moves the folder and regenerates the script'
     `${P.dazLib}/Scripts/DTH-Character-Studio/Demo/Nova/ROM_Nova_G9.dsa`,
   )
   expect(novaDsa).toContain(`var dthRefRootAbs = "${novaFolder}/daz3d/dth-exports";`)
-  expect(novaDsa).toContain('"$HIP/../daz3d/dth-exports"')
+  expect(novaDsa).toContain('"$JOB/daz3d/dth-exports"')
   // The app's own folder for this character followed the rename, and the script
   // reads its CSV from the new one — a stale path here would make every export
   // report "PoseAsset CSV not found" while the file sat under the old name.

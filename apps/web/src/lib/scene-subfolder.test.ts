@@ -96,15 +96,11 @@ describe('hipAnchorDirs — where $HIP-relative reference paths can anchor', () 
   })
 })
 
-describe('hipRefPrefixFor — the $HIP prefix that replaces the export root', () => {
-  it('standard layout: hips in the houdini folder reach the export root by one ..', () => {
+describe('hipRefPrefixFor — the $JOB prefix that replaces the export root', () => {
+  it('standard layout: the export root is one hop from $JOB (the character folder)', () => {
     expect(
-      hipRefPrefixFor(
-        ['X:/p/Kira/houdini/K.hiplc'],
-        'X:/p/Kira',
-        'X:/p/Kira/daz3d/dth-exports',
-      ),
-    ).toBe('$HIP/../daz3d/dth-exports')
+      hipRefPrefixFor(['X:/p/Kira/houdini/K.hiplc'], 'X:/p/Kira', 'X:/p/Kira/daz3d/dth-exports'),
+    ).toBe('$JOB/daz3d/dth-exports')
     // Backslash inputs (the stored Windows paths) resolve identically.
     expect(
       hipRefPrefixFor(
@@ -112,32 +108,50 @@ describe('hipRefPrefixFor — the $HIP prefix that replaces the export root', ()
         'X:\\p\\Kira',
         'X:\\p\\Kira\\daz3d\\dth-exports',
       ),
-    ).toBe('$HIP/../daz3d/dth-exports')
+    ).toBe('$JOB/daz3d/dth-exports')
   })
 
-  it('no linked projects → absolute (there is no $HIP to anchor at)', () => {
-    expect(hipRefPrefixFor([], 'X:/p/Kira', 'X:/p/Kira/daz3d/dth-exports')).toBe('')
-  })
-
-  it('a hip outside the character folder → absolute (no fixed relative path exists)', () => {
+  it('does not care how DEEP the .hip sits — the whole point of leaving $HIP', () => {
+    // The old $HIP form encoded the scene's depth as `..` hops, so this had to
+    // fall back to absolute. $JOB is the character folder either way.
     expect(
-      hipRefPrefixFor(['E:/elsewhere/K.hiplc'], 'X:/p/Kira', 'X:/p/Kira/daz3d/dth-exports'),
-    ).toBe('')
+      hipRefPrefixFor(
+        ['X:/p/Kira/houdini/variants/deep/K.hiplc'],
+        'X:/p/Kira',
+        'X:/p/Kira/daz3d/dth-exports',
+      ),
+    ).toBe('$JOB/daz3d/dth-exports')
   })
 
-  it('two hips in different folders → absolute (one prefix cannot be right for both)', () => {
+  it('two hips in different folders now share one prefix', () => {
+    // With $HIP this was absolute: no single `..` walk was right for both.
     expect(
       hipRefPrefixFor(
         ['X:/p/Kira/houdini/A.hiplc', 'X:/p/Kira/archive/B.hiplc'],
         'X:/p/Kira',
         'X:/p/Kira/daz3d/dth-exports',
       ),
+    ).toBe('$JOB/daz3d/dth-exports')
+  })
+
+  it('no linked projects → absolute (nothing to write a project-relative path into)', () => {
+    expect(hipRefPrefixFor([], 'X:/p/Kira', 'X:/p/Kira/daz3d/dth-exports')).toBe('')
+  })
+
+  it('a hip outside the character folder → absolute', () => {
+    // Hand-linked in the user's own tree: its $JOB is whatever they set, so the
+    // studio cannot assume it is this character's folder.
+    expect(
+      hipRefPrefixFor(['E:/elsewhere/K.hiplc'], 'X:/p/Kira', 'X:/p/Kira/daz3d/dth-exports'),
     ).toBe('')
   })
 
-  it('a cross-drive export root → absolute (no .. walk crosses a drive letter)', () => {
+  it('an export root outside the character folder → absolute', () => {
+    // $JOB IS the character folder, so nothing above or beside it has a
+    // $JOB-relative form — cross-drive included.
+    expect(hipRefPrefixFor(['X:/p/Kira/houdini/K.hiplc'], 'X:/p/Kira', 'Y:/exports/Kira')).toBe('')
     expect(
-      hipRefPrefixFor(['X:/p/Kira/houdini/K.hiplc'], 'X:/p/Kira', 'Y:/exports/Kira'),
+      hipRefPrefixFor(['X:/p/Kira/houdini/K.hiplc'], 'X:/p/Kira', 'X:/p/shared-exports'),
     ).toBe('')
   })
 })

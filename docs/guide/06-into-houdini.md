@@ -37,7 +37,7 @@ Houdini-only pass.
 > exports as well as the scene. The exports live on the Daz side,
 > one `..` up from the scene: in the file picker, navigate to
 > `../daz3d/dth-exports/` and tick **Make path relative to current directory**
-> — the import reads `$HIP/../daz3d/dth-exports/primary/<Name>.dth` and the
+> — the import reads `$JOB/daz3d/dth-exports/primary/<Name>.dth` and the
 > `.hip` stays portable.
 
 ## Generate the Houdini project automatically
@@ -51,7 +51,7 @@ network ready**. The network comes out
 **wired**: the import file paths (`.dth`, FBX, Alembic, ROM FBX), the
 **PoseAsset CSV path**, the **export directory** and the **Skinning method**
 (Linear / Dual Quaternion, from the ROM definition) are prefilled — relative to
-the scene (`$HIP/../daz3d/dth-exports/…`) by default, absolute when the
+`$JOB` — the character folder — (`$JOB/daz3d/dth-exports/…`) by default, absolute when the
 project's
 [Houdini path style](./05-rom-in-daz.md#reference-skeleton-paths--hip-by-default)
 says so — and the **character name** is set with them. A parameter
@@ -66,7 +66,7 @@ point at — generate one project per scene to cover them all.
 The **export directory** is a different folder from the imports, on purpose:
 they read the Daz→Houdini intermediates under `dth-exports`, while Houdini
 writes its own Unreal-bound output to the character's **`export/`** folder
-(`$HIP/../export/`, or whatever the project's *Final export subfolder* is
+(`$JOB/export/`, or whatever the project's *Final export subfolder* is
 named). One `export/` per character, shared by every scene's project.
 Generate a second or third project and they all land in the same houdini folder,
 so they share both `$JOB` and `$HIP` — and with `$HIP` shared, Houdini's own

@@ -187,6 +187,11 @@ pub struct ProjectRefInfo {
     /// four of Houdini's own scratch files (`rendergallery.db`, the PDG
     /// taskgraph/checkpoint) that simply do not exist until used.
     pub broken: Vec<String>,
+    /// Refs still written the pre-v63 way (`$HIP/../…`), as `<node> <parm>`.
+    /// They RESOLVE, so they are not broken — but `$HIP` encodes the scene's
+    /// depth and disagrees with what Houdini's own picker writes, so the card
+    /// flags them and Make paths portable re-anchors them on `$JOB`.
+    pub hip_relative: Vec<String>,
 }
 
 /// One import reference a repath rebuilt.

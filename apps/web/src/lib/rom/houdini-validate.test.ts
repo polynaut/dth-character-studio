@@ -14,7 +14,7 @@ function scanned(over: Partial<MaterialScanProject> = {}): MaterialScanProject {
     error: '',
     nodes: [],
     job: CHAR,
-    refs: { collapsible: 0, foreign: 0, broken: [] },
+    refs: { collapsible: 0, foreign: 0, broken: [], hipRelative: [] },
     prefill: { fillable: [], missing: [] },
     ...over,
   }
@@ -58,7 +58,12 @@ describe('validateHoudiniProject', () => {
   it('reports unresolved import paths and blank parms, and names them', () => {
     const health = validateHoudiniProject(
       scanned({
-        refs: { collapsible: 0, foreign: 2, broken: ['/obj/import import_character_dtu_file'] },
+        refs: {
+          collapsible: 0,
+          foreign: 2,
+          broken: ['/obj/import import_character_dtu_file'],
+          hipRelative: [],
+        },
         prefill: { fillable: ['export_directory'], missing: ['pose_asset_csv_file_path'] },
       }),
       CHAR,
@@ -71,11 +76,36 @@ describe('validateHoudiniProject', () => {
     expect(health.summary).not.toContain('pose_asset_csv_file_path')
   })
 
+  it('flags a pre-v63 project still anchored on $HIP, and names the fix', () => {
+    // These RESOLVE — that is why nothing caught them before. They are a fault
+    // because `$HIP` encodes the scene's depth and disagrees with what
+    // Houdini's own picker writes into the same node.
+    const health = validateHoudiniProject(
+      scanned({
+        refs: {
+          collapsible: 0,
+          foreign: 0,
+          broken: [],
+          hipRelative: ['/obj/dth import_character_dtu_file', '/obj/dth import_character_fbx_file'],
+        },
+      }),
+      CHAR,
+    )
+    expect(health.ok).toBe(false)
+    expect(health.problems.map((p) => p.code)).toEqual(['hip-relative'])
+    expect(health.summary).toContain('$JOB')
+    // The badge is only useful if it says where the repair lives.
+    expect(health.summary).toContain('Make paths portable')
+  })
+
   it('foreign references alone are not a fault', () => {
     // A texture outside the Daz library cannot be made portable; it is reported
     // by the repath flow, but it does not stop the project working.
     expect(
-      validateHoudiniProject(scanned({ refs: { collapsible: 3, foreign: 5, broken: [] } }), CHAR).ok,
+      validateHoudiniProject(
+        scanned({ refs: { collapsible: 3, foreign: 5, broken: [], hipRelative: [] } }),
+        CHAR,
+      ).ok,
     ).toBe(true)
   })
 })

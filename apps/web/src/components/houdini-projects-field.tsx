@@ -142,7 +142,7 @@ function HoudiniCard({
  * scenes). Houdini projects are linked in place and never copied.
  *
  * NOT because a `.hip` must hold absolute paths — it needn't, and the studio's
- * own Generate project deliberately authors relative ones (`$HIP/../…`). It is
+ * own Generate project deliberately authors relative ones (`$JOB/…`). It is
  * because moving a project is only safe when BOTH hold: every reference is
  * relative, AND its `$JOB` project folder travels with it. The studio can
  * guarantee neither for a `.hip` the user authored elsewhere, and a copy that
@@ -756,8 +756,8 @@ function GenerateProjectDialog({
             Creates a new Houdini scene with the DazToHue network — built by running your
             installed DazToHue <em>shelf tool</em>, so it always matches the current plugin —
             and <em>Set Project</em> baked to the character folder, which holds both the
-            scene and the exports: every import resolves relative to the scene file
-            (<code>$HIP/../…</code>), so the project stays moveable. Runs Houdini&apos;s <code>hython</code>; the first start
+            scene and the exports: every import resolves relative to that project folder
+            (<code>$JOB/…</code>), so the project stays moveable. Runs Houdini&apos;s <code>hython</code>; the first start
             can take a moment.
           </InfoPopup>
         </span>
