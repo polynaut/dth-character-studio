@@ -14,7 +14,7 @@ function scanned(over: Partial<MaterialScanProject> = {}): MaterialScanProject {
     error: '',
     nodes: [],
     job: CHAR,
-    refs: { collapsible: 0, foreign: 0, broken: [], hipRelative: []  },
+    refs: { collapsible: 0, foreign: 0, broken: [], hipRelative: [] },
     prefill: { fillable: [], missing: [] },
     ...over,
   }
@@ -58,7 +58,12 @@ describe('validateHoudiniProject', () => {
   it('reports unresolved import paths and blank parms, and names them', () => {
     const health = validateHoudiniProject(
       scanned({
-        refs: { collapsible: 0, foreign: 2, broken: ['/obj/import import_character_dtu_file'], hipRelative: []  },
+        refs: {
+          collapsible: 0,
+          foreign: 2,
+          broken: ['/obj/import import_character_dtu_file'],
+          hipRelative: [],
+        },
         prefill: { fillable: ['export_directory'], missing: ['pose_asset_csv_file_path'] },
       }),
       CHAR,
@@ -97,7 +102,10 @@ describe('validateHoudiniProject', () => {
     // A texture outside the Daz library cannot be made portable; it is reported
     // by the repath flow, but it does not stop the project working.
     expect(
-      validateHoudiniProject(scanned({ refs: { collapsible: 3, foreign: 5, broken: [], hipRelative: []  } }), CHAR).ok,
+      validateHoudiniProject(
+        scanned({ refs: { collapsible: 3, foreign: 5, broken: [], hipRelative: [] } }),
+        CHAR,
+      ).ok,
     ).toBe(true)
   })
 })

@@ -1091,10 +1091,22 @@ def _rehome_hip_ref(value, roots):
 
     Only `$HIP` itself — `$HIPNAME` and `$HIPFILE` are different variables that
     merely share the prefix.
+
+    And only a path that ESCAPES the houdini folder (`$HIP/../…`). A `$HIP` path
+    that stays inside it is not a pre-v63 leftover: it is where Houdini itself
+    writes, and its stock defaults say so — a Karma ROP's `$HIP/render/…`, a File
+    Cache SOP's `$HIP/geo/…`. Those are meant to follow the scene file, which is
+    exactly what `$HIP` does and `$JOB` does not, so re-anchoring them would
+    change what the user's own nodes mean. `_file_ref_parms` hands us EVERY file
+    parm in the scene, not just the DTH network's, so without this the health
+    badge fires on any project someone has actually worked in.
     """
     if not value:
         return None
-    if not (value == "$HIP" or value[:5] in ("$HIP/", "$HIP\\")):
+    if value[:5] not in ("$HIP/", "$HIP\\"):
+        return None
+    tail = value[5:].replace("\\", "/")
+    if not (tail == ".." or tail.startswith("../")):
         return None
     try:
         expanded = _norm_path(hou.expandString(value))
@@ -1342,8 +1354,11 @@ def _project_ref_info():
             info["broken"].append(label)
         for parm, raw in _file_ref_parms(node):
             if _rehome_hip_ref(raw, roots) is not None:
-                # Pre-v63 `$HIP/../…`: resolves today, but depth-fragile and at
-                # odds with what Houdini writes. Named so the card can say so.
+                # Pre-v63 `$HIP/../…` — a path that LEAVES the houdini folder.
+                # It resolves today, but is depth-fragile and at odds with what
+                # Houdini's picker writes, so the card names it. A `$HIP` path
+                # that stays inside (Houdini's own render/cache defaults) is
+                # deliberately not counted — see `_rehome_hip_ref`.
                 info["hipRelative"].append(node.path() + " " + parm.name())
             elif _collapse_ref(raw, roots) is not None:
                 info["collapsible"] += 1
@@ -1395,8 +1410,12 @@ def op_repath(request):
                     changed += 1
                 for parm, raw in _file_ref_parms(node):
                     # Re-anchor a pre-v63 `$HIP/../…` on `$JOB` first; only then
-                    # try the absolute-path collapse.
-                    collapsed = _rehome_hip_ref(raw, roots) or _collapse_ref(raw, roots)
+                    # try the absolute-path collapse. Explicit `is None` rather
+                    # than `or`: these return None to mean "not mine", and a
+                    # falsy-but-real answer must not fall through to the next.
+                    collapsed = _rehome_hip_ref(raw, roots)
+                    if collapsed is None:
+                        collapsed = _collapse_ref(raw, roots)
                     if collapsed is None:
                         # Absolute and under none of the known roots: it cannot
                         # be made portable, so it is REPORTED rather than

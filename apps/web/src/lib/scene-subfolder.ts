@@ -162,8 +162,9 @@ export function hipRefPrefixFor(
   // The export root has to be expressible FROM the character folder: `$JOB` is
   // that folder, so anything outside it has no relative form at all.
   if (!inside(exportRoot)) return ''
-  const rel = exportRoot.slice(folder.length + 1)
-  return rel === '' ? '$JOB' : `$JOB/${rel}`
+  // Non-empty by construction: `inside` demands the `<folder>/` prefix and the
+  // trailing separators are already stripped, so the root is strictly deeper.
+  return `$JOB/${exportRoot.slice(folder.length + 1)}`
 }
 
 /** Tokens that carry no scene identity — generation markers and the DTH preset

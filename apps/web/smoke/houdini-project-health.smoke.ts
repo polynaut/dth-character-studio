@@ -23,7 +23,7 @@ function scan(over: Record<string, unknown> = {}) {
     error: '',
     nodes: [],
     job: P.charFolder,
-    refs: { collapsible: 0, foreign: 0, broken: [], hipRelative: []  },
+    refs: { collapsible: 0, foreign: 0, broken: [], hipRelative: [] },
     prefill: { fillable: [], missing: [] },
     ...over,
   }
@@ -206,7 +206,12 @@ test('unresolved imports and blank parms are both named', async ({ page }) => {
   await openWithStore(
     page,
     scan({
-      refs: { collapsible: 0, foreign: 0, broken: ['/obj/dth import_character_dtu_file'], hipRelative: []  },
+      refs: {
+        collapsible: 0,
+        foreign: 0,
+        broken: ['/obj/dth import_character_dtu_file'],
+        hipRelative: [],
+      },
       prefill: { fillable: ['export_directory'], missing: [] },
     }),
   )
@@ -249,4 +254,24 @@ test('a badge from a STALE store clears itself once the sweep re-reads the proje
   // The stale entry keys on a mtime the file no longer has, so it is ignored —
   // and the badge must not appear on the strength of it.
   await expect(page.getByText('Needs attention')).toHaveCount(0)
+})
+
+test('Fill network blames the UNKNOWN $JOB, not a lack of work', async ({ page }) => {
+  // A project that reports no $JOB at all (never Set Project'd) with a parm the
+  // studio could fill. It is refused for the same reason a WRONG $JOB is — the
+  // values written are $JOB-relative, so there is nothing to anchor them on —
+  // but it used to fall outside BOTH the target set and the blocked set, so the
+  // button sat disabled under "Nothing blank the studio has an answer for".
+  // That reads as "no work here" while work is exactly what is waiting.
+  await openWithStore(
+    page,
+    scan({ job: '', prefill: { fillable: ['export_directory'], missing: [] } }),
+  )
+
+  await page.getByRole('button', { name: /^Utils/ }).first().click()
+  const fill = page.getByRole('dialog').getByRole('button', { name: 'Fill network' })
+  await expect(fill).toBeDisabled()
+  // The button kit renders a `title` prop as `data-tooltip` (its own tooltip),
+  // not as the native attribute.
+  await expect(fill).toHaveAttribute('data-tooltip', /Repair \$JOB first/)
 })

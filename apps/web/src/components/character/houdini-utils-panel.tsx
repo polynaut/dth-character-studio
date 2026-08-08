@@ -786,17 +786,22 @@ export function HoudiniUtilsPanel({
     [targetScan, charFolder],
   )
 
-  /** Projects held back from Fill network only because their `$JOB` differs —
-   *  the reason the button's tooltip gives, so a disabled action is never a
-   *  dead end. */
+  /** Projects held back from Fill network by their `$JOB` — the reason the
+   *  button's tooltip gives, so a disabled action is never a dead end.
+   *
+   *  UNKNOWN counts as blocked, not as "nothing to fill": a project that
+   *  reports no `$JOB` at all (never Set Project'd) has work waiting and is
+   *  refused for the same reason as a wrong one — there is nothing to anchor
+   *  the written values on. Leaving it out of both sets is what made the
+   *  button say "nothing blank the studio has an answer for" while holding a
+   *  fillable project back. */
   const prefillBlockedByJob = useMemo(
     () =>
       targetScan.projects.filter(
         (p) =>
           p.ok &&
           p.prefill.fillable.length > 0 &&
-          p.job.trim() !== '' &&
-          !sameFolder(p.job, charFolder),
+          (p.job.trim() === '' || !sameFolder(p.job, charFolder)),
       ).length,
     [targetScan, charFolder],
   )
@@ -1560,7 +1565,7 @@ export function HoudiniUtilsPanel({
               disabled={busy || prefillTargets.length === 0 || !projectId}
               title={
                 prefillBlockedByJob > 0
-                  ? `Repair $JOB first — the values are written relative to it, so ${prefillBlockedByJob} project(s) would get paths pointing at the old folder.`
+                  ? `Repair $JOB first — the values are written relative to it, so ${prefillBlockedByJob} project(s) would get paths anchored on the wrong folder, or on none.`
                   : prefillTargets.length === 0
                     ? 'Nothing blank the studio has an answer for'
                     : undefined

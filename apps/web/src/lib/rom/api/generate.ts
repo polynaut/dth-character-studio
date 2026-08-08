@@ -410,11 +410,11 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   // scenes-folder rename, a charactersSubdir move, the v29 migration — would
   // otherwise leave them aimed at the old one. They all funnel through here,
   // so ONE refresh covers the lot instead of each flow having to remember
-  // The $HIP emit decision: bone-scale reference-skeleton paths are written
-  // `$HIP`-anchored (`$HIP/../<dazSubdir>/dth-exports/…` — plain relative
-  // navigation, no junctions since v0.63) only when ONE prefix is provably
-  // right for every linked `.hip`: all in the character's layout, one anchor
-  // folder, export root on the same drive (`hipRefPrefixFor`). Anything else
+  // The project-relative emit decision: bone-scale reference-skeleton paths are
+  // written `$JOB`-anchored (`$JOB/<dazSubdir>/dth-exports/…` — runtime v63;
+  // `$HIP/../…` before it, no junctions since v0.63) only when ONE prefix is
+  // provably right for every linked `.hip`: all inside the character folder,
+  // and the export root inside it too (`hipRefPrefixFor`). Anything else
   // falls back to absolute paths for this character rather than shipping refs
   // that cannot resolve. The style knob stays PER PROJECT (the `.dcsp`,
   // Settings → Project).
