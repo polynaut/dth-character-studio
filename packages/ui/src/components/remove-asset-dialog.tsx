@@ -22,7 +22,6 @@ export function RemoveAssetDialog({
   showDeleteFile = true,
   deleteFileDisabled = false,
   toggleLabel = 'Delete file on disk',
-  invertToggle = false,
   deleteLabel = 'Delete',
   busy,
   error,
@@ -46,12 +45,10 @@ export function RemoveAssetDialog({
    * rather than hiding the option, so deleting the original is never one tap away.
    */
   deleteFileDisabled?: boolean
-  /** The toggle's label (e.g. "Keep houdini files" with {@link invertToggle}). */
+  /** The toggle's label. One wording for every asset type — an inverted
+   *  "Keep …" variant used to exist for Houdini projects and was exactly what
+   *  made the two remove dialogs read as different features. */
   toggleLabel?: string
-  /** Show the KEPT state on the switch: checked = keep = NO delete. For
-   *  keep-by-default flows ("Keep houdini files") where safety is the ON
-   *  position; `deleteFile`/`onDeleteFileChange` still speak delete-polarity. */
-  invertToggle?: boolean
   /** The confirm label while deleting (e.g. "Remove"); unlink stays "Unlink". */
   deleteLabel?: string
   busy: boolean
@@ -67,8 +64,8 @@ export function RemoveAssetDialog({
         <div>
           <label className="flex w-fit items-center gap-2">
             <Switch
-              checked={invertToggle ? !deleting : deleting}
-              onCheckedChange={(value) => onDeleteFileChange(invertToggle ? !value : value)}
+              checked={deleting}
+              onCheckedChange={onDeleteFileChange}
               disabled={deleteFileDisabled}
             />
             <span className={cn('text-sm', deleteFileDisabled && 'text-muted-foreground')}>
