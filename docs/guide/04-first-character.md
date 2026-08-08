@@ -84,9 +84,11 @@ generation they are shown greyed out):
   Houdini project(s), or let
   [**Generate project**](./06-into-houdini.md#generate-the-houdini-project-automatically)
   build one. Click a card to open it in Houdini, **Alt+click** to reveal its
-  folder. Projects are linked where they lie by default; switch **Copy into the
-  character's Houdini folder** on to bring one in instead (with an optional
-  *Move*), and see
+  folder. Pick a `.hip` that lives **outside** the character folder and the
+  studio asks the same question it asks for a Daz scene: **Copy in** — into the
+  character's Houdini folder, with *Delete original after copying* if you meant
+  to move it — or **Link in place**. One that already sits inside the character
+  folder is simply linked; there is nothing to decide. See
   [project checks](./06-into-houdini.md#project-checks--what-the-card-warns-about)
   for what a copied project needs afterwards.
 - **Saved something new?** The studio notices by itself: save a `.duf` or a

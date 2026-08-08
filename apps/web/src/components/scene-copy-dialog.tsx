@@ -43,8 +43,11 @@ export function SceneCopyDialog({
   filePath?: string
   /** A fixed, read-only scenes-folder chip (e.g. "daz3d\") before the subfolder. */
   prefix?: string
-  subfolder: string
-  onSubfolderChange: (value: string) => void
+  /** Omit BOTH to hide the subfolder row entirely — the Houdini-project flow
+   *  has no subfolder to name (a copied `.hip` always lands in the character's
+   *  houdini folder), so asking for one would be a field with no answer. */
+  subfolder?: string
+  onSubfolderChange?: (value: string) => void
   deleteOriginal: boolean
   onDeleteOriginalChange: (value: boolean) => void
   busy: boolean
@@ -81,22 +84,24 @@ export function SceneCopyDialog({
           </div>
         ) : null}
         {validation}
-        <div>
-          <Label className="mb-1 block">Subfolder</Label>
-          <div className="flex items-center gap-1">
-            {prefix ? (
-              <span className="flex h-9 shrink-0 items-center rounded-md border bg-muted px-2.5 font-mono text-xs text-muted-foreground">
-                {prefix}
-              </span>
-            ) : null}
-            <Input
-              className="flex-1"
-              value={subfolder}
-              placeholder="e.g. Outfit_Casual"
-              onChange={(e) => onSubfolderChange(e.target.value)}
-            />
+        {onSubfolderChange ? (
+          <div>
+            <Label className="mb-1 block">Subfolder</Label>
+            <div className="flex items-center gap-1">
+              {prefix ? (
+                <span className="flex h-9 shrink-0 items-center rounded-md border bg-muted px-2.5 font-mono text-xs text-muted-foreground">
+                  {prefix}
+                </span>
+              ) : null}
+              <Input
+                className="flex-1"
+                value={subfolder ?? ''}
+                placeholder="e.g. Outfit_Casual"
+                onChange={(e) => onSubfolderChange(e.target.value)}
+              />
+            </div>
           </div>
-        </div>
+        ) : null}
         <div className="flex items-center gap-2">
           <Switch checked={deleteOriginal} onCheckedChange={onDeleteOriginalChange} />
           <span className="text-sm">Delete original after copying</span>
@@ -122,11 +127,11 @@ export function SceneCopyDialog({
             Link in place
           </Button>
           <Button
-            disabled={busy || confirmDisabled || (requireSubfolder && subfolder.trim() === '')}
+            disabled={busy || confirmDisabled || (requireSubfolder && (subfolder ?? '').trim() === '')}
             title={
               confirmDisabled
                 ? confirmDisabledTitle
-                : requireSubfolder && subfolder.trim() === ''
+                : requireSubfolder && (subfolder ?? '').trim() === ''
                   ? 'Enter a subfolder — every scene lives in its own subfolder now'
                   : undefined
             }

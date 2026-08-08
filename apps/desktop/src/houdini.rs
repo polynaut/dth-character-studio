@@ -258,6 +258,16 @@ pub fn create_houdini_project(request: CreateHoudiniProjectRequest) -> Result<St
     if !request.prefill_json.is_empty() {
         command.env("DTH_PREFILL", &request.prefill_json);
     }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        // Without this, hython opens a console window that takes FOCUS — in the
+        // middle of a Generate the user is watching, on top of the dialog that
+        // started it. `run_houdini_material_util` has always suppressed it; this
+        // spawn simply never did.
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
     let output = command
         .output()
         .map_err(|e| format!("Could not start hython: {e}"))?;
