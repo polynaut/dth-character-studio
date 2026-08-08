@@ -1431,8 +1431,21 @@ export const CHARACTER_SCHEMA_VERSION = 30
  *       the bump is what INSTALLS the new script: `copyRuntimeFiles` skips the
  *       whole install while the marker matches, so without it no existing
  *       library would ever see the file.
+ * v63 — generated project-relative reference paths are anchored on **`$JOB`**
+ *       instead of `$HIP`: `$JOB/daz3d/dth-exports/…` where it was
+ *       `$HIP/../daz3d/dth-exports/…` (`hipRefPrefixFor`). `$JOB` IS the
+ *       character folder (v0.64), so the export tree is one hop from it — and
+ *       that is what Houdini's own file picker writes, so a hand-picked path
+ *       and a generated one finally agree in the same node. The `$HIP` form was
+ *       never a preference: before v0.64 `$JOB` sat BELOW the exports and could
+ *       not express them. It encodes the `.hip`'s DEPTH, so a project one
+ *       folder deeper broke every path, and it needed every project in ONE
+ *       folder for a single prefix to be right — neither limit survives.
+ *       The emitted bone-scale reference-skeleton paths change, hence the bump;
+ *       projects generated earlier keep the old form, are flagged by the card's
+ *       `hip-relative` check, and are rewritten by Utils → Make paths portable.
  */
-export const RUNTIME_VERSION = 62
+export const RUNTIME_VERSION = 63
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

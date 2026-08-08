@@ -23,7 +23,7 @@ function scan(over: Record<string, unknown> = {}) {
     error: '',
     nodes: [],
     job: P.charFolder,
-    refs: { collapsible: 0, foreign: 0, broken: [] },
+    refs: { collapsible: 0, foreign: 0, broken: [], hipRelative: []  },
     prefill: { fillable: [], missing: [] },
     ...over,
   }
@@ -206,7 +206,7 @@ test('unresolved imports and blank parms are both named', async ({ page }) => {
   await openWithStore(
     page,
     scan({
-      refs: { collapsible: 0, foreign: 0, broken: ['/obj/dth import_character_dtu_file'] },
+      refs: { collapsible: 0, foreign: 0, broken: ['/obj/dth import_character_dtu_file'], hipRelative: []  },
       prefill: { fillable: ['export_directory'], missing: [] },
     }),
   )

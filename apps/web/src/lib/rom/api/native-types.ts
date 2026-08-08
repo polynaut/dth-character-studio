@@ -277,6 +277,11 @@ export const projectRefInfoSchema = z.object({
    *  definition of broken in general — measured, a healthy project reports four
    *  of Houdini's own scratch files that simply don't exist until used. */
   broken: z.array(z.string()),
+  /** Refs still written the pre-v63 way (`$HIP/../…`). They RESOLVE, so they
+   *  are not broken — but `$HIP` encodes the scene's depth and disagrees with
+   *  what Houdini's own picker writes, so the card flags them and Make paths
+   *  portable re-anchors them on `$JOB`. */
+  hipRelative: z.array(z.string()),
 })
 
 /** One import reference a repath rebuilt. */

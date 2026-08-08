@@ -151,12 +151,16 @@ INTRINSIC_UV_NAMES = frozenset(("", "uv", "uv_original"))
 # whose library sits on another drive.
 LIB_VAR = "$DAZ3D_LIB"
 
-# The roots a stored path can be expressed relative to, in the order a TIE is
-# broken. Longest match actually wins (see `_ref_roots`); this order only
-# decides between roots of EQUAL length, where `$HIP` is the safer answer — it
-# travels with the scene file itself, while `$JOB` is a setting that can be
-# repointed out from under it.
-REF_ROOT_VARS = ("$HIP", "$JOB", LIB_VAR)
+# The roots a stored path can be expressed relative to. `$JOB` FIRST and it wins
+# outright — see `_ref_roots`, which no longer sorts by length.
+#
+# `$JOB` is the character folder (v0.64) and `$HIP` is the houdini folder INSIDE
+# it, so longest-match used to hand everything under `houdini/` to `$HIP`. That
+# encodes the scene's depth: move the `.hip` one folder down and every `$HIP`
+# path silently points somewhere else, while `$JOB` follows Set Project. It is
+# also what Houdini's own picker writes. So the studio anchors on `$JOB`
+# everywhere, and `$HIP` survives only for what `$JOB` cannot reach.
+REF_ROOT_VARS = ("$JOB", "$HIP", LIB_VAR)
 
 # What "Generate project" wires onto a fresh network, keyed by the payload field
 # the studio sends. Existing projects can't be regenerated, so the Utils drawer
@@ -1034,20 +1038,18 @@ def op_scan(request):
 
 
 def _ref_roots():
-    """`[(var, normalized root)]`, longest root first.
+    """`[(var, normalized root)]` in REF_ROOT_VARS order — `$JOB` first.
 
-    Longest-match-wins is what makes nesting correct without a special case: on
-    a studio-generated project `$HIP` (`<char>/houdini`) sits INSIDE `$JOB`
-    (`<char>`), so a scene-local path collapses to `$HIP` and an export two
-    levels up to `$JOB` — which is exactly the split measured for the file
-    picker's own behaviour.
+    Deliberately NOT sorted by length any more. Longest-match-wins gave every
+    path under `houdini/` to `$HIP`, because `$HIP` nests inside `$JOB`; the
+    studio now anchors everything it can on `$JOB` (see REF_ROOT_VARS), so the
+    declared order is the priority and `$HIP` only catches what `$JOB` cannot.
     """
     roots = []
     for var in REF_ROOT_VARS:
         value = _norm_path(hou.getenv(var[1:]) or "")
         if value:
             roots.append((var, value))
-    roots.sort(key=lambda pair: len(pair[1]), reverse=True)
     return roots
 
 
@@ -1074,6 +1076,35 @@ def _collapse_ref(value, roots):
         if lowered.startswith(root.lower() + "/"):
             return var + norm[len(root) :]
     return None
+
+
+def _rehome_hip_ref(value, roots):
+    """`$HIP/../daz3d/x.fbx` → `$JOB/daz3d/x.fbx`, or None to leave it alone.
+
+    Everything the studio generates is `$JOB`-anchored now (RUNTIME_VERSION 63),
+    but projects made before that carry `$HIP/../…`. Those still RESOLVE, so
+    `_collapse_ref` never saw them — it only rewrites absolute paths, and a
+    value starting with `$` is already relative to something. They are worth
+    rewriting anyway: `$HIP` encodes the scene's DEPTH, so moving the `.hip` one
+    folder down breaks every one of them, and it disagrees with what Houdini's
+    own picker writes into the same node.
+
+    Only `$HIP` itself — `$HIPNAME` and `$HIPFILE` are different variables that
+    merely share the prefix.
+    """
+    if not value:
+        return None
+    if not (value == "$HIP" or value[:5] in ("$HIP/", "$HIP\\")):
+        return None
+    try:
+        expanded = _norm_path(hou.expandString(value))
+    except Exception:
+        return None
+    if not expanded:
+        return None
+    # `..` is what makes this worth doing; resolve it before matching a root.
+    expanded = _norm_path(os.path.normpath(expanded).replace("\\", "/"))
+    return _collapse_ref(expanded, roots)
 
 
 def _file_ref_parms(node):
@@ -1305,12 +1336,16 @@ def _project_ref_info():
     never promise a number the action then doesn't deliver.
     """
     roots = _ref_roots()
-    info = {"collapsible": 0, "foreign": 0, "broken": []}
+    info = {"collapsible": 0, "foreign": 0, "broken": [], "hipRelative": []}
     for node in hou.node("/").allSubChildren():
         for label, _old, _new in _repair_import_refs(node, roots, True):
             info["broken"].append(label)
-        for _parm, raw in _file_ref_parms(node):
-            if _collapse_ref(raw, roots) is not None:
+        for parm, raw in _file_ref_parms(node):
+            if _rehome_hip_ref(raw, roots) is not None:
+                # Pre-v63 `$HIP/../…`: resolves today, but depth-fragile and at
+                # odds with what Houdini writes. Named so the card can say so.
+                info["hipRelative"].append(node.path() + " " + parm.name())
+            elif _collapse_ref(raw, roots) is not None:
                 info["collapsible"] += 1
             elif raw and not raw.startswith("$") and _looks_absolute(raw):
                 info["foreign"] += 1
@@ -1359,7 +1394,9 @@ def op_repath(request):
                     result["repaired"].append({"label": label, "from": old, "to": new})
                     changed += 1
                 for parm, raw in _file_ref_parms(node):
-                    collapsed = _collapse_ref(raw, roots)
+                    # Re-anchor a pre-v63 `$HIP/../…` on `$JOB` first; only then
+                    # try the absolute-path collapse.
+                    collapsed = _rehome_hip_ref(raw, roots) or _collapse_ref(raw, roots)
                     if collapsed is None:
                         # Absolute and under none of the known roots: it cannot
                         # be made portable, so it is REPORTED rather than

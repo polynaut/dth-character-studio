@@ -133,7 +133,7 @@ Exporter writes. All three names can be changed per project in
 There is no plumbing between the two sides: from a `.hip` in the houdini
 folder, the exports are plain `..` navigation away (`../daz3d/dth-exports/…`),
 and ticking Houdini's **Make path relative to current directory** in the file
-picker gives you the portable `$HIP/../…` form. Everything the studio writes
+picker gives you the portable `$JOB/…` form ($JOB is the character folder). Everything the studio writes
 is an ordinary file or folder — nothing needs special treatment from Perforce,
 Git or backup tools.
 
@@ -153,11 +153,12 @@ Set Project at all.
 ### Reference-skeleton paths — `$HIP` by default
 
 Every **Bone scale** frame gets a reference-skeleton FBX, and the PoseAsset CSV
-has to point Houdini at it. Those paths are written relative to **`$HIP`** (the
-folder holding the `.hip`), climbing over to the Daz side:
+has to point Houdini at it. Those paths are written relative to **`$JOB`** —
+the character folder, which **Generate project** bakes in — so they reach
+straight across to the Daz side:
 
 ```
-$HIP/../daz3d/dth-exports/primary/Kira_frame_432.fbx
+$JOB/daz3d/dth-exports/primary/Kira_frame_432.fbx
 ```
 
 so the project keeps resolving after you move, rename or copy the character

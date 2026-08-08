@@ -8,7 +8,12 @@
       "ok": true,
       "error": "",
       "job": "D:/chars/Kira",
-      "refs": { "collapsible": 131, "foreign": 0, "broken": [] },
+      "refs": {
+        "collapsible": 131,
+        "foreign": 0,
+        "broken": [],
+        "hipRelative": ["/obj/DazToHue/DazToHueImport import_character_fbx_file"]
+      },
       "prefill": {
         "fillable": ["/obj/DazToHue/DazToHueImport import_character_rom_fbx_file"],
         "missing": ["/obj/DazToHue/DazToHuePoseAsset pose_asset_csv_file_path"]
@@ -74,7 +79,7 @@
       "ok": false,
       "error": "Unable to open file",
       "job": "",
-      "refs": { "collapsible": 0, "foreign": 0, "broken": [] },
+      "refs": { "collapsible": 0, "foreign": 0, "broken": [], "hipRelative": [] },
       "prefill": { "fillable": [], "missing": [] },
       "nodes": []
     }

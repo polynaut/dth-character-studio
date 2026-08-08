@@ -45,7 +45,12 @@ import {
   scanHoudiniMaterials,
   transferHoudiniMaterials,
 } from '#/lib/rom/api.ts'
-import { defaultsRowsFor, planRepath, projectsNeedingRepair } from '#/lib/rom/houdini-defaults.ts'
+import {
+  defaultsRowsFor,
+  planRepath,
+  projectsNeedingRepair,
+  sameFolder,
+} from '#/lib/rom/houdini-defaults.ts'
 import type {
   CharacterWithProject,
   MaterialNodeInfo,
@@ -760,13 +765,40 @@ export function HoudiniUtilsPanel({
   )
 
   /** Projects with at least one blank parm the studio can fill. A parm this
-   *  DazToHue version lacks is NOT work — it is reported in the row instead. */
+   *  DazToHue version lacks is NOT work — it is reported in the row instead.
+   *
+   *  GATED on `$JOB` being correct, for the same reason the repath is: the
+   *  values written are `$JOB`-anchored (runtime v63), so filling a project
+   *  whose `$JOB` still points somewhere else would store paths that resolve
+   *  into the wrong folder — and they would look right in the parameter field.
+   *  Repair $JOB first; the row above says so. */
   const prefillTargets = useMemo(
     () =>
       targetScan.projects
-        .filter((p) => p.ok && p.prefill.fillable.length > 0)
+        .filter(
+          (p) =>
+            p.ok &&
+            p.prefill.fillable.length > 0 &&
+            p.job.trim() !== '' &&
+            sameFolder(p.job, charFolder),
+        )
         .map((p) => p.hipPath),
-    [targetScan],
+    [targetScan, charFolder],
+  )
+
+  /** Projects held back from Fill network only because their `$JOB` differs —
+   *  the reason the button's tooltip gives, so a disabled action is never a
+   *  dead end. */
+  const prefillBlockedByJob = useMemo(
+    () =>
+      targetScan.projects.filter(
+        (p) =>
+          p.ok &&
+          p.prefill.fillable.length > 0 &&
+          p.job.trim() !== '' &&
+          !sameFolder(p.job, charFolder),
+      ).length,
+    [targetScan, charFolder],
   )
 
   /** Every project the scan could open — what a refresh would be run against.
@@ -1527,9 +1559,11 @@ export function HoudiniUtilsPanel({
               variant="outline"
               disabled={busy || prefillTargets.length === 0 || !projectId}
               title={
-                prefillTargets.length === 0
-                  ? 'Nothing blank the studio has an answer for'
-                  : undefined
+                prefillBlockedByJob > 0
+                  ? `Repair $JOB first — the values are written relative to it, so ${prefillBlockedByJob} project(s) would get paths pointing at the old folder.`
+                  : prefillTargets.length === 0
+                    ? 'Nothing blank the studio has an answer for'
+                    : undefined
               }
               onClick={() => {
                 setActionReport(null)

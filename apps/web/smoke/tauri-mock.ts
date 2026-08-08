@@ -577,7 +577,7 @@ export function installTauriMock(seed: TauriMockSeed): void {
               // No hython here to read real parms: a scanned project reports
               // nothing to repath, so the General tab's reference rows stay
               // quiet unless a spec seeds them.
-              refs: { collapsible: 0, foreign: 0, broken: [] },
+              refs: { collapsible: 0, foreign: 0, broken: [], hipRelative: []  },
               prefill: { fillable: [], missing: [] },
               hipDir: norm(hipPath).replace(/\/[^/]*$/, ''),
             })),
