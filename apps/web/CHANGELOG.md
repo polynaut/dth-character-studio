@@ -1,5 +1,74 @@
 # @dth/web
 
+## 0.69.0
+
+### Minor Changes
+
+- [#748](https://github.com/polynaut/dth-character-studio/pull/748) [`943ecf3`](https://github.com/polynaut/dth-character-studio/commit/943ecf387adcfb4057ca679dac9acfaf20bf9417) Thanks [@polynaut](https://github.com/polynaut)! - Houdini paths are anchored on `$JOB` instead of `$HIP`
+
+  A generated project wrote its import, CSV and export paths as
+  `$HIP/../daz3d/dth-exports/…`. They now read `$JOB/daz3d/dth-exports/…`.
+
+  `$JOB` **is** the character folder — Generate project bakes it in — so the whole
+  Daz side is one hop away, and it is what Houdini itself writes: pick an export by
+  hand and its file picker collapses the path to `$JOB/…`, so a hand-picked path
+  and a generated one finally match inside the same node. The old form was never a
+  preference; before v0.64 `$JOB` pointed _below_ the exports and could not
+  express them at all.
+
+  It is also sturdier. `$HIP/../` encodes how deep the `.hip` sits, so a project
+  moved one folder down silently broke every path, and every project of a
+  character had to live in the same folder for one prefix to be right. Neither
+  limit remains — projects at different depths, or in different folders, now share
+  one prefix.
+
+  **Projects made before this keep their old paths and still work.** Their card
+  flags them (_“…still anchored on $HIP instead of $JOB”_) and **Utils → Make
+  paths portable** rewrites them. Only paths that _leave_ the houdini folder
+  (`$HIP/../…`) count: a `$HIP` path that stays inside it is where Houdini itself
+  writes — render output, caches — and is meant to follow the scene file, so it is
+  neither flagged nor rewritten. **Fill network** now waits for a correct `$JOB`
+  the way the repath already did: the values it writes are `$JOB`-relative, so
+  filling a project whose `$JOB` still points elsewhere would store paths aimed at
+  the wrong folder. Repair `$JOB` first — the tab says so.
+
+- [#751](https://github.com/polynaut/dth-character-studio/pull/751) [`71ad73c`](https://github.com/polynaut/dth-character-studio/commit/71ad73c0059802a9ca75e8116acfdf4909b29efe) Thanks [@polynaut](https://github.com/polynaut)! - Unlinking a scene and unlinking a Houdini project now work the same way
+
+  The two remove dialogs asked the same question in opposite directions. A Daz
+  scene offered **“Delete file on disk”**, off by default; a Houdini project
+  offered **“Keep houdini files”**, on by default — the same choice, inverted, in
+  different words, next to a button that said _Unlink_ either way. They read as
+  two unrelated features.
+
+  They are one dialog now, with one toggle in one direction, and the confirm
+  button says what will actually happen:
+
+  - **A file inside the character folder** — the studio's own copy, put there when
+    you created, copied or generated it — defaults to **Remove**: the card goes
+    and the file goes with it. Turn the toggle off and it becomes an _Unlink_.
+  - **A file linked in place**, in your own tree, can only ever be **Unlink**. The
+    toggle is shown but locked off, so “this one can't be deleted” is visible
+    rather than a silently missing option.
+
+### Patch Changes
+
+- [#749](https://github.com/polynaut/dth-character-studio/pull/749) [`fc20c37`](https://github.com/polynaut/dth-character-studio/commit/fc20c37ca7b362df178221e50ca9cd46df35c4af) Thanks [@polynaut](https://github.com/polynaut)! - A Houdini project card no longer says “Needs attention” about a problem that is already gone
+
+  The badge is painted from the last stored scan, and the background sweep that
+  refreshes that store was started without waiting for it — so the card kept
+  showing whatever was found _before_ the scan, while the Utils drawer, which
+  scans live, reported every check passing. Opening the drawer to a green
+  **“Nothing to fix — every check already passes”** under a card marked _Needs
+  attention_ was the visible symptom.
+
+  The card now re-reads once the sweep it started has landed, and again when the
+  Utils drawer closes (the drawer's own scan is the freshest answer there is). The
+  first paint is still instant from the store — nothing waits on Houdini.
+
+- Updated dependencies [[`943ecf3`](https://github.com/polynaut/dth-character-studio/commit/943ecf387adcfb4057ca679dac9acfaf20bf9417), [`71ad73c`](https://github.com/polynaut/dth-character-studio/commit/71ad73c0059802a9ca75e8116acfdf4909b29efe)]:
+  - @dth/rom@0.69.0
+  - @dth/ui@0.69.0
+
 ## 0.68.1
 
 ### Patch Changes
