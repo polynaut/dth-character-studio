@@ -130,10 +130,10 @@ detailed in [Build the ROM in Daz](./05-rom-in-daz.md#direct-export-optional-rec
 </p>
 
 The **Export directory** section shows where [direct export](./05-rom-in-daz.md#direct-export-optional-recommended)
-lands. It's fixed and read-only: `dth-exports` inside the character's Daz
-folder, created with the character. A Houdini project reaches those files by a
-relative path (`../daz3d/dth-exports/…`) rather than containing them — see
-[where the Houdini project fits](./05-rom-in-daz.md#where-the-houdini-project-fits).
+lands. It's fixed and read-only: `daz-export` inside the character's Houdini
+folder, created with the character. Those files exist only to be imported by
+Houdini, so they sit next to the `.hip` that reads them (`$JOB/houdini/daz-export/…`)
+— see [where the Houdini project fits](./05-rom-in-daz.md#where-the-houdini-project-fits).
 
 <details>
 <summary><strong>Add morphs on frame 0</strong></summary>
@@ -377,10 +377,12 @@ keeps this character's own scene-derived Golden Palace / Dicktator setup.
 <table><tr><td>
 
 **Operations → Delete** removes the character's folder and generated files,
-with a confirmation that lets you **keep the Daz files folder** (your scenes
-*and* their `dth-exports`) and **keep the Houdini files folder** (your `.hip`
-projects — offered only when the character has one) — for when the assets
-should outlive the definition. This can't be undone.
+with a confirmation that lets you **keep the Daz files folder** (your scenes)
+and **keep the Houdini files folder** (your `.hip` projects — offered only when
+the character has one) — for when the assets should outlive the definition.
+Either way the `daz-export` folder goes: it's regenerable output, often
+gigabytes of it, and keeping your own files must not quietly keep that too.
+This can't be undone.
 
 </td></tr></table>
 </details>

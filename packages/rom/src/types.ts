@@ -1444,8 +1444,19 @@ export const CHARACTER_SCHEMA_VERSION = 30
  *       The emitted bone-scale reference-skeleton paths change, hence the bump;
  *       projects generated earlier keep the old form, are flagged by the card's
  *       `hip-relative` check, and are rewritten by Utils → Make paths portable.
+ * v64 — the export root MOVED and was renamed: `<char>/<houdiniSubdir>/daz-export`
+ *       where it was `<char>/<dazSubdir>/dth-exports`. Nothing in Daz ever opens
+ *       these files again — the `.dth`/`.fbx`/`.abc` exist to be imported by
+ *       Houdini — so they now sit one hop from the `.hip` that reads them, and
+ *       the name says whose output it is rather than which tool wrote it. The
+ *       emitted export/reference paths change (`$JOB/houdini/daz-export/…`),
+ *       hence the bump. Existing characters keep their files: the next save
+ *       carries them across (`migrateExportRoot`) and removes the emptied old
+ *       root. A Houdini project generated earlier still names the OLD folder, so
+ *       its imports report as broken until Utils → Make paths portable rebuilds
+ *       them from the character's current export root.
  */
-export const RUNTIME_VERSION = 63
+export const RUNTIME_VERSION = 64
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a
@@ -1666,11 +1677,11 @@ export const characterSchema = z.object({
    * exporter output.
    *
    * DERIVED, not user data (schema v29): always
-   * `<character folder>/<project dazSubdir>/dth-exports` — the Daz side owns
-   * the exporter's output, and the Houdini project reaches it through a
-   * `dth-exports` junction instead of containing it (`EXPORTS_FOLDER` in the
-   * web layer's `lib/scene-subfolder.ts` is the one spelling of that name). The
-   * value needs host context (the project manifest + the character's folder on
+   * `<character folder>/<project houdiniSubdir>/daz-export` (runtime v64; it was
+   * `<dazSubdir>/dth-exports` before) — these files exist only to be imported by
+   * Houdini, so they sit beside the `.hip` that reads them (`EXPORTS_FOLDER` in
+   * the web layer's `lib/scene-subfolder.ts` is the one spelling of that name).
+   * The value needs host context (the project manifest + the character's folder on
    * disk), so like `canonicalImage` it resolves in the web layer's
    * `parseCharacter` — never in this pure core. '' therefore stays a valid
    * TRANSIENT state meaning "not resolved yet" (a definition read outside the

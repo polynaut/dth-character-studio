@@ -13,7 +13,7 @@ import type { Character } from '@dth/rom'
 
 /**
  * The "Export directory" pane — read-only since schema v29. The directory is
- * DERIVED (`<character>/<daz subfolder>/dth-exports`, created at character
+ * DERIVED (`<character>/<houdini subfolder>/daz-export`, created at character
  * creation and re-resolved on every save), so there is nothing to pick and
  * nothing that can drift; the panel exists to show where the exports land.
  *
@@ -35,10 +35,11 @@ export function ExportSettingsSection({ character }: { character: Character }) {
         <>
           <PathCode path={displayPath(character.exportPath)} className={tallPathChipClass} />
           <p className="mt-3 text-xs text-muted-foreground">
-            Fixed, beside the character&apos;s Daz scenes. Each scene exports into its own
-            subfolder here, named after the scene&apos;s folder (e.g. <code>primary</code>).
-            A generated Houdini project reaches these files by a relative path
-            (<code>$JOB/…</code>), so everything stays moveable.
+            Fixed, beside the character&apos;s Houdini projects — these files exist to be
+            imported by Houdini, so they sit next to the <code>.hip</code> that reads them.
+            Each scene exports into its own subfolder here, named after the scene&apos;s folder
+            (e.g. <code>primary</code>). A generated Houdini project reaches them by a
+            relative path (<code>$JOB/…</code>), so everything stays moveable.
           </p>
         </>
       ) : (

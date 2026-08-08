@@ -323,8 +323,8 @@ current code before relying on details, but assume the *lesson* still holds.
   absorbed.
 - **"A `.hip` always holds absolute paths" is FALSE — the real constraint is
   `$JOB`.** A Houdini project can be authored entirely relative, and the
-  studio's own Generate project does exactly that (`$HIP/../<dazSubdir>/
-  dth-exports/…`). Moving one safely needs BOTH: every reference relative, AND
+  studio's own Generate project does exactly that (`$JOB/<houdiniSubdir>/
+  daz-export/…`). Moving one safely needs BOTH: every reference relative, AND
   its `$JOB` project folder travelling with it. The studio links Houdini
   projects in place rather than copying them because it can guarantee neither
   property for a `.hip` authored elsewhere — not because relative authoring is

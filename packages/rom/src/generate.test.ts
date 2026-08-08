@@ -1608,7 +1608,7 @@ describe('exporter integration', () => {
   it('the export dir is FLAT — no Houdini-project layer anywhere (schema v29)', () => {
     const character = withReferencePose({
       name: 'Ita',
-      exportPath: 'X:\\p\\Ita\\daz3d\\dth-exports',
+      exportPath: 'X:\\p\\Ita\\houdini\\daz-export',
       scenePath: 'X:\\p\\daz3d\\primary\\Ita.duf',
       extraScenes: ['X:\\p\\daz3d\\Beach\\Beach.duf'],
     })
@@ -1687,11 +1687,11 @@ describe('exporter integration', () => {
       {},
       {},
       undefined,
-      '$HIP/../daz3d/dth-exports',
+      '$JOB/houdini/daz-export',
     ).content
     expect(hipContent).toContain('var dthRefRootAbs = "X:/exports/electra";')
     expect(hipContent).toContain(
-      'dthRefDir = "$HIP/../daz3d/dth-exports" + dthExportDir.substr(dthRefRootAbs.length);',
+      'dthRefDir = "$JOB/houdini/daz-export" + dthExportDir.substr(dthRefRootAbs.length);',
     )
     // Delivered under the export set's own scene-suffixed base name, into the
     // resolved export dir (scene subfolder included).

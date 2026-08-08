@@ -65,7 +65,7 @@ test('a single-scene character is not asked which scene — there is only one', 
   const prefill = await lastPrefill(page)
   // The fixture's scenes sit directly in `daz3d/`, so each export subfolder is
   // the scene's own stem rather than the `primary/` of the standard layout.
-  expect(prefill.dth).toBe('$JOB/daz3d/dth-exports/KiraDefault_G9_GP/Kira.dth')
+  expect(prefill.dth).toBe('$JOB/houdini/daz-export/KiraDefault_G9_GP/Kira.dth')
   expect(await commandCalls(page, 'create_houdini_project')).toHaveLength(1)
 })
 
@@ -84,7 +84,7 @@ test('the chosen scene decides the import paths', async ({ page }) => {
   // existed these all came out as the primary's, and re-aiming them was five
   // hand edits inside Houdini.
   const prefill = await lastPrefill(page)
-  const dir = '$JOB/daz3d/dth-exports/KiraSummertide_G9_GP'
+  const dir = '$JOB/houdini/daz-export/KiraSummertide_G9_GP'
   expect(prefill.dth).toBe(`${dir}/Kira_KiraSummertide_G9_GP.dth`)
   expect(prefill.abc).toBe(`${dir}/Kira_KiraSummertide_G9_GP.abc`)
   expect(prefill.csv).toBe(`${dir}/Kira_KiraSummertide_G9_GP_pose_asset.csv`)
@@ -92,10 +92,10 @@ test('the chosen scene decides the import paths', async ({ page }) => {
   expect(prefill.dth).not.toContain('KiraDefault')
 })
 
-test('Houdini is told to write into the character export folder, not dth-exports', async ({
+test('Houdini is told to write into the character export folder, not daz-export', async ({
   page,
 }) => {
-  // The two are different ends of the pipeline: `dth-exports` holds the
+  // The two are different ends of the pipeline: `daz-export` holds the
   // Daz→Houdini intermediates the imports READ (large, regenerable, not backed
   // up), while `export/` is what Houdini produces for Unreal. Until v0.68 this
   // parm carried the export ROOT, quietly aiming Houdini's output into the
@@ -107,5 +107,5 @@ test('Houdini is told to write into the character export folder, not dth-exports
   const prefill = await lastPrefill(page)
   // Trailing slash is load-bearing — the HDA concatenates it with the name.
   expect(prefill.exportDirectory).toBe('$JOB/export/')
-  expect(prefill.exportDirectory).not.toContain('dth-exports')
+  expect(prefill.exportDirectory).not.toContain('daz-export')
 })

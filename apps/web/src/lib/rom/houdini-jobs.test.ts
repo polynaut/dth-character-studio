@@ -24,7 +24,7 @@ function kira(over: Partial<Character> = {}): Character {
     gender: 'female',
     createdAt: '2026-01-01',
     updatedAt: '2026-01-01',
-    exportPath: 'X:\\p\\Kira\\daz3d\\dth-exports',
+    exportPath: 'X:\\p\\Kira\\houdini\\daz-export',
     scenePath: 'X:\\p\\Kira\\daz3d\\primary\\Kira.duf',
     extraScenes: ['X:\\p\\Kira\\daz3d\\summertide\\KiraSummertide.duf'],
     ...over,
@@ -38,12 +38,12 @@ const EXTRA = 'x:/p/kira/daz3d/summertide/kirasummertide.duf'
 describe('sceneDthPath — the match key handed to Houdini', () => {
   it('is <exportPath>/<scene folder>/<export name>.dth, primary keeping the bare name', () => {
     expect(sceneDthPath(kira(), PRIMARY, ROOT)).toBe(
-      'X:/p/Kira/daz3d/dth-exports/primary/Kira.dth',
+      'X:/p/Kira/houdini/daz-export/primary/Kira.dth',
     )
     // An extra scene carries its subfolder in the name, exactly like the files
     // the exporter writes beside it.
     expect(sceneDthPath(kira(), EXTRA, ROOT)).toBe(
-      'X:/p/Kira/daz3d/dth-exports/summertide/Kira_Summertide.dth',
+      'X:/p/Kira/houdini/daz-export/summertide/Kira_Summertide.dth',
     )
   })
 
@@ -54,7 +54,7 @@ describe('sceneDthPath — the match key handed to Houdini', () => {
     // the lookup missed, the job came out with zero scenes, and the run died on
     // "none of these scenes has an export path".
     expect(sceneDthPath(kira(), 'X:\\p\\Kira\\daz3d\\primary\\Kira.duf', ROOT)).toBe(
-      'X:/p/Kira/daz3d/dth-exports/primary/Kira.dth',
+      'X:/p/Kira/houdini/daz-export/primary/Kira.dth',
     )
   })
 
@@ -75,8 +75,8 @@ describe('buildHoudiniJob', () => {
       scenesRootAbs: ROOT,
     })
     expect(job.scenes).toEqual([
-      { dth: 'X:/p/Kira/daz3d/dth-exports/primary/Kira.dth', label: 'Kira' },
-      { dth: 'X:/p/Kira/daz3d/dth-exports/summertide/Kira_Summertide.dth', label: 'KiraSummertide' },
+      { dth: 'X:/p/Kira/houdini/daz-export/primary/Kira.dth', label: 'Kira' },
+      { dth: 'X:/p/Kira/houdini/daz-export/summertide/Kira_Summertide.dth', label: 'KiraSummertide' },
     ])
     // Paths travel forward-slashed — Houdini's own convention, and what the
     // node parms hold.
@@ -91,8 +91,8 @@ describe('buildHoudiniJob', () => {
       { resultPath: 'r.json', scenesRootAbs: ROOT },
     )
     expect(job.scenes).toEqual([
-      { dth: 'X:/p/Kira/daz3d/dth-exports/primary/Kira.dth', label: 'Kira' },
-      { dth: 'X:/p/Kira/daz3d/dth-exports/summertide/Kira_Summertide.dth', label: 'KiraSummertide' },
+      { dth: 'X:/p/Kira/houdini/daz-export/primary/Kira.dth', label: 'Kira' },
+      { dth: 'X:/p/Kira/houdini/daz-export/summertide/Kira_Summertide.dth', label: 'KiraSummertide' },
     ])
   })
 
@@ -108,27 +108,27 @@ describe('buildHoudiniJob', () => {
     expect(job.scenes).toHaveLength(1)
   })
 
-  it('prefill: primary-scene paths ride the $HIP prefix, export directory keeps its slash', () => {
+  it('prefill: primary-scene paths ride the $JOB prefix, export directory keeps its slash', () => {
     const prefill = buildHoudiniPrefill(kira(), {
-      hipRefPrefix: '$HIP/../daz3d/dth-exports',
+      hipRefPrefix: '$JOB/houdini/daz-export',
       scenesRootAbs: ROOT,
-      finalExportDir: '$HIP/../export',
+      finalExportDir: '$JOB/export',
     })
     expect(prefill).toEqual({
       characterName: 'Kira',
       // G9 with no explicit preset pick assumes the DTH-recommended DQS —
       // which the Import node's menu spells 'dualquat'.
       skinning: 'dualquat',
-      csv: '$HIP/../daz3d/dth-exports/primary/Kira_pose_asset.csv',
-      dth: '$HIP/../daz3d/dth-exports/primary/Kira.dth',
-      fbx: '$HIP/../daz3d/dth-exports/primary/Kira.fbx',
-      abc: '$HIP/../daz3d/dth-exports/primary/Kira.abc',
-      romFbx: '$HIP/../daz3d/dth-exports/primary/Kira_experimental_rom.fbx',
+      csv: '$JOB/houdini/daz-export/primary/Kira_pose_asset.csv',
+      dth: '$JOB/houdini/daz-export/primary/Kira.dth',
+      fbx: '$JOB/houdini/daz-export/primary/Kira.fbx',
+      abc: '$JOB/houdini/daz-export/primary/Kira.abc',
+      romFbx: '$JOB/houdini/daz-export/primary/Kira_experimental_rom.fbx',
       // Houdini WRITES here, so it is the character's own export/ folder — NOT
-      // the dth-exports the imports above read. The HDA concatenates
+      // the daz-export the imports above read. The HDA concatenates
       // export_directory + character_name, so the trailing slash is
       // load-bearing (456.py's measured facts).
-      exportDirectory: '$HIP/../export/',
+      exportDirectory: '$JOB/export/',
     })
   })
 
@@ -138,7 +138,7 @@ describe('buildHoudiniJob', () => {
       scenesRootAbs: ROOT,
       finalExportDir: 'X:/p/Kira/export',
     })
-    expect(prefill.dth).toBe('X:/p/Kira/daz3d/dth-exports/primary/Kira.dth')
+    expect(prefill.dth).toBe('X:/p/Kira/houdini/daz-export/primary/Kira.dth')
     expect(prefill.exportDirectory).toBe('X:/p/Kira/export/')
   })
 
@@ -148,20 +148,20 @@ describe('buildHoudiniJob', () => {
     // difference between a project wired to the outfit and one wired to the
     // primary — five paths, and no way to fix it but by hand.
     const prefill = buildHoudiniPrefill(kira(), {
-      hipRefPrefix: '$HIP/../daz3d/dth-exports',
+      hipRefPrefix: '$JOB/houdini/daz-export',
       scenesRootAbs: ROOT,
       // The RAW stored value, backslashes and all — the dialog passes whatever
       // `extraScenes` holds, and matching normalizes separators + case itself.
       scenePath: 'X:\\p\\Kira\\daz3d\\summertide\\KiraSummertide.duf',
-      finalExportDir: '$HIP/../export',
+      finalExportDir: '$JOB/export',
     })
-    expect(prefill.dth).toBe('$HIP/../daz3d/dth-exports/summertide/Kira_Summertide.dth')
+    expect(prefill.dth).toBe('$JOB/houdini/daz-export/summertide/Kira_Summertide.dth')
     expect(prefill.csv).toBe(
-      '$HIP/../daz3d/dth-exports/summertide/Kira_Summertide_pose_asset.csv',
+      '$JOB/houdini/daz-export/summertide/Kira_Summertide_pose_asset.csv',
     )
     // One export folder per CHARACTER, not per scene — Houdini's output for
     // every variant collects in the same place.
-    expect(prefill.exportDirectory).toBe('$HIP/../export/')
+    expect(prefill.exportDirectory).toBe('$JOB/export/')
   })
 
   it('prefill: a scene this character does not link falls back to the primary', () => {
@@ -169,17 +169,17 @@ describe('buildHoudiniJob', () => {
     // with: a stale pick (the scene was unlinked meanwhile) must degrade to the
     // one scene every character has.
     const prefill = buildHoudiniPrefill(kira(), {
-      hipRefPrefix: '$HIP/../daz3d/dth-exports',
+      hipRefPrefix: '$JOB/houdini/daz-export',
       scenesRootAbs: ROOT,
       scenePath: 'X:/somewhere/else/Foreign.duf',
-      finalExportDir: '$HIP/../export',
+      finalExportDir: '$JOB/export',
     })
-    expect(prefill.dth).toBe('$HIP/../daz3d/dth-exports/primary/Kira.dth')
+    expect(prefill.dth).toBe('$JOB/houdini/daz-export/primary/Kira.dth')
   })
 
   it('prefill: no export directory still fills name + skinning, paths stay empty', () => {
     const prefill = buildHoudiniPrefill(kira({ exportPath: '' }), {
-      hipRefPrefix: '$HIP/../daz3d/dth-exports',
+      hipRefPrefix: '$JOB/houdini/daz-export',
       scenesRootAbs: ROOT,
     })
     expect(prefill.characterName).toBe('Kira')
@@ -191,7 +191,7 @@ describe('buildHoudiniJob', () => {
   it('prefill: a Linear-only generation maps to the linear menu token', () => {
     // G8 ships no DQS ROM, so the auto-selected skinning is Linear.
     const prefill = buildHoudiniPrefill(kira({ genesis: 'G8' }), {
-      hipRefPrefix: '$HIP/../daz3d/dth-exports',
+      hipRefPrefix: '$JOB/houdini/daz-export',
       scenesRootAbs: ROOT,
     })
     expect(prefill.skinning).toBe('linear')

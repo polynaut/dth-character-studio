@@ -158,7 +158,7 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
   ])
   expect(job.resultPath).toBe(HOUDINI_RESULT)
   // The blank-parm fallback aims at the character's FINAL export folder (where
-  // Houdini writes for Unreal) — never the regenerable `dth-exports`
+  // Houdini writes for Unreal) — never the regenerable `daz-export`
   // intermediate the imports read (P.exportDir), which "Export too" used to
   // send even after Generate project stopped baking it.
   expect(job.exportDirectory).toBe(`${P.charFolder}/export`)

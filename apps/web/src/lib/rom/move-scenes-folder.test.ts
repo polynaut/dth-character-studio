@@ -190,12 +190,13 @@ describe('moveCharacterScenesFolder', () => {
     expect(onDisk.updatedAt).toBe(moved.updatedAt)
   })
 
-  it('the EXPORT root follows the renamed folder — it lives inside it', async () => {
-    // Regression: the export root was re-derived from the PROJECT's dazSubdir on
-    // every save, so renaming daz3d → scenes physically moved `dth-exports`
-    // along with the folder and then pointed exportPath straight back at the
-    // vanished `daz3d/dth-exports`. The rename undid half of itself on its own
-    // save, and every later export targeted a resurrected daz3d.
+  it('the EXPORT root does NOT follow the renamed scenes folder — it lives elsewhere now', async () => {
+    // The export root sat inside the Daz folder until v0.69, which made this
+    // rename a two-sided problem: the folder move carried `dth-exports` along,
+    // and the save had to re-derive the path to match or the rename undid half
+    // of itself. Moving the root to `<houdiniSubdir>/daz-export` dissolves the
+    // coupling — renaming the scenes folder is now purely a scenes operation,
+    // and that is the property worth pinning.
     await storage.createProjectManifest('/games/R', 'R')
     const c = seedCharacter('/games/R')
 
@@ -203,7 +204,8 @@ describe('moveCharacterScenesFolder', () => {
       data: { projectId: '/games/R', character: c, newSubdir: 'scenes' },
     })
 
-    expect(moved.exportPath).toBe('/games/R/Kira/scenes/dth-exports')
+    expect(moved.scenePath).toBe('/games/R/Kira/scenes/Kira.duf')
+    expect(moved.exportPath).toBe('/games/R/Kira/houdini/daz-export')
     const onDisk = JSON.parse(files.get('/games/R/Kira/Kira.json') as string)
     expect(onDisk.exportPath).toBe(moved.exportPath)
   })

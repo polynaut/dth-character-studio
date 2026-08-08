@@ -675,6 +675,10 @@ const repathInput = z.object({
         /** The `$JOB` the project must ALREADY carry. The Python refuses a
          *  mismatch rather than repathing against a stale root — see below. */
         jobDir: z.string().min(1),
+        /** The character's CURRENT export root — where a broken import path can
+         *  be looked for when no sibling survives to point the way. Optional:
+         *  a character with no folder of its own has none. */
+        exportDir: z.string().default(''),
       }),
     )
     .min(1),
@@ -687,8 +691,14 @@ const repathInput = z.object({
  * The other half of the `$JOB` story: {@link repairHoudiniDefaults} fixes what
  * the user picks AFTERWARDS, this fixes what is already stored. Every absolute
  * reference under `$HIP` / `$JOB` / `$DAZ3D_LIB` is rewritten relative to it,
- * and any DazToHue import path whose file is missing is rebuilt from a sibling
- * that still resolves (only when the derived file actually exists).
+ * and any DazToHue import path whose file is missing is rebuilt — from a sibling
+ * that still resolves, or failing that from `exportDir` (only ever when the
+ * derived file actually exists).
+ *
+ * That second donor is what carries a project across the v0.69 export-root move:
+ * when the whole folder relocates, the import paths break TOGETHER, so no
+ * sibling survives to point at the new location — and the character's own export
+ * root is the one thing that still knows where the files went.
  *
  * **`$JOB` must already be correct.** `jobDir` is the value the caller expects,
  * and the Python REFUSES a project whose `$JOB` differs — collapsing against a

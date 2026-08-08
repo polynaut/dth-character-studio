@@ -13,7 +13,7 @@
  * | `$JOB` | a picked export collapses to |
  * | --- | --- |
  * | `<char>/houdini/houdini-project` | an ABSOLUTE path |
- * | `<char>` (the character folder) | `$JOB/daz3d/dth-exports/…` |
+ * | `<char>` (the character folder) | `$JOB/houdini/daz-export/…` |
  *
  * A path above `$HIP` collapses only when it sits under `$JOB`, and the old
  * value sits BELOW the exports, so it could never help. `$HIP` still wins for

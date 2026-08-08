@@ -42,8 +42,7 @@ export const BULK_EXPORT_ONLY_SCRIPT = '.Bulk_Export_Only.dsa'
  *
  * Renamed from the hidden `rom-animations` in runtime v48: a folder the user
  * is meant to open scenes from should be visible, and the name now matches the
- * lowercase-hyphenated convention of the other studio folders (`dth-exports`,
- * `houdini-project`).
+ * lowercase-hyphenated convention of the other studio folders (`daz-export`).
  */
 export const ROM_ANIMATIONS_FOLDER = 'rom-animations'
 
@@ -379,11 +378,12 @@ function buildExportBlock(
    */
   unattended = false,
   /**
-   * `$HIP`-anchored replacement for the export ROOT in bone-scale
-   * reference-skeleton paths (e.g. `$HIP/../daz3d/dth-exports`) — the HOST
+   * Project-relative replacement for the export ROOT in bone-scale
+   * reference-skeleton paths (e.g. `$JOB/houdini/daz-export`) — the HOST
    * computes it from where the linked `.hip`s live relative to the export
    * root (project "Houdini path style"); this pure core can't see the
-   * filesystem, so it obeys. Empty = absolute paths, the always-safe form.
+   * filesystem, so it obeys, whatever variable the host anchors on. Empty =
+   * absolute paths, the always-safe form.
    */
   hipRefPrefix = '',
 ): string {
@@ -415,9 +415,9 @@ function buildExportBlock(
       ? `    var dthCsvName = ${dazJson(poseAssetFileName(character))};`
       : indentLines(sceneCsvLookupSnippet(poseAssetFileName(character), sceneCsvMap).trimEnd())
   // Bone-scale reference paths are written either absolute (dthExportDir as
-  // resolved at run time) or anchored at $HIP via the host-computed prefix —
-  // e.g. `$HIP/../daz3d/dth-exports`, valid because the linked `.hip`s sit in
-  // the character's houdini folder and the layout is fixed. The swap is a
+  // resolved at run time) or project-relative via the host-computed prefix —
+  // e.g. `$JOB/houdini/daz-export`, valid because `$JOB` is the character folder
+  // and the layout below it is fixed. The swap is a
   // prefix exchange on the export ROOT, so whatever scene subfolder this run
   // resolved rides along untouched; an export dir that somehow isn't under
   // the root keeps the absolute path rather than producing a wrong one.

@@ -1155,7 +1155,55 @@ def _file_ref_parms(node):
     return out
 
 
-def _repair_import_refs(node, roots, dry_run):
+def _relocated_donor(broken, export_dir):
+    """A replacement folder+stem for imports that ALL broke, or None.
+
+    The sibling rule below cannot help when the export folder itself moved: every
+    import path breaks in the same instant, so there is no survivor to read the
+    new location off. That is exactly what the v0.69 root move did
+    (`<char>/<daz>/dth-exports` → `<char>/<houdini>/daz-export`), and the
+    character's current export root — passed in by the studio, which derives it —
+    is the one thing that still knows where the files went.
+
+    The stored path keeps its own SCENE SUBFOLDER and basename: a character
+    exports each scene into its own folder under the root, so `…/summertide/
+    Kira_Summertide.dth` has to land under `<new root>/summertide/`, not at the
+    root. Only the root part is exchanged, which is the same prefix-swap the
+    generated `.dsa` performs.
+
+    Returns `(folder, stem)` only when the `.dth` derived from it EXISTS on disk
+    — a relocation the filesystem confirms, never a guess. `None` otherwise, so
+    an unrelated breakage falls through to being reported rather than "repaired"
+    into a second wrong path.
+    """
+    if not export_dir:
+        return None
+    root = _norm_path(export_dir).rstrip("/")
+    if not root or not os.path.isdir(root):
+        return None
+    for _parm, _name, _ext, value in broken:
+        stored = _norm_path(value)
+        if not stored:
+            continue
+        stem = os.path.splitext(os.path.basename(stored))[0]
+        parent = os.path.dirname(stored)
+        # Walk the stored path's tail from longest to shortest: `<sub>/<file>`
+        # for the usual per-scene layout, then the bare file for a flat one.
+        # Longest first, so a scene subfolder is preferred over the root.
+        tails = []
+        while parent and len(tails) < 3:
+            tails.append(os.path.basename(parent))
+            parent = os.path.dirname(parent)
+        candidates = []
+        for depth in range(len(tails), -1, -1):
+            candidates.append("/".join([root] + list(reversed(tails[:depth]))))
+        for folder in candidates:
+            if os.path.exists(_norm_path(os.path.join(folder, stem + ".dth"))):
+                return (folder, stem)
+    return None
+
+
+def _repair_import_refs(node, roots, dry_run, export_dir=""):
     """Rebuild a DazToHueImport path that points at a file which isn't there.
 
     Pre-v0.63 projects hold a `.dth` addressed through the RETIRED `dth-exports`
@@ -1167,6 +1215,9 @@ def _repair_import_refs(node, roots, dry_run):
     still resolves gives both the folder and the stem. That matters because the
     node → scene mapping is genuinely ambiguous (a project can hold several
     import nodes naming the same files), and this needs none of it.
+
+    When NOTHING resolves — the export folder itself moved — `_relocated_donor`
+    supplies the same two values from the character's current export root.
 
     Only ever applied when the derived file EXISTS, so a repair is a verified
     fact rather than a guess. Returns `[(label, old, new)]`.
@@ -1193,14 +1244,20 @@ def _repair_import_refs(node, roots, dry_run):
         if os.path.exists(value):
             resolved[ext] = value
         else:
-            broken.append((parm, name, ext))
-    if not broken or not resolved:
+            broken.append((parm, name, ext, value))
+    if not broken:
         return fixed
-    # Any sibling that resolves will do — they all live in the export folder.
-    donor = list(resolved.values())[0]
-    folder = os.path.dirname(donor)
-    stem = os.path.splitext(os.path.basename(donor))[0]
-    for parm, name, ext in broken:
+    if resolved:
+        # Any sibling that resolves will do — they all live in the export folder.
+        donor = list(resolved.values())[0]
+        folder = os.path.dirname(donor)
+        stem = os.path.splitext(os.path.basename(donor))[0]
+    else:
+        relocated = _relocated_donor(broken, export_dir)
+        if relocated is None:
+            return fixed
+        folder, stem = relocated
+    for parm, name, ext, _value in broken:
         candidate = _norm_path(os.path.join(folder, stem + ext))
         if not os.path.exists(candidate):
             continue
@@ -1393,6 +1450,7 @@ def op_repath(request):
             "foreign": [],
             "backupPath": "",
         }
+        export_dir = _norm_path(target.get("exportDir", ""))
         try:
             _load(path)
             current = _scene_job()
@@ -1405,7 +1463,7 @@ def op_repath(request):
             changed = 0
             foreign = set()
             for node in hou.node("/").allSubChildren():
-                for label, old, new in _repair_import_refs(node, roots, dry_run):
+                for label, old, new in _repair_import_refs(node, roots, dry_run, export_dir):
                     result["repaired"].append({"label": label, "from": old, "to": new})
                     changed += 1
                 for parm, raw in _file_ref_parms(node):

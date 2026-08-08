@@ -11,7 +11,7 @@ import type { Page } from '@playwright/test'
 // file through the same rules as the pick/drop flows, Skip permanently ignores
 // it (`.dcsmeta/characters/<folder>/detected-ignore.json`). Files that appear
 // WHILE the wizard is open append as pages (the detection keeps rescanning on
-// focus). Generated trees (dth-exports, rom-animations, Houdini backup/) and
+// focus). Generated trees (daz-export, rom-animations, Houdini backup/) and
 // already-linked files must never be offered.
 
 const NEW_SCENE = `${P.charFolder}/daz3d/beach/KiraBeach_G9.duf`
@@ -45,7 +45,7 @@ test('new files: banner on load + focus, wizard adds/skips, live-appends while o
   // …and decoys that must NOT be detected: generated Daz output, a ROM
   // animation, Houdini's auto-backup, and the already-linked scene/.hip
   // (P.scene / P.houdini are linked by the seed itself).
-  seed.files[`${P.charFolder}/daz3d/dth-exports/primary/Kira_export.duf`] = 'duf-fixture'
+  seed.files[`${P.charFolder}/houdini/daz-export/primary/Kira_export.duf`] = 'duf-fixture'
   seed.files[`${P.charFolder}/daz3d/rom-animations/KiraDefault_ROM.duf`] = 'duf-fixture'
   seed.files[`${P.charFolder}/houdini/backup/Kira_bak1.hip`] = 'hip-fixture'
   // The add validation reads the scene — one G9 figure, empty timeline (the

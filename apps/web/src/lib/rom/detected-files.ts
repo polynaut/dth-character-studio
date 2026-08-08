@@ -22,7 +22,7 @@ export interface DetectedFiles {
 
 const HIP_EXT = /\.(hip|hipnc|hiplc)$/i
 
-/** Directory names whose subtrees never hold offerable files. `dth-exports` and
+/** Directory names whose subtrees never hold offerable files. `daz-export` and
  *  `rom-animations` are generated Daz output, `.dcsmeta` is app-owned, `backup`
  *  is Houdini's auto-backup. One shared set: a `.duf` can't legitimately live in
  *  a Houdini backup either, so over-pruning is fine. Also the `skipDir` for the
@@ -34,8 +34,18 @@ export function detectSkipDir(name: string): boolean {
 
 /** The same list the NATIVE walk is given (`scan_files_by_ext`), which prunes
  *  before descending — reading a character's whole export tree only to discard
- *  it is the expensive half of a sweep, and the sweep runs on every focus. */
-export const DETECT_SKIP_DIRS = ['.dcsmeta', 'dth-exports', 'rom-animations', 'backup']
+ *  it is the expensive half of a sweep, and the sweep runs on every focus.
+ *
+ *  `dth-exports` is the pre-v0.69 name of the export root and stays on the list:
+ *  a character is only migrated off it by its next SAVE, and until then that
+ *  tree is exactly as full of generated `.duf`s as the new one. */
+export const DETECT_SKIP_DIRS = [
+  '.dcsmeta',
+  'daz-export',
+  'dth-exports',
+  'rom-animations',
+  'backup',
+]
 
 /** The extensions worth walking for, without the dot — what the native scan is
  *  asked for. `.duf` scenes and every Houdini scene flavour. */

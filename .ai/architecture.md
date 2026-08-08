@@ -297,7 +297,8 @@ Files saved into the character's folder (an outfit variant `.duf`, a new `.hip`)
 surface as a banner + add wizard instead of waiting for a manual pick/drop.
 
 - **The rule is pure subtraction** (`lib/rom/detected-files.ts`, vitest-covered):
-  everything on disk minus generated trees (`dth-exports/`, `rom-animations/`,
+  everything on disk minus generated trees (`daz-export/` + the pre-v0.69
+  `dth-exports/`, `rom-animations/`,
   `*_ROM.duf`, Houdini `backup/`, `.dcsmeta/`), minus the LIVE draft's linked
   lists, minus the permanent skip list. Stateless, so rescanning on every window
   focus (`lib/use-detected-files.ts`) is idempotent — which is what lets the

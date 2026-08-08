@@ -1624,17 +1624,23 @@ function SettingsPage() {
                   onChange={(e) => patchProject({ dazSubdir: e.target.value })}
                 />
               </Field>
+              {/* Deliberately NOT disabled by `createHoudiniSubdir` any more: since
+                  v0.69 the fixed `daz-export` root lives in this folder, so the name
+                  is load-bearing even for a project that seeds no empty one. */}
               <Field label="Houdini projects subfolder">
                 <Input
                   value={projectSettings.houdiniSubdir}
                   placeholder="houdini"
-                  disabled={!projectSettings.createHoudiniSubdir}
                   onChange={(e) => patchProject({ houdiniSubdir: e.target.value })}
                 />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Also holds <code>daz-export</code> — where the DTH Exporter writes what
+                  Houdini imports.
+                </p>
               </Field>
               {/* The END of the pipeline — what Houdini generates for Unreal.
                   Not the Daz→Houdini intermediate, which is the fixed
-                  `dth-exports` inside the Daz subfolder. */}
+                  `daz-export` inside the Houdini subfolder. */}
               <Field label="Final export subfolder">
                 <Input
                   value={projectSettings.exportSubdir}

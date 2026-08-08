@@ -3,12 +3,12 @@ use std::path::Path;
 
 use crate::fsutil::move_tree;
 
-// Moving a character's already-exported files into the fixed export root
-// (schema v29). Before v29 the export directory was user-chosen, so an existing
-// character's .abc/.dth/.csv sit wherever it pointed — usually inside its
-// Houdini folder. The studio re-derives the path on the character's next save;
-// this command carries the FILES across so the migration doesn't strand
-// gigabytes at the old location.
+// Moving a character's already-exported files into the fixed export root.
+// Written for schema v29 (before it, the export directory was user-chosen, so an
+// existing character's .abc/.dth/.csv sat wherever it pointed) and used again
+// for the v0.69 move of the root itself. The studio re-derives the path on the
+// character's next save; this command carries the FILES across so a relocation
+// doesn't strand gigabytes at the old location.
 //
 // The studio decides WHICH folders move (it knows its own layout from the
 // per-character export-folders record) and passes explicit absolute pairs —
@@ -83,7 +83,7 @@ mod tests {
         let base = std::env::temp_dir().join("dth_move_exports_test");
         let _ = fs::remove_dir_all(&base);
         let old = base.join("houdini/Proj/dth-export");
-        let new = base.join("daz3d/dth-exports");
+        let new = base.join("houdini/daz-export");
         fs::create_dir_all(old.join("primary")).unwrap();
         fs::write(old.join("primary/Kira.dth"), b"payload").unwrap();
         fs::create_dir_all(old.join("summertide")).unwrap();

@@ -1006,7 +1006,14 @@ export function HoudiniUtilsPanel({
     try {
       const result = await repathHoudiniReferences({
         data: {
-          targets: repath.targets.map((hipPath) => ({ hipPath, jobDir: charFolder })),
+          // `exportDir` is the fallback donor for an import path whose whole
+          // export folder moved (v0.69) — no sibling survives to point at the
+          // new location, and this is the only thing that knows it.
+          targets: repath.targets.map((hipPath) => ({
+            hipPath,
+            jobDir: charFolder,
+            exportDir: character.exportPath,
+          })),
           dryRun,
         },
       })

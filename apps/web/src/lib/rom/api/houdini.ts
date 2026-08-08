@@ -5,7 +5,7 @@ import { z } from 'zod'
 import * as storage from '../storage'
 import { houdiniVersionFromInstall, matchingHoudiniDocsFolder } from '#/lib/houdini-version.ts'
 import {
-  EXPORTS_FOLDER,
+  LEGACY_EXPORTS_FOLDER,
   characterHoudiniDir,
   characterHoudiniProjectDir,
   hipAnchorDirs,
@@ -41,14 +41,14 @@ import { charScopeInput, charsRoot, joinPath, locateCharacter, resolveProject } 
 // here; the folder-create + hython run are native (create_houdini_project,
 // houdini.rs).
 //
-// The project folder holds no exports (schema v29) — those live in the
-// character's fixed Daz-side export root, reached from the project folder by
-// plain relative navigation (`$JOB/<dazSubdir>/dth-exports/…`, runtime v63;
-// `$HIP/../…` before it). Earlier versions planted
-// `dth-exports` JUNCTIONS here and beside every `.hip`; the feature was killed
-// (v0.63) — reparse points fought Perforce/backup tooling and doubled the
-// folder in every picker — and {@link sweepExportJunctions} now REMOVES the
-// leftovers from exactly the places the old code created them.
+// The character's export root sits in the HOUDINI folder as `daz-export`
+// (v0.69), one hop from every `.hip` that reads it, reached by plain relative
+// navigation (`$JOB/<houdiniSubdir>/daz-export/…`, runtime v64). Earlier
+// versions planted `dth-exports` JUNCTIONS here and beside every `.hip` to fake
+// exactly that adjacency; the feature was killed (v0.63) — reparse points fought
+// Perforce/backup tooling and doubled the folder in every picker — and
+// {@link sweepExportJunctions} now REMOVES the leftovers from exactly the places
+// the old code created them.
 
 const generateInput = charScopeInput.extend({
   /** The new scene's name (dialog input, prefilled `<Project>_<Character>`). */
@@ -82,7 +82,7 @@ export function generatedHoudiniScenePath(houdiniDir: string, sceneName: string)
 }
 
 /**
- * Remove leftover `dth-exports` junctions from EXACTLY the places the old
+ * Remove leftover `dth-exports` JUNCTIONS from EXACTLY the places the old
  * junction feature created them: beside every linked `.hip` inside the
  * character folder (the {@link hipAnchorDirs} set), the character's houdini
  * folder itself, and the (retired) `houdini-project/` folder. Runs from the one
@@ -90,9 +90,16 @@ export function generatedHoudiniScenePath(houdiniDir: string, sceneName: string)
  * existing projects lose their junctions on the next save/refresh without a
  * separate migration.
  *
- * Strictly reparse-point-safe: the Rust side (`remove_junction`) verifies the
- * path IS a junction before removing it and refuses a real folder — a user
- * folder named `dth-exports` (the actual export root!) can never be touched.
+ * It hunts {@link LEGACY_EXPORTS_FOLDER} — the name the junctions carried —
+ * NOT the current {@link EXPORTS_FOLDER}. Since v0.69 the live export root sits
+ * inside the houdini folder, which is one of the folders swept here, so aiming
+ * this at the current name would point a delete straight at the real thing.
+ *
+ * Strictly reparse-point-safe on top of that: the Rust side (`remove_junction`)
+ * verifies the path IS a junction before removing it and refuses a real folder.
+ * Two independent reasons the export root cannot be touched, which is the right
+ * number for a sweep that deletes.
+ *
  * Returns the paths actually removed, so Refresh assets can report them.
  */
 export async function sweepExportJunctions(
@@ -108,7 +115,7 @@ export async function sweepExportJunctions(
   if (projectDir) dirs.add(projectDir)
   const removed: Array<string> = []
   for (const dir of dirs) {
-    const link = joinPath(dir, EXPORTS_FOLDER)
+    const link = joinPath(dir, LEGACY_EXPORTS_FOLDER)
     try {
       // A primitive return — z.enum, not a bare invoke<T>() cast (no fixture
       // needed; see the FFI ritual in .ai/conventions.md).
@@ -287,7 +294,7 @@ export async function generateHoudiniProject({
   // path, so the project stopped being movable — a property the retired
   // `dth-exports` junction had been providing invisibly by making exports look
   // like they were below `$HIP`. With `$JOB` on the character folder the same
-  // pick yields `$JOB/daz3d/dth-exports/…`, while `$HIP` still wins for paths
+  // pick yields `$JOB/houdini/daz-export/…`, while `$HIP` still wins for paths
   // inside the houdini folder.
   //
   // Layout: the scene FILE lives in the character's houdini folder, which IS
@@ -296,16 +303,17 @@ export async function generateHoudiniProject({
   // (render/, geo/, backup/) collects in that single folder for free:
   //   <character>/                      ← $JOB (v0.64)
   //   houdini/<name>.hiplc              ← the scenes (one per generate)
+  //   houdini/daz-export/<scene>/       ← what the imports READ (v0.69)
   //   houdini/render|geo|backup/        ← Houdini's own output, shared
   // A dedicated `houdini-project/` subfolder was created here until v0.68 and
   // could never attract any of that: `$HIP` is DERIVED from where the `.hip`
   // sits and cannot be pointed elsewhere (Set Project sets `$JOB`, not `$HIP`),
   // so the folder stayed empty while the output landed beside the scenes.
   // {@link sweepHoudiniProjectDirs} removes the empty leftovers.
-  // The export root is reached from the project folder by plain relative
-  // navigation (`$JOB/<dazSubdir>/dth-exports/…` — the emitted swap is
-  // buildExportBlock in @dth/rom dsa.ts, the prefix rule is `hipRefPrefixFor`).
-  // No junctions anywhere since v0.63.
+  // The export root is a plain SIBLING of the scenes since v0.69
+  // (`$JOB/<houdiniSubdir>/daz-export/…` — the emitted swap is buildExportBlock
+  // in @dth/rom dsa.ts, the prefix rule is `hipRefPrefixFor`). No junctions
+  // anywhere since v0.63.
   const charFolder = location?.folderAbs ?? ''
   if (!charFolder) throw new Error(`Character ${id} not found`)
   const houdiniDir = characterHoudiniDir(charFolder, project.houdiniSubdir)
@@ -350,9 +358,9 @@ export async function generateHoudiniProject({
     ? hipRefPrefixFor([scenePath], charFolder, character.exportPath)
     : ''
   // Houdini's OWN output goes to the character's `export/` folder — the end of
-  // the pipeline, not the `dth-exports` intermediates the imports read. Its
+  // the pipeline, not the `daz-export` intermediates the imports read. Its
   // prefix is computed against that folder, so it comes out `$JOB/export`
-  // rather than sharing the imports' `$JOB/daz3d/dth-exports`.
+  // rather than sharing the imports' `$JOB/houdini/daz-export`.
   const finalExportAbs = joinPath(charFolder, normalizeRelFolder(project.exportSubdir))
   const finalExportDir =
     (relative ? hipRefPrefixFor([scenePath], charFolder, finalExportAbs) : '') || finalExportAbs
@@ -540,7 +548,7 @@ export async function startHoudiniExport({
     // A FALLBACK only: 456.py fills a node's blank export_directory with this
     // and restores whatever the user had set (their project, their choice).
     // The character's FINAL export folder — where Houdini WRITES for Unreal —
-    // never `character.exportPath`, which is the regenerable `dth-exports`
+    // never `character.exportPath`, which is the regenerable `daz-export`
     // intermediate the imports READ (the same wrong target Generate project
     // used to bake; see buildHoudiniPrefill's exportDirectory note).
     exportDirectory: joinPath(location.folderAbs, normalizeRelFolder(project.exportSubdir)),

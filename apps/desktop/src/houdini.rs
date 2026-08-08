@@ -120,7 +120,7 @@ pub struct CreateHoudiniProjectRequest {
     /// the project stopped being movable — the retired `dth-exports` junction
     /// had been hiding that by making exports appear below `$HIP`. With `$JOB`
     /// at the character folder, the same pick yields
-    /// `$JOB/daz3d/dth-exports/…`, and `$HIP` still wins for paths inside it.
+    /// `$JOB/houdini/daz-export/…`, and `$HIP` still wins for paths inside it.
     pub job_dir: String,
     /// The new scene file to save.
     pub scene_path: String,

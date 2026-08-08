@@ -74,7 +74,7 @@ def normalize(path):
 
 def with_trailing_slash(path):
     """The HDA concatenates `export_directory + character_name`, so a missing
-    separator silently produces `.../dth-exportsKira/`."""
+    separator silently produces `.../exportKira/`."""
     cleaned = (path or "").replace("\\", "/").rstrip("/")
     return cleaned + "/" if cleaned else ""
 

@@ -6,7 +6,8 @@
 Houdini paths are anchored on `$JOB` instead of `$HIP`
 
 A generated project wrote its import, CSV and export paths as
-`$HIP/../daz3d/dth-exports/…`. They now read `$JOB/daz3d/dth-exports/…`.
+`$HIP/../…`. They now read `$JOB/…` (the export folder itself moves in the same
+release — see *The export folder moved into the Houdini folder* below).
 
 `$JOB` **is** the character folder — Generate project bakes it in — so the whole
 Daz side is one hop away, and it is what Houdini itself writes: pick an export by
