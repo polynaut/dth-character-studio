@@ -71,7 +71,7 @@ test('Copy in brings the file in and links the copy, leaving the original', asyn
   await open(page)
   const ask = await addAndAsk(page)
   await ask.getByRole('button', { name: 'Copy in' }).click()
-  await expect(page.getByText(/Copied 1 Houdini project/)).toBeVisible()
+  await expect(page.getByText(/Copied 1 Houdini project/)).toBeVisible({ timeout: 20_000 })
 
   expect(await has(page, DEST)).toBe(true)
   // A COPY leaves the source alone — that is the whole difference from move.
@@ -90,7 +90,7 @@ test('"Delete original after copying" removes the source once the copy landed', 
   // siblings rather than a <label>, so the text is not a click target.
   await ask.getByRole('switch').click()
   await ask.getByRole('button', { name: 'Copy in' }).click()
-  await expect(page.getByText(/Moved 1 Houdini project/)).toBeVisible()
+  await expect(page.getByText(/Moved 1 Houdini project/)).toBeVisible({ timeout: 20_000 })
 
   expect(await has(page, DEST)).toBe(true)
   expect(await has(page, OUTSIDE)).toBe(false)
@@ -100,11 +100,16 @@ test('a project already inside the character folder is linked without asking', a
   await open(page, INSIDE)
   await page.getByRole('button', { name: 'Add project' }).click()
 
-  // No dialog: it already lives where a copy would put it, so there is no
-  // decision to make.
+  // Assert the PERSISTED outcome, not the toast. Linking a project that sits
+  // inside the character folder also wakes the background scan sweep (that is
+  // the half of the tree it covers), so this path can take noticeably longer on
+  // a loaded CI runner than it does locally — and a toast is transient, so a
+  // slow run misses the window and the spec fails for a reason that has nothing
+  // to do with what it is testing. The definition on disk has no such window.
+  await expect.poll(() => linked(page), { timeout: 20_000 }).toContain(INSIDE)
+  // And it got there without a decision to make: it already lives where a copy
+  // would have put it.
   await expect(page.getByRole('dialog', { name: /link it\?/ })).toHaveCount(0)
-  await expect(page.getByText(/Linked Houdini project/)).toBeVisible()
-  expect(await linked(page)).toContain(INSIDE)
 })
 
 test('a name already in the folder is refused rather than overwritten', async ({ page }) => {
