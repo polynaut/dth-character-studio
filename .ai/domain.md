@@ -301,6 +301,20 @@ older runtimes as stale.
   source without a complete copy in hand. The emptied OLD root then goes via
   `remove_dir_if_empty` (v0.69) — only ever when empty, so a folder still holding
   a failed move or the user's own files stays exactly where it is.
+- **A relocation reaches a LIBRARY through Tools → Refresh assets, not through
+  the version bump.** `migrateExportRoot` hangs off the character SAVE, which
+  covers a character you open and nobody else. Refresh is the sweep that visits
+  them all, so it calls `relocateExportRoot` (api/generate.ts) for EVERY
+  character it walks — stale or skipped — which pairs the file move with the
+  `storage.saveCharacter` that rewrites `exportPath`; either half alone is a
+  broken state. **A `RUNTIME_VERSION` bump does not do this and cannot.** It
+  makes Refresh visit everyone, but what it triggers is REGENERATION, and
+  generation reads the STORED `exportPath` — so the bump alone re-emits the old
+  folder into every script and then stamps the new version over the staleness
+  that brought the user there, leaving the character reading as up to date on a
+  root it never moved off. The trigger has to be the stored path disagreeing with
+  its own derivation. Pinned end-to-end in `export-root-migration.smoke.ts` (the
+  only layer that can: vitest can't, because the migration is `isTauri()`-gated).
 - **Deleting a character with a KEEP flag still drops the export root**
   (`deleteCharacter`, api/characters.ts). "Keep the Daz files" / "Keep the
   Houdini files" spare a whole subfolder, and one of them contains the export

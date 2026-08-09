@@ -417,6 +417,16 @@ export async function saveCharacter({ data }: { data: unknown }): Promise<Charac
  * know: it fires only while the STORED path still differs from the derived one,
  * which the save itself then fixes. Idempotent by construction.
  *
+ * TWO callers, and the second is what makes a relocation reach a whole library:
+ * {@link saveCharacter} (the editor), and **Tools → Refresh assets**, which
+ * calls it for every character it walks and then persists the re-derived path.
+ * A `RUNTIME_VERSION` bump alone would NOT have done that — the refresh clears
+ * a stale runtime by regenerating the scripts, and regeneration reads the
+ * STORED `exportPath`, so without this the refresh would have re-emitted the old
+ * folder, stamped the new runtime version, and left the character looking up to
+ * date on a root it had never moved off. Returns whether the roots differed, so
+ * the caller knows the definition needs writing.
+ *
  * What moves is exactly what the studio recorded as its own export folders
  * ({@link EXPORT_FOLDERS_FILE}) — never the whole old directory, which for the
  * default layout WAS the character's Houdini folder and holds the user's
@@ -426,23 +436,32 @@ export async function saveCharacter({ data }: { data: unknown }): Promise<Charac
  * are (the Rust side never deletes a source without a complete copy), and the
  * save proceeds either way — a blocked migration must not block editing.
  */
-async function migrateExportRoot(
+export async function migrateExportRoot(
   project: { path: string; houdiniSubdir?: string },
   character: Character,
   lib: string,
-): Promise<void> {
-  if (!isTauri()) return
+): Promise<boolean> {
+  // TRUE once the stored root is known to differ from the derived one — the
+  // caller's cue that the definition needs re-saving, whatever happened to the
+  // files afterwards. Deliberately NOT "the move succeeded": `saveCharacter`
+  // re-derives `exportPath` unconditionally, so a caller that skipped the save
+  // on a partial move would leave the two halves disagreeing in a way a manual
+  // save never produces.
+  let needed = false
+  if (!isTauri()) return needed
   try {
     const oldRoot = character.exportPath.trim().replace(/\\/g, '/')
-    if (!oldRoot) return
+    if (!oldRoot) return needed
     const location = await locateCharacter(lib, character.id)
-    if (!location?.relFolder) return
+    if (!location?.relFolder) return needed
     // The SAME derivation the save below writes. It must stay literally the same
     // call: while this trigger spelled the anchor differently from the save, a
     // character whose layout disagreed with the project default re-fired it on
     // EVERY save and moved its exports back and forth between two trees.
     const newRoot = characterExportRoot(location.folderAbs, project.houdiniSubdir)
-    if (!newRoot || normalizePathLower(newRoot) === normalizePathLower(oldRoot)) return
+    if (!newRoot || normalizePathLower(newRoot) === normalizePathLower(oldRoot)) return needed
+    // Past here the roots DIFFER, which is the whole answer the caller needs.
+    needed = true
 
     // The record lives in the character's meta folder — but this save can be the
     // FIRST one after the v0.68 relocation, and the relocation itself only runs
@@ -459,11 +478,13 @@ async function migrateExportRoot(
       : (await exists(legacyRecord))
         ? legacyRecord
         : ''
-    if (!recordPath) return
+    if (!recordPath) return needed
     const recorded = parseExportFoldersRecord(await readTextFile(recordPath))
     // A record written for a DIFFERENT export dir describes folders that aren't
     // at `oldRoot` — the same guard the housekeeping's delete side applies.
-    if (!recorded || normalizePathLower(recorded.exportDir) !== normalizePathLower(oldRoot)) return
+    if (!recorded || normalizePathLower(recorded.exportDir) !== normalizePathLower(oldRoot)) {
+      return needed
+    }
 
     const moves = recorded.folders
       .map((rel) => ({
@@ -471,7 +492,7 @@ async function migrateExportRoot(
         to: joinPath(newRoot, migratedExportFolder(rel)),
       }))
       .filter((m) => normalizePathLower(m.from) !== normalizePathLower(m.to))
-    if (moves.length === 0) return
+    if (moves.length === 0) return needed
 
     const failures = z.array(z.string()).parse(await invoke('move_exports', { request: { moves } }))
     if (failures.length > 0) {
@@ -500,9 +521,11 @@ async function migrateExportRoot(
       // locked or unreadable: an empty leftover folder, nothing more
     }
   } catch {
-    // Never fail a save over the migration — the files stay where they are and
-    // the next save retries (the trigger is still true until they move).
+    // Never fail a save over the migration — the files stay where they are, and
+    // the caller still repoints the definition, exactly as it would have if the
+    // move had found nothing to carry.
   }
+  return needed
 }
 
 const deleteCharacterInput = charScopeInput.extend({

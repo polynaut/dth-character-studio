@@ -331,6 +331,18 @@ current code before relying on details, but assume the *lesson* still holds.
   impossible. Corrected 2026-08-06 (the earlier wording came from a workflow
   that happened to use absolute refs); state the reason this way, or the next
   reader concludes movable Houdini projects can't exist.
+- **A version bump makes a refresh RUN; it does not make a migration HAPPEN.**
+  The v0.69 export-root move bumped `RUNTIME_VERSION`, which is necessary — no
+  bump, no refresh, nothing regenerates. It is not sufficient, and the failure is
+  silent in the worst way: the refresh regenerates from the STORED path, so it
+  re-emitted the old folder, stamped the new version, and cleared the staleness
+  that was the only sign anything was owed. The character then reads as fully up
+  to date on a root it never moved off. **Ask two questions, not one:** does the
+  bump make the sweep visit this character (version), and does the sweep contain
+  code that performs the migration (wiring)? They are answered in different files
+  — `RUNTIME_VERSION` in `packages/rom/types.ts`, the wiring in `refreshAllAssets`
+  — and the second is the one that gets forgotten. A migration that only hangs
+  off the character SAVE reaches the characters the user happens to open.
 - **A cache key must cover everything the cached ANSWER depends on, not just the
   file it was read from.** The Houdini scan store is keyed on `<hip>|<mtime>`,
   and one third of its answer (`refs.broken` — do the files the import paths name

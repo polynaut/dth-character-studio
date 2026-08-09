@@ -85,6 +85,12 @@ export function RefreshAssetsTab() {
       )
     if (result.counts.migrated > 0)
       lines.push(`Migrated ${n(result.counts.migrated, 'character definition')}`)
+    // Named explicitly because this one MOVED the user's files — a folder full
+    // of gigabytes changing place is not something a run should do quietly.
+    if (result.counts.exports > 0)
+      lines.push(
+        `Moved the export folder of ${n(result.counts.exports, 'character')} into its Houdini folder`,
+      )
     if (result.counts.scripts > 0)
       lines.push(`Re-generated Daz scripts for ${n(result.counts.scripts, 'character')}`)
     if (result.counts.csv > 0) lines.push(`Re-generated ${n(result.counts.csv, 'PoseAsset CSV')}`)
@@ -141,8 +147,9 @@ export function RefreshAssetsTab() {
         <h2 className="flex w-fit items-center gap-1 font-semibold">
           Refresh assets
           <InfoPopup label="Refresh assets — more information">
-            Re-generates every project's Daz scripts and PoseAsset CSVs to the current version —
-            character definitions aren't changed.{' '}
+            Re-generates every project's Daz scripts and PoseAsset CSVs to the current version. It
+            only ever writes a character definition to MIGRATE it — bringing an old one up to the
+            current schema, or repointing it after the studio moved a folder it owns.{' '}
             <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/tools.html#tab-3--refresh-assets">
               Open guide
             </GuideLink>

@@ -42,6 +42,7 @@ import { relativeInside } from '../storage/fs'
 import { copyDazScene } from './attachments'
 import { clearImageSrcCache, rebuildAvatarMaster, upscaleStoredAvatar } from './avatars'
 import { carryStoredProductsToMeta, ingestProductScans, pruneProductScans } from './products'
+import { migrateExportRoot } from './characters'
 import { poseAssetFramesSchema, sceneWearablesSchema } from './native-types'
 import { hipRefPrefixFor } from '#/lib/scene-subfolder.ts'
 import { sweepExportJunctions, sweepHoudiniProjectDirs } from './houdini'
@@ -655,6 +656,44 @@ function legacyPoseName(character: Character): string {
 }
 
 /**
+ * Carry a character's exports to the current export ROOT and persist the
+ * re-derived path — the whole-library half of what a manual save does.
+ *
+ * `migrateExportRoot` moves the FILES; `storage.saveCharacter` is what rewrites
+ * `exportPath`, and the two must happen together or the definition and the disk
+ * disagree. In the editor `saveCharacter` (api/characters.ts) pairs them; this
+ * is the pairing for Refresh assets, which is the only way a relocation reaches
+ * a library the user isn't opening character by character.
+ *
+ * Returns whether anything was relocated, for the report.
+ *
+ * Deliberately NOT driven by a version flag. The v0.69 root move bumped
+ * `RUNTIME_VERSION`, which does make Refresh visit every character — but the
+ * regeneration it triggers reads the STORED `exportPath`, so on its own the bump
+ * would have re-emitted the OLD folder and then stamped the new version over the
+ * staleness that brought the user here. The trigger has to be the path
+ * disagreeing with its own derivation, which is exactly what `migrateExportRoot`
+ * tests.
+ */
+async function relocateExportRoot(
+  project: ProjectInfo,
+  lib: string,
+  character: Character,
+  location: storage.CharacterLocation,
+): Promise<boolean> {
+  try {
+    if (!(await migrateExportRoot(project, character, lib))) return false
+    await storage.saveCharacter(project, character, lib, { location, character })
+    return true
+  } catch {
+    // Best-effort, like every other repair in this sweep: a character whose
+    // files are locked keeps the old root and is picked up by the next run
+    // (the trigger stays true until the definition is actually rewritten).
+    return false
+  }
+}
+
+/**
  * The one-time move of app-internal files out of the character folder into its
  * `.dcsmeta/characters/<folder>` home. Shared by every generation AND by
  * Refresh assets' skip path — a character with nothing stale would otherwise
@@ -1024,6 +1063,11 @@ export interface RefreshSummary {
     /** Stored avatars xBRZ-upscaled to 768² (were smaller — from before the
      *  upscale-on-write feature). Independent of the three regen axes above. */
     avatars: number
+    /** Characters whose already-exported files were carried to the current
+     *  export ROOT (the v0.69 move — see `relocateExportRoot`). Reported because
+     *  it MOVES the user's gigabytes: silent is the wrong volume for that, and
+     *  a run that says nothing about it reads as a run that did nothing. */
+    exports: number
   }
   results: Array<RefreshResult>
   /** Definitions saved by a NEWER build, which this build can't read. On a normal
@@ -1250,7 +1294,7 @@ async function refreshAllAssetsInner(refreshOpts: {
   // Pass 2 — regenerate per character. A schema change regenerates both artifacts
   // (the migration can alter generated output); runtime → Daz scripts; csv → CSV.
   let skipped = 0
-  const counts = { migrated: 0, reset: resetCount, scripts: 0, csv: 0, avatars: 0 }
+  const counts = { migrated: 0, reset: resetCount, scripts: 0, csv: 0, avatars: 0, exports: 0 }
   for (const item of items) {
     const { project, lib, character, targets } = item
     const regenSchema = force || targets.schema
@@ -1262,6 +1306,9 @@ async function refreshAllAssetsInner(refreshOpts: {
       // read stale) until some other cause regenerated it. The relocation is
       // idempotent and cheap — one readDir when there is nothing to move.
       await relocateCharacterInternals(project.path, item.location, character)
+      // Same argument for the EXPORT root: its trigger is a stored path that
+      // differs from the derived one, which no staleness flag describes.
+      if (await relocateExportRoot(project, lib, character, item.location)) counts.exports += 1
       skipped += 1
       continue
     }
@@ -1297,6 +1344,19 @@ async function refreshAllAssetsInner(refreshOpts: {
         await carryStoredProductsToMeta(project, location.relFolder, character.id, location.definitionAbs)
         await storage.saveCharacter(project, fresh, lib, { location, character: fresh })
         counts.migrated += 1
+      }
+      // The EXPORT-ROOT relocation, BEFORE the generation below — which reads
+      // the STORED `exportPath` and would otherwise re-emit the old folder into
+      // every regenerated script, then stamp the new runtime version on top and
+      // leave the character reading as up to date.
+      //
+      // Unconditional, like the internals relocation: it is triggered by a
+      // stored path differing from the derived one, and NO staleness flag
+      // describes that. In particular a `RUNTIME_VERSION` bump does not — the
+      // refresh clears a stale runtime whether or not anything moved.
+      if (await relocateExportRoot(project, lib, fresh, location)) {
+        counts.exports += 1
+        fresh = (await storage.readCharacterAt(location.definitionAbs)) ?? fresh
       }
       // Take in anything the Daz product scan left for this character. Refresh is
       // the "bring everything in line" button, and a batch that scanned ten
