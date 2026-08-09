@@ -34,7 +34,7 @@ export interface DcspManifest {
   /** Default subfolder a copied Daz scene lands in, under the character folder. */
   dazSubdir: string
   /** The character's Houdini folder — its `.hiplc` projects AND the fixed
-   *  `daz-export` root the studio writes into (v0.69). `createHoudiniSubdir`
+   *  `daz-export` root the studio writes into. `createHoudiniSubdir`
    *  only governs seeding it EMPTY into a new character; the export root brings
    *  it into being either way. */
   houdiniSubdir: string

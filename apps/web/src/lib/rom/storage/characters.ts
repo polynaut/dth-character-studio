@@ -40,7 +40,7 @@ import type { Project } from './projects'
 // The character library: scanning a project's folder for definitions and the
 // CRUD around them (save/create/move/delete + the paths Generate writes into).
 
-// `scenesRootRelOf` lived here until v0.69: the character's own scenes root,
+// `scenesRootRelOf` lived here until the export-root move: the character's own scenes root,
 // which was what the derived export root anchored on while it sat inside the Daz
 // folder. The export root moved to `<houdiniSubdir>/daz-export`, which no
 // per-character rename can move, so the rule had no consumers left. What the
@@ -545,8 +545,8 @@ export async function saveCharacter(
         .then((m) => m.houdiniSubdir)
         .catch(() => undefined)
     : undefined
-  // Anchored on the project's HOUDINI subfolder (v0.69, when the export root
-  // moved there and became `daz-export`). Plain, not per-character: the Daz side
+  // Anchored on the project's HOUDINI subfolder — where the export root moved
+  // to, as `daz-export`. Plain, not per-character: the Daz side
   // needed `scenesRootRelOf` because a character can RENAME its own scenes
   // folder and the export root travelled inside it — a rename that then
   // half-undid itself, this save pointing `exportPath` back at the vanished

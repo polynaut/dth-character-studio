@@ -123,7 +123,7 @@ describe('the scan store', () => {
   })
 
   it('a MOVED export root invalidates the entry, though the .hip never changed', () => {
-    // The v0.69 move relocated every file the import paths name and touched no
+    // The export-root move relocated every file the import paths name, and no
     // `.hip` at all. On path+mtime alone the store answered "all resolve" for
     // exactly the projects it had just broken — a scan's verdict is about the
     // file AND its surroundings, so the surroundings are in the key.

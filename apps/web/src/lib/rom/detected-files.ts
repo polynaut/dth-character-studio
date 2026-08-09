@@ -36,7 +36,7 @@ export function detectSkipDir(name: string): boolean {
  *  before descending — reading a character's whole export tree only to discard
  *  it is the expensive half of a sweep, and the sweep runs on every focus.
  *
- *  `dth-exports` is the pre-v0.69 name of the export root and stays on the list:
+ *  `dth-exports` is the pre-move name of the export root and stays on the list:
  *  a character is only migrated off it by its next SAVE, and until then that
  *  tree is exactly as full of generated `.duf`s as the new one. */
 export const DETECT_SKIP_DIRS = [

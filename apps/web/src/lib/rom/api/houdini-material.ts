@@ -753,7 +753,7 @@ const repathInput = z.object({
  * that still resolves, or failing that from the character's export root (only
  * ever when the derived file actually exists).
  *
- * That second donor is what carries a project across the v0.69 export-root move:
+ * That second donor is what carries a project across the export-root move:
  * when the whole folder relocates, the import paths break TOGETHER, so no
  * sibling survives to point at the new location — and the character's own export
  * root is the one thing that still knows where the files went.

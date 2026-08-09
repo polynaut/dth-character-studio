@@ -166,8 +166,8 @@ export const P = {
    *  beside the shared `houdini-project` folder. */
   houdiniDir: 'D:/DTH Projects/Demo/Kira/houdini',
   /** The demo character's export directory: FIXED at `<char>/<houdini>/daz-export`
-   *  since schema v29, moved into the Houdini folder in v0.69 — derived, never
-   *  picked (the panel is read-only). */
+   *  since schema v29, and moved into the Houdini folder by the export-root move
+   *  — derived, never picked (the panel is read-only). */
   exportDir: 'D:/DTH Projects/Demo/Kira/houdini/daz-export',
 }
 

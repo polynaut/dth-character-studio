@@ -18,7 +18,7 @@ export const PRIMARY_SCENE_SUBFOLDER = 'primary'
  * (schema v29) — `Character.exportPath` is derived from this rather than stored
  * (resolved in `parseCharacter`).
  *
- * It sat under the DAZ subfolder as `dth-exports` between v0.62 and v0.69, on
+ * It sat under the DAZ subfolder as `dth-exports` from v0.62 until this move, on
  * the reasoning that the DTH Exporter's output is Daz-side output. It reads the
  * other way round in practice: nothing in Daz ever opens these files again — the
  * `.dth`/`.fbx`/`.abc` exist solely to be imported by Houdini, one hop from the
@@ -35,11 +35,12 @@ export const EXPORTS_FOLDER = 'daz-export'
 
 /**
  * The name the export root carried while it lived under the Daz subfolder
- * (v0.62–v0.69), and — earlier still — the name of the RETIRED junctions the
- * studio planted in Houdini folders (see `sweepExportJunctions`).
+ * (from v0.62 until the root moved), and — earlier still — the name of the
+ * RETIRED junctions the studio planted in Houdini folders (see
+ * `sweepExportJunctions`).
  *
  * The sweep must keep hunting THIS name rather than {@link EXPORTS_FOLDER}:
- * after the v0.69 move the live export root sits in exactly the folder the
+ * now that the live export root sits in exactly the folder the
  * sweep looks in, so pointing it at the current name would aim a delete at the
  * real thing. (The Rust side refuses anything that isn't a reparse point, so it
  * could not actually have deleted it — but a sweep whose only defence is the

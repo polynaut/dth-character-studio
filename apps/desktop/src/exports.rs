@@ -6,7 +6,7 @@ use crate::fsutil::move_tree;
 // Moving a character's already-exported files into the fixed export root.
 // Written for schema v29 (before it, the export directory was user-chosen, so an
 // existing character's .abc/.dth/.csv sat wherever it pointed) and used again
-// for the v0.69 move of the root itself. The studio re-derives the path on the
+// for the later move of the root itself. The studio re-derives the path on the
 // character's next save; this command carries the FILES across so a relocation
 // doesn't strand gigabytes at the old location.
 //

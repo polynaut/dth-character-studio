@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test'
 import { P, buildSeed } from './fixtures.ts'
 import { installTauriMock } from './tauri-mock.ts'
 
-// The v0.69 export-root move, from the only angle that matters to somebody who
+// The export-root move, from the only angle that matters to somebody who
 // already has a library: does **Tools → Refresh assets** carry it across?
 //
 // The migration itself lives on the character SAVE, which is fine for a
@@ -15,7 +15,7 @@ import { installTauriMock } from './tauri-mock.ts'
 // stored `exportPath`, so without the relocation it would re-emit the old folder
 // and stamp the new version over the very staleness that brought the user here.
 
-/** Where this character's exports sat before v0.69. */
+/** Where this character's exports sat before the export-root move. */
 const OLD_ROOT = `${P.charFolder}/daz3d/dth-exports`
 /** One already-exported scene folder under it, with a real payload. */
 const OLD_DTH = `${OLD_ROOT}/primary/Kira.dth`

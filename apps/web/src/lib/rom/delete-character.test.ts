@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 // the delete that reaches back INTO a folder the user asked to keep.
 //
 // "Keep the Daz files" / "Keep the Houdini files" spare a whole subfolder, and
-// since v0.69 the Houdini one contains the fixed `daz-export` root (before it,
+// the Houdini one now contains the fixed `daz-export` root (before the move,
 // the Daz one contained `dth-exports`). Those are derived artifacts — gigabytes
 // of regenerable `.abc`/`.dth` — so keeping the user's scenes or `.hip` files
 // must not silently keep every export with them.

@@ -382,8 +382,8 @@ already written.
   Two cases, one pass. Projects made before v0.63 address their `.dth` through
   the retired `dth-exports` junction, so it dangles while the `.fbx` and `.abc`
   beside it are fine — the replacement is derived from that same node's other
-  export files, which sit together under the same name. Projects made before
-  v0.69 point at the old export folder, and there **every** import broke at
+  export files, which sit together under the same name. Projects made before the
+  export folder moved point at the old one, and there **every** import broke at
   once, so no sibling survives to follow: those are rebuilt from the character's
   current export directory instead. Either way the new path is only written when
   the file it would point at **actually exists**. Nothing is guessed.

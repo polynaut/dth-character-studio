@@ -165,7 +165,7 @@ describe('sceneSubfolderConflict — names the studio already owns', () => {
     expect(sceneSubfolderConflict('Daz-Export')).toContain('exports')
   })
 
-  it('refuses the PRE-v0.69 name too, while un-migrated characters can still have one', () => {
+  it('refuses the PRE-MOVE name too, while un-migrated characters can still have one', () => {
     // A character only moves off `<daz>/dth-exports` on its next save; until
     // then that folder is real and sits exactly where scene subfolders do.
     expect(sceneSubfolderConflict('dth-exports')).toContain('exports')

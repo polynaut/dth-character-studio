@@ -83,7 +83,7 @@ export function scanStoreKey(hipPath: string): string {
  *
  * **The export root is part of the key because part of the ANSWER is about files
  * that are not the `.hip`.** `refs.broken` says whether the files an import path
- * names exist, and the v0.69 export-root move relocated every one of them
+ * names exist, and the export-root move relocated every one of them
  * without touching a single `.hip` — so on path+mtime alone the store kept
  * serving "everything resolves" for exactly the projects that move broke, until
  * the user happened to re-save one in Houdini. Anything else a verdict depends

@@ -191,7 +191,7 @@ describe('moveCharacterScenesFolder', () => {
   })
 
   it('the EXPORT root does NOT follow the renamed scenes folder — it lives elsewhere now', async () => {
-    // The export root sat inside the Daz folder until v0.69, which made this
+    // The export root sat inside the Daz folder until it moved, which made this
     // rename a two-sided problem: the folder move carried `dth-exports` along,
     // and the save had to re-derive the path to match or the rename undid half
     // of itself. Moving the root to `<houdiniSubdir>/daz-export` dissolves the

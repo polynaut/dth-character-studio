@@ -217,6 +217,11 @@ GH_REPO=polynaut/dth-character-studio \
   across `.ai/` docs and code comments. If a version stamp is worth writing,
   write the CURRENT unreleased target (the version PR's number) — or describe
   the change by feature ("since the meta-folder move"), which can't go stale.
+  **It happened again on the export-root branch (#752): 44 references to "v0.69"
+  written while that was the next number, and v0.69.0 then shipped without the
+  feature** — a train the branch wasn't on. Prefer the FEATURE description; the
+  "current unreleased target" half of this rule is only safe if nothing else
+  merges first, which is not a thing a branch can know.
 - Never tag or publish by hand — see `.ai/release.md`.
 
 ## Character-schema change ritual

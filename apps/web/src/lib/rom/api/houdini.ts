@@ -41,8 +41,8 @@ import { charScopeInput, charsRoot, joinPath, locateCharacter, resolveProject } 
 // here; the folder-create + hython run are native (create_houdini_project,
 // houdini.rs).
 //
-// The character's export root sits in the HOUDINI folder as `daz-export`
-// (v0.69), one hop from every `.hip` that reads it, reached by plain relative
+// The character's export root sits in the HOUDINI folder as `daz-export`,
+// one hop from every `.hip` that reads it, reached by plain relative
 // navigation (`$JOB/<houdiniSubdir>/daz-export/…`, runtime v64). Earlier
 // versions planted `dth-exports` JUNCTIONS here and beside every `.hip` to fake
 // exactly that adjacency; the feature was killed (v0.63) — reparse points fought
@@ -91,7 +91,7 @@ export function generatedHoudiniScenePath(houdiniDir: string, sceneName: string)
  * separate migration.
  *
  * It hunts {@link LEGACY_EXPORTS_FOLDER} — the name the junctions carried —
- * NOT the current {@link EXPORTS_FOLDER}. Since v0.69 the live export root sits
+ * NOT the current {@link EXPORTS_FOLDER}. The live export root now sits
  * inside the houdini folder, which is one of the folders swept here, so aiming
  * this at the current name would point a delete straight at the real thing.
  *
@@ -303,14 +303,14 @@ export async function generateHoudiniProject({
   // (render/, geo/, backup/) collects in that single folder for free:
   //   <character>/                      ← $JOB (v0.64)
   //   houdini/<name>.hiplc              ← the scenes (one per generate)
-  //   houdini/daz-export/<scene>/       ← what the imports READ (v0.69)
+  //   houdini/daz-export/<scene>/       ← what the imports READ
   //   houdini/render|geo|backup/        ← Houdini's own output, shared
   // A dedicated `houdini-project/` subfolder was created here until v0.68 and
   // could never attract any of that: `$HIP` is DERIVED from where the `.hip`
   // sits and cannot be pointed elsewhere (Set Project sets `$JOB`, not `$HIP`),
   // so the folder stayed empty while the output landed beside the scenes.
   // {@link sweepHoudiniProjectDirs} removes the empty leftovers.
-  // The export root is a plain SIBLING of the scenes since v0.69
+  // The export root is a plain SIBLING of the scenes since the export-root move
   // (`$JOB/<houdiniSubdir>/daz-export/…` — the emitted swap is buildExportBlock
   // in @dth/rom dsa.ts, the prefix rule is `hipRefPrefixFor`). No junctions
   // anywhere since v0.63.

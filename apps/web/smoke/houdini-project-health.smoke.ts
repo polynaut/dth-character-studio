@@ -21,7 +21,7 @@ const STORE = `${P.project}/.dcsmeta/characters/Kira/houdini-scan.json`
  * inside the page, because the fake stamps its world when it is installed.
  *
  * The EXPORT ROOT is in the key because part of a scan's verdict is about files
- * that are NOT the `.hip` (`refs.broken`), and the v0.69 root move relocated
+ * that are NOT the `.hip` (`refs.broken`), and the export-root move relocated
  * every one of them without touching a single scene file. A seeded entry naming
  * a different root reads as stale here — which is exactly what should happen to
  * a real pre-move entry.

@@ -1166,7 +1166,7 @@ def _relocated_donor(broken, export_dir):
 
     The sibling rule below cannot help when the export folder itself moved: every
     import path breaks in the same instant, so there is no survivor to read the
-    new location off. That is exactly what the v0.69 root move did
+    new location off. That is exactly what the export-root move did
     (`<char>/<daz>/dth-exports` → `<char>/<houdini>/daz-export`), and the
     character's current export root — passed in by the studio, which derives it —
     is the one thing that still knows where the files went.

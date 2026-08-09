@@ -472,9 +472,9 @@ describe('createCharacterAt seeds the export root + the Houdini folder', () => {
 
     expect(location.folderAbs).toBe('/games/Nova/Kira')
     expect(dirs.has('/games/Nova/Kira/houdini')).toBe(true)
-    // Fixed at <char>/<houdiniSubdir>/daz-export — derived, never picked (v29,
-    // moved there in v0.69: nothing in Daz reopens these files, they exist to be
-    // imported by the .hip sitting one folder up).
+    // Fixed at <char>/<houdiniSubdir>/daz-export — derived, never picked (v29;
+    // the export-root move put it here, because nothing in Daz reopens these
+    // files — they exist to be imported by the .hip sitting one folder up).
     expect(dirs.has('/games/Nova/Kira/houdini/daz-export')).toBe(true)
     expect(character.exportPath).toBe('/games/Nova/Kira/houdini/daz-export')
     // …and it's in the definition on disk, not just the returned record.

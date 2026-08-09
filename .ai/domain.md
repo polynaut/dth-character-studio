@@ -236,7 +236,7 @@ older runtimes as stale.
 - **THREE folders are seeded into every new character** (`seedCharacterFolders`),
   each named by a per-project manifest field: `dazSubdir` (`daz3d` — the Daz
   scenes, and nothing generated), `houdiniSubdir` (`houdini` — the `.hiplc`
-  files AND the `daz-export` root inside it since v0.69; `createHoudiniSubdir`
+  files AND the `daz-export` root inside it since the export-root move; `createHoudiniSubdir`
   only gates seeding it EMPTY, the export root brings the folder into being
   either way, which is why the Settings field is no longer disabled with that
   toggle. A `houdini-project` subfolder appeared inside it until v0.68, retired
@@ -251,7 +251,7 @@ older runtimes as stale.
 - The **export directory is DERIVED** (schema v29) — not user data, no picker:
   `<character folder>/<houdiniSubdir>/daz-export` (`characterExportRoot`,
   `lib/scene-subfolder.ts`), the manifest value taken straight. **It moved there
-  in v0.69** (runtime v64), from `<dazSubdir>/dth-exports`: nothing in Daz ever
+  from `<dazSubdir>/dth-exports`** (runtime v64): nothing in Daz ever
   reopens these files — the `.dth`/`.fbx`/`.abc` exist to be imported by
   Houdini — so they belong one hop from the `.hip` that reads them, and the name
   says whose output it is rather than which tool wrote it.
@@ -283,7 +283,7 @@ older runtimes as stale.
   same check.
 - **A relocation MOVES the already-exported files** (`migrateExportRoot`,
   api/characters.ts → Rust `move_exports`, exports.rs). Written for v29, reused
-  UNCHANGED for the v0.69 root move — which is the payoff of deriving the trigger
+  UNCHANGED for the export-root move — which is the payoff of deriving the trigger
   from the paths rather than from a version flag: it fires while the stored path
   still differs from the derived one, which the save then fixes. Idempotent by
   construction. "Derived" MUST be the literally same `characterExportRoot(...)`
@@ -299,7 +299,7 @@ older runtimes as stale.
   `fsutil::move_tree` (shared with dedup's quarantine) does the work — rename
   fast-path, cross-volume copy-then-delete, link-safe, and it never deletes a
   source without a complete copy in hand. The emptied OLD root then goes via
-  `remove_dir_if_empty` (v0.69) — only ever when empty, so a folder still holding
+  `remove_dir_if_empty` — only ever when empty, so a folder still holding
   a failed move or the user's own files stays exactly where it is.
 - **A relocation reaches a LIBRARY through Tools → Refresh assets, not through
   the version bump.** `migrateExportRoot` hangs off the character SAVE, which
@@ -319,7 +319,7 @@ older runtimes as stale.
   (`deleteCharacter`, api/characters.ts). "Keep the Daz files" / "Keep the
   Houdini files" spare a whole subfolder, and one of them contains the export
   root — derived, regenerable, and gigabytes. It hung off `keepDaz` while the
-  root lived in the Daz folder; since v0.69 EITHER flag arms it, because a
+  root lived in the Daz folder; since the export-root move EITHER flag arms it, because a
   character never saved since the move still has its exports at the old location.
   Two candidate roots therefore: the DERIVED one, and the character's STORED
   `exportPath`. The stored one is user data for anything not saved since v29
@@ -358,7 +358,7 @@ older runtimes as stale.
   no committed test — the repo has no Python harness, `material_utils` runs only
   inside hython. `_relocated_donor` itself touches nothing but `os.path`, so it
   WAS verified ad-hoc (2026-08-09) by stubbing `hou`, importing the module and
-  running it against a real temp tree: the v0.69 layout, a second scene keeping
+  running it against a real temp tree: the post-move layout, a second scene keeping
   its own subfolder, a set whose `.dth` was never exported, an unrelated dangling
   path (correctly refused), a missing/absent root, backslash input, and a flat
   layout. What that does NOT cover is everything around it — `parm.eval()`,
@@ -493,7 +493,7 @@ older runtimes as stale.
   (junction.rs) is strictly reparse-point-safe: it verifies via
   `symlink_metadata` that the path IS a junction before `remove_dir`, refuses
   a real folder (`"not-a-junction"` — the actual export root is itself named
-  `dth-exports`, which was the export ROOT's own name until v0.69 — and the
+  `dth-exports`, which was the export ROOT's own name until the export-root move — and the
   sweep deliberately keeps hunting the LEGACY name, `LEGACY_EXPORTS_FOLDER`,
   never `EXPORTS_FOLDER`, because the live root now sits in a folder the sweep
   looks in), and reports `"absent"` for nothing-there. Best-effort — a

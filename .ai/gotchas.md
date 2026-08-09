@@ -332,7 +332,7 @@ current code before relying on details, but assume the *lesson* still holds.
   that happened to use absolute refs); state the reason this way, or the next
   reader concludes movable Houdini projects can't exist.
 - **A version bump makes a refresh RUN; it does not make a migration HAPPEN.**
-  The v0.69 export-root move bumped `RUNTIME_VERSION`, which is necessary — no
+  The export-root move bumped `RUNTIME_VERSION`, which is necessary — no
   bump, no refresh, nothing regenerates. It is not sufficient, and the failure is
   silent in the worst way: the refresh regenerates from the STORED path, so it
   re-emitted the old folder, stamped the new version, and cleared the staleness
@@ -346,7 +346,7 @@ current code before relying on details, but assume the *lesson* still holds.
 - **A cache key must cover everything the cached ANSWER depends on, not just the
   file it was read from.** The Houdini scan store is keyed on `<hip>|<mtime>`,
   and one third of its answer (`refs.broken` — do the files the import paths name
-  exist?) is about files that are not the `.hip`. The v0.69 export-root move
+  exist?) is about files that are not the `.hip`. The export-root move
   relocated every one of them without touching a single `.hip`, so the store
   would have kept serving "all resolve" for exactly the projects the move broke,
   until the user happened to re-save one in Houdini. The export root is in

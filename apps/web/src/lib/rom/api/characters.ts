@@ -409,7 +409,7 @@ export async function saveCharacter({ data }: { data: unknown }): Promise<Charac
  * strand them (often gigabytes) at the old location.
  *
  * Written for schema v29 (when the export directory stopped being user-chosen)
- * and reused unchanged for the v0.69 move of the root itself, from
+ * and reused unchanged for the later move of the root itself, from
  * `<dazSubdir>/dth-exports` to `<houdiniSubdir>/daz-export` — which is the point
  * of deriving the trigger from the paths rather than from a version flag.
  *
@@ -554,7 +554,7 @@ export async function deleteCharacter({ data }: { data: unknown }): Promise<void
   if (keepDaz && project.dazSubdir) keepFolders.push(project.dazSubdir)
   if (keepHoudini && project.houdiniSubdir) keepFolders.push(project.houdiniSubdir)
   await storage.deleteCharacter(lib, id, { keepFolders, location: location ?? undefined })
-  // "Keep Houdini files" spares the whole Houdini subfolder — which since v0.69
+  // "Keep Houdini files" spares the whole Houdini subfolder — which since the export-root move
   // also contains the EXPORT root. Those are derived artifacts (regenerable from
   // the scenes, and gigabytes of them), so keeping the user's `.hip` files must
   // not silently keep every .abc/.dth too: drop the export root explicitly.
@@ -583,7 +583,7 @@ export async function deleteCharacter({ data }: { data: unknown }): Promise<void
     // Houdini folder — including, plausibly, that folder itself. `<char>/houdini`
     // passes the containment test, so a `keepHoudini` delete would have
     // recursively removed the very folder the flag exists to spare. The recorded
-    // export root is only ever `daz-export` (or the pre-v0.69 `dth-exports`), so
+    // export root is only ever `daz-export` (or the pre-move `dth-exports`), so
     // requiring the last segment to say so costs nothing real and turns an
     // arbitrary stored string back into a bounded one.
     const looksLikeExportRoot = (p: string) => {

@@ -1624,9 +1624,9 @@ function SettingsPage() {
                   onChange={(e) => patchProject({ dazSubdir: e.target.value })}
                 />
               </Field>
-              {/* Deliberately NOT disabled by `createHoudiniSubdir` any more: since
-                  v0.69 the fixed `daz-export` root lives in this folder, so the name
-                  is load-bearing even for a project that seeds no empty one. */}
+              {/* Deliberately NOT disabled by `createHoudiniSubdir` any more: the
+                  fixed `daz-export` root lives in this folder now, so the name is
+                  load-bearing even for a project that seeds no empty one. */}
               <Field label="Houdini projects subfolder">
                 <Input
                   value={projectSettings.houdiniSubdir}

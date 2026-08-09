@@ -667,7 +667,7 @@ function legacyPoseName(character: Character): string {
  *
  * Returns whether anything was relocated, for the report.
  *
- * Deliberately NOT driven by a version flag. The v0.69 root move bumped
+ * Deliberately NOT driven by a version flag. The export-root move bumped
  * `RUNTIME_VERSION`, which does make Refresh visit every character — but the
  * regeneration it triggers reads the STORED `exportPath`, so on its own the bump
  * would have re-emitted the OLD folder and then stamped the new version over the
@@ -1064,7 +1064,7 @@ export interface RefreshSummary {
      *  upscale-on-write feature). Independent of the three regen axes above. */
     avatars: number
     /** Characters whose already-exported files were carried to the current
-     *  export ROOT (the v0.69 move — see `relocateExportRoot`). Reported because
+     *  export ROOT (the export-root move — see `relocateExportRoot`). Reported because
      *  it MOVES the user's gigabytes: silent is the wrong volume for that, and
      *  a run that says nothing about it reads as a run that did nothing. */
     exports: number

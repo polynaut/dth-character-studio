@@ -8,7 +8,7 @@ use std::path::Path;
 // which needs no reparse points and upsets no Perforce/backup tooling. What
 // remains here is the SWEEP: `remove_junction` deletes the leftovers the old
 // versions created — strictly reparse-point-verified, so a real folder (the
-// export root, which sat under this very name until v0.69) can never be touched.
+// export root, which sat under this very name until the export-root move) can never be touched.
 // The creation code survives only as a test helper: the sweep's test has to
 // build a junction to prove removing one never eats its target.
 

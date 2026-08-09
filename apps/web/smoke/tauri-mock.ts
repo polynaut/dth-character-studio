@@ -399,7 +399,7 @@ export function installTauriMock(seed: TauriMockSeed): void {
         // recorded (see `calls`) so a spec can assert the sweep ran.
         return 'absent'
       case 'move_exports': {
-        // The export-root relocation (schema v29, and the v0.69 move of the root
+        // The export-root relocation (schema v29, and the export-root move of the root
         // itself). The real command moves whole folder TREES and reports the
         // ones it could not; this world has no locking, so every move succeeds
         // and the failure list comes back empty. Modelled as a prefix rename
