@@ -85,7 +85,7 @@ test('never offers the generated trees it is supposed to prune', async ({ page }
   await openProject(page)
   // The Daz export tree and the studio's own ROM animations are `.duf`s living
   // in exactly the folders the sweep walks.
-  await saveAndReturn(page, `${P.charFolder}/daz3d/dth-exports/primary/Kira.duf`)
+  await saveAndReturn(page, `${P.charFolder}/houdini/daz-export/primary/Kira.duf`)
   await saveAndReturn(page, `${P.charFolder}/daz3d/rom-animations/Kira_ROM.duf`)
   await expect(page.getByText(BANNER)).toHaveCount(0)
 })

@@ -461,7 +461,7 @@ describe('createCharacterAt seeds the export root + the Houdini folder', () => {
     })
   }
 
-  it('creates the fixed export root beside the Daz scenes and points at it', async () => {
+  it('creates the fixed export root inside the Houdini folder and points at it', async () => {
     const project = seedProject({ houdiniSubdir: 'houdini', createHoudiniSubdir: true })
 
     const { character, location } = await storage.createCharacterAt(
@@ -472,17 +472,19 @@ describe('createCharacterAt seeds the export root + the Houdini folder', () => {
 
     expect(location.folderAbs).toBe('/games/Nova/Kira')
     expect(dirs.has('/games/Nova/Kira/houdini')).toBe(true)
-    // Fixed at <char>/<dazSubdir>/dth-exports — derived, never picked (v29).
-    expect(dirs.has('/games/Nova/Kira/daz3d/dth-exports')).toBe(true)
-    expect(character.exportPath).toBe('/games/Nova/Kira/daz3d/dth-exports')
+    // Fixed at <char>/<houdiniSubdir>/daz-export — derived, never picked (v29;
+    // the export-root move put it here, because nothing in Daz reopens these
+    // files — they exist to be imported by the .hip sitting one folder up).
+    expect(dirs.has('/games/Nova/Kira/houdini/daz-export')).toBe(true)
+    expect(character.exportPath).toBe('/games/Nova/Kira/houdini/daz-export')
     // …and it's in the definition on disk, not just the returned record.
     expect(JSON.parse(files.get('/games/Nova/Kira/Kira.json') as string)).toMatchObject({
-      exportPath: '/games/Nova/Kira/daz3d/dth-exports',
+      exportPath: '/games/Nova/Kira/houdini/daz-export',
     })
   })
 
-  it('follows a renamed Daz subfolder, and the folder auto-suffix', async () => {
-    const project = seedProject({ dazSubdir: 'scenes/daz', createHoudiniSubdir: false })
+  it('follows a renamed Houdini subfolder, and the folder auto-suffix', async () => {
+    const project = seedProject({ houdiniSubdir: 'hou/projects', createHoudiniSubdir: false })
     addDir('/games/Nova/Kira') // taken → the create auto-suffixes
 
     const { character, location } = await storage.createCharacterAt(
@@ -494,8 +496,8 @@ describe('createCharacterAt seeds the export root + the Houdini folder', () => {
     expect(location.folderAbs).toBe('/games/Nova/Kira (2)')
     // The path follows the folder the create actually landed in — which the
     // caller could not have predicted.
-    expect(character.exportPath).toBe('/games/Nova/Kira (2)/scenes/daz/dth-exports')
-    expect(dirs.has('/games/Nova/Kira (2)/scenes/daz/dth-exports')).toBe(true)
+    expect(character.exportPath).toBe('/games/Nova/Kira (2)/hou/projects/daz-export')
+    expect(dirs.has('/games/Nova/Kira (2)/hou/projects/daz-export')).toBe(true)
   })
 
   it('creates the FINAL export folder beside the Daz and Houdini ones', async () => {
@@ -503,9 +505,10 @@ describe('createCharacterAt seeds the export root + the Houdini folder', () => {
 
     await storage.createCharacterAt(project, fresh('Kira'), 'Kira')
 
-    // Three peers in the character folder: Daz scenes, the Houdini project,
-    // and where Houdini's Unreal-bound output lands.
-    expect(dirs.has('/games/Nova/Kira/daz3d/dth-exports')).toBe(true)
+    // The two ends of the pipeline are peers in the character folder, and must
+    // never be confused: `houdini/daz-export` is what Houdini READS, `export/`
+    // is what it WRITES for Unreal.
+    expect(dirs.has('/games/Nova/Kira/houdini/daz-export')).toBe(true)
     expect(dirs.has('/games/Nova/Kira/houdini')).toBe(true)
     expect(dirs.has('/games/Nova/Kira/export')).toBe(true)
   })
@@ -524,9 +527,11 @@ describe('createCharacterAt seeds the export root + the Houdini folder', () => {
 
     const { character } = await storage.createCharacterAt(project, fresh('Kira'), 'Kira')
 
-    // The export root is Daz-side and independent of the Houdini settings.
-    expect(dirs.has('/games/Nova/Kira/houdini')).toBe(false)
-    expect(character.exportPath).toBe('/games/Nova/Kira/daz3d/dth-exports')
+    // `createHoudiniSubdir` governs seeding an EMPTY folder, nothing more — the
+    // export root has contents by definition, so it is created either way and
+    // brings the folder with it.
+    expect(character.exportPath).toBe('/games/Nova/Kira/houdini/daz-export')
+    expect(dirs.has('/games/Nova/Kira/houdini/daz-export')).toBe(true)
   })
 
   it('never seeds (or points at) anything for a definition dropped in the project root', async () => {
@@ -551,7 +556,7 @@ describe('createCharacterAt seeds the export root + the Houdini folder', () => {
 
     // A prefilled/imported path is no longer honoured: the export root is a
     // fixed derivation, so an imported definition adopts its new home's.
-    expect(character.exportPath).toBe('/games/Nova/Kira/daz3d/dth-exports')
+    expect(character.exportPath).toBe('/games/Nova/Kira/houdini/daz-export')
     expect(dirs.has('/games/Nova/Kira/houdini')).toBe(true)
   })
 })
@@ -667,12 +672,12 @@ describe('repointCharacterPaths', () => {
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
       scenePath: '/games/Nova/kira/daz3d/primary/kira.duf',
-      exportPath: '/games/Nova/kira/daz3d/dth-exports',
+      exportPath: '/games/Nova/kira/houdini/daz-export',
     })
 
     const moved = storage.repointCharacterPaths(c, '/games/Nova/kira', '/games/Alt/chars/Kira')
 
-    expect(moved.exportPath).toBe('/games/Alt/chars/Kira/daz3d/dth-exports')
+    expect(moved.exportPath).toBe('/games/Alt/chars/Kira/houdini/daz-export')
     // A pre-v29 hand-picked root OUTSIDE the folder is not the folder's to move.
     const foreign = storage.repointCharacterPaths(
       { ...c, exportPath: 'X:/renders/kira' },
@@ -680,29 +685,6 @@ describe('repointCharacterPaths', () => {
       '/games/Alt/chars/Kira',
     )
     expect(foreign.exportPath).toBe('X:/renders/kira')
-  })
-})
-
-describe('scenesRootRelOf — THE derived-export-root rule', () => {
-  it('reads the root from the primary scene, project dazSubdir only as fallback', () => {
-    // A RENAMED scenes folder: the primary sits under `scenes/`, so the export
-    // root derives there. Every consumer of the derived root (saveCharacter,
-    // migrateExportRoot's trigger, the delete flow's keep-Daz purge) shares
-    // this rule — one left on the plain dazSubdir spelling re-derives the old
-    // `daz3d/dth-exports` and, for the migration trigger, MOVES exports into a
-    // resurrected daz3d tree on every save.
-    expect(
-      storage.scenesRootRelOf('/games/Nova/Kira/scenes/primary/Kira.duf', '/games/Nova/Kira', 'daz3d'),
-    ).toBe('scenes')
-    // The default layout derives the default.
-    expect(
-      storage.scenesRootRelOf('/games/Nova/Kira/daz3d/primary/Kira.duf', '/games/Nova/Kira', 'daz3d'),
-    ).toBe('daz3d')
-    // Fallbacks: no primary, one linked outside the folder, or a legacy
-    // primary directly in the folder root.
-    expect(storage.scenesRootRelOf('', '/games/Nova/Kira', 'daz3d')).toBe('daz3d')
-    expect(storage.scenesRootRelOf('X:/elsewhere/Kira.duf', '/games/Nova/Kira', 'daz3d')).toBe('daz3d')
-    expect(storage.scenesRootRelOf('/games/Nova/Kira/Kira.duf', '/games/Nova/Kira', 'daz3d')).toBe('daz3d')
   })
 })
 

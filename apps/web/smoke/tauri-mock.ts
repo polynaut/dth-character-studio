@@ -398,6 +398,24 @@ export function installTauriMock(seed: TauriMockSeed): void {
         // junction — 'absent' is the truthful answer; the call itself is
         // recorded (see `calls`) so a spec can assert the sweep ran.
         return 'absent'
+      case 'move_exports': {
+        // The export-root relocation (schema v29, and the export-root move of the root
+        // itself). The real command moves whole folder TREES and reports the
+        // ones it could not; this world has no locking, so every move succeeds
+        // and the failure list comes back empty. Modelled as a prefix rename
+        // over the flat file map, which is what a tree move is here.
+        const moves = (args.request.moves ?? []) as Array<{ from: string; to: string }>
+        for (const move of moves) {
+          const from = norm(move.from)
+          const to = norm(move.to)
+          for (const key of [...files.keys()]) {
+            if (key !== from && !key.startsWith(`${from}/`)) continue
+            files.set(to + key.slice(from.length), files.get(key)!)
+            files.delete(key)
+          }
+        }
+        return []
+      }
       case 'remove_dir_if_empty':
         // The retired `houdini-project` folder (v0.68), swept by the same
         // generation funnel as the junctions above — so the mock has to know

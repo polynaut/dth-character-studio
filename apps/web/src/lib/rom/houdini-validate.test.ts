@@ -122,6 +122,23 @@ describe('the scan store', () => {
     expect(freshScan(store, HIP, scanCacheKey(HIP, 2000))).toBeNull()
   })
 
+  it('a MOVED export root invalidates the entry, though the .hip never changed', () => {
+    // The export-root move relocated every file the import paths name, and no
+    // `.hip` at all. On path+mtime alone the store answered "all resolve" for
+    // exactly the projects it had just broken — a scan's verdict is about the
+    // file AND its surroundings, so the surroundings are in the key.
+    const oldRoot = `${CHAR}/daz3d/dth-exports`
+    const key = scanCacheKey(HIP, 1000, oldRoot)
+    const store = withScanResults(emptyScanStore(), [{ hipPath: HIP, key, project: scanned() }], 'now')
+
+    expect(freshScan(store, HIP, key)).not.toBeNull()
+    expect(freshScan(store, HIP, scanCacheKey(HIP, 1000, `${CHAR}/houdini/daz-export`))).toBeNull()
+    // Normalised like every other path lookup — separators and case.
+    expect(
+      freshScan(store, HIP, scanCacheKey(HIP, 1000, `${CHAR}\\daz3d\\DTH-Exports`)),
+    ).not.toBeNull()
+  })
+
   it('matches a path by separator and case, like every other lookup', () => {
     const key = scanCacheKey(HIP, 1000)
     const store = withScanResults(emptyScanStore(), [{ hipPath: HIP, key, project: scanned() }], 'now')

@@ -20,7 +20,7 @@ the product**.
 | **Group / suffix / method** | Custom poses live in groups; a group has a Houdini suffix scope (`centre`/`left`/`right`), a generation method and a calculate-from source (menu indices in the CSV). |
 | **Art direction** | Named override frames inside the GP/DK preset blocks (e.g. `VaginaOpen` @ GP frame 96) carrying their own morph values (`ART_DIRECTION_CATALOG`). |
 | **JCM morph mods** | Rules riding custom morphs along the shipped joint-corrective bends: per bone/axis, a signed `drives[]` list (angle range → value range; the **sign of the angle extreme picks the bend direction**). Split into runtime `positive[]`/`negative[]` by `jcmMorphModForRuntime` at generation. |
-| **Bone scale** | Per-pose flag (`boneScaleRef`) marking a morph that scales bones. Only meaningful in **GEN and FBM** (`REFERENCE_FBX_SECTIONS`) — a reference path on a MIS row breaks the HDA import. The CSV carries `{{DTH_EXPORT_DIR}}/Reference Skeletons/{{DTH_EXPORT_NAME}}_frame_<N>.fbx`; the generated `.dsa` resolves both tokens at CSV-copy time, `{{DTH_EXPORT_DIR}}` via **`dthRefDir`** — the run-time export dir, or (per-project `houdiniPathStyle` on `hip`, the default — the app-global Settings key of the same name is LEGACY pre-v0.61, kept only so old settings.json files still parse, `storage/settings.ts`) **`$JOB/<dazSubdir>/dth-exports/<scene subfolder>`** — a prefix swap on the absolute export ROOT so the resolved scene subfolder rides along. Whether project-relative paths are emitted at all is **HOST-decided** (the pure core just obeys the `hipRefPrefix` argument, `''` = absolute): `generateCharacterFiles` computes it via **`hipRefPrefixFor`** (`lib/scene-subfolder.ts`), which needs at least one linked project, all of them inside the character folder, and the export root inside it too. Anything else — no project yet, a hand-linked `.hip` in the user's own tree (its `$JOB` is whatever the user set), an export root outside the character folder, or style `absolute` — yields `''`. **`$JOB`, not `$HIP` (runtime v63).** `$JOB` IS the character folder: it is scene state saved with the `.hip` (`hou.putenv`, the programmatic Set Project), baked by `create_houdini_project` since v0.64 and repairable from the Utils drawer — an earlier note here calling it "session-global" and its survival "unverified" was wrong, and the whole Defaults/repair feature rests on the opposite. `$HIP` encoded the SCENE'S DEPTH (`$HIP/../…`), so a project one folder deeper broke every path and every project had to sit in one folder for a single prefix to be right; `$JOB` needs neither, and it is what Houdini's own picker writes (measured with `hou.text.collapseCommonVars`). **Verified live 2026-08-08**: a freshly generated project came out with every import, CSV and export path reading `$JOB/…` and resolving in Houdini. What that run did NOT cover, and is still unmeasured: the `hip-relative` badge appearing on a pre-v63 project, and `_rehome_hip_ref` rewriting one. Pre-v63 projects keep the old form: flagged by `validateHoudiniProject`'s `hip-relative` check and rewritten by Utils → Make paths portable (`_rehome_hip_ref`). |
+| **Bone scale** | Per-pose flag (`boneScaleRef`) marking a morph that scales bones. Only meaningful in **GEN and FBM** (`REFERENCE_FBX_SECTIONS`) — a reference path on a MIS row breaks the HDA import. The CSV carries `{{DTH_EXPORT_DIR}}/Reference Skeletons/{{DTH_EXPORT_NAME}}_frame_<N>.fbx`; the generated `.dsa` resolves both tokens at CSV-copy time, `{{DTH_EXPORT_DIR}}` via **`dthRefDir`** — the run-time export dir, or (per-project `houdiniPathStyle` on `hip`, the default — the app-global Settings key of the same name is LEGACY pre-v0.61, kept only so old settings.json files still parse, `storage/settings.ts`) **`$JOB/<houdiniSubdir>/daz-export/<scene subfolder>`** (runtime v64; `<dazSubdir>/dth-exports` before it) — a prefix swap on the absolute export ROOT so the resolved scene subfolder rides along. Whether project-relative paths are emitted at all is **HOST-decided** (the pure core just obeys the `hipRefPrefix` argument, `''` = absolute): `generateCharacterFiles` computes it via **`hipRefPrefixFor`** (`lib/scene-subfolder.ts`), which needs at least one linked project, all of them inside the character folder, and the export root inside it too (no anchor-COUNT gate since v63 — `$JOB` does not encode depth, so projects in different subfolders share one prefix). Anything else — no project yet, a hand-linked `.hip` in the user's own tree (its `$JOB` is whatever the user set), an export root outside the character folder, or style `absolute` — yields `''`. **`$JOB`, not `$HIP` (runtime v63).** `$JOB` IS the character folder: it is scene state saved with the `.hip` (`hou.putenv`, the programmatic Set Project), baked by `create_houdini_project` since v0.64 and repairable from the Utils drawer — an earlier note here calling it "session-global" and its survival "unverified" was wrong, and the whole Defaults/repair feature rests on the opposite. `$HIP` encoded the SCENE'S DEPTH (`$HIP/../…`), so a project one folder deeper broke every path and every project had to sit in one folder for a single prefix to be right; `$JOB` needs neither, and it is what Houdini's own picker writes (measured with `hou.text.collapseCommonVars`). **Verified live 2026-08-08**: a freshly generated project came out with every import, CSV and export path reading `$JOB/…` and resolving in Houdini. What that run did NOT cover, and is still unmeasured: the `hip-relative` badge appearing on a pre-v63 project, and `_rehome_hip_ref` rewriting one. Pre-v63 projects keep the old form: flagged by `validateHoudiniProject`'s `hip-relative` check and rewritten by Utils → Make paths portable (`_rehome_hip_ref`). |
 | **Frame-0 morphs** | "Add morphs on frame 0" (schema v28, runtime v44): a name+value list (`frameZeroMorphs` → `config.frameZeroMorphs`) the runtime sets + keys at frame 0 on EVERY figure-tree node carrying the name (figure, geografts, fitted clothing — one clothing "Expand All" row reaches every outfit piece of the open scene; with no other keys the value holds across the whole ROM). Deliberately UNVALIDATED — no morph scan needed, a scene without the morph skips it with a Daz-log warning, never a run-log failure. Per-scene `sceneOverride.frameZero` = presence-armed full replacement like `preserve`. |
 | **Groom / hair** | Daz-side it's "hair", Houdini-side "groom". Hair is ALWAYS per scene by presence (no more `groomMode` — removed in schema v20): a scene's `groomScenes` items ARE its hair, none listed → nothing excluded. The generated script hides them for the ROM export (hide-only, needs Exporter Plugin ≥ 2.0.1 = `MIN_GROOM_EXPORTER_VERSION`), and a separate `Export_Hair_…` script exports EACH hair item of the open scene ON ITS OWN (runtime v33) as `<Name>_Hair_<item>_grooms.abc` — for every item it hides the other wearables (incl. the other hair items) and exports just that one, so Houdini gets one alembic per hair asset. A newly linked scene gets its detected hair PRE-SELECTED by one shared rule — `seedSceneHair` (`lib/groom-detect.ts`) — at all five places a scene reaches a character: creation, the first primary link, Add scene, REPLACE primary, and the missing-primary RELINK. The relink is the SAME scene at a new path, so it first REPOINTS an existing record to the final path (like a move/rename — `repointLinkedScene`) and seeds only a record-less target; a record keyed on the dead old path would never match the scene again. Any new scene-linking path must call it. |
 | **Figure detection** | The native `scene_wearables` (`poses.rs`) also returns the scene's base **`figure`** node (the non-conformed node whose id/name starts with "Genesis"). The pure inverse `genesisFromFigureNode(id)` (`types.ts`, the reverse of `genesisFigureNode`) maps `Genesis9` / `Genesis8_1Female` → generation (+ gender for the gendered gens; null for G9). The **create-character dialog** uses it to auto-select Genesis + gender from the picked scene's contents (best-effort, both fields stay editable) — reading what's IN the scene, not guessing from its filename. The **add-scene dialog** validates a candidate EXTRA scene from the same read (`scene-compat.tsx`, "Validation" table): same generation (+ gender where the figure id carries it), exactly ONE figure root (`figures`), an EMPTY animation timeline (`animationFrames` ≤ 1 — the ROM script fills the timeline itself), and the same GP/DK geograft set as the primary scene (gender's closest proxy, matched over the conformed items' id/label). A definite fail blocks Add behind an explicit "Add anyway" switch; an unreadable scene degrades to unchecked and never blocks. The **create-character dialog** runs the character-independent subset (`sceneCreateRows`: one figure root + empty timeline) behind a "Create anyway" switch. The same read also DRIVES two character fields via `primarySceneDerivation` (never continuously): the **GEN section's `enabled`** (on ⟺ the scene carries a GP/DK geograft; its editor toggle is permanently disabled; re-derived by the missing-primary relink flow) and the **gender** (figure id for the gendered gens, geograft for the neutral G9 — DK → male, GP → female; a G9 BOTH-grafts scene also sets `presetAssets` to GP+DK explicitly, since the gender-based auto default would include only one block). Gender is applied by `createCharacter` ONLY — **baked at creation, nothing changes it afterwards** (the relink flow deliberately applies just the GEN part). The manual Gender fields are gone — the create dialog shows it read-only and the Identity row is display-only. **REPLACING the primary is gated on the character having NO extra scenes** (`daz-scene-field.tsx`: the card's replace button is rendered-but-disabled with the reason as its tooltip, and `onReplacePick`/`applyReplace` both re-check). Every extra was validated against the CURRENT primary — above all `geograftRow`, since each scene must produce the primary's skeleton — so swapping the primary re-decides that reference and a GP-less replacement would leave validated extras silently mismatched. Re-validating and unlinking failures automatically is worse than making the user unlink and re-add, which runs the real per-scene validation. The missing-primary RELINK flow (`onPick`/`applyLink`, offered only when the primary FILE is gone) deliberately bypasses this gate: there is no primary left to compare a replacement against and the character must become openable again, so it swaps `scenePath` and re-derives GEN while the extras stay linked unchecked — the accepted escape hatch for the mismatch the replace gate forbids. |
@@ -235,26 +235,33 @@ older runtimes as stale.
   already).
 - **THREE folders are seeded into every new character** (`seedCharacterFolders`),
   each named by a per-project manifest field: `dazSubdir` (`daz3d` — the Daz
-  scenes, and the `dth-exports` root inside it), `houdiniSubdir` (`houdini`,
-  gated by `createHoudiniSubdir` — the `.hiplc` files; a `houdini-project`
-  subfolder appeared inside it until v0.68, retired since — see the Generate
-  Houdini project entry), and `exportSubdir` (`export`) — the character's FINAL
-  export folder, where what Houdini generates for Unreal lands. Generation
-  re-creates that last one too, so characters predating the setting get theirs.
-  DON'T confuse the two "export" folders: `<char>/<daz>/dth-exports` is the
+  scenes, and nothing generated), `houdiniSubdir` (`houdini` — the `.hiplc`
+  files AND the `daz-export` root inside it since the export-root move; `createHoudiniSubdir`
+  only gates seeding it EMPTY, the export root brings the folder into being
+  either way, which is why the Settings field is no longer disabled with that
+  toggle. A `houdini-project` subfolder appeared inside it until v0.68, retired
+  since — see the Generate Houdini project entry), and `exportSubdir` (`export`)
+  — the character's FINAL export folder, where what Houdini generates for Unreal
+  lands. Generation re-creates that last one too, so characters predating the
+  setting get theirs.
+  DON'T confuse the two "export" folders: `<char>/<houdini>/daz-export` is the
   Daz→Houdini INTERMEDIATE (derived, fixed, studio-written); `<char>/export` is
   the END of the pipeline (user-owned — the studio only creates it, and the
   Houdini job's fallback `exportDirectory` is its natural consumer).
 - The **export directory is DERIVED** (schema v29) — not user data, no picker:
-  `<character folder>/<scenes root>/dth-exports` (`characterExportRoot`,
-  `lib/scene-subfolder.ts`), where the scenes root comes from the character's
-  OWN primary scene via `deriveScenesRootRel` (`scenesRootRelOf` in
-  `storage/characters.ts`) and the project `dazSubdir` is only the FALLBACK
-  (scene-less character, primary linked outside the folder). Deriving from
-  `dazSubdir` alone made a scenes-folder rename (daz3d → daz) half-undo
-  itself: the rename physically moved `dth-exports` with the folder and the
-  very next save pointed `exportPath` straight back at the vanished
-  `daz3d/dth-exports`. Created at character creation (`seedCharacterFolders`)
+  `<character folder>/<houdiniSubdir>/daz-export` (`characterExportRoot`,
+  `lib/scene-subfolder.ts`), the manifest value taken straight. **It moved there
+  from `<dazSubdir>/dth-exports`** (runtime v64): nothing in Daz ever
+  reopens these files — the `.dth`/`.fbx`/`.abc` exist to be imported by
+  Houdini — so they belong one hop from the `.hip` that reads them, and the name
+  says whose output it is rather than which tool wrote it.
+  That also deleted a rule: while the root lived inside the Daz folder it had to
+  follow a per-character scenes-folder RENAME, so it derived from the character's
+  own primary scene (`scenesRootRelOf`, now gone — a plain `dazSubdir` spelling
+  made the rename half-undo itself, the save pointing `exportPath` back at the
+  vanished `daz3d/dth-exports`). The Houdini folder has no per-character rename,
+  so the manifest value is the whole answer.
+  Created at character creation (`seedCharacterFolders`)
   and re-resolved on EVERY save, which is how pre-v29 characters migrate off
   their hand-picked path; it needs host context so it resolves in the web
   layer, never in the pure core (migration Case C). Being derived does NOT
@@ -264,22 +271,25 @@ older runtimes as stale.
   feeds them) at the old location until some later save. `exportPath: ''` survives only as "not resolved yet" (a loose
   root-level definition, or a definition read outside the desktop app).
   Exports are FLAT under it: `<exportPath>/<scene-subfolder>/`.
-  Because that root sits at exactly the level SCENE SUBFOLDERS occupy,
-  `dth-exports` is a RESERVED subfolder name — `sceneSubfolderConflict`
+  The root only shares a level with SCENE SUBFOLDERS when a project points
+  `dazSubdir` and `houdiniSubdir` at the same folder (both empty included), but
+  `daz-export` (and the legacy `dth-exports`, real until a character's next save)
+  is a RESERVED subfolder name anyway — `sceneSubfolderConflict`
   (`lib/scene-subfolder.ts`) refuses it at every place a subfolder is chosen
   (add-with-copy, replace-with-copy, the card's move/rename chip), judged on the
   first segment and case-insensitively. `rom-animations` is deliberately NOT
   reserved: it lives one level deeper, inside each scene's own subfolder, so it
   can never collide with a sibling. Any NEW subfolder-naming path must call the
   same check.
-- The v29 migration MOVES the already-exported files (`migrateExportRoot`,
-  api/characters.ts → Rust `move_exports`, exports.rs). Its trigger needs no
-  version flag: it fires while the stored path still differs from the derived
-  one, which the save then fixes — idempotent by construction. "Derived" MUST
-  mean the same `scenesRootRelOf` rule the save uses (see the export-directory
-  bullet above): while this trigger still spelled it `project.dazSubdir`, a
-  character with a renamed scenes folder re-fired it on every save and moved
-  its exports into a resurrected `daz3d/dth-exports` each time. What moves is
+- **A relocation MOVES the already-exported files** (`migrateExportRoot`,
+  api/characters.ts → Rust `move_exports`, exports.rs). Written for v29, reused
+  UNCHANGED for the export-root move — which is the payoff of deriving the trigger
+  from the paths rather than from a version flag: it fires while the stored path
+  still differs from the derived one, which the save then fixes. Idempotent by
+  construction. "Derived" MUST be the literally same `characterExportRoot(...)`
+  call the save makes: while this trigger spelled the anchor differently, a
+  character whose layout disagreed with the project default re-fired it on every
+  save and moved its exports back and forth between two trees. What moves is
   exactly `EXPORT_FOLDERS_FILE`'s recorded folders, NEVER the whole old
   directory (the default old path WAS the Houdini folder, `.hiplc` files
   included), each losing its dead `<project>/dth-export/` prefix via
@@ -288,7 +298,72 @@ older runtimes as stale.
   Best-effort: a failure leaves the files put and the next save retries.
   `fsutil::move_tree` (shared with dedup's quarantine) does the work — rename
   fast-path, cross-volume copy-then-delete, link-safe, and it never deletes a
-  source without a complete copy in hand.
+  source without a complete copy in hand. The emptied OLD root then goes via
+  `remove_dir_if_empty` — only ever when empty, so a folder still holding
+  a failed move or the user's own files stays exactly where it is.
+- **A relocation reaches a LIBRARY through Tools → Refresh assets, not through
+  the version bump.** `migrateExportRoot` hangs off the character SAVE, which
+  covers a character you open and nobody else. Refresh is the sweep that visits
+  them all, so it calls `relocateExportRoot` (api/generate.ts) for EVERY
+  character it walks — stale or skipped — which pairs the file move with the
+  `storage.saveCharacter` that rewrites `exportPath`; either half alone is a
+  broken state. **A `RUNTIME_VERSION` bump does not do this and cannot.** It
+  makes Refresh visit everyone, but what it triggers is REGENERATION, and
+  generation reads the STORED `exportPath` — so the bump alone re-emits the old
+  folder into every script and then stamps the new version over the staleness
+  that brought the user there, leaving the character reading as up to date on a
+  root it never moved off. The trigger has to be the stored path disagreeing with
+  its own derivation. Pinned end-to-end in `export-root-migration.smoke.ts` (the
+  only layer that can: vitest can't, because the migration is `isTauri()`-gated).
+- **Deleting a character with a KEEP flag still drops the export root**
+  (`deleteCharacter`, api/characters.ts). "Keep the Daz files" / "Keep the
+  Houdini files" spare a whole subfolder, and one of them contains the export
+  root — derived, regenerable, and gigabytes. It hung off `keepDaz` while the
+  root lived in the Daz folder; since the export-root move EITHER flag arms it, because a
+  character never saved since the move still has its exports at the old location.
+  Two candidate roots therefore: the DERIVED one, and the character's STORED
+  `exportPath`. The stored one is user data for anything not saved since v29
+  (free directory picker), so it must pass two tests — inside the character
+  folder AND named `daz-export`/`dth-exports`. Containment alone is not enough:
+  the picker's most natural pre-v29 answer was the Houdini folder itself, which
+  is contained, and a `keepHoudini` delete would then have recursively removed
+  the folder the flag exists to spare. Pinned in `delete-character.test.ts`,
+  including that case.
+- **A Houdini project generated before a relocation still names the old folder.**
+  Its imports break TOGETHER, so `_repair_import_refs`' sibling donor has nothing
+  to read the new location off — hence the second donor, `_relocated_donor`
+  (material_utils.py): the studio passes the character's current export root as
+  `exportDir` — DERIVED by `scanExportRoot` (api/houdini-material.ts) from the
+  project + character scope, never taken from a caller or from the stored
+  `exportPath`, so the scan and the repath cannot spell it differently — and a
+  broken path is rebuilt as `<root>/<its own scene subfolder>/<its own stem>`
+  (each parm probed with its OWN extension, so a node with no `.dth` filled in
+  still repairs), written only when that file EXISTS.
+  **Three things have to line up or the repair is unreachable**, and each was a
+  real bug before it was a rule:
+  1. `exportDir` reaches the **scan** too, not just the repath (`op_scan` →
+     `_project_ref_info(export_dir)`). The scan runs `_repair_import_refs` dry to
+     produce `refs.broken`, so without it a moved root reports NOTHING broken.
+  2. `planRepath` (`houdini-defaults.ts`) counts **all three** kinds of work —
+     `collapsible` + `hipRelative` + `broken` — because it is also the GATE: the
+     Utils button is disabled on an empty `targets`. A moved-root project has
+     only the third; a pre-v63 project has only the second.
+  3. The scan CACHE key (`scanKey`, api/houdini-material.ts) includes the export
+     root. A verdict about paths is not a property of the `.hip` alone, and the
+     move changes every one of them without touching the file — on mtime alone
+     the store keeps serving the pre-move "all resolve".
+  Then it surfaces as the card's `broken-refs` badge → Utils → **Make paths
+  portable**. The TS half of that chain is vitest-pinned
+  (`houdini-defaults.test.ts`, `houdini-validate.test.ts`). The Python half has
+  no committed test — the repo has no Python harness, `material_utils` runs only
+  inside hython. `_relocated_donor` itself touches nothing but `os.path`, so it
+  WAS verified ad-hoc (2026-08-09) by stubbing `hou`, importing the module and
+  running it against a real temp tree: the post-move layout, a second scene keeping
+  its own subfolder, a set whose `.dth` was never exported, an unrelated dangling
+  path (correctly refused), a missing/absent root, backslash input, and a flat
+  layout. What that does NOT cover is everything around it — `parm.eval()`,
+  `unexpandedString()`, the save — so the end-to-end repair is still worth a
+  **Dry run** on one real pre-move project before it is trusted.
 - Schema v27's **Houdini project folder** is GONE (v29), and with it the
   `<folder>/dth-export/` nesting, `houdiniProjectResolution`, the per-scene
   override and the run-time `dthExportProj` block. The export directory owes
@@ -341,18 +416,18 @@ older runtimes as stale.
   character name), `import_character_name` (prefilled paths may bypass the
   HDA's auto-fill), and `import_skinning_method` (`characterSkinning`'s
   dqs→`dualquat` / linear→`linear`). Paths ride the same `hipRefPrefixFor`
-  prefix as the CSVs (`$JOB/<dazSubdir>/dth-exports/...` when the gate
+  prefix as the CSVs (`$JOB/<houdiniSubdir>/daz-export/...` when the gate
   passes and the project's path style is `hip`), absolute otherwise.
   Two things that look like details and are not:
   - **`scenePath` picks the scene** (v0.68 — the Generate dialog's picker, shown
     only with more than one linked scene; an unknown value falls back to the
-    primary). Every scene exports into its OWN `dth-exports/<subfolder>/` under
+    primary). Every scene exports into its OWN `daz-export/<subfolder>/` under
     a scene-carrying name, so the pick IS the wiring: before it, a multi-scene
     character's every generated project imported the primary's set and re-aiming
     it was five hand edits. One project per scene.
   - **`export_directory` is the OTHER end of the pipeline** and must never be
     derived from the import paths. The imports READ the Daz→Houdini
-    intermediates under `dth-exports` (large, regenerable, not backed up);
+    intermediates under `daz-export` (large, regenerable, not backed up);
     this is where Houdini WRITES for Unreal — the character's `export/` folder
     (the project's `exportSubdir`), resolved by the CALLER since only the host
     knows that subdir, and given its own `hipRefPrefixFor` against that folder
@@ -418,7 +493,10 @@ older runtimes as stale.
   (junction.rs) is strictly reparse-point-safe: it verifies via
   `symlink_metadata` that the path IS a junction before `remove_dir`, refuses
   a real folder (`"not-a-junction"` — the actual export root is itself named
-  `dth-exports`!), and reports `"absent"` for nothing-there. Best-effort — a
+  `dth-exports`, which was the export ROOT's own name until the export-root move — and the
+  sweep deliberately keeps hunting the LEGACY name, `LEGACY_EXPORTS_FOLDER`,
+  never `EXPORTS_FOLDER`, because the live root now sits in a folder the sweep
+  looks in), and reports `"absent"` for nothing-there. Best-effort — a
   locked link waits for the next generation — and the removed paths surface in
   Tools → Refresh assets as "removed N leftover dth-exports junction(s)"
   (`sweptJunctions` on the generate result). The junction-CREATION code
@@ -516,7 +594,7 @@ older runtimes as stale.
   now, because a drift between the emitted `.dsa` and the host's path means the
   studio stats a file Daz never wrote. Renamed from the hidden
   `.ROM_Animations` in **runtime v48** (it holds scenes the user OPENS, so
-  hiding it was wrong; the name now matches `dth-exports` / `houdini-project`).
+  hiding it was wrong; the name matches the other studio folders, `daz-export`).
   `migrateRomAnimationFolders` (api/generate.ts) renames an existing one beside
   each linked scene on the next generation — idempotent, and it refuses to
   merge when BOTH folders exist. `LEGACY_ROM_ANIMATIONS_FOLDER` exists only for

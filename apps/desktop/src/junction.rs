@@ -4,11 +4,11 @@ use std::path::Path;
 // Directory JUNCTIONS — RETIRED as a feature (v0.63). The studio used to plant
 // `dth-exports` junctions beside every linked `.hip` and inside the shared
 // `houdini-project` folder so `$HIP/dth-exports/…` paths could resolve;
-// generated paths are plain-relative now (`$JOB/<dazSubdir>/dth-exports/…`),
+// generated paths are plain-relative now (`$JOB/<houdiniSubdir>/daz-export/…`),
 // which needs no reparse points and upsets no Perforce/backup tooling. What
 // remains here is the SWEEP: `remove_junction` deletes the leftovers the old
 // versions created — strictly reparse-point-verified, so a real folder (the
-// actual export root is itself named `dth-exports`!) can never be touched.
+// export root, which sat under this very name until the export-root move) can never be touched.
 // The creation code survives only as a test helper: the sweep's test has to
 // build a junction to prove removing one never eats its target.
 

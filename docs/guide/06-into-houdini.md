@@ -33,12 +33,11 @@ Houdini-only pass.
 > [!TIP]
 > Use Houdini's **File → Set Project** on the
 > **[character folder](./05-rom-in-daz.md#where-the-houdini-project-fits)**
-> itself — the one holding both `daz3d/` and `houdini/` — so `$JOB` covers the
-> exports as well as the scene. The exports live on the Daz side,
-> one `..` up from the scene: in the file picker, navigate to
-> `../daz3d/dth-exports/` and tick **Make path relative to current directory**
-> — the import reads `$JOB/daz3d/dth-exports/primary/<Name>.dth` and the
-> `.hip` stays portable.
+> itself — the one holding `houdini/` — so `$JOB` covers the exports as well as
+> the scene. The exports sit beside the scene: in the file picker, navigate to
+> `daz-export/` and tick **Make path relative to current directory** — the
+> import reads `$JOB/houdini/daz-export/primary/<Name>.dth` and the `.hip` stays
+> portable.
 
 ## Generate the Houdini project automatically
 
@@ -51,7 +50,7 @@ network ready**. The network comes out
 **wired**: the import file paths (`.dth`, FBX, Alembic, ROM FBX), the
 **PoseAsset CSV path**, the **export directory** and the **Skinning method**
 (Linear / Dual Quaternion, from the ROM definition) are prefilled — relative to
-`$JOB` — the character folder — (`$JOB/daz3d/dth-exports/…`) by default, absolute when the
+`$JOB` — the character folder — (`$JOB/houdini/daz-export/…`) by default, absolute when the
 project's
 [Houdini path style](./05-rom-in-daz.md#reference-skeleton-paths--hip-by-default)
 says so — and the **character name** is set with them. A parameter
@@ -64,7 +63,7 @@ exports into its own folder, so the pick decides which export set the imports
 point at — generate one project per scene to cover them all.
 
 The **export directory** is a different folder from the imports, on purpose:
-they read the Daz→Houdini intermediates under `dth-exports`, while Houdini
+they read the Daz→Houdini intermediates under `daz-export`, while Houdini
 writes its own Unreal-bound output to the character's **`export/`** folder
 (`$JOB/export/`, or whatever the project's *Final export subfolder* is
 named). One `export/` per character, shared by every scene's project.
@@ -81,16 +80,18 @@ scattering per scene.
 
 ```
 Ita/                            ← $JOB (Set Project), baked into every scene
-├─ daz3d/                       ← the exports live here, under $JOB
+├─ daz3d/                       ← your Daz scenes
 └─ houdini/                     ← $HIP, and the shared project folder
-   ├─ PlaygroundAssets_Ita.hiplc   ← the generated scene (imports ../daz3d/dth-exports/…)
+   ├─ PlaygroundAssets_Ita.hiplc   ← the generated scene (imports daz-export/…)
+   ├─ daz-export/                  ← what the DTH Exporter wrote, per scene
    └─ render/ geo/ backup/         ← Houdini's own output, shared by every scene here
 ```
 
 Removing a **generated** project asks about its files: with **Keep houdini
 files** on it is only unlinked; turned off, its scene file is deleted too. The
 houdini folder itself always stays — the character's other scenes live in it,
-and it holds no exports. Hand-linked projects are always unlink-only.
+and so does its `daz-export` folder. Hand-linked projects are always
+unlink-only.
 
 One one-time Settings entry powers it: the **Houdini installation folder**
 (Houdini's own install directory — its `bin\hython.exe` builds the scene
@@ -356,8 +357,8 @@ Measured with the call Houdini's own file picker uses:
 
 | `$JOB` | picking an export gives you |
 | --- | --- |
-| `<character>/houdini/houdini-project` | `D:\…\Ita\daz3d\dth-exports\primary\Ita.fbx` |
-| `<character>` — what **Repair `$JOB`** writes | `$JOB/daz3d/dth-exports/primary/Ita.fbx` |
+| `<character>/houdini/houdini-project` | `D:\…\Ita\houdini\daz-export\primary\Ita.fbx` |
+| `<character>` — what **Repair `$JOB`** writes | `$JOB/houdini/daz-export/primary/Ita.fbx` |
 
 `$HIP` still wins for paths inside the houdini folder, so this disturbs nothing
 that already works.
@@ -378,11 +379,14 @@ already written.
   Anything under none of those roots can't be made portable — it stays exactly
   as it is and the report names it.
 - Rebuilds a **DazToHue import** path that points at a file which isn't there.
-  Projects made before v0.63 address their `.dth` through the retired
-  `dth-exports` junction, so it dangles while the `.fbx` and `.abc` beside it
-  are fine. The replacement is derived from that same node's other export files
-  — they sit together with the same name — and is only written when the file it
-  would point at **actually exists**. Nothing is guessed.
+  Two cases, one pass. Projects made before v0.63 address their `.dth` through
+  the retired `dth-exports` junction, so it dangles while the `.fbx` and `.abc`
+  beside it are fine — the replacement is derived from that same node's other
+  export files, which sit together under the same name. Projects made before the
+  export folder moved point at the old one, and there **every** import broke at
+  once, so no sibling survives to follow: those are rebuilt from the character's
+  current export directory instead. Either way the new path is only written when
+  the file it would point at **actually exists**. Nothing is guessed.
 
 > **`$JOB` has to be right first**, and the button stays disabled until it is.
 > A path is made relative to whatever `$JOB` the scene currently carries, so

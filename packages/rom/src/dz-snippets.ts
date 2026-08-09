@@ -109,9 +109,9 @@ if (dthRomSourceHit) {
  *
  * The export dir itself is FLAT (schema v29): every scene lands directly in
  * `<exportPath>/<subfolder>/`. Between v27 and v29 a `houdiniProjectFolder`
- * could nest it under `<project>/dth-export` first — that coupling is gone,
- * because the export root no longer lives inside the Houdini project at all;
- * Houdini reaches it through a `dth-exports` junction instead.
+ * could nest it under `<project>/dth-export` first — that coupling is gone.
+ * The root sits in the character's houdini folder again (runtime v64), but as a
+ * plain sibling of the `.hip` files, owned by nothing.
  */
 export function sceneExportSubfolderSnippet(
   map: Record<string, string>,

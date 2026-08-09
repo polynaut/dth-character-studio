@@ -1007,6 +1007,11 @@ export function HoudiniUtilsPanel({
       const result = await repathHoudiniReferences({
         data: {
           targets: repath.targets.map((hipPath) => ({ hipPath, jobDir: charFolder })),
+          // The scope, not the export root itself: the api derives that (and the
+          // SCAN derives it the same way, so the dry run and the card can never
+          // disagree about which folder a broken import is rebuilt against).
+          projectId,
+          characterId: character.id,
           dryRun,
         },
       })

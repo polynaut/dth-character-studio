@@ -42,6 +42,8 @@ describe('detectNewFiles', () => {
 
   it('excludes generated trees and ROM animations for scenes', () => {
     const out = detect([
+      'houdini/daz-export/primary/export.duf',
+      // The pre-move root: real until the character's next save moves it.
       'daz3d/dth-exports/primary/export.duf',
       '.dcsmeta/whatever/thing.duf',
       'daz3d/rom-animations/Kira_ROM.duf',

@@ -12,11 +12,12 @@ import type { MaterialScanProject } from './api/native-types.ts'
  * across restarts: the Utils drawer used to re-earn it on every open, from an
  * in-memory Map that died with the window.
  *
- * **Keyed on the file's modification time**, so the store answers "is this still
- * true?" without opening anything: a `.hip` the user saved in Houdini gets a new
- * mtime, its entry stops matching, and the background scan picks it up again.
- * A path that cannot be stat'd yields no key at all and is always treated as
- * stale — never as a hit.
+ * **Keyed on the file's modification time — and on the export root it was
+ * judged against**, so the store answers "is this still true?" without opening
+ * anything: a `.hip` the user saved in Houdini gets a new mtime, its entry stops
+ * matching, and the background scan picks it up again. A path that cannot be
+ * stat'd yields no key at all and is always treated as stale — never as a hit.
+ * See {@link scanCacheKey} for why the mtime alone is not enough.
  *
  * Two stores, deliberately separate (see `characterScanStorePath` /
  * `sourceScanStorePath` in api/houdini-material.ts): a character's own projects
@@ -33,7 +34,8 @@ import type { MaterialScanProject } from './api/native-types.ts'
 export const HOUDINI_SCAN_FILE = 'houdini-scan.json'
 
 const entrySchema = z.object({
-  /** `<normalized path>|<mtime ms>` — see {@link scanCacheKey}. */
+  /** `<normalized path>|<mtime ms>|<normalized export root>` — see
+   *  {@link scanCacheKey}. Opaque: compared by equality, never parsed. */
   key: z.string().default(''),
   /** ISO timestamp of the scan that produced this entry (diagnostics only). */
   scannedAt: z.string().default(''),
@@ -74,13 +76,30 @@ export function scanStoreKey(hipPath: string): string {
 }
 
 /**
- * The freshness key for one project: its path plus the file's mtime. An
- * unreadable mtime yields '' — which never matches a stored key, so a file the
- * studio cannot stat is rescanned rather than served from a guess.
+ * The freshness key for one project: its path, the file's mtime, and the export
+ * root the scan judged it against. An unreadable mtime yields '' — which never
+ * matches a stored key, so a file the studio cannot stat is rescanned rather
+ * than served from a guess.
+ *
+ * **The export root is part of the key because part of the ANSWER is about files
+ * that are not the `.hip`.** `refs.broken` says whether the files an import path
+ * names exist, and the export-root move relocated every one of them
+ * without touching a single `.hip` — so on path+mtime alone the store kept
+ * serving "everything resolves" for exactly the projects that move broke, until
+ * the user happened to re-save one in Houdini. Anything else a verdict depends
+ * on and that can change behind the file's back belongs here too.
+ *
+ * Optional, defaulting to '': an unscoped scan (the shared source store — the
+ * template projects people copy setups from) belongs to no character and has no
+ * export root, and its verdict does not depend on one.
  */
-export function scanCacheKey(hipPath: string, mtimeMs: number | undefined): string {
+export function scanCacheKey(
+  hipPath: string,
+  mtimeMs: number | undefined,
+  exportRoot = '',
+): string {
   if (mtimeMs === undefined || !Number.isFinite(mtimeMs)) return ''
-  return `${scanStoreKey(hipPath)}|${mtimeMs}`
+  return `${scanStoreKey(hipPath)}|${mtimeMs}|${scanStoreKey(exportRoot)}`
 }
 
 /** The stored scan for `hipPath` IF it still describes the file on disk. */

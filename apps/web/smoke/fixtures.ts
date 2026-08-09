@@ -165,9 +165,10 @@ export const P = {
   /** The demo character's Houdini folder — where its `.hiplc` files live,
    *  beside the shared `houdini-project` folder. */
   houdiniDir: 'D:/DTH Projects/Demo/Kira/houdini',
-  /** The demo character's export directory: FIXED at `<char>/<daz>/dth-exports`
-   *  since schema v29 — derived, never picked (the panel is read-only). */
-  exportDir: 'D:/DTH Projects/Demo/Kira/daz3d/dth-exports',
+  /** The demo character's export directory: FIXED at `<char>/<houdini>/daz-export`
+   *  since schema v29, and moved into the Houdini folder by the export-root move
+   *  — derived, never picked (the panel is read-only). */
+  exportDir: 'D:/DTH Projects/Demo/Kira/houdini/daz-export',
 }
 
 /** The hair item the demo character lists on its primary scene (Hair-items

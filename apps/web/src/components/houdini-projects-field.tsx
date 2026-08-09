@@ -688,7 +688,7 @@ function GenerateProjectDialog({
   const [name, setName] = useState(defaultProjectName(projectName, character.name))
   const [busy, setBusy] = useState(false)
   // Which scene's export set the new network imports. Every linked scene exports
-  // into its OWN `dth-exports/<subfolder>/`, so on a multi-scene character this
+  // into its OWN `daz-export/<subfolder>/`, so on a multi-scene character this
   // is the difference between a project wired to the outfit you meant and one
   // wired to the primary — five paths to re-pick by hand afterwards.
   const scenes = [character.scenePath, ...character.extraScenes].filter(Boolean)

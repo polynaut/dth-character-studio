@@ -99,16 +99,16 @@ describe('hipAnchorDirs — where $HIP-relative reference paths can anchor', () 
 describe('hipRefPrefixFor — the $JOB prefix that replaces the export root', () => {
   it('standard layout: the export root is one hop from $JOB (the character folder)', () => {
     expect(
-      hipRefPrefixFor(['X:/p/Kira/houdini/K.hiplc'], 'X:/p/Kira', 'X:/p/Kira/daz3d/dth-exports'),
-    ).toBe('$JOB/daz3d/dth-exports')
+      hipRefPrefixFor(['X:/p/Kira/houdini/K.hiplc'], 'X:/p/Kira', 'X:/p/Kira/houdini/daz-export'),
+    ).toBe('$JOB/houdini/daz-export')
     // Backslash inputs (the stored Windows paths) resolve identically.
     expect(
       hipRefPrefixFor(
         ['X:\\p\\Kira\\houdini\\K.hiplc'],
         'X:\\p\\Kira',
-        'X:\\p\\Kira\\daz3d\\dth-exports',
+        'X:\\p\\Kira\\houdini\\daz-export',
       ),
-    ).toBe('$JOB/daz3d/dth-exports')
+    ).toBe('$JOB/houdini/daz-export')
   })
 
   it('does not care how DEEP the .hip sits — the whole point of leaving $HIP', () => {
@@ -118,9 +118,9 @@ describe('hipRefPrefixFor — the $JOB prefix that replaces the export root', ()
       hipRefPrefixFor(
         ['X:/p/Kira/houdini/variants/deep/K.hiplc'],
         'X:/p/Kira',
-        'X:/p/Kira/daz3d/dth-exports',
+        'X:/p/Kira/houdini/daz-export',
       ),
-    ).toBe('$JOB/daz3d/dth-exports')
+    ).toBe('$JOB/houdini/daz-export')
   })
 
   it('two hips in different folders now share one prefix', () => {
@@ -129,20 +129,20 @@ describe('hipRefPrefixFor — the $JOB prefix that replaces the export root', ()
       hipRefPrefixFor(
         ['X:/p/Kira/houdini/A.hiplc', 'X:/p/Kira/archive/B.hiplc'],
         'X:/p/Kira',
-        'X:/p/Kira/daz3d/dth-exports',
+        'X:/p/Kira/houdini/daz-export',
       ),
-    ).toBe('$JOB/daz3d/dth-exports')
+    ).toBe('$JOB/houdini/daz-export')
   })
 
   it('no linked projects → absolute (nothing to write a project-relative path into)', () => {
-    expect(hipRefPrefixFor([], 'X:/p/Kira', 'X:/p/Kira/daz3d/dth-exports')).toBe('')
+    expect(hipRefPrefixFor([], 'X:/p/Kira', 'X:/p/Kira/houdini/daz-export')).toBe('')
   })
 
   it('a hip outside the character folder → absolute', () => {
     // Hand-linked in the user's own tree: its $JOB is whatever they set, so the
     // studio cannot assume it is this character's folder.
     expect(
-      hipRefPrefixFor(['E:/elsewhere/K.hiplc'], 'X:/p/Kira', 'X:/p/Kira/daz3d/dth-exports'),
+      hipRefPrefixFor(['E:/elsewhere/K.hiplc'], 'X:/p/Kira', 'X:/p/Kira/houdini/daz-export'),
     ).toBe('')
   })
 
@@ -158,8 +158,16 @@ describe('hipRefPrefixFor — the $JOB prefix that replaces the export root', ()
 
 describe('sceneSubfolderConflict — names the studio already owns', () => {
   it('refuses the export folder, whatever its casing', () => {
-    // <char>/<dazSubdir>/dth-exports sits at exactly the level scene
-    // subfolders do, so a scene moved there would fight the export root.
+    // A project can point dazSubdir and houdiniSubdir at the same folder (both
+    // empty is the degenerate case), and then a scene subfolder named this would
+    // land on the export root itself.
+    expect(sceneSubfolderConflict('daz-export')).toContain('exports')
+    expect(sceneSubfolderConflict('Daz-Export')).toContain('exports')
+  })
+
+  it('refuses the PRE-MOVE name too, while un-migrated characters can still have one', () => {
+    // A character only moves off `<daz>/dth-exports` on its next save; until
+    // then that folder is real and sits exactly where scene subfolders do.
     expect(sceneSubfolderConflict('dth-exports')).toContain('exports')
     expect(sceneSubfolderConflict('DTH-Exports')).toContain('exports')
   })
@@ -168,18 +176,18 @@ describe('sceneSubfolderConflict — names the studio already owns', () => {
     expect(sceneSubfolderConflict('summertide')).toBe('')
     expect(sceneSubfolderConflict('primary')).toBe('')
     // Only a WHOLE segment is reserved — a longer name merely containing it is fine.
-    expect(sceneSubfolderConflict('dth-exports-old')).toBe('')
+    expect(sceneSubfolderConflict('daz-export-old')).toBe('')
   })
 
   it('judges the FIRST segment — the one landing under the scenes root', () => {
-    expect(sceneSubfolderConflict('dth-exports/beach')).toContain('exports')
+    expect(sceneSubfolderConflict('daz-export/beach')).toContain('exports')
     // Nested deeper, it collides with nothing the studio writes.
-    expect(sceneSubfolderConflict('outfits/dth-exports')).toBe('')
+    expect(sceneSubfolderConflict('outfits/daz-export')).toBe('')
   })
 
   it('ignores leading separators and empty input', () => {
-    expect(sceneSubfolderConflict('/dth-exports')).toContain('exports')
-    expect(sceneSubfolderConflict('\\dth-exports')).toContain('exports')
+    expect(sceneSubfolderConflict('/daz-export')).toContain('exports')
+    expect(sceneSubfolderConflict('\\daz-export')).toContain('exports')
     expect(sceneSubfolderConflict('')).toBe('')
   })
 })

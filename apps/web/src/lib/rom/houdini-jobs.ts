@@ -228,7 +228,7 @@ export interface HoudiniPrefill {
    *  export folder; the name is the plugin's to change). */
   romFbx: string
   /** `export_directory` — where Houdini WRITES its Unreal-bound output, i.e. the
-   *  character's `export/` folder, NOT the `dth-exports` the imports read from.
+   *  character's `export/` folder, NOT the `daz-export` the imports read from.
    *  Trailing slash REQUIRED: the HDA concatenates `export_directory +
    *  character_name` naively (456.py's measured facts). */
   exportDirectory: string
@@ -241,10 +241,10 @@ export interface HoudiniPrefill {
  * `scenePath` picks it; omitted (or naming a scene this character doesn't link)
  * falls back to the PRIMARY, which every character has. A character with several
  * outfit scenes gets a project per scene, each wired to its own
- * `dth-exports/<subfolder>/` — before v0.68 every generated project pointed at
+ * `daz-export/<subfolder>/` — before v0.68 every generated project pointed at
  * the primary's, and re-aiming it was a hand edit of five paths.
  *
- * With a `hipRefPrefix` (e.g. `$HIP/../daz3d/dth-exports`, computed by
+ * With a `hipRefPrefix` (e.g. `$JOB/houdini/daz-export`, computed by
  * `hipRefPrefixFor` for the hip being generated) the import paths ride it;
  * absolute otherwise — the same style split the generated CSVs use. Name +
  * skinning are always filled; the path fields are '' when the character has no
@@ -252,7 +252,7 @@ export interface HoudiniPrefill {
  *
  * `exportDirectory` is a DIFFERENT folder from the import paths and must not be
  * derived from them: the imports read the Daz→Houdini intermediates under
- * `dth-exports`, while this is where Houdini WRITES for Unreal — the character's
+ * `daz-export`, while this is where Houdini WRITES for Unreal — the character's
  * own `export/` folder (the project's `exportSubdir`). It came from the caller
  * because only the host knows that subdir. Until v0.68 it was the export ROOT,
  * which quietly aimed Houdini's output into the regenerable Daz-side tree.

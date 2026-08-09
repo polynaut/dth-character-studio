@@ -140,7 +140,7 @@
         {
           "label": "/obj/DazToHue/DazToHueImport import_character_dtu_file",
           "from": "$HIP/houdini-project/dth-exports/primary/Ita.dth",
-          "to": "$JOB/daz3d/dth-exports/primary/Ita.dth"
+          "to": "$JOB/houdini/daz-export/primary/Ita.dth"
         }
       ],
       "foreign": ["X:/shared/textures/custom_skin.png"],
@@ -155,7 +155,7 @@
       "filled": [
         {
           "label": "/obj/DazToHue/DazToHueImport import_character_rom_fbx_file",
-          "value": "$HIP/../daz3d/dth-exports/primary/Ita_experimental_rom.fbx"
+          "value": "$JOB/houdini/daz-export/primary/Ita_experimental_rom.fbx"
         }
       ],
       "skippedMissing": ["/obj/DazToHue/DazToHuePoseAsset pose_asset_csv_file_path"],

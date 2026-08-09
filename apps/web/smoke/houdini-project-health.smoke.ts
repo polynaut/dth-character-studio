@@ -15,6 +15,21 @@ import type { Page } from '@playwright/test'
 /** The character's scan store, in its `.dcsmeta` folder. */
 const STORE = `${P.project}/.dcsmeta/characters/Kira/houdini-scan.json`
 
+/**
+ * A stored entry's freshness key, in the shape `scanCacheKey` builds it:
+ * `<path>|<mtime>|<export root>`, all normalised. `__MTIME__` is filled in
+ * inside the page, because the fake stamps its world when it is installed.
+ *
+ * The EXPORT ROOT is in the key because part of a scan's verdict is about files
+ * that are NOT the `.hip` (`refs.broken`), and the export-root move relocated
+ * every one of them without touching a single scene file. A seeded entry naming
+ * a different root reads as stale here — which is exactly what should happen to
+ * a real pre-move entry.
+ */
+function storeKey(hipPath: string): string {
+  return `${hipPath.toLowerCase()}|__MTIME__|${P.exportDir.toLowerCase()}`
+}
+
 /** A scan result in the shape `material_utils.py` reports. */
 function scan(over: Record<string, unknown> = {}) {
   return {
@@ -35,15 +50,15 @@ async function openWithStore(page: Page, project: Record<string, unknown>) {
     version: 1,
     projects: {
       [P.houdini.toLowerCase()]: {
-        key: `${P.houdini.toLowerCase()}|__MTIME__`,
+        key: storeKey(P.houdini),
         scannedAt: '2026-08-07T00:00:00.000Z',
         project,
       },
     },
   })
   await page.addInitScript(installTauriMock, seed)
-  // The store keys on `<path>|<mtime>`, and the fake stamps its world when it is
-  // installed — so the seeded entry gets that stamp here, after install.
+  // The fake stamps its world when it is installed — so the seeded entry gets
+  // that mtime here, after install (see {@link storeKey}).
   await page.addInitScript((storePath: string) => {
     const mock = (window as any).__tauriMock
     const raw = mock.files.get(storePath) as string
@@ -123,7 +138,7 @@ test('the drawer merges the store with a scan of what it does not cover', async 
     version: 1,
     projects: {
       [P.houdini.toLowerCase()]: {
-        key: `${P.houdini.toLowerCase()}|__MTIME__`,
+        key: storeKey(P.houdini),
         scannedAt: '2026-08-07T00:00:00.000Z',
         project: scan({ nodes: [node('CachedBox')] }),
       },
@@ -173,12 +188,12 @@ test('a store that covers every linked project serves the drawer without a scan'
     version: 1,
     projects: {
       [P.houdini.toLowerCase()]: {
-        key: `${P.houdini.toLowerCase()}|__MTIME__`,
+        key: storeKey(P.houdini),
         scannedAt: '2026-08-07T00:00:00.000Z',
         project: scan({ nodes: [node('CachedBox')] }),
       },
       [OUTSIDE.toLowerCase()]: {
-        key: `${OUTSIDE.toLowerCase()}|__MTIME__`,
+        key: storeKey(OUTSIDE),
         scannedAt: '2026-08-07T00:00:00.000Z',
         project: scan({ hipPath: OUTSIDE, nodes: [node('OutsideBox')] }),
       },

@@ -13,13 +13,40 @@ import { stripTrailingDotsAndSpaces, stripTrailingSeparators, trimSeparators } f
 export const PRIMARY_SCENE_SUBFOLDER = 'primary'
 
 /**
- * The character's fixed EXPORT root, below its Daz subfolder:
- * `<character folder>/<project dazSubdir>/dth-exports/`. Not user-choosable
- * (schema v29) — the DTH Exporter's output is Daz-side output, so it lives
- * beside the scenes that produce it, and `Character.exportPath` is derived
- * from this rather than stored (resolved in `parseCharacter`).
+ * The character's fixed EXPORT root, below its HOUDINI subfolder:
+ * `<character folder>/<project houdiniSubdir>/daz-export/`. Not user-choosable
+ * (schema v29) — `Character.exportPath` is derived from this rather than stored
+ * (resolved in `parseCharacter`).
+ *
+ * It sat under the DAZ subfolder as `dth-exports` from v0.62 until this move, on
+ * the reasoning that the DTH Exporter's output is Daz-side output. It reads the
+ * other way round in practice: nothing in Daz ever opens these files again — the
+ * `.dth`/`.fbx`/`.abc` exist solely to be imported by Houdini, one hop from the
+ * `.hip` that reads them. Hence the name too: `daz-export` is "the Daz export",
+ * seen from the Houdini folder it now lives in.
+ *
+ * Moving it back is not free for existing users, and two mechanisms absorb that:
+ * `migrateExportRoot` (api/characters.ts) carries the already-exported FILES
+ * across on the character's next save, and a generated Houdini project whose
+ * import paths now point at the vacated folder is repaired by Utils → **Make
+ * paths portable** ({@link LEGACY_EXPORTS_FOLDER}).
  */
-export const EXPORTS_FOLDER = 'dth-exports'
+export const EXPORTS_FOLDER = 'daz-export'
+
+/**
+ * The name the export root carried while it lived under the Daz subfolder
+ * (from v0.62 until the root moved), and — earlier still — the name of the
+ * RETIRED junctions the studio planted in Houdini folders (see
+ * `sweepExportJunctions`).
+ *
+ * The sweep must keep hunting THIS name rather than {@link EXPORTS_FOLDER}:
+ * now that the live export root sits in exactly the folder the
+ * sweep looks in, so pointing it at the current name would aim a delete at the
+ * real thing. (The Rust side refuses anything that isn't a reparse point, so it
+ * could not actually have deleted it — but a sweep whose only defence is the
+ * layer below it is one refactor from being wrong.)
+ */
+export const LEGACY_EXPORTS_FOLDER = 'dth-exports'
 
 /**
  * RETIRED (v0.68) — nothing creates this folder anymore. It was the fixed-name
@@ -40,12 +67,22 @@ export const HOUDINI_PROJECT_FOLDER = 'houdini-project'
  * folder of that name directly under the character's scenes root — a scene
  * moved there would fight the studio for the same directory.
  *
- * Only {@link EXPORTS_FOLDER} qualifies today: `<char>/<dazSubdir>/dth-exports`
- * sits at exactly the level scene subfolders do. `rom-animations` does NOT
- * belong here — it lives one level deeper, INSIDE each scene's own subfolder,
- * so it can never collide with a sibling.
+ * {@link EXPORTS_FOLDER} qualifies whenever the project points `dazSubdir` and
+ * `houdiniSubdir` at the same folder — including the degenerate case of both
+ * being empty, where scenes and exports share the character folder itself. The
+ * standard layout separates them, so this is a guard against a configuration
+ * rather than against the everyday one; it costs a user nothing and the
+ * alternative is a scene folder quietly fighting the exporter for a directory.
+ * {@link LEGACY_EXPORTS_FOLDER} stays reserved beside it for as long as
+ * un-migrated characters can still have one on disk.
+ *
+ * `rom-animations` does NOT belong here — it lives one level deeper, INSIDE
+ * each scene's own subfolder, so it can never collide with a sibling.
  */
-export const RESERVED_SCENE_SUBFOLDERS: ReadonlyArray<string> = [EXPORTS_FOLDER]
+export const RESERVED_SCENE_SUBFOLDERS: ReadonlyArray<string> = [
+  EXPORTS_FOLDER,
+  LEGACY_EXPORTS_FOLDER,
+]
 
 /**
  * Why `subfolder` can't be used as a scene subfolder, or '' when it's fine.
@@ -74,13 +111,23 @@ function underSubdir(charFolderAbs: string, subdir: string | undefined, leaf: st
 
 /**
  * A character's export root — the DERIVED value of `Character.exportPath`
- * (schema v29). Callers must only pass the folder of a character that OWNS one:
- * a loose root-level definition would resolve to the library's own
- * `<dazSubdir>/dth-exports` and collide with every other loose character, so
+ * (schema v29): `<character folder>/<houdiniSubdir>/daz-export`.
+ *
+ * Callers must only pass the folder of a character that OWNS one: a loose
+ * root-level definition would resolve to the library's own
+ * `<houdiniSubdir>/daz-export` and collide with every other loose character, so
  * those keep whatever export path they already had.
+ *
+ * `houdiniSubdir` is the project manifest's, straight — unlike the Daz side
+ * there is no per-character rename to follow, which is why this takes a plain
+ * value where it used to need `scenesRootRelOf`. A project that configures no
+ * Houdini subfolder at all puts the export root directly in the character
+ * folder; `createHoudiniSubdir` is deliberately NOT consulted, because that
+ * setting only decides whether an EMPTY folder is seeded, and the export root
+ * needs the folder either way.
  */
-export function characterExportRoot(charFolderAbs: string, dazSubdir?: string): string {
-  return underSubdir(charFolderAbs, dazSubdir, EXPORTS_FOLDER)
+export function characterExportRoot(charFolderAbs: string, houdiniSubdir?: string): string {
+  return underSubdir(charFolderAbs, houdiniSubdir, EXPORTS_FOLDER)
 }
 
 /** A character's Houdini folder — where its generated `.hiplc` files live,
@@ -122,13 +169,13 @@ export function hipAnchorDirs(
 
 /**
  * The `$JOB`-anchored prefix that replaces the export ROOT in generated
- * reference paths — e.g. `$JOB/daz3d/dth-exports` for the standard layout — or
+ * reference paths — e.g. `$JOB/houdini/daz-export` for the standard layout — or
  * '' when only absolute paths are safe.
  *
  * **`$JOB` is the character folder** (baked by Generate project since v0.64,
  * and repairable from the Utils drawer), so anything in the character's layout
  * is one hop from it. That is also what Houdini itself writes: its file picker
- * collapses a picked export to `$JOB/daz3d/dth-exports/…` (measured with
+ * collapses a picked export to `$JOB/houdini/daz-export/…` (measured with
  * `hou.text.collapseCommonVars`), so generated and hand-picked paths finally
  * agree inside the same node.
  *

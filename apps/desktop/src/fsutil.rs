@@ -49,7 +49,7 @@ pub(crate) trait DirVisitor {
     /// carries on. Defaults to false, so every existing visitor is unchanged.
     ///
     /// Pruning at walk time rather than filtering the results is the point for a
-    /// scan: a character's `dth-exports` holds the FBX/Alembic output, and
+    /// scan: a character's `daz-export` holds the FBX/Alembic output, and
     /// reading all of it to then throw it away is the expensive half of the walk.
     fn skip_dir(&self, _name: &std::ffi::OsStr) -> bool {
         false
@@ -137,7 +137,7 @@ impl DirVisitor for LockedFiles {
 /// one call for an entire tree.
 ///
 /// `skip_dirs` are matched case-insensitively against a directory's own NAME at
-/// any depth (`dth-exports`, `.dcsmeta`, `rom-animations`, `backup`) and pruned
+/// any depth (`daz-export`, `.dcsmeta`, `rom-animations`, `backup`) and pruned
 /// before descending — reading a character's whole FBX/Alembic export tree only
 /// to discard it is the expensive half of the walk.
 ///
@@ -487,14 +487,14 @@ mod tests {
         make("Kira.json"); // not a wanted extension
         // Pruned subtrees: the generated export tree, the app's own meta folder,
         // Houdini's auto-backups — reading them is the expensive half of a walk.
-        make("daz3d/dth-exports/primary/Kira.duf");
+        make("houdini/daz-export/primary/Kira.duf");
         make(".dcsmeta/characters/Kira/anything.duf");
         make("houdini/backup/Kira_bak.hiplc");
 
         let found = scan_files_by_ext(
             root.to_string_lossy().into_owned(),
             vec!["duf".into(), "hip".into(), "hiplc".into()],
-            vec!["dth-exports".into(), ".dcsmeta".into(), "backup".into()],
+            vec!["daz-export".into(), ".dcsmeta".into(), "backup".into()],
         );
         assert_eq!(
             found,

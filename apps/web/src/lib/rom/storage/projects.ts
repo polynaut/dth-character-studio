@@ -33,7 +33,10 @@ export interface DcspManifest {
   createdAt: string
   /** Default subfolder a copied Daz scene lands in, under the character folder. */
   dazSubdir: string
-  /** Empty Houdini folder seeded into each new character. Gated by createHoudiniSubdir. */
+  /** The character's Houdini folder — its `.hiplc` projects AND the fixed
+   *  `daz-export` root the studio writes into. `createHoudiniSubdir`
+   *  only governs seeding it EMPTY into a new character; the export root brings
+   *  it into being either way. */
   houdiniSubdir: string
   /** Whether to seed the empty Houdini folder when a character is created. */
   createHoudiniSubdir: boolean
@@ -41,7 +44,7 @@ export interface DcspManifest {
    * The character's FINAL export folder, seeded empty into each new character
    * beside the Daz and Houdini ones — where the files Houdini generates for
    * Unreal land. The END of the pipeline, and not to be confused with
-   * `dth-exports`, which is the Daz→Houdini intermediate INSIDE the Daz folder.
+   * `daz-export`, which is the Daz→Houdini intermediate INSIDE the Houdini folder.
    */
   exportSubdir: string
   /** Whether the project shows the reusable Daz-scene "assets" feature (off = characters only). */

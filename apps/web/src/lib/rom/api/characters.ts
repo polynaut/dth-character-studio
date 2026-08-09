@@ -1,5 +1,4 @@
 import { exists, mkdir, readDir, readFile, readTextFile, remove, stat } from '@tauri-apps/plugin-fs'
-import { invoke, isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
 import { withBusyCursor } from '../../busy-cursor.ts'
@@ -12,13 +11,10 @@ export type { RomRunFailedMorph, RomRunLog, RomRunSceneRun } from '../run-log.ts
 import { LAST_ROM_RUN_FILE } from '../character-internals.ts'
 import * as storage from '../storage'
 import { normalizeRelFolder } from '../library'
+import { normalizeSceneKey } from '../execute-jobs.ts'
 import {
-  EXPORT_FOLDERS_FILE,
-  migratedExportFolder,
-  normalizeSceneKey,
-  parseExportFoldersRecord,
-} from '../execute-jobs.ts'
-import {
+  EXPORTS_FOLDER,
+  LEGACY_EXPORTS_FOLDER,
   PRIMARY_SCENE_SUBFOLDER,
   characterExportRoot,
   deriveScenesRootRel,
@@ -53,6 +49,7 @@ import {
 } from './core'
 import { copyTipImage, findTipImage, removeCharacterAvatars, writeAvatarBytes } from './avatars'
 import { carryStoredProductsToMeta, pruneProductScans } from './products'
+import { migrateExportRoot } from './export-root'
 import { sceneWearables } from './generate'
 import { seedSceneHair } from '#/lib/groom-detect.ts'
 import { primarySceneDerivation } from '#/lib/scene-compat.ts'
@@ -401,89 +398,6 @@ export async function saveCharacter({ data }: { data: unknown }): Promise<Charac
   return saved.character
 }
 
-/**
- * Carry a pre-v29 character's already-exported files into the fixed export root
- * before the save repoints `exportPath` at it — otherwise the migration would
- * silently strand them (often gigabytes) at the old, user-chosen location.
- *
- * Runs at most once per character, and needs no version flag to know: it fires
- * only while the STORED path still differs from the derived one, which the save
- * itself then fixes. Idempotent by construction.
- *
- * What moves is exactly what the studio recorded as its own export folders
- * ({@link EXPORT_FOLDERS_FILE}) — never the whole old directory, which for the
- * default layout WAS the character's Houdini folder and holds the user's
- * `.hiplc` files. Each recorded folder loses its dead v27
- * `<project>/dth-export/` prefix and keeps the rest, so nested scene subfolders
- * survive. Best-effort throughout: a failed move leaves the files where they
- * are (the Rust side never deletes a source without a complete copy), and the
- * save proceeds either way — a blocked migration must not block editing.
- */
-async function migrateExportRoot(
-  project: { path: string; dazSubdir?: string },
-  character: Character,
-  lib: string,
-): Promise<void> {
-  if (!isTauri()) return
-  try {
-    const oldRoot = character.exportPath.trim().replace(/\\/g, '/')
-    if (!oldRoot) return
-    const location = await locateCharacter(lib, character.id)
-    if (!location?.relFolder) return
-    // The SAME derivation the save below writes (scenesRootRelOf — the
-    // character's own scenes root, project dazSubdir only as fallback). The
-    // plain-dazSubdir spelling that used to sit here re-fired the trigger on
-    // every save of a character with a RENAMED scenes folder — and moved its
-    // exports into a resurrected `daz3d/dth-exports` each time.
-    const newRoot = characterExportRoot(
-      location.folderAbs,
-      storage.scenesRootRelOf(character.scenePath, location.folderAbs, project.dazSubdir ?? ''),
-    )
-    if (!newRoot || normalizePathLower(newRoot) === normalizePathLower(oldRoot)) return
-
-    // The record lives in the character's meta folder — but this save can be the
-    // FIRST one after the v0.68 relocation, and the relocation itself only runs
-    // on generation (which comes after this). So fall back to the old spot in
-    // the character folder; missing it here would strand exactly the gigabytes
-    // this function exists to carry.
-    const metaRecord = joinPath(
-      storage.characterMetaDir(project.path, location.relFolder, character.id),
-      EXPORT_FOLDERS_FILE,
-    )
-    const legacyRecord = joinPath(location.folderAbs, EXPORT_FOLDERS_FILE)
-    const recordPath = (await exists(metaRecord))
-      ? metaRecord
-      : (await exists(legacyRecord))
-        ? legacyRecord
-        : ''
-    if (!recordPath) return
-    const recorded = parseExportFoldersRecord(await readTextFile(recordPath))
-    // A record written for a DIFFERENT export dir describes folders that aren't
-    // at `oldRoot` — the same guard the housekeeping's delete side applies.
-    if (!recorded || normalizePathLower(recorded.exportDir) !== normalizePathLower(oldRoot)) return
-
-    const moves = recorded.folders
-      .map((rel) => ({
-        from: joinPath(oldRoot, rel),
-        to: joinPath(newRoot, migratedExportFolder(rel)),
-      }))
-      .filter((m) => normalizePathLower(m.from) !== normalizePathLower(m.to))
-    if (moves.length === 0) return
-
-    const failures = z.array(z.string()).parse(await invoke('move_exports', { request: { moves } }))
-    if (failures.length > 0) {
-      console.warn(`Export migration left ${failures.length} folder(s) behind:\n${failures.join('\n')}`)
-    }
-    // The record still names the OLD dir + the old nesting. Drop it: the next
-    // generation writes a fresh one for the layout that now exists, and a stale
-    // record would aim the housekeeping's delete at the wrong tree.
-    await remove(recordPath)
-  } catch {
-    // Never fail a save over the migration — the files stay where they are and
-    // the next save retries (the trigger is still true until they move).
-  }
-}
-
 const deleteCharacterInput = charScopeInput.extend({
   /** Preserve the character's Daz-scenes subfolder (settings.dazSubdir). */
   keepDaz: z.boolean().optional(),
@@ -510,24 +424,67 @@ export async function deleteCharacter({ data }: { data: unknown }): Promise<void
   if (keepDaz && project.dazSubdir) keepFolders.push(project.dazSubdir)
   if (keepHoudini && project.houdiniSubdir) keepFolders.push(project.houdiniSubdir)
   await storage.deleteCharacter(lib, id, { keepFolders, location: location ?? undefined })
-  // "Keep Daz files" spares the whole Daz subfolder — which since schema v29
-  // also contains the EXPORT root. Those are derived artifacts (regenerable
-  // from the scenes, and gigabytes of them), so keeping the scenes must not
-  // silently keep every .abc/.dth too: drop the export root explicitly.
+  // "Keep Houdini files" spares the whole Houdini subfolder — which since the export-root move
+  // also contains the EXPORT root. Those are derived artifacts (regenerable from
+  // the scenes, and gigabytes of them), so keeping the user's `.hip` files must
+  // not silently keep every .abc/.dth too: drop the export root explicitly.
   // Best-effort — an orphaned export folder is never worth failing a delete.
-  if (keepDaz && location?.relFolder) {
-    try {
-      // Derived by the same rule the save uses (scenesRootRelOf) — a renamed
-      // scenes folder moved the export root with it, and aiming this purge at
-      // the project-default `daz3d/dth-exports` would silently keep gigabytes.
-      const exportRoot = characterExportRoot(
-        location.folderAbs,
-        storage.scenesRootRelOf(character?.scenePath ?? '', location.folderAbs, project.dazSubdir ?? ''),
-      )
-      if (exportRoot && (await exists(exportRoot))) await remove(exportRoot, { recursive: true })
-    } catch {
-      // leave the exports behind rather than failing the delete
+  //
+  // It hung off `keepDaz` while the root lived in the Daz folder. Both flags are
+  // checked now, because an un-migrated character (one never saved since the
+  // move) still has its exports under the Daz subfolder, and a delete is exactly
+  // the moment nobody comes back to clean up.
+  if ((keepDaz || keepHoudini) && location?.relFolder) {
+    // Two roots, because a character that has not been SAVED since the move
+    // still has its exports under the Daz subfolder: where they belong now, and
+    // where this character's definition says they actually are. The stored path
+    // is the precise answer for the second — better than re-deriving a legacy
+    // layout, since it also covers a renamed scenes folder.
+    //
+    // A candidate has to pass TWO independent tests, and the second is the
+    // load-bearing one.
+    //
+    // Inside the character folder: never follow a pre-v29 hand-picked path OUT
+    // of it — a keep-flag delete may not reach into the user's own tree.
+    //
+    // And NAMED like an export root. Containment alone is not enough, because
+    // `exportPath` is user data for any character not saved since v29: it was a
+    // free directory picker, and its natural answer was somewhere inside the
+    // Houdini folder — including, plausibly, that folder itself. `<char>/houdini`
+    // passes the containment test, so a `keepHoudini` delete would have
+    // recursively removed the very folder the flag exists to spare. The recorded
+    // export root is only ever `daz-export` (or the pre-move `dth-exports`), so
+    // requiring the last segment to say so costs nothing real and turns an
+    // arbitrary stored string back into a bounded one.
+    const looksLikeExportRoot = (p: string) => {
+      const leaf = normalizePathLower(p).split('/').pop() ?? ''
+      return leaf === EXPORTS_FOLDER.toLowerCase() || leaf === LEGACY_EXPORTS_FOLDER.toLowerCase()
     }
+    const deletable = (p: string) =>
+      p.trim() !== '' &&
+      normalizePathLower(p).startsWith(normalizePathLower(location.folderAbs) + '/') &&
+      looksLikeExportRoot(p)
+    // Deduped by a case-folded KEY while keeping the original spelling: the two
+    // answers coincide for an already-migrated character, and two concurrent
+    // recursive deletes of one folder would race each other — but the path that
+    // gets deleted has to be the real one (macOS is case-SENSITIVE).
+    const byKey = new Map<string, string>()
+    for (const root of [
+      characterExportRoot(location.folderAbs, project.houdiniSubdir),
+      character?.exportPath ?? '',
+    ]) {
+      if (deletable(root)) byKey.set(normalizePathLower(root), root)
+    }
+    const roots = [...byKey.values()]
+    await Promise.all(
+      roots.map(async (root) => {
+        try {
+          if (await exists(root)) await remove(root, { recursive: true })
+        } catch {
+          // leave the exports behind rather than failing the delete
+        }
+      }),
+    )
   }
   // Remove the character's generated Daz script subfolder (derived artifact,
   // orphaned once the character is gone). Best-effort.

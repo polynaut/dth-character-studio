@@ -154,7 +154,18 @@ function RootComponent() {
         theme="dark"
         position="top-center"
         closeButton
-        style={{ '--border-radius': 'var(--radius)' } as CSSProperties}
+        // WIDER than sonner's 356px default. This app's toasts are mostly
+        // messages from the layers below it — an os error 32 with the locking
+        // process named, a hython stderr line, a path that failed to write —
+        // and at the default width those wrap into a seven-line paragraph the
+        // eye has to read rather than scan. Clamped to the viewport so a narrow
+        // window still gets a toast that fits inside it.
+        style={
+          {
+            '--border-radius': 'var(--radius)',
+            '--width': 'min(34rem, calc(100vw - 2rem))',
+          } as CSSProperties
+        }
         icons={{
           success: (
             <span className="flex size-7 items-center justify-center rounded-full bg-emerald-500 text-white">

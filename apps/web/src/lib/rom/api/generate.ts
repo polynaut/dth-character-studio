@@ -42,6 +42,7 @@ import { relativeInside } from '../storage/fs'
 import { copyDazScene } from './attachments'
 import { clearImageSrcCache, rebuildAvatarMaster, upscaleStoredAvatar } from './avatars'
 import { carryStoredProductsToMeta, ingestProductScans, pruneProductScans } from './products'
+import { relocateExportRoot } from './export-root'
 import { poseAssetFramesSchema, sceneWearablesSchema } from './native-types'
 import { hipRefPrefixFor } from '#/lib/scene-subfolder.ts'
 import { sweepExportJunctions, sweepHoudiniProjectDirs } from './houdini'
@@ -405,19 +406,14 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
     primaryRel === null
       ? undefined
       : joinPath(outDir, deriveScenesRootRel(primaryRel, project.dazSubdir))
-  // The `dth-exports` junctions store an ABSOLUTE target, so every path that
-  // can change the export root — a character rename or folder move, a
-  // scenes-folder rename, a charactersSubdir move, the v29 migration — would
-  // otherwise leave them aimed at the old one. They all funnel through here,
-  // so ONE refresh covers the lot instead of each flow having to remember
   // The project-relative emit decision: bone-scale reference-skeleton paths are
-  // written `$JOB`-anchored (`$JOB/<dazSubdir>/dth-exports/…` — runtime v63;
-  // `$HIP/../…` before it, no junctions since v0.63) only when ONE prefix is
-  // provably right for every linked `.hip`: all inside the character folder,
-  // and the export root inside it too (`hipRefPrefixFor`). Anything else
-  // falls back to absolute paths for this character rather than shipping refs
-  // that cannot resolve. The style knob stays PER PROJECT (the `.dcsp`,
-  // Settings → Project).
+  // written `$JOB`-anchored (`$JOB/<houdiniSubdir>/daz-export/…` — runtime v64;
+  // `<dazSubdir>/dth-exports` in v63, `$HIP/../…` before that, and no junctions
+  // since v0.63) only when ONE prefix is provably right for every linked `.hip`:
+  // all inside the character folder, and the export root inside it too
+  // (`hipRefPrefixFor`). Anything else falls back to absolute paths for this
+  // character rather than shipping refs that cannot resolve. The style knob
+  // stays PER PROJECT (the `.dcsp`, Settings → Project).
   const hipRefPrefix =
     project.houdiniPathStyle !== 'absolute'
       ? hipRefPrefixFor(versioned.houdiniProjects, outDir, versioned.exportPath)
@@ -1029,6 +1025,11 @@ export interface RefreshSummary {
     /** Stored avatars xBRZ-upscaled to 768² (were smaller — from before the
      *  upscale-on-write feature). Independent of the three regen axes above. */
     avatars: number
+    /** Characters whose already-exported files were carried to the current
+     *  export ROOT (the export-root move — see `relocateExportRoot`). Reported because
+     *  it MOVES the user's gigabytes: silent is the wrong volume for that, and
+     *  a run that says nothing about it reads as a run that did nothing. */
+    exports: number
   }
   results: Array<RefreshResult>
   /** Definitions saved by a NEWER build, which this build can't read. On a normal
@@ -1255,7 +1256,7 @@ async function refreshAllAssetsInner(refreshOpts: {
   // Pass 2 — regenerate per character. A schema change regenerates both artifacts
   // (the migration can alter generated output); runtime → Daz scripts; csv → CSV.
   let skipped = 0
-  const counts = { migrated: 0, reset: resetCount, scripts: 0, csv: 0, avatars: 0 }
+  const counts = { migrated: 0, reset: resetCount, scripts: 0, csv: 0, avatars: 0, exports: 0 }
   for (const item of items) {
     const { project, lib, character, targets } = item
     const regenSchema = force || targets.schema
@@ -1267,6 +1268,9 @@ async function refreshAllAssetsInner(refreshOpts: {
       // read stale) until some other cause regenerated it. The relocation is
       // idempotent and cheap — one readDir when there is nothing to move.
       await relocateCharacterInternals(project.path, item.location, character)
+      // Same argument for the EXPORT root: its trigger is a stored path that
+      // differs from the derived one, which no staleness flag describes.
+      if (await relocateExportRoot(project, lib, character, item.location)) counts.exports += 1
       skipped += 1
       continue
     }
@@ -1302,6 +1306,19 @@ async function refreshAllAssetsInner(refreshOpts: {
         await carryStoredProductsToMeta(project, location.relFolder, character.id, location.definitionAbs)
         await storage.saveCharacter(project, fresh, lib, { location, character: fresh })
         counts.migrated += 1
+      }
+      // The EXPORT-ROOT relocation, BEFORE the generation below — which reads
+      // the STORED `exportPath` and would otherwise re-emit the old folder into
+      // every regenerated script, then stamp the new runtime version on top and
+      // leave the character reading as up to date.
+      //
+      // Unconditional, like the internals relocation: it is triggered by a
+      // stored path differing from the derived one, and NO staleness flag
+      // describes that. In particular a `RUNTIME_VERSION` bump does not — the
+      // refresh clears a stale runtime whether or not anything moved.
+      if (await relocateExportRoot(project, lib, fresh, location)) {
+        counts.exports += 1
+        fresh = (await storage.readCharacterAt(location.definitionAbs)) ?? fresh
       }
       // Take in anything the Daz product scan left for this character. Refresh is
       // the "bring everything in line" button, and a batch that scanned ten

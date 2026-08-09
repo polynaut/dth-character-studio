@@ -10,7 +10,7 @@ import {
 import type { Character } from '@dth/rom'
 
 import { canonicalImage } from '../image'
-import { characterExportRoot, deriveScenesRootRel } from '#/lib/scene-subfolder.ts'
+import { characterExportRoot } from '#/lib/scene-subfolder.ts'
 import {
   characterFolderName,
   definitionFileName,
@@ -40,26 +40,11 @@ import type { Project } from './projects'
 // The character library: scanning a project's folder for definitions and the
 // CRUD around them (save/create/move/delete + the paths Generate writes into).
 
-/**
- * The character's scenes ROOT relative to its folder, from where the primary
- * scene actually sits — the anchor for the derived export root. Falls back to
- * the project's `dazSubdir` when there is no primary inside the folder to read
- * one from (a scene-less character, one linked in place elsewhere, or a
- * legacy primary sitting directly in the folder root).
- *
- * THE one rule for "where does this character's export root live" — exported
- * because every consumer of the derived root must agree with the save that
- * derives it (`saveCharacter` below, the v29 `migrateExportRoot` trigger, the
- * delete flow's keep-Daz export purge). A consumer left on the plain
- * `project.dazSubdir` spelling breaks the moment a scenes folder is renamed:
- * it re-derives the OLD `daz3d/dth-exports` while the save writes the new one.
- */
-export function scenesRootRelOf(scenePath: string, folderAbs: string, dazSubdir: string): string {
-  if (!scenePath.trim() || !folderAbs.trim()) return dazSubdir
-  const relDir = relativeInside(folderAbs, dirname(scenePath))
-  if (relDir === null) return dazSubdir
-  return deriveScenesRootRel(relDir, dazSubdir) || dazSubdir
-}
+// `scenesRootRelOf` lived here until the export-root move: the character's own scenes root,
+// which was what the derived export root anchored on while it sat inside the Daz
+// folder. The export root moved to `<houdiniSubdir>/daz-export`, which no
+// per-character rename can move, so the rule had no consumers left. What the
+// scene cards and generation still share is `deriveScenesRootRel` itself.
 
 /**
  * THE single repoint site: rewrite every in-folder path field of a character
@@ -88,7 +73,7 @@ export function repointCharacterPaths(
     houdiniProjects: character.houdiniProjects.map(repoint),
     imageScene: repoint(character.imageScene),
     // The DERIVED export root (schema v29) lives inside the folder too
-    // (<folder>/<scenes root>/dth-exports). saveCharacter re-derives it anyway,
+    // (<folder>/<houdiniSubdir>/daz-export). saveCharacter re-derives it anyway,
     // but a move that doesn't immediately re-save — moveCharactersRoot — left
     // the stored path naming the OLD location, so anything reading it before
     // the next save (a dazProductsEnabled regenerate in the same batch, the
@@ -555,27 +540,22 @@ export async function saveCharacter(
   // carry a hand-picked path) migrate the first time they're written — the
   // Case C pattern, the same way Refresh assets persists other host-resolved
   // values. Only for a character that owns a folder: see characterExportRoot.
-  const dazSubdir = relFolder
+  const houdiniSubdir = relFolder
     ? await readManifest(project.path)
-        .then((m) => m.dazSubdir)
+        .then((m) => m.houdiniSubdir)
         .catch(() => undefined)
     : undefined
-  // Anchored on the character's OWN scenes root, not the project default: the
-  // export folder lives inside the Daz folder, so renaming that folder has to
-  // carry it. Deriving from `dazSubdir` alone meant a scenes-folder rename
-  // (daz3d → daz) physically moved `dth-exports` with the folder and then this
-  // save pointed `exportPath` straight back at the vanished `daz3d/dth-exports`
-  // — the rename half-undoing itself on its own save. `deriveScenesRootRel` is
-  // the one shared rule the scene cards and generation already use; the project
-  // default remains the fallback when there is no primary inside the folder to
-  // read a root from.
+  // Anchored on the project's HOUDINI subfolder — where the export root moved
+  // to, as `daz-export`. Plain, not per-character: the Daz side
+  // needed `scenesRootRelOf` because a character can RENAME its own scenes
+  // folder and the export root travelled inside it — a rename that then
+  // half-undid itself, this save pointing `exportPath` back at the vanished
+  // `daz3d/dth-exports`. The Houdini folder has no such per-character rename, so
+  // the manifest value is the whole answer.
   const finalStamped = relFolder
     ? {
         ...repointed,
-        exportPath: characterExportRoot(
-          finalFolderAbs,
-          scenesRootRelOf(repointed.scenePath, finalFolderAbs, dazSubdir ?? ''),
-        ),
+        exportPath: characterExportRoot(finalFolderAbs, houdiniSubdir),
       }
     : repointed
 
@@ -661,14 +641,14 @@ export async function createCharacterAt(
  * at it) and, when the project asks for one, the empty Houdini folder — and
  * return the character to write.
  *
- * The export root is `<folder>/<dazSubdir>/dth-exports` (schema v29,
+ * The export root is `<folder>/<houdiniSubdir>/daz-export` (schema v29,
  * {@link characterExportRoot}): fixed, not chosen, and created for every
- * foldered character regardless of the Houdini settings — the exporter's output
- * is Daz-side output. The Houdini folder is still seeded to nudge the user into
- * putting their `.hiplc` there, but it no longer holds exports — generated
- * scenes land directly in it, nothing else appears (the `houdini-project`
- * subfolder and the `dth-exports` junction are both retired; leftover ones are
- * swept on generation).
+ * foldered character — including one whose project switched the empty Houdini
+ * folder off, because `createHoudiniSubdir` only governs seeding an EMPTY
+ * folder and this one has contents by definition. Nothing else appears in the
+ * Houdini folder: generated `.hiplc` scenes land directly in it, and the
+ * `houdini-project` subfolder and the `dth-exports` junction are both retired
+ * (leftovers are swept on generation).
  *
  * Best-effort and only for characters that own a folder: never scatter a seed
  * folder into the project root (a loose definition's "folder" is the whole
@@ -694,11 +674,11 @@ async function seedCharacterFolders(
     }
     // The FINAL export folder, beside the Daz and Houdini ones: where the files
     // Houdini generates for Unreal land. The end of the pipeline — not to be
-    // confused with `dth-exports` inside the Daz folder, which is the
+    // confused with `daz-export` inside the Houdini folder, which is the
     // Daz→Houdini intermediate.
     const exportSub = normalizeRelFolder(manifest.exportSubdir)
     if (exportSub) await mkdir(join(folderAbs, exportSub), { recursive: true })
-    const exportRoot = characterExportRoot(folderAbs, normalizeRelFolder(manifest.dazSubdir))
+    const exportRoot = characterExportRoot(folderAbs, normalizeRelFolder(manifest.houdiniSubdir))
     if (!exportRoot) return character
     await mkdir(exportRoot, { recursive: true })
     return { ...character, exportPath: exportRoot }
