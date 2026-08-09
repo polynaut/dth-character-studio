@@ -1,5 +1,53 @@
 # @dth/web
 
+## 0.70.0
+
+### Minor Changes
+
+- [#752](https://github.com/polynaut/dth-character-studio/pull/752) [`5edc086`](https://github.com/polynaut/dth-character-studio/commit/5edc086868fae4b0f7e213432c60922a4ba0dc0d) Thanks [@polynaut](https://github.com/polynaut)! - The export folder moved into the Houdini folder, as `daz-export`
+
+  A character's Daz→Houdini exports now land in
+  `<character>/houdini/daz-export/` instead of `<character>/daz3d/dth-exports/`.
+
+  Nothing in Daz ever opens these files again — the `.dth`, `.fbx` and `.abc` exist
+  to be imported by Houdini — so they belong beside the `.hip` that reads them, not
+  beside the scenes that produced them. Hence the name too: `daz-export` is _the
+  Daz export_, read from the Houdini folder it now sits in. A generated project
+  reaches it as `$JOB/houdini/daz-export/…`, one folder down instead of one up.
+
+  **Your existing exports come with it.** Each character carries its files across
+  the next time it is saved, and the emptied old folder is removed — **Tools →
+  Refresh assets** does the whole project in one go. Only the folders the studio
+  wrote are moved; anything else you kept in there stays put.
+
+  **A Houdini project generated before this still names the old folder**, so its
+  imports report as broken on the character page. **Utils → Make paths portable**
+  now repairs that case: where every import broke at once — which is what a folder
+  move does — there is no surviving sibling path to follow, so it rebuilds them
+  from the character's current export directory instead. As before, a path is only
+  written when the file it points at actually exists.
+
+  Two smaller consequences: **Settings → Project → Houdini projects subfolder** is
+  no longer greyed out when _Create the Houdini subfolder in new characters_ is
+  off, because the export root lives in that folder whatever the toggle says; and
+  deleting a character with **keep the Houdini files folder** still removes
+  `daz-export`, since keeping your `.hip` files should not quietly keep gigabytes
+  of regenerable output with them.
+
+### Patch Changes
+
+- [#752](https://github.com/polynaut/dth-character-studio/pull/752) [`5edc086`](https://github.com/polynaut/dth-character-studio/commit/5edc086868fae4b0f7e213432c60922a4ba0dc0d) Thanks [@polynaut](https://github.com/polynaut)! - Toasts are wider
+
+  Notifications were 356px, which is fine for "Saved" and wrong for what this app
+  mostly has to say — a Windows error with the locking process named, a path that
+  could not be written, a line of hython's stderr. Those arrived as a seven-line
+  paragraph you had to read rather than glance at. They now get 544px, and still
+  shrink to fit a narrow window.
+
+- Updated dependencies [[`5edc086`](https://github.com/polynaut/dth-character-studio/commit/5edc086868fae4b0f7e213432c60922a4ba0dc0d)]:
+  - @dth/rom@0.70.0
+  - @dth/ui@0.70.0
+
 ## 0.69.0
 
 ### Minor Changes
