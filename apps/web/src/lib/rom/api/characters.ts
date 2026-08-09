@@ -1,5 +1,4 @@
 import { exists, mkdir, readDir, readFile, readTextFile, remove, stat } from '@tauri-apps/plugin-fs'
-import { invoke, isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
 import { withBusyCursor } from '../../busy-cursor.ts'
@@ -12,12 +11,7 @@ export type { RomRunFailedMorph, RomRunLog, RomRunSceneRun } from '../run-log.ts
 import { LAST_ROM_RUN_FILE } from '../character-internals.ts'
 import * as storage from '../storage'
 import { normalizeRelFolder } from '../library'
-import {
-  EXPORT_FOLDERS_FILE,
-  migratedExportFolder,
-  normalizeSceneKey,
-  parseExportFoldersRecord,
-} from '../execute-jobs.ts'
+import { normalizeSceneKey } from '../execute-jobs.ts'
 import {
   EXPORTS_FOLDER,
   LEGACY_EXPORTS_FOLDER,
@@ -55,6 +49,7 @@ import {
 } from './core'
 import { copyTipImage, findTipImage, removeCharacterAvatars, writeAvatarBytes } from './avatars'
 import { carryStoredProductsToMeta, pruneProductScans } from './products'
+import { migrateExportRoot } from './export-root'
 import { sceneWearables } from './generate'
 import { seedSceneHair } from '#/lib/groom-detect.ts'
 import { primarySceneDerivation } from '#/lib/scene-compat.ts'
@@ -401,131 +396,6 @@ export async function saveCharacter({ data }: { data: unknown }): Promise<Charac
     ...saved.character.extraScenes,
   ])
   return saved.character
-}
-
-/**
- * Carry a character's already-exported files into the fixed export root before
- * the save repoints `exportPath` at it — otherwise a relocation would silently
- * strand them (often gigabytes) at the old location.
- *
- * Written for schema v29 (when the export directory stopped being user-chosen)
- * and reused unchanged for the later move of the root itself, from
- * `<dazSubdir>/dth-exports` to `<houdiniSubdir>/daz-export` — which is the point
- * of deriving the trigger from the paths rather than from a version flag.
- *
- * Runs at most once per character per relocation, and needs no version flag to
- * know: it fires only while the STORED path still differs from the derived one,
- * which the save itself then fixes. Idempotent by construction.
- *
- * TWO callers, and the second is what makes a relocation reach a whole library:
- * {@link saveCharacter} (the editor), and **Tools → Refresh assets**, which
- * calls it for every character it walks and then persists the re-derived path.
- * A `RUNTIME_VERSION` bump alone would NOT have done that — the refresh clears
- * a stale runtime by regenerating the scripts, and regeneration reads the
- * STORED `exportPath`, so without this the refresh would have re-emitted the old
- * folder, stamped the new runtime version, and left the character looking up to
- * date on a root it had never moved off. Returns whether the roots differed, so
- * the caller knows the definition needs writing.
- *
- * What moves is exactly what the studio recorded as its own export folders
- * ({@link EXPORT_FOLDERS_FILE}) — never the whole old directory, which for the
- * default layout WAS the character's Houdini folder and holds the user's
- * `.hiplc` files. Each recorded folder loses its dead v27
- * `<project>/dth-export/` prefix and keeps the rest, so nested scene subfolders
- * survive. Best-effort throughout: a failed move leaves the files where they
- * are (the Rust side never deletes a source without a complete copy), and the
- * save proceeds either way — a blocked migration must not block editing.
- */
-export async function migrateExportRoot(
-  project: { path: string; houdiniSubdir?: string },
-  character: Character,
-  lib: string,
-): Promise<boolean> {
-  // TRUE once the stored root is known to differ from the derived one — the
-  // caller's cue that the definition needs re-saving, whatever happened to the
-  // files afterwards. Deliberately NOT "the move succeeded": `saveCharacter`
-  // re-derives `exportPath` unconditionally, so a caller that skipped the save
-  // on a partial move would leave the two halves disagreeing in a way a manual
-  // save never produces.
-  let needed = false
-  if (!isTauri()) return needed
-  try {
-    const oldRoot = character.exportPath.trim().replace(/\\/g, '/')
-    if (!oldRoot) return needed
-    const location = await locateCharacter(lib, character.id)
-    if (!location?.relFolder) return needed
-    // The SAME derivation the save below writes. It must stay literally the same
-    // call: while this trigger spelled the anchor differently from the save, a
-    // character whose layout disagreed with the project default re-fired it on
-    // EVERY save and moved its exports back and forth between two trees.
-    const newRoot = characterExportRoot(location.folderAbs, project.houdiniSubdir)
-    if (!newRoot || normalizePathLower(newRoot) === normalizePathLower(oldRoot)) return needed
-    // Past here the roots DIFFER, which is the whole answer the caller needs.
-    needed = true
-
-    // The record lives in the character's meta folder — but this save can be the
-    // FIRST one after the v0.68 relocation, and the relocation itself only runs
-    // on generation (which comes after this). So fall back to the old spot in
-    // the character folder; missing it here would strand exactly the gigabytes
-    // this function exists to carry.
-    const metaRecord = joinPath(
-      storage.characterMetaDir(project.path, location.relFolder, character.id),
-      EXPORT_FOLDERS_FILE,
-    )
-    const legacyRecord = joinPath(location.folderAbs, EXPORT_FOLDERS_FILE)
-    const recordPath = (await exists(metaRecord))
-      ? metaRecord
-      : (await exists(legacyRecord))
-        ? legacyRecord
-        : ''
-    if (!recordPath) return needed
-    const recorded = parseExportFoldersRecord(await readTextFile(recordPath))
-    // A record written for a DIFFERENT export dir describes folders that aren't
-    // at `oldRoot` — the same guard the housekeeping's delete side applies.
-    if (!recorded || normalizePathLower(recorded.exportDir) !== normalizePathLower(oldRoot)) {
-      return needed
-    }
-
-    const moves = recorded.folders
-      .map((rel) => ({
-        from: joinPath(oldRoot, rel),
-        to: joinPath(newRoot, migratedExportFolder(rel)),
-      }))
-      .filter((m) => normalizePathLower(m.from) !== normalizePathLower(m.to))
-    if (moves.length === 0) return needed
-
-    const failures = z.array(z.string()).parse(await invoke('move_exports', { request: { moves } }))
-    if (failures.length > 0) {
-      console.warn(`Export migration left ${failures.length} folder(s) behind:\n${failures.join('\n')}`)
-    }
-    // The record still names the OLD dir + the old nesting. Drop it: the next
-    // generation writes a fresh one for the layout that now exists, and a stale
-    // record would aim the housekeeping's delete at the wrong tree.
-    await remove(recordPath)
-    // The old root itself is now an empty shell the user never asked for, and
-    // `move_exports` only ever moved what was INSIDE it. `remove_dir_if_empty`
-    // is the whole safety argument: a root still holding something (a scene
-    // subfolder whose move failed, or files the user put there) is left alone,
-    // and the command refuses a symlink. Best-effort — an empty folder is never
-    // worth reporting, let alone failing a save over.
-    try {
-      // Parsed, not a bare invoke — the same z.enum spelling `sweepHoudiniProjectDirs`
-      // uses for this command (the FFI ritual in .ai/conventions.md: a primitive
-      // return still goes through a schema, it just needs no fixture). Nothing
-      // acts on the verdict here, but a silently changed contract should fail
-      // loudly in one place rather than be swallowed by two different `catch`es.
-      z.enum(['removed', 'absent', 'not-empty', 'not-a-directory']).parse(
-        await invoke('remove_dir_if_empty', { request: { dirPath: oldRoot } }),
-      )
-    } catch {
-      // locked or unreadable: an empty leftover folder, nothing more
-    }
-  } catch {
-    // Never fail a save over the migration — the files stay where they are, and
-    // the caller still repoints the definition, exactly as it would have if the
-    // move had found nothing to carry.
-  }
-  return needed
 }
 
 const deleteCharacterInput = charScopeInput.extend({

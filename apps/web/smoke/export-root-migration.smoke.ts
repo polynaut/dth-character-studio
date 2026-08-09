@@ -3,6 +3,8 @@ import { expect, test } from '@playwright/test'
 import { P, buildSeed } from './fixtures.ts'
 import { installTauriMock } from './tauri-mock.ts'
 
+import type { Page } from '@playwright/test'
+
 // The export-root move, from the only angle that matters to somebody who
 // already has a library: does **Tools → Refresh assets** carry it across?
 //
@@ -22,6 +24,17 @@ const OLD_DTH = `${OLD_ROOT}/primary/Kira.dth`
 const NEW_DTH = `${P.exportDir}/primary/Kira.dth`
 /** The studio's own record of which folders under the root are its to move. */
 const RECORD = `${P.charMeta}/.dth_export_folders.json`
+
+/** One file out of the fake world, '' when it isn't there. */
+function readFile(page: Page, path: string): Promise<string> {
+  return page.evaluate(
+    (p) =>
+      (window as unknown as { __tauriMock: { files: Map<string, string> } }).__tauriMock.files.get(
+        p,
+      ) ?? '',
+    path,
+  )
+}
 
 function seedPreMove() {
   const seed = buildSeed({ demo: true, activeProjectFile: P.dcsp })
@@ -48,11 +61,7 @@ test('Tools → Refresh assets moves an existing character onto the new export r
   await page.getByRole('tab', { name: /Refresh assets/ }).click()
   await page.getByRole('button', { name: /^Refresh assets$/ }).click()
 
-  const read = (path: string) =>
-    page.evaluate(
-      (p) => ((window as unknown as { __tauriMock: { files: Map<string, string> } }).__tauriMock.files.get(p) ?? '') as string,
-      path,
-    )
+  const read = (path: string) => readFile(page, path)
 
   // The FILES travelled — with their scene subfolder, not flattened onto the root.
   await expect.poll(() => read(NEW_DTH)).toBe('dth-fixture')
@@ -90,11 +99,7 @@ test('a character already on the new root is left alone', async ({ page }) => {
   await page.getByRole('tab', { name: /Refresh assets/ }).click()
   await page.getByRole('button', { name: /^Refresh assets$/ }).click()
 
-  const read = (path: string) =>
-    page.evaluate(
-      (p) => ((window as unknown as { __tauriMock: { files: Map<string, string> } }).__tauriMock.files.get(p) ?? '') as string,
-      path,
-    )
+  const read = (path: string) => readFile(page, path)
 
   await expect.poll(() => read(`${P.charFolder}/Kira.json`)).not.toBe('')
   expect(await read(NEW_DTH)).toBe('dth-fixture')

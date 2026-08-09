@@ -42,7 +42,7 @@ import { relativeInside } from '../storage/fs'
 import { copyDazScene } from './attachments'
 import { clearImageSrcCache, rebuildAvatarMaster, upscaleStoredAvatar } from './avatars'
 import { carryStoredProductsToMeta, ingestProductScans, pruneProductScans } from './products'
-import { migrateExportRoot } from './characters'
+import { relocateExportRoot } from './export-root'
 import { poseAssetFramesSchema, sceneWearablesSchema } from './native-types'
 import { hipRefPrefixFor } from '#/lib/scene-subfolder.ts'
 import { sweepExportJunctions, sweepHoudiniProjectDirs } from './houdini'
@@ -653,44 +653,6 @@ function overrideCsvNamesFor(character: Character, name: string): Array<string> 
  *  the file became `<name>_pose_asset.csv`. */
 function legacyPoseName(character: Character): string {
   return poseAssetFileName(character).replace(/_pose_asset\.csv$/, '_PoseAsset.csv')
-}
-
-/**
- * Carry a character's exports to the current export ROOT and persist the
- * re-derived path — the whole-library half of what a manual save does.
- *
- * `migrateExportRoot` moves the FILES; `storage.saveCharacter` is what rewrites
- * `exportPath`, and the two must happen together or the definition and the disk
- * disagree. In the editor `saveCharacter` (api/characters.ts) pairs them; this
- * is the pairing for Refresh assets, which is the only way a relocation reaches
- * a library the user isn't opening character by character.
- *
- * Returns whether anything was relocated, for the report.
- *
- * Deliberately NOT driven by a version flag. The export-root move bumped
- * `RUNTIME_VERSION`, which does make Refresh visit every character — but the
- * regeneration it triggers reads the STORED `exportPath`, so on its own the bump
- * would have re-emitted the OLD folder and then stamped the new version over the
- * staleness that brought the user here. The trigger has to be the path
- * disagreeing with its own derivation, which is exactly what `migrateExportRoot`
- * tests.
- */
-async function relocateExportRoot(
-  project: ProjectInfo,
-  lib: string,
-  character: Character,
-  location: storage.CharacterLocation,
-): Promise<boolean> {
-  try {
-    if (!(await migrateExportRoot(project, character, lib))) return false
-    await storage.saveCharacter(project, character, lib, { location, character })
-    return true
-  } catch {
-    // Best-effort, like every other repair in this sweep: a character whose
-    // files are locked keeps the old root and is picked up by the next run
-    // (the trigger stays true until the definition is actually rewritten).
-    return false
-  }
 }
 
 /**
