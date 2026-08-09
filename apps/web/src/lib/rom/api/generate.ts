@@ -405,19 +405,14 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
     primaryRel === null
       ? undefined
       : joinPath(outDir, deriveScenesRootRel(primaryRel, project.dazSubdir))
-  // The `dth-exports` junctions store an ABSOLUTE target, so every path that
-  // can change the export root — a character rename or folder move, a
-  // scenes-folder rename, a charactersSubdir move, the v29 migration — would
-  // otherwise leave them aimed at the old one. They all funnel through here,
-  // so ONE refresh covers the lot instead of each flow having to remember
   // The project-relative emit decision: bone-scale reference-skeleton paths are
-  // written `$JOB`-anchored (`$JOB/<dazSubdir>/dth-exports/…` — runtime v63;
-  // `$HIP/../…` before it, no junctions since v0.63) only when ONE prefix is
-  // provably right for every linked `.hip`: all inside the character folder,
-  // and the export root inside it too (`hipRefPrefixFor`). Anything else
-  // falls back to absolute paths for this character rather than shipping refs
-  // that cannot resolve. The style knob stays PER PROJECT (the `.dcsp`,
-  // Settings → Project).
+  // written `$JOB`-anchored (`$JOB/<houdiniSubdir>/daz-export/…` — runtime v64;
+  // `<dazSubdir>/dth-exports` in v63, `$HIP/../…` before that, and no junctions
+  // since v0.63) only when ONE prefix is provably right for every linked `.hip`:
+  // all inside the character folder, and the export root inside it too
+  // (`hipRefPrefixFor`). Anything else falls back to absolute paths for this
+  // character rather than shipping refs that cannot resolve. The style knob
+  // stays PER PROJECT (the `.dcsp`, Settings → Project).
   const hipRefPrefix =
     project.houdiniPathStyle !== 'absolute'
       ? hipRefPrefixFor(versioned.houdiniProjects, outDir, versioned.exportPath)

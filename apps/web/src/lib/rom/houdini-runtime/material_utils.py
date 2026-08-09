@@ -1004,6 +1004,12 @@ def _node_info(node):
 
 
 def op_scan(request):
+    # The character's current export root, when the scan is scoped to one. The
+    # dry `_repair_import_refs` below needs it for the same reason `op_repath`
+    # does: after a whole-folder move no sibling import path survives to read the
+    # new location off, so without it the scan reports nothing broken and the
+    # studio's repath button — gated on this very number — stays disabled.
+    export_dir = _norm_path(request.get("exportDir", ""))
     projects = []
     for path in request.get("hipPaths", []):
         entry = {
@@ -1021,7 +1027,7 @@ def op_scan(request):
             # Read in the SAME pass as the nodes — opening a `.hip` costs tens
             # of seconds, and the General tab must not pay it a second time.
             entry["job"] = _scene_job()
-            entry["refs"] = _project_ref_info()
+            entry["refs"] = _project_ref_info(export_dir)
             entry["prefill"] = _prefill_scan()
         except Exception as exc:
             entry["ok"] = False
@@ -1171,17 +1177,29 @@ def _relocated_donor(broken, export_dir):
     root. Only the root part is exchanged, which is the same prefix-swap the
     generated `.dsa` performs.
 
-    Returns `(folder, stem)` only when the `.dth` derived from it EXISTS on disk
-    — a relocation the filesystem confirms, never a guess. `None` otherwise, so
-    an unrelated breakage falls through to being reported rather than "repaired"
-    into a second wrong path.
+    Each broken entry is probed with its OWN extension, not the `.dth`: the three
+    parms share a stem, so any one of them can confirm the relocation, and a node
+    whose `.dth` parm was never filled in would otherwise never repair at all
+    while its `.fbx` and `.abc` sat at the new root in plain sight.
+
+    Returns `(folder, stem)` only when the derived file EXISTS on disk. That is
+    the same standard the sibling donor holds itself to, and it is worth being
+    precise about what it does and does not prove: the file is really there, so
+    the path written can always be opened — it is not proof that it is the same
+    file the parm used to name. The shortest candidate is the root itself, which
+    a flat export layout needs, and which is also the loosest match here: a
+    hand-picked `.dth` from somewhere else entirely, broken for unrelated
+    reasons, is re-aimed at a same-stem file in this character's export root if
+    one happens to exist. `None` otherwise, so an unrelated breakage with no
+    match falls through to being REPORTED rather than "repaired" into a second
+    wrong path.
     """
     if not export_dir:
         return None
     root = _norm_path(export_dir).rstrip("/")
     if not root or not os.path.isdir(root):
         return None
-    for _parm, _name, _ext, value in broken:
+    for _parm, _name, ext, value in broken:
         stored = _norm_path(value)
         if not stored:
             continue
@@ -1198,7 +1216,7 @@ def _relocated_donor(broken, export_dir):
         for depth in range(len(tails), -1, -1):
             candidates.append("/".join([root] + list(reversed(tails[:depth]))))
         for folder in candidates:
-            if os.path.exists(_norm_path(os.path.join(folder, stem + ".dth"))):
+            if os.path.exists(_norm_path(os.path.join(folder, stem + ext))):
                 return (folder, stem)
     return None
 
@@ -1398,16 +1416,19 @@ def op_prefill(request):
     return {"op": "prefill", "projects": [], "targets": [], "prefill": results, "dryRun": dry_run}
 
 
-def _project_ref_info():
+def _project_ref_info(export_dir=""):
     """What a repath WOULD do to the open scene — read-only, for the scan.
 
     Runs the exact helpers `op_repath` runs (with `dry_run`), so the tab can
-    never promise a number the action then doesn't deliver.
+    never promise a number the action then doesn't deliver — and, just as
+    load-bearing, never UNDER-reports one either: `export_dir` has to be the same
+    value `op_repath` gets, or the scan misses every repair only the relocation
+    donor can make and the studio disables the button on the strength of it.
     """
     roots = _ref_roots()
     info = {"collapsible": 0, "foreign": 0, "broken": [], "hipRelative": []}
     for node in hou.node("/").allSubChildren():
-        for label, _old, _new in _repair_import_refs(node, roots, True):
+        for label, _old, _new in _repair_import_refs(node, roots, True, export_dir):
             info["broken"].append(label)
         for parm, raw in _file_ref_parms(node):
             if _rehome_hip_ref(raw, roots) is not None:

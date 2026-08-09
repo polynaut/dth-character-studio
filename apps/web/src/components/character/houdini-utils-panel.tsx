@@ -1006,14 +1006,12 @@ export function HoudiniUtilsPanel({
     try {
       const result = await repathHoudiniReferences({
         data: {
-          // `exportDir` is the fallback donor for an import path whose whole
-          // export folder moved (v0.69) — no sibling survives to point at the
-          // new location, and this is the only thing that knows it.
-          targets: repath.targets.map((hipPath) => ({
-            hipPath,
-            jobDir: charFolder,
-            exportDir: character.exportPath,
-          })),
+          targets: repath.targets.map((hipPath) => ({ hipPath, jobDir: charFolder })),
+          // The scope, not the export root itself: the api derives that (and the
+          // SCAN derives it the same way, so the dry run and the card can never
+          // disagree about which folder a broken import is rebuilt against).
+          projectId,
+          characterId: character.id,
           dryRun,
         },
       })

@@ -19,6 +19,8 @@ import {
   parseExportFoldersRecord,
 } from '../execute-jobs.ts'
 import {
+  EXPORTS_FOLDER,
+  LEGACY_EXPORTS_FOLDER,
   PRIMARY_SCENE_SUBFOLDER,
   characterExportRoot,
   deriveScenesRootRel,
@@ -486,7 +488,14 @@ async function migrateExportRoot(
     // and the command refuses a symlink. Best-effort — an empty folder is never
     // worth reporting, let alone failing a save over.
     try {
-      await invoke('remove_dir_if_empty', { request: { dirPath: oldRoot } })
+      // Parsed, not a bare invoke — the same z.enum spelling `sweepHoudiniProjectDirs`
+      // uses for this command (the FFI ritual in .ai/conventions.md: a primitive
+      // return still goes through a schema, it just needs no fixture). Nothing
+      // acts on the verdict here, but a silently changed contract should fail
+      // loudly in one place rather than be swallowed by two different `catch`es.
+      z.enum(['removed', 'absent', 'not-empty', 'not-a-directory']).parse(
+        await invoke('remove_dir_if_empty', { request: { dirPath: oldRoot } }),
+      )
     } catch {
       // locked or unreadable: an empty leftover folder, nothing more
     }
@@ -538,20 +547,40 @@ export async function deleteCharacter({ data }: { data: unknown }): Promise<void
     // where this character's definition says they actually are. The stored path
     // is the precise answer for the second — better than re-deriving a legacy
     // layout, since it also covers a renamed scenes folder.
-    const inside = (p: string) =>
-      normalizePathLower(p).startsWith(normalizePathLower(location.folderAbs) + '/')
+    //
+    // A candidate has to pass TWO independent tests, and the second is the
+    // load-bearing one.
+    //
+    // Inside the character folder: never follow a pre-v29 hand-picked path OUT
+    // of it — a keep-flag delete may not reach into the user's own tree.
+    //
+    // And NAMED like an export root. Containment alone is not enough, because
+    // `exportPath` is user data for any character not saved since v29: it was a
+    // free directory picker, and its natural answer was somewhere inside the
+    // Houdini folder — including, plausibly, that folder itself. `<char>/houdini`
+    // passes the containment test, so a `keepHoudini` delete would have
+    // recursively removed the very folder the flag exists to spare. The recorded
+    // export root is only ever `daz-export` (or the pre-v0.69 `dth-exports`), so
+    // requiring the last segment to say so costs nothing real and turns an
+    // arbitrary stored string back into a bounded one.
+    const looksLikeExportRoot = (p: string) => {
+      const leaf = normalizePathLower(p).split('/').pop() ?? ''
+      return leaf === EXPORTS_FOLDER.toLowerCase() || leaf === LEGACY_EXPORTS_FOLDER.toLowerCase()
+    }
+    const deletable = (p: string) =>
+      p.trim() !== '' &&
+      normalizePathLower(p).startsWith(normalizePathLower(location.folderAbs) + '/') &&
+      looksLikeExportRoot(p)
     // Deduped by a case-folded KEY while keeping the original spelling: the two
     // answers coincide for an already-migrated character, and two concurrent
     // recursive deletes of one folder would race each other — but the path that
     // gets deleted has to be the real one (macOS is case-SENSITIVE).
-    // Never follow a pre-v29 hand-picked path OUT of the character folder
-    // either — a keep-flag delete may not reach into the user's own tree.
     const byKey = new Map<string, string>()
     for (const root of [
       characterExportRoot(location.folderAbs, project.houdiniSubdir),
       character?.exportPath ?? '',
     ]) {
-      if (root.trim() && inside(root)) byKey.set(normalizePathLower(root), root)
+      if (deletable(root)) byKey.set(normalizePathLower(root), root)
     }
     const roots = [...byKey.values()]
     await Promise.all(

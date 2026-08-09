@@ -301,16 +301,55 @@ older runtimes as stale.
   source without a complete copy in hand. The emptied OLD root then goes via
   `remove_dir_if_empty` (v0.69) — only ever when empty, so a folder still holding
   a failed move or the user's own files stays exactly where it is.
+- **Deleting a character with a KEEP flag still drops the export root**
+  (`deleteCharacter`, api/characters.ts). "Keep the Daz files" / "Keep the
+  Houdini files" spare a whole subfolder, and one of them contains the export
+  root — derived, regenerable, and gigabytes. It hung off `keepDaz` while the
+  root lived in the Daz folder; since v0.69 EITHER flag arms it, because a
+  character never saved since the move still has its exports at the old location.
+  Two candidate roots therefore: the DERIVED one, and the character's STORED
+  `exportPath`. The stored one is user data for anything not saved since v29
+  (free directory picker), so it must pass two tests — inside the character
+  folder AND named `daz-export`/`dth-exports`. Containment alone is not enough:
+  the picker's most natural pre-v29 answer was the Houdini folder itself, which
+  is contained, and a `keepHoudini` delete would then have recursively removed
+  the folder the flag exists to spare. Pinned in `delete-character.test.ts`,
+  including that case.
 - **A Houdini project generated before a relocation still names the old folder.**
   Its imports break TOGETHER, so `_repair_import_refs`' sibling donor has nothing
   to read the new location off — hence the second donor, `_relocated_donor`
   (material_utils.py): the studio passes the character's current export root as
-  `exportDir` on each repath target, and a broken path is rebuilt as
-  `<root>/<its own scene subfolder>/<its own stem>`, written only when that file
-  EXISTS. Surfaces as the card's `broken-refs` badge → Utils → **Make paths
-  portable**. UNTESTED as of v0.69: no Python harness exists in the repo
-  (material_utils runs only inside hython), so this one is code review + the
-  existing dry-run/backup safety, not a passing test.
+  `exportDir` — DERIVED by `scanExportRoot` (api/houdini-material.ts) from the
+  project + character scope, never taken from a caller or from the stored
+  `exportPath`, so the scan and the repath cannot spell it differently — and a
+  broken path is rebuilt as `<root>/<its own scene subfolder>/<its own stem>`
+  (each parm probed with its OWN extension, so a node with no `.dth` filled in
+  still repairs), written only when that file EXISTS.
+  **Three things have to line up or the repair is unreachable**, and each was a
+  real bug before it was a rule:
+  1. `exportDir` reaches the **scan** too, not just the repath (`op_scan` →
+     `_project_ref_info(export_dir)`). The scan runs `_repair_import_refs` dry to
+     produce `refs.broken`, so without it a moved root reports NOTHING broken.
+  2. `planRepath` (`houdini-defaults.ts`) counts **all three** kinds of work —
+     `collapsible` + `hipRelative` + `broken` — because it is also the GATE: the
+     Utils button is disabled on an empty `targets`. A moved-root project has
+     only the third; a pre-v63 project has only the second.
+  3. The scan CACHE key (`scanKey`, api/houdini-material.ts) includes the export
+     root. A verdict about paths is not a property of the `.hip` alone, and the
+     move changes every one of them without touching the file — on mtime alone
+     the store keeps serving the pre-move "all resolve".
+  Then it surfaces as the card's `broken-refs` badge → Utils → **Make paths
+  portable**. The TS half of that chain is vitest-pinned
+  (`houdini-defaults.test.ts`, `houdini-validate.test.ts`). The Python half has
+  no committed test — the repo has no Python harness, `material_utils` runs only
+  inside hython. `_relocated_donor` itself touches nothing but `os.path`, so it
+  WAS verified ad-hoc (2026-08-09) by stubbing `hou`, importing the module and
+  running it against a real temp tree: the v0.69 layout, a second scene keeping
+  its own subfolder, a set whose `.dth` was never exported, an unrelated dangling
+  path (correctly refused), a missing/absent root, backslash input, and a flat
+  layout. What that does NOT cover is everything around it — `parm.eval()`,
+  `unexpandedString()`, the save — so the end-to-end repair is still worth a
+  **Dry run** on one real pre-move project before it is trusted.
 - Schema v27's **Houdini project folder** is GONE (v29), and with it the
   `<folder>/dth-export/` nesting, `houdiniProjectResolution`, the per-scene
   override and the run-time `dthExportProj` block. The export directory owes

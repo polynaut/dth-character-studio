@@ -331,6 +331,24 @@ current code before relying on details, but assume the *lesson* still holds.
   impossible. Corrected 2026-08-06 (the earlier wording came from a workflow
   that happened to use absolute refs); state the reason this way, or the next
   reader concludes movable Houdini projects can't exist.
+- **A cache key must cover everything the cached ANSWER depends on, not just the
+  file it was read from.** The Houdini scan store is keyed on `<hip>|<mtime>`,
+  and one third of its answer (`refs.broken` — do the files the import paths name
+  exist?) is about files that are not the `.hip`. The v0.69 export-root move
+  relocated every one of them without touching a single `.hip`, so the store
+  would have kept serving "all resolve" for exactly the projects the move broke,
+  until the user happened to re-save one in Houdini. The export root is in
+  `scanKey` now. The general shape: when a cached verdict is about the RELATION
+  between a file and its surroundings, the surroundings belong in the key.
+- **A plan that also GATES a button has to count everything the action fixes.**
+  `planRepath` decides both what the Utils repath would do and whether the button
+  is clickable (empty `targets` = disabled). It counted absolute-collapsible and
+  broken refs but not `hipRelative`, and the scan couldn't produce `broken` for a
+  moved export root — so two different classes of project sat behind a greyed-out
+  button while the card's own badge told the user to press it. Both were found by
+  reading the gate, not by using it, because the symptom is a UI that says
+  everything is fine. When a "what would this do" summary doubles as a
+  precondition, every branch the run can take must be represented in it.
 - **The DazToHue HDA has its own "Linking" feature, and it is a LIVE MIRROR —
   not a copy.** `DazToHueShared.do_link_to_source` rewrites every linkable parm
   of the target to `ch("<source>/<parm>")` / `chs(...)` (plus `opmultiparm` for

@@ -136,6 +136,11 @@ export interface ScannedRefs {
   collapsible: number
   foreign: number
   broken: ReadonlyArray<string>
+  /** Pre-v63 `$HIP/../…` paths — they RESOLVE, but leave the houdini folder,
+   *  so the repath re-anchors them on `$JOB`. Counted separately by the scan
+   *  (`_project_ref_info` puts a path in one bucket or the other), and folded
+   *  back into the plan's `collapsible` because the run treats them the same. */
+  hipRelative: ReadonlyArray<string>
 }
 
 /** A project as the General tab sees it. */
@@ -159,6 +164,13 @@ export interface ScannedProject {
  * the row says so rather than letting the user find out.
  *
  * The Python refuses a mismatch too; this is what stops the user reaching it.
+ *
+ * **Everything the run can fix must be counted here**, because this is also the
+ * gate: the button is disabled on an empty `targets`. Two separate bugs came
+ * from counting less than the run does — a `$HIP/../` project (flagged by the
+ * card, nothing else to do) and a project whose export root MOVED (every import
+ * broken, nothing absolute left) both reported "nothing to do" while their own
+ * badges told the user to press the button.
  */
 export function planRepath(
   projects: ReadonlyArray<ScannedProject>,
@@ -166,6 +178,11 @@ export function planRepath(
 ): {
   /** Projects a run would be sent — readable, `$JOB` correct, something to do. */
   targets: Array<string>
+  /** References the run will rewrite so they sit under a root: the absolute ones
+   *  it can collapse PLUS the pre-v63 `$HIP/../…` it re-anchors on `$JOB`. One
+   *  number because `op_repath` does one thing to both and reports them as one
+   *  `collapsed` count — and because leaving the second out is what made the
+   *  button refuse the very projects the card's `hip-relative` badge sends here. */
   collapsible: number
   broken: number
   foreign: number
@@ -180,15 +197,20 @@ export function planRepath(
   const eligible = readable.filter(
     (project) => project.job.trim() !== '' && sameFolder(project.job, charFolder),
   )
-  const targets = eligible
-    .filter((project) => project.refs.collapsible > 0 || project.refs.broken.length > 0)
-    .map((project) => project.hipPath)
+  // Three kinds of work, and ALL THREE have to be here: a project can need only
+  // the `$HIP/../…` re-anchor (its paths resolve and none is absolute), and one
+  // whose export folder moved has nothing else either — every import broke, and
+  // `refs.broken` is the only trace of it. Miss one and the button greys out
+  // while the card's own badge tells the user to press it.
+  const work = (refs: ScannedRefs) =>
+    refs.collapsible + refs.hipRelative.length + refs.broken.length
+  const targets = eligible.filter((project) => work(project.refs) > 0).map((project) => project.hipPath)
   const sum = (pick: (refs: ScannedRefs) => number) =>
     eligible.reduce((total, project) => total + pick(project.refs), 0)
 
   return {
     targets,
-    collapsible: sum((refs) => refs.collapsible),
+    collapsible: sum((refs) => refs.collapsible + refs.hipRelative.length),
     broken: sum((refs) => refs.broken.length),
     foreign: sum((refs) => refs.foreign),
     blockedByJob,

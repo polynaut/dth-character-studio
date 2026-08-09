@@ -120,10 +120,12 @@ describe('projectsNeedingRepair', () => {
 describe('planRepath', () => {
   const HIP = `${ITA_HIP_DIR}/PlaygroundAssets_Ita.hiplc`
   const BROKEN_DTU = '/obj/DazToHue/DazToHueImport import_character_dtu_file'
+  const HIP_REL_DTU = '/obj/DazToHue/DazToHueImport import_character_dtu_file'
   /** Measured with the pre-v0.64 $JOB still in place. */
-  const STALE_REFS = { collapsible: 0, foreign: 2, broken: [BROKEN_DTU] }
+  const STALE_REFS = { collapsible: 0, foreign: 2, broken: [BROKEN_DTU], hipRelative: [] }
   /** The same file, measured again after the $JOB repair. */
-  const REPAIRED_REFS = { collapsible: 2, foreign: 0, broken: [BROKEN_DTU] }
+  const REPAIRED_REFS = { collapsible: 2, foreign: 0, broken: [BROKEN_DTU], hipRelative: [] }
+  const CLEAN_REFS = { collapsible: 0, foreign: 0, broken: [], hipRelative: [] }
 
   it('refuses to run while $JOB is still stale, and says why', () => {
     const plan = planRepath([{ hipPath: HIP, ok: true, job: ITA_STALE_JOB, refs: STALE_REFS }], ITA)
@@ -149,10 +151,9 @@ describe('planRepath', () => {
   })
 
   it('sends only the projects with something to do', () => {
-    const clean = { collapsible: 0, foreign: 0, broken: [] }
     const plan = planRepath(
       [
-        { hipPath: 'a.hiplc', ok: true, job: ITA, refs: clean },
+        { hipPath: 'a.hiplc', ok: true, job: ITA, refs: CLEAN_REFS },
         { hipPath: 'b.hiplc', ok: true, job: ITA, refs: REPAIRED_REFS },
       ],
       ITA,
@@ -161,21 +162,22 @@ describe('planRepath', () => {
   })
 
   it('says so when there is genuinely nothing left to fix', () => {
-    const clean = { collapsible: 0, foreign: 0, broken: [] }
-    const plan = planRepath([{ hipPath: 'a.hiplc', ok: true, job: ITA, refs: clean }], ITA)
+    const plan = planRepath([{ hipPath: 'a.hiplc', ok: true, job: ITA, refs: CLEAN_REFS }], ITA)
     expect(plan.targets).toEqual([])
     expect(plan.reason).toContain('already relative')
   })
 
   it('counts a project with only BROKEN refs as work, not as clean', () => {
-    // Nothing to collapse, but a dangling import is still a repair.
+    // Nothing to collapse, but a dangling import is still a repair. This is the
+    // ONLY signal a project whose export folder moved gives off: every import
+    // path broke at once, and nothing absolute is left to collapse.
     const plan = planRepath(
       [
         {
           hipPath: 'a.hiplc',
           ok: true,
           job: ITA,
-          refs: { collapsible: 0, foreign: 0, broken: [BROKEN_DTU] },
+          refs: { collapsible: 0, foreign: 0, broken: [BROKEN_DTU], hipRelative: [] },
         },
       ],
       ITA,
@@ -184,9 +186,38 @@ describe('planRepath', () => {
     expect(plan.broken).toBe(1)
   })
 
+  it('counts a project with only $HIP-relative refs as work too', () => {
+    // A pre-v63 project: its paths RESOLVE and none is absolute, so `collapsible`
+    // and `broken` are both 0 and the plan used to call it clean — while the
+    // card's own `hip-relative` badge told the user "Make paths portable
+    // rewrites them" and the button sat disabled. The run re-anchors them and
+    // reports them as collapsed, so the plan counts them the same way.
+    const plan = planRepath(
+      [
+        {
+          hipPath: 'a.hiplc',
+          ok: true,
+          job: ITA,
+          refs: { collapsible: 0, foreign: 0, broken: [], hipRelative: [HIP_REL_DTU] },
+        },
+      ],
+      ITA,
+    )
+    expect(plan.targets).toEqual(['a.hiplc'])
+    expect(plan.collapsible).toBe(1)
+    expect(plan.reason).toBe('')
+  })
+
   it('ignores a project the scan could not read', () => {
     const plan = planRepath(
-      [{ hipPath: 'gone.hiplc', ok: false, job: '', refs: { collapsible: 9, foreign: 9, broken: [] } }],
+      [
+        {
+          hipPath: 'gone.hiplc',
+          ok: false,
+          job: '',
+          refs: { collapsible: 9, foreign: 9, broken: [], hipRelative: [] },
+        },
+      ],
       ITA,
     )
     expect(plan.targets).toEqual([])
@@ -203,7 +234,7 @@ describe('planRepath', () => {
           hipPath: 'a.hiplc',
           ok: true,
           job: ITA,
-          refs: { collapsible: 3, foreign: 5, broken: [] },
+          refs: { collapsible: 3, foreign: 5, broken: [], hipRelative: [] },
         },
       ],
       ITA,

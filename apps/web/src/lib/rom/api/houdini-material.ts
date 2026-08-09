@@ -7,7 +7,7 @@ import { houdiniVersionFromInstall, matchingHoudiniDocsFolder } from '#/lib/houd
 import { HOUDINI_SCRIPTS_FOLDER } from '../houdini-jobs'
 import { normalizePath } from '#/lib/path.ts'
 import { stripTrailingSeparators } from '#/lib/path-trim.ts'
-import { hipRefPrefixFor } from '#/lib/scene-subfolder.ts'
+import { characterExportRoot, hipRefPrefixFor } from '#/lib/scene-subfolder.ts'
 import { buildHoudiniPrefill, sceneDthPath } from '../houdini-jobs'
 import { characterScenesRoot } from './execute'
 import { normalizeRelFolder } from '../library'
@@ -17,6 +17,7 @@ import {
   freshScan,
   houdiniScanStoreJson,
   parseScanStore,
+  scanCacheKey,
   withScanResults,
 } from '../houdini-project-cache.ts'
 import type { HoudiniScanStore } from '../houdini-project-cache.ts'
@@ -76,7 +77,11 @@ const scanInput = z.object({
   hipPaths: z.array(z.string().min(1)),
   /** Which store the results are persisted to. With BOTH set it is that
    *  character's own store (in its `.dcsmeta` folder); otherwise the shared
-   *  source store in app-data — see `scanStorePath`. */
+   *  source store in app-data — see `scanStorePath`.
+   *
+   *  They also decide the EXPORT ROOT the scan judges broken import paths
+   *  against (`scanExportRoot`): an unscoped scan is of projects belonging to no
+   *  character, and has no root to rebuild a path from. */
   projectId: z.string().default(''),
   characterId: z.string().default(''),
 })
@@ -343,12 +348,17 @@ export async function scanHoudiniMaterials({
   if (!isTauri()) {
     throw new Error('Scanning Houdini projects needs the desktop app (it runs hython).')
   }
+  // Resolved HERE rather than taken from the caller: three call sites reach this
+  // (the drawer, its cached-first open, the background sweep) and a forgotten
+  // argument would silently cost the relocation repair — the failure mode being
+  // a card that cheerfully reports "all resolve" over a dead project.
+  const exportRoot = await scanExportRoot(projectId, characterId)
   // Serve unchanged files from cache and only send the rest to hython. When
   // everything is cached this returns without starting a process at all —
   // reopening the drawer on projects nobody touched is then instant.
   //
-  // TWO layers, same mtime key: the in-memory Map answers within a session, the
-  // on-disk store survives a restart and is shared between windows. The disk
+  // TWO layers, one key (`scanKey`): the in-memory Map answers within a session,
+  // the on-disk store survives a restart and is shared between windows. The disk
   // read costs one small JSON; the miss it saves costs a whole hython start.
   // The persistent layer must never be able to FAIL a scan: it is an
   // optimisation, and a broken cache degrading to "no cache" is correct where
@@ -362,7 +372,7 @@ export async function scanHoudiniMaterials({
   } catch {
     storePath = ''
   }
-  const keys = await Promise.all(hipPaths.map(scanKey))
+  const keys = await Promise.all(hipPaths.map((hipPath) => scanKey(hipPath, exportRoot)))
   const cached = new Map<string, MaterialScanProject>()
   const stale: Array<string> = []
   hipPaths.forEach((hipPath, i) => {
@@ -380,11 +390,17 @@ export async function scanHoudiniMaterials({
   // easily ask twice (React StrictMode double-fires its effect in dev, and
   // Rescan is clickable while one is running). Deliberately scans only —
   // a transfer is not idempotent and must never be coalesced.
-  const key = JSON.stringify(stale)
+  // Keyed on the export root too, for the same reason `scanKey` is: two scans of
+  // one file against different roots are different questions.
+  const key = JSON.stringify([exportRoot, stale])
   const running = inFlightScans.get(key)
   const pending =
     running ??
-    runMaterialUtil({ op: 'scan', hipPaths: stale })
+    // `exportDir` lets the scan's dry `_repair_import_refs` see the SAME
+    // relocation repair a real repath would make — without it the scan reports
+    // nothing broken for a moved export root, and `planRepath` then offers no
+    // target, which disables the very action that would fix it.
+    runMaterialUtil({ op: 'scan', hipPaths: stale, exportDir: exportRoot })
       .then((report) => report.projects)
       .finally(() => {
         inFlightScans.delete(key)
@@ -537,9 +553,13 @@ export async function fetchCachedHoudiniScans({
   try {
     const { character } = await prefillContext({ projectId, id })
     const stored = await readScanStore(await scanStorePath(projectId, id))
+    // The same key the scan that wrote these entries used — export root
+    // included, so a moved root reads as "not scanned yet" rather than serving
+    // the pre-move verdict.
+    const exportRoot = await scanExportRoot(projectId, id)
     const hits = await Promise.all(
       character.houdiniProjects.map(async (hipPath) =>
-        freshScan(stored, hipPath, await scanKey(hipPath)),
+        freshScan(stored, hipPath, await scanKey(hipPath, exportRoot)),
       ),
     )
     return hits.filter((p): p is MaterialScanProject => p !== null)
@@ -575,10 +595,15 @@ export async function fetchHoudiniProjectStatus({
   try {
     const { character, charFolder } = await prefillContext({ projectId, id })
     const stored = await readScanStore(await scanStorePath(projectId, id))
+    // Export root in the key, like every other reader of this store: a card must
+    // not badge a project "healthy" off a verdict measured against the folder the
+    // exports USED to live in. A moved root reads as unscanned until the sweep
+    // catches up, which is the honest answer.
+    const exportRoot = await scanExportRoot(projectId, id)
     return Promise.all(
       character.houdiniProjects.map(async (hipPath) => {
         const scan = insideFolder(hipPath, charFolder)
-          ? freshScan(stored, hipPath, await scanKey(hipPath))
+          ? freshScan(stored, hipPath, await scanKey(hipPath, exportRoot))
           : null
         const health = validateHoudiniProject(scan, charFolder)
         return { hipPath, ok: health.ok, summary: health.summary, scanned: scan !== null }
@@ -590,14 +615,15 @@ export async function fetchHoudiniProjectStatus({
 }
 
 /**
- * Scanned projects, keyed by path + mtime.
+ * Scanned projects, keyed by {@link scanKey} (path + mtime + export root).
  *
  * Opening a `.hip` costs tens of seconds, and the drawer is built for REPEATED
  * use — pick a template, transfer, come back. Re-reading a file that hasn't
  * changed since the last look is the single most wasteful thing this feature
- * did. The mtime IS the invalidation: a transfer rewrites the target, so its
- * next scan misses and re-reads exactly the file that changed while its
- * neighbours stay cached.
+ * did. The mtime is most of the invalidation: a transfer rewrites the target, so
+ * its next scan misses and re-reads exactly the file that changed while its
+ * neighbours stay cached. It is not ALL of it — see `scanKey` for the part of a
+ * verdict that lives outside the file.
  */
 const scanCache = new Map<string, MaterialScanProject>()
 
@@ -614,13 +640,40 @@ function cacheScan(key: string, project: MaterialScanProject): void {
   }
 }
 
-/** `<path>|<mtime>` — '' when the file can't be stat'd, which means "don't
- *  cache": an unreadable path must be re-attempted, not remembered as broken. */
-async function scanKey(hipPath: string): Promise<string> {
+/**
+ * The stat half of {@link scanCacheKey} — '' when the file can't be stat'd,
+ * which means "don't cache": an unreadable path must be re-attempted, not
+ * remembered as broken. The key FORMAT lives in the pure cache module (where it
+ * is tested), not here; this only supplies the mtime.
+ */
+async function scanKey(hipPath: string, exportRoot: string): Promise<string> {
   try {
     const info = await stat(hipPath)
-    const mtime = info.mtime?.getTime()
-    return mtime ? `${normalizePath(hipPath).toLowerCase()}|${mtime}` : ''
+    return scanCacheKey(hipPath, info.mtime?.getTime(), exportRoot)
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * The character's CURRENT export root, for the scan that judges its projects —
+ * '' for an unscoped scan (the shared Utils source store: template projects
+ * belong to no character, so there is no root to rebuild a path from).
+ *
+ * DERIVED the way the save derives it (`characterExportRoot`), not read off the
+ * stored `exportPath`: this answers "where would the exports be now", which is
+ * what a broken path has to be rebuilt against. Best-effort — an unresolvable
+ * character degrades to '', which costs the relocation repair and nothing else.
+ */
+async function scanExportRoot(projectId: string, characterId: string): Promise<string> {
+  if (!projectId || !characterId) return ''
+  try {
+    const project = await resolveProject(projectId)
+    const location = await locateCharacter(charsRoot(project), characterId)
+    // Only a character that OWNS a folder has one — a loose root-level
+    // definition would resolve to the library's own, shared with every other.
+    if (!location?.relFolder) return ''
+    return characterExportRoot(location.folderAbs, project.houdiniSubdir)
   } catch {
     return ''
   }
@@ -675,13 +728,18 @@ const repathInput = z.object({
         /** The `$JOB` the project must ALREADY carry. The Python refuses a
          *  mismatch rather than repathing against a stale root — see below. */
         jobDir: z.string().min(1),
-        /** The character's CURRENT export root — where a broken import path can
-         *  be looked for when no sibling survives to point the way. Optional:
-         *  a character with no folder of its own has none. */
-        exportDir: z.string().default(''),
       }),
     )
     .min(1),
+  /** Whose projects these are. The character's export root — the fallback donor
+   *  for an import path whose whole folder moved — is resolved HERE from it
+   *  (`scanExportRoot`) rather than passed in, because the SCAN derives it the
+   *  same way and the two must agree: `_project_ref_info` promises the tab can
+   *  never name a number the run then doesn't deliver, and two spellings of
+   *  "the export root" is exactly how that promise breaks. Optional — without a
+   *  scope there is no root, and the relocation repair simply doesn't apply. */
+  projectId: z.string().default(''),
+  characterId: z.string().default(''),
   dryRun: z.boolean(),
 })
 
@@ -692,8 +750,8 @@ const repathInput = z.object({
  * the user picks AFTERWARDS, this fixes what is already stored. Every absolute
  * reference under `$HIP` / `$JOB` / `$DAZ3D_LIB` is rewritten relative to it,
  * and any DazToHue import path whose file is missing is rebuilt — from a sibling
- * that still resolves, or failing that from `exportDir` (only ever when the
- * derived file actually exists).
+ * that still resolves, or failing that from the character's export root (only
+ * ever when the derived file actually exists).
  *
  * That second donor is what carries a project across the v0.69 export-root move:
  * when the whole folder relocates, the import paths break TOGETHER, so no
@@ -715,11 +773,17 @@ export async function repathHoudiniReferences({
 }: {
   data: unknown
 }): Promise<MaterialUtilReport> {
-  const input = repathInput.parse(data)
+  const { targets, projectId, characterId, dryRun } = repathInput.parse(data)
   if (!isTauri()) {
     throw new Error('Repathing Houdini references needs the desktop app (it runs hython).')
   }
-  return runMaterialUtil({ op: 'repath', ...input })
+  // One derivation, shared with the scan — see `projectId` on the input.
+  const exportDir = await scanExportRoot(projectId, characterId)
+  return runMaterialUtil({
+    op: 'repath',
+    targets: targets.map(({ hipPath, jobDir }) => ({ hipPath, jobDir, exportDir })),
+    dryRun,
+  })
 }
 
 const refreshInput = z.object({
