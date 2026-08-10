@@ -128,6 +128,12 @@ offsets byte-identically — if a generation change moves them, the change is wr
   - `failedFrames` (the red row markers) is scoped to the SELECTED scene. Not
     cosmetic: a scene override reorders/inserts/deletes ROM frames, so another
     scene's frame numbers mark the WRONG rows.
+  - The merge rule holds on the FAILURE paths too (runtime v65): the generated
+    script's `dthWriteFailureLog` (wrong-scene abort, missing runtime,
+    unexpected exception) merges per scene instead of truncating with a v1
+    record, and export/CSV-delivery failures are filed into the open scene's
+    RUN entry (flipping its `ok` and the batch's) — the reader flattens
+    `runs[].errors`, so a top-level-only push is invisible to the studio.
   - A run with `scene: ''` (unsaved scene, or a pre-v54 log) can't be
     attributed, so it applies to whatever scene is selected — the old behaviour,
     kept so a log already on disk at upgrade time still reports.
@@ -293,9 +299,18 @@ older runtimes as stale.
   exactly `EXPORT_FOLDERS_FILE`'s recorded folders, NEVER the whole old
   directory (the default old path WAS the Houdini folder, `.hiplc` files
   included), each losing its dead `<project>/dth-export/` prefix via
-  `migratedExportFolder`. The record is dropped afterwards (it names the old
-  dir; a stale one would aim the housekeeping's delete at the wrong tree).
-  Best-effort: a failure leaves the files put and the next save retries.
+  `migratedExportFolder`. After a CLEAN carry the record is dropped (it names
+  the old dir; a stale one would aim the housekeeping's delete at the wrong
+  tree). After a PARTIAL carry the FAILED subset is kept in the record, still
+  filed under the dir the folders physically remain in — that retained record
+  is both the housekeeping guard and the retry trigger: the save repoints
+  `exportPath`, so "stored differs from derived" goes false, and without the
+  record the leftovers were orphaned silently forever. The retry source is
+  trusted only when it matches the stored path or sits INSIDE the character
+  folder (a byte-copied project's record can name the ORIGINAL project's tree),
+  and `..` spellings are refused outright. Failure membership is judged by
+  what is still on disk (`exists` per source), never by parsing the Rust
+  failure strings.
   `fsutil::move_tree` (shared with dedup's quarantine) does the work — rename
   fast-path, cross-volume copy-then-delete, link-safe, and it never deletes a
   source without a complete copy in hand. The emptied OLD root then goes via
@@ -304,10 +319,18 @@ older runtimes as stale.
 - **A relocation reaches a LIBRARY through Tools → Refresh assets, not through
   the version bump.** `migrateExportRoot` hangs off the character SAVE, which
   covers a character you open and nobody else. Refresh is the sweep that visits
-  them all, so it calls `relocateExportRoot` (api/generate.ts) for EVERY
-  character it walks — stale or skipped — which pairs the file move with the
-  `storage.saveCharacter` that rewrites `exportPath`; either half alone is a
-  broken state. **A `RUNTIME_VERSION` bump does not do this and cannot.** It
+  them all. A stored-vs-derived disagreement is a REGEN cause there
+  (`exportRootStale` in the sweep loop): the repoint rewrites `exportPath`,
+  which the generated `.dsa` BAKES, so relocating without regenerating leaves
+  every installed script exporting into the vacated old root — the sweep
+  therefore routes such a character through the regen path, where
+  `relocateExportRoot` pairs the file move with the `storage.saveCharacter`
+  that rewrites `exportPath` (either half alone is a broken state) and the
+  regeneration then reads the fresh path. The skip path only RETRIES leftover
+  partial carries (see the retained record above), from a fresh definition
+  read, and never needs to rewrite anything. A `houdiniSubdir` change in
+  Settings → Project runs the same relocate+regen pairing inline at save time.
+  **A `RUNTIME_VERSION` bump does not do this and cannot.** It
   makes Refresh visit everyone, but what it triggers is REGENERATION, and
   generation reads the STORED `exportPath` — so the bump alone re-emits the old
   folder into every script and then stamps the new version over the staleness
@@ -323,8 +346,10 @@ older runtimes as stale.
   character never saved since the move still has its exports at the old location.
   Two candidate roots therefore: the DERIVED one, and the character's STORED
   `exportPath`. The stored one is user data for anything not saved since v29
-  (free directory picker), so it must pass two tests — inside the character
-  folder AND named `daz-export`/`dth-exports`. Containment alone is not enough:
+  (free directory picker), so it must pass three tests — no `..` segment
+  (containment is a plain prefix compare that cannot see through traversal),
+  inside the character folder, AND named `daz-export`/`dth-exports`.
+  Containment alone is not enough:
   the picker's most natural pre-v29 answer was the Houdini folder itself, which
   is contained, and a `keepHoudini` delete would then have recursively removed
   the folder the flag exists to spare. Pinned in `delete-character.test.ts`,
