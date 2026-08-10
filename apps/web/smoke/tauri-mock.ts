@@ -57,6 +57,11 @@ export interface TauriMockSeed {
   /** The base figure node a scene reports (`scene_wearables`) — the create
    *  dialog's Genesis/gender auto-select source. Default: null (none found). */
   sceneFigure?: { id: string; label: string } | null
+  /** Keyed frames on a scene's timeline (`scene_wearables`), PER scene path.
+   *  Default 1 — an EMPTY timeline, which is what ADDING a scene demands. The
+   *  Import-from-Daz-scene check inverts that (the keys are what it reads), so
+   *  a spec driving a scan seeds a real count here. */
+  sceneAnimationFrames?: Record<string, number>
   /** What `elevated_session` answers — an elevated (UAC) window. Default false. */
   elevated?: boolean
   /** Absolute paths whose fs commands are HELD — the invoke neither resolves
@@ -107,6 +112,11 @@ export interface TauriMockState {
   /** The mtime every file in the fake world reports — stable per page, so a
    *  spec can seed an mtime-keyed cache entry that reads as fresh. */
   mtimeMs: number
+  /** Override ONE path's mtime from here on. The world's fixed stamp can't
+   *  express "this file was written later in the run", which is what a
+   *  freshness check (did THIS run write it, or is it last run's leftover?)
+   *  is looking at. `Date.now()` is the usual argument. */
+  setMtime: (path: string, ms: number) => void
   calls: Array<{ cmd: string; args: unknown }>
   /** Every material-utility request the studio wrote, parsed, oldest first.
    *
@@ -136,6 +146,8 @@ export function installTauriMock(seed: TauriMockSeed): void {
    * `__tauriMock` so a spec can seed a cache entry that reads as fresh.
    */
   const FAKE_MTIME_MS = Date.now()
+  /** Per-path mtime overrides — see `TauriMockState.setMtime`. */
+  const mtimeOverrides = new Map<string, number>()
   const extraDirs = new Set<string>()
   const calls: Array<{ cmd: string; args: unknown }> = []
   const materialRequests: Array<Record<string, unknown>> = []
@@ -146,6 +158,9 @@ export function installTauriMock(seed: TauriMockSeed): void {
     files,
     /** The mtime every file reports — a spec seeding an mtime-keyed cache needs it. */
     mtimeMs: FAKE_MTIME_MS,
+    setMtime: (path, ms) => {
+      mtimeOverrides.set(norm(path), ms)
+    },
     calls,
     materialRequests,
     unhandled,
@@ -234,7 +249,9 @@ export function installTauriMock(seed: TauriMockSeed): void {
     // somebody looked at it. With a fresh value per call every mtime-keyed cache
     // in the studio missed on every read — which looks exactly like a cache that
     // works, and hid the fact that none of them were ever exercised here.
-    const now = FAKE_MTIME_MS
+    // A spec that needs one file to look NEWER than the world says so
+    // explicitly, via `__tauriMock.setMtime` (see TauriMockState).
+    const now = mtimeOverrides.get(p) ?? FAKE_MTIME_MS
     return {
       isFile: file,
       isDirectory: !file,
@@ -483,7 +500,7 @@ export function installTauriMock(seed: TauriMockSeed): void {
           items: seed.sceneWearables?.[norm(args.path)] ?? [],
           figure: seed.sceneFigure ?? null,
           figures: seed.sceneFigure ? [seed.sceneFigure] : [],
-          animationFrames: 1,
+          animationFrames: seed.sceneAnimationFrames?.[norm(args.path)] ?? 1,
           error: '',
         }
       case 'write_text_file_if_unchanged': {

@@ -147,6 +147,33 @@ current code before relying on details, but assume the *lesson* still holds.
   modal may only stand down once the claimed batch shows real work
   (`exporterJobsWorking`) — a live Daz stuck on a modal Save prompt claims
   late and looks identical to the closing claim until its first row mark.
+- **A `bulk-export` handoff leaves its claimed `running_…json` behind unless
+  something watches it to 100** (measured 2026-08-10, first live Import-from-Daz-scene
+  run): the Runner renames the job file and marks it done, but DELETING the
+  finished file is the STUDIO's side of the contract, and the only thing doing
+  it is the export flow's progress watch. Any new flow that reuses the
+  `bulk-export` type without arming that watch — the headless frame scan does —
+  must sweep the file itself, and only at `progress: 100` (a live batch's file
+  belongs to its own run). `fetchSceneScanProgress` → `clearFinishedJobFile` is
+  the pattern; `sweepFinishedOpenScene` is the same job for `open-scene`.
+- **A `bulk-export` batch resets Daz to an EMPTY SCENE when it finishes**, so a
+  silent run looks from the outside exactly like nothing happened: no dialog
+  (by design — a modal would block a runner nobody is watching), and the scene
+  it just opened is gone again. Not a defect, but every UI on top of this type
+  has to say so, or the user concludes the feature is broken while it is
+  working. (`open-scene` is the exception — the Runner skips the reset for that
+  type.)
+- **Every writer of the single global job file needs the claim-wait, not just
+  the exists-check.** The exists-checks refuse to clobber someone else's batch;
+  they do nothing about a batch NOBODY takes — a Daz running without the Runner
+  plugin, or one shutting down. Its pending file then blocks every later export
+  and scan with "a batch is waiting for Daz Studio", with no abort in sight.
+  The rule: after `assertHandoffOwned`, when Daz was already running, poll
+  `OPEN_SCENE_PICKUP_TIMEOUT_MS` for the rename and take the file back when it
+  never comes (`openSceneInRunningDaz`, `startProjectScan`, `startSceneScan`).
+  When the studio LAUNCHED Daz itself the wait can't apply — a cold start
+  outlasts it — so that path owes the user an abort instead
+  (`abortProjectScanRun`, `abortSceneScan`), including on dialog dismissal.
 - **Fast runtime test loop:** copying an updated `.DthUtils.dsa`/`.DthWorkflow.dsa`
   over the installed one in `<Daz library>/Scripts/DTH-Character-Studio/` and
   re-running the character's ROM script is enough — no app rebuild needed. (Only

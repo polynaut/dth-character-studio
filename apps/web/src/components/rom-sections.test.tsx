@@ -993,15 +993,15 @@ describe('section header click target', () => {
     // target is the row, not the button) — the section opens.
     const header = screen.getByText('Full Body').closest('div')!
     fireEvent.click(header)
-    expect(screen.getByText('Import from CSV')).toBeTruthy()
+    expect(screen.getByText('Import from Daz scene')).toBeTruthy()
     // The summary text hugs the enable switch — clicking it must NOT flip the
     // accordion back (data-accordion-ignore).
     fireEvent.click(screen.getByText(/custom · 1 group/))
-    expect(screen.getByText('Import from CSV')).toBeTruthy()
+    expect(screen.getByText('Import from Daz scene')).toBeTruthy()
     // The title button still works as the accessible control (its own click
     // toggles; the row handler defers to it instead of double-firing).
     fireEvent.click(screen.getByText('Full Body'))
-    expect(screen.queryByText('Import from CSV')).toBeNull()
+    expect(screen.queryByText('Import from Daz scene')).toBeNull()
   })
 })
 

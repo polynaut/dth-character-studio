@@ -3,8 +3,13 @@
 // DTH Character Studio - scan the open scene's keyed morph frames into a CSV.
 // Select your character's root node (add more nodes to widen the scan), then
 // run this. The CSV lands in the studio's scan output folder, named after the
-// open scene - the studio's "Import from CSV" picker lists it automatically.
-// The output path is baked in by the studio when it installs this script.
+// open scene - the studio's "Import from Daz scene" picker lists it
+// automatically. The output path is baked in by the studio when it installs
+// this script.
+//
+// The studio can also run this for you - "Import from Daz scene" opens the
+// scene through the job runner and calls the same DthScanFrames() silently.
+// This shelf script is the hand-run route, unchanged.
 
 var dir_self = new DzDir(new DzFileInfo(getScriptFileName()).path());
 include(dir_self.filePath(".DthUtils.dsa"));

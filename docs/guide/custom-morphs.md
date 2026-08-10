@@ -6,14 +6,38 @@ to **Custom** and you list the morphs yourself. This page continues
 exactly that for its **Full Body Morphs (FBM)** section.
 
 <details>
-<summary><strong>Import from existing Daz scene</strong></summary>
+<summary><strong>Import from an existing Daz scene</strong></summary>
 <table><tr><td>
 
-Run the bundled **`Scan_Frames`** script in Daz Studio
-(`Scripts › DTH-Character-Studio`): it scans the open scene — every keyed morph
-frame — and writes a CSV. That CSV shows up in the **Import from CSV** picker
-automatically, one per scene name; **Browse** still takes any CSV you curated
-yourself.
+A section already posed on a Daz timeline doesn't have to be typed in again.
+**Import from Daz scene** reads those keyed frames and turns each one into a
+pose row.
+
+Click it, then **pick a scene** — or drag the `.duf` straight from Explorer onto
+the button. The studio checks the scene first:
+
+| Check | Why |
+| ----- | --- |
+| Exactly **one figure** | The scan picks the figure itself, so a second one makes it a coin toss. |
+| The character's **own generation** | A G8 scan imports morph names that belong to another skeleton. |
+| **Animation on the timeline** | The keyed frames *are* what there is to read. This is the opposite of the check when you *add* a scene, which wants an empty timeline for the ROM script to fill. |
+
+A failed check blocks the scan and says why, with the usual *"Scan anyway"*
+escape if you know better.
+
+**Start scan** hands the scene to Daz Studio — the same job runner **DTH
+Export** uses, so it needs the **Runner plugin** installed
+([Installation](./01-installation.md)). Daz opens the scene, scans it with no
+dialogs and the studio takes you straight to the frame-range picker. It looks
+like nothing is happening in Daz: that is the point — the run opens no windows,
+and it clears the scene again when it finishes. **Cancel scan** takes the job
+back if you change your mind.
+
+Scans you already made stay listed in the same dialog, newest first. That is
+deliberate: **one scan of a scene can feed several ROM sections**, so importing
+FBM after RET should not send you back to Daz. **Browse** still takes any CSV
+you curated yourself, and running **`Scan_Frames`** by hand in Daz
+(`Scripts › DTH-Character-Studio`) still works and lands in the same list.
 
 </td></tr></table>
 </details>

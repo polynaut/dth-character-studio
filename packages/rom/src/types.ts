@@ -1481,8 +1481,18 @@ export const CHARACTER_SCHEMA_VERSION = 30
  *       paths change, hence the bump. Projects generated under v63–v65 keep the
  *       `$JOB` form — it resolves, so it is NOT flagged; Utils → Make paths
  *       portable shortens it (`_shorten_job_ref`).
+ * v67 — `DthScanFrames` gained a SILENT mode, for the studio to run it through
+ *       the job runner instead of the user running it by hand in Daz: it
+ *       auto-selects the figure (`dthFindGenerationFigure`, the same asset-identity
+ *       match the ROM script uses, so a renamed node still resolves), opens no
+ *       MessageBox, and reports through a small JSON result file. A modal in a
+ *       batch run would block the runner on a Daz nobody is looking at, and
+ *       without the result file every failure — no figure, no keyed frames, an
+ *       unwritable folder — looks identical from outside: no CSV appears and a
+ *       waiting dialog spins with nothing to say. The interactive path is
+ *       unchanged.
  */
-export const RUNTIME_VERSION = 66
+export const RUNTIME_VERSION = 67
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

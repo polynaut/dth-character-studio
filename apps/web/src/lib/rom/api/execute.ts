@@ -25,6 +25,13 @@ import {
 } from '../execute-jobs'
 import { BUILD_ROM_ANIMATION_SCRIPT, sceneExportName } from '@dth/rom'
 import { sceneDthPath } from '../houdini-jobs'
+import {
+  SCAN_RUN_SCRIPT,
+  parseScanResult,
+  scanCsvPath,
+  scanResultPath,
+  scanRunScript,
+} from '../scan-run.ts'
 import { normalizePathLower } from '#/lib/path.ts'
 import { deriveScenesRootRel } from '#/lib/scene-subfolder.ts'
 import { relativeInside } from '../storage/fs'
@@ -1484,4 +1491,250 @@ export async function romAnimationFresh({ data }: { data: unknown }): Promise<bo
   } catch {
     return false
   }
+}
+
+// --- Import from Daz scene: a headless Scan_Frames run ----------------------
+
+/** Tolerance on "this file was written by THIS run": FAT/exFAT stamp mtimes to
+ *  2-second granularity, so a file written right after the clock reading can
+ *  land just before it. A scan takes many seconds, so nothing real is missed. */
+const MTIME_SLACK_MS = 2000
+
+const scanSceneInput = z.object({
+  /** The `.duf` to open and scan — already validated by `sceneScanRows`. */
+  scenePath: z.string().min(1),
+  /** The character's generation, e.g. "G9". The silent run selects the figure
+   *  by ASSET identity from it (`dthFindGenerationFigure`). */
+  genesis: z.string().min(1),
+})
+
+/** Where a started scan will land, so the caller can poll for it. */
+export interface SceneScanStarted {
+  /** The CSV this run is predicted to write ({@link scanCsvPath}) — the studio's
+   *  half of the naming contract with the `.dsa`, stated where it can be
+   *  asserted. NOT the path to import: the poll reports the one the result file
+   *  names, which is authoritative even if this guess were wrong. */
+  csvPath: string
+  resultPath: string
+  /** When the handoff went down. The poll requires the CSV to be newer than
+   *  this, which is what keeps a previous scan's file from being imported as
+   *  this run's (see {@link fetchSceneScanProgress}). */
+  startedAtMs: number
+  /** False ⇒ the studio started Daz itself, and the wait covers a cold launch.
+   *  True ⇒ a live Runner claimed the batch before this returned. */
+  dazWasRunning: boolean
+}
+
+/**
+ * Hand a headless frame scan of `scenePath` to the job runner.
+ *
+ * The same handoff every batch uses — one global job file, refuse while another
+ * is live, read back what we wrote — because a scan is a batch like any other
+ * from the Runner's point of view: it opens the scene and runs the script.
+ *
+ * **The stale-result delete is not tidying.** The poll's whole termination
+ * condition is "the result file for this scene appeared". A previous scan of
+ * the same scene left one, so without removing it first the dialog would read
+ * the OLD verdict — instantly — and call the new scan finished before Daz had
+ * opened anything. The previous CSV is deliberately NOT deleted: a scan that
+ * then fails would have destroyed a working import for nothing, and `startedAtMs`
+ * already stops the old file being read as this run's.
+ *
+ * Like every other handoff writer, a Daz that is ALREADY running gets the
+ * claim-wait: the Runner renames the file within a poll interval, and when the
+ * rename never comes the handoff is taken back rather than left pending
+ * forever — a stranded job file blocks every later batch with "an export batch
+ * is waiting", and this dialog would spin on a scan nobody is running.
+ */
+export async function startSceneScan({ data }: { data: unknown }): Promise<SceneScanStarted> {
+  const { scenePath, genesis } = scanSceneInput.parse(data)
+  if (!isTauri()) throw new Error('Scanning a Daz scene needs the desktop app.')
+  const settings = await storage.getSettings()
+  if (!settings.dazLibraryFolder) {
+    throw new Error(
+      'Set “My DAZ 3D Library” in Settings first — the job file and the scan script live there.',
+    )
+  }
+  const outDir = await storage.scanFramesDir()
+  const csvPath = scanCsvPath(outDir, scenePath)
+  const resultPath = scanResultPath(outDir, scenePath)
+
+  // The per-run script goes in the scripts ROOT, beside the runtime it includes
+  // (it resolves `.DthUtils.dsa` / `.DthScanFrames.dsa` from its own folder).
+  const scriptPath = joinPath(storage.studioScriptsDir(settings.dazLibraryFolder), SCAN_RUN_SCRIPT)
+  const runtimeProbe = joinPath(storage.studioScriptsDir(settings.dazLibraryFolder), '.DthUtils.dsa')
+  if (!(await exists(runtimeProbe))) {
+    throw new Error(
+      'The DTH runtime is not installed in your Daz library yet — save a character (or run Tools → Refresh assets) once, then try again.',
+    )
+  }
+
+  const paths = await exporterJobFilePaths()
+  if (!paths) throw new Error('Set “My DAZ 3D Library” in Settings first.')
+  if (await exists(paths.pending)) {
+    throw new Error('An export batch is waiting for Daz Studio — let it start (or abort it) first.')
+  }
+  if (await exists(paths.running)) {
+    const finished = await readTextFile(paths.running)
+      .then((text) => parseJobFileJson(text)?.progress === 100)
+      .catch(() => false)
+    if (!finished) {
+      throw new Error('Daz Studio is working through an export batch — try again when it finishes.')
+    }
+    await remove(paths.running).catch(() => {})
+  }
+
+  await mkdir(outDir, { recursive: true }).catch(() => {})
+  await remove(resultPath).catch(() => {})
+  await storage.writeTextFileAtomic(scriptPath, scanRunScript({ outDir, resultPath, genesis }))
+
+  // Stamped BEFORE the handoff, so every file this run writes is newer than it.
+  const startedAtMs = Date.now()
+  const jobJson = jobFileJson([{ scenePath, scriptPath }])
+  await storage.writeTextFileAtomic(paths.pending, jobJson)
+  await assertHandoffOwned(paths.pending, jobJson)
+  const dazWasRunning = await dazStudioRunningNative(false)
+  if (!dazWasRunning) {
+    // A fresh launch claims the file on startup — no wait (Daz can take long to
+    // come up; the dialog's waiting state covers it, with Cancel as the out).
+    await launchDazSceneless()
+    return { csvPath, resultPath, startedAtMs, dazWasRunning }
+  }
+  // A "running" Daz may be SHUTTING DOWN (the process lingers, its Runner poller
+  // is already gone) — or running without the Runner plugin at all, which is the
+  // one requirement of this feature nothing else can check. Same claim-wait as
+  // every other handoff: take the batch back rather than leave it pending
+  // forever, blocking every export and scan that comes after it.
+  const deadline = Date.now() + OPEN_SCENE_PICKUP_TIMEOUT_MS
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, OPEN_SCENE_POLL_MS))
+    // The rename IS the claim (contract v2 lifecycle, shared by every type).
+    if (!(await exists(paths.pending).catch(() => true))) {
+      return { csvPath, resultPath, startedAtMs, dazWasRunning }
+    }
+  }
+  await remove(paths.pending).catch(() => {})
+  throw new Error(
+    'Daz Studio never picked the scan up — it is most likely still shutting down, or running without the Runner plugin (the same one DTH Export needs). The handoff was taken back; check the Runner in Settings, then try again.',
+  )
+}
+
+/**
+ * Abort a scan handoff still WAITING for Daz Studio — the dialog's way out of
+ * the spinner, and the reason closing it can't strand the global job file.
+ *
+ * Deletes the pending file only when it is still OUR scan (its one row points at
+ * {@link SCAN_RUN_SCRIPT}): an export batch queued meanwhile belongs to someone
+ * else, and taking it away would strand that run instead. A batch the Runner has
+ * already CLAIMED is left alone — the rename means Daz is running it, and the
+ * result file it writes is simply nobody's business by then.
+ */
+export async function abortSceneScan(): Promise<void> {
+  if (!isTauri()) return
+  try {
+    const paths = await exporterJobFilePaths()
+    if (!paths) return
+    const parsed = parseJobFileJson(await readTextFile(paths.pending).catch(() => ''))
+    const jobs = parsed?.jobs ?? []
+    // `every` on an empty list is vacuously true — an unrecognisable batch is
+    // somebody's, not ours.
+    const ours = jobs.length > 0 && jobs.every((job) => job.scriptPath.endsWith(SCAN_RUN_SCRIPT))
+    if (ours) await remove(paths.pending).catch(() => {})
+  } catch {
+    // Nothing to take back, or unreadable — either way there is no scan of ours
+    // left pending to abort.
+  }
+}
+
+/**
+ * Remove the Runner's claimed job file once it reports the batch finished.
+ *
+ * The export flow's progress watch owns this for its own batches; a scan has no
+ * watch, so this is where it happens. Only a FINISHED file (`progress: 100`) is
+ * removed — a live batch's file is somebody else's, and deleting it would strand
+ * the run that owns it.
+ */
+async function clearFinishedJobFile(): Promise<void> {
+  try {
+    const paths = await exporterJobFilePaths()
+    if (!paths) return
+    if (!(await exists(paths.running))) return
+    const finished = await readTextFile(paths.running)
+      .then((text) => parseJobFileJson(text)?.progress === 100)
+      .catch(() => false)
+    if (finished) await remove(paths.running).catch(() => {})
+  } catch {
+    // A leftover blocks nothing — the next start sweeps a finished one.
+  }
+}
+
+/** A started scan, as the dialog polls it. */
+export interface SceneScanProgress {
+  state: 'running' | 'done' | 'failed'
+  csvPath: string
+  frames: number
+  error: string
+}
+
+/**
+ * Poll one started scan.
+ *
+ * Reads the RESULT file, never "did a CSV appear": the result is what
+ * distinguishes "still running" from "ran and found nothing", and a CSV alone
+ * cannot say which. A torn read is `running` — the file is written while Daz
+ * has it open, and treating a half-written one as failed would abort a scan
+ * about to succeed.
+ *
+ * `done` still insists the CSV is on disk AND newer than the run that claims it
+ * ({@link SceneScanStarted.startedAtMs}). The result says the script believed it
+ * wrote one — but a `printCSV` that fails silently (locked file, full disk)
+ * leaves the PREVIOUS scan's CSV sitting at exactly that path, and importing
+ * that would be the worst outcome available: stale frames, reported as success.
+ * The mtime is the same freshness test {@link romAnimationFresh} uses for a
+ * regenerated file, and it costs no user data — unlike deleting the old CSV up
+ * front, which throws away a working import whenever the new scan fails.
+ */
+export async function fetchSceneScanProgress({
+  data,
+}: {
+  data: unknown
+}): Promise<SceneScanProgress> {
+  const { resultPath, startedAtMs } = z
+    .object({ resultPath: z.string().min(1), startedAtMs: z.number().default(0) })
+    .parse(data)
+  if (!isTauri()) return { state: 'running', csvPath: '', frames: 0, error: '' }
+  const text = await readTextFile(resultPath).catch(() => '')
+  if (!text) return { state: 'running', csvPath: '', frames: 0, error: '' }
+  const result = parseScanResult(text)
+  if (!result) return { state: 'running', csvPath: '', frames: 0, error: '' }
+  // The scan is over either way — clear the claimed job file the Runner left
+  // behind. The EXPORT flow's watch does this for its own batches; a scan has
+  // no watch, so without it a finished `running_…json` sits in the user's
+  // scripts folder until the next scan happens to sweep it (measured on the
+  // first live run). Best-effort: a leftover blocks nothing (the next start
+  // removes a finished one), so failing here must not fail the scan.
+  await clearFinishedJobFile()
+  if (!result.ok) {
+    return { state: 'failed', csvPath: '', frames: 0, error: result.error || 'The scan failed.' }
+  }
+  if (!(await exists(result.csvPath))) {
+    return {
+      state: 'failed',
+      csvPath: '',
+      frames: 0,
+      error: `The scan reported success but wrote no CSV:\n${result.csvPath}`,
+    }
+  }
+  // A filesystem with coarse timestamps can stamp a file a beat before the
+  // clock reading that started the run; the slack keeps that from reading as
+  // "stale", and is far shorter than any scan takes.
+  if (startedAtMs > 0 && (await mtimeOf(result.csvPath)) < startedAtMs - MTIME_SLACK_MS) {
+    return {
+      state: 'failed',
+      csvPath: '',
+      frames: 0,
+      error: `The scan reported success but left the previous CSV in place — nothing was written this run:\n${result.csvPath}`,
+    }
+  }
+  return { state: 'done', csvPath: result.csvPath, frames: result.frames, error: '' }
 }

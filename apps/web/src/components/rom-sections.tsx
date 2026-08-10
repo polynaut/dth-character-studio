@@ -176,6 +176,11 @@ export const RomSections = memo(function RomSections({
   const lastCsvDir = useRef('')
   // The section whose scan-CSV picker is open (null = no import in progress).
   const [pickerSection, setPickerSection] = useState<RomSection | null>(null)
+  /** A scene dropped on the Import button — the dialog opens already pointed
+   *  at it. Set ONLY by {@link openPicker}, and cleared on every path that
+   *  closes the dialog: a leftover would re-open the next import (any section,
+   *  however it was opened) pre-pointed at a scene the user dropped once. */
+  const [pickerScene, setPickerScene] = useState('')
   // A picked CSV awaiting its frame-range dialog (null = no import in progress).
   const [pendingCsv, setPendingCsv] = useState<{
     section: RomSection
@@ -540,8 +545,22 @@ export const RomSections = memo(function RomSections({
   // Scan_Frames scans (plus Browse for hand-curated files); a full scene scan
   // covers the whole ROM, so the chosen file then opens the frame-range dialog
   // and applyCsvImport commits the slice.
-  async function loadCsv(section: RomSection, filePath: string) {
+  /** Open the scan/CSV picker for a section — with a dropped `.duf` already
+   *  aimed at, or without one. The single entry point, so "no scene was
+   *  dropped" is an explicit '' rather than whatever the last drop left. */
+  function openPicker(section: RomSection, scene = '') {
+    setPickerScene(scene)
+    setPickerSection(section)
+  }
+
+  /** Close it, from wherever — always dropping the dropped-scene state with it. */
+  function closePicker() {
     setPickerSection(null)
+    setPickerScene('')
+  }
+
+  async function loadCsv(section: RomSection, filePath: string) {
+    closePicker()
     let imported: Awaited<ReturnType<typeof importPosesFromCsv>>
     try {
       imported = await importPosesFromCsv({ data: { filePath } })
@@ -1030,7 +1049,10 @@ export const RomSections = memo(function RomSections({
                     {/* CSV import — on a non-primary scene it imports into the scene's own
                         section (escalates), same as adding frames. */}
                     <div className="my-4 flex gap-2">
-                      <ImportCsvButton onImport={() => setPickerSection(section)} />
+                      <ImportCsvButton
+                        onImport={() => openPicker(section)}
+                        onImportScene={(dropped) => openPicker(section, dropped)}
+                      />
                       <Button
                         variant="ghost"
                         size="sm"
@@ -1079,7 +1101,10 @@ export const RomSections = memo(function RomSections({
                       >
                         <Plus /> Add group
                       </Button>
-                      <ImportCsvButton onImport={() => setPickerSection(section)} />
+                      <ImportCsvButton
+                        onImport={() => openPicker(section)}
+                        onImportScene={(dropped) => openPicker(section, dropped)}
+                      />
                       <Button
                         variant="ghost"
                         size="sm"
@@ -1115,9 +1140,11 @@ export const RomSections = memo(function RomSections({
       {pickerSection && (
         <ScanCsvPickerDialog
           sectionLabel={SECTION_LABELS[pickerSection]}
+          character={{ genesis, gender }}
+          initialScenePath={pickerScene}
           onPick={(path) => void loadCsv(pickerSection, path)}
           onBrowse={() => void browseCsv(pickerSection)}
-          onClose={() => setPickerSection(null)}
+          onClose={closePicker}
         />
       )}
       {pendingCsv && (
