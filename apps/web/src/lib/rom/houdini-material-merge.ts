@@ -56,6 +56,17 @@ export interface SurfaceMergePlan {
   trimmed: Array<string>
   /** Surfaces the incoming slots claim that NO target slot claims today.
    *
+   *  **Empty when the target has no slots at all**, which is not the same
+   *  answer as "they all matched": on a node with nothing on it the question is
+   *  vacuous — there is no slot that COULD claim a surface — so every incoming
+   *  one would be listed by arithmetic while saying nothing about the figures.
+   *  Measured 2026-08-10: a freshly generated project (0 slots) had the confirm
+   *  dialog telling a user to "check both nodes are the same figure" about two
+   *  nodes that were the same figure, and the post-run report repeat it about
+   *  surfaces the run had just created. {@link isFigureMismatch} already made
+   *  this exemption for the BLOCKING check; it belongs to the rule, so the two
+   *  cannot drift apart again.
+   *
    *  A handful is ordinary (the source wears something the target doesn't). All
    *  of them, on a large set, means the two nodes describe different figures —
    *  copying a Genesis 9 skin onto a Genesis 8 character would look exactly like
@@ -113,7 +124,11 @@ export function planSurfaceMerge(
   return {
     evicted,
     trimmed,
-    unclaimed: [...incomingSurfaces].filter((token) => !claimed.has(token)),
+    // Vacuous on an empty target — see `unclaimed` on the interface.
+    unclaimed:
+      targetSlots.length === 0
+        ? []
+        : [...incomingSurfaces].filter((token) => !claimed.has(token)),
   }
 }
 

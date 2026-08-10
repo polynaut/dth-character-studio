@@ -452,7 +452,7 @@ export function HoudiniProjectsField({
       {
         toast:
           !keepFiles && managedProject(hip)
-            ? 'Removed Houdini project — the scene file and project folder were deleted'
+            ? 'Removed Houdini project — the project file and its folder were deleted'
             : 'Unlinked Houdini project',
       },
     )
@@ -780,14 +780,14 @@ function GenerateProjectDialog({
           <InfoPopup label="Generate Houdini project — more information">
             <div className="space-y-2">
               <p>
-                Creates a Houdini scene with the DazToHue network already wired: the Daz
+                Creates a Houdini project with the DazToHue network already wired: the Daz
                 import paths, the PoseAsset CSV path and the export path are filled in.
               </p>
               <p>
                 <code>$JOB</code> is set to the <strong>character folder</strong>.
               </p>
               <p>
-                <code>$HIP</code> follows the scene file itself, so it points at{' '}
+                <code>$HIP</code> follows the project file itself, so it points at{' '}
                 <code>{hipFolderLabel}</code> — where the <code>daz-export</code> files also
                 live. That is why the imports read <code>$HIP/daz-export/…</code>.
               </p>

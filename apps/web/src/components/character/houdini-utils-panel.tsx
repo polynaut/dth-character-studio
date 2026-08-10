@@ -2172,13 +2172,22 @@ function GeneralTab({
               explains WHY the row exists, which is worth one click and not
               worth six lines of prose on every visit. */}
           <InfoPopup label="Project checks — more information">
-            <code>$JOB</code> is saved inside each <code>.hip</code>, so a project keeps whatever
-            it was created with — projects made before v0.64 still point it at the shared{' '}
-            <code>houdini/houdini-project</code> folder, which sits below your exports. Houdini
-            only turns a path you pick into a variable when it sits under <code>$HIP</code> or{' '}
-            <code>$JOB</code>, so those projects write an absolute path every time you choose an
-            export by hand. Repairing <code>$JOB</code> fixes what you pick from now on;{' '}
-            <strong>Make paths portable</strong> fixes what is already stored.
+            <div className="space-y-2">
+              <p>
+                What has to be true for a project to keep working when it — or your library —
+                moves.
+              </p>
+              <p>
+                <code>$JOB</code> is saved inside the project file, so an older one can still
+                point somewhere else. <strong>Repair $JOB</strong> puts it back on the
+                character folder, which is what makes the paths you pick from now on come out
+                relative.
+              </p>
+              <p>
+                <strong>Make paths portable</strong> is the other half: it rewrites paths
+                already stored absolute to <code>$HIP/…</code> or <code>$JOB/…</code>.
+              </p>
+            </div>
           </InfoPopup>
         </Label>
         <span className="text-xs text-muted-foreground">
