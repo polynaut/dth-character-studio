@@ -246,13 +246,6 @@ pub(crate) fn path_contains(outer: &Path, inner: &Path) -> bool {
     i.len() >= o.len() && o.iter().zip(&i).all(|(a, b)| a == b)
 }
 
-/// The path the recursive-delete rails should judge: the CANONICAL form when the
-/// target exists — so a `..`-laden spelling or a junction/symlink can't dress a
-/// dangerous target (a drive root, a profile folder) up as a safe-looking one —
-/// and the raw path when it doesn't (missing targets keep their existing
-/// "not found" handling). Segment counting still works on the canonical form:
-/// the Windows `\\?\` verbatim prefix is a `Prefix`/`RootDir` component, never a
-/// `Normal` one, so it adds no phantom segments.
 /// Move `src` to `dst`, falling back to copy-then-delete when a plain rename
 /// fails (a different volume). `Ok` means it was FULLY moved; `Err` carries why
 /// it wasn't AND what state it was left in — silence here used to hide half-done
@@ -380,6 +373,13 @@ pub(crate) fn move_tree(src: &Path, dst: &Path) -> Result<(), String> {
     })
 }
 
+/// The path the recursive-delete rails should judge: the CANONICAL form when the
+/// target exists — so a `..`-laden spelling or a junction/symlink can't dress a
+/// dangerous target (a drive root, a profile folder) up as a safe-looking one —
+/// and the raw path when it doesn't (missing targets keep their existing
+/// "not found" handling). Segment counting still works on the canonical form:
+/// the Windows `\\?\` verbatim prefix is a `Prefix`/`RootDir` component, never a
+/// `Normal` one, so it adds no phantom segments.
 pub(crate) fn rail_target(path: &Path) -> PathBuf {
     fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }

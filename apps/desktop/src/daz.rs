@@ -66,7 +66,8 @@ pub fn run_daz_script(script_path: String, install_folder: String) -> Result<Str
     }
 }
 
-/// Launch Daz Studio with NO arguments — a plain, scene-less startup. Used by
+/// Launch Daz Studio — with the scene as its one argument when `scenePath` is
+/// non-empty, else a plain scene-less startup. Used by
 /// the Execute feature: the studio writes the exporter job file first, then
 /// starts Daz so the DTH Exporter Plugin finds and runs the jobs on startup.
 /// The caller is expected to check `daz_studio_running` first — launching while

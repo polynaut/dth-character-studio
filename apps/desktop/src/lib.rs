@@ -50,7 +50,14 @@ pub fn run() {
         // the startup ("main") window so its frontend opens that project.
         .setup(|app| {
             use tauri::Manager;
-            if let Some(dcsp) = dcsp_from_args(&std::env::args().collect::<Vec<_>>()) {
+            // args_os, not args: `args()` PANICS on a non-Unicode argument, and
+            // Windows filenames can carry unpaired surrogates — a `.dcsp` named
+            // that way would crash the app before any window exists. Lossy is
+            // fine here: the extension match still works, and a path mangled by
+            // the replacement char simply resolves to no project.
+            let args: Vec<String> =
+                std::env::args_os().map(|a| a.to_string_lossy().into_owned()).collect();
+            if let Some(dcsp) = dcsp_from_args(&args) {
                 // Build the mapping FIRST — its identity key canonicalizes (I/O)
                 // and must never run under the map lock (windows::ProjectPathKey).
                 // Setup runs before any window shows, and the file was just

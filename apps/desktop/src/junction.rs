@@ -24,7 +24,9 @@ pub struct RemoveJunctionRequest {
 /// path — left alone, deliberately not an error: the sweep treats it as
 /// none of its business). Removing a junction deletes the reparse point only,
 /// never its target's contents.
-#[tauri::command]
+// `(async)`: the path can live on an offline NAS share, where the stat/remove
+// block for seconds — and the sweep runs per linked scene during generation.
+#[tauri::command(async)]
 pub fn remove_junction(request: RemoveJunctionRequest) -> Result<String, String> {
     let link = Path::new(&request.link_path);
     match std::fs::symlink_metadata(link) {

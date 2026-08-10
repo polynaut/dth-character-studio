@@ -331,7 +331,10 @@ pub struct RemoveDirIfEmptyRequest {
 /// Returns `"removed"`, `"absent"` (nothing there), `"not-empty"` (left alone,
 /// deliberately not an error) or `"not-a-directory"` (a file — or a reparse
 /// point, which is never followed — sits at that path).
-#[tauri::command]
+// `(async)`: the folder can live on an offline NAS share, where the stat/read/
+// remove block for seconds — and the sweep runs per linked scene during
+// generation.
+#[tauri::command(async)]
 pub fn remove_dir_if_empty(request: RemoveDirIfEmptyRequest) -> Result<String, String> {
     let dir = std::path::Path::new(&request.dir_path);
     // symlink_metadata, not metadata: a junction/symlink must NOT be followed —
