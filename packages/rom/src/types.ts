@@ -1455,8 +1455,18 @@ export const CHARACTER_SCHEMA_VERSION = 30
  *       root. A Houdini project generated earlier still names the OLD folder, so
  *       its imports report as broken until Utils → Make paths portable rebuilds
  *       them from the character's current export root.
+ * v65 — audit fix-pass over the emitted scripts: the per-scene config lookup
+ *       reads the `dthOpenSceneFile` capture (a run from a saved ROM animation
+ *       used to miss its scene's frame-layout override while delivering that
+ *       scene's CSV — the artifact desync the product exists to prevent);
+ *       reference-skeleton frames follow the OPEN scene's merged walk;
+ *       export/CSV-delivery failures land in the v2 run log's per-scene runs
+ *       (top-level pushes were invisible to the studio's reader) and the
+ *       catastrophic-failure log merges per scene instead of truncating; a
+ *       cleared per-scene art direction emits an explicit null; the split
+ *       Export_ and the groom script carry the indexSync scan.
  */
-export const RUNTIME_VERSION = 64
+export const RUNTIME_VERSION = 65
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

@@ -83,10 +83,16 @@ export function orphanedRomAnimations(
 ): Array<string> {
   const keep = new Set(expectedStems.map((stem) => stem.toLowerCase()))
   return fileNames.filter((name) => {
-    // The base is everything before the FIRST dot: "Kira_ROM.duf.png" → "Kira_ROM".
-    const dot = name.indexOf('.')
-    const base = dot > 0 ? name.slice(0, dot) : name
-    if (!/_rom$/i.test(base)) return false
+    // The base is everything up to the `_ROM` that ends the stem, judged
+    // against the extension dot AFTER it — a scene stem may itself contain
+    // dots ({@link romAnimationPath} stems on the LAST dot: "Kira.v2.duf" →
+    // "Kira.v2_ROM.duf"), so slicing at the FIRST dot made every dotted
+    // stem's ROM animation invisible to this sweep forever. Greedy, so a stem
+    // that itself ends in "_ROM.something" still resolves to the outermost
+    // marker.
+    const match = /^(.*_rom)(\.|$)/i.exec(name)
+    if (!match) return false
+    const base = match[1]
     return !keep.has(base.slice(0, -'_ROM'.length).toLowerCase())
   })
 }
@@ -386,10 +392,37 @@ function buildExportBlock(
    * absolute paths, the always-safe form.
    */
   hipRefPrefix = '',
+  /** Per-scene preset-block frames for ROM-override scenes (the same map the
+   *  per-scene CSVs are sized by) — the reference-skeleton frames below must
+   *  follow the OPEN scene's merged walk, like the CSV it is delivered with. */
+  sceneFrames: Record<string, PresetFrames> = {},
 ): string {
   const exportDir = character.exportPath.trim()
   if (!exportDir) return ''
   const refFrames = frames ? referenceFrames(character, frames).join(' ') : ''
+  // Reference-skeleton frames PER ROM-override scene: those scenes' CSVs bake
+  // their bone-scale `_frame_<N>.fbx` paths from the MERGED walk, so telling
+  // the exporter the base list would write FBXs the override CSV never
+  // references while the frames it does reference are never written — the
+  // HDA then imports a wrong or missing reference skeleton. Same scene set
+  // and key normalization as {@link buildSceneCsvMap}.
+  const refFramesByScene: Record<string, string> = {}
+  for (const override of activeSceneOverrides(character)) {
+    if (!sceneOverrideBuildsRom(character, override)) continue
+    const key = override.scenePath.trim().replace(/\\/g, '/').toLowerCase()
+    if (key === '') continue
+    const sceneWalk = sceneFrames[key] ?? frames
+    if (!sceneWalk) continue
+    const merged = referenceFrames(mergeSceneOverride(character, override), sceneWalk).join(' ')
+    if (merged !== refFrames) refFramesByScene[key] = merged
+  }
+  const refFramesBlock =
+    Object.keys(refFramesByScene).length === 0
+      ? `    var dthRefFrames = ${dazJson(refFrames)};`
+      : `    var dthRefFrames = ${dazJson(refFrames)};
+    var dthRefFramesByScene = ${dazJson(refFramesByScene, 2)};
+    var dthRefFramesKey = dthOpenSceneFile.split("\\\\").join("/").toLowerCase();
+    if (dthRefFramesByScene[dthRefFramesKey] != undefined) dthRefFrames = dthRefFramesByScene[dthRefFramesKey];`
   // ONE snippet body shared with the groom export (dz-snippets), re-indented to
   // this block's 4-space base — the two copies used to differ only in indent.
   // The exporterFigureName base makes the snippet also declare dthExportName:
@@ -457,17 +490,23 @@ ${refDirBlock}
                 dthCsvOut.write(dthCsvText);
                 dthCsvOut.close();
                 print("Copied " + dthCsvName + " to " + dthCsvDst);
-            } else print("Failed to write " + dthCsvName + " to " + dthCsvDst);
-        } else print("Failed to read " + dthCsvName + " for copy.");
+            } else dthExportAlert("The PoseAsset CSV could not be written to " + dthCsvDst + " - the Houdini import for this scene has no CSV until the export is re-run.");
+        } else dthExportAlert("The PoseAsset CSV " + dthCsvName + " could not be read for delivery - the Houdini import for this scene has no CSV until the export is re-run.");
     } else {
+        // Unusual but historically tolerated (a hand-cleaned .dcsmeta) — logged
+        // so the studio's report shows it, no modal: the export itself succeeded
+        // and DTH Export's delivered-CSV freshness check also flags it.
         print("PoseAsset CSV not found in " + ${dazJson(metaDirAbs.replace(/\\/g, '/'))} + " — nothing to copy.");
+        dthExportLogProblem("The PoseAsset CSV " + dthCsvName + " was not found in the studio's data folder - save the character in DTH Character Studio to regenerate it, then re-run the export.");
     }
 `
     : ''
   // The export call + CSV delivery. With groom items listed it is wrapped in the
   // hide bracket below; without any, the emitted script is unchanged. The name
-  // is the run-time dthExportName (scene-suffixed), never the bare base name.
-  const exportCore = `    dthExportAction.doExport(dthExportDir, dthExportName, ${dazJson(refFrames)}, false);
+  // is the run-time dthExportName (scene-suffixed), never the bare base name;
+  // the reference frames are the OPEN scene's (see refFramesBlock above).
+  const exportCore = `${refFramesBlock}
+    dthExportAction.doExport(dthExportDir, dthExportName, dthRefFrames, false);
 ${csvCopyBlock}`
   const groomMap = groomSceneMap(character)
   const indentBlock = indentLines
@@ -584,8 +623,31 @@ var dthExportLogProblem = function (dthLogMsg) {
             // so the run itself is the failure.
             dthLogRec = { logVersion: 1, character: ${dazJson(character.name)}, ok: false, errors: [], failedMorphs: [] };
         }
-        if (!dthLogRec.errors) dthLogRec.errors = [];
-        dthLogRec.errors.push(String(dthLogMsg));
+        if (dthLogRec.runs && dthLogRec.runs.length) {
+            // A v2 log (the ROM run just wrote it, merged BY SCENE): the studio
+            // reads runs[].errors and every-run-ok — a top-level push here is
+            // INVISIBLE to it, which is how a bulk run with a broken exporter
+            // used to complete every scene, export nothing, and say nothing.
+            // File the failure under the open scene's own run entry.
+            var dthLogKey = String(typeof dthOpenSceneFile != "undefined" ? dthOpenSceneFile : "").split("\\\\").join("/").toLowerCase();
+            var dthLogRun = null;
+            for (var dthLri = 0; dthLri < dthLogRec.runs.length; dthLri++) {
+                var dthLrEntry = dthLogRec.runs[dthLri];
+                if (!dthLrEntry) continue;
+                if (String(dthLrEntry.scene ? dthLrEntry.scene : "").split("\\\\").join("/").toLowerCase() == dthLogKey) dthLogRun = dthLrEntry;
+            }
+            if (!dthLogRun) dthLogRun = dthLogRec.runs[dthLogRec.runs.length - 1];
+            if (!dthLogRun.errors) dthLogRun.errors = [];
+            dthLogRun.errors.push(String(dthLogMsg));
+            dthLogRun.ok = false;
+            dthLogRec.ok = false;
+        } else {
+            if (!dthLogRec.errors) dthLogRec.errors = [];
+            dthLogRec.errors.push(String(dthLogMsg));
+            // An export failure is never an ok run — the v1 reader takes both
+            // fields at face value.
+            dthLogRec.ok = false;
+        }
         dthLogRec.finishedAt = new Date().toString();
         dthLogRec.finishedAtMs = new Date().getTime();
         var dthLogOut = new DzFile(dthExportLogPath);
@@ -785,6 +847,21 @@ function buildSceneConfigMap(
       const value = merged[k]
       if (value === undefined) continue // can't unset via shallow copy; bIncludeX gates it
       if (JSON.stringify(value) !== JSON.stringify(baseConfig[k])) delta[k] = value
+    }
+    // The one omitted-key case the bIncludeX gate does NOT cover: a scene that
+    // CLEARS art direction while keeping the block ON. The merged config then
+    // omits gp/dkArtDirection with bIncludeGP/DK still true, the shallow copy
+    // can't unset the base's key, and the runtime would stamp the base's
+    // art-direction morphs onto the very scene the user cleared. Emit an
+    // explicit null — the runtime's truthiness gate (`if (options["gpArtDirection"])`)
+    // then skips it.
+    for (const [k, gate] of [
+      ['gpArtDirection', 'bIncludeGP'],
+      ['dkArtDirection', 'bIncludeDK'],
+    ] as const) {
+      if (merged[k] === undefined && baseConfig[k] !== undefined && merged[gate] === true) {
+        delta[k] = null
+      }
     }
     // Identity dials — not section-derived, emit explicitly (same G9 gate as the base).
     if (override.identity) {
@@ -1178,7 +1255,7 @@ function buildRomScriptDsa(
   const exportBlock =
     exportDir && character.exportWithRomScript !== false
       ? `            // Export to the DTH pipeline via the Exporter Plugin (v1.8.1+).
-${buildExportBlock(character, frames, metaDirAbs, sceneCsvMap, scenesRootAbs, bulk, hipRefPrefix)
+${buildExportBlock(character, frames, metaDirAbs, sceneCsvMap, scenesRootAbs, bulk, hipRefPrefix, sceneFrames)
   .split('\n')
   .map((line) => (line ? `            ${line}` : line))
   .join('\n')}`
@@ -1207,29 +1284,88 @@ ${scriptTitle}${sceneSelectBlock ? `
 // this script's <project>/<character>/ subfolder.
 
 var dthCharacterConfig = ${dazJson(config, 2)};
-${sceneSelectBlock}
 // The wrong-scene guard: refuse to build when the OPEN scene isn't one of this
 // character's linked scenes (see dthSceneLinkError below the config).
 ${sceneGuardSnippet(character)}
-${openSceneFileSnippet()}${romAnimationSourceSnippet(romAnimationSourceMap(character))}
+${openSceneFileSnippet()}${romAnimationSourceSnippet(romAnimationSourceMap(character))}${sceneSelectBlock}
 // Write a minimal run log so even a catastrophic failure reaches the studio.
+// MERGES like the runtime's writeRunLog (log v2 stores one entry per scene):
+// in a batch, scene B's failure must never truncate away what scene A already
+// recorded — the pre-v56 truncate here destroyed earlier scenes' failures
+// right before the studio could ingest them.
 function dthWriteFailureLog(sError) {
     try {
         if (!dthCharacterConfig.runLogPath) return;
-        var dthLogFile = new DzFile(dthCharacterConfig.runLogPath);
-        // One ORed mode arg — a second open() argument warns on DS6.
-        if (dthLogFile.open(dthLogFile.WriteOnly | dthLogFile.Truncate)) {
-            dthLogFile.write(JSON.stringify({
+        var dthPrevLog = null;
+        var dthLogIn = new DzFile(dthCharacterConfig.runLogPath);
+        if (dthLogIn.exists() && dthLogIn.open(dthLogIn.ReadOnly)) {
+            var dthPrevTxt = String(dthLogIn.read());
+            dthLogIn.close();
+            try { dthPrevLog = JSON.parse(dthPrevTxt); } catch (ePrev) { dthPrevLog = null; }
+        }
+        // The scene this failure belongs to: the capture when it exists (a saved
+        // ROM animation already resolved back to its source scene there), else
+        // the live filename — the capture is declared AFTER this function but
+        // always before any call site can fail.
+        var dthFailScene = "";
+        try {
+            dthFailScene = (typeof dthOpenSceneFile != "undefined" && dthOpenSceneFile)
+                ? String(dthOpenSceneFile) : String(Scene.getFilename());
+        } catch (eScn) { /* unsaved scene */ }
+        var dthFailSceneName = "";
+        if (dthFailScene) {
+            try { dthFailSceneName = String(new DzFileInfo(dthFailScene).completeBaseName()); } catch (eSn) {}
+        }
+        var dthNow = new Date();
+        var dthOutRec;
+        if (dthPrevLog && dthPrevLog.runs && dthPrevLog.runs.length) {
+            // v2: replace THIS scene's entry, keep every other scene's — the
+            // same rule as the runtime's writeRunLog.
+            var dthFailKey = dthFailScene.split("\\\\").join("/").toLowerCase();
+            var dthKeepRuns = [];
+            for (var dthKi = 0; dthKi < dthPrevLog.runs.length; dthKi++) {
+                var dthOldRun = dthPrevLog.runs[dthKi];
+                if (!dthOldRun) continue;
+                if (String(dthOldRun.scene ? dthOldRun.scene : "").split("\\\\").join("/").toLowerCase() == dthFailKey) continue;
+                dthKeepRuns.push(dthOldRun);
+            }
+            dthKeepRuns.push({
+                character: dthCharacterConfig.characterName,
+                runtimeVersion: dthCharacterConfig.runtimeVersion,
+                studioVersion: dthCharacterConfig.studioVersion,
+                finishedAt: dthNow.toString(),
+                finishedAtMs: dthNow.getTime(),
+                ok: false,
+                errors: [String(sError)],
+                failedMorphs: [],
+                scene: dthFailScene,
+                sceneName: dthFailSceneName
+            });
+            dthOutRec = {
+                logVersion: 2,
+                ok: false,
+                finishedAt: dthNow.toString(),
+                finishedAtMs: dthNow.getTime(),
+                character: dthCharacterConfig.characterName,
+                runs: dthKeepRuns
+            };
+        } else {
+            dthOutRec = {
                 logVersion: 1,
                 character: dthCharacterConfig.characterName,
                 runtimeVersion: dthCharacterConfig.runtimeVersion,
                 studioVersion: dthCharacterConfig.studioVersion,
-                finishedAt: new Date().toString(),
-                finishedAtMs: new Date().getTime(),
+                finishedAt: dthNow.toString(),
+                finishedAtMs: dthNow.getTime(),
                 ok: false,
                 errors: [String(sError)],
                 failedMorphs: []
-            }, null, 2));
+            };
+        }
+        var dthLogFile = new DzFile(dthCharacterConfig.runLogPath);
+        // One ORed mode arg — a second open() argument warns on DS6.
+        if (dthLogFile.open(dthLogFile.WriteOnly | dthLogFile.Truncate)) {
+            dthLogFile.write(JSON.stringify(dthOutRec, null, 2));
             dthLogFile.close();
         }
     } catch (dthLogErr) { /* even the log failed — the dialog still fires */ }
@@ -1401,6 +1537,8 @@ export function toExportScriptDsa(
   hipRefPrefix = '',
   /** Scan-sync settings — see {@link IndexSyncOptions}. */
   indexSync?: IndexSyncOptions,
+  /** Per-scene preset-block frames — see {@link buildExportBlock}. */
+  sceneFrames: Record<string, PresetFrames> = {},
 ): GeneratedFile {
   const content = `// DAZ Studio version 4.22.0.16 filetype DAZ Script
 
@@ -1423,7 +1561,7 @@ if (dthSceneLinkErr) {
 } else if (!dthFig) {
     MessageBox.critical("No ${character.genesis} figure found in the scene - load the character's scene and re-run.", "DTH Character Studio", "&OK");
 } else {
-${indentLines(indexSyncSnippet(indexSync))}${buildExportBlock(character, frames, metaDirAbs, buildSceneCsvMap(character), scenesRootAbs, unattended, hipRefPrefix)
+${indentLines(indexSyncSnippet(indexSync))}${buildExportBlock(character, frames, metaDirAbs, buildSceneCsvMap(character), scenesRootAbs, unattended, hipRefPrefix, sceneFrames)
   .split('\n')
   .map((line) => (line ? `    ${line}` : line))
   .join('\n')}}
@@ -1459,6 +1597,8 @@ export function toBulkExportOnlyScriptDsa(
   hipRefPrefix = '',
   /** Scan-sync settings — see {@link IndexSyncOptions}. */
   indexSync?: IndexSyncOptions,
+  /** Per-scene preset-block frames — see {@link buildExportBlock}. */
+  sceneFrames: Record<string, PresetFrames> = {},
 ): GeneratedFile {
   const built = toExportScriptDsa(
     { ...character, exportHairAssets: true },
@@ -1469,6 +1609,7 @@ export function toBulkExportOnlyScriptDsa(
     true,
     hipRefPrefix,
     indexSync,
+    sceneFrames,
   )
   // Hidden (dot-prefixed) → the Content Library never shows it: no tile.
   return { fileName: BULK_EXPORT_ONLY_SCRIPT, content: built.content, target: 'daz' }
@@ -1493,6 +1634,10 @@ export function toBulkExportOnlyScriptDsa(
 export function toGroomExportScriptDsa(
   character: Character,
   scenesRootAbs?: string,
+  /** Scan-sync settings — see {@link IndexSyncOptions}. A groom export runs on
+   *  a verified scene like every other export, so it keeps the scan data
+   *  current too (the v55 contract). */
+  indexSync?: IndexSyncOptions,
 ): GeneratedFile {
   const exportDir = character.exportPath.trim().replace(/\\/g, '/')
   const groomMap = groomSceneMap(character)
@@ -1513,6 +1658,11 @@ export function toGroomExportScriptDsa(
 // via the DTH Exporter, restores the scene. Run it on the character's scene with
 // the figure selected; the ROM is NOT needed.
 
+var dir_self_scan = new DzDir(new DzFileInfo(getScriptFileName()).path());${indexSync?.morphIndexDir ? `
+include(dir_self_scan.filePath("../../.DthUtils.dsa"));
+include(dir_self_scan.filePath("../../.DthScanMorphs.dsa"));` : ''}${indexSync?.products ? `
+include(dir_self_scan.filePath("../../.DthProducts.dsa"));` : ''}
+
 ${sceneGuardSnippet(character)}
 ${openSceneFileSnippet()}${romAnimationSourceSnippet(romAnimationSourceMap(character))}
 var dthAction = MainWindow.getActionMgr().findAction("DazToHueExporterAction");
@@ -1524,7 +1674,7 @@ if (dthSceneLinkErr) {
 } else if (!dthFig || !dthFig.inherits("DzNode")) {
     MessageBox.critical("No ${character.genesis} figure found in the scene - load the character's scene and re-run.", "DTH Character Studio", "&OK");
 } else {
-${groomSceneLookupSnippet(groomMap)}
+${indentLines(indexSyncSnippet(indexSync))}${groomSceneLookupSnippet(groomMap)}
     if (dthGroomLabels.length == 0) {
         MessageBox.information("The open scene has no hair list in DTH Character Studio - nothing to export. Open one of the character's scenes with hair items defined.", "DTH Character Studio", "&OK");
     } else {
@@ -1690,7 +1840,22 @@ export function generateAll(
       indexSync,
     ),
     ...(split
-      ? [toExportScriptDsa(character, frames, metaDirAbs, scenesRootAbs, false, hipRefPrefix)]
+      ? [
+          toExportScriptDsa(
+            character,
+            frames,
+            metaDirAbs,
+            scenesRootAbs,
+            false,
+            hipRefPrefix,
+            // The v55 contract — every ROM/export run scans the scene — holds
+            // for the SPLIT export too; omitting it here was the one carrier
+            // the coverage test's fixture (exportWithRomScript default-true)
+            // could not see.
+            indexSync,
+            sceneFrames,
+          ),
+        ]
       : []),
     // The hidden bulk script the Runner executes on DTH Export runs — always
     // ROM + always full export, so it only exists WITH an export dir.
@@ -1716,6 +1881,7 @@ export function generateAll(
             scenesRootAbs,
             hipRefPrefix,
             indexSync,
+            sceneFrames,
           ),
         ]
       : []),
@@ -1732,7 +1898,7 @@ export function generateAll(
       scenesRootAbs,
       indexSync,
     ),
-    ...(groom ? [toGroomExportScriptDsa(character, scenesRootAbs)] : []),
+    ...(groom ? [toGroomExportScriptDsa(character, scenesRootAbs, indexSync)] : []),
     ...(scanProducts ? [toScanProductsScriptDsa(character, scanProducts)] : []),
     toPoseAssetCsv(character, frames, era),
     ...overrideCsvs,

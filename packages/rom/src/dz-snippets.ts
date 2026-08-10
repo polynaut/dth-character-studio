@@ -166,11 +166,18 @@ export function groomSceneLookupSnippet(groomMap: Record<string, Array<string>>)
  * were overridden swaps in just those fields. Same scene-key normalization as
  * {@link groomSceneLookupSnippet} — a change to one must land in the other, or
  * the two disagree on which scene is open. Base indent 0; must run AFTER the
- * `var dthCharacterConfig = …;` it mutates.
+ * `var dthCharacterConfig = …;` it mutates AND after {@link
+ * openSceneFileSnippet} + {@link romAnimationSourceSnippet}: it reads the
+ * `dthOpenSceneFile` capture, never `Scene.getFilename()` live — a saved ROM
+ * animation resolves back to its SOURCE scene there, and reading live would
+ * key the lookup on `rom-animations/<stem>_ROM.duf`, miss the delta, and build
+ * the BASE frame layout while the export block (capture-keyed) delivers the
+ * override scene's CSV: the exact artifact desync the product exists to
+ * prevent.
  */
 export function sceneConfigLookupSnippet(sceneConfigMap: Record<string, unknown>): string {
   return `var dthSceneOverrides = ${dazJson(sceneConfigMap, 2)};
-var dthOpenScene = String(Scene.getFilename()).split("\\\\").join("/").toLowerCase();
+var dthOpenScene = dthOpenSceneFile.split("\\\\").join("/").toLowerCase();
 var dthSceneDelta = dthSceneOverrides[dthOpenScene];
 if (dthSceneDelta) {
     for (var dthOk in dthSceneDelta) {

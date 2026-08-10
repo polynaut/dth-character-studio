@@ -750,6 +750,34 @@ describe('resolveRomPaths', () => {
     expect(paths.mouth).toContain('Mouth.duf')
   })
 
+  it('honors explicit FAC (mouth) and PHY preset selections — same rule as JCM', () => {
+    const twoOfEach = {
+      folder: 'D:/P',
+      assets: [
+        { name: 'G9 DQS JCM FAC - Base', relPath: 'base.duf', genesis: 'G9' as const, skinning: 'dqs' as const, section: 'JCM' as const, includesFac: true },
+        { name: 'G9 DQS JCM FAC - Mouth', relPath: 'mouth-dqs.duf', genesis: 'G9' as const, skinning: 'dqs' as const, section: 'FAC' as const, includesFac: false },
+        { name: 'G9 LINEAR JCM FAC - Mouth', relPath: 'mouth-linear.duf', genesis: 'G9' as const, skinning: 'linear' as const, section: 'FAC' as const, includesFac: false },
+        { name: 'G9 Physics A', relPath: 'phys-a.duf', genesis: 'G9' as const, skinning: null, section: 'PHY' as const, includesFac: false },
+        { name: 'G9 Physics B', relPath: 'phys-b.duf', genesis: 'G9' as const, skinning: null, section: 'PHY' as const, includesFac: false },
+      ],
+    }
+    // Defaults hold without a pick: skinning-matched mouth, first physics asset.
+    const defSections = makeSections()
+    defSections.PHY.enabled = true
+    const defaults = resolveRomPaths(makeCharacter({ sections: defSections }), twoOfEach)
+    expect(defaults.mouth).toContain('mouth-dqs.duf')
+    expect(defaults.phys).toContain('phys-a.duf')
+    // The editor offers the preset picker for EVERY preset section — a stored
+    // pick must resolve, not silently fall back to the default.
+    const sections = makeSections()
+    sections.PHY.enabled = true
+    sections.FAC.presetAssets = ['G9 LINEAR JCM FAC - Mouth.duf']
+    sections.PHY.presetAssets = ['G9 Physics B.duf']
+    const picked = resolveRomPaths(makeCharacter({ sections }), twoOfEach)
+    expect(picked.mouth).toContain('mouth-linear.duf')
+    expect(picked.phys).toContain('phys-b.duf')
+  })
+
   it('returns nothing without a catalog and the script config omits the path options', () => {
     expect(resolveRomPaths(makeCharacter(), { folder: '', assets: [] })).toEqual({})
     const config = characterConfig(toCharacterScriptDsa(makeCharacter()).content)
@@ -1550,7 +1578,51 @@ describe('exporter integration', () => {
     const refs = referenceFrames(character, FRAMES).join(' ')
     expect(content).toContain('findAction("DazToHueExporterAction")')
     expect(content).toContain('var dthExportDir = "X:/exports/electra";')
-    expect(content).toContain(`dthExportAction.doExport(dthExportDir, dthExportName, "${refs}", false)`)
+    // The frames ride a variable now — a ROM-override scene swaps in its own
+    // merged list (see the per-scene test below); without overrides the base
+    // list is the only value the variable ever holds.
+    expect(content).toContain(`var dthRefFrames = "${refs}";`)
+    expect(content).toContain('dthExportAction.doExport(dthExportDir, dthExportName, dthRefFrames, false)')
+    expect(content).not.toContain('dthRefFramesByScene')
+  })
+
+  it('files an export failure under the open scene RUN of a v2 log, never only the top level', () => {
+    // The studio's reader flattens runs[].errors and ANDs runs[].ok whenever a
+    // v2 log exists — a top-level-only errors push is invisible to it, which is
+    // how a bulk run with a broken exporter completed every scene, exported
+    // nothing, and said nothing (the exact pre-v49 failure this channel was
+    // built to prevent).
+    const content = toCharacterScriptDsa(
+      withReferencePose({ exportPath: 'X:\\exports\\e' }),
+      {},
+      FRAMES,
+      'C:/meta',
+    ).content
+    expect(content).toContain('dthLogRun.errors.push(String(dthLogMsg));')
+    expect(content).toContain('dthLogRun.ok = false;')
+    expect(content).toContain('dthLogRec.ok = false;')
+  })
+
+  it('a CSV delivery failure reaches the run log, not just the console', () => {
+    const content = toCharacterScriptDsa(
+      withReferencePose({ exportPath: 'X:\\exports\\e' }),
+      {},
+      FRAMES,
+      'C:/meta',
+    ).content
+    expect(content).toContain('dthExportAlert("The PoseAsset CSV could not be written to "')
+    expect(content).toContain('dthExportLogProblem("The PoseAsset CSV " + dthCsvName + " was not found')
+  })
+
+  it('the catastrophic-failure log merges a v2 log per scene instead of truncating it', () => {
+    // In a batch, scene B's wrong-scene abort must never destroy what scene A's
+    // run already recorded — the same replace-own-scene rule as the runtime's
+    // writeRunLog, inlined because the failure paths can't rely on the runtime
+    // being present.
+    const content = toCharacterScriptDsa(withReferencePose(), {}, FRAMES, 'C:/meta').content
+    expect(content).toContain('function dthWriteFailureLog')
+    expect(content).toContain('runs: dthKeepRuns')
+    expect(content).toContain('dthKeepRuns.push(dthOldRun);')
   })
 
   it('scene-suffixes the doExport figure name at run time (runtime v40)', () => {
@@ -1866,6 +1938,15 @@ describe('exporter integration', () => {
     ])
     // Two scenes CAN share one folder — both stems are expected.
     expect(orphanedRomAnimations(listing, ['Ita_G9_GP', 'ItaDefault_G9_GP'])).toEqual([])
+  })
+
+  it('orphanedRomAnimations: sees dotted scene stems', () => {
+    // romAnimationPath stems on the LAST dot ("Kira.v2.duf" → "Kira.v2_ROM.duf");
+    // the old matcher stemmed on the FIRST dot, so a dotted stem's ROM animation
+    // (and its two thumbnails) was invisible to this sweep forever.
+    const listing = ['Kira.v2_ROM.duf', 'Kira.v2_ROM.duf.png', 'Kira.v2_ROM.tip.png']
+    expect(orphanedRomAnimations(listing, ['Kira.v2'])).toEqual([])
+    expect(orphanedRomAnimations(listing, ['Kira.v3'])).toEqual(listing)
   })
 
   it('orphanedRomAnimations: never touches what the studio did not write', () => {

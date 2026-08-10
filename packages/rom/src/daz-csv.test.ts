@@ -99,4 +99,21 @@ describe('posesFromDazCsv', () => {
     const poses = posesFromDazCsv(',,,Genesis9,body_bs_X,1\n')
     expect(poses).toEqual([])
   })
+
+  it('fails LOUD on a triplet-misaligned row (locale decimal comma / unquoted comma)', () => {
+    // `1,5` written unquoted splits into two cells and shifts every later
+    // column — the old tolerant walk imported wrong-but-finite morphs without
+    // a word. Corrupt input must abort the import, not quietly mangle it.
+    expect(() =>
+      posesFromDazCsv('5,,,Genesis9,prop_A,1,5,Genesis9,prop_B,2\n'),
+    ).toThrow(/triplets/)
+    // The truncating variant (a locale value in the LAST triplet) throws too.
+    expect(() => posesFromDazCsv('5,,,Genesis9,prop_A,1,5\n')).toThrow(/triplets/)
+  })
+
+  it('tolerates trailing empty cells — a plain trailing comma is not corruption', () => {
+    const poses = posesFromDazCsv('5,,,Genesis9,prop_A,1,\n')
+    expect(poses).toHaveLength(1)
+    expect(poses[0].morphs).toHaveLength(1)
+  })
 })

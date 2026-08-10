@@ -196,7 +196,17 @@ export const characterMigrations: Record<
         if (override.enabled !== false) {
           if (Array.isArray(override.sectionOverrides)) {
             for (const so of override.sectionOverrides) {
-              if (so && typeof so === 'object' && typeof so.section === 'string' && so.config)
+              // Validated like flatSection above: `rom` is a partialRecord over
+              // the section enum, and zod 4 REJECTS unknown record keys — an
+              // unvalidated string here would brick the whole character over
+              // one hand-edited legacy entry (heal, don't brick).
+              if (
+                so &&
+                typeof so === 'object' &&
+                typeof so.section === 'string' &&
+                (ROM_SECTIONS as ReadonlyArray<string>).includes(so.section) &&
+                so.config
+              )
                 entry(so.section).owned = so.config
             }
           }
@@ -224,6 +234,9 @@ export const characterMigrations: Record<
               se &&
               typeof se === 'object' &&
               typeof se.section === 'string' &&
+              // Same guard as sectionOverrides above — an unknown section key
+              // would fail the whole character's parse.
+              (ROM_SECTIONS as ReadonlyArray<string>).includes(se.section) &&
               typeof se.enabled === 'boolean'
             )
               entry(se.section).enabled = se.enabled

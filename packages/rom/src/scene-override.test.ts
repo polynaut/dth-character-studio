@@ -757,6 +757,88 @@ describe('generateAll — scene overrides folded into the one script', () => {
     expect(grabObject(files[0].content, 'dthSceneOverrides')[sceneKey].bIncludeGP).toBe(false)
   })
 
+  it('a scene that CLEARS the base art direction emits an explicit null delta', () => {
+    // The bIncludeX gate covers a scene that turns the BLOCK off — not one that
+    // keeps GP on and empties the art direction. The merged config then simply
+    // OMITS gpArtDirection, the shallow runtime copy can't unset the base's
+    // key, and the cleared scene got the base's morphs stamped anyway. The
+    // explicit null trips the runtime's truthiness gate instead.
+    const artB = { id: 'a', rom: 'gp' as const, frame: 96, name: 'Open', morphs: [{ id: 'm', node: 'GoldenPalace_G9', prop: 'GP_Open', value: 0.8 }] }
+    const cleared = makeOverride({
+      scenePath: scene,
+      rom: { GEN: { owned: ownedGenConfig({ artDirection: [] }) } },
+    })
+    const character = genFemale({
+      sections: {
+        ...defaultSections(),
+        GEN: { enabled: true, mode: 'preset', presetAssets: [], artDirection: [artB], groups: [], customAssetPath: '' },
+      },
+      sceneOverrides: [cleared],
+    })
+    const script = generateAll(character, {}, FRAMES)[0].content
+    expect(grabObject(script, 'dthCharacterConfig').gpArtDirection).toBeDefined()
+    const delta = grabObject(script, 'dthSceneOverrides')[sceneKey]
+    expect(delta.gpArtDirection).toBeNull()
+    // The block itself stays on — only the payload was cleared.
+    expect(delta.bIncludeGP).toBeUndefined()
+  })
+
+  it('reference-skeleton frames follow the OPEN scene, matching its CSV (per-scene lookup)', () => {
+    // A reorder shifts the bone-scale pose from base+1 to base+0. The scene's
+    // CSV bakes its _frame_<N>.fbx path from the MERGED walk, so the exporter
+    // must be told the merged frame list for that scene — a base-only list
+    // wrote an FBX the override CSV never references while the frame it does
+    // reference was never written.
+    const sections = makeSections()
+    sections.FBM.groups[0].poses[1].boneScaleRef = true
+    const reordered = makeOverride({
+      scenePath: scene,
+      rom: {
+        FBM: {
+          owned: ownedConfig([
+            {
+              ...fbmGroup(),
+              poses: [{ ...fbmGroup().poses[1], boneScaleRef: true }, fbmGroup().poses[0]],
+            },
+          ]),
+        },
+      },
+    })
+    const character = makeCharacter({
+      sections,
+      extraScenes: [scene],
+      exportPath: 'D:\\export',
+      sceneOverrides: [reordered],
+    })
+    const files = generateAll(character, {}, FRAMES)
+    const script = files[0].content
+    // Base: GluteSize at 329; the reordering scene: at 328.
+    expect(script).toContain('var dthRefFrames = "329";')
+    expect(script).toContain(`"${sceneKey}": "328"`)
+    expect(script).toContain('dthExportAction.doExport(dthExportDir, dthExportName, dthRefFrames, false)')
+    // The same 328 the scene's own CSV references.
+    const sceneCsv = files.find((f) => f.fileName === 'ElectraG9_ElectraBeach_pose_asset.csv')!.content
+    expect(sceneCsv).toContain('_frame_328.fbx')
+    const baseCsv = files.find((f) => f.fileName === 'ElectraG9_pose_asset.csv')!.content
+    expect(baseCsv).toContain('_frame_329.fbx')
+  })
+
+  it('the per-scene config lookup reads the capture, emitted after it exists', () => {
+    // The lookup must key on dthOpenSceneFile — the capture a saved ROM
+    // animation is resolved back through — never Scene.getFilename() live: a
+    // run from rom-animations/<stem>_ROM.duf would miss the delta and build
+    // the BASE frame layout while the export delivers the override CSV.
+    const script = generateAll(withScene(), {}, FRAMES)[0].content
+    expect(script).toContain('var dthOpenScene = dthOpenSceneFile.split("\\\\").join("/").toLowerCase();')
+    expect(script).not.toContain('var dthOpenScene = String(Scene.getFilename())')
+    const capture = script.indexOf('var dthOpenSceneFile = String(Scene.getFilename());')
+    const romSource = script.indexOf('var dthRomSourceScenes =')
+    const lookup = script.indexOf('var dthSceneOverrides =')
+    expect(capture).toBeGreaterThan(-1)
+    expect(romSource).toBeGreaterThan(capture)
+    expect(lookup).toBeGreaterThan(romSource)
+  })
+
   it('a per-scene preset-asset swap emits the changed include flags', () => {
     const swap = makeOverride({
       scenePath: scene,
