@@ -686,36 +686,40 @@ current code before relying on details, but assume the *lesson* still holds.
   from a real folder: `remove_junction` (junction.rs) treats
   `symlink_metadata().file_type().is_symlink()` as THE junction test and
   refuses everything else.
-- **The DTH Exporter is only scriptable in Daz Studio 6.** Driving it needs
+- **Scripted export exists in BOTH Studio majors now — but only from Exporter
+  2.0.2.0 on Daz Studio 4.** Driving the exporter needs
   `MainWindow.getActionMgr().findAction("DazToHueExporterAction")` →
-  `doExport(dir, name, referenceFrames, saveSettings)` — introduced with the DS6
-  exporter plugin 1.8.1. The **Daz Studio 4 build has no scripted export at
-  all**: measured on a DS4 install whose exporter dialog reports 2.0.1, its
-  action is class `ExporterAction` / name `DazToHue_Action` (so the class lookup
-  misses it entirely), carries 28 methods that are all inherited DzAction/QAction
-  members, and a sweep of ALL 912 registered actions plus the global script scope
-  found no `doExport*` anywhere. `trigger()` only opens the dialog.
-  Consequences: (1) never treat finding the action as proof it can export — gate
-  on `typeof doExport == "function"`; (2) the DLL version is no guide, the DS4
-  build stamps FileVersion 1.0.0.1 while reporting 2.0.1 in its UI, and the DS6
-  build has no version resource at all; (3) automated export — the ROM script's
-  export block and the whole bulk DTH Export flow — is DS6-only, even though the
-  Runner plugin itself does load in DS4.
-- **"Export only" may never point at Daz Studio 4** — the corollary of (3) above,
-  and the reason `exportOnlyCandidateKeys` (`lib/daz-install.ts`) floors its
-  candidates at major ≥ 5. The Export-only flag exists because plugins are built
-  per Studio major: a machine that has moved to the newest Studio can be waiting
-  on a Runner build for it, so the batch keeps running in an older install while
-  everything else uses the active one. The trap is that DS4 looks eligible from
-  every angle the studio can cheaply check — it takes the Runner DLL
-  (`RUNNER_DLL.ds4`), so `fetchExportRunnerGate` goes GREEN, the launcher starts
-  it, and the Runner claims the job file. Every scene then runs and every export
-  block skips, because that build has no `doExport`: a batch that completes and
-  exports nothing, which is the exact failure the flag exists to prevent. The
-  floor is 5, not 6, to mirror `dazFlavorFromExeVersion`'s `major >= 5` → `ds6`
-  split rather than restating the boundary. On today's DS4 + DS6 machines that
-  means the switch is offered nowhere, which is correct — there is no valid
-  arrangement to describe until a Studio newer than 6 ships.
+  `doExport(dir, name, referenceFrames, saveSettings)`, introduced with the DS6
+  exporter plugin 1.8.1. The Studio 4 build had **no scripted export at all**
+  until mrpdean added it: measured on a DS4 install whose exporter dialog
+  reported 2.0.1, its action was class `ExporterAction` / name
+  `DazToHue_Action` (so the class lookup missed it entirely), carried 28
+  methods that were all inherited DzAction/QAction members, and a sweep of ALL
+  912 registered actions plus the global script scope found no `doExport*`
+  anywhere — `trigger()` only opened the dialog. **Exporter 2.0.2.0 fixes
+  that**: a DS4 batch was measured on 2026-08-10 writing its `.abc` + `.dth`
+  under script control, so DS4 is a full export target and
+  `exportOnlyCandidateKeys` no longer floors its candidates at major ≥ 5 (the
+  floor, and the "Export only may never point at Daz Studio 4" rule that went
+  with it, are gone). What survives: (1) never treat finding the action as proof
+  it can export — the generated script still gates on
+  `typeof doExport == "function"`, which is what silently degrades on an OLD DS4
+  exporter (a batch that completes and exports nothing); (2) the DLL version is a
+  weak guide — the pre-2.0.2 DS4 build stamps FileVersion 1.0.0.1 while
+  reporting 2.0.1 in its UI, and older DS6 builds carry no version resource at
+  all, so "is this new enough?" is answered by keeping every install on the
+  newest build (Settings → Daz Studio plugins) rather than by comparing numbers.
+- **A Daz plugin's generation is in its FILE NAME, and that is a loader rule.**
+  Daz Studio 6 only loads plugins named `dsp_*.dll`; Daz Studio 4 loads the
+  plain name. So `dth_exporter.dll` is a DS4 build and `dsp_dth_exporter.dll` a
+  DS6 one — not by convention but by what each Studio will accept, which is why
+  `exporterDllFlavor` (`lib/daz-plugins.ts`) decides from the name and treats a
+  folder called "Daz Studio 6" only as a cross-check to flag. The same split
+  names the bundled Runner DLLs (`RUNNER_DLL`). Both plugins are installed into
+  EVERY detected 64-bit Daz install, paired by generation: one release folder
+  (`ExporterPlugin/Daz Studio 4` + `…/Daz Studio 6`, how mrpdean publishes it)
+  serves a whole machine, and a generation with no build on hand is REPORTED,
+  never served with the other one's binary.
 - **Three consumers must agree on WHICH Daz runs the export batch**, and they are
   fed by one pure rule (`storage/settings.ts` → `exportInstallFolder`): the
   launcher (`api/core.exportDazInstallFolder`), the Runner GATE

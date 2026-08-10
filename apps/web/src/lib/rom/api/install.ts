@@ -5,7 +5,11 @@ import { withBusyCursor } from '../../busy-cursor.ts'
 import * as storage from '../storage'
 import { dataPath } from '../storage'
 import { dedupReportSchema, installReportSchema } from './native-types.ts'
+import { detectDazInstalls } from './daz-install'
+import { dazFlavorFromMajor, newestReleasePerFlavor } from '#/lib/daz-plugins.ts'
+import { normalizePathLower } from '#/lib/path.ts'
 
+import type { DazFlavor, PluginRelease } from '#/lib/daz-plugins.ts'
 import type { StudioSettings } from '../storage'
 // The structured native-command RETURN types are inferred from the zod schemas
 // in native-types.ts (parsed at each `invoke` boundary below, so a Rust
@@ -72,16 +76,6 @@ export async function listDthReleases({
   return storage.listDthReleases(folder)
 }
 
-/** Inspect a DTH Exporter Plugin folder: a single plugin, or versioned folders. */
-export async function listDthExporterReleases({
-  data,
-}: {
-  data: unknown
-}): Promise<ReturnType<typeof storage.listDthExporterReleases>> {
-  const { folder } = z.object({ folder: z.string() }).parse(data)
-  return storage.listDthExporterReleases(folder)
-}
-
 export async function saveSettings({ data }: { data: unknown }): Promise<StudioSettings> {
   // The same tolerant schema reads settings.json and validates the save input —
   // the field list + defaults live ONCE, in storage/settings.ts. The caller's
@@ -140,6 +134,207 @@ export async function installDthRelease({ data }: { data: unknown }): Promise<In
       target,
     },
   }))
+}
+
+// --- Daz plugins: every release, into every installation ---------------------
+// Both Daz plugins the studio installs — the DTH Exporter (mrpdean's, from the
+// user's release folders) and the bundled Runner — ship ONE BINARY PER STUDIO
+// GENERATION, and a machine can have several generations installed at once. So
+// the install is a MATCH, not a pair of paths: every release, into every
+// installation of the generation it was built for. The matching rules are pure
+// (`lib/daz-plugins.ts`); this is the I/O around them.
+
+/** One Daz installation as an install TARGET, with both plugins' state in it. */
+export interface DazPluginTarget {
+  /** DIM's key, or '' for the manually configured install folder. */
+  key: string
+  /** "DAZ Studio 6", or "Daz Studio install folder" for the manual one. */
+  name: string
+  path: string
+  /** Read from the install's own DAZStudio exe; DIM's major version is the
+   *  fallback when the exe can't be read. null = neither could answer, and the
+   *  panel says so rather than guessing a binary into it. */
+  flavor: DazFlavor | null
+  /** The exporter DLL version currently in its `plugins` folder ('' = none). */
+  exporterInstalled: string
+  /** The release that WOULD be installed here (null = none for this
+   *  generation among the configured folders). */
+  exporterSource: PluginRelease | null
+  /** The bundled Runner's state against this install. */
+  runner: storage.RunnerStatus
+}
+
+/** What Settings → Daz Studio plugins shows: what we have, where it goes. */
+export interface DazPluginState {
+  /** Every exporter build found under the configured folders. */
+  sources: Array<PluginRelease>
+  /** Configured folders holding no exporter DLL at all — a typo or a moved
+   *  release, named instead of silently ignored. */
+  emptyFolders: Array<string>
+  /** The bundled Runner release tag ('' in a dev checkout with no staged DLLs). */
+  runnerBundledVersion: string
+  targets: Array<DazPluginTarget>
+  /** No Daz installation could be resolved at all — DIM lists none and no
+   *  install folder is configured. */
+  noTargets: boolean
+}
+
+/** Whether this target's exporter is already the build we would install. An
+ *  unknown version on either side is never "current": it cannot be compared, so
+ *  installing (a copy) is the honest answer. */
+function exporterIsCurrent(target: DazPluginTarget): boolean {
+  const source = target.exporterSource
+  if (!source || !source.version || !target.exporterInstalled) return false
+  return source.version === target.exporterInstalled
+}
+
+/** Whether the bundled Runner still has to be written into this target. */
+function runnerIsPending(status: storage.RunnerStatus): boolean {
+  if (status.error !== null) return false
+  if (status.installed === 'none') return true
+  // 'differs' with the INSTALLED one newer is a runner ahead of this app —
+  // installing would downgrade it (the same call `runnerGate` makes).
+  return status.installed === 'differs' && !storage.runnerInstalledNewer(status)
+}
+
+/** How many plugin copies "Install / update all" would actually make. */
+export function pendingPluginInstalls(state: DazPluginState): number {
+  let pending = 0
+  for (const target of state.targets) {
+    if (target.exporterSource && !exporterIsCurrent(target)) pending++
+    if (runnerIsPending(target.runner)) pending++
+  }
+  return pending
+}
+
+/**
+ * Every Daz installation the studio may install plugins into.
+ *
+ * DIM's list is the source (64-bit and actually on disk — a 32-bit entry takes
+ * none of these 64-bit DLLs, and an install DIM still lists after removal has no
+ * `plugins` folder to write to). The configured install folder joins it when DIM
+ * doesn't already cover it, which is what keeps a DIM-less machine — a portable
+ * install, a hand-set path — working exactly as before.
+ */
+async function pluginTargets(): Promise<Array<{ key: string; name: string; path: string; major: number }>> {
+  const settings = await storage.getSettings()
+  const scan = await detectDazInstalls()
+  const targets = scan.apps
+    .filter((app) => app.exists && app.bits === 64)
+    .map((app) => ({ key: app.key, name: app.name, path: app.path, major: app.version }))
+  const configured = settings.dazInstallFolder.trim()
+  if (configured && !targets.some((t) => normalizePathLower(t.path) === normalizePathLower(configured))) {
+    targets.push({ key: '', name: 'Daz Studio install folder', path: configured, major: 0 })
+  }
+  return targets
+}
+
+/**
+ * The whole panel's state in one read: which exporter builds the configured
+ * folders hold, and what each detected Daz installation currently has.
+ */
+export async function fetchDazPluginState(): Promise<DazPluginState> {
+  const settings = await storage.getSettings()
+  const scan = await storage.scanExporterSources(storage.exporterSourceFolders(settings))
+  const newest = newestReleasePerFlavor(scan.found)
+  const found = await pluginTargets()
+  const targets = await Promise.all(
+    found.map(async (target) => {
+      const flavor = (await storage.detectDazFlavor(target.path)) ?? dazFlavorFromMajor(target.major)
+      return {
+        key: target.key,
+        name: target.name,
+        path: target.path,
+        flavor,
+        exporterInstalled: await storage.installedExporterVersion(target.path),
+        exporterSource: flavor ? newest[flavor] : null,
+        runner: await storage.runnerStatus(target.path),
+      }
+    }),
+  )
+  return {
+    sources: scan.found,
+    emptyFolders: scan.emptyFolders,
+    runnerBundledVersion: targets[0]?.runner.bundledVersion ?? (await storage.bundledRunnerTag()),
+    targets,
+    noTargets: targets.length === 0,
+  }
+}
+
+/**
+ * Install BOTH plugins into every detected Daz installation — the panel's one
+ * button.
+ *
+ * Only what is actually pending is copied (an up-to-date plugin is left alone,
+ * and a Runner NEWER than the bundled one is never downgraded), unless `force`
+ * repairs everything. Every copy is its own step in the merged report, labelled
+ * with the installation it went into, so a machine where one Daz needs
+ * elevation and another doesn't reads as exactly that — one failed step beside
+ * three good ones — instead of one opaque failure.
+ *
+ * Per-target failures do NOT abort the rest: the report carries them. It throws
+ * only when there is nothing to do at all, which is a setup problem the user has
+ * to fix before any of this means anything.
+ */
+export async function installDazPlugins({ data }: { data: unknown }): Promise<InstallReport> {
+  const { dryRun, force } = z
+    .object({ dryRun: z.boolean().optional(), force: z.boolean().optional() })
+    .parse(data ?? {})
+  const state = await fetchDazPluginState()
+  if (state.noTargets) {
+    throw new Error(
+      'No Daz Studio installation to install into — activate one above, or set the Daz Studio install folder.',
+    )
+  }
+  // Both bundled Runner folders once, not once per target: they are the same
+  // two paths for every installation on the machine.
+  const runnerFolders: Record<DazFlavor, string> = {
+    ds4: await storage.bundledRunnerFolder('ds4'),
+    ds6: await storage.bundledRunnerFolder('ds6'),
+  }
+  const jobs: Array<{ label: string; folder: string; target: string }> = []
+  for (const target of state.targets) {
+    if (target.exporterSource && (force || !exporterIsCurrent(target))) {
+      jobs.push({
+        label: `Exporter plugin → ${target.name}`,
+        folder: target.exporterSource.folder,
+        target: target.path,
+      })
+    }
+    // A generation this build carries no Runner for is skipped, not failed —
+    // the other installs still get theirs (dev checkout without `fetch:runner`).
+    if (target.flavor && runnerFolders[target.flavor] && (force || runnerIsPending(target.runner))) {
+      jobs.push({
+        label: `Runner plugin → ${target.name}`,
+        folder: runnerFolders[target.flavor],
+        target: target.path,
+      })
+    }
+  }
+  if (jobs.length === 0) {
+    throw new Error(
+      state.sources.length === 0
+        ? 'No DTH Exporter Plugin release found — add the folder holding its DLLs above.'
+        : 'Everything is already up to date in every detected Daz Studio.',
+    )
+  }
+  const steps: InstallReport['steps'] = []
+  let totalFiles = 0
+  for (const job of jobs) {
+    const report = installReportSchema.parse(
+      await invoke('install_dth_plugin', {
+        request: {
+          exporterFolder: job.folder,
+          dazInstallFolder: job.target,
+          dryRun: dryRun ?? false,
+          label: job.label,
+        },
+      }),
+    )
+    steps.push(...report.steps)
+    totalFiles += report.totalFiles
+  }
+  return { dryRun: dryRun ?? false, steps, totalFiles }
 }
 
 /**

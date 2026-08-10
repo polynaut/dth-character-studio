@@ -140,6 +140,28 @@ const DTH_VERSION = '2.4.3'
 
 /** The virtual world's absolute paths (all '/'-separated — the fake fs is a
  *  string map; nothing here touches a real disk). */
+/**
+ * A fake Windows DLL carrying a real `VS_FIXEDFILEINFO` block, so the studio's
+ * own reader (`fileVersionFromBytes`, which scans for the 0xFEEF04BD signature)
+ * finds the version the caller means. Returned as a data URL — how the fake
+ * filesystem stores binary content.
+ *
+ * Shared because two things depend on the SAME bytes being readable: the Daz
+ * plugin panel (which versions every DLL it finds) and the guide screenshots.
+ */
+export function fakeDll(version: string): string {
+  const [a = 0, b = 0, c = 0, d = 0] = version.split('.').map((n) => Number.parseInt(n, 10) || 0)
+  const u32 = (hi: number, lo: number) => [lo & 0xff, (lo >> 8) & 0xff, hi & 0xff, (hi >> 8) & 0xff]
+  const bytes = [
+    0x4d, 0x5a, 0x90, 0x00, // an MZ header, so the block isn't the whole file
+    0xbd, 0x04, 0xef, 0xfe, // VS_FIXEDFILEINFO signature
+    0x00, 0x00, 0x01, 0x00, // struct version
+    ...u32(a, b), // FileVersionMS
+    ...u32(c, d), // FileVersionLS
+  ]
+  return `data:application/octet-stream;base64,${Buffer.from(bytes).toString('base64')}`
+}
+
 export const P = {
   appData: 'C:/Users/You/AppData/Local/com.polynaut.dthcharacterstudio',
   dazLib: 'D:/DAZ 3D/My DAZ 3D Library',

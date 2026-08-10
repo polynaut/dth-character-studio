@@ -201,9 +201,12 @@ Studio can still have to export from an older one. Three consumers must agree an
 are fed by ONE pure rule (`storage/settings.ts` → `exportInstallFolder`): the
 launcher, the Runner GATE (`fetchExportRunnerGate`) and the Runner INSTALL
 (`resolveRunnerInstall`) — a gate reading one install while the launcher starts
-another reports "ready" over an export that opens Daz and waits forever. Which
-installs may carry the flag is a separate measured rule, and it excludes DS4:
-see `.ai/gotchas.md`, "Export only" may never point at Daz Studio 4.
+another reports "ready" over an export that opens Daz and waits forever. Any
+older install may carry the flag since Exporter 2.0.2.0 made DS4 scriptable too
+(`.ai/gotchas.md`); the Runner install is no longer part of that answer — **both
+Daz plugins are installed into every detected install**, paired by generation
+(Settings → Daz Studio plugins, `api/install.fetchDazPluginState` +
+`installDazPlugins`, rules in `lib/daz-plugins.ts`).
 
 Window creation must never run on the main thread from a sync command
 (deadlock) — `windows.rs` documents the pattern. `tauri.conf.json`:

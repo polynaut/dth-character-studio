@@ -37,6 +37,7 @@ export { scriptIconNames, writeScriptIcons } from './storage/script-icons'
 export {
   consumeSettingsFileCorrupt,
   exportInstallFolder,
+  exporterSourceFolders,
   getSettings,
   saveSettings,
   studioSettingsSchema,
@@ -103,9 +104,10 @@ export type { AssetKind, DazAsset } from './storage/assets'
 // --- DTH release / Exporter Plugin scanning + install plans -------------------
 export {
   ZIP_RELEASE_WARNING,
+  bundledRunnerFolder,
+  bundledRunnerTag,
   detectDazFlavor,
   installedExporterVersion,
-  listDthExporterReleases,
   listDthReleases,
   resolveActiveReleaseRoot,
   resolvePluginInstall,
@@ -114,13 +116,15 @@ export {
   runnerGate,
   runnerInstalledNewer,
   runnerStatus,
+  scanExporterSources,
 } from './storage/releases'
 export type {
   ActiveReleaseEntry,
   DazFlavor,
-  DthExporterReleaseInfo,
   DthReleaseInfo,
+  ExporterSourceScan,
   PluginInstall,
+  PluginRelease,
   ReleaseInstall,
   RunnerGate,
   RunnerInstall,

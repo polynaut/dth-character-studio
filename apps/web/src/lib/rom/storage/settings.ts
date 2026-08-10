@@ -44,15 +44,28 @@ export const studioSettingsSchema = z.object({
    */
   currentDthVersion: str,
   /**
-   * The DTH Exporter Plugin folder (contains `dth_exporter.dll`), or a folder of
-   * versioned plugin folders. Stored for reference; the version is read from the
-   * DLL rather than the folder name.
+   * Where the DTH Exporter Plugin releases are, as a LIST — a folder holding the
+   * exporter DLL, or one holding a folder per Studio generation
+   * (`ExporterPlugin/Daz Studio 4` + `…/Daz Studio 6`, which is how mrpdean
+   * publishes it). Each folder is scanned itself and one level down.
+   *
+   * A list because the plugin ships one binary per Studio generation and a
+   * machine can run several side by side: the studio installs the DS4 build into
+   * every Daz Studio 4 it finds and the DS6 build into every Daz Studio 6, so
+   * "the exporter folder" was never one folder — it was one per Studio, and a
+   * single field could only ever describe half a machine.
+   */
+  dthExporterFolders: stringArray,
+  /**
+   * LEGACY single Exporter Plugin folder — read once and merged into
+   * {@link exporterSourceFolders} so an existing settings.json keeps working,
+   * never written again. (Same treatment as `houdiniPathStyle`.)
    */
   dthExporterFolder: str,
   /**
-   * Selected Exporter Plugin version (the DLL's FileVersion, e.g. "1.0.0.1"), or
-   * a folder name fallback when a plugin folder carries no version resource.
-   * Empty = not chosen / none detected.
+   * LEGACY selected Exporter Plugin version. The plugin is now resolved per
+   * Studio generation and the NEWEST build of each is installed, so there is no
+   * single version to pin; kept only so old files still parse.
    */
   currentDthExporterVersion: str,
   /**
@@ -271,6 +284,27 @@ export async function saveSettings(
  * install that has since been activated in its own right, must not keep quietly
  * taking the exports.
  */
+/**
+ * Every folder to look for DTH Exporter Plugin releases in: the configured list,
+ * plus the legacy single field when it names something the list doesn't already
+ * cover. Trimmed, de-duplicated case-insensitively, order preserved (the user's
+ * order decides ties between two copies of the same version).
+ *
+ * Pure, and the single statement of "where do the exporter builds come from" —
+ * the scan, the install and the Settings readout all ask it.
+ */
+export function exporterSourceFolders(settings: StudioSettings): Array<string> {
+  const out: Array<string> = []
+  const seen = new Set<string>()
+  for (const raw of [...settings.dthExporterFolders, settings.dthExporterFolder]) {
+    const folder = raw.trim()
+    if (!folder || seen.has(folder.toLowerCase())) continue
+    seen.add(folder.toLowerCase())
+    out.push(folder)
+  }
+  return out
+}
+
 export function exportInstallFolder(settings: StudioSettings): string {
   const key = settings.dazExportInstallKey.trim()
   const folder = settings.dazExportInstallFolder.trim()

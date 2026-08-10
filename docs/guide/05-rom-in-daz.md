@@ -261,7 +261,7 @@ project you tick by hand can only be **opened** (the export modes are
 disabled, and one project at a time).
 
 Press **Start**: the batch is handed to Daz Studio, where the bundled
-[**Runner plugin**](./02-setup.md#install-the-dth-character-studio-runner-plugin)
+[**Runner plugin**](./02-setup.md#daz-studio-plugins)
 works through it unattended — every scene gets its full ROM build, export and
 delivered CSV, exactly as if you had run the scripts by hand. A closed Daz is
 started; a running one picks the batch up by itself. While the batch is still

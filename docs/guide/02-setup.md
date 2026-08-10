@@ -102,27 +102,52 @@ dropped; usually an uninstall left it.
    Houdini version: each extra folder installs its release independently, so
    an older Houdini can keep an older DTH release.
 
-## Setup DTH Exporter Plugin
+## Daz Studio plugins
 
-Needed for exporting the ROM out of Daz (step 5) — including the studio's
-automatic direct export.
+Two plugins live inside Daz Studio, and the studio installs both — into **every**
+Daz Studio it finds on this machine:
 
-1. **DTH Exporter Plugin release(s) folder** — the extracted Exporter Plugin
-   download.
+- the **DTH Exporter** (mrpdean's), which exports the ROM out of Daz — you point
+  the studio at its release folder;
+- the **DTH Character Studio Runner** (ships inside the app, nothing to
+  download), which lets the studio drive Daz: the
+  [**DTH Export** batch](./05-rom-in-daz.md#batch-export--dth-export),
+  [**Tools → Scan & index → Scan project**](./tools.md#tab-1--scan-amp-index),
+  [**Import from Daz scene**](./05-rom-in-daz.md), and opening scenes in an
+  already-running Daz all go through it.
+
+1. **DTH Exporter Plugin release folder(s)** — **Add folder** and pick the
+   extracted download. Both Daz Studio 4 and Daz Studio 6 builds are handled: if
+   your download holds a folder per version (`ExporterPluginDaz Studio 4` beside
+   `ExporterPluginDaz Studio 6`), point at the folder ABOVE them and the studio
+   finds both. Keep the versions somewhere else? Add one folder each.
+
+   Which Daz Studio a build is for is read from the DLL itself — Daz Studio 6
+   only loads plugins named `dsp_*.dll`, so the name is the answer. The list
+   under the field shows what was found, and flags a folder whose name disagrees
+   with the DLL inside it.
 
    <p align="center">
-     <img width="900" alt="Exporter Plugin release folder field" src="screenshots/settings-exporter-plugin.png" />
+     <img width="900" alt="Daz Studio plugins panel" src="screenshots/settings-daz-plugins.png" />
      <br>
-     <sub><em>Point it at the extracted DTH Exporter Plugin download.</em></sub>
+     <sub><em>One release folder, both builds found — and every Daz Studio on the
+     machine listed with what it has and what it would get.</em></sub>
    </p>
 
-2. **Which Daz Studio it installs into** — the card you activated decides, and
-   the line above the buttons names the folder. Without an activated
-   installation, a **Daz Studio install folder** field is there for you to fill
-   in (e.g. `C:\Program Files\DAZ 3D\DAZStudio4`).
-3. Press **Install**. Daz Studio usually sits in an admin-protected folder on
-   `C:` — the app tells you when that's the case: close Daz, then reopen
-   DTH Character Studio as administrator and install again.
+2. **Installed in** — one row per Daz Studio on the machine, with what each has
+   now and what it would get. A Daz Studio with no matching build says so rather
+   than being handed the wrong one (a Daz Studio 6 cannot load a Daz Studio 4
+   plugin at all).
+
+3. Press **Install / update all**. Only what is pending is copied; when
+   everything is current the button becomes **Reinstall all**. Each copy is its
+   own line in the report, named after the installation it went into, so one Daz
+   needing admin rights while another doesn't reads as exactly that.
+
+   Daz Studio usually sits in an admin-protected folder on `C:` — the app tells
+   you when that's the case: close Daz, then reopen DTH Character Studio as
+   administrator and install again. **Daz must be closed either way** — a running
+   Daz Studio locks its loaded plugin DLLs.
 
    <p align="center">
      <img width="594" alt="Administrator rights notice" src="https://github.com/user-attachments/assets/39eb5538-ac57-478f-9b1d-2cfa533a736d" />
@@ -140,18 +165,6 @@ automatic direct export.
    take it: while the studio runs as administrator, Windows silently blocks
    drag-and-drop from Explorer into its window (nothing happens, no error).
    The restart reopens your project without elevation and drops work again.
-
-## Install the DTH Character Studio Runner Plugin
-
-The **Runner plugin** ships **inside the app** — nothing to download. It lets
-the studio drive Daz Studio: the
-[**DTH Export** batch](./05-rom-in-daz.md#batch-export--dth-export),
-[**Tools → Scan & index → Scan project**](./tools.md#tab-1--scan-amp-index),
-and opening scenes in an already-running Daz all go through it. With the Daz Studio install
-folder set (above), press **Install** — the panel shows the bundled version,
-the exact version installed in Daz, and says when an update is pending. The
-same admin note as above applies, and Daz must be closed (a running Daz locks
-its plugins).
 
 ## Save
 

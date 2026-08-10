@@ -124,10 +124,10 @@ test('activating an installation derives the paths and saves them itself', async
   // card above already lists it, and a second copy can only ever agree.
   await expect(page.getByLabel('My DAZ 3D Library')).toHaveCount(0)
   await expect(page.getByLabel('Daz Studio install folder')).toHaveCount(0)
-  // Each install still says where it will write — that part does belong beside
-  // its buttons. Two of them: the release into the library, the plugin into the
-  // Daz Studio folder.
-  await expect(page.getByText(/Installs into.*from the Daz installation above/)).toHaveCount(2)
+  // The RELEASE install still says where it will write — that part belongs
+  // beside its buttons. The plugins no longer have such a line: they go into
+  // every detected installation, which the Daz plugins panel lists in full.
+  await expect(page.getByText(/Installs into.*from the Daz installation above/)).toHaveCount(1)
 })
 
 test('activating the other card re-derives from it', async ({ page }) => {
@@ -275,19 +275,20 @@ function ds7Seed() {
   return seed
 }
 
-test('Export only is offered NOWHERE on a DS4 + DS6 machine', async ({ page }) => {
-  // The trap this closes: DS4 takes the Runner plugin happily, so every cheap
-  // check says yes — the gate would go green, the launcher would start it, the
-  // Runner would claim the job file, and then every scene's export would skip,
-  // because that build has no scripted export at all. A batch that completes and
-  // exports nothing is the exact failure Export only exists to prevent, so DS4
-  // is never offered, and on this machine there is nothing else to offer.
+test('Export only IS offered on DS4 beside an active DS6', async ({ page }) => {
+  // This used to assert the opposite. DS4 was excluded because its exporter had
+  // no scripted export — a batch there ran every scene and exported nothing.
+  // mrpdean shipped scripted export in the DS4 plugin (Exporter 2.0.2.0) and a
+  // DS4 batch was measured writing its files, so the older install is a real
+  // choice on the commonest two-Studio machine there is.
   const seed = dimSeed()
   await openDazSettings(page, seed)
   await page.getByRole('button', { name: /DAZ Studio 6/ }).click()
   await expect(page.getByText(/DAZ Studio 6 activated/)).toBeVisible()
 
-  await expect(page.getByText('Export only')).toHaveCount(0)
+  const switches = page.getByRole('switch', { name: /Run export batches in/ })
+  await expect(switches).toHaveCount(1)
+  await expect(page.getByRole('switch', { name: 'Run export batches in DAZ Studio 4' })).toBeVisible()
 })
 
 test('Export only sends the batch to the older Studio, and only that one', async ({ page }) => {
@@ -295,13 +296,16 @@ test('Export only sends the batch to the older Studio, and only that one', async
   await page.getByRole('button', { name: /DAZ Studio 7/ }).click()
   await expect(page.getByText(/DAZ Studio 7 activated/)).toBeVisible()
 
-  // Offered on DS6 — older than the active one, and able to export. Never on
-  // DS4, and never on the active install itself.
+  // Offered on BOTH older installs (DS6 and DS4 — scripted export exists in
+  // each since Exporter 2.0.2.0), never on the active install itself. Only one
+  // can be ON, which is what the single stored key enforces.
   const switches = page.getByRole('switch', { name: /Run export batches in/ })
-  await expect(switches).toHaveCount(1)
-  await expect(page.getByRole('switch', { name: 'Run export batches in DAZ Studio 6' })).toBeVisible()
+  await expect(switches).toHaveCount(2)
+  await expect(page.getByRole('switch', { name: 'Run export batches in DAZ Studio 7' })).toHaveCount(0)
+  const ds6Switch = page.getByRole('switch', { name: 'Run export batches in DAZ Studio 6' })
+  await expect(ds6Switch).toBeVisible()
 
-  await switches.click()
+  await ds6Switch.click()
   await expect(page.getByText(/Export batches will run in DAZ Studio 6/)).toBeVisible()
 
   // Both halves reach disk: the KEY is what arms the redirect, the FOLDER is
@@ -315,7 +319,7 @@ test('Export only sends the batch to the older Studio, and only that one', async
 
   // Turning it off hands the exports back, clearing both fields — a leftover
   // folder must never keep quietly taking the batch.
-  await switches.click()
+  await ds6Switch.click()
   await expect(page.getByText(/Export batches follow the active installation again/)).toBeVisible()
   await expect.poll(async () => (await savedSettings(page)).dazExportInstallKey).toBe('')
   expect((await savedSettings(page)).dazExportInstallFolder).toBe('')

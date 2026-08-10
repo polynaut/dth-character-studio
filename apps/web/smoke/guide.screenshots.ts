@@ -1,6 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
 
-import { buildSeed, DIM_FOLDER, P, UPROJECT, prime, settle, type SeedOptions } from './fixtures.ts'
+import { buildSeed, DIM_FOLDER, P, UPROJECT, fakeDll, prime, settle, type SeedOptions } from './fixtures.ts'
 
 // Documentation screenshots for docs/guide/*. Reuses the smoke Tauri fake +
 // fixture world (one project "Demo", one character "Kira"). Each `test`
@@ -941,16 +941,52 @@ test('detail-path-chip-alt', async ({ page }) => {
   await page.keyboard.up('Alt')
 })
 
-test('settings-exporter-plugin', async ({ page }) => {
-  await prime(page, buildSeed())
+test('settings-daz-plugins', async ({ page }) => {
+  // A two-Studio machine, which is the whole point of the panel: one release
+  // folder holding a build per generation, installed into every Daz found.
+  const roaming = 'C:/Users/You/AppData/Roaming'
+  const dazAppData = `${roaming}/DAZ 3D`
+  const ds4 = 'C:/Program Files/DAZ 3D/DAZStudio4'
+  const ds6 = 'C:/Program Files/DAZ 3D/DAZStudio6'
+  const resources = 'C:/Program Files/DTH Character Studio'
+  const exporter = 'X:/DazToHue/ExporterPlugin'
+  const seed = buildSeed({ dazInstallFolder: ds6 })
+  seed.roamingDir = roaming
+  seed.resourceDir = resources
+  seed.files[`${dazAppData}/dzInstall.ini`] = [
+    '[General]',
+    'InstalledApplications=dzStudio6InstallDir-64 dzStudio4InstallDir-64',
+    '',
+    '[ApplicationPath]',
+    `dzStudio6InstallDir-64=${ds6}`,
+    `dzStudio4InstallDir-64=${ds4}`,
+    '',
+  ].join('\n')
+  seed.files[`${ds6}/DAZStudio.exe`] = fakeDll('6.0.1.0')
+  seed.files[`${ds4}/DAZStudio.exe`] = fakeDll('4.22.0.16')
+  seed.files[`${resources}/resources/dth-runner/version.txt`] = '1.1.4'
+  seed.files[`${resources}/resources/dth-runner/ds4/dthcharacterstudiorunner.dll`] = fakeDll('1.1.4.0')
+  seed.files[`${resources}/resources/dth-runner/ds6/dsp_dthcharacterstudiorunner.dll`] = fakeDll('1.1.4.0')
+  seed.files[`${exporter}/Daz Studio 4/dth_exporter.dll`] = fakeDll('2.0.2.0')
+  seed.files[`${exporter}/Daz Studio 4/dth_tools.dll`] = 'companion'
+  seed.files[`${exporter}/Daz Studio 6/dsp_dth_exporter.dll`] = fakeDll('2.0.2.0')
+  seed.files[`${ds6}/plugins/dsp_dth_exporter.dll`] = fakeDll('2.0.1.0')
+  seed.files[`${ds6}/plugins/dsp_dthcharacterstudiorunner.dll`] = fakeDll('1.1.4.0')
+  const settingsPath = `${P.appData}/settings.json`
+  seed.files[settingsPath] = JSON.stringify({
+    ...JSON.parse(seed.files[settingsPath] ?? '{}'),
+    dazInstallFolder: ds6,
+    dazInstallKey: 'dzstudio6installdir-64',
+    dthExporterFolders: [exporter],
+  })
+  await prime(page, seed)
   await page.goto('/')
   await page.getByRole('heading', { name: 'DTH Character Studio' }).waitFor()
   await page.getByRole('link', { name: 'Settings' }).click()
-  await shoot(
-    page,
-    join(OUT, 'settings-exporter-plugin.png'),
-    card(page, 'Setup DTH Exporter Plugin Release'),
-  )
+  await page.getByRole('heading', { name: 'Daz Studio plugins' }).waitFor()
+  // Wait for the per-install scan, so the shot never catches an empty table.
+  await page.getByText('pending').first().waitFor()
+  await shoot(page, join(OUT, 'settings-daz-plugins.png'), card(page, 'Daz Studio plugins'))
 })
 
 test('detail-morph-autocomplete', async ({ page }) => {

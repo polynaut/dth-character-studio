@@ -37,7 +37,7 @@ Download the `…_aarch64.dmg` and drag the app to Applications.
 >   [DTH Export batch](./05-rom-in-daz.md#batch-export--dth-export),
 >   [Tools → Scan & index](./tools.md#tab-1--scan-amp-index), opening a scene in
 >   a running Daz, and the bundled
->   [Runner plugin](./02-setup.md#install-the-dth-character-studio-runner-plugin).
+>   [Runner plugin](./02-setup.md#daz-studio-plugins).
 > - The **DTH Exporter Plugin** itself, which is a Windows Daz plugin — so
 >   [direct export](./05-rom-in-daz.md#direct-export-optional-recommended) and
 >   the [bone-scale reference skeletons](./custom-morphs.md) that depend on it.

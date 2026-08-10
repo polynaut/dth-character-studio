@@ -78,7 +78,7 @@ generation they are shown greyed out):
   Animation**, which builds it in Daz and opens the result (Ctrl forces a
   rebuild; Alt+click reveals the folder). A running Daz Studio opens the scene
   right away (handed over via the bundled
-  [Runner plugin](./02-setup.md#install-the-dth-character-studio-runner-plugin)),
+  [Runner plugin](./02-setup.md#daz-studio-plugins)),
   otherwise Daz is started with it.
 - **Houdini projects** — drop `.hip`/`.hiplc` files to link the character's
   Houdini project(s), or let
