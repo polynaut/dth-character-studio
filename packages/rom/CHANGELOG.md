@@ -1,5 +1,17 @@
 # @dth/rom
 
+## 0.73.0
+
+### Patch Changes
+
+- [#768](https://github.com/polynaut/dth-character-studio/pull/768) [`8a24f72`](https://github.com/polynaut/dth-character-studio/commit/8a24f72116e1b27b860110e7e93a612297963477) Thanks [@polynaut](https://github.com/polynaut)! - **A Scan_Frames import lands with names Houdini accepts.**
+
+  Daz property labels are prose — `Torso Muscular`, `5 Belly Shape Muscular`, `!Breast Large`, `Shape NAVEL FOR PEAR` — and Houdini takes letters, numbers and underscores only. Imported verbatim, a scanned FBM section arrived as a grid of rows the editor immediately flagged red, and the only way forward was retyping dozens of names by hand.
+
+  The import now strips what Houdini rejects: `Torso Muscular` becomes `TorsoMuscular`, which reads the same to a human and passes. Nothing is lost — the raw Daz property stays on the morph and is still what the Parameter-name column shows, so each row says exactly which morph it drives.
+
+  This applies to what the studio _derives_ on import, not to what you type: the editor still flags an illegal name you enter yourself rather than silently rewriting it.
+
 ## 0.72.0
 
 ## 0.71.0
