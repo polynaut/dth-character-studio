@@ -155,6 +155,8 @@ export {
   openSceneInRunningDaz,
   romAnimationFresh,
   startProjectScan,
+  startSceneScan,
+  fetchSceneScanProgress,
 } from './api/execute'
 export type {
   ExecuteJobsSummary,
@@ -164,6 +166,8 @@ export type {
   ProjectScanPlan,
   ProjectScanSummary,
   RomAnimationStatus,
+  SceneScanStarted,
+  SceneScanProgress,
 } from './api/execute'
 
 // --- houdini: Generate project (hython, DazToHue network from the HDA), and

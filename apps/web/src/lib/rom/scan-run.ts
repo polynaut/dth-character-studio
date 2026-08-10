@@ -12,6 +12,18 @@ import { z } from 'zod'
  */
 
 /**
+ * File name of the per-run script, in the studio's scripts ROOT beside the
+ * runtime it includes.
+ *
+ * Dot-prefixed like the runtime's own `.DthUtils.dsa`: it is machinery, not one
+ * of the scripts the user is meant to find and run from Daz's content library.
+ * ONE name, rewritten per run — a scan is never concurrent with another (the
+ * single global job file already refuses that), so a per-run file name would
+ * only leave litter nothing cleans up.
+ */
+export const SCAN_RUN_SCRIPT = '.dth_scan_run.dsa'
+
+/**
  * The CSV the scan will write for `scenePath`.
  *
  * **Predicting this is what makes the flow finite.** The script derives its

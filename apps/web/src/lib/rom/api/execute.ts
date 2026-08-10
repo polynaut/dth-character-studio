@@ -25,6 +25,13 @@ import {
 } from '../execute-jobs'
 import { BUILD_ROM_ANIMATION_SCRIPT, sceneExportName } from '@dth/rom'
 import { sceneDthPath } from '../houdini-jobs'
+import {
+  SCAN_RUN_SCRIPT,
+  parseScanResult,
+  scanCsvPath,
+  scanResultPath,
+  scanRunScript,
+} from '../scan-run.ts'
 import { normalizePathLower } from '#/lib/path.ts'
 import { deriveScenesRootRel } from '#/lib/scene-subfolder.ts'
 import { relativeInside } from '../storage/fs'
@@ -1479,4 +1486,130 @@ export async function romAnimationFresh({ data }: { data: unknown }): Promise<bo
   } catch {
     return false
   }
+}
+
+// --- Import from Daz scene: a headless Scan_Frames run ----------------------
+
+const scanSceneInput = z.object({
+  /** The `.duf` to open and scan — already validated by `sceneScanRows`. */
+  scenePath: z.string().min(1),
+  /** The character's generation, e.g. "G9". The silent run selects the figure
+   *  by ASSET identity from it (`dthFindGenerationFigure`). */
+  genesis: z.string().min(1),
+})
+
+/** Where a started scan will land, so the caller can poll for it. */
+export interface SceneScanStarted {
+  csvPath: string
+  resultPath: string
+  dazWasRunning: boolean
+}
+
+/**
+ * Hand a headless frame scan of `scenePath` to the job runner.
+ *
+ * The same handoff every batch uses — one global job file, refuse while another
+ * is live, read back what we wrote — because a scan is a batch like any other
+ * from the Runner's point of view: it opens the scene and runs the script.
+ *
+ * **The stale-output delete is not tidying.** The poll's whole termination
+ * condition is "the result file for this scene appeared". A previous scan of
+ * the same scene left one, so without removing it first the dialog would read
+ * the OLD verdict — instantly, and with an old CSV behind it — and call the new
+ * scan finished before Daz had opened anything.
+ */
+export async function startSceneScan({ data }: { data: unknown }): Promise<SceneScanStarted> {
+  const { scenePath, genesis } = scanSceneInput.parse(data)
+  if (!isTauri()) throw new Error('Scanning a Daz scene needs the desktop app.')
+  const settings = await storage.getSettings()
+  if (!settings.dazLibraryFolder) {
+    throw new Error(
+      'Set “My DAZ 3D Library” in Settings first — the job file and the scan script live there.',
+    )
+  }
+  const outDir = await storage.scanFramesDir()
+  const csvPath = scanCsvPath(outDir, scenePath)
+  const resultPath = scanResultPath(outDir, scenePath)
+
+  // The per-run script goes in the scripts ROOT, beside the runtime it includes
+  // (it resolves `.DthUtils.dsa` / `.DthScanFrames.dsa` from its own folder).
+  const scriptPath = joinPath(storage.studioScriptsDir(settings.dazLibraryFolder), SCAN_RUN_SCRIPT)
+  const runtimeProbe = joinPath(storage.studioScriptsDir(settings.dazLibraryFolder), '.DthUtils.dsa')
+  if (!(await exists(runtimeProbe))) {
+    throw new Error(
+      'The DTH runtime is not installed in your Daz library yet — save a character (or run Tools → Refresh assets) once, then try again.',
+    )
+  }
+
+  const paths = await exporterJobFilePaths()
+  if (!paths) throw new Error('Set “My DAZ 3D Library” in Settings first.')
+  if (await exists(paths.pending)) {
+    throw new Error('An export batch is waiting for Daz Studio — let it start (or abort it) first.')
+  }
+  if (await exists(paths.running)) {
+    const finished = await readTextFile(paths.running)
+      .then((text) => parseJobFileJson(text)?.progress === 100)
+      .catch(() => false)
+    if (!finished) {
+      throw new Error('Daz Studio is working through an export batch — try again when it finishes.')
+    }
+    await remove(paths.running).catch(() => {})
+  }
+
+  await mkdir(outDir, { recursive: true }).catch(() => {})
+  await remove(resultPath).catch(() => {})
+  await remove(csvPath).catch(() => {})
+  await storage.writeTextFileAtomic(scriptPath, scanRunScript({ outDir, resultPath, genesis }))
+
+  const jobJson = jobFileJson([{ scenePath, scriptPath }])
+  await storage.writeTextFileAtomic(paths.pending, jobJson)
+  await assertHandoffOwned(paths.pending, jobJson)
+  const dazWasRunning = await dazStudioRunningNative(false)
+  if (!dazWasRunning) await launchDazSceneless()
+  return { csvPath, resultPath, dazWasRunning }
+}
+
+/** A started scan, as the dialog polls it. */
+export interface SceneScanProgress {
+  state: 'running' | 'done' | 'failed'
+  csvPath: string
+  frames: number
+  error: string
+}
+
+/**
+ * Poll one started scan.
+ *
+ * Reads the RESULT file, never "did a CSV appear": the result is what
+ * distinguishes "still running" from "ran and found nothing", and a CSV alone
+ * cannot say which. A torn read is `running` — the file is written while Daz
+ * has it open, and treating a half-written one as failed would abort a scan
+ * about to succeed.
+ *
+ * `done` still insists the CSV is on disk. The result says the script believed
+ * it wrote one; the import that follows needs the file itself.
+ */
+export async function fetchSceneScanProgress({
+  data,
+}: {
+  data: unknown
+}): Promise<SceneScanProgress> {
+  const { resultPath } = z.object({ resultPath: z.string().min(1) }).parse(data)
+  if (!isTauri()) return { state: 'running', csvPath: '', frames: 0, error: '' }
+  const text = await readTextFile(resultPath).catch(() => '')
+  if (!text) return { state: 'running', csvPath: '', frames: 0, error: '' }
+  const result = parseScanResult(text)
+  if (!result) return { state: 'running', csvPath: '', frames: 0, error: '' }
+  if (!result.ok) {
+    return { state: 'failed', csvPath: '', frames: 0, error: result.error || 'The scan failed.' }
+  }
+  if (!(await exists(result.csvPath))) {
+    return {
+      state: 'failed',
+      csvPath: '',
+      frames: 0,
+      error: `The scan reported success but wrote no CSV:\n${result.csvPath}`,
+    }
+  }
+  return { state: 'done', csvPath: result.csvPath, frames: result.frames, error: '' }
 }
