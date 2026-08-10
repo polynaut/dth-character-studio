@@ -86,16 +86,24 @@ The **real SPA in a real browser** against an in-memory fake of the native layer
   `project-scan.smoke.ts` (the Tools scan batch; absorbed the deleted
   `genesis-index.smoke.ts` in #657). Specs assert through the whole
   api→storage stack by reading back `__tauriMock.files`/`calls`.
-- **CI wall time is WORKER-bound, not suite-bound — don't cut specs for speed.**
-  Measured 2026-08-10 (run 31429667874): the same 99 tests take 4.0m on CI at
-  Playwright's default workers (half of the public runner's 4 vCPU = 2) and
-  ~50s on a many-core dev machine. The config pins `workers: 4` on CI for that
-  reason. Two related facts that keep coming up: the docs suites
+- **The CI smoke wall time is CPU-bound — measured, not assumed.** Two runs on
+  2026-08-10: 99 tests at Playwright's default 2 workers = 4.0m
+  (run 31429667874); 105 tests at the pinned 4 workers = 3.9m (run
+  31430433321). ~8% per test from doubling workers, because Chromium + the
+  Vite dev server's on-the-fly transforms saturate the public runner's 4 vCPU
+  at 2 workers already (a many-core dev machine does the suite in ~50s on raw
+  CPU). Consequences: adding workers past 4 is pointless; trimming specs WOULD
+  cut wall time (it is linear when CPU-bound) but trades real coverage for
+  ~2 minutes on an unwatched gate; the levers that genuinely move it are
+  **sharding across runners** (`--shard` + a job matrix — touches the required
+  `smoke` check's shape, so that is the maintainer's call) or serving a
+  **prebuilt bundle** (`vite build` + preview) instead of dev-mode transforms.
+  Two related facts that keep coming up: the docs suites
   (`guide.screenshots.ts`, clips) are NOT in CI — `testMatch: /.*\.smoke\.ts/`
   excludes them; they run only via `pnpm screenshots` / `pnpm clips` under
-  their own configs. And higher worker counts are proven daily by local runs:
-  tests share nothing but the stateless Vite dev server (every page installs
-  its own in-memory fake), so per-file parallelism is safe.
+  their own configs. And worker counts well past 4 are proven daily by local
+  runs: tests share nothing but the stateless Vite dev server (every page
+  installs its own in-memory fake), so per-file parallelism is safe.
 - **This layer is where browser-only bugs reproduce.** A window-freezing React
   render loop passed every jsdom test and only showed here — when a UI
   interaction "works in tests" but misbehaves in the app, write the repro as a
