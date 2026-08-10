@@ -1532,9 +1532,12 @@ function TargetRow({ icon: Icon, children }: { icon: LucideIcon; children: React
  *
  * An empty value is called out instead, because "the source had nothing for
  * this" is a different problem from "you haven't set it yet" and has a
- * different fix — which one depends on `source`: a Daz path missing means DIM
- * had no value, a Houdini documents folder missing means that Houdini has never
- * been started.
+ * different fix — one that differs per path: a missing Daz path means DIM had
+ * no value; the Houdini documents folder is created by that Houdini's first
+ * launch, so starting it once is the fix; the Houdini installation folder
+ * comes from the installer, never a launch, so only the manual paths can
+ * supply it — and what's lost is the tool (`verb` "Uses"), not an install
+ * destination.
  */
 function DerivedTarget({
   value,
@@ -1548,8 +1551,11 @@ function DerivedTarget({
   missing: string
   /** Which installation section above derived this path. */
   source?: 'daz' | 'houdini'
-  /** How the path is used — "Installs into" for a destination, "Uses" for a tool source. */
-  verb?: string
+  /** How the path is used — "Installs into" for a destination, "Uses" for a
+   *  tool source. The empty-value warning follows it too: a missing
+   *  destination leaves nothing to install into, a missing tool path leaves
+   *  nothing to run. */
+  verb?: 'Installs into' | 'Uses'
   children?: ReactNode
 }) {
   if (!value) {
@@ -1561,6 +1567,12 @@ function DerivedTarget({
             The DAZ Install Manager has no {missing} path, so there is nothing to install into.
             Use <strong>Set the paths manually</strong> in the Daz installation section to fill it
             in yourself.
+          </span>
+        ) : verb === 'Uses' ? (
+          <span>
+            This Houdini installation has no {missing} recorded, so there is nothing to run.
+            Use <strong>Set the paths manually</strong> in the Houdini installation section to
+            fill it in yourself.
           </span>
         ) : (
           <span>
