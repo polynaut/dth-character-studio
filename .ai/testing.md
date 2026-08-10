@@ -79,13 +79,23 @@ The **real SPA in a real browser** against an in-memory fake of the native layer
 - `apps/web/smoke/fixtures.ts` — `buildSeed(opts)` builds the world (project
   "Demo", character "Kira", DTH release tree). The character goes through the
   **real `characterSchema`**, so schema bumps fail here loudly.
-- `smoke/*.smoke.ts` — 17 spec files. The core families: `studio.smoke.ts`
+- `smoke/*.smoke.ts` — 33 spec files / ~100 tests. The core families: `studio.smoke.ts`
   (one test per window kind), `override.smoke.ts` (the per-scene ROM override
   flow end to end), `houdini-export.smoke.ts` / `houdini-only.smoke.ts` /
   `export-only-gate.smoke.ts` (the DTH Export modes), and
   `project-scan.smoke.ts` (the Tools scan batch; absorbed the deleted
   `genesis-index.smoke.ts` in #657). Specs assert through the whole
   api→storage stack by reading back `__tauriMock.files`/`calls`.
+- **CI wall time is WORKER-bound, not suite-bound — don't cut specs for speed.**
+  Measured 2026-08-10 (run 31429667874): the same 99 tests take 4.0m on CI at
+  Playwright's default workers (half of the public runner's 4 vCPU = 2) and
+  ~50s on a many-core dev machine. The config pins `workers: 4` on CI for that
+  reason. Two related facts that keep coming up: the docs suites
+  (`guide.screenshots.ts`, clips) are NOT in CI — `testMatch: /.*\.smoke\.ts/`
+  excludes them; they run only via `pnpm screenshots` / `pnpm clips` under
+  their own configs. And higher worker counts are proven daily by local runs:
+  tests share nothing but the stateless Vite dev server (every page installs
+  its own in-memory fake), so per-file parallelism is safe.
 - **This layer is where browser-only bugs reproduce.** A window-freezing React
   render loop passed every jsdom test and only showed here — when a UI
   interaction "works in tests" but misbehaves in the app, write the repro as a
