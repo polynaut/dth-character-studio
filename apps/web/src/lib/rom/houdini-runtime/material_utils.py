@@ -155,12 +155,23 @@ LIB_VAR = "$DAZ3D_LIB"
 # outright — see `_ref_roots`, which no longer sorts by length.
 #
 # `$JOB` is the character folder (v0.64) and `$HIP` is the houdini folder INSIDE
-# it, so longest-match used to hand everything under `houdini/` to `$HIP`. That
-# encodes the scene's depth: move the `.hip` one folder down and every `$HIP`
-# path silently points somewhere else, while `$JOB` follows Set Project. It is
-# also what Houdini's own picker writes. So the studio anchors on `$JOB`
-# everywhere, and `$HIP` survives only for what `$JOB` cannot reach.
-REF_ROOT_VARS = ("$JOB", "$HIP", LIB_VAR)
+# it. The order here IS the priority (no length sort), and it is `$HIP` first as
+# of v66 — which is what Houdini itself does. Measured 2026-08-10 with
+# `hou.text.collapseCommonVars` on a real project:
+#
+#     <char>/houdini/daz-export/primary/x.dth  ->  $HIP/daz-export/primary/x.dth
+#     <char>/export/                           ->  $JOB/export/
+#
+# Since v0.68 put `daz-export` INSIDE the houdini folder, every import, CSV and
+# reference path is below `$HIP` — no `..`, and shorter. `$JOB` still catches
+# what `$HIP` cannot reach without climbing out (`<char>/export`, Houdini's own
+# output beside the houdini folder), exactly as the picker falls back.
+#
+# v63 had these the other way round for a reason that expired with that move:
+# back then the exports sat BESIDE the houdini folder, so `$HIP` could only
+# reach them as `$HIP/../…`, which encodes the scene's DEPTH. It still does —
+# see `_rehome_hip_ref`, which rewrites that form to `$JOB` and is unchanged.
+REF_ROOT_VARS = ("$HIP", "$JOB", LIB_VAR)
 
 # What "Generate project" wires onto a fresh network, keyed by the payload field
 # the studio sends. Existing projects can't be regenerated, so the Utils drawer
@@ -1047,12 +1058,13 @@ def op_scan(request):
 
 
 def _ref_roots():
-    """`[(var, normalized root)]` in REF_ROOT_VARS order — `$JOB` first.
+    """`[(var, normalized root)]` in REF_ROOT_VARS order — `$HIP` first (v66).
 
-    Deliberately NOT sorted by length any more. Longest-match-wins gave every
-    path under `houdini/` to `$HIP`, because `$HIP` nests inside `$JOB`; the
-    studio now anchors everything it can on `$JOB` (see REF_ROOT_VARS), so the
-    declared order is the priority and `$HIP` only catches what `$JOB` cannot.
+    Deliberately NOT sorted by length: the declared order is the priority. `$HIP`
+    nests inside `$JOB`, so preferring it means everything under the houdini
+    folder — which is where `daz-export` has lived since v0.68 — anchors on the
+    `.hip` itself, and `$JOB` catches only what is outside it. That is the order
+    Houdini's own picker uses (see REF_ROOT_VARS for the measurement).
     """
     roots = []
     for var in REF_ROOT_VARS:
@@ -1126,6 +1138,44 @@ def _rehome_hip_ref(value, roots):
     # `..` is what makes this worth doing; resolve it before matching a root.
     expanded = _norm_path(os.path.normpath(expanded).replace("\\", "/"))
     return _collapse_ref(expanded, roots)
+
+
+def _shorten_job_ref(node, value, roots):
+    """`$JOB/houdini/daz-export/x.dth` → `$HIP/daz-export/x.dth`, or None.
+
+    The other half of the v66 anchor swap. Projects generated between v63 and
+    v65 hold `$JOB/<houdiniSubdir>/…` for paths that now have a shorter, and
+    picker-agreeing, `$HIP/…` spelling. Both resolve — this is a shortening, not
+    a repair — so it is offered by *Make paths portable* and is deliberately NOT
+    part of `_project_ref_info`: badging a project that works would teach the eye
+    to ignore the badge that means something is actually broken.
+
+    **Only on DazToHue nodes.** `_file_ref_parms` hands us every file parm in the
+    scene, and a `$JOB/…` path on the user's OWN nodes is their choice of anchor:
+    the two spellings differ the moment the `.hip` moves relative to `$JOB`, so
+    re-anchoring a cache or render output would change what their node means. The
+    studio only rewrites the paths it emits itself.
+    """
+    if not value or value[:5] not in ("$JOB/", "$JOB\\"):
+        return None
+    try:
+        if "daztohue" not in node.type().name().lower():
+            return None
+    except Exception:
+        return None
+    try:
+        expanded = _norm_path(hou.expandString(value))
+    except Exception:
+        return None
+    if not expanded:
+        return None
+    expanded = _norm_path(os.path.normpath(expanded).replace("\\", "/"))
+    collapsed = _collapse_ref(expanded, roots)
+    # Only a move to `$HIP` counts: re-collapsing to the same `$JOB/…` it came
+    # from is not a rewrite, and reporting it would inflate every dry run.
+    if collapsed is None or not collapsed.startswith("$HIP/"):
+        return None
+    return collapsed
 
 
 def _file_ref_parms(node):
@@ -1491,11 +1541,15 @@ def op_repath(request):
                     result["repaired"].append({"label": label, "from": old, "to": new})
                     changed += 1
                 for parm, raw in _file_ref_parms(node):
-                    # Re-anchor a pre-v63 `$HIP/../…` on `$JOB` first; only then
-                    # try the absolute-path collapse. Explicit `is None` rather
-                    # than `or`: these return None to mean "not mine", and a
+                    # Three passes, most specific first: re-anchor a pre-v63
+                    # `$HIP/../…` on `$JOB`, shorten a v63–v65 `$JOB/houdini/…`
+                    # to `$HIP/…` on the studio's own nodes, then the ordinary
+                    # absolute-path collapse. Explicit `is None` rather than
+                    # `or`: these return None to mean "not mine", and a
                     # falsy-but-real answer must not fall through to the next.
                     collapsed = _rehome_hip_ref(raw, roots)
+                    if collapsed is None:
+                        collapsed = _shorten_job_ref(node, raw, roots)
                     if collapsed is None:
                         collapsed = _collapse_ref(raw, roots)
                     if collapsed is None:

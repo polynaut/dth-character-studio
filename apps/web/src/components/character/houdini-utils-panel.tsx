@@ -785,10 +785,14 @@ export function HoudiniUtilsPanel({
    *  DazToHue version lacks is NOT work — it is reported in the row instead.
    *
    *  GATED on `$JOB` being correct, for the same reason the repath is: the
-   *  values written are `$JOB`-anchored (runtime v63), so filling a project
-   *  whose `$JOB` still points somewhere else would store paths that resolve
-   *  into the wrong folder — and they would look right in the parameter field.
-   *  Repair $JOB first; the row above says so. */
+   *  values written are variable-anchored, so filling a project whose `$JOB`
+   *  still points somewhere else would store paths that resolve into the wrong
+   *  folder — and they would look right in the parameter field. Runtime v66
+   *  narrowed the exposure without removing it: the import/CSV paths anchor on
+   *  `$HIP` now, which cannot be wrong, but the final export directory is still
+   *  `$JOB/<exportSubdir>` (nothing else can reach a folder BESIDE the houdini
+   *  one), so a wrong `$JOB` still misplaces Houdini's own output. Repair $JOB
+   *  first; the row above says so. */
   const prefillTargets = useMemo(
     () =>
       targetScan.projects
@@ -1732,7 +1736,8 @@ export function HoudiniUtilsPanel({
               is already stored absolute. */}
           <p className="rounded-md border p-3 text-xs text-muted-foreground">
             This fixes paths you pick <strong>from now on</strong>: Houdini will collapse an
-            export you choose to <code>$JOB/…</code> instead of writing it absolute. Paths already
+            export you choose to <code>$HIP/…</code> (or <code>$JOB/…</code> when it sits outside
+            the project&apos;s own folder) instead of writing it absolute. Paths already
             stored absolute stay exactly as they are — repointing <code>$JOB</code> does not
             rewrite existing references.
           </p>

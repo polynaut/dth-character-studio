@@ -65,7 +65,7 @@ test('a single-scene character is not asked which scene — there is only one', 
   const prefill = await lastPrefill(page)
   // The fixture's scenes sit directly in `daz3d/`, so each export subfolder is
   // the scene's own stem rather than the `primary/` of the standard layout.
-  expect(prefill.dth).toBe('$JOB/houdini/daz-export/KiraDefault_G9_GP/Kira.dth')
+  expect(prefill.dth).toBe('$HIP/daz-export/KiraDefault_G9_GP/Kira.dth')
   expect(await commandCalls(page, 'create_houdini_project')).toHaveLength(1)
 })
 
@@ -84,7 +84,7 @@ test('the chosen scene decides the import paths', async ({ page }) => {
   // existed these all came out as the primary's, and re-aiming them was five
   // hand edits inside Houdini.
   const prefill = await lastPrefill(page)
-  const dir = '$JOB/houdini/daz-export/KiraSummertide_G9_GP'
+  const dir = '$HIP/daz-export/KiraSummertide_G9_GP'
   expect(prefill.dth).toBe(`${dir}/Kira_KiraSummertide_G9_GP.dth`)
   expect(prefill.abc).toBe(`${dir}/Kira_KiraSummertide_G9_GP.abc`)
   expect(prefill.csv).toBe(`${dir}/Kira_KiraSummertide_G9_GP_pose_asset.csv`)

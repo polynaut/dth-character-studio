@@ -448,6 +448,32 @@ current code before relying on details, but assume the *lesson* still holds.
   when it actually exists. Related dry-run trap: the repaired value is stored
   in its already-collapsed form, because collapsing it in the following pass
   made a real run report one more rewrite than its own dry run.
+- **Let Houdini decide the anchor — `collapseCommonVars` is the spec, and its
+  answer MOVED when the exports moved.** Measured 2026-08-10 on a real project
+  (`hou.text.collapseCommonVars`, the call behind the HDA's file picker):
+  `<char>/houdini/daz-export/primary/x.dth` → **`$HIP/daz-export/primary/x.dth`**,
+  while `<char>/export/` → **`$JOB/export/`**. Same call, two anchors, and both
+  are right: `$HIP` is preferred wherever it reaches, and Houdini refuses to
+  emit `..` so anything beside the houdini folder falls to `$JOB`. This is the
+  same call that justified v63's move to `$JOB` — the answer flipped not because
+  the measurement was wrong but because **v64 moved `daz-export` INSIDE the
+  houdini folder**, which is the input that call depends on. Hence v66. Lesson
+  for the next anchor argument: re-run the measurement after any layout change,
+  because the premise is the layout, not the variable. Two properties worth
+  keeping in mind when choosing: `$HIP` is DERIVED (it cannot drift, so a project
+  whose `$JOB` points at another character still resolves its own imports) but it
+  names the `.hip`'s own folder, so one prefix only serves projects that SHARE
+  that folder — `$JOB` is the depth-independent one, which is why v66 keeps it as
+  the second tier rather than deleting it.
+- **A form that still resolves is not a defect — don't badge it.** v66 leaves
+  v63–v65's `$JOB/houdini/…` paths unflagged and only offers to shorten them in
+  *Make paths portable*. The pre-v63 `$HIP/../…` form IS flagged, because the
+  `..` makes it depth-fragile — an actual future breakage. Badging the merely
+  longer form would have put "Needs attention" on every project generated in the
+  preceding week and taught the eye to skip the badge that means something is
+  really wrong. Same reason `_shorten_job_ref` is scoped to DazToHue nodes: a
+  `$JOB/…` path on the user's own cache/render nodes is THEIR choice of anchor,
+  and the two spellings diverge the moment the `.hip` moves relative to `$JOB`.
 - **UPDATE 2026-08-10: it LANDED in 2.5.1, and the studio kept saying it hadn't
   — a cache bug, not a DazToHue one.** `DazToHuePoseAsset.hda` (version 2.5.1,
   installed standalone BESIDE the 2.5 `DazToHue.hda`, which still defines the

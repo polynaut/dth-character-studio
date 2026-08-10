@@ -244,7 +244,7 @@ export interface HoudiniPrefill {
  * `daz-export/<subfolder>/` — before v0.68 every generated project pointed at
  * the primary's, and re-aiming it was a hand edit of five paths.
  *
- * With a `hipRefPrefix` (e.g. `$JOB/houdini/daz-export`, computed by
+ * With a `hipRefPrefix` (e.g. `$HIP/daz-export`, computed by
  * `hipRefPrefixFor` for the hip being generated) the import paths ride it;
  * absolute otherwise — the same style split the generated CSVs use. Name +
  * skinning are always filled; the path fields are '' when the character has no
