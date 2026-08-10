@@ -137,10 +137,12 @@ vi.mock('@tauri-apps/plugin-fs', () => ({
 import { CHARACTER_SCHEMA_VERSION, characterSchema, defaultSections } from '@dth/rom'
 import * as storage from './storage'
 import {
+  clearExporterJobFiles,
   dismissExportRun,
   executeCharacterJobs,
   exporterJobsWorking,
   fetchExportRunProgress,
+  fetchExporterJobFiles,
   launchDazForPendingJobs,
 } from './api/execute'
 import { EXPORTER_JOB_FILE, RUNNING_JOB_FILE, jobFileJson } from './execute-jobs'
@@ -335,5 +337,77 @@ describe("exporterJobsWorking — the wait-for-close modal's stand-down probe", 
   it('false on a torn read — keep waiting, the next tick parses clean', async () => {
     files.set(RUNNING, '{"version":1,"type":"bulk-export","progr')
     await expect(exporterJobsWorking()).resolves.toBe(false)
+  })
+})
+
+// The other end of the same story: when NO rescue applies — the batch was never
+// claimed, or was claimed by a Daz that is long gone and no character owns it
+// anymore — the file just sits there, and every later export AND scan refuses
+// over it. Settings → App Data is the escape hatch, so it has to be able to say
+// what is there and take it away.
+describe('fetchExporterJobFiles — what is actually lying in the scripts root', () => {
+  it('nothing on disk → nothing to report', async () => {
+    await expect(fetchExporterJobFiles()).resolves.toEqual([])
+  })
+
+  it('reports the PENDING file by name, with its rows and an age', async () => {
+    files.set(PENDING, jobFileJson([{ scenePath: SCENE, scriptPath: SCRIPT }]))
+    const [file, ...rest] = await fetchExporterJobFiles()
+    expect(rest).toEqual([])
+    expect(file).toMatchObject({
+      kind: 'pending',
+      fileName: EXPORTER_JOB_FILE,
+      path: PENDING,
+      jobs: 1,
+      progress: 0,
+      type: 'bulk-export',
+      // Never claimed: clearing it can't strand anything.
+      mayBeLive: false,
+    })
+    expect(file?.ageMs).toBeGreaterThan(0)
+  })
+
+  it('reports a claimed file as claimed — and a part-worked one as maybe LIVE', async () => {
+    seedClaimedWorked()
+    await expect(fetchExporterJobFiles()).resolves.toMatchObject([
+      { kind: 'running', fileName: RUNNING_JOB_FILE, jobs: 1, progress: 50, mayBeLive: true },
+    ])
+  })
+
+  it('an unreadable file is still reported — that is the state people come here to clear', async () => {
+    files.set(RUNNING, '{"version":1,"type":"bulk-exp')
+    await expect(fetchExporterJobFiles()).resolves.toMatchObject([
+      { kind: 'running', jobs: 0, type: null, mayBeLive: true },
+    ])
+  })
+
+  it('reports BOTH names when both exist — no readout that hides one of them', async () => {
+    files.set(PENDING, jobFileJson([{ scenePath: SCENE, scriptPath: SCRIPT }]))
+    seedClaimedWorked()
+    const found = await fetchExporterJobFiles()
+    expect(found.map((f) => f.kind)).toEqual(['pending', 'running'])
+  })
+})
+
+describe('clearExporterJobFiles — the manual way out of a stranded handoff', () => {
+  it('deletes what is there and names it', async () => {
+    files.set(PENDING, jobFileJson([{ scenePath: SCENE, scriptPath: SCRIPT }]))
+    seedClaimedWorked()
+    await expect(clearExporterJobFiles()).resolves.toEqual([EXPORTER_JOB_FILE, RUNNING_JOB_FILE])
+    expect(files.has(PENDING)).toBe(false)
+    expect(files.has(RUNNING)).toBe(false)
+  })
+
+  it('nothing to delete is not a failure', async () => {
+    await expect(clearExporterJobFiles()).resolves.toEqual([])
+  })
+
+  it('drops the export watch with the file — no "run died" toast for a deliberate clear', async () => {
+    await armClaimedRun()
+    // The watch is armed on this character's batch…
+    await expect(fetchExportRunProgress()).resolves.toMatchObject({ characterId: 'c1' })
+    await expect(clearExporterJobFiles()).resolves.toEqual([RUNNING_JOB_FILE])
+    // …and is gone with it, rather than reporting a death the user caused.
+    await expect(fetchExportRunProgress()).resolves.toBeNull()
   })
 })

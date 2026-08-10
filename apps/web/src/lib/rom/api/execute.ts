@@ -13,6 +13,7 @@ import {
   executeSceneSignature,
   jobFileJson,
   isReclaimableBatch,
+  jobFileMayBeLive,
   jobSceneForMode,
   jobScriptForMode,
   normalizeSceneKey,
@@ -51,7 +52,9 @@ import type {
   ExecuteStamp,
   ExecuteStamps,
   ExporterJob,
+  ExporterJobType,
   HoudiniRunMode,
+  JobFileKind,
   ScanProductsConfig,
   ScanSceneWork,
 } from '../execute-jobs'
@@ -138,16 +141,60 @@ async function writeStamps(path: string, stamps: ExecuteStamps): Promise<void> {
   await storage.writeTextFileAtomic(path, JSON.stringify(stamps, null, 2))
 }
 
-/** `daz_studio_running` through the FFI ritual (a primitive return still goes
- *  through a schema — see api/native-types.ts). `fallback` keeps each call
- *  site's existing failure bias: "assume running" where clobbering a live batch
- *  is the risk, "assume closed" where a needless launch is the risk. */
-async function dazStudioRunningNative(fallback: boolean): Promise<boolean> {
+/**
+ * WHICH Daz a running-check is about — the same question has two right answers
+ * here, and they are not interchangeable.
+ *
+ * - `'export'` — only the installation that runs export batches (the
+ *   **Export only** one, else the active one). What a LAUNCH decision needs:
+ *   with "Export only" pointing at an older install, asking globally let an open
+ *   DS6 answer "Daz is already running, nothing to start", so the DS4 the batch
+ *   was for never launched and the job file sat pending and unclaimed forever.
+ *   Being wrong the other way here costs one redundant launch, which a running
+ *   Daz collapses into itself.
+ * - `'any'` — any Daz at all, the pre-existing meaning. What the two
+ *   DESTRUCTIVE readings keep: "the run died, delete its file" and "that stale
+ *   `running_` file is nobody's, overwrite it". Those act on "no Daz is
+ *   running", so a probe that answers about ONE install can strand a live batch
+ *   whenever the install folder and the running executable's path disagree
+ *   (a moved/reinstalled Daz, a settings path never re-detected). Being wrong
+ *   the other way just delays a cleanup — and Settings → App Data can now clear
+ *   a job file by hand, which is the honest way out of the stuck case.
+ */
+type DazRunningScope = 'export' | 'any'
+
+/**
+ * `daz_studio_running` through the FFI ritual (a primitive return still goes
+ * through a schema — see api/native-types.ts). `fallback` keeps each call site's
+ * failure bias: "assume running" where clobbering a live batch is the risk,
+ * "assume closed" where a needless launch is the risk. `scope` is stated at
+ * every call site on purpose — see {@link DazRunningScope}; there is no default
+ * that is right for both kinds of caller.
+ */
+async function dazStudioRunningNative(
+  fallback: boolean,
+  scope: DazRunningScope,
+): Promise<boolean> {
   try {
-    return z.boolean().parse(await invoke('daz_studio_running'))
+    const installFolder = scope === 'export' ? await exportDazInstallFolder() : ''
+    return z.boolean().parse(await invoke('daz_studio_running', { installFolder }))
   } catch {
     return fallback
   }
+}
+
+/**
+ * Whether the installation that runs export batches is up — the wait-for-Daz-to-
+ * close modal's poll ({@link launchDazForPendingJobs} is what it calls once this
+ * goes false). Exported because that modal lives in the character UI, and asking
+ * the unscoped "any Daz running?" there kept it spinning forever whenever the
+ * export install was closed but ANOTHER Daz was open.
+ *
+ * Bias on failure: not running — the same one the modal has always had (it would
+ * rather try a launch than wait on a probe it can't read).
+ */
+export async function exportDazStudioRunning(): Promise<boolean> {
+  return dazStudioRunningNative(false, 'export')
 }
 
 /** Start a scene-less Daz Studio (its Runner claims the pending job file on
@@ -546,7 +593,11 @@ export async function fetchExportRunProgress(watcher?: string): Promise<ExportRu
       // this watch only DETECTS and defers: report 'pending', touch nothing.
       // (Without a modal — Daz died claimed-but-idle on its own — the parked
       // file waits for the next handoff's stale cleanup instead.)
-      const dazRunning = await dazStudioRunningNative(true)
+      //
+      // ANY Daz, deliberately: what follows DELETES the file. A probe scoped to
+      // the export install would call a batch dead whenever the configured
+      // folder and the running executable's path disagree — see DazRunningScope.
+      const dazRunning = await dazStudioRunningNative(true, 'any')
       if (!dazRunning) {
         if (isReclaimableBatch(parsed)) {
           return { state: 'pending', characterId: run.characterId, total: run.total }
@@ -622,6 +673,103 @@ export async function abortExporterJobs({ data }: { data: unknown }): Promise<vo
   } catch {
     // stamp rollback is best-effort — the abort itself (the delete) succeeded
   }
+}
+
+/**
+ * One job file sitting in the Daz library's studio scripts root, as Settings →
+ * App Data reads it. Unscoped on purpose: {@link abortExporterJobs} needs a
+ * character (it rolls that character's handoff stamps back), and the file this
+ * is about is precisely one nobody can name an owner for anymore.
+ */
+export interface ExporterJobFileState {
+  kind: JobFileKind
+  /** The file's name on disk — the thing to look for in the Daz library. */
+  fileName: string
+  path: string
+  /** How old the file is, in ms (0 when no mtime could be read). */
+  ageMs: number
+  /** Rows in the batch (0 when the file can't be parsed). */
+  jobs: number
+  /** Runner-owned progress 0–100 — always 0 on a file that was never claimed. */
+  progress: number
+  /** What the batch does; null when the file can't be parsed at all. */
+  type: ExporterJobType | null
+  /** Deleting it could strand a run in progress ({@link jobFileMayBeLive}). */
+  mayBeLive: boolean
+}
+
+/** Read one of the two job-file names, tolerantly: an existing file is always
+ *  reported, even torn or unreadable — that is exactly the state someone opens
+ *  this readout to get rid of. */
+async function readJobFileState(
+  path: string,
+  kind: JobFileKind,
+): Promise<ExporterJobFileState | null> {
+  if (!(await exists(path).catch(() => false))) return null
+  const parsed = parseJobFileJson(await readTextFile(path).catch(() => ''))
+  const mtime = await mtimeOf(path)
+  return {
+    kind,
+    fileName: kind === 'pending' ? EXPORTER_JOB_FILE : RUNNING_JOB_FILE,
+    path,
+    ageMs: mtime > 0 ? Math.max(0, Date.now() - mtime) : 0,
+    jobs: parsed?.jobs.length ?? 0,
+    progress: parsed?.progress ?? 0,
+    type: parsed?.type ?? null,
+    mayBeLive: jobFileMayBeLive(kind, parsed),
+  }
+}
+
+/**
+ * Every exporter job file currently on disk (usually none, occasionally one) —
+ * the Settings readout behind "clear a stranded job file".
+ *
+ * Both names are reported rather than the first one found: they mean different
+ * things (waiting for Daz vs claimed by a Runner), and a readout that hid one
+ * would be describing the wrong file at the worst possible moment. Empty in a
+ * browser or without a Daz library configured — there is no job file then.
+ */
+export async function fetchExporterJobFiles(): Promise<Array<ExporterJobFileState>> {
+  const paths = await exporterJobFilePaths()
+  if (!paths) return []
+  const found = await Promise.all([
+    readJobFileState(paths.pending, 'pending'),
+    readJobFileState(paths.running, 'running'),
+  ])
+  return found.filter((state) => state !== null)
+}
+
+/**
+ * Delete every exporter job file on disk — the manual way out of a batch that
+ * can never start or finish, which otherwise blocks every later export AND scan
+ * with "a batch is waiting for Daz Studio".
+ *
+ * Blunt by design: the caller (Settings) has shown the user what is there and
+ * whether it might still be live ({@link fetchExporterJobFiles}), and this is
+ * the action they confirmed. A delete that fails (a locked file) throws, so the
+ * UI can say so instead of reporting a cleanup that didn't happen. Returns the
+ * file names removed.
+ */
+export async function clearExporterJobFiles(): Promise<Array<string>> {
+  if (!isTauri()) return []
+  const paths = await exporterJobFilePaths()
+  if (!paths) return []
+  const results = await Promise.all(
+    [
+      { name: EXPORTER_JOB_FILE, path: paths.pending },
+      { name: RUNNING_JOB_FILE, path: paths.running },
+    ].map(async ({ name, path }) => {
+      if (!(await exists(path).catch(() => false))) return null
+      await remove(path)
+      return name
+    }),
+  )
+  const removed = results.filter((name) => name !== null)
+  // Whatever this window was watching is gone with the file — leaving the watch
+  // armed would only produce a "run died" toast for a batch the user just
+  // cleared on purpose (same reason abortExporterJobs drops it).
+  if (removed.length > 0) activeRun = null
+  return removed
 }
 
 /** One linked scene's state for the DTH Export dialog. */
@@ -890,9 +1038,16 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
       // Unreadable or torn: assume a live batch — refusing is the safe guess.
       .catch(() => false)
     if (!finished) {
-      const dazRunning = await dazStudioRunningNative(true)
+      // ANY Daz: the next line DELETES someone else's claimed batch, so this
+      // must not answer about one install while another is working (see
+      // DazRunningScope). The refusal names the manual way out, because "a Daz
+      // is open" is exactly the state in which a genuinely stale file can never
+      // clean itself up.
+      const dazRunning = await dazStudioRunningNative(true, 'any')
       if (dazRunning) {
-        throw new Error('Daz Studio is working through a batch — try again when it finishes.')
+        throw new Error(
+          'Daz Studio is working through a batch — try again when it finishes.\nIf that batch is stuck, clear it in Settings → App Data → DTH Exporter job file.',
+        )
       }
       // Daz gone below 100 = a dead run; fall through and clean it up.
     }
@@ -941,7 +1096,7 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
 
   // Start Daz scene-less when it isn't running; a running instance needs
   // nothing — the plugin polls for the job file and picks it up in place.
-  const dazWasRunning = await dazStudioRunningNative(false)
+  const dazWasRunning = await dazStudioRunningNative(false, 'export')
   let dazLaunched = false
   let dazClosing = false
   if (!dazWasRunning) {
@@ -988,7 +1143,7 @@ export async function launchDazForPendingJobs(): Promise<boolean> {
     // orphaned forever. Take it back.
     if (!(await reclaimOrphanedBatch(paths))) return false
   }
-  if (await dazStudioRunningNative(false)) return true
+  if (await dazStudioRunningNative(false, 'export')) return true
   await launchDazSceneless()
   return true
 }
@@ -1083,7 +1238,7 @@ export async function generateRomAnimation({
   // actually holds the handoff (see assertHandoffOwned).
   await assertHandoffOwned(paths.pending, jobJson)
   const startedAt = Date.now()
-  const dazWasRunning = await dazStudioRunningNative(false)
+  const dazWasRunning = await dazStudioRunningNative(false, 'export')
   if (!dazWasRunning) {
     await launchDazSceneless()
   }
@@ -1356,7 +1511,7 @@ export async function startProjectScan({ data }: { data: unknown }): Promise<Pro
     scenes: sceneWork.map((s) => s.scenePath),
   }
 
-  const dazWasRunning = await dazStudioRunningNative(false)
+  const dazWasRunning = await dazStudioRunningNative(false, 'export')
   const summary: ProjectScanSummary = {
     rows: jobs.length,
     scenes: sceneWork.length,
@@ -1593,7 +1748,7 @@ export async function startSceneScan({ data }: { data: unknown }): Promise<Scene
   const jobJson = jobFileJson([{ scenePath, scriptPath }])
   await storage.writeTextFileAtomic(paths.pending, jobJson)
   await assertHandoffOwned(paths.pending, jobJson)
-  const dazWasRunning = await dazStudioRunningNative(false)
+  const dazWasRunning = await dazStudioRunningNative(false, 'export')
   if (!dazWasRunning) {
     // A fresh launch claims the file on startup — no wait (Daz can take long to
     // come up; the dialog's waiting state covers it, with Cancel as the out).
