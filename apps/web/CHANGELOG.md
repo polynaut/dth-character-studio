@@ -1,5 +1,22 @@
 # @dth/web
 
+## 0.72.0
+
+### Minor Changes
+
+- [#761](https://github.com/polynaut/dth-character-studio/pull/761) [`5eae024`](https://github.com/polynaut/dth-character-studio/commit/5eae0249b3012386d6d50a66f85c4b462cb2696e) Thanks [@polynaut](https://github.com/polynaut)! - The audit's deferred findings ([#755](https://github.com/polynaut/dth-character-studio/issues/755)), fixed:
+
+  - **Orphaned Daz-library script folders are swept.** A character deleted or renamed outside the app stranded `Scripts/DTH-Character-Studio/<project>/<character>/` forever (a mid-rename generation failure leaked the old-name folder the same way). Housekeeping now removes them — under strict gates: only folders of characters provably gone from a fully readable library, only inside projects the app knows, never the shared runtime, never unknown project folders.
+  - **A byte-copied project no longer shares its product-scan store with the original.** First open of the copy's new path mints it a fresh project id, so the two stores separate; the original keeps its data, and a _moved_ project keeps its id.
+  - **Two windows can no longer drop each other's recents entries.** The registry write goes through a native compare-and-swap under one process-wide lock — a conflicting write retries instead of clobbering.
+  - **Two spellings of a missing `.dcsp` path** (`\` vs `/`, trailing separator) now open ONE window instead of two.
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @dth/rom@0.72.0
+  - @dth/ui@0.72.0
+
 ## 0.71.0
 
 ### Minor Changes
