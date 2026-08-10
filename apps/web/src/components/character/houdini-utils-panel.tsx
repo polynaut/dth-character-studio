@@ -2165,37 +2165,45 @@ function GeneralTab({
 }) {
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <Label className="flex w-fit items-center gap-1 text-base font-semibold">
-          Project checks
-          {/* The full `$JOB` story lives here rather than above the cards: it
-              explains WHY the row exists, which is worth one click and not
-              worth six lines of prose on every visit. */}
-          <InfoPopup label="Project checks — more information">
-            <div className="space-y-2">
-              <p>
-                What has to be true for a project to keep working when it — or your library —
-                moves.
-              </p>
-              <p>
-                <code>$JOB</code> is saved inside the project file, so an older one can still
-                point somewhere else. <strong>Repair $JOB</strong> puts it back on the
-                character folder, which is what makes the paths you pick from now on come out
-                relative.
-              </p>
-              <p>
-                <strong>Make paths portable</strong> is the other half: it rewrites paths
-                already stored absolute to <code>$HIP/…</code> or <code>$JOB/…</code>.
-              </p>
-            </div>
-          </InfoPopup>
-        </Label>
-        <span className="text-xs text-muted-foreground">
+      {/* Title + Rescan on one line, the count beneath — one block, so the
+          section's `space-y-4` keeps its distance from the cards below while
+          the count stays tight under its own heading. */}
+      <div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <Label className="flex w-fit items-center gap-1 text-base font-semibold">
+            Project checks
+            {/* The full `$JOB` story lives here rather than above the cards: it
+                explains WHY the row exists, which is worth one click and not
+                worth six lines of prose on every visit. */}
+            <InfoPopup label="Project checks — more information">
+              <div className="space-y-2">
+                <p>
+                  What has to be true for a project to keep working when it — or your library —
+                  moves.
+                </p>
+                <p>
+                  <code>$JOB</code> is saved inside the project file, so an older one can still
+                  point somewhere else. <strong>Repair $JOB</strong> puts it back on the
+                  character folder, which is what makes the paths you pick from now on come out
+                  relative.
+                </p>
+                <p>
+                  <strong>Make paths portable</strong> is the other half: it rewrites paths
+                  already stored absolute to <code>$HIP/…</code> or <code>$JOB/…</code>.
+                </p>
+              </div>
+            </InfoPopup>
+          </Label>
+          {/* Rescan sits beside the title, not after the count: it is an ACTION on
+              the section, and the count is a result of it. Splitting them puts the
+              two things you can click next to each other. */}
+          <Button variant="ghost" size="sm" disabled={scan.loading} onClick={onRescan}>
+            <RefreshCw className={scan.loading ? 'animate-spin' : ''} /> Rescan
+          </Button>
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">
           {scan.projects.length} project{scan.projects.length === 1 ? '' : 's'} read
-        </span>
-        <Button variant="ghost" size="sm" disabled={scan.loading} onClick={onRescan}>
-          <RefreshCw className={scan.loading ? 'animate-spin' : ''} /> Rescan
-        </Button>
+        </p>
       </div>
 
       {scan.loading ? (
