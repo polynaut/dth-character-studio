@@ -562,6 +562,36 @@ function insideFolder(hip: string, folder: string): boolean {
  * the last sweep has a new mtime, so it simply isn't in the answer, and the
  * caller sees it as "not scanned yet" while the sweep catches up.
  */
+/**
+ * The transfer sources used most recently, newest first — the drawer's shortcut
+ * row. Entries whose file no longer exists are dropped by the storage layer, so
+ * what comes back is always openable.
+ */
+export async function fetchHoudiniSourceRecents(): Promise<Array<storage.HoudiniSourceRecent>> {
+  if (!isTauri()) return []
+  try {
+    return await storage.listHoudiniSources()
+  } catch {
+    // A convenience row: a store that cannot be read costs the shortcut, never
+    // the drawer around it.
+    return []
+  }
+}
+
+const rememberSourceInput = z.object({ hipPath: z.string().min(1) })
+
+/** Record a `.hip` as the source just used. Best-effort by construction — see
+ *  the storage module on why this one does not get the CAS treatment. */
+export async function rememberHoudiniSource({ data }: { data: unknown }): Promise<void> {
+  const { hipPath } = rememberSourceInput.parse(data)
+  if (!isTauri()) return
+  try {
+    await storage.rememberHoudiniSource(hipPath, new Date().toISOString())
+  } catch {
+    // Losing a shortcut must never surface as a failed transfer.
+  }
+}
+
 export async function fetchCachedHoudiniScans({
   data,
 }: {

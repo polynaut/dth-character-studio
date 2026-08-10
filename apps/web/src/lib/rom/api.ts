@@ -193,6 +193,8 @@ export {
   restoreHoudiniBackup,
   fetchCachedHoudiniScans,
   fetchHoudiniProjectStatus,
+  fetchHoudiniSourceRecents,
+  rememberHoudiniSource,
   scanCharacterHoudiniProjects,
   scanHoudiniMaterials,
   transferHoudiniMaterials,

@@ -354,3 +354,50 @@ test('Rescan really rescans — it is not served by the cache', async ({ page })
   // says out loud that it ran.
   await expect(page.getByText(/Rescanned the Houdini project/)).toBeVisible()
 })
+
+test('a chosen source joins "Recently used", and one click picks it again', async ({ page }) => {
+  // The transfer source is nearly always the SAME personal template, re-browsed
+  // from scratch every time. The row remembers the last few and makes the
+  // second use one click — so it has to survive a drawer close, which is what
+  // separates it from component state.
+  const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true, houdiniProject: true })
+  const settingsPath = `${P.appData}/settings.json`
+  seed.files[settingsPath] = JSON.stringify({
+    ...JSON.parse(seed.files[settingsPath] ?? '{}'),
+    houdiniInstallFolder: HOUDINI_INSTALL,
+    houdiniDocsFolder: 'C:/Users/dev/Documents/houdini22.0',
+  })
+  seed.files[`${HOUDINI_INSTALL}/bin/hython.exe`] = 'hython-exe-fixture'
+  // The template the user keeps coming back to — the file the picker returns.
+  const TEMPLATE = 'D:/Templates/G9_Skin_Base.hiplc'
+  seed.files[TEMPLATE] = 'hip-fixture'
+  seed.dialogPath = TEMPLATE
+  seed.materialScan = { [P.houdini]: [node('TargetBox')], [TEMPLATE]: [node('SourceBox')] }
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await expect(page.getByText(/custom ROM frames/)).toBeVisible()
+
+  await page.getByRole('button', { name: /^Utils/ }).first().click()
+  const drawer = page.getByRole('dialog')
+  await drawer.getByRole('tab', { name: 'Material' }).click()
+  // Nothing to offer before anything has been chosen.
+  await expect(drawer.getByText('Recently used')).toHaveCount(0)
+
+  await drawer.getByRole('button', { name: 'Browse…' }).click()
+  await expect(drawer.getByText('SourceBox')).toBeVisible()
+  // The pick was recorded, and the row names it by file.
+  await expect(drawer.getByText('Recently used')).toBeVisible()
+  await expect(drawer.getByRole('button', { name: /G9_Skin_Base/ })).toBeVisible()
+
+  // Close the drawer and come back: the whole point is that it OUTLIVES this.
+  await drawer.getByRole('button', { name: /^Close/ }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await page.getByRole('button', { name: /^Utils/ }).first().click()
+  const reopened = page.getByRole('dialog')
+  await reopened.getByRole('tab', { name: 'Material' }).click()
+
+  // One click re-selects it — no picker, no typing.
+  await reopened.getByRole('button', { name: /G9_Skin_Base/ }).click()
+  await expect(reopened.getByText('SourceBox')).toBeVisible()
+})

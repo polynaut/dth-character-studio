@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   AlertTriangle,
@@ -41,6 +41,8 @@ import {
   discardHoudiniBackups,
   restoreHoudiniBackup,
   fetchCachedHoudiniScans,
+  fetchHoudiniSourceRecents,
+  rememberHoudiniSource,
   scanCharacterHoudiniProjects,
   scanHoudiniMaterials,
   transferHoudiniMaterials,
@@ -70,7 +72,7 @@ import {
   surfaceLabel,
 } from '#/lib/rom/houdini-material-merge.ts'
 import type { SurfaceMergePlan } from '#/lib/rom/houdini-material-merge.ts'
-import type { DazAsset } from '#/lib/rom/storage.ts'
+import type { DazAsset, HoudiniSourceRecent } from '#/lib/rom/storage.ts'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import houdiniLogo from '#/assets/houdini-logo.svg'
 import { pickHipPath } from '#/lib/desktop.ts'
@@ -535,12 +537,29 @@ export function HoudiniUtilsPanel({
     setPickedMaterials(new Set())
   }, [selectedSource])
 
+  /** The shortcut row under the picker — read on open, and again after each
+   *  choice so the order the user just changed is the order they see. */
+  const [sourceRecents, setSourceRecents] = useState<Array<HoudiniSourceRecent>>([])
+  const loadSourceRecents = useCallback(async () => {
+    setSourceRecents(await fetchHoudiniSourceRecents().catch(() => []))
+  }, [])
+  useEffect(() => {
+    if (open) void loadSourceRecents()
+  }, [open, loadSourceRecents])
+
   useEffect(() => {
     setSelectedSource('')
     if (!open || !activeSourceHip) {
       setSourceScan(EMPTY_SCAN)
       return
     }
+    // Remembered on CHOICE, not on a completed transfer: the expensive thing
+    // this row saves is the re-browsing, and that cost is already paid the
+    // moment a file is picked — whether or not the copy that follows is the one
+    // the user ultimately wants. Re-picking a recent moves it back to the top.
+    void rememberHoudiniSource({ data: { hipPath: activeSourceHip } })
+      .then(loadSourceRecents)
+      .catch(() => {})
     void runScan([activeSourceHip], setSourceScan)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, activeSourceHip])
@@ -1298,6 +1317,52 @@ export function HoudiniUtilsPanel({
                   </Button>
                 </FileDropZone>
               </div>
+
+              {/* The shortcut row: the last few sources, newest first. Same
+                  affordance as the templates above (a chip that IS the pick),
+                  because it answers the same question — "the file I keep coming
+                  back to" — for the ones the studio was never told about. Files
+                  that have since disappeared are already filtered out, so every
+                  chip here opens. */}
+              {sourceRecents.length > 0 && (
+                <div className="mb-3">
+                  <p className="mb-1 text-xs text-muted-foreground">Recently used</p>
+                  <div className="flex flex-wrap gap-2">
+                    {sourceRecents.map((recent) => {
+                      const active =
+                        normalizePath(activeSourceHip).toLowerCase() ===
+                        normalizePath(recent.path).toLowerCase()
+                      return (
+                        <button
+                          key={recent.path}
+                          type="button"
+                          // The full path, because the chip shows only the file
+                          // name and two templates called `Base.hiplc` in
+                          // different folders are otherwise indistinguishable.
+                          title={displayPath(recent.path)}
+                          onClick={() => {
+                            setSourceMode('browse')
+                            setBrowsedHip(recent.path)
+                          }}
+                          className={`flex max-w-full items-center gap-2 rounded-md border px-2.5 py-1.5 text-sm ${
+                            active
+                              ? 'border-houdini-orange bg-houdini-orange/15 font-medium'
+                              : 'text-muted-foreground hover:bg-accent/50'
+                          }`}
+                        >
+                          <img
+                            src={houdiniLogo}
+                            alt=""
+                            aria-hidden
+                            className="size-4 shrink-0 object-contain"
+                          />
+                          <span className="truncate">{fileName(recent.path)}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
 
               {activeSourceHip && (
                 <p className="mb-2 truncate text-xs text-muted-foreground" title={activeSourceHip}>
