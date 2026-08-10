@@ -129,6 +129,7 @@ describe('settings (settings.json)', () => {
     dazLibraryFolder: '',
     dthPosesFolder: '',
     currentDthVersion: '',
+    dthExporterFolders: [],
     dthExporterFolder: '',
     currentDthExporterVersion: '',
     dazInstallFolder: '',
@@ -184,6 +185,7 @@ describe('settings (settings.json)', () => {
       dazLibraryFolder: 'X:/My DAZ 3D Library',
       dthPosesFolder: 'X:/dth/releases',
       currentDthVersion: '2.4.3',
+      dthExporterFolders: ['X:/dth/exporter/Daz Studio 4', 'X:/dth/exporter/Daz Studio 6'],
       dthExporterFolder: 'X:/dth/exporter',
       currentDthExporterVersion: '1.0.0.1',
       dazInstallFolder: 'C:/Program Files/DAZ 3D/DAZStudio4',
@@ -976,5 +978,48 @@ describe('exportInstallFolder — which Daz runs the export batch', () => {
     expect(storage.exportInstallFolder(base({ dazExportInstallKey: 'dzstudio4installdir-64' }))).toBe(
       'C:/Program Files/DAZ 3D/DAZStudio6',
     )
+  })
+})
+
+describe('exporterSourceFolders — where the exporter builds come from', () => {
+  const base = (over: Partial<StudioSettings> = {}): StudioSettings =>
+    storage.studioSettingsSchema.parse(over)
+
+  it('is the configured list, in the order the user typed it', () => {
+    expect(
+      storage.exporterSourceFolders(base({ dthExporterFolders: ['D:/a', 'D:/b'] })),
+    ).toEqual(['D:/a', 'D:/b'])
+  })
+
+  it('merges the legacy single folder for a settings.json never seen by the UI', () => {
+    // The whole point of the merge: an install run before the user ever opens
+    // Settings still finds the folder they configured under the old field.
+    expect(storage.exporterSourceFolders(base({ dthExporterFolder: 'D:/legacy' }))).toEqual([
+      'D:/legacy',
+    ])
+  })
+
+  it('de-duplicates case-insensitively rather than scanning a folder twice', () => {
+    expect(
+      storage.exporterSourceFolders(
+        base({ dthExporterFolders: ['D:/Plugins'], dthExporterFolder: 'd:/plugins' }),
+      ),
+    ).toEqual(['D:/Plugins'])
+  })
+
+  it('drops blanks and trims — an empty row is not a folder', () => {
+    expect(
+      storage.exporterSourceFolders(base({ dthExporterFolders: ['  D:/a  ', '', '   '] })),
+    ).toEqual(['D:/a'])
+  })
+
+  it('a CLEARED legacy field adds nothing back — which is what makes a removal stick', () => {
+    // Settings migrates the legacy value into the list and clears it. Were it
+    // left in place, removing the migrated row would leave the list empty while
+    // this merge silently re-added the same folder: the panel (which scans the
+    // fields) would show it gone while the install kept installing from it.
+    expect(
+      storage.exporterSourceFolders(base({ dthExporterFolders: [], dthExporterFolder: '' })),
+    ).toEqual([])
   })
 })

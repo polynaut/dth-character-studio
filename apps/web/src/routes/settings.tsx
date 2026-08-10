@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { AlertTriangle, CircleCheck, Download, Plus } from 'lucide-react'
+import { AlertTriangle, Download, Plus } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 import { Button, Field, InfoPopup, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, Tabs, TabsContent, TabsList, TabsTrigger } from '@dth/ui'
@@ -12,20 +12,15 @@ import {
   fetchActiveProject,
   fetchAppDataFolder,
   fetchPoseAssets,
-  fetchRunnerStatus,
   fetchSettings,
-  installDthPlugin,
   installDthRelease,
-  installDthRunner,
-  installedExporterVersion,
-  listDthExporterReleases,
   listDthReleases,
   rescanPoseAssets,
   saveProjectSettings,
   saveSettings,
 } from '#/lib/rom/api.ts'
 import { navOrigin } from '#/lib/nav-origin.ts'
-import { PROJECT_BEHAVIOR_DEFAULTS, runnerInstalledNewer } from '#/lib/rom/storage.ts'
+import { PROJECT_BEHAVIOR_DEFAULTS } from '#/lib/rom/storage.ts'
 import { useUnsavedChangesGuard } from '#/lib/use-unsaved-guard.ts'
 import { useSettingsActions } from '#/lib/use-settings-actions.ts'
 import { useConfirm } from '#/lib/use-confirm.tsx'
@@ -40,18 +35,12 @@ import { HoudiniInstallSection } from '#/components/settings/houdini-install-sec
 import { defaultHoudiniInstall, deriveHoudiniPaths } from '#/lib/houdini-install.ts'
 import { HousekeepingSection } from '#/components/settings/housekeeping-section.tsx'
 import { NetworkDrivesSection } from '#/components/settings/network-drives-section.tsx'
-import { PostInstallElevationNotice } from '#/components/settings/post-install-elevation-notice.tsx'
-import {
-  ExporterReleasePicker,
-  ReleasePicker,
-} from '#/components/settings/release-pickers.tsx'
+import { ReleasePicker } from '#/components/settings/release-pickers.tsx'
+import { DazPluginsSection } from '#/components/settings/daz-plugins-section.tsx'
 import { toast } from 'sonner'
 
-import type {
-  ExporterReleasesState,
-  ReleasesState,
-} from '#/components/settings/release-pickers.tsx'
-import type { InstallReport, RunnerStatus } from '#/lib/rom/api.ts'
+import type { ReleasesState } from '#/components/settings/release-pickers.tsx'
+import type { InstallReport } from '#/lib/rom/api.ts'
 import type { DazInstallScan } from '#/lib/daz-install.ts'
 import type { HoudiniInstallScan } from '#/lib/houdini-install.ts'
 
@@ -177,24 +166,12 @@ function SettingsPage() {
   const [pinnedMissing, setPinnedMissing] = useState<{ missing: string; using: string } | null>(
     null,
   )
-  const [exporter, setExporter] = useState<ExporterReleasesState>({
-    mode: 'none',
-    version: '',
-    releases: [],
-    error: null,
-  })
-  const [exporterLoading, setExporterLoading] = useState(false)
   const [releaseInstalling, setReleaseInstalling] = useState(false)
   // The release install report is split per target so each renders next to its
   // own buttons: the Daz report under the "My DAZ 3D Library" install, the
   // Houdini report at the bottom (shared by the primary + any extra folders).
   const [dazReport, setDazReport] = useState<InstallReport | null>(null)
   const [houdiniReport, setHoudiniReport] = useState<InstallReport | null>(null)
-  const [pluginInstalling, setPluginInstalling] = useState(false)
-  const [pluginReport, setPluginReport] = useState<InstallReport | null>(null)
-  // Version of the exporter DLL already in <Daz install>/plugins. null = not yet
-  // checked / no install folder; '' = folder set but plugin not installed there.
-  const [installedExporter, setInstalledExporter] = useState<string | null>(null)
   // The app's internal data folder (settings.json, recents.json, network-drives.json,
   // …), resolved once for display in the App Data tab.
   const [appDataFolder, setAppDataFolder] = useState('')
@@ -559,41 +536,28 @@ function SettingsPage() {
     }
   }, [settings.dthPosesFolder])
 
-  // Same debounced inspection for the Exporter Plugin folder.
+  // The pre-list Exporter folder becomes the first row of the list, once — and
+  // is CLEARED in the same edit.
+  //
+  // `exporterSourceFolders` merges the legacy field into every scan, which is
+  // what keeps a settings.json that has never been through this page working.
+  // But left in place it is also permanent: removing the migrated row would
+  // leave `dthExporterFolders` empty while the merge silently put the same
+  // folder back, so the panel (which scans the FIELDS) would show it gone while
+  // the install (which reads the saved settings) kept installing from it. Moving
+  // the value instead of copying it makes the list the whole input, which is
+  // what the merge is a fallback for. One Save persists both halves.
   useEffect(() => {
-    const folder = settings.dthExporterFolder
-    if (!folder) {
-      setExporter({ mode: 'none', version: '', releases: [], error: null })
-      // Clear the spinner too (see the releases effect above).
-      setExporterLoading(false)
-      return
-    }
-    let cancelled = false
-    setExporterLoading(true)
-    // Named + `void`d, same as the releases effect above.
-    async function inspect() {
-      try {
-        const result = await listDthExporterReleases({ data: { folder } })
-        if (!cancelled) setExporter(result)
-      } catch (e) {
-        // Clear the stale list + show the error (see the releases effect above).
-        if (!cancelled)
-          setExporter({
-            mode: 'none',
-            version: '',
-            releases: [],
-            error: e instanceof Error ? e.message : String(e),
-          })
-      } finally {
-        if (!cancelled) setExporterLoading(false)
+    setSettings((s) => {
+      const legacy = s.dthExporterFolder.trim()
+      if (!legacy) return s
+      return {
+        ...s,
+        dthExporterFolders: s.dthExporterFolders.length > 0 ? s.dthExporterFolders : [legacy],
+        dthExporterFolder: '',
       }
-    }
-    const timer = setTimeout(() => void inspect(), 350)
-    return () => {
-      cancelled = true
-      clearTimeout(timer)
-    }
-  }, [settings.dthExporterFolder])
+    })
+  }, [initial.dthExporterFolder])
 
   // Multi-release with no valid selection yet → pre-select the latest. That
   // marks the form dirty so the user saves once to store CURRENT_DTH_VERSION;
@@ -608,72 +572,6 @@ function SettingsPage() {
     })
   }, [releases])
 
-  // Keep the stored Exporter version in step with the inspected folder: a single
-  // plugin folder pins its detected version; a multi folder pre-selects the
-  // newest when the current pick isn't among them.
-  useEffect(() => {
-    if (exporter.mode === 'single') {
-      setSettings((s) =>
-        s.currentDthExporterVersion === exporter.version
-          ? s
-          : { ...s, currentDthExporterVersion: exporter.version },
-      )
-    } else if (exporter.mode === 'multi' && exporter.releases.length > 0) {
-      setSettings((s) => {
-        if (exporter.releases.some((r) => r.version === s.currentDthExporterVersion)) return s
-        return { ...s, currentDthExporterVersion: exporter.releases[0].version }
-      })
-    }
-  }, [exporter])
-
-  // Read the version of the exporter DLL already installed in the Daz plugins
-  // folder, so the pane can show up-to-date / update-available. ONE cancel-aware
-  // reader shared by the debounced effect below and the post-install refresh: a
-  // read only stamps its result while it is still the NEWEST read (sequence
-  // check) for the CURRENT folder (ref check) — a slow read can never stamp a
-  // stale version over a fresher one, and a folder change discards in-flight
-  // reads for the previous folder.
-  const exporterReadSeq = useRef(0)
-  const dazInstallFolderRef = useRef(settings.dazInstallFolder)
-  dazInstallFolderRef.current = settings.dazInstallFolder
-  const loadInstalledExporter = useCallback(async () => {
-    const seq = ++exporterReadSeq.current
-    const folder = dazInstallFolderRef.current
-    const version = folder ? await installedExporterVersion(folder) : null
-    if (seq === exporterReadSeq.current && folder === dazInstallFolderRef.current)
-      setInstalledExporter(version)
-  }, [])
-
-  // The bundled Runner plugin's state vs the same Daz install folder — same
-  // cancel-aware reader pattern as loadInstalledExporter above.
-  const [runnerState, setRunnerState] = useState<RunnerStatus | null>(null)
-  const [runnerInstalling, setRunnerInstalling] = useState(false)
-  const [runnerReport, setRunnerReport] = useState<InstallReport | null>(null)
-  const runnerReadSeq = useRef(0)
-  const loadRunnerStatus = useCallback(async () => {
-    const seq = ++runnerReadSeq.current
-    const folder = dazInstallFolderRef.current
-    const status = await fetchRunnerStatus(folder)
-    if (seq === runnerReadSeq.current && folder === dazInstallFolderRef.current)
-      setRunnerState(status)
-  }, [])
-
-  // Debounced so typing the install path doesn't re-read the DLLs on every
-  // keystroke (an emptied folder clears immediately). The timer only guards the
-  // START of a read — in-flight staleness is each helper's own validity check.
-  useEffect(() => {
-    if (!settings.dazInstallFolder) {
-      void loadInstalledExporter()
-      void loadRunnerStatus()
-      return
-    }
-    const timer = setTimeout(() => {
-      void loadInstalledExporter()
-      void loadRunnerStatus()
-    }, 350)
-    return () => clearTimeout(timer)
-  }, [settings.dazInstallFolder, loadInstalledExporter, loadRunnerStatus])
-
   // Scoped to the machine-setting fields the General tab edits. Save still writes the
   // full settings object, but the Tools-page fields are untouched here so they never
   // flip this dirty — the button reflects only this page's changes.
@@ -681,8 +579,11 @@ function SettingsPage() {
     settings.dazLibraryFolder !== initial.dazLibraryFolder ||
     settings.dthPosesFolder !== initial.dthPosesFolder ||
     settings.currentDthVersion !== initial.currentDthVersion ||
+    JSON.stringify(settings.dthExporterFolders) !== JSON.stringify(initial.dthExporterFolders) ||
+    // The legacy single folder is only ever CLEARED (see the migration above),
+    // and that clear has to reach disk on its own: without it the merge in
+    // `exporterSourceFolders` keeps re-adding a folder the user removed.
     settings.dthExporterFolder !== initial.dthExporterFolder ||
-    settings.currentDthExporterVersion !== initial.currentDthExporterVersion ||
     settings.dazInstallFolder !== initial.dazInstallFolder ||
     // `dimManifestsFolder` is deliberately NOT here: the Project tab owns its
     // manual edit (and `projectDirty` tracks that), while activating an
@@ -830,53 +731,27 @@ function SettingsPage() {
     return saved
   }
 
-  // Two independent installs: the DTH release content (Daz library + Houdini),
-  // and the admin-sensitive Exporter Plugin DLLs (Daz install). Each is enabled
-  // once its own prerequisites are set; pending edits are saved automatically
-  // before either runs (they read the saved settings).
+  // The DTH release content install (Daz library + Houdini). Enabled once its
+  // prerequisites are set; pending edits are saved automatically before it runs
+  // (it reads the saved settings). The two Daz PLUGINS have their own section —
+  // they install into every detected Daz Studio, so nothing here gates them.
   const releaseReady = !releases.error && releases.mode !== 'none'
-  const exporterReady = !exporter.error && exporter.mode !== 'none'
   // The release install is split: Daz content → library, Houdini assets → the
   // Houdini documents folder — each half has its own prerequisites and buttons.
   const canInstallDaz = releaseReady && !!settings.dazLibraryFolder
   const canInstallHoudini = releaseReady && !!settings.houdiniDocsFolder
-  const canInstallPlugin = exporterReady && !!settings.dazInstallFolder
   const dazBlockers: Array<string> = []
   if (!releaseReady) dazBlockers.push('a DTH release')
   if (!settings.dazLibraryFolder) dazBlockers.push('“My DAZ 3D Library”')
   const houdiniBlockers: Array<string> = []
   if (!releaseReady) houdiniBlockers.push('a DTH release')
   if (!settings.houdiniDocsFolder) houdiniBlockers.push('the Houdini documents folder')
-  const pluginBlockers: Array<string> = []
-  if (!exporterReady) pluginBlockers.push('a DTH Exporter Plugin')
-  if (!settings.dazInstallFolder) pluginBlockers.push('the Daz Studio install folder')
-
-  // The Runner ships with the app — only the Daz install folder gates it (plus
-  // a readable status: flavor detected, bundled DLL present).
-  const canInstallRunner = !!settings.dazInstallFolder && !!runnerState && !runnerState.error
-  const runnerInstallLabel =
-    runnerState?.installed === 'none'
-      ? 'Install'
-      : runnerState?.installed === 'current'
-        ? 'Reinstall'
-        : 'Update'
-
-  // Compare the release's exporter version with the one already in the plugins
-  // folder to drive the status line + button label (Install / Update / Reinstall).
-  const sourceExporterVer = exporter.version || settings.currentDthExporterVersion || ''
-  const exporterUpToDate =
-    !!installedExporter && !!sourceExporterVer && installedExporter === sourceExporterVer
-  const pluginInstallLabel = !installedExporter
-    ? 'Install'
-    : exporterUpToDate
-      ? 'Reinstall'
-      : 'Update'
 
   // Run a scoped install: persist pending edits first, then surface the per-step
   // report. On failure the first errored step's message is toasted verbatim — it
   // carries the "close all apps / restart as administrator" guidance.
   // Shared with the Tools page: save pending settings edits, then run the install.
-  const { runInstall } = useSettingsActions({
+  const { runInstall, saveIfDirty } = useSettingsActions({
     dirty,
     settings,
     baseline: initial,
@@ -890,6 +765,19 @@ function SettingsPage() {
       await rebuildCatalog().catch(() => {})
     },
   })
+
+  // The plugin section runs its own install (it targets several Daz installs and
+  // reports per target), so it only borrows the save-before-action half: the
+  // folder list has to be on disk before the install reads settings back.
+  async function saveBeforePluginInstall(): Promise<boolean> {
+    try {
+      await saveIfDirty()
+      return true
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+      return false
+    }
+  }
 
   // The sticky header's Save persists EVERY pending change — the machine settings
   // (General tab) and, in a project window, the project manifest (Project tab) —
@@ -1041,8 +929,10 @@ function SettingsPage() {
                 label="DTH release(s) folder"
                 value={settings.dthPosesFolder}
                 // Unset: start at the Exporter-plugin folder's parent — the two
-                // DazToHue downloads almost always live under one root.
-                browseFrom={parentDir(settings.dthExporterFolder)}
+                // DazToHue downloads almost always live under one root. The
+                // FIRST configured release folder, since the single legacy field
+                // is migrated into that list and then cleared.
+                browseFrom={parentDir(settings.dthExporterFolders.find(Boolean) ?? '')}
                 placeholder="D:\DazToHue\Releases"
                 onChange={(value) => setSettings((s) => ({ ...s, dthPosesFolder: value }))}
                 help={
@@ -1390,256 +1280,14 @@ function SettingsPage() {
               )}
           </section>
 
-          <section className="space-y-4 rounded-lg border bg-card p-5">
-            <div>
-              <h2 className="font-semibold">Setup DTH Exporter Plugin Release</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Select the Exporter Plugin release, then install its DLLs into Daz Studio's
-                <span className="font-mono"> plugins</span> folder.
-              </p>
-            </div>
-
-            <div>
-              <FolderField
-                label="DTH Exporter Plugin release(s) folder"
-                value={settings.dthExporterFolder}
-                // …and the mirror of the DTH-releases field above.
-                browseFrom={parentDir(settings.dthPosesFolder)}
-                placeholder="D:\DazToHue\ExporterPlugin"
-                onChange={(value) => setSettings((s) => ({ ...s, dthExporterFolder: value }))}
-                info={
-                  <>
-                    The Daz Studio <strong>DazToHue Exporter</strong> plugin — the DLL named like{' '}
-                    <em>dsp_dth_exporter.dll</em>. Its version is read straight from the DLL, so the
-                    folder needn't be version-named. Part of{' '}
-                    <a
-                      href="https://www.artstation.com/marketplace/p/BLM5K/daztohue"
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      DazToHue
-                    </a>{' '}
-                    by mrpdean.
-                  </>
-                }
-                help={
-                  <>
-                    The DazToHue Exporter plugin folder (contains the exporter DLL), or a folder of
-                    versioned plugin folders. The version is read from the DLL.
-                  </>
-                }
-              />
-              <ExporterReleasePicker
-                releases={exporter}
-                loading={exporterLoading}
-                value={settings.currentDthExporterVersion}
-                onChange={(version) =>
-                  setSettings((s) => ({ ...s, currentDthExporterVersion: version }))
-                }
-              />
-            </div>
-
-            {/* Same rule as the library above — the active installation IS the
-                answer to "which Daz Studio", so the field would be a control
-                with nothing to control. The destination shows with the buttons. */}
-            {dazDerived ? (
-              <DerivedTarget value={settings.dazInstallFolder} missing="Daz Studio install folder">
-                The Exporter Plugin DLLs go into its
-                <span className="font-mono"> /plugins</span> subfolder.
-              </DerivedTarget>
-            ) : (
-              <FolderField
-                label="Daz Studio install folder"
-                value={settings.dazInstallFolder}
-                placeholder="C:\Program Files\DAZ 3D\DAZStudio4"
-                onChange={(value) => setSettings((s) => ({ ...s, dazInstallFolder: value }))}
-                help={
-                  <>
-                    Where Daz Studio is installed. The DLLs go into its
-                    <span className="font-mono"> /plugins</span> subfolder. Usually{' '}
-                    <span className="font-mono">{'C:\\Program Files\\DAZ 3D\\DAZStudio4'}</span> (Daz
-                    Studio 4, sometimes with a <span className="font-mono">64-bit</span> suffix) or{' '}
-                    <span className="font-mono">{'C:\\Program Files\\DAZ 3D\\DAZStudio6'}</span> (Daz
-                    Studio 6).
-                  </>
-                }
-              />
-            )}
-
-            {canInstallPlugin ? (
-              <div className="space-y-1 text-sm text-muted-foreground">
-                {!exporterUpToDate && (
-                  <p>
-                    Ready to install Exporter{' '}
-                    <strong className="text-foreground">
-                      {sourceExporterVer ||
-                        settings.dthExporterFolder.split(/[\\/]/).filter(Boolean).pop() ||
-                        '?'}
-                    </strong>
-                    {dirty ? ' — pending changes are saved on install.' : '.'}
-                  </p>
-                )}
-                {installedExporter === '' ? (
-                  <p>Not installed in this Daz Studio yet.</p>
-                ) : installedExporter ? (
-                  exporterUpToDate ? (
-                    <p className="flex items-center gap-1.5 text-emerald-500">
-                      <CircleCheck className="size-4 shrink-0" />
-                      Already installed ({installedExporter}) — up to date.
-                    </p>
-                  ) : (
-                    <p>
-                      Installed: <strong className="text-foreground">{installedExporter}</strong> →
-                      updating to <strong className="text-foreground">{sourceExporterVer || '?'}</strong>.
-                    </p>
-                  )
-                ) : null}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Set {pluginBlockers.join(', ')} to enable the install.
-              </p>
-            )}
-
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                onClick={() =>
-                  void runInstall(installDthPlugin, true, setPluginInstalling, setPluginReport)
-                }
-                disabled={!canInstallPlugin || pluginInstalling}
-              >
-                {pluginInstalling ? 'Working…' : 'Dry run'}
-              </Button>
-              <Button
-                onClick={() =>
-                  void runInstall(
-                    installDthPlugin,
-                    false,
-                    setPluginInstalling,
-                    setPluginReport,
-                    () => void loadInstalledExporter(),
-                  )
-                }
-                disabled={!canInstallPlugin || pluginInstalling}
-              >
-                <Download /> {pluginInstalling ? 'Installing…' : pluginInstallLabel}
-              </Button>
-            </div>
-
-            {pluginReport && (
-              <InstallReportList report={pluginReport} onClose={() => setPluginReport(null)} />
-            )}
-
-            {pluginReport?.steps.some((step) => step.status === 'error') && (
-              <p className="text-sm text-destructive">
-                Install failed — close all Daz and Houdini apps and restart DTH Character Studio as
-                administrator, then try again.
-              </p>
-            )}
-
-            <PostInstallElevationNotice report={pluginReport} />
-          </section>
-
-          {/* The Runner plugin ships INSIDE the app (fetched from
-              polynaut/dth-character-studio-runner at build time) — no source
-              folder to pick; only the Daz install folder above matters, and the
-              DS4-vs-DS6 DLL is chosen from its DAZStudio exe version. */}
-          <section className="space-y-4 rounded-lg border bg-card p-5">
-            <div>
-              <h2 className="font-semibold">Install DTH Character Studio Runner Plugin</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Runs DTH Export batches in Daz Studio unattended: the plugin polls for the job file
-                the character editor's <strong>DTH Export</strong> button writes and works through
-                it scene by scene. It ships with this app — installing copies the right DLL (Daz
-                Studio 4 vs 6, detected from the install folder above) into Daz Studio's
-                <span className="font-mono"> plugins</span> folder.
-              </p>
-            </div>
-
-            {!settings.dazInstallFolder ? (
-              <p className="text-sm text-muted-foreground">
-                Set the Daz Studio install folder above to enable the install.
-              </p>
-            ) : runnerState?.error ? (
-              <p className="text-sm text-destructive">{runnerState.error}</p>
-            ) : runnerState ? (
-              <div className="space-y-1 text-sm text-muted-foreground">
-                <p>
-                  Bundled Runner{' '}
-                  <strong className="text-foreground">{runnerState.bundledVersion || '?'}</strong>
-                  {runnerState.flavor && (
-                    <> — {runnerState.flavor === 'ds6' ? 'Daz Studio 6' : 'Daz Studio 4'} detected.</>
-                  )}
-                </p>
-                {runnerState.installed === 'none' ? (
-                  <p>Not installed in this Daz Studio yet.</p>
-                ) : runnerState.installed === 'current' ? (
-                  <p className="flex items-center gap-1.5 text-emerald-500">
-                    <CircleCheck className="size-4 shrink-0" />
-                    Already installed ({runnerState.installedVersion ||
-                      runnerState.bundledVersion ||
-                      '?'}) — up to date.
-                  </p>
-                ) : runnerInstalledNewer(runnerState) ? (
-                  <p>
-                    Installed:{' '}
-                    <strong className="text-foreground">{runnerState.installedVersion}</strong> —
-                    newer than the bundled Runner; updating would replace it.
-                  </p>
-                ) : (
-                  <p>
-                    Installed:{' '}
-                    <strong className="text-foreground">
-                      {runnerState.installedVersion || 'unknown version'}
-                    </strong>{' '}
-                    → updating to{' '}
-                    <strong className="text-foreground">{runnerState.bundledVersion || '?'}</strong>.
-                  </p>
-                )}
-              </div>
-            ) : null}
-
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                onClick={() =>
-                  void runInstall(installDthRunner, true, setRunnerInstalling, setRunnerReport)
-                }
-                disabled={!canInstallRunner || runnerInstalling}
-              >
-                {runnerInstalling ? 'Working…' : 'Dry run'}
-              </Button>
-              <Button
-                onClick={() =>
-                  void runInstall(
-                    installDthRunner,
-                    false,
-                    setRunnerInstalling,
-                    setRunnerReport,
-                    () => void loadRunnerStatus(),
-                  )
-                }
-                disabled={!canInstallRunner || runnerInstalling}
-              >
-                <Download /> {runnerInstalling ? 'Installing…' : runnerInstallLabel}
-              </Button>
-            </div>
-
-            {runnerReport && (
-              <InstallReportList report={runnerReport} onClose={() => setRunnerReport(null)} />
-            )}
-
-            {runnerReport?.steps.some((step) => step.status === 'error') && (
-              <p className="text-sm text-destructive">
-                Install failed — close all Daz apps and restart DTH Character Studio as
-                administrator, then try again. (A running Daz Studio locks its loaded plugin
-                DLLs.)
-              </p>
-            )}
-
-            <PostInstallElevationNotice report={runnerReport} />
-          </section>
+          {/* Both Daz plugins — mrpdean's Exporter (from the release folders
+              below) and the bundled Runner — into EVERY detected Daz Studio, paired
+              by the generation each binary is built for. See DazPluginsSection. */}
+          <DazPluginsSection
+            folders={settings.dthExporterFolders}
+            onFoldersChange={(next) => setSettings((s) => ({ ...s, dthExporterFolders: next }))}
+            saveBeforeInstall={saveBeforePluginInstall}
+          />
 
           {/* Renders its own card, or nothing when no network drives are
               detected — see NetworkDrivesSection. */}

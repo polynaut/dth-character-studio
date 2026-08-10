@@ -2,7 +2,22 @@ import { resolveResource } from '@tauri-apps/api/path'
 import { exists, readDir, readFile } from '@tauri-apps/plugin-fs'
 
 import { basename, isDir, join } from './fs'
-import { exportInstallFolder, getSettings } from './settings'
+import { exporterSourceFolders, exportInstallFolder, getSettings } from './settings'
+import {
+  dazFlavorFromExeVersion,
+  exporterDllFlavor,
+  flavorFromPathHint,
+  newestReleasePerFlavor,
+} from '#/lib/daz-plugins.ts'
+
+import type { DazFlavor, PluginRelease } from '#/lib/daz-plugins.ts'
+
+// The generation split (`DazFlavor`, `dazFlavorFromExeVersion`) is pure and
+// lives with the rest of the plugin-matching rules in `lib/daz-plugins.ts`;
+// re-exported here because this module has always been where callers looked
+// for it.
+export type { DazFlavor, PluginRelease }
+export { dazFlavorFromExeVersion }
 
 // DTH release + Exporter Plugin scanning: what the Settings pickers list, which
 // release/plugin is active, and the resolved install plans the Tools page runs.
@@ -103,24 +118,14 @@ export async function listDthReleases(folder: string): Promise<{
 // --- DTH Exporter Plugin --------------------------------------------------
 // The Exporter Plugin ships as DLLs (not a content pack), so a "release" is a
 // folder holding the exporter DLL (`dth_tools.dll` is an optional companion).
-// Folder names carry no version, so the version is read from the DLL itself.
+// Folder names carry no version, so the version is read from the DLL itself —
+// and WHICH Studio generation a DLL is for is read from its name (the `dsp_`
+// prefix DS6 requires), which is what lets one scan serve every install on the
+// machine. The rules are pure, in `lib/daz-plugins.ts`.
 
-export interface DthExporterReleaseInfo {
-  /** The DLL's FileVersion (e.g. "1.0.0.1"), or the folder name when it has none. */
-  version: string
-  /** The folder name on disk holding the plugin. */
-  name: string
-}
-
-/**
- * Whether a filename is the exporter DLL. Matched by pattern, not a fixed name:
- * the DLL has been renamed across releases (`dth_exporter.dll` →
- * `dsp_dth_exporter.dll`), so any `*dth_exporter*.dll` counts (which still
- * excludes the optional `dth_tools.dll` companion).
- */
+/** Whether a filename is an exporter DLL of either generation. */
 function isExporterDll(name: string): boolean {
-  const lower = name.toLowerCase()
-  return lower.endsWith('.dll') && lower.includes('dth_exporter')
+  return exporterDllFlavor(name) !== null
 }
 
 /** Absolute path to the exporter DLL in `folder`, or null when there isn't one. */
@@ -160,54 +165,6 @@ async function readDllFileVersion(path: string): Promise<string> {
   } catch {
     return ''
   }
-}
-
-/**
- * Inspect a configured Exporter Plugin folder — mirrors `listDthReleases`:
- *  - **single**: the folder itself holds the exporter DLL; its version is read
- *    from the DLL;
- *  - **multi**: a folder of plugin folders (each with the exporter DLL), newest
- *    version first, de-duplicated by version.
- */
-export async function listDthExporterReleases(folder: string): Promise<{
-  mode: 'single' | 'multi' | 'none'
-  version: string
-  releases: Array<DthExporterReleaseInfo>
-  error: string | null
-}> {
-  if (!folder) return { mode: 'none', version: '', releases: [], error: null }
-  if (!(await isDir(folder))) {
-    return { mode: 'none', version: '', releases: [], error: `Folder not reachable: ${folder}` }
-  }
-  const dll = await findExporterDll(folder)
-  if (dll) {
-    return { mode: 'single', version: await readDllFileVersion(dll), releases: [], error: null }
-  }
-  const children = await readDir(folder)
-  const found: Array<DthExporterReleaseInfo & { v: Array<number> }> = []
-  for (const child of children) {
-    if (!child.isDirectory) continue
-    const subDll = await findExporterDll(join(folder, child.name))
-    if (!subDll) continue
-    // Fall back to the folder name so a version-less DLL is still selectable.
-    const version = (await readDllFileVersion(subDll)) || child.name
-    found.push({ version, name: child.name, v: parseVersion(version) })
-  }
-  if (found.length === 0) {
-    return {
-      mode: 'none',
-      version: '',
-      releases: [],
-      error:
-        'No DTH Exporter Plugin here. Pick the plugin folder (containing the exporter DLL) or a folder of versioned plugin folders.',
-    }
-  }
-  const byVersion = new Map<string, DthExporterReleaseInfo & { v: Array<number> }>()
-  for (const r of found) if (!byVersion.has(r.version)) byVersion.set(r.version, r)
-  const releases = [...byVersion.values()]
-    .sort((a, b) => compareVersions(b.v, a.v))
-    .map(({ v: _v, ...r }) => r)
-  return { mode: 'multi', version: '', releases, error: null }
 }
 
 /** Shown when a release is only available as a zip — Daz can't load from one. */
@@ -332,31 +289,6 @@ export async function resolveActiveReleaseRoot(
   return resolveActiveReleaseEntry(folder, currentVersion)
 }
 
-/**
- * Resolve the active Exporter Plugin *folder* (the one holding the DLLs) from the
- * configured folder + selected version — single mode is the folder itself, multi
- * mode the chosen versioned subfolder.
- */
-async function resolveExporterFolder(
-  folder: string,
-  currentVersion: string,
-): Promise<{ exporterFolder: string; version: string; error: string | null }> {
-  if (!folder) return { exporterFolder: '', version: '', error: 'No Exporter Plugin folder configured' }
-  if (!(await isDir(folder))) {
-    return { exporterFolder: '', version: '', error: `Folder not reachable: ${folder}` }
-  }
-  const dll = await findExporterDll(folder)
-  if (dll) {
-    return { exporterFolder: folder, version: await readDllFileVersion(dll), error: null }
-  }
-  const list = await listDthExporterReleases(folder)
-  if (list.mode !== 'multi' || list.releases.length === 0) {
-    return { exporterFolder: '', version: '', error: list.error ?? `No Exporter Plugin found in: ${folder}` }
-  }
-  const chosen = list.releases.find((r) => r.version === currentVersion) ?? list.releases[0]
-  return { exporterFolder: join(folder, chosen.name), version: chosen.version, error: null }
-}
-
 /** Resolved paths for the DTH *release* install (Daz content + Houdini assets). */
 export interface ReleaseInstall {
   releaseRoot: string
@@ -413,20 +345,114 @@ export interface PluginInstall {
 /**
  * Resolve the Exporter *plugin* install from saved settings: the active exporter
  * folder + the Daz Studio install folder (required).
+ *
+ * The SINGLE-target resolver, kept for the manual setup — a machine DIM does not
+ * describe, where the studio knows exactly one Daz install folder and nothing to
+ * enumerate. The normal path is {@link planPluginInstalls}, which pairs every
+ * release with every detected installation.
  */
 export async function resolvePluginInstall(): Promise<PluginInstall> {
   const s = await getSettings()
   const errors: Array<string> = []
-  const exporter = await resolveExporterFolder(s.dthExporterFolder, s.currentDthExporterVersion)
-  if (exporter.error || !exporter.exporterFolder) {
-    errors.push(exporter.error ?? 'No DTH Exporter Plugin resolved — set the Exporter Plugin folder.')
+  const flavor = s.dazInstallFolder ? await detectDazFlavor(s.dazInstallFolder) : null
+  const releases = await scanExporterSources(exporterSourceFolders(s))
+  const release = flavor ? newestReleasePerFlavor(releases.found)[flavor] : null
+  if (!release) {
+    errors.push(
+      releases.found.length === 0
+        ? 'No DTH Exporter Plugin resolved — add an Exporter Plugin release folder.'
+        : `No DTH Exporter Plugin build for this Daz Studio (${flavor ?? 'unknown generation'}) among the release folders.`,
+    )
   }
   if (!s.dazInstallFolder) errors.push('Set the Daz Studio install folder.')
   return {
-    exporterFolder: exporter.exporterFolder,
-    exporterVersion: exporter.version,
+    exporterFolder: release?.folder ?? '',
+    exporterVersion: release?.version ?? '',
     dazInstallFolder: s.dazInstallFolder,
     errors,
+  }
+}
+
+/** What a scan of the configured Exporter release folders found. */
+export interface ExporterSourceScan {
+  /** Every exporter DLL found, in the order the folders were configured. */
+  found: Array<PluginRelease>
+  /** Configured folders that hold no exporter DLL at all (named so a typo or a
+   *  moved release is visible instead of silently reducing the plan). */
+  emptyFolders: Array<string>
+}
+
+/**
+ * Every DTH Exporter build under the configured release folders.
+ *
+ * Each folder is read as itself AND one level down, because that is how the
+ * plugin is actually published: `ExporterPlugin/Daz Studio 4/dth_exporter.dll`
+ * beside `ExporterPlugin/Daz Studio 6/dsp_dth_exporter.dll`. So pointing the
+ * studio at ONE folder can yield a build for every Studio on the machine — and
+ * pointing it at several (a release per Studio, kept apart) works the same way.
+ *
+ * One level, not a recursive walk: a release tree is shallow by construction,
+ * and a deep scan over a network share is a cost the user never asked for.
+ */
+export async function scanExporterSources(
+  folders: ReadonlyArray<string>,
+): Promise<ExporterSourceScan> {
+  const unique: Array<string> = []
+  const seen = new Set<string>()
+  for (const raw of folders) {
+    const folder = raw.trim()
+    if (!folder || seen.has(folder.toLowerCase())) continue
+    seen.add(folder.toLowerCase())
+    unique.push(folder)
+  }
+  // Per folder concurrently, but flattened in the CONFIGURED order: that order
+  // is what decides ties between two copies of the same version.
+  const perFolder = await Promise.all(
+    unique.map(async (folder) => {
+      const own = await releasesInFolder(folder)
+      const nested = await Promise.all((await subFolders(folder)).map(releasesInFolder))
+      return { folder, releases: [...own, ...nested.flat()] }
+    }),
+  )
+  return {
+    found: perFolder.flatMap((entry) => entry.releases),
+    emptyFolders: perFolder.filter((entry) => entry.releases.length === 0).map((e) => e.folder),
+  }
+}
+
+/** The exporter DLLs directly inside one folder, typed by generation. */
+async function releasesInFolder(folder: string): Promise<Array<PluginRelease>> {
+  let entries: Awaited<ReturnType<typeof readDir>>
+  try {
+    entries = await readDir(folder)
+  } catch {
+    return []
+  }
+  // The DLL name is the contract (DS6 loads `dsp_*` only), so it decides which
+  // generation a build is for; the folder's own claim rides along as a
+  // cross-check the panel can flag.
+  const pathHint = flavorFromPathHint(folder)
+  return Promise.all(
+    entries
+      .filter((entry) => entry.isFile && exporterDllFlavor(entry.name) !== null)
+      .map(async (entry) => ({
+        folder,
+        fileName: entry.name,
+        flavor: exporterDllFlavor(entry.name)!,
+        version: await readDllFileVersion(join(folder, entry.name)),
+        pathHint,
+      })),
+  )
+}
+
+/** Immediate subfolder paths, or none when the folder can't be read. */
+async function subFolders(folder: string): Promise<Array<string>> {
+  try {
+    return (await readDir(folder))
+      .filter((entry) => entry.isDirectory)
+      .map((entry) => join(folder, entry.name))
+  } catch {
+    return []
   }
 }
 
@@ -452,22 +478,12 @@ export async function installedExporterVersion(dazInstallFolder: string): Promis
 // carries one since v1.0.3 — '' for older DLLs), the bundled one is the staged
 // release tag (version.txt).
 
-export type DazFlavor = 'ds4' | 'ds6'
-
 /** The per-generation DLL names — fixed by the runner's install contract
- *  (DS6 only loads plugins named `dsp_*.dll`; DS4 uses the plain name). */
+ *  (DS6 only loads plugins named `dsp_*.dll`; DS4 uses the plain name — the
+ *  same rule that identifies an EXPORTER release, see `lib/daz-plugins.ts`). */
 export const RUNNER_DLL: Record<DazFlavor, string> = {
   ds4: 'dthcharacterstudiorunner.dll',
   ds6: 'dsp_dthcharacterstudiorunner.dll',
-}
-
-/** DS4 vs DS6 from a DAZStudio exe's file version: major 4 → ds4, 5+ → ds6
- *  (null for an unreadable/absent version — never guess from folder names,
- *  "DAZStudio4 64-bit" contains a 6). */
-export function dazFlavorFromExeVersion(version: string): DazFlavor | null {
-  const major = Number.parseInt(version.split('.')[0] ?? '', 10)
-  if (!Number.isFinite(major) || major <= 0) return null
-  return major >= 5 ? 'ds6' : 'ds4'
 }
 
 /** Detect the install folder's Daz generation by reading the version resource
@@ -493,6 +509,20 @@ export async function detectDazFlavor(dazInstallFolder: string): Promise<DazFlav
  *  holding that generation's one DLL). */
 async function bundledRunnerDir(flavor: DazFlavor): Promise<string> {
   return resolveResource(`resources/dth-runner/${flavor}`)
+}
+
+/** The bundled runner folder for a flavor, but only when its DLL is really
+ *  there — '' otherwise, so a caller installing into several Daz installs skips
+ *  a generation this build carries no binary for instead of failing all of them
+ *  (a dev checkout before `pnpm fetch:runner`). */
+export async function bundledRunnerFolder(flavor: DazFlavor): Promise<string> {
+  const dir = await bundledRunnerDir(flavor)
+  return (await exists(join(dir, RUNNER_DLL[flavor]))) ? dir : ''
+}
+
+/** The staged runner release tag, for a panel with no install to read it off. */
+export async function bundledRunnerTag(): Promise<string> {
+  return bundledRunnerVersion()
 }
 
 /** The staged runner release tag ('' when this build has none — a dev checkout
@@ -527,12 +557,24 @@ export interface RunnerStatus {
   error: string | null
 }
 
-/** The bundled-vs-installed runner state driving the Settings panel. */
-export async function runnerStatus(dazInstallFolder: string): Promise<RunnerStatus> {
+/**
+ * The bundled-vs-installed runner state driving the Settings panel.
+ *
+ * `knownFlavor` is the caller's already-resolved generation, and it exists so the
+ * two plugins never disagree about one installation: the plugin panel falls back
+ * to DIM's major version when an install's `DAZStudio*.exe` can't be read, and
+ * without passing that down the Exporter would be matched into an install while
+ * the Runner reported "could not detect the Daz Studio version" for the very
+ * same folder. Omitted, this detects the generation itself, exactly as before.
+ */
+export async function runnerStatus(
+  dazInstallFolder: string,
+  knownFlavor?: DazFlavor | null,
+): Promise<RunnerStatus> {
   const bundledVersion = await bundledRunnerVersion()
   if (!dazInstallFolder)
     return { bundledVersion, flavor: null, installed: 'none', installedVersion: '', error: null }
-  const flavor = await detectDazFlavor(dazInstallFolder)
+  const flavor = (await detectDazFlavor(dazInstallFolder)) ?? knownFlavor ?? null
   if (!flavor) {
     return {
       bundledVersion,

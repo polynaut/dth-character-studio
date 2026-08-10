@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-import { P, buildSeed } from './fixtures.ts'
+import { P, buildSeed, fakeDll } from './fixtures.ts'
 import { installTauriMock } from './tauri-mock.ts'
 
 import type { Page } from '@playwright/test'
@@ -21,12 +21,15 @@ const SETTINGS = `${P.appData}/settings.json`
 function elevatedSeed(elevated: boolean): TauriMockSeed {
   const seed = buildSeed({ activeProjectFile: P.dcsp, dazInstallFolder: DAZ_INSTALL })
   seed.elevated = elevated
-  // A single-mode Exporter release: the folder itself holds the DLL (its fake
-  // bytes carry no PE version resource — version stays '', which is allowed).
+  // One Exporter release folder, holding the DS4 build (the plain name is what
+  // makes it one). Its fake bytes carry no PE version resource — the version
+  // stays '', which is allowed and simply never reads as "already current".
   seed.files[`${EXPORTER_DIR}/dth_exporter.dll`] = 'dll-fixture'
+  // No DIM on this machine, so the configured install folder IS the one target.
+  seed.files[`${DAZ_INSTALL}/DAZStudio.exe`] = fakeDll('4.22.0.16')
   seed.files[SETTINGS] = JSON.stringify({
     ...(JSON.parse(seed.files[SETTINGS]) as Record<string, unknown>),
-    dthExporterFolder: EXPORTER_DIR,
+    dthExporterFolders: [EXPORTER_DIR],
   })
   return seed
 }
@@ -38,12 +41,12 @@ async function openGeneralSettings(page: Page, seed: TauriMockSeed) {
   // navigation bounces a reload straight back home).
   await page.getByRole('link', { name: 'Settings' }).click()
   await page.getByRole('tab', { name: 'General' }).click()
-  await expect(page.getByText('Setup DTH Exporter Plugin Release')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Daz Studio plugins' })).toBeVisible()
 }
 
-/** The Exporter install section (the Runner section repeats the button names). */
+/** The Daz plugins section — both plugins install from here now. */
 const exporterSection = (page: Page) =>
-  page.locator('section').filter({ hasText: 'Setup DTH Exporter Plugin Release' })
+  page.locator('section').filter({ hasText: 'Daz Studio plugins' })
 
 const relaunchCalls = (page: Page) =>
   page.evaluate(
@@ -61,12 +64,12 @@ test('elevated: successful install offers the de-elevated restart, dry run does 
 
   // A dry run also produces a report — but nothing was installed, so no notice.
   await section.getByRole('button', { name: 'Dry run' }).click()
-  await expect(page.getByText(/Dry run — would copy/)).toBeVisible()
+  await expect(page.getByText(/Dry run — 1 plugin cop/)).toBeVisible()
   await expect(section.getByText(/Restart normally/)).not.toBeVisible()
 
   // The real install: report + toast + the restart offer.
-  await section.getByRole('button', { name: 'Install', exact: true }).click()
-  await expect(page.getByText('Installed 1 file(s)')).toBeVisible()
+  await section.getByRole('button', { name: 'Install / update all' }).click()
+  await expect(page.getByText(/Installed \d+ file\(s\) into 1 location/)).toBeVisible()
   await expect(
     section.getByText(/running as administrator, and Windows silently blocks drag-and-drop/),
   ).toBeVisible()
@@ -87,8 +90,8 @@ test('not elevated: a successful install shows no restart notice', async ({ page
   await openGeneralSettings(page, elevatedSeed(false))
   const section = exporterSection(page)
 
-  await section.getByRole('button', { name: 'Install', exact: true }).click()
-  await expect(page.getByText('Installed 1 file(s)')).toBeVisible()
+  await section.getByRole('button', { name: 'Install / update all' }).click()
+  await expect(page.getByText(/Installed \d+ file\(s\) into 1 location/)).toBeVisible()
   await expect(section.getByText(/Restart normally/)).not.toBeVisible()
 
   expect(

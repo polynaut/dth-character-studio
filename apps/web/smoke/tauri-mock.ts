@@ -35,6 +35,11 @@ export interface TauriMockSeed {
    *  `houdini<major>.<minor>` preferences folders are looked for under. */
   documentDir?: string
   homeDir?: string
+  /** What `resolveResource()` resolves against — the app's bundled resources
+   *  (the DTH Runner plugin DLLs under `resources/dth-runner/{ds4,ds6}`). A
+   *  spec that seeds files there gets a real bundled-Runner state; one that
+   *  doesn't gets "this build carries no bundled Runner", like a dev checkout. */
+  resourceDir?: string
   /** What `houdini_installs` reports — the registry, as the studio sees it.
    *  Omit for a machine with no Houdini installed. */
   houdiniInstalls?: Array<{ version: string; path: string }>
@@ -377,6 +382,13 @@ export function installTauriMock(seed: TauriMockSeed): void {
         if (args.directory === 9) return seed.publicDir ?? 'C:/Users/Public'
         if (args.directory === 6) return seed.documentDir ?? 'C:/Users/dev/Documents'
         if (args.directory === 21) return seed.homeDir ?? 'C:/Users/dev'
+        // 11 = Resource — `resolveResource(p)` asks for it WITH a path, and the
+        // answer is the joined one (the bundled Runner DLLs live there).
+        if (args.directory === 11) {
+          const base = seed.resourceDir ?? 'C:/Program Files/DTH Character Studio'
+          const rel = String(args.path ?? '').replace(/^[\\/]+/, '')
+          return rel ? `${base}/${rel}` : base
+        }
         return seed.appDataDir
       case 'plugin:app|version':
         return seed.version

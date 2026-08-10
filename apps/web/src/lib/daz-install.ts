@@ -99,22 +99,6 @@ export function defaultDazApp(apps: ReadonlyArray<DazAppFound>): DazAppFound | n
 }
 
 /**
- * The oldest Studio major that can actually RUN an export batch.
- *
- * Not a preference — a measured capability. Driving the DTH Exporter from a
- * script needs `doExport`, which is a Daz Studio 6 exporter-plugin feature
- * (1.8.1+); the Studio 4 build exposes no scripted export at all, so a batch
- * that lands there runs every scene and exports nothing (`.ai/gotchas.md`, "The
- * DTH Exporter is only scriptable in Daz Studio 6" — and the generated script's
- * own `typeof doExport == "function"` gate in `packages/rom/src/dsa.ts`).
- *
- * 5 rather than 6 to mirror `dazFlavorFromExeVersion` in
- * `lib/rom/storage/releases.ts` (`major >= 5` → `ds6`): one rule about which
- * side of the DS4/DS6 split an install falls on, not two that can drift.
- */
-const SCRIPTED_EXPORT_MIN_VERSION = 5
-
-/**
  * Which installations may be marked **Export only** — the older ones that can
  * still run a batch, and only while the NEWEST is running everything else.
  *
@@ -130,20 +114,17 @@ const SCRIPTED_EXPORT_MIN_VERSION = 5
  *    deliberately gone back to the old Studio for everything has already
  *    answered this question with the Activate button, and offering a switch
  *    that says "…but exports here" on the newer one would be a second, opposite
- *    knob for the same decision;
- *  - and only one that can SCRIPT an export at all
- *    ({@link SCRIPTED_EXPORT_MIN_VERSION}). This is the trap the whole feature
- *    walks past: a Studio 4 install takes the Runner plugin happily, so the gate
- *    would go green, the launcher would start it, the Runner would claim the job
- *    file — and then every scene's export block would skip, because that build
- *    has no `doExport`. A batch that completes and exports nothing is the exact
- *    failure this feature exists to prevent, and offering DS4 here would be the
- *    studio walking the user into it.
+ *    knob for the same decision.
  *
- * On a DS4 + DS6 machine that leaves nothing to offer, which is correct: there
- * is no valid arrangement to describe. The switch becomes live when a Studio
- * newer than 6 ships and the Runner has no build for it yet — the case it is
- * actually for.
+ * **Daz Studio 4 is a candidate again (2026-08-10).** It used to be excluded by
+ * a `major >= 5` floor, because driving the exporter from a script needs
+ * `doExport` and the Studio 4 build had none — a batch there completed and
+ * exported nothing. mrpdean shipped scripted export in the Studio 4 plugin with
+ * **Exporter 2.0.2.0**, and a DS4 batch was measured writing its `.abc`/`.dth`
+ * on 2026-08-10, so the capability is no longer a generation split. What an
+ * older DS4 exporter still can't do is now a PLUGIN-VERSION question, which the
+ * Daz-plugins section answers by keeping every install on the newest build
+ * rather than by hiding the switch (see `.ai/gotchas.md`).
  *
  * An install whose folder is gone is never a candidate: exports would launch
  * nothing. Returns the eligible KEYS, in the order the apps were given.
@@ -160,14 +141,7 @@ export function exportOnlyCandidateKeys(
   // approving a layout it cannot see the whole of.
   const newest = apps.reduce((max, app) => Math.max(max, app.version), 0)
   if (active.version < newest) return []
-  return apps
-    .filter(
-      (app) =>
-        app.exists &&
-        app.version >= SCRIPTED_EXPORT_MIN_VERSION &&
-        app.version < active.version,
-    )
-    .map((app) => app.key)
+  return apps.filter((app) => app.exists && app.version < active.version).map((app) => app.key)
 }
 
 /** The studio settings an activated installation implies. */

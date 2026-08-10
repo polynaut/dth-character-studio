@@ -123,7 +123,8 @@ smoke `houdini-refresh-assets` / `houdini-project-health` /
 
 CONTRACT (`packages/rom/src/dsa.ts`): DS6 action class
 `DazToHueExporterAction`, DS4 fallback action *name* `DazToHue_Action`;
-scriptability is DS6-only, gated on `typeof doExport == "function"`;
+scriptability is gated on `typeof doExport == "function"` (DS6 since exporter
+1.8.1, DS4 since **2.0.2.0** — older DS4 builds silently export nothing);
 `doExport(dir, name, refFrames, false)` — 4 args;
 `doExportAlembicGroomPoses(dir, name, false)` — the 2-arg call CRASHES Daz;
 plugin 2.0+ skips hidden nodes (`exporterSupportsGroomHide`,

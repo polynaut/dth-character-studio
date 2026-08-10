@@ -38,7 +38,7 @@ One pass over everything a project can be scanned for. Tick what you want,
 press **Start scan**, and leave it — the studio hands Daz Studio a single batch
 and works through it unattended, reporting progress on the button. The batch
 goes through the
-[**Runner plugin**](./02-setup.md#install-the-dth-character-studio-runner-plugin),
+[**Runner plugin**](./02-setup.md#daz-studio-plugins),
 so Start stays off until the Runner is installed and **My DAZ 3D Library** is
 set in [Settings](./02-setup.md).
 
