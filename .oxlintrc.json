@@ -27,14 +27,28 @@
     "react/jsx-no-constructed-context-values": "error",
     "typescript/no-unnecessary-type-assertion": "error",
 
-    // perf/suspicious are error categories, but these specific rules flag
-    // high-count INTENTIONAL patterns (see the note in
-    // validate-pull-request.yml) — they stay advisory warnings on purpose:
-    // sequential awaits are deliberate fs ordering, the react-markdown
-    // component maps are nested by design, and the map-spreads keep records
-    // immutable.
+    // perf/suspicious are error categories, but these three flag patterns this
+    // codebase uses ON PURPOSE — sequential awaits are deliberate fs ordering,
+    // the react-markdown component maps are nested by design, and the
+    // map-spreads keep records immutable.
+    //
+    // All three printed as warnings until 2026-08-10 — 189 lines (156 + 24 + 9),
+    // every one inspected and intentional. `warn` does not gate CI, so those
+    // lines only ever printed: turning them off allows nothing `warn` was not
+    // already allowing. What a 189-line wall does buy is a lint log nobody
+    // reads, which is where a real finding goes to hide.
+    //
+    // Two of them stay `warn` HERE and are switched off per-directory in
+    // `overrides`, so each keeps its teeth where the pattern is not the house
+    // idiom: an await-in-loop in a fresh component still says something, a
+    // nested component outside a markdown renderer still does. Re-check the
+    // scopes if a directory's habits change.
     "no-await-in-loop": "warn",
-    "oxc/no-map-spread": "warn",
+    // no-map-spread is OFF everywhere, not scoped: its advice is to mutate in
+    // place, and every hit here is an immutable update of React state or a
+    // stored record — where mutating is the bug the spread exists to avoid.
+    // A perf rule that is wrong in all 9 of its hits has nothing to say here.
+    "oxc/no-map-spread": "off",
     "react/no-unstable-nested-components": "warn",
 
     // A stylesheet import has nothing to assign — that IS the import. Both hits
@@ -63,6 +77,43 @@
     ]
   },
   "overrides": [
+    {
+      // The api/storage layer IS sequential by design: fs work that must keep
+      // its order, single-flight guards, and the batches that deliberately
+      // refuse to run Daz/hython in parallel. 142 of the 156 hits were here,
+      // and "use Promise.all" is the wrong answer for every one of them.
+      "files": ["apps/web/src/lib/rom/**"],
+      "rules": { "no-await-in-loop": "off" }
+    },
+    {
+      // Recorders and screenshot drivers step through a script: frame, click,
+      // settle, shoot. Concurrency would photograph the wrong moment.
+      "files": ["apps/web/smoke/**"],
+      "rules": { "no-await-in-loop": "off" }
+    },
+    {
+      // The same sequential-by-design work as the api layer, in the UI files
+      // that drive it: a folder move, a scene relink, the notes media upload,
+      // the project scan. Named one by one rather than widening the glob — a
+      // FIFTH file has to argue for itself instead of arriving silently.
+      "files": [
+        "apps/web/src/lib/use-folder-move.tsx",
+        "apps/web/src/components/notes-editor.tsx",
+        "apps/web/src/components/daz-scene-field.tsx",
+        "apps/web/src/routes/projects.$projectId.index.tsx"
+      ],
+      "rules": { "no-await-in-loop": "off" }
+    },
+    {
+      // `react-markdown`'s `components={{ … }}` map: these ARE defined per
+      // render, that is the API's shape, and hoisting them would mean hoisting
+      // the props they close over too.
+      "files": [
+        "apps/web/src/components/notes-editor.tsx",
+        "apps/web/src/components/release-notes.tsx"
+      ],
+      "rules": { "react/no-unstable-nested-components": "off" }
+    },
     {
       "files": ["**/*.test.ts", "**/*.test.tsx", "**/testutil.*"],
       "rules": {
