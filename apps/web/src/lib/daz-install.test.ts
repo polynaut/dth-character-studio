@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   defaultDazApp,
   deriveDazPaths,
+  exportOnlyCandidateKeys,
   parseDimAccountIni,
   parseDimCurrentUser,
   parseDzInstallIni,
@@ -127,6 +128,54 @@ describe('defaultDazApp', () => {
   it('offers nothing when every listed install is missing', () => {
     expect(defaultDazApp([app(6, false), app(4, false)])).toBeNull()
     expect(defaultDazApp([])).toBeNull()
+  })
+})
+
+describe('exportOnlyCandidateKeys', () => {
+  const KEY4 = 'dzstudio4installdir-64'
+  const KEY6 = 'dzstudio6installdir-64'
+
+  it('offers the OLDER install while the newest is active — the DS6 + DS4 case', () => {
+    // The shape this exists for: authoring on DS6, but the Runner plugin has no
+    // DS6 build yet, so the export batch still has to run in DS4.
+    expect(exportOnlyCandidateKeys([app(6, true), app(4, true)], KEY6)).toEqual([KEY4])
+  })
+
+  it('never offers it on the ACTIVE install — that is just "the default"', () => {
+    expect(exportOnlyCandidateKeys([app(6, true), app(4, true)], KEY6)).not.toContain(KEY6)
+  })
+
+  it('offers nothing when an OLDER install is the active one', () => {
+    // Going back to DS4 for everything is a decision already made with Activate;
+    // a switch on the DS6 card saying "…but exports here" would be a second,
+    // opposite knob for the same question.
+    expect(exportOnlyCandidateKeys([app(6, true), app(4, true)], KEY4)).toEqual([])
+  })
+
+  it('offers nothing on a single-install machine', () => {
+    expect(exportOnlyCandidateKeys([app(6, true)], KEY6)).toEqual([])
+  })
+
+  it('skips an older install whose folder is gone — exports would launch nothing', () => {
+    expect(exportOnlyCandidateKeys([app(6, true), app(4, false)], KEY6)).toEqual([])
+  })
+
+  it('offers nothing when the active install is not the newest LISTED, even if that one is gone', () => {
+    // A machine whose DS7 folder was deleted but is still listed has not
+    // settled on DS6; the studio cannot see the whole layout, so it does not
+    // hand out an arrangement that assumes it can.
+    expect(exportOnlyCandidateKeys([app(7, false), app(6, true), app(4, true)], KEY6)).toEqual([])
+  })
+
+  it('offers BOTH older installs on a future 7 + 6 + 4 machine', () => {
+    // Exclusivity is not this function's job — it reports what may be offered,
+    // and the single stored key is what allows only one of them to be on.
+    expect(exportOnlyCandidateKeys([app(7, true), app(6, true), app(4, true)], 'dzstudio7installdir-64'))
+      .toEqual([KEY6, KEY4])
+  })
+
+  it('offers nothing when the active key matches no listed install', () => {
+    expect(exportOnlyCandidateKeys([app(6, true), app(4, true)], 'gone')).toEqual([])
   })
 })
 

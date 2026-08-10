@@ -36,7 +36,7 @@ import {
   locateCharacter,
   projectIdInput,
   resolveProject,
-  activeDazInstallFolder,
+  exportDazInstallFolder,
 } from './core'
 import type { ProjectInfo } from './core'
 
@@ -145,11 +145,16 @@ async function dazStudioRunningNative(fallback: boolean): Promise<boolean> {
 
 /** Start a scene-less Daz Studio (its Runner claims the pending job file on
  *  startup). The command returns the launched exe path — schema-parsed at the
- *  boundary like every native return, then unused here. */
+ *  boundary like every native return, then unused here.
+ *
+ *  The EXPORT install, not the active one: this is the launch that needs the
+ *  Runner plugin, and "Export only" exists so a machine whose newest Studio has
+ *  no Runner build yet can still export from the older one. With no card
+ *  flagged the two resolve to the same folder. */
 async function launchDazSceneless(): Promise<void> {
   z.string().parse(
     await invoke('launch_daz_studio', {
-      installFolder: await activeDazInstallFolder(),
+      installFolder: await exportDazInstallFolder(),
       scenePath: '',
     }),
   )

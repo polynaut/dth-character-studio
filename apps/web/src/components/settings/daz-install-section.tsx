@@ -1,9 +1,10 @@
 import { AlertTriangle, Loader2, RefreshCw, Pencil } from 'lucide-react'
 
-import { Button, InfoPopup } from '@dth/ui'
+import { Button, InfoPopup, Switch } from '@dth/ui'
 import { InstallCard } from '#/components/settings/install-card.tsx'
 import { PathCode } from '#/components/path-code.tsx'
 import { displayPath } from '#/lib/path.ts'
+import { exportOnlyCandidateKeys } from '#/lib/daz-install.ts'
 import dazLogo from '#/assets/daz-logo.png'
 
 import type { DazInstallScan, DerivedDazPaths } from '#/lib/daz-install.ts'
@@ -37,6 +38,8 @@ export function DazInstallSection({
   onRescan,
   onActivate,
   onSetManually,
+  exportOnlyKey,
+  onExportOnly,
 }: {
   scan: DazInstallScan | null
   loading: boolean
@@ -53,12 +56,24 @@ export function DazInstallSection({
   onRescan: () => void
   onActivate: (key: string) => void
   onSetManually: () => void
+  /** The installation currently flagged **Export only**, '' when none is. */
+  exportOnlyKey: string
+  /** Flip the flag. `key` when turning one on, '' when turning it off — the
+   *  caller stores ONE key, which is what makes the switches exclusive without
+   *  any card having to know about the others. */
+  onExportOnly: (key: string) => void
 }) {
   const apps = scan?.apps ?? []
   // A stored installation this machine no longer has. Never silently swapped
   // for another: the paths on disk still point at the old one, and only the
   // user can say whether that is a reinstall or the wrong machine.
   const activeMissing = activeKey !== '' && !apps.some((app) => app.key === activeKey)
+
+  // Which cards may carry the Export-only switch — the older installs, and only
+  // while the newest one is the active one. The rule is pure and lives with the
+  // install model (`lib/daz-install.ts`), so it can be tested without a Settings
+  // page around it.
+  const exportOnlyCandidates = exportOnlyCandidateKeys(apps, activeKey)
 
   // A plain div, not a <section>: the Settings route wraps this in the card
   // <section> every other block on that page uses, and nesting two would make
@@ -120,6 +135,26 @@ export function DazInstallSection({
               disabled={busyKey !== ''}
               tone="daz"
               onActivate={() => onActivate(app.key)}
+              footer={
+                exportOnlyCandidates.includes(app.key) ? (
+                  <span className="mt-1.5 flex items-start gap-2 rounded-md border border-dashed p-2">
+                    <Switch
+                      checked={exportOnlyKey === app.key}
+                      onCheckedChange={(on) => onExportOnly(on ? app.key : '')}
+                      disabled={busyKey !== ''}
+                      aria-label={`Run export batches in ${app.name}`}
+                    />
+                    <span className="min-w-0 text-xs">
+                      <span className="font-medium">Export only</span>
+                      <span className="mt-0.5 block text-muted-foreground">
+                        DTH Export runs its batch in {app.name}; everything else keeps using
+                        the active installation. For when the Runner plugin has no build for
+                        the newer Studio yet.
+                      </span>
+                    </span>
+                  </span>
+                ) : undefined
+              }
             />
           ))}
         </div>

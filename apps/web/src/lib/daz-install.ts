@@ -99,6 +99,44 @@ export function defaultDazApp(apps: ReadonlyArray<DazAppFound>): DazAppFound | n
 }
 
 /** The studio settings an activated installation implies. */
+/**
+ * Which installations may be marked **Export only** — the older ones, and only
+ * while the NEWEST is the one running everything else.
+ *
+ * The flag exists for one shape of machine: authoring has moved to the newest
+ * Studio, but the export batch still has to run in an older one because the DTH
+ * Runner plugin is built against a single Studio major (`.ai/gotchas.md`). So it
+ * is offered only where it makes sense to answer:
+ *
+ *  - an install OLDER than the active one — marking the active install itself
+ *    would mean "run exports where everything already runs", which is the
+ *    default and not a choice;
+ *  - and only while the active install IS the newest detected. Someone who has
+ *    deliberately gone back to the old Studio for everything has already
+ *    answered this question with the Activate button, and offering a switch
+ *    that says "…but exports here" on the newer one would be a second, opposite
+ *    knob for the same decision.
+ *
+ * An install whose folder is gone is never a candidate: exports would launch
+ * nothing. Returns the eligible KEYS, in the order the apps were given.
+ */
+export function exportOnlyCandidateKeys(
+  apps: ReadonlyArray<DazAppFound>,
+  activeKey: string,
+): Array<string> {
+  const active = apps.find((app) => app.key === activeKey)
+  if (!active) return []
+  // "Newest detected" counts installs that are GONE too: a machine whose DS7
+  // folder was deleted but still listed is not a machine that has settled on
+  // DS6, and quietly offering the switch there would read as the studio
+  // approving a layout it cannot see the whole of.
+  const newest = apps.reduce((max, app) => Math.max(max, app.version), 0)
+  if (active.version < newest) return []
+  return apps
+    .filter((app) => app.exists && app.version > 0 && app.version < active.version)
+    .map((app) => app.key)
+}
+
 export interface DerivedDazPaths {
   dazInstallFolder: string
   dazLibraryFolder: string

@@ -135,6 +135,8 @@ describe('settings (settings.json)', () => {
     // No Daz installation activated yet, so the three Daz paths above/below are
     // the user's own to edit (see `dazInstallKey`).
     dazInstallKey: '',
+    dazExportInstallKey: '',
+    dazExportInstallFolder: '',
     // Fresh install writes Houdini paths $HIP-relative — the setting only ever
     // turns that OFF.
     houdiniPathStyle: 'hip',
@@ -186,6 +188,8 @@ describe('settings (settings.json)', () => {
       currentDthExporterVersion: '1.0.0.1',
       dazInstallFolder: 'C:/Program Files/DAZ 3D/DAZStudio4',
       dazInstallKey: 'dzstudio4installdir-64',
+      dazExportInstallKey: '',
+      dazExportInstallFolder: '',
       houdiniPathStyle: 'absolute',
       houdiniDocsFolder: 'D:/Documents/houdini20.5',
       extraHoudiniDocsFolders: ['D:/Documents/houdini19.5'],
@@ -933,5 +937,44 @@ describe('copyRuntimeFiles', () => {
     ]) {
       expect(files.has(`${root}/${stale}`)).toBe(false)
     }
+  })
+})
+
+describe('exportInstallFolder — which Daz runs the export batch', () => {
+  const base = (over: Partial<StudioSettings> = {}): StudioSettings =>
+    storage.studioSettingsSchema.parse({
+      dazInstallFolder: 'C:/Program Files/DAZ 3D/DAZStudio6',
+      ...over,
+    })
+
+  it('is the ACTIVE install when no card is flagged', () => {
+    expect(storage.exportInstallFolder(base())).toBe('C:/Program Files/DAZ 3D/DAZStudio6')
+  })
+
+  it('is the flagged install when one carries Export only', () => {
+    // The whole point: everything else stays on DS6, the batch runs in DS4
+    // because that is where a Runner plugin build exists.
+    expect(
+      storage.exportInstallFolder(
+        base({
+          dazExportInstallKey: 'dzstudio4installdir-64',
+          dazExportInstallFolder: 'C:/Program Files/DAZ 3D/DAZStudio4',
+        }),
+      ),
+    ).toBe('C:/Program Files/DAZ 3D/DAZStudio4')
+  })
+
+  it('the KEY arms it — a leftover folder alone never takes the exports', () => {
+    // Turning the switch off clears the key; a stale folder must not keep
+    // silently redirecting the batch.
+    expect(
+      storage.exportInstallFolder(base({ dazExportInstallFolder: 'C:/Program Files/DAZ 3D/DAZStudio4' })),
+    ).toBe('C:/Program Files/DAZ 3D/DAZStudio6')
+  })
+
+  it('falls back to the active install when the flag names no folder', () => {
+    expect(storage.exportInstallFolder(base({ dazExportInstallKey: 'dzstudio4installdir-64' }))).toBe(
+      'C:/Program Files/DAZ 3D/DAZStudio6',
+    )
   })
 })

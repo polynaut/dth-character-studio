@@ -30,6 +30,7 @@ export function InstallCard({
    *  a detected Daz Studio reads as the same kind of object. Default keeps the
    *  neutral/primary look the Houdini section uses. */
   tone,
+  footer,
 }: {
   logo: string
   title: string
@@ -42,15 +43,25 @@ export function InstallCard({
   disabled: boolean
   onActivate: () => void
   tone?: 'daz'
+  /** An extra row INSIDE the card's box but OUTSIDE its button — a control that
+   *  belongs to this install without being "activate it" (the Daz section's
+   *  Export-only switch). Kept out of the button because nesting one
+   *  interactive control in another is neither valid nor clickable: the switch
+   *  would activate the card on its way to toggling. */
+  footer?: ReactNode
 }) {
   const daz = tone === 'daz'
-  return (
+  const card = (
     <button
       type="button"
       disabled={!exists || disabled}
       onClick={onActivate}
       data-active={active ? 'true' : 'false'}
-      className={`flex min-w-[16rem] flex-1 items-start gap-3 rounded-lg border p-3 text-left transition-colors ${
+      className={`flex ${
+        // With a footer the wrapper does the sizing; without one the button IS
+        // the card and keeps the flex behaviour the sections lay out with.
+        footer ? 'w-full' : 'min-w-[16rem] flex-1'
+      } items-start gap-3 rounded-lg border p-3 text-left transition-colors ${
         daz ? 'daz-install-card ' : ''
       }${
         active
@@ -109,5 +120,15 @@ export function InstallCard({
         ) : null}
       </span>
     </button>
+  )
+  // No footer → the card IS the button, exactly as before (the Houdini section
+  // and every Daz card without the switch keep their existing box and flex
+  // behaviour). With one, a wrapper carries the sizing and the two stack.
+  if (!footer) return card
+  return (
+    <span className="flex min-w-[16rem] flex-1 flex-col">
+      {card}
+      {footer}
+    </span>
   )
 }
