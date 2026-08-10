@@ -637,6 +637,50 @@ describe('generateAll', () => {
     )
   })
 
+  it('every generated .dsa opens with the Daz Studio filetype header', () => {
+    // The header line is what makes Daz treat the file as a script at all.
+    // One character that triggers all four emission sites (character/bulk ROM,
+    // split Export_, hair export, product scan) — then every .dsa is checked,
+    // so a builder added later is covered by construction.
+    const files = generateAll(
+      makeCharacter({
+        exportPath: 'X:\\exports\\e',
+        exportWithRomScript: false,
+        exportHairAssets: true,
+        sceneOverrides: [
+          {
+            scenePath: 'D:/P/Electra/daz3d/Electra.duf',
+            rom: {},
+            hair: [{ nodeLabel: 'Electra Hair' }],
+          },
+        ],
+      }),
+      {},
+      FRAMES,
+      undefined,
+      undefined,
+      {
+        dimManifestPath: 'E:/DIM/ManifestFiles',
+        outputDir: 'C:/data/product-scans/proj/char',
+        dazLibraryFolder: 'D:/DAZ 3D/My DAZ 3D Library',
+      },
+    )
+    const scripts = files.filter((f) => f.fileName.endsWith('.dsa'))
+    expect(scripts.map((f) => f.fileName)).toEqual(
+      expect.arrayContaining([
+        'Export_ElectraG9_G9.dsa',
+        'Export_Hair_ElectraG9_G9.dsa',
+        'Scan_Products_ElectraG9.dsa',
+      ]),
+    )
+    for (const f of scripts) {
+      expect(
+        f.content.startsWith('// DAZ Studio version 4.22.0.16 filetype DAZ Script\n'),
+        `${f.fileName} must open with the filetype header`,
+      ).toBe(true)
+    }
+  })
+
   // Daz shows a script's Content Library tile by name (`<base>.png`), and the host
   // writes those bytes — but WHICH artwork a script gets follows a rule the core
   // owns: `ROM_<base>.dsa` is one name for two different scripts, one that also

@@ -109,7 +109,10 @@ current code before relying on details, but assume the *lesson* still holds.
 - **`include()` must be top-level** in DS6 — a legacy include inside a function
   throws `URIError: Legacy Include` (regression-guarded in `generate.test.ts`).
 - **`App.openFile(path, false)` replaces the current scene without a save
-  prompt** — the generated per-character `Open_Scene` script warns the user first.
+  prompt** — relied on by both open-in-running-Daz paths: the forwarded one-shot
+  `.dsa` bridge (`api/attachments.ts` `openSceneInRunningDaz`) and the Runner's
+  `open-scene` job (`api/execute.ts`). The per-character `Open_Scene` script
+  that once wrapped this with a warning dialog was removed at runtime v22.
 - **DS6 removed `DzContentMgr.saveScene`** (probe-measured 2026-07-30: calling it
   is a TypeError) — the script-side scene save-as moved to **`Scene.saveScene(path)`**,
   which saves silently and writes the `.tip.png` thumbnail beside the `.duf`.
@@ -120,7 +123,11 @@ current code before relying on details, but assume the *lesson* still holds.
   `App.getExportMgr()`, which DS6 also dropped.
 - **Command-line forwarding to a running Daz instance stops working once a scene
   is loaded** — full "open in running instance" automation isn't possible from
-  scripts alone; that's why the studio ships an Open_Scene script instead.
+  scripts alone. Forwarding a `.dsa` still works, so opening a scene in a
+  running Daz goes through a forwarded one-shot script bridge
+  (`api/attachments.ts`) or the Runner plugin's `open-scene` job
+  (`api/execute.ts`) — the per-character `Open_Scene` script this bullet used
+  to name was removed at runtime v22.
 - **A CLOSING Daz can still claim the export job file on a final poll tick**
   (measured 2026-08-03 via the DTH Export flow): quit Daz, hand a batch off
   right after — the lingering process's Runner poll can still fire, rename
