@@ -84,6 +84,36 @@ launch and self-update on the user's confirmation.
 Full pipeline, signing-key, and branch-policy setup live in
 [devops.md](./devops.md) and [CONTRIBUTING.md](../CONTRIBUTING.md).
 
+## Claude Code commands & skills
+
+The repo ships its own [Claude Code](https://claude.com/claude-code) commands
+(`.claude/commands/*.md` — single-prompt slash commands) and skills
+(`.claude/skills/<name>/SKILL.md` — multi-step walkthroughs). They encode this
+repo's rituals so no session has to rediscover them: type the slash name in a
+Claude Code session started at the repo root. The authoritative description of
+each lives in its file's frontmatter; this table is the map.
+
+| Command | What it does |
+| ------- | ------------ |
+| `/grill` | Adversarial staff-engineer review of the branch diff — verdict SHIP IT / NEEDS WORK / BLOCK, re-reviewed after fixes until everything is resolved. |
+| `/verify` | Runs the full verification gate in order (typecheck, lint, tests, smoke, cargo) and fixes what fails. |
+| `/write-pr` | The house style for PR descriptions — structure, tone, and naming what was and wasn't verified. |
+| `/dep-release` | Puts already-merged dependency bumps on the release train — Dependabot PRs carry no changesets, so product-relevant bumps never release themselves. |
+| `/docs-refresh` | Brings `docs/guide` back in step with the code: documents features that shipped without docs, refreshes or proposes screenshots, deletes what no longer applies, proposes splits for overgrown pages. |
+| `/upgrade-dth` | Walkthrough for a new **DazToHue** release: every studio↔DTH coupling surface (PoseAsset CSV era, HDA node/parm names, the Exporter Plugin contract, preset assets, install layout) as contract → check → adjust, with the tests that pin each. |
+| `/upgrade-daz` | Walkthrough for a new **Daz Studio**: flavor detection and its closed DS4/DS6 world, the Runner plugin's SDK/ABI rules, the emitted-DazScript quirk ledger, and the process/launch hardcodes. |
+| `/upgrade-houdini` | Walkthrough for a new **Houdini**: pairing the new install with its fresh (empty!) prefs folder and reinstalling the DTH assets there, then the hython/Python/env assumptions. |
+
+The `upgrade-*` trio exists because those details fade between releases: each
+skill was built from a measured code sweep, and each run is expected to
+re-stamp the "measured against" versions and fold what the new release changed
+back into the skill.
+
+When to reach for which: `/verify` before pushing, `/grill` before merging
+anything non-trivial, `/write-pr` when opening the PR, `/docs-refresh` after a
+run of feature merges, `/dep-release` after merging Dependabot PRs, and the
+`upgrade-*` trio when the corresponding external release ships.
+
 ## More docs
 
 - [devops.md](./devops.md) — release pipeline, signing keys, branch policy
