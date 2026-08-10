@@ -1,6 +1,6 @@
 import { copyFile, exists, mkdir, readDir, remove, rename, stat, writeTextFile } from '@tauri-apps/plugin-fs'
 import { open as shellOpen } from '@tauri-apps/plugin-shell'
-import { invoke } from '@tauri-apps/api/core'
+import { invoke, isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
 import { characterSchema, dazJson, newId } from '@dth/rom'
@@ -60,6 +60,22 @@ async function copySceneInto(
     `${scenePath}.tip.png`,
     `${sceneBase(scenePath)}.tip.png`,
   ]
+  // Refuse to clobber — same rule as copyHoudiniProject. The destination can
+  // already hold a same-named scene (two same-stem scenes copied into one
+  // .assets subfolder). Overwriting silently replaced the existing bytes, and
+  // with deleteOriginal the source vanished too — two registry assets then
+  // shared one file, and removing either asset deleted the survivor's files.
+  // The SIDECARS are checked too, not just the .duf: a stray same-stem
+  // thumbnail would otherwise be absorbed silently as this copy's.
+  const clobbers = await Promise.all(
+    sources.map(async (src) =>
+      (await exists(joinPath(destDir, basename(src)))) ? basename(src) : '',
+    ),
+  )
+  const clobber = clobbers.find(Boolean)
+  if (clobber) {
+    throw new Error(`${clobber} already exists in ${destDir} — rename or remove it first.`)
+  }
   const copied: Array<string> = []
   for (const src of sources) {
     if (await exists(src)) {
@@ -118,6 +134,9 @@ export async function renameDazScene({ data }: { data: unknown }): Promise<strin
   if (!clean || /[\\/:*?"<>|]/.test(clean) || clean === '.' || clean === '..') {
     throw new Error('Enter a plain file name (no slashes or special characters).')
   }
+  // Browser build: no filesystem to rename on — report the path unchanged, so
+  // the caller repoints nothing (the same "nothing happened" the pickers no-op to).
+  if (!isTauri()) return scenePath
   const norm = scenePath.replaceAll('\\', '/')
   const dir = norm.slice(0, norm.lastIndexOf('/'))
   const newDuf = `${dir}/${clean}.duf`
@@ -313,10 +332,13 @@ async function openSceneInRunningDaz(scenePath: string): Promise<void> {
   bridgeSeq = (bridgeSeq + 1) % BRIDGE_POOL
   await writeTextFile(bridge, script)
   try {
-    const exe = await invoke<string>('run_daz_script', {
-      scriptPath: bridge,
-      installFolder: await activeDazInstallFolder(),
-    })
+    // A primitive return — z.string, not a bare invoke<T>() cast (no fixture).
+    const exe = z.string().parse(
+      await invoke('run_daz_script', {
+        scriptPath: bridge,
+        installFolder: await activeDazInstallFolder(),
+      }),
+    )
     // Visible in the (now enabled) devtools console — tells us which instance we
     // asked to run the script when a running Daz doesn't react.
     console.info('[DTH] ran open-scene script via', exe, '→', bridge)
@@ -340,11 +362,11 @@ export async function openScene({ data }: { data: unknown }): Promise<void> {
       'Refusing to open — not a recognised scene/project file (.duf/.hip/.uproject).',
     )
   }
+  // Browser build: nothing to launch — no-op like the rest of the native layer
+  // (the shell plugin would throw an unhandled "not in Tauri" otherwise).
+  if (!isTauri()) return
   // A running Daz ignores forwarded .duf opens — route through the script bridge.
-  if (
-    /\.duf$/i.test(scenePath) &&
-    (await invoke<boolean>('daz_studio_running').catch(() => false))
-  ) {
+  if (/\.duf$/i.test(scenePath) && (await dazStudioRunning())) {
     await openSceneInRunningDaz(scenePath)
   } else if (/\.duf$/i.test(scenePath)) {
     await openSceneInActivatedDaz(scenePath)
@@ -373,10 +395,13 @@ export async function openScene({ data }: { data: unknown }): Promise<void> {
  */
 async function openSceneInActivatedDaz(scenePath: string): Promise<void> {
   try {
-    await invoke<string>('launch_daz_studio', {
-      installFolder: await activeDazInstallFolder(),
-      scenePath,
-    })
+    // A primitive return — z.string, not a bare invoke<T>() cast (no fixture).
+    z.string().parse(
+      await invoke('launch_daz_studio', {
+        installFolder: await activeDazInstallFolder(),
+        scenePath,
+      }),
+    )
   } catch {
     await openLikeExplorer(scenePath)
   }
@@ -423,9 +448,16 @@ async function focusOpenedApp(scenePath: string): Promise<void> {
 
 /** Whether a Daz Studio instance is currently running (false in a plain browser).
  *  The scene-card UI uses it to warn — the studio can't switch the scene of an
- *  already-running Daz, so it points the user at the per-character open script. */
+ *  already-running Daz, so it points the user at the per-character open script.
+ *  A primitive return, still schema-parsed (the FFI ritual — no fixture);
+ *  a parse failure reads as "can't tell" = not running, like an invoke failure
+ *  always has. */
 export async function dazStudioRunning(): Promise<boolean> {
-  return invoke<boolean>('daz_studio_running').catch(() => false)
+  try {
+    return z.boolean().parse(await invoke('daz_studio_running'))
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -466,6 +498,8 @@ export async function revealPath({ data }: { data: unknown }): Promise<void> {
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(path)) {
     throw new Error('Refusing to open a URL — the path must be a local file or folder.')
   }
+  // Browser build: no file manager to open — no-op like every native feature.
+  if (!isTauri()) return
   let dir = path
   try {
     if (!(await stat(path)).isDirectory) dir = path.replace(/[\\/][^\\/]*$/, '')

@@ -61,6 +61,19 @@ export function posesFromDazCsv(text: string): Array<ImportedPose> {
     if ((cols[0] ?? '').trim() === '') continue
     const frame = Number(cols[0])
     if (!Number.isFinite(frame)) continue
+    // Alignment guard, fail-loud: a data row's cells after the first three must
+    // come in complete (node, prop, value) triplets. A value written with a
+    // locale decimal COMMA (`1,5`) or an unquoted comma in a label splits into
+    // an extra cell and shifts every later column — the old tolerant walk then
+    // imported wrong-but-finite morphs without a word. Trailing EMPTY cells are
+    // fine (a plain trailing comma is not corruption).
+    const trimmed = [...cols]
+    while (trimmed.length > 3 && (trimmed[trimmed.length - 1] ?? '').trim() === '') trimmed.pop()
+    if (trimmed.length > 3 && (trimmed.length - 3) % 3 !== 0) {
+      throw new Error(
+        `Morph CSV row for frame ${frame} has ${trimmed.length - 3} value cells, which do not form complete (node, property, value) triplets — usually a decimal comma (locale export) or an unquoted comma in a label. Re-export the CSV with '.' decimals, or quote the offending field.`,
+      )
+    }
     const morphs: Array<Morph> = []
     for (let i = 3; i + 3 <= cols.length; i += 3) {
       const node = (cols[i] ?? '').trim()

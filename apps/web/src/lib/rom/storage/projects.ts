@@ -342,9 +342,16 @@ export async function moveCharacterMetaDir(
 }
 
 // --- Recent projects (volatile app-data) ---------------------------------
-// The only project state the app keeps: a capped, newest-first list of recently
-// opened `.dcsp` files, for the Home screen. Non-important — losing it just empties
-// the list; the projects themselves are the `.dcsp` files scattered on disk.
+// The only project state the app keeps: a newest-first list of recently opened
+// `.dcsp` files, for the Home screen. Losing it just empties the list; the
+// projects themselves are the `.dcsp` files scattered on disk.
+//
+// Deliberately UNCAPPED: recents doubles as the app's only project REGISTRY —
+// every cross-project sweep (Refresh assets, note-media GC, fetchAllCharacters)
+// reads it as "the projects the app knows about". A cap would silently evict
+// the oldest entry on the next open, dropping that project out of Home AND out
+// of every sweep with no signal to the user. Entries are one path+name each, so
+// the list stays tiny; the explicit "Remove from recents" is the only removal.
 
 export interface RecentProject {
   /** Absolute path to the project's `.dcsp` file. */
@@ -352,8 +359,6 @@ export interface RecentProject {
   name: string
   lastOpenedAt: string
 }
-
-const RECENTS_CAP = 12
 
 async function readRecents(): Promise<Array<RecentProject>> {
   try {
@@ -399,12 +404,10 @@ function mutateRecents(
 /** Record (or bump to the top) a project in the recents list. */
 export async function rememberRecent(path: string, name: string): Promise<void> {
   const key = path.toLowerCase()
-  return mutateRecents((recents) =>
-    [
-      { path, name, lastOpenedAt: new Date().toISOString() },
-      ...recents.filter((r) => r.path.toLowerCase() !== key),
-    ].slice(0, RECENTS_CAP),
-  )
+  return mutateRecents((recents) => [
+    { path, name, lastOpenedAt: new Date().toISOString() },
+    ...recents.filter((r) => r.path.toLowerCase() !== key),
+  ])
 }
 
 /** Drop a project from the recents list (never touches files on disk). */

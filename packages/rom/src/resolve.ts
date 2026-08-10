@@ -67,9 +67,14 @@ export function resolveRomPaths(
   )
   // The mouth companion resolves through the ONE FAC rule (facPresetSupport):
   // no FAC-capable base in the catalog → no mouth, matching the availability chip.
+  // An explicit FAC pick wins, like JCM's — the editor offers the picker for
+  // every preset section, so a selection it stores must be honored here or the
+  // user's pick silently no-ops into the skinning-matched default.
   const facSupport = facPresetSupport(catalog.assets, genesis)
   const resolveMouth = (skinning: DthPoseAsset['skinning']) =>
-    facSupport.mouths.find((a) => a.skinning === skinning) ?? facSupport.mouths[0]
+    facSupport.mouths.find((a) => `${a.name}.duf` === sections.FAC.presetAssets[0]) ??
+    facSupport.mouths.find((a) => a.skinning === skinning) ??
+    facSupport.mouths[0]
 
   if (jcmPreset) {
     const available = catalog.assets.filter((a) => a.section === 'JCM' && forGenesis(a))
@@ -106,7 +111,10 @@ export function resolveRomPaths(
   }
 
   if (physPreset) {
-    const phys = catalog.assets.find((a) => a.section === 'PHY' && forGenesis(a))
+    // Explicit pick wins here too (same rule as JCM/FAC above).
+    const physAssets = catalog.assets.filter((a) => a.section === 'PHY' && forGenesis(a))
+    const phys =
+      physAssets.find((a) => `${a.name}.duf` === sections.PHY.presetAssets[0]) ?? physAssets[0]
     if (phys) paths.phys = join(phys.relPath)
   }
   return paths
@@ -165,9 +173,10 @@ export function presetFramesSignature(character: Character): string {
       sections.JCM.presetAssets,
       sections.JCM.customAssetPath,
     ],
-    // FAC steers which JCM base .duf resolveRomPaths picks (includesFac match).
-    fac: [sections.FAC.enabled, sections.FAC.mode],
+    // FAC steers which JCM base .duf resolveRomPaths picks (includesFac match);
+    // its presetAssets pick the mouth companion, PHY's pick the physics ROM.
+    fac: [sections.FAC.enabled, sections.FAC.mode, sections.FAC.presetAssets],
     gen: [sections.GEN.enabled, sections.GEN.mode, sections.GEN.presetAssets],
-    phy: [sections.PHY.enabled, sections.PHY.mode],
+    phy: [sections.PHY.enabled, sections.PHY.mode, sections.PHY.presetAssets],
   })
 }

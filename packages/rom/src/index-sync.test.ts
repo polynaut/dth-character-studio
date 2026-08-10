@@ -85,6 +85,39 @@ describe('scan-on-export (indexSync)', () => {
     }
   })
 
+  it('the SPLIT Export_ and the groom script scan too (the fixture blind spot)', () => {
+    // The derived loop above only covers what the default fixture emits —
+    // exportWithRomScript stays true there, so the standalone Export_ script
+    // (and the groom script, which needs a hair list) never appeared in it and
+    // their indexSync wiring escaped the very test built to catch new
+    // variants. Pin them explicitly.
+    const files = generateAll(
+      character({
+        exportWithRomScript: false,
+        sceneOverrides: [
+          { scenePath: 'D:/proj/Kira/daz3d/Kira.duf', rom: {}, hair: [{ nodeLabel: 'Kira Hair' }] },
+        ],
+      }),
+      {},
+      FRAMES,
+      'D:/proj/Kira',
+      '2.4.4',
+      undefined,
+      {},
+      {},
+      undefined,
+      '',
+      SYNC,
+    )
+    const byName: Record<string, string> = {}
+    for (const f of files) if (f.fileName.endsWith('.dsa')) byName[f.fileName] = f.content
+    for (const name of ['Export_Kira_G9.dsa', 'Export_Hair_Kira_G9.dsa']) {
+      expect(byName[name], `${name} missing`).toBeDefined()
+      expect(byName[name], name).toContain('.DthScanMorphs.dsa')
+      expect(byName[name], name).toContain('DthScanSceneMorphsQuiet("C:/AppData/dth", dthOpenSceneFile)')
+    }
+  })
+
   it('scans BEFORE the ROM build — the scene is still pristine there', () => {
     // After ApplyDTHCharacter the ROM is dialled onto the figure and the scene
     // has been saved as <stem>_ROM.duf; scanning first is the truest picture of

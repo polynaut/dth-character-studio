@@ -9,6 +9,7 @@ import {
   writeFile,
 } from '@tauri-apps/plugin-fs'
 import { open as shellOpen } from '@tauri-apps/plugin-shell'
+import { isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
 import * as storage from '../storage'
@@ -97,6 +98,9 @@ export class NotesConflictError extends Error {
  */
 export async function saveNotes({ data }: { data: unknown }): Promise<number | null> {
   const { projectId, characterId, text, expectedMtime } = saveNotesInput.parse(data)
+  // Browser build: nothing persists — report "no file" like fetchNotes does,
+  // instead of throwing from the fs plugin on every autosave pause.
+  if (!isTauri()) return null
   const path = await notesPath(projectId, characterId)
   const onDisk = await fileMtime(path)
   if (onDisk !== null && onDisk !== expectedMtime) throw new NotesConflictError()
@@ -274,6 +278,10 @@ export async function addNoteMedia({
   data: unknown
 }): Promise<{ fileName: string; markdown: string }> {
   const { projectId, sourcePath } = addMediaInput.parse(data)
+  // Browser build: native drag-drop (the only source of paths) can't happen
+  // there, but backstop like the neighbours — empty snippet, nothing inserted
+  // (the notes editor skips empty markdown).
+  if (!isTauri()) return { fileName: '', markdown: '' }
   const bytes = await readFile(sourcePath)
   if (bytes.length > 100 * 1024 * 1024) throw new Error('File is larger than 100 MB.')
   const source = basename(sourcePath)

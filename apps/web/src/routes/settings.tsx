@@ -126,7 +126,7 @@ function normalizeProjectSettings(s: ProjectSettings): ProjectSettings {
 
 function SettingsPage() {
   const { settings: initial, project } = Route.useLoaderData()
-  const { tab } = Route.useSearch()
+  const { from, tab } = Route.useSearch()
   const router = useRouter()
   const confirm = useConfirm()
 
@@ -439,11 +439,19 @@ function SettingsPage() {
           assetsEnabled: normalized.assetsEnabled,
           dazProductsEnabled: normalized.dazProductsEnabled,
           charactersSubdir: normalized.charactersSubdir,
+          // Every manifest field the tab edits — the api input DEFAULTS a
+          // missing field, so omitting one here silently resets its stored
+          // value on every save (houdiniPathStyle was reset to 'hip' this way).
+          houdiniPathStyle: normalized.houdiniPathStyle,
         },
       })
       await router.invalidate()
       toast.success('Project settings saved')
     } catch (e) {
+      // A partial characters-folder move rewrites the manifest to MATCH REALITY
+      // before throwing — re-read it here too, or the form baseline (and the
+      // dirty compare) keeps measuring against a manifest that no longer exists.
+      await router.invalidate().catch(() => {})
       toast.error(e instanceof Error ? e.message : String(e))
     } finally {
       setSavingProject(false)
@@ -879,9 +887,19 @@ function SettingsPage() {
       {/* In a project window the Project tab leads (and opens by default) —
           matching the tab order; General/App Data are machine-wide. A `tab`
           search param overrides (guarded: `project` without a project window
-          falls back to the default). */}
+          falls back to the default). CONTROLLED by the param (not defaultValue),
+          the Tools pattern: an uncontrolled Tabs ignores a `?tab=` change once
+          mounted (same route match, no remount), so a deep link into an
+          already-open Settings never switched tabs. onValueChange keeps the URL
+          in sync when the user clicks; `from` rides along untouched. */}
       <Tabs
-        defaultValue={tab && (tab !== 'project' || project) ? tab : project ? 'project' : 'general'}
+        value={tab && (tab !== 'project' || project) ? tab : project ? 'project' : 'general'}
+        onValueChange={(value) =>
+          void router.navigate({
+            to: '/settings',
+            search: { from, tab: value as SettingsTab },
+          })
+        }
         className="max-w-3xl"
       >
         <TabsList>
@@ -919,6 +937,35 @@ function SettingsPage() {
               onSetManually={() => void onSetDazPathsManually()}
             />
           </section>
+
+          {/* The DIM manifests folder is a MACHINE setting (settings.json), but
+              its manual field normally lives on the Project tab (next to the
+              Daz Products toggle it arms). A Home window has no Project tab, so
+              the machine couldn't be configured before any project was open —
+              offer the field here in that case. Hidden when an activated Daz
+              install derives it (the card above already lists it) and in a
+              project window (one editable copy at a time). */}
+          {!project && !dazDerived && (
+            <section className="space-y-2 rounded-lg border bg-card p-5">
+              <h2 className="font-semibold">Daz product scanning</h2>
+              <FolderField
+                label="DAZ Install Manager manifests folder (optional)"
+                value={settings.dimManifestsFolder}
+                placeholder="E:\DAZ 3D\Install Manager\ManifestFiles"
+                onChange={(value) => setSettings((s) => ({ ...s, dimManifestsFolder: value }))}
+                help="Arms the per-export Daz product scan; whether a project SHOWS the results is its own setting (Settings → Project)."
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void onDetectDimFolder()}
+                disabled={detectingDim}
+              >
+                {detectingDim ? 'Detecting…' : 'Detect installed location'}
+              </Button>
+            </section>
+          )}
 
           <section className="space-y-4 rounded-lg border bg-card p-5">
             <HoudiniInstallSection

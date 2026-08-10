@@ -6,11 +6,11 @@ import {
   dataPath,
   findManifestPath,
   getSettings,
-  listCharacters,
   metaImagesDir,
   PROJECT_BEHAVIOR_DEFAULTS,
   rememberRecent,
   saveSettings,
+  scanCharacterLibrary,
   writeManifest,
   type DcspManifest,
 } from './storage'
@@ -24,11 +24,18 @@ import { stripTrailingSeparators } from '#/lib/path.ts'
  * a crash after writing the manifest but before moving avatars would otherwise
  * leave the avatars in app-data, which finalisation then deletes wholesale.
  * Best-effort per avatar.
+ *
+ * Returns whether the character scan was COMPLETE (zero unreadable
+ * definitions). The scan tolerates a torn/corrupt definition by reporting it as
+ * a problem instead of an entry — which means that character's avatar never
+ * reaches this move. Finalisation must therefore not delete the legacy images
+ * dir on an incomplete scan: those avatars are still only there.
  */
-async function moveProjectAvatars(dir: string, imagesDir: string): Promise<void> {
+async function moveProjectAvatars(dir: string, imagesDir: string): Promise<boolean> {
   const dest = metaImagesDir(dir)
   await mkdir(dest, { recursive: true })
-  for (const character of await listCharacters(dir)) {
+  const scan = await scanCharacterLibrary(dir)
+  for (const { character } of scan.entries) {
     const image = character.image
     if (!image || isExternalImage(image)) continue
     const src = `${imagesDir}/${image}`
@@ -42,6 +49,7 @@ async function moveProjectAvatars(dir: string, imagesDir: string): Promise<void>
       // a locked/missing avatar shouldn't fail the project's migration
     }
   }
+  return scan.problems.length === 0
 }
 
 /**
@@ -90,6 +98,10 @@ export async function migrateProjects(): Promise<void> {
   const imagesDir = await dataPath('images')
   let migrated = 0
   let allOk = true
+  // Whether EVERY project's avatar move ran off a complete character scan — an
+  // unreadable definition hides its avatar from the move, so finalisation may
+  // only delete the legacy images dir when nothing was hidden anywhere.
+  let avatarsComplete = true
 
   for (const project of projects) {
     const dir = stripTrailingSeparators(project.path.replace(/\\/g, '/'))
@@ -106,7 +118,7 @@ export async function migrateProjects(): Promise<void> {
       // here — otherwise finalisation would delete app-data/images with those
       // avatars still in it. Then skip; it counts as done.
       if (await findManifestPath(dir)) {
-        await moveProjectAvatars(dir, imagesDir)
+        avatarsComplete = (await moveProjectAvatars(dir, imagesDir)) && avatarsComplete
         continue
       }
       const manifest: DcspManifest = {
@@ -130,7 +142,7 @@ export async function migrateProjects(): Promise<void> {
       await writeManifest(dir, manifest)
       // Move this project's avatars into its `.dcsmeta/images` (the stored `image`
       // is a bare filename). Shared with the already-migrated path above.
-      await moveProjectAvatars(dir, imagesDir)
+      avatarsComplete = (await moveProjectAvatars(dir, imagesDir)) && avatarsComplete
 
       const dcsp = await findManifestPath(dir)
       if (dcsp) await rememberRecent(dcsp, project.name)
@@ -148,10 +160,20 @@ export async function migrateProjects(): Promise<void> {
     } catch {
       // leave it; harmless — the guard above just makes the next run a no-op
     }
-    try {
-      if (await exists(imagesDir)) await remove(imagesDir, { recursive: true })
-    } catch {
-      // ignore — orphaned, unreferenced avatars
+    // The legacy images dir may only go when every project's avatar move saw a
+    // COMPLETE character scan: an unreadable definition never surfaced its
+    // avatar to the move, so deleting the dir would delete that avatar's only
+    // copy. Left in place otherwise — orphaned-at-worst beats gone.
+    if (avatarsComplete) {
+      try {
+        if (await exists(imagesDir)) await remove(imagesDir, { recursive: true })
+      } catch {
+        // ignore — orphaned, unreferenced avatars
+      }
+    } else {
+      console.warn(
+        `[migrate-projects] kept the legacy avatar folder at ${imagesDir} — at least one project had unreadable character definitions, whose avatars may still live only there.`,
+      )
     }
     // Rewrite settings.json without the moved-out behaviour fields (getSettings no
     // longer parses them, so a re-save strips them from disk).

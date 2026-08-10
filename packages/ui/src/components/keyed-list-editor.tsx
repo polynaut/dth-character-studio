@@ -1,4 +1,5 @@
 import { Plus, Trash2 } from 'lucide-react'
+import { useRef } from 'react'
 import type { ReactNode } from 'react'
 
 import { Button } from '../primitives/button.tsx'
@@ -35,8 +36,36 @@ export function KeyedListEditor<T>({
   emptyHint?: ReactNode
   children: (item: T, set: (next: T) => void, index: number) => ReactNode
 }) {
-  const setAt = (index: number, next: T) =>
+  // Stable row identity. Index keys handed a deleted middle row's key — and
+  // with it any transient DOM/focus state — to the row after it. Each item
+  // INSTANCE gets a uid (WeakMap, so removed items just fall away); set()
+  // transfers the uid to the replacement so an edit keeps its key instead of
+  // remounting the row mid-typing. Rows are objects in practice; a primitive
+  // item (no WeakMap identity) falls back to the old index key.
+  const uids = useRef(new WeakMap<object, number>())
+  const nextUid = useRef(0)
+  const keyOf = (item: T, index: number): number | string => {
+    if (typeof item !== 'object' || item === null) return `i${index}`
+    let uid = uids.current.get(item)
+    if (uid === undefined) {
+      uid = nextUid.current++
+      uids.current.set(item, uid)
+    }
+    return uid
+  }
+  const setAt = (index: number, next: T) => {
+    const prev = items[index]
+    if (
+      typeof prev === 'object' &&
+      prev !== null &&
+      typeof next === 'object' &&
+      next !== null &&
+      uids.current.has(prev)
+    ) {
+      uids.current.set(next, uids.current.get(prev)!)
+    }
     onChange(items.map((item, i) => (i === index ? next : item)))
+  }
   const removeAt = (index: number) => onChange(items.filter((_, i) => i !== index))
 
   return (
@@ -49,7 +78,7 @@ export function KeyedListEditor<T>({
         </p>
       ) : (
         items.map((item, index) => (
-          <div key={index} className={rowClassName}>
+          <div key={keyOf(item, index)} className={rowClassName}>
             {children(item, (next) => setAt(index, next), index)}
             {/* A light-red-bordered destructive icon button (like the Export-directory
                 Clear), size-9 to line up with the h-9 row inputs — not a bare glyph. */}

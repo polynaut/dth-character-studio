@@ -188,7 +188,16 @@ fn decode_ref(s: &str) -> String {
     let mut out = Vec::with_capacity(bytes.len());
     let mut i = 0;
     while i < bytes.len() {
-        if bytes[i] == b'%' && i + 2 < bytes.len() {
+        // Hex-validate BOTH bytes BEFORE slicing the str: `%` followed by a
+        // multi-byte UTF-8 char would land `&s[i+1..i+3]` mid-char and panic
+        // ("byte index is not a char boundary") — reachable from any
+        // user-supplied `.duf`. Two ASCII hex digits guarantee the boundaries
+        // (and make the parse infallible); anything else is a literal `%`.
+        if bytes[i] == b'%'
+            && i + 2 < bytes.len()
+            && bytes[i + 1].is_ascii_hexdigit()
+            && bytes[i + 2].is_ascii_hexdigit()
+        {
             if let Ok(byte) = u8::from_str_radix(&s[i + 1..i + 3], 16) {
                 out.push(byte);
                 i += 3;
@@ -423,6 +432,20 @@ mod tests {
         let data = br#"{"scene":{"animations":[]}}"#;
         let out = gunzip_bounded(&gzip(data), Path::new("ok.duf"), 1024).unwrap();
         assert_eq!(out, data);
+    }
+
+    #[test]
+    fn decode_ref_never_panics_on_a_percent_before_a_multibyte_char() {
+        // The old code sliced `&s[i+1..i+3]` before checking the two bytes were
+        // hex — "%€" put the slice end mid-€ (a 3-byte char) and panicked on the
+        // char boundary, through scene_wearables (documented "never throws")
+        // from any user-supplied scene `.duf`. Non-hex after `%` is a literal.
+        assert_eq!(decode_ref("%€"), "%€");
+        assert_eq!(decode_ref("%2€"), "%2€");
+        // The normal encoded path still decodes, `#`-stripped.
+        assert_eq!(decode_ref("#Left%20Nipple%201"), "Left Nipple 1");
+        // A trailing `%` (nothing left to decode) stays literal too.
+        assert_eq!(decode_ref("100%"), "100%");
     }
 
     #[test]

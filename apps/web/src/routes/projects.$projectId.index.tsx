@@ -31,6 +31,7 @@ import {
   copyDazScene,
   createCharacter,
   deleteCharacter,
+  deleteCharacterFolder,
   fetchCharactersWithProblems,
   fetchProject,
   generateCharacterFiles,
@@ -42,7 +43,7 @@ import {
 import { pickDufPath } from '#/lib/desktop.ts'
 import { useFileDrop } from '#/lib/file-drop.ts'
 import { PRIMARY_SCENE_SUBFOLDER } from '#/lib/scene-subfolder.ts'
-import { browseStart, displayPath, normalizePathLower, stripTrailingSeparators } from '#/lib/path.ts'
+import { browseStart, dirOf, displayPath, normalizePathLower, stripTrailingSeparators } from '#/lib/path.ts'
 import { PathCode, tallPathChipClass } from '#/components/path-code.tsx'
 import { HeaderNav } from '#/components/header-nav.tsx'
 import { SceneValidationTable } from '#/components/scene-compat.tsx'
@@ -147,6 +148,13 @@ function ProjectCharactersPage() {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
+  // The unreadable-definition escape hatch: the FOLDER (absolute path) of a scan
+  // problem the user asked to delete; null = no confirm open. A corrupt
+  // definition never reaches the character list, so the ordinary delete flow
+  // can't touch it — this per-problem action can.
+  const [problemDeleteFolder, setProblemDeleteFolder] = useState<string | null>(null)
+  const [problemDeleting, setProblemDeleting] = useState(false)
+  const [problemDeleteError, setProblemDeleteError] = useState('')
   // Whether any character about to be deleted has a Houdini subfolder on disk —
   // gates the bulk-delete dialog's "keep Houdini files" toggle.
   const [keepHoudiniAvailable, setKeepHoudiniAvailable] = useState(false)
@@ -348,7 +356,12 @@ function ProjectCharactersPage() {
         params: { projectId, characterId: character.id },
       })
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      const message = e instanceof Error ? e.message : String(e)
+      setError(message)
+      // The inline error lives INSIDE the panel — Esc-close it during a long
+      // "Copy & Create" and the failure vanishes (reopening resets the panel).
+      // The toast survives the dismissal.
+      toast.error(message)
       // A copy/save failure lands AFTER createCharacter succeeded — the character
       // already exists on disk. Refresh the list so it isn't invisible (and a
       // retry doesn't re-run createCharacter against the leftover folder).
@@ -393,6 +406,29 @@ function ProjectCharactersPage() {
     }
   }, [confirmOpen, projectId, selectedIds])
 
+  // Where the project's character folders live — a scan problem sitting DIRECTLY
+  // at this root has no folder of its own, so the per-problem delete (which
+  // removes a whole folder) is not offered for it.
+  const charactersRootKey = normalizePathLower(
+    project.charactersSubdir ? `${project.path}/${project.charactersSubdir}` : project.path,
+  )
+
+  async function onDeleteProblemFolder() {
+    if (!problemDeleteFolder) return
+    setProblemDeleting(true)
+    setProblemDeleteError('')
+    try {
+      await deleteCharacterFolder({ data: { projectId, folder: problemDeleteFolder } })
+      setProblemDeleteFolder(null)
+      toast.success('Character folder deleted')
+      await router.invalidate()
+    } catch (e) {
+      setProblemDeleteError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setProblemDeleting(false)
+    }
+  }
+
   async function onBulkDelete({ keep, keep2 }: { keep: boolean; keep2: boolean }) {
     setDeleting(true)
     setDeleteError('')
@@ -429,9 +465,16 @@ function ProjectCharactersPage() {
             name={project.name}
             ariaLabel="Project name"
             onSave={async (next) => {
-              await renameProject({ data: { projectId, name: next } })
-              await router.invalidate()
-              toast.success('Project renamed')
+              // renameProject can throw AFTER the rename itself succeeded (the
+              // generated-scripts folder couldn't follow — the message carries
+              // the guidance and EditableTitle toasts it). Invalidate either
+              // way, so the page reflects the name that IS on disk now.
+              try {
+                await renameProject({ data: { projectId, name: next } })
+                toast.success('Project renamed')
+              } finally {
+                await router.invalidate()
+              }
             }}
           />
           <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
@@ -742,11 +785,31 @@ function ProjectCharactersPage() {
                   : `${scanProblems.length} character files could not be read and are not shown:`}
               </p>
               <ul className="mt-1 space-y-0.5 text-muted-foreground">
-                {scanProblems.map((p) => (
-                  <li key={p.path}>
-                    <PathCode path={displayPath(p.path)} /> — {p.reason}
-                  </li>
-                ))}
+                {scanProblems.map((p) => {
+                  const folder = dirOf(p.path)
+                  // A problem file directly at the characters root owns no
+                  // folder — deleting "its" folder would take the library.
+                  const deletable = normalizePathLower(folder) !== charactersRootKey
+                  return (
+                    <li key={p.path} className="flex flex-wrap items-center gap-x-2">
+                      <span>
+                        <PathCode path={displayPath(p.path)} /> — {p.reason}
+                      </span>
+                      {deletable && (
+                        <button
+                          type="button"
+                          className="font-medium text-destructive underline underline-offset-2 hover:opacity-80"
+                          onClick={() => {
+                            setProblemDeleteError('')
+                            setProblemDeleteFolder(folder)
+                          }}
+                        >
+                          Delete character folder…
+                        </button>
+                      )}
+                    </li>
+                  )
+                })}
               </ul>
               {scanProblems.some((p) => p.tooNew) && (
                 <p className="mt-2">
@@ -936,6 +999,27 @@ function ProjectCharactersPage() {
         onDelete={() => setConfirmOpen(true)}
         busy={deleting}
       />
+
+      {problemDeleteFolder && (
+        // The unreadable-definition delete confirm — same dialog family as the
+        // bulk delete below. No keep toggles: nothing in a folder whose
+        // definition can't even be read can be told apart to spare.
+        <BulkDeleteDialog
+          noun="character folder"
+          names={[problemDeleteFolder.split(/[\\/]/).pop() ?? problemDeleteFolder]}
+          message={
+            <>
+              Permanently deletes <PathCode path={displayPath(problemDeleteFolder)} /> with
+              everything inside it — the unreadable definition plus any scenes and files in the
+              folder — and the app data stored for it. This cannot be undone.
+            </>
+          }
+          busy={problemDeleting}
+          error={problemDeleteError || undefined}
+          onConfirm={() => void onDeleteProblemFolder()}
+          onClose={() => setProblemDeleteFolder(null)}
+        />
+      )}
 
       {confirmOpen && (
         <BulkDeleteDialog

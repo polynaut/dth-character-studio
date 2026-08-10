@@ -109,17 +109,23 @@ function HoudiniCard({
       }
       // The scan verdict, pinned bottom-left: a project that will fail when it
       // opens should say so here, not the first time an import comes up empty
-      // in Houdini. Everything it reports is repairable in the Utils drawer.
+      // in Houdini. Everything it reports is repairable in the Utils drawer —
+      // and the badge opens it: it is the card's only always-visible signal,
+      // so it must also be a way in (the wrench alone is hover-only). The card
+      // renders `extra` above its cover button precisely so it can be
+      // interactive.
       extra={
         warning ? (
-          <span
-            className="flex items-center gap-1 text-xs text-amber-500"
+          <button
+            type="button"
+            className="flex items-center gap-1 rounded-sm text-xs text-amber-500 outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
             title={warning}
-            aria-label={`Needs attention: ${warning}`}
+            aria-label={`Needs attention: ${warning} — open the repairs in Utils`}
+            onClick={onUtils}
           >
             <AlertTriangle className="size-3.5 shrink-0" />
             Needs attention
-          </span>
+          </button>
         ) : undefined
       }
       altHeld={altHeld}
@@ -132,7 +138,7 @@ function HoudiniCard({
       onRemove={onRemove}
       removeTitle="Unlink from character"
       onUtils={onUtils}
-      utilsTitle="Utils — copy material setups between projects"
+      utilsTitle="Utils — repairs + copy material setups between projects"
     />
   )
 }
@@ -415,10 +421,13 @@ export function HoudiniProjectsField({
 
   function askRemove(hip: string) {
     setError('')
-    // Default follows WHERE the file is: the studio's own copy goes with the
-    // card (the button reads "Remove"), the user's original never does
-    // ("Unlink"). The toggle overrides either way.
-    setKeepFiles(!managedProject(hip))
+    // Delete always starts OFF, even for the studio's own copy — that copy can
+    // be the ONLY one ("Copy in" offers deleting the original), the delete is
+    // permanent (no recycle bin), and every other surface promises that
+    // removing keeps files. Deleting is opt-in per removal (the confirm button
+    // flips Unlink → Delete when the toggle is on), matching the Daz-scene
+    // dialog, which dropped the same where-the-file-is pre-tick.
+    setKeepFiles(true)
     setPendingRemove(hip)
   }
 
@@ -633,7 +642,10 @@ export function HoudiniProjectsField({
           // user's original — the toggle is shown but locked off, so "you
           // cannot delete this" is visible rather than silently absent.
           deleteFileDisabled={!managedProject(pendingRemove)}
-          deleteLabel="Remove"
+          // The dialog's default "Delete" — same reasoning as the Daz-scene
+          // dialog: with no pre-tick, the confirm must read as deletion exactly
+          // when the toggle says so.
+          deleteLabel="Delete"
           busy={busy}
           error={error}
           onConfirm={() => void confirmRemove()}

@@ -13,13 +13,21 @@ import { ensureNetworkDrives, fetchKnownDrives, forgetNetworkDrive, uncForPath }
 export function NetworkDrivesSection() {
   const [drives, setDrives] = useState<Array<{ drive: string; unc: string; mapped: boolean }>>([])
   const [busy, setBusy] = useState(false)
+  // A failed read must not render as "no drives" (the section silently
+  // vanishes) — it keeps the section visible with an inline error + retry.
+  const [loadError, setLoadError] = useState('')
 
   const load = useCallback(async () => {
-    const known = await fetchKnownDrives()
-    const withStatus = await Promise.all(
-      known.map(async (d) => ({ ...d, mapped: (await uncForPath(d.drive)) !== '' })),
-    )
-    setDrives(withStatus)
+    try {
+      const known = await fetchKnownDrives()
+      const withStatus = await Promise.all(
+        known.map(async (d) => ({ ...d, mapped: (await uncForPath(d.drive)) !== '' })),
+      )
+      setDrives(withStatus)
+      setLoadError('')
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : String(e))
+    }
   }, [])
 
   useEffect(() => {
@@ -29,7 +37,8 @@ export function NetworkDrivesSection() {
   // No detected network drives → render nothing (the parent shows only this, so
   // the whole "Network drives" block — separator, heading and all — disappears).
   // Users who don't use mapped drives shouldn't see an empty, confusing section.
-  if (drives.length === 0) return null
+  // A failed read is NOT "no drives" — that keeps the section up with the error.
+  if (drives.length === 0 && !loadError) return null
 
   async function remap() {
     setBusy(true)
@@ -69,6 +78,14 @@ export function NetworkDrivesSection() {
         </InfoPopup>
       </h2>
       <div className="space-y-3">
+        {loadError && (
+          <div className="flex items-center gap-2 text-sm text-destructive">
+            <span>Couldn&apos;t read the network drives: {loadError}</span>
+            <Button variant="outline" size="xs" className="shrink-0" onClick={() => void load()}>
+              Retry
+            </Button>
+          </div>
+        )}
         <ul className="space-y-2 text-sm">
           {drives.map((d) => (
             <li key={d.drive} className="flex items-center gap-2">

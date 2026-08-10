@@ -131,6 +131,51 @@ async function writeStamps(path: string, stamps: ExecuteStamps): Promise<void> {
   await storage.writeTextFileAtomic(path, JSON.stringify(stamps, null, 2))
 }
 
+/** `daz_studio_running` through the FFI ritual (a primitive return still goes
+ *  through a schema — see api/native-types.ts). `fallback` keeps each call
+ *  site's existing failure bias: "assume running" where clobbering a live batch
+ *  is the risk, "assume closed" where a needless launch is the risk. */
+async function dazStudioRunningNative(fallback: boolean): Promise<boolean> {
+  try {
+    return z.boolean().parse(await invoke('daz_studio_running'))
+  } catch {
+    return fallback
+  }
+}
+
+/** Start a scene-less Daz Studio (its Runner claims the pending job file on
+ *  startup). The command returns the launched exe path — schema-parsed at the
+ *  boundary like every native return, then unused here. */
+async function launchDazSceneless(): Promise<void> {
+  z.string().parse(
+    await invoke('launch_daz_studio', {
+      installFolder: await activeDazInstallFolder(),
+      scenePath: '',
+    }),
+  )
+}
+
+/**
+ * TOCTOU backstop for the single global job file: every handoff writer guards
+ * with "refuse while a pending file exists", but two windows can both pass that
+ * check and the second write then silently clobbers the first's live handoff.
+ * One cheap read-back right after writing decides who actually owns the file —
+ * the write is atomic (write-then-rename), so the read sees one whole file, and
+ * the content identifies the batch (its scene/script paths and row order). The
+ * loser throws the same "someone else's batch" refusal its exists-check would
+ * have thrown a moment earlier. Two windows writing byte-identical batches
+ * can't be told apart — and don't need to be: the batch on disk IS the one
+ * either of them meant.
+ */
+async function assertHandoffOwned(pendingPath: string, written: string): Promise<void> {
+  const onDisk = await readTextFile(pendingPath).catch(() => '')
+  if (onDisk !== written) {
+    throw new Error(
+      'Another window handed Daz Studio a batch at the same moment — let it start (or abort it) first.',
+    )
+  }
+}
+
 /** Absolute paths of the (one, global) job file pair — the pending file the
  *  studio writes and the `running_` one the Runner renames it to. Null when
  *  the desktop app / Daz library aren't available. */
@@ -268,7 +313,11 @@ export async function openSceneInRunningDaz({
     await remove(paths.running).catch(() => {})
   }
 
-  await storage.writeTextFileAtomic(paths.pending, openSceneJobFileJson(scenePath))
+  const jobJson = openSceneJobFileJson(scenePath)
+  await storage.writeTextFileAtomic(paths.pending, jobJson)
+  // Both windows can pass the exists-checks above — the read-back decides who
+  // actually holds the handoff (see assertHandoffOwned).
+  await assertHandoffOwned(paths.pending, jobJson)
   const deadline = Date.now() + OPEN_SCENE_PICKUP_TIMEOUT_MS
   while (Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, OPEN_SCENE_POLL_MS))
@@ -485,7 +534,7 @@ export async function fetchExportRunProgress(watcher?: string): Promise<ExportRu
       // this watch only DETECTS and defers: report 'pending', touch nothing.
       // (Without a modal — Daz died claimed-but-idle on its own — the parked
       // file waits for the next handoff's stale cleanup instead.)
-      const dazRunning = await invoke<boolean>('daz_studio_running').catch(() => true)
+      const dazRunning = await dazStudioRunningNative(true)
       if (!dazRunning) {
         if (isReclaimableBatch(parsed)) {
           return { state: 'pending', characterId: run.characterId, total: run.total }
@@ -829,7 +878,7 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
       // Unreadable or torn: assume a live batch — refusing is the safe guess.
       .catch(() => false)
     if (!finished) {
-      const dazRunning = await invoke<boolean>('daz_studio_running').catch(() => true)
+      const dazRunning = await dazStudioRunningNative(true)
       if (dazRunning) {
         throw new Error('Daz Studio is working through a batch — try again when it finishes.')
       }
@@ -861,7 +910,16 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
   if (mode === 'rom-export') {
     const path = stampsPath(project, location, id)
     const stored = await readStamps(path)
-    const nextStamps: ExecuteStamps = { version: 1, scenes: { ...stored.scenes } }
+    // Carry ONLY the stamps of scenes still linked (same normalization the
+    // stamps are keyed by): unlink after unlink used to accrete dead keys
+    // forever — the store is rewritten wholesale here anyway, and a scene
+    // re-linked later SHOULD read as affected (its stamp dates a link that no
+    // longer existed in between).
+    const linkedKeys = new Set(linked.map(normalizeSceneKey))
+    const nextStamps: ExecuteStamps = { version: 1, scenes: {} }
+    for (const [key, stamp] of Object.entries(stored.scenes)) {
+      if (linkedKeys.has(key)) nextStamps.scenes[key] = stamp
+    }
     for (const scene of scenes) {
       const stamp = stamps.get(scene)
       if (stamp) nextStamps.scenes[normalizeSceneKey(scene)] = stamp
@@ -871,14 +929,11 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
 
   // Start Daz scene-less when it isn't running; a running instance needs
   // nothing — the plugin polls for the job file and picks it up in place.
-  const dazWasRunning = await invoke<boolean>('daz_studio_running').catch(() => false)
+  const dazWasRunning = await dazStudioRunningNative(false)
   let dazLaunched = false
   let dazClosing = false
   if (!dazWasRunning) {
-    await invoke<string>('launch_daz_studio', {
-      installFolder: await activeDazInstallFolder(),
-      scenePath: '',
-    })
+    await launchDazSceneless()
     dazLaunched = true
   } else {
     // A "running" Daz may actually be SHUTTING DOWN — the process lingers a
@@ -921,11 +976,8 @@ export async function launchDazForPendingJobs(): Promise<boolean> {
     // orphaned forever. Take it back.
     if (!(await reclaimOrphanedBatch(paths))) return false
   }
-  if (await invoke<boolean>('daz_studio_running').catch(() => false)) return true
-  await invoke<string>('launch_daz_studio', {
-    installFolder: await activeDazInstallFolder(),
-    scenePath: '',
-  })
+  if (await dazStudioRunningNative(false)) return true
+  await launchDazSceneless()
   return true
 }
 
@@ -1013,14 +1065,15 @@ export async function generateRomAnimation({
     }
     await remove(paths.running).catch(() => {})
   }
-  await storage.writeTextFileAtomic(paths.pending, jobFileJson([{ scenePath: scene, scriptPath }]))
+  const jobJson = jobFileJson([{ scenePath: scene, scriptPath }])
+  await storage.writeTextFileAtomic(paths.pending, jobJson)
+  // Both windows can pass the exists-checks above — the read-back decides who
+  // actually holds the handoff (see assertHandoffOwned).
+  await assertHandoffOwned(paths.pending, jobJson)
   const startedAt = Date.now()
-  const dazWasRunning = await invoke<boolean>('daz_studio_running').catch(() => false)
+  const dazWasRunning = await dazStudioRunningNative(false)
   if (!dazWasRunning) {
-    await invoke<string>('launch_daz_studio', {
-      installFolder: await activeDazInstallFolder(),
-      scenePath: '',
-    })
+    await launchDazSceneless()
   }
   return { romPath: romAnimationPath(scene), dazWasRunning, startedAt }
 }
@@ -1277,7 +1330,11 @@ export async function startProjectScan({ data }: { data: unknown }): Promise<Pro
   // the moment the job file appears, and a row that beat its own config would
   // fail with "not in the scan config" for no reason.
   await storage.writeTextFileAtomic(joinPath(scriptsRoot, SCAN_CONFIG_FILE), scanConfigJson(sceneWork))
-  await storage.writeTextFileAtomic(paths.pending, jobFileJson(jobs))
+  const jobJson = jobFileJson(jobs)
+  await storage.writeTextFileAtomic(paths.pending, jobJson)
+  // Both windows can pass the exists-checks above — the read-back decides who
+  // actually holds the handoff, BEFORE this window arms its watch on it.
+  await assertHandoffOwned(paths.pending, jobJson)
   activeRun = {
     characterId: PROJECT_SCAN_RUN,
     total: jobs.length,
@@ -1287,7 +1344,7 @@ export async function startProjectScan({ data }: { data: unknown }): Promise<Pro
     scenes: sceneWork.map((s) => s.scenePath),
   }
 
-  const dazWasRunning = await invoke<boolean>('daz_studio_running').catch(() => false)
+  const dazWasRunning = await dazStudioRunningNative(false)
   const summary: ProjectScanSummary = {
     rows: jobs.length,
     scenes: sceneWork.length,
@@ -1298,10 +1355,7 @@ export async function startProjectScan({ data }: { data: unknown }): Promise<Pro
   if (!dazWasRunning) {
     // A fresh launch claims the file on startup — no wait (Daz can take long to
     // come up; the panel's pending state covers it, with Abort as the out).
-    await invoke<string>('launch_daz_studio', {
-      installFolder: await activeDazInstallFolder(),
-      scenePath: '',
-    })
+    await launchDazSceneless()
     return summary
   }
   // A "running" Daz may be SHUTTING DOWN (the process lingers, its Runner poller

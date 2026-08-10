@@ -231,6 +231,31 @@ describe('moveCharacterScenesFolder', () => {
     expect(onDisk.updatedAt).toBe(saved.updatedAt)
   })
 
+  it('refuses the Houdini subfolder as the scenes root — exact AND nested spellings', async () => {
+    await storage.createProjectManifest('/games/H', 'H')
+    const c = seedCharacter('/games/H')
+    const before = files.get('/games/H/Kira/Kira.json')
+
+    // Exact: the scenes root would BE the Houdini folder (case-insensitive).
+    await expect(
+      moveCharacterScenesFolder({
+        data: { projectId: '/games/H', character: c, newSubdir: 'Houdini' },
+      }),
+    ).rejects.toThrow(/Houdini folder/)
+    // Nested: normalizeRelFolder allows separators, and "houdini/daz-export"
+    // would land the scenes root exactly ON the derived export root — the
+    // character-delete rails then judge the scenes tree as an export root.
+    await expect(
+      moveCharacterScenesFolder({
+        data: { projectId: '/games/H', character: c, newSubdir: 'houdini/daz-export' },
+      }),
+    ).rejects.toThrow(/Houdini folder/)
+
+    // Nothing moved, nothing saved.
+    expect(files.has('/games/H/Kira/daz3d/Kira.duf')).toBe(true)
+    expect(files.get('/games/H/Kira/Kira.json')).toBe(before)
+  })
+
   it('refuses a scenes folder OUTSIDE the character folder, changing nothing', async () => {
     await storage.createProjectManifest('/games/R', 'R')
     // The primary scene is linked in place from a shared folder outside

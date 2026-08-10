@@ -56,6 +56,7 @@ export {
   characterKeepFolders,
   createCharacter,
   deleteCharacter,
+  deleteCharacterFolder,
   dismissRomRunLog,
   fetchAllCharacters,
   fetchBoneIndex,

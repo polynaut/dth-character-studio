@@ -1038,8 +1038,13 @@ function DthExportDialog({
   const noRomChecked = scenesMissingRomAnimation(mode, status, checked)
   /** The skip-Daz Start gate, {@link noRomChecked}'s sibling: selected scenes
    *  whose last Daz export is not on disk — nothing to rely on. Moot under
-   *  "Export all" (the checked scenes don't scope that run). */
-  const noExportChecked = houdiniMode === 'export-all' ? [] : scenesMissingExport(mode, status, checked)
+   *  "Export all" (the checked scenes don't scope that run) — and under
+   *  "Open only", which consumes no export at all (it just opens the one
+   *  picked `.hip`; see `onExport`). */
+  const noExportChecked =
+    houdiniMode === 'export-all' || houdiniMode === 'open'
+      ? []
+      : scenesMissingExport(mode, status, checked)
   // The probe (one stat per scene) is sub-second; holding Start for it closes
   // the window where a row checked mid-flight could start with unknown state.
   // Both artifact-gated modes wait it out the same way.
@@ -1412,11 +1417,16 @@ function DthExportDialog({
           disabled={
             busy ||
             checking ||
-            // No scenes = nothing to start from, whatever the modes say.
-            checked.size === 0 ||
-            (mode === 'houdini-only'
-              ? checkedHips.size === 0 || noExportChecked.length > 0
-              : !runner || runner.blocked || noRomChecked.length > 0)
+            (mode === 'houdini-only' && houdiniMode === 'open'
+              ? // "Open only" consumes ONLY the Houdini pick (`onExport` opens
+                // `chosenHips[0]` and never reads the Daz-scene selection or
+                // the exports), so neither of those may gate it.
+                checkedHips.size === 0
+              : // No scenes = nothing to start from, whatever the modes say.
+                checked.size === 0 ||
+                (mode === 'houdini-only'
+                  ? checkedHips.size === 0 || noExportChecked.length > 0
+                  : !runner || runner.blocked || noRomChecked.length > 0))
           }
           title={
             mode !== 'houdini-only' && runner?.blocked
@@ -1425,17 +1435,23 @@ function DthExportDialog({
                 ? mode === 'houdini-only'
                   ? 'Checking each scene for a Daz export on disk — a moment'
                   : 'Checking each scene for a saved ROM animation — a moment'
-                : checked.size === 0
-                  ? 'Select at least one Daz scene'
-                  : mode === 'houdini-only'
-                    ? checkedHips.size === 0
-                      ? 'Select at least one Houdini project'
-                      : noExportChecked.length > 0
-                        ? 'Every selected scene needs a Daz export on disk to skip Daz — see above'
+                : mode === 'houdini-only' && houdiniMode === 'open'
+                  ? // Open-only's single requirement — the Daz-scene wording
+                    // below would name a selection this run never reads.
+                    checkedHips.size === 0
+                    ? 'Select the Houdini project to open'
+                    : undefined
+                  : checked.size === 0
+                    ? 'Select at least one Daz scene'
+                    : mode === 'houdini-only'
+                      ? checkedHips.size === 0
+                        ? 'Select at least one Houdini project'
+                        : noExportChecked.length > 0
+                          ? 'Every selected scene needs a Daz export on disk to skip Daz — see above'
+                          : undefined
+                      : noRomChecked.length > 0
+                        ? 'Every selected scene needs a saved ROM animation for an export-only run — see above'
                         : undefined
-                    : noRomChecked.length > 0
-                      ? 'Every selected scene needs a saved ROM animation for an export-only run — see above'
-                      : undefined
           }
           onClick={() => void onExport()}
         >

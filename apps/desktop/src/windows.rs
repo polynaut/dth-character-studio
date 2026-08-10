@@ -324,7 +324,11 @@ pub fn active_project_file(window: tauri::Window, projects: tauri::State<WindowP
 /// live-re-titled to the new name and re-pinned to the new file, so an open
 /// project window's native title bar tracks the rename without being closed
 /// and reopened. A no-op on a case-only rename (the frontend skips the call).
-#[tauri::command]
+// `(async)`: building the keys canonicalizes (up to ~30s on an offline SMB
+// share — see ProjectPathKey); a sync command would pay that on the main thread
+// and freeze every window. The fn stays sync (no await points), so the map
+// mutex guard never crosses a suspension.
+#[tauri::command(async)]
 pub fn sync_renamed_project_window(
     app: tauri::AppHandle,
     projects: tauri::State<WindowProjects>,

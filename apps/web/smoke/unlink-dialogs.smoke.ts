@@ -6,15 +6,18 @@ import { installTauriMock } from './tauri-mock.ts'
 import type { Page } from '@playwright/test'
 
 // The two remove dialogs — a Daz scene and a Houdini project — are one dialog
-// asking one question, and the answer follows WHERE the file is:
+// asking one question. WHERE the file is decides what deletion is ALLOWED,
+// never what is pre-selected:
 //
-//   inside the character folder  → the studio's own copy → default Remove
-//   outside it                   → the user's original   → Unlink only
+//   inside the character folder  → the studio's own copy → deletion offered, OFF
+//   outside it                   → the user's original   → deletion locked off
 //
-// They used to differ in wording AND in polarity (a "Delete file on disk"
-// toggle off-by-default against a "Keep houdini files" toggle on-by-default),
-// which read as two unrelated features. These specs pin the shared shape and
-// the destructive default, because a default that deletes has to be deliberate.
+// Delete always starts unticked: every other surface (the dock tooltip, the
+// replace-primary guidance) promises "the file is kept" on unlink, a scene
+// moved in via "delete original after copying" is the ONLY copy, and there is
+// no recycle bin — a pre-ticked delete destroys exactly the file the user
+// means to keep. The confirm button reads "Delete" only when the box is
+// ticked, so the destructive state is always explicit.
 
 const OUTSIDE_HIP = 'D:/Templates/External.hiplc'
 
@@ -42,19 +45,19 @@ test('both dialogs use the same toggle, in the same direction', async ({ page })
   await houdini.getByRole('button', { name: 'Cancel' }).click()
 })
 
-test('a project inside the character folder defaults to Remove', async ({ page }) => {
+test('a project inside the character folder OFFERS deletion, unticked', async ({ page }) => {
   await openCharacter(page)
   await page.getByRole('button', { name: 'Unlink from character' }).first().click()
 
   const dialog = page.getByRole('dialog', { name: 'Remove Houdini project?' })
-  // The studio's own copy: the switch is ON and the button says what will
-  // happen to the file.
-  await expect(dialog.getByRole('switch')).toBeChecked()
-  await expect(dialog.getByRole('button', { name: 'Remove' })).toBeVisible()
-
-  // Turning it off makes it an unlink, and the button follows.
-  await dialog.getByRole('switch').click()
+  // The studio's own copy: deletion is available but never pre-selected.
+  await expect(dialog.getByRole('switch')).not.toBeChecked()
+  await expect(dialog.getByRole('switch')).toBeEnabled()
   await expect(dialog.getByRole('button', { name: 'Unlink' })).toBeVisible()
+
+  // Ticking it arms the delete, and the button says so.
+  await dialog.getByRole('switch').click()
+  await expect(dialog.getByRole('button', { name: 'Delete' })).toBeVisible()
 })
 
 test('a project linked from outside is unlink-only, and says so', async ({ page }) => {
@@ -90,7 +93,7 @@ test('a project linked from outside is unlink-only, and says so', async ({ page 
   expect(await has(page, OUTSIDE_HIP)).toBe(true)
 })
 
-test('removing a scene inside the folder deletes the file; the toggle keeps it', async ({
+test('the default unlink keeps the file; ticking the toggle deletes it', async ({
   page,
 }) => {
   await openCharacter(page)
@@ -98,10 +101,20 @@ test('removing a scene inside the folder deletes the file; the toggle keeps it',
   // card — the same dialog, the same rules.
   await page.getByRole('button', { name: 'Unlink from character' }).first().click()
   const dialog = page.getByRole('dialog', { name: 'Remove Houdini project?' })
-  await dialog.getByRole('switch').click() // keep the file
+  // No toggle touched: the default answer never destroys the file.
   await dialog.getByRole('button', { name: 'Unlink' }).click()
-
   await expect(dialog).toHaveCount(0)
-  // Unlinked, not deleted — the file the user asked to keep is still there.
   expect(await has(page, P.houdini)).toBe(true)
+
+  // Re-link happens via the seed only — a fresh navigation re-seeds the mock;
+  // walk back in the way openCharacter does and take the DELETE path.
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await expect(page.getByText(/custom ROM frames/)).toBeVisible()
+  await page.getByRole('button', { name: 'Unlink from character' }).first().click()
+  const again = page.getByRole('dialog', { name: 'Remove Houdini project?' })
+  await again.getByRole('switch').click() // arm the delete
+  await again.getByRole('button', { name: 'Delete' }).click()
+  await expect(again).toHaveCount(0)
+  expect(await has(page, P.houdini)).toBe(false)
 })

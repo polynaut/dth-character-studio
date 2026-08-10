@@ -412,7 +412,12 @@ export async function findCharacterAcrossProjects(id: string): Promise<Character
  * costs one `exists()` instead of two full library walks.
  */
 export async function saveCharacter(
-  project: Project,
+  /** `houdiniSubdir` rides along when the caller already resolved the manifest
+   *  (every api-layer save passes a full ProjectInfo) — it anchors the derived
+   *  export root, and having it here avoids a second manifest read whose
+   *  transient failure would otherwise be indistinguishable from "no Houdini
+   *  subfolder configured". */
+  project: Project & { houdiniSubdir?: string },
   character: Character,
   charactersRoot?: string,
   /** The character's already-resolved entry (skips the full library scan) —
@@ -540,10 +545,18 @@ export async function saveCharacter(
   // carry a hand-picked path) migrate the first time they're written — the
   // Case C pattern, the same way Refresh assets persists other host-resolved
   // values. Only for a character that owns a folder: see characterExportRoot.
-  const houdiniSubdir = relFolder
-    ? await readManifest(project.path)
+  // Prefer the subdir the caller already resolved; the manifest read is a
+  // fallback for storage-level callers. A FAILED read is not "no Houdini
+  // subfolder configured" — the same save just read the manifest fine in
+  // resolveProject, so this is a transient blip (an unreachable share, a locked
+  // file), and deriving with `undefined` would silently repoint the export root
+  // to `<char>/daz-export` and set up a pointless file migration on the next
+  // healthy save. `null` = unknown → leave `exportPath` exactly as stored.
+  const houdiniSubdir: string | null | undefined = relFolder
+    ? (project.houdiniSubdir ??
+      (await readManifest(project.path)
         .then((m) => m.houdiniSubdir)
-        .catch(() => undefined)
+        .catch(() => null)))
     : undefined
   // Anchored on the project's HOUDINI subfolder — where the export root moved
   // to, as `daz-export`. Plain, not per-character: the Daz side
@@ -552,12 +565,13 @@ export async function saveCharacter(
   // half-undid itself, this save pointing `exportPath` back at the vanished
   // `daz3d/dth-exports`. The Houdini folder has no such per-character rename, so
   // the manifest value is the whole answer.
-  const finalStamped = relFolder
-    ? {
-        ...repointed,
-        exportPath: characterExportRoot(finalFolderAbs, houdiniSubdir),
-      }
-    : repointed
+  const finalStamped =
+    relFolder && houdiniSubdir !== null
+      ? {
+          ...repointed,
+          exportPath: characterExportRoot(finalFolderAbs, houdiniSubdir),
+        }
+      : repointed
 
   await writeTextFileAtomic(definitionAbs, JSON.stringify(finalStamped, null, 2) + '\n')
   return {

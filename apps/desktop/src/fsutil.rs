@@ -246,13 +246,6 @@ pub(crate) fn path_contains(outer: &Path, inner: &Path) -> bool {
     i.len() >= o.len() && o.iter().zip(&i).all(|(a, b)| a == b)
 }
 
-/// The path the recursive-delete rails should judge: the CANONICAL form when the
-/// target exists — so a `..`-laden spelling or a junction/symlink can't dress a
-/// dangerous target (a drive root, a profile folder) up as a safe-looking one —
-/// and the raw path when it doesn't (missing targets keep their existing
-/// "not found" handling). Segment counting still works on the canonical form:
-/// the Windows `\\?\` verbatim prefix is a `Prefix`/`RootDir` component, never a
-/// `Normal` one, so it adds no phantom segments.
 /// Move `src` to `dst`, falling back to copy-then-delete when a plain rename
 /// fails (a different volume). `Ok` means it was FULLY moved; `Err` carries why
 /// it wasn't AND what state it was left in — silence here used to hide half-done
@@ -295,9 +288,31 @@ pub(crate) fn move_tree(src: &Path, dst: &Path) -> Result<(), String> {
     if fs::rename(src, dst).is_ok() {
         return Ok(());
     }
-    // Cross-drive fallback: copy, then delete the source.
+    // A rename can also fail because `dst` EXISTS (Windows refuses dir-over-dir
+    // renames) — e.g. a concurrent writer claimed it between the caller's own
+    // existence check and now. Never merge into it: refuse while both trees are
+    // still untouched.
+    if dst.exists() {
+        return Err(format!(
+            "{} already exists — refusing to merge into it",
+            dst.display()
+        ));
+    }
+    // Cross-drive fallback: copy into a STAGING sibling of `dst`, then rename
+    // into place, then delete the source. Copying straight into `dst` had two
+    // holes this closes: a destination appearing mid-copy was silently MERGED
+    // into (`copy_dir` overwrites), and the failed-copy rollback then deleted
+    // that pre-existing content along with the partial copy. The staging path
+    // is ours by construction — deterministic, so a leftover from an
+    // interrupted attempt is reclaimed by the retry instead of poisoning `dst`.
+    let tmp = staging_sibling(dst)?;
+    if tmp.exists() {
+        let cleared =
+            if tmp.is_dir() { fs::remove_dir_all(&tmp) } else { fs::remove_file(&tmp) };
+        cleared.map_err(|e| format!("clear stale staging copy {}: {e}", tmp.display()))?;
+    }
     let copied: Result<(), String> = if is_dir {
-        match copy_dir(src, dst) {
+        match copy_dir(src, &tmp) {
             // A dir link inside is never followed while copying, so a copy-based
             // move would silently drop it — refuse rather than lose the link.
             Ok(stats) if stats.skipped_links > 0 => Err(format!(
@@ -308,18 +323,39 @@ pub(crate) fn move_tree(src: &Path, dst: &Path) -> Result<(), String> {
             Err(e) => Err(e.to_string()),
         }
     } else {
-        fs::copy(src, dst).map(|_| ()).map_err(|e| e.to_string())
+        fs::copy(src, &tmp).map(|_| ()).map_err(|e| e.to_string())
     };
     if let Err(reason) = copied {
-        // The COPY failed — `dst` is partial/garbage. Roll it back so a caller's
-        // name-collision loop doesn't mint " (1)" duplicates from it. The source
-        // is untouched, so nothing is lost.
+        // The COPY failed — the staging copy is partial/garbage and OURS alone;
+        // dropping it can never touch pre-existing destination content. The
+        // source is untouched, so nothing is lost.
         if is_dir {
-            let _ = fs::remove_dir_all(dst);
+            let _ = fs::remove_dir_all(&tmp);
         } else {
-            let _ = fs::remove_file(dst);
+            let _ = fs::remove_file(&tmp);
         }
         return Err(format!("copy failed: {reason}"));
+    }
+    // Staged completely — move it into place. A dir-over-dir rename fails on
+    // Windows, which IS the no-merge guarantee for the racy window; files need
+    // the explicit check (rename would silently replace an existing file).
+    if !is_dir && dst.exists() {
+        let _ = fs::remove_file(&tmp);
+        return Err(format!(
+            "{} already exists — refusing to replace it",
+            dst.display()
+        ));
+    }
+    if let Err(e) = fs::rename(&tmp, dst) {
+        let staged_note = match if is_dir { fs::remove_dir_all(&tmp) } else { fs::remove_file(&tmp) }
+        {
+            Ok(()) => String::new(),
+            Err(c) => format!(" (a complete staging copy is left at {}: {c})", tmp.display()),
+        };
+        return Err(format!(
+            "couldn't move the staged copy into {}: {e} — the source is untouched{staged_note}",
+            dst.display()
+        ));
     }
     // Copy succeeded — `dst` is now a COMPLETE copy. Delete the source. If that
     // fails (e.g. an app holds a file open, so `remove_dir_all` deletes some
@@ -337,8 +373,28 @@ pub(crate) fn move_tree(src: &Path, dst: &Path) -> Result<(), String> {
     })
 }
 
+/// The path the recursive-delete rails should judge: the CANONICAL form when the
+/// target exists — so a `..`-laden spelling or a junction/symlink can't dress a
+/// dangerous target (a drive root, a profile folder) up as a safe-looking one —
+/// and the raw path when it doesn't (missing targets keep their existing
+/// "not found" handling). Segment counting still works on the canonical form:
+/// the Windows `\\?\` verbatim prefix is a `Prefix`/`RootDir` component, never a
+/// `Normal` one, so it adds no phantom segments.
 pub(crate) fn rail_target(path: &Path) -> PathBuf {
     fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+}
+
+/// The staging path {@link move_tree}'s cross-drive fallback copies into before
+/// renaming into place: a sibling of `dst` with a suffix no user folder uses.
+/// Deterministic on purpose — an interrupted attempt's leftover is reclaimed by
+/// the retry of the same move.
+fn staging_sibling(dst: &Path) -> Result<PathBuf, String> {
+    let name = dst
+        .file_name()
+        .ok_or_else(|| format!("no file name in {}", dst.display()))?;
+    let mut staged = name.to_os_string();
+    staged.push(".dth-moving");
+    Ok(dst.with_file_name(staged))
 }
 
 /// Number of files (recursively) under `dir`; 0 when it can't be read. Does not

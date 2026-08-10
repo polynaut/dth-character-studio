@@ -30,6 +30,11 @@ const TARGET: u32 = 768;
 /// master rebuild (Ctrl+Refresh assets) — stored masters are flattened onto it.
 const TILE_BG: [u8; 3] = [0x26, 0x26, 0x26];
 
+/// Input-pixel cap for the upscale path: xBRZ magnifies up to ×6 per side, so a
+/// degenerate PNG (e.g. 500×100000) would balloon into multi-GB buffers — any
+/// real avatar source sits far below 4096².
+const MAX_UPSCALE_INPUT_PIXELS: u64 = 4096 * 4096;
+
 /// Composite `src` over {@link TILE_BG} into an opaque image. A tip's hard
 /// transparent edge is a discontinuity every magnifier turns into jaggies;
 /// flattening onto the exact background it'll be shown on FIRST makes that edge a
@@ -57,7 +62,9 @@ fn flatten_on_tile_bg(src: &RgbaImage) -> RgbaImage {
 /// Failures return an error string; the caller (writeAvatarBytes) treats any
 /// failure as "keep the original image", so a bad upscale never blocks setting an
 /// avatar.
-#[tauri::command]
+// `(async)`: PNG decode + xBRZ ×6 supersample + Lanczos are seconds of CPU — a
+// sync command would burn them on the main thread and freeze every window.
+#[tauri::command(async)]
 pub fn upscale_avatar_file(path: String) -> Result<bool, String> {
     upscale_png_to_square(Path::new(&path), TARGET)
 }
@@ -72,6 +79,14 @@ fn upscale_png_to_square(p: &Path, target: u32) -> Result<bool, String> {
     let (w, h) = (rgba.width(), rgba.height());
     if w >= target && h >= target {
         return Ok(false);
+    }
+    // The magnification buffers scale with w×h×factor² — refuse a degenerate
+    // input before committing to them (the caller keeps the original image).
+    if u64::from(w) * u64::from(h) > MAX_UPSCALE_INPUT_PIXELS {
+        return Err(format!(
+            "refusing to upscale {}: {w}×{h} exceeds the {MAX_UPSCALE_INPUT_PIXELS}-pixel input cap",
+            p.display()
+        ));
     }
     // Flatten onto the tile bg BEFORE magnifying — the tip's transparent edge is a
     // discontinuity magnifiers jag (see flatten_on_tile_bg). Marginal for xBRZ (it's
@@ -107,7 +122,9 @@ fn upscale_png_to_square(p: &Path, target: u32) -> Result<bool, String> {
 /// edges come out anti-aliased. A source already ≤ `size` on both sides is
 /// returned unchanged (never upscaled — xBRZ did any upscaling on write). Raw
 /// bytes (an ArrayBuffer to the webview), not a JSON number array.
-#[tauri::command]
+// `(async)`: decoding + Lanczos-resampling a 768² master is real CPU work — off
+// the main thread like the upscale.
+#[tauri::command(async)]
 pub fn downscale_avatar_png(path: String, size: u32) -> Result<Response, String> {
     Ok(Response::new(downscale_png_bytes(Path::new(&path), size)?))
 }

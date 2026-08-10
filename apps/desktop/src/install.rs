@@ -150,7 +150,14 @@ fn install_contents(label: &str, src_dir: &Path, dst_dir: &Path, dry: bool) -> I
     }
     let mut files = 0u64;
     let mut skipped_links = 0u64;
-    for entry in entries.flatten() {
+    for entry in entries {
+        // An erroring entry is a hard error, never a silent skip — `flatten()`
+        // here installed a SUBSET of a partially-listable folder and reported
+        // ok, inconsistent with copy_dir (unreadable → hard error).
+        let entry = match entry {
+            Ok(e) => e,
+            Err(e) => return step_err(label, io_detail(&src_dir.display().to_string(), &e)),
+        };
         let from = entry.path();
         let to = dst_dir.join(entry.file_name());
         if dry {
@@ -183,20 +190,34 @@ fn install_plugin_dlls(label: &str, exporter_folder: &Path, daz_install: &Path, 
     if !exporter_folder.exists() {
         return step_skip(label, format!("exporter folder not found ({})", exporter_folder.display()));
     }
-    let dlls: Vec<std::path::PathBuf> = match fs::read_dir(exporter_folder) {
-        Ok(entries) => entries
-            .flatten()
-            .map(|e| e.path())
-            .filter(|p| {
-                p.is_file()
-                    && p.extension()
-                        .and_then(|s| s.to_str())
-                        .map(|s| s.eq_ignore_ascii_case("dll"))
-                        .unwrap_or(false)
-            })
-            .collect(),
+    // An erroring entry is a hard error, never a silent drop — same posture as
+    // install_contents: a partially-listable folder installing a subset of the
+    // plugin DLLs while reporting ok is exactly the invisible-failure class the
+    // install report exists to prevent.
+    let mut dlls: Vec<std::path::PathBuf> = Vec::new();
+    match fs::read_dir(exporter_folder) {
+        Ok(entries) => {
+            for entry in entries {
+                match entry {
+                    Ok(e) => dlls.push(e.path()),
+                    Err(e) => {
+                        return step_err(
+                            label,
+                            io_detail(&exporter_folder.display().to_string(), &e),
+                        )
+                    }
+                }
+            }
+        }
         Err(e) => return step_err(label, e.to_string()),
-    };
+    }
+    dlls.retain(|p| {
+        p.is_file()
+            && p.extension()
+                .and_then(|s| s.to_str())
+                .map(|s| s.eq_ignore_ascii_case("dll"))
+                .unwrap_or(false)
+    });
     if dlls.is_empty() {
         return step_skip(label, "no .dll files in the exporter folder".into());
     }

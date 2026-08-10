@@ -73,7 +73,8 @@ export async function writeAvatarBytes(
   // like the fs writes above.
   if (isTauri()) {
     try {
-      const upscaled = await invoke<boolean>('upscale_avatar_file', { path: filePath })
+      // A primitive return — z.boolean, not a bare invoke<T>() cast (no fixture).
+      const upscaled = z.boolean().parse(await invoke('upscale_avatar_file', { path: filePath }))
       // The upscale REPLACED the pristine bytes — keep them as a `.src` sibling.
       // For an UPLOAD it's the only copy of the user's original; for a SCENE
       // avatar it's the avatar-sync STALENESS REFERENCE: sync decides "did the
@@ -324,7 +325,11 @@ export async function resolveImageSrcAtSize(image: string, sizePx: number): Prom
   if (cached) return cached
   try {
     const path = joinPath(storage.metaImagesDir(projectDir), image)
-    const buf = await invoke<ArrayBuffer>('downscale_avatar_png', { path, size: sizePx })
+    // Binary return — still parsed at the boundary (an unexpected shape falls
+    // into the catch below, i.e. the full-image fallback), not a bare cast.
+    const buf = z.instanceof(ArrayBuffer).parse(
+      await invoke('downscale_avatar_png', { path, size: sizePx }),
+    )
     const url = imageDataUrl(new Uint8Array(buf), image)
     variantSrcCache.set(key, url)
     return url
@@ -346,7 +351,8 @@ export async function upscaleStoredAvatar(projectDir: string, image: string): Pr
   if (!image || isExternalImage(image) || !isTauri()) return false
   try {
     const path = joinPath(storage.metaImagesDir(projectDir), image)
-    return (await invoke<boolean>('upscale_avatar_file', { path })) === true
+    // A primitive return — z.boolean, not a bare invoke<T>() cast (no fixture).
+    return z.boolean().parse(await invoke('upscale_avatar_file', { path }))
   } catch {
     return false
   }
@@ -400,7 +406,9 @@ export async function rebuildAvatarMaster(
     const previous = await readFile(path)
     await writeFile(path, pristine)
     try {
-      await invoke('upscale_avatar_file', { path })
+      // Return value unused (the rebuild proceeds either way an in-place
+      // upscale reports), but still schema-parsed at the boundary.
+      z.boolean().parse(await invoke('upscale_avatar_file', { path }))
     } catch (e) {
       await writeFile(path, previous)
       console.warn('avatar rebuild failed; restored the previous master', e)

@@ -289,11 +289,15 @@ describe('project manifest (.dcsp)', () => {
 })
 
 describe('recent projects', () => {
-  it('is newest-first, de-duplicates, and caps at 12', async () => {
+  it('is newest-first, de-duplicates, and never evicts (recents IS the registry)', async () => {
     for (let i = 0; i < 15; i++) await storage.rememberRecent(`/p/${i}/P${i}.dcsp`, `P${i}`)
     const r = await storage.listRecents()
-    expect(r.length).toBe(12)
+    // No cap: recents doubles as the app's only project registry — an evicted
+    // entry would silently drop that project out of Home AND out of every
+    // cross-project sweep. The oldest open must survive any number of newer ones.
+    expect(r.length).toBe(15)
     expect(r[0].path).toBe('/p/14/P14.dcsp')
+    expect(r[14].path).toBe('/p/0/P0.dcsp')
 
     await storage.rememberRecent('/p/14/P14.dcsp', 'P14')
     const r2 = await storage.listRecents()

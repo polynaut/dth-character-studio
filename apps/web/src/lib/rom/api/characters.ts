@@ -1,4 +1,5 @@
 import { exists, mkdir, readDir, readFile, readTextFile, remove, stat } from '@tauri-apps/plugin-fs'
+import { isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
 import { withBusyCursor } from '../../busy-cursor.ts'
@@ -29,7 +30,7 @@ import {
   romSectionSchema,
 } from '@dth/rom'
 import { fillSectionsFrom, filledSections } from '#/lib/fill-sections.ts'
-import { normalizePath, normalizePathLower, parentDir } from '#/lib/path.ts'
+import { hasParentTraversal, normalizePath, normalizePathLower, parentDir } from '#/lib/path.ts'
 import {
   cacheCharacterLocation,
   characterLocationCache,
@@ -460,8 +461,15 @@ export async function deleteCharacter({ data }: { data: unknown }): Promise<void
       const leaf = normalizePathLower(p).split('/').pop() ?? ''
       return leaf === EXPORTS_FOLDER.toLowerCase() || leaf === LEGACY_EXPORTS_FOLDER.toLowerCase()
     }
+    // `..` refused outright: the containment below is a plain prefix compare,
+    // and `<char>/houdini/../../../X/daz-export` passes BOTH tests while
+    // resolving outside the character folder. `exportPath` is user data for any
+    // character not saved since v29 — exactly the poisoned-input class the
+    // Rust delete rails canonicalize against, and this delete never reaches
+    // Rust (it goes through the fs plugin).
     const deletable = (p: string) =>
       p.trim() !== '' &&
+      !hasParentTraversal(p) &&
       normalizePathLower(p).startsWith(normalizePathLower(location.folderAbs) + '/') &&
       looksLikeExportRoot(p)
     // Deduped by a case-folded KEY while keeping the original spelling: the two
@@ -523,6 +531,71 @@ export async function deleteCharacter({ data }: { data: unknown }): Promise<void
   }
 }
 
+const deleteCharacterFolderInput = z.object({
+  projectId: z.string().min(1),
+  /** Absolute path of the folder to delete — derived by the caller from an
+   *  unreadable definition's path (the scan problem's `path`'s directory). */
+  folder: z.string().min(1),
+})
+
+/**
+ * Delete a character FOLDER whose definition can't be read — the escape hatch
+ * for a corrupt/too-new definition: the scan reports it as a problem instead of
+ * an entry, so {@link deleteCharacter} (which resolves by id) can never reach
+ * it and the broken folder is undeletable through the app.
+ *
+ * Tightly bounded, because the input is a raw path rather than a resolved
+ * character: `..` is refused outright (the containment below is a plain prefix
+ * compare — see the deleteCharacter rails), the target must sit INSIDE the
+ * project's characters root, and it must not BE the root (a loose corrupt
+ * definition AT the root has no folder of its own to delete — removing "its"
+ * folder would take the whole library). The same lock gate as every other
+ * folder-removing operation runs first, so a file open in Daz/Houdini aborts
+ * before anything is touched. The folder's meta dir (keyed by its
+ * library-relative path) goes with it, best-effort.
+ */
+export async function deleteCharacterFolder({ data }: { data: unknown }): Promise<void> {
+  const { projectId, folder } = deleteCharacterFolderInput.parse(data)
+  if (hasParentTraversal(folder)) {
+    throw new Error('Refusing to delete — the folder path contains a parent (“..”) segment.')
+  }
+  const project = await resolveProject(projectId)
+  const root = normalizePath(charsRoot(project))
+  const target = normalizePath(folder)
+  if (!normalizePathLower(target).startsWith(normalizePathLower(root) + '/')) {
+    throw new Error('Refusing to delete — the folder is not inside the project’s characters folder.')
+  }
+  // The folder can hold MORE than the corrupt definition: grouping layouts nest
+  // character folders, and a corrupt json can sit in a folder that also carries
+  // live characters below it. Deleting would take them along — refuse, named.
+  const scan = await storage.scanCharacterLibrary(root)
+  const targetKey = normalizePathLower(target)
+  const live = scan.entries.filter((e) =>
+    normalizePathLower(e.location.definitionAbs).startsWith(`${targetKey}/`),
+  )
+  if (live.length > 0) {
+    throw new Error(
+      `Refusing to delete — the folder also contains ${live.length} readable character${
+        live.length === 1 ? '' : 's'
+      } (${live.map((e) => e.character.name).join(', ')}). Move or delete those first.`,
+    )
+  }
+  await assertMovable(target)
+  invalidateCharacterLocations()
+  await withBusyCursor(remove(target, { recursive: true }))
+  // Its meta dir (run log, stamps, export record) is keyed by the folder's
+  // library-relative path — orphaned the moment the folder is gone. The id
+  // fallback key can't apply here: a root-level definition never reaches this
+  // function (the root guard above), so relFolder is always non-empty.
+  try {
+    const relFolder = target.slice(root.length + 1)
+    const metaDir = storage.characterMetaDir(project.path, relFolder, '')
+    if (await exists(metaDir)) await remove(metaDir, { recursive: true })
+  } catch {
+    // an orphaned meta dir is what the housekeeping orphan sweep cleans up
+  }
+}
+
 /**
  * Which keepable subfolders (the configured Daz / Houdini subdirs) actually exist
  * inside a character's folder — so the delete dialog only offers to keep what's
@@ -562,6 +635,9 @@ const csvImportInput = z.object({ filePath: z.string().min(1) })
  */
 export async function importPosesFromCsv({ data }: { data: unknown }): Promise<Array<ImportedPose>> {
   const { filePath } = csvImportInput.parse(data)
+  // Browser build: no file to read — an empty import ("No morphs found") beats
+  // an unhandled fs-plugin throw, matching how the pickers no-op there.
+  if (!isTauri()) return []
   return posesFromDazCsv(await readTextFile(filePath))
 }
 
@@ -686,6 +762,25 @@ export async function moveCharacterScenesFolder({
   const oldDir = `${charFolder}/${deriveScenesRootRel(primaryRel, project.dazSubdir)}`
   const rel = normalizeRelFolder(newSubdir) // separators, no '..' / absolute / illegal chars
   if (!rel) throw new Error('Enter a subfolder name.')
+  // The project's Houdini subfolder anchors every character's DERIVED export
+  // root (`<char>/<houdiniSubdir>/daz-export`). Renaming the scenes root TO
+  // that name succeeds whenever the character has no Houdini folder yet — and
+  // from then on the export root derives INSIDE the scenes root, scenes and
+  // gigabytes of exports fighting over one tree. NESTED spellings are refused
+  // too (normalizeRelFolder allows separators): "houdini/daz-export" would
+  // land the scenes root exactly ON the derived export root, which the
+  // character-delete rails judge deletable by leaf name — the scenes tree
+  // would read as an export root. The UI's reserved-name check
+  // (sceneSubfolderConflict) covers scene SUBFOLDERS only, so this is the
+  // api-level backstop for the root itself. Case-insensitive like every other
+  // path compare (Windows).
+  const houdiniKey = normalizePathLower(project.houdiniSubdir)
+  const relKey = normalizePathLower(rel)
+  if (relKey === houdiniKey || relKey.startsWith(`${houdiniKey}/`)) {
+    throw new Error(
+      `"${project.houdiniSubdir}" is the project's Houdini folder — the character's export root lives inside it. Pick a scenes folder name outside it.`,
+    )
+  }
   const newDir = `${charFolder}/${rel}`
   let next = character
   if (normalizePathLower(newDir) !== normalizePathLower(oldDir)) {

@@ -614,7 +614,12 @@ export async function fetchHoudiniRunProgress(): Promise<
     // "no file yet" and let the liveness check decide whether to keep waiting
     result = null
   }
-  const houdiniUp = await invoke<boolean>('houdini_running').catch(() => true)
+  // A primitive return — z.boolean, not a bare invoke<T>() cast (no fixture
+  // needed); a parse failure reads as "can't tell" = keep waiting, like an
+  // invoke failure always has.
+  const houdiniUp = await invoke('houdini_running')
+    .then((up) => z.boolean().parse(up))
+    .catch(() => true)
   const state = houdiniRunStateFrom(result, houdiniUp)
   if (state.state === 'finished' || state.state === 'dead') {
     if (activeHoudiniRun === run) activeHoudiniRun = null

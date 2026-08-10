@@ -19,10 +19,16 @@ export type UpdatePromptRequest = {
    *  user is catching up across several versions. */
   skipped?: Array<{ version: string; url: string }>
   /**
-   * Download + install + relaunch. On success the process exits, so this never
-   * resolves; a rejection means the update failed and the dialog surfaces it.
+   * Download + install (NO relaunch — that's {@link relaunch}). Resolves once
+   * the update is fully installed; a rejection means it failed. Split from the
+   * relaunch so the dialog can be HIDDEN during a long download: a hidden
+   * dialog must not yank the app away on completion — it toasts "restart to
+   * apply" instead, and only a visible dialog relaunches automatically.
    */
   install: () => Promise<void>
+  /** Restart the app into the installed update (the process exits — never
+   *  resolves on success). */
+  relaunch: () => Promise<void>
 }
 
 import { compareDthVersions } from '@dth/rom'
