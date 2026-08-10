@@ -1139,3 +1139,17 @@ spec can seed an mtime-keyed cache entry that reads as fresh.
 The wider lesson: three fixes were aimed at plausible causes before anyone dumped
 the drawer's own text, which had the error string in it the whole time. When a UI
 assertion fails, print what the UI actually says before theorising.
+- **A figure's source asset is on the OBJECT, not reliably on the node — and in
+  Daz Studio 4 the node answers nothing.** `node.getAssetUri()` returns a usable
+  path in DS6 and empty in DS4, which silently disabled every generation
+  detection built on it: the scene morph scan skipped all of DS4 with "No
+  Genesis 3, 8, 8.1 or 9 figure could be found" while the same run keyed morphs
+  on `Genesis8_1Female` seven seconds later (measured 2026-08-10). The identity
+  is reachable — the product scan had always walked node → `getObject()` →
+  `getCurrentShape()` → `getGeometry()` and resolves assets fine in DS4 — so
+  `dthNodeAssetPath` (DthUtils, runtime v68) does the same walk, plus
+  `getAssetFileInfo()` where `getAssetUri()` is absent. Two lessons: an
+  identity probe gets the WHOLE chain, never one accessor; and a detection that
+  can fail needs a fallback the caller can supply (the studio passes the
+  character's declared generation), because "we could not read it" and "it is
+  not there" are different answers that had been collapsed into one message.

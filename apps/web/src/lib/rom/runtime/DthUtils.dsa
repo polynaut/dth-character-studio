@@ -1009,17 +1009,75 @@ function dthGenerationAssetFiles(sGenesis){
 	return null;
 }
 
-/** The node's source-asset file path, lowercased ('' when unreadable —
- *  guarded, so an API difference degrades instead of erroring). */
-function dthNodeAssetPath(oNode){
+/**
+ * The source-asset file path of ONE element, lowercased ('' when unreadable).
+ * Every probe is feature-detected, so a Studio without one degrades to the next
+ * instead of erroring.
+ */
+function dthElementAssetPath(oEl){
+	if (!oEl) return "";
 	try {
-		if (oNode && typeof oNode.getAssetUri == "function") {
-			var oUri = oNode.getAssetUri();
-			if (oUri && typeof oUri.getFilePath == "function") return String(oUri.getFilePath()).toLowerCase();
-			if (oUri) return String(oUri).toLowerCase();
+		if (typeof oEl.getAssetUri == "function") {
+			var oUri = oEl.getAssetUri();
+			if (oUri) {
+				if (typeof oUri.getFilePath == "function") {
+					var sFp = String(oUri.getFilePath());
+					if (sFp) return sFp.toLowerCase();
+				}
+				var sUri = String(oUri);
+				if (sUri) return sUri.toLowerCase();
+			}
 		}
-		if (oNode && oNode.assetUri != undefined) return String(oNode.assetUri).toLowerCase();
-	} catch (e) { /* fall through */ }
+	} catch (e1) { /* next probe */ }
+	try {
+		if (typeof oEl.getAssetFileInfo == "function") {
+			var oInfo = oEl.getAssetFileInfo();
+			if (oInfo && typeof oInfo.getFilePath == "function") {
+				var sPath = String(oInfo.getFilePath());
+				if (sPath) return sPath.toLowerCase();
+			}
+		}
+	} catch (e2) { /* next probe */ }
+	try {
+		if (oEl.assetUri != undefined) {
+			var sProp = String(oEl.assetUri);
+			if (sProp) return sProp.toLowerCase();
+		}
+	} catch (e3) { /* give up */ }
+	return "";
+}
+
+/**
+ * The node's source-asset file path, lowercased ('' when unreadable).
+ *
+ * **The asset rides on the OBJECT, not always on the node.** Asking the node
+ * alone is what made generation detection fail outright in Daz Studio 4 — the
+ * scene morph scan then reported "no Genesis figure could be found" about a
+ * figure the same run was keying morphs on (measured 2026-08-10 on a G8.1
+ * scene). The product scan has always walked deeper, and demonstrably resolves
+ * assets in DS4; this is that same walk: node → object → shape → geometry,
+ * taking the first identity anything can give.
+ */
+function dthNodeAssetPath(oNode){
+	if (!oNode) return "";
+	var sPath = dthElementAssetPath(oNode);
+	if (sPath) return sPath;
+	try {
+		if (typeof oNode.getObject != "function") return "";
+		var oObject = oNode.getObject();
+		if (!oObject) return "";
+		sPath = dthElementAssetPath(oObject);
+		if (sPath) return sPath;
+		if (typeof oObject.getCurrentShape != "function") return "";
+		var oShape = oObject.getCurrentShape();
+		if (!oShape) return "";
+		sPath = dthElementAssetPath(oShape);
+		if (sPath) return sPath;
+		if (typeof oShape.getGeometry != "function") return "";
+		var oGeom = oShape.getGeometry();
+		if (!oGeom) return "";
+		return dthElementAssetPath(oGeom);
+	} catch (e) { /* an API difference: '' is the honest answer */ }
 	return "";
 }
 

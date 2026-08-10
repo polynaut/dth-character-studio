@@ -1491,8 +1491,19 @@ export const CHARACTER_SCHEMA_VERSION = 30
  *       unwritable folder — looks identical from outside: no CSV appears and a
  *       waiting dialog spins with nothing to say. The interactive path is
  *       unchanged.
+ * v68 — the scene morph scan works in Daz Studio 4. It identified a figure's
+ *       generation from the source asset of the NODE alone, which DS4 answers
+ *       with nothing — so every scene scanned there was skipped with "no
+ *       Genesis figure could be found", about the figure the same run was
+ *       keying morphs on (measured 2026-08-10, G8.1). Two changes, either of
+ *       which fixes it: `dthNodeAssetPath` now walks node → object → shape →
+ *       geometry (the walk the product scan already used, which does resolve
+ *       in DS4), and the studio's own runs pass the CHARACTER's generation as
+ *       a fallback — `DthScanSceneMorphsQuiet(dir, scene, genesis)` from the
+ *       generated script, `genesis` per scene in the bulk scan's sidecar.
+ *       Detection still wins where it works; the fallback only fills a blank.
  */
-export const RUNTIME_VERSION = 67
+export const RUNTIME_VERSION = 68
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

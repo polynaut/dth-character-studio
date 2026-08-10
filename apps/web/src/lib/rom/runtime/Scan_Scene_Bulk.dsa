@@ -89,7 +89,15 @@ function DthScanSceneBulk(config) {
 	var aDone = [];
 
 	if (oScene.morphs === true) {
-		DthScanSceneMorphs({ outDir: config["outDir"], bulk: true });
+		// `genesis` is the character's own generation, from the sidecar — the
+		// fallback for a scene whose figures carry no readable asset identity
+		// (Daz Studio 4; see DthScanSceneMorphs). Absent in an older sidecar,
+		// which simply keeps the detect-or-skip behaviour.
+		DthScanSceneMorphs({
+			outDir: config["outDir"],
+			genesis: oScene.genesis ? String(oScene.genesis) : "",
+			bulk: true
+		});
 		aDone.push("morphs");
 	}
 
