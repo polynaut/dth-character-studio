@@ -128,6 +128,11 @@ export interface TauriMockState {
   /** What `daz_studio_running` reports — false until a spec flips it (the way
    *  a spec keeps a claimed batch's Daz "alive" while driving its progress). */
   dazRunning?: boolean
+  /** WHICH installation the running fake Daz belongs to (an install folder).
+   *  Unset = it answers for whichever install is asked about. Set it to make
+   *  the fake a specific Studio — how a spec reproduces "DS6 is open, the batch
+   *  belongs to DS4" (see daz-launch-activated.smoke.ts). */
+  dazRunningFolder?: string
   /** Let every command held on a `holdPaths` path proceed, and stop holding. */
   releaseHeld: () => void
   /** Mutable: the answer `houdini_running` gives from now on. */
@@ -549,11 +554,23 @@ export function installTauriMock(seed: TauriMockSeed): void {
         return null
       case 'ensure_network_drives':
         return []
-      case 'daz_studio_running':
+      case 'daz_studio_running': {
         // False until a spec flips `__tauriMock.dazRunning` — how a spec keeps
         // the fake Daz "alive" while it drives a claimed batch's progress
         // (the studio treats a sub-100 running file with Daz gone as a DEAD run).
-        return (window as any).__tauriMock?.dazRunning === true
+        if ((window as any).__tauriMock?.dazRunning !== true) return false
+        // The real probe is INSTALL-AWARE: an empty installFolder asks "any
+        // Daz", a folder asks "is THAT installation up" — DS4 and DS6 both run
+        // an executable called DAZStudio.exe, so only the path can tell them
+        // apart. `dazRunningFolder` is which install the fake Daz belongs to;
+        // unset means "whichever you ask about", which is what every spec that
+        // doesn't care about the distinction wants.
+        const asked = String(args?.installFolder ?? '')
+        const where = String((window as any).__tauriMock?.dazRunningFolder ?? '')
+        if (!asked || !where) return true
+        const flat = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+        return flat(asked) === flat(where)
+      }
       case 'launch_daz_studio':
         // Nothing to start. The batch is claimed by the Runner INSIDE Daz,
         // which this fake does not impersonate — a spec plays that part by

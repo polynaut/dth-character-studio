@@ -419,6 +419,59 @@ export function isReclaimableBatch(parsed: ExporterJobFile | null): boolean {
   return parsed.jobs.every((job) => job.status === 'pending')
 }
 
+/** Which of the two job-file names is on disk: the one the studio writes, or
+ *  the `running_` one the Runner renamed it to (the rename IS the claim). */
+export type JobFileKind = 'pending' | 'running'
+
+/**
+ * Whether deleting this job file could strand a run that is happening RIGHT NOW
+ * — the judgement Settings → App Data needs before offering to clear a job file
+ * by hand.
+ *
+ * A stranded file blocks every later export and scan ("a batch is waiting for
+ * Daz Studio"), so clearing one has to be possible; a file a Runner is working
+ * through is the opposite case, where deleting it takes the batch away from the
+ * Daz that owns it and no toast will ever explain why the run stopped. The two
+ * are told apart exactly the way the reclaim path already tells them apart —
+ * this restates no rule of its own:
+ *
+ * - **pending** — never claimed. Deleting it IS what Abort does. Not live.
+ * - **`running_` at 100** — finished; the studio just never swept it. Not live.
+ * - **`running_`, untouched** ({@link isReclaimableBatch}) — a closing Daz
+ *   claimed it and died before running a row. That is the stranded case itself.
+ * - **`running_`, part-worked** — a Runner is (or was) working it. LIVE.
+ * - **`running_`, unreadable** — the same guess every other reader here makes
+ *   about a torn or foreign file: assume a live batch.
+ */
+export function jobFileMayBeLive(kind: JobFileKind, parsed: ExporterJobFile | null): boolean {
+  if (kind === 'pending') return false
+  if (!parsed) return true
+  if (parsed.progress >= 100) return false
+  return !isReclaimableBatch(parsed)
+}
+
+/**
+ * How long ago something happened, for a human deciding whether a leftover file
+ * is theirs: `"just now"`, `"12 minutes ago"`, `"3 hours ago"`, `"5 days ago"`.
+ *
+ * Deliberately coarse and single-unit — the readout answers "is this from the
+ * batch I started a minute ago, or from last week?", which no second unit makes
+ * clearer. `0` (an mtime nothing could read) has no answer at all, and falls in
+ * with "just now" — the CAUTIOUS end for a delete decision, since a file that
+ * might be seconds old might also still be running. It is not the reassuring
+ * reading; nothing here should reassure on no evidence.
+ */
+export function formatAgo(ms: number): string {
+  if (!Number.isFinite(ms) || ms <= 0) return 'just now'
+  const minutes = Math.floor(ms / 60_000)
+  if (minutes < 1) return 'just now'
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`
+  const days = Math.floor(hours / 24)
+  return `${days} day${days === 1 ? '' : 's'} ago`
+}
+
 /**
  * The scene file a mode's job row OPENS for `scenePath`: the saved ROM
  * animation for `export-only` (that is where the built ROM lives — the

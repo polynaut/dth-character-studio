@@ -95,6 +95,9 @@ windows-sys = { version = "0.61", features = [
   # Focusing another app's window after "Open in …" (see foreground.rs).
   "Win32_UI_WindowsAndMessaging",
   "Win32_System_Threading",
+  # Enumerating running processes (procs.rs) — WHICH Daz install is up, not just
+  # whether something called DAZStudio.exe is (see daz.rs).
+  "Win32_System_Diagnostics_ToolHelp",
   # Reading the process token to detect an elevated session (elevation.rs).
   "Win32_Security",
   # Writing a directory junction's reparse point (see junction.rs).

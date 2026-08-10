@@ -174,6 +174,21 @@ current code before relying on details, but assume the *lesson* still holds.
   When the studio LAUNCHED Daz itself the wait can't apply — a cold start
   outlasts it — so that path owes the user an abort instead
   (`abortProjectScanRun`, `abortSceneScan`), including on dialog dismissal.
+- **A destructive confirm built on a focus-refreshed readout is confirming a
+  SNAPSHOT, not the file.** `useRefetchOnFocus` re-reads on mount and window
+  focus — and nothing else — so a readout stays as it was for as long as the
+  window keeps focus. That is fine for anything descriptive, and wrong the
+  moment a warning computed from it is the only guard on an irreversible
+  action: the job-file readout in Settings → App Data can say "written, never
+  claimed" (no amber warning) while the Runner has since renamed the file
+  INSIDE Daz and started working it, and the delete then takes a live batch
+  away. The fix that generalizes: hash what was shown
+  (`exporterJobFilesSignature` — state only, never age, which ticks and
+  decides nothing), pass it to the destructive call, and have that call
+  re-read and refuse on a mismatch (`ExporterJobFilesChangedError`). Re-read
+  when ARMING the confirm too, so the warning being weighed is current.
+  Applies to any future "show state → confirm → mutate" pair over a file
+  something outside the app writes.
 - **Fast runtime test loop:** copying an updated `.DthUtils.dsa`/`.DthWorkflow.dsa`
   over the installed one in `<Daz library>/Scripts/DTH-Character-Studio/` and
   re-running the character's ROM script is enough — no app rebuild needed. (Only
@@ -716,6 +731,32 @@ current code before relying on details, but assume the *lesson* still holds.
   split rather than restating the boundary. On today's DS4 + DS6 machines that
   means the switch is offered nowhere, which is correct — there is no valid
   arrangement to describe until a Studio newer than 6 ships.
+- **Every Daz Studio major ships an executable called `DAZStudio.exe`** — so a
+  process NAME cannot say which INSTALLATION is running, and any probe that asks
+  by name is answering a different question than the caller asked. Measured on a
+  DS4 + DS6 machine (2026-08-10): with "Export only" on the older install, DTH
+  Export never started at all. `daz_studio_running` filtered `tasklist` on the
+  image name, the open DS6 answered "yes, Daz is running", the studio concluded
+  there was nothing to launch — and the batch meant for DS4 sat in a pending job
+  file nobody ever claimed (no Daz process afterwards, no error, no toast).
+  `launch_daz_studio` had the mirror-image bug: it preferred
+  `running_daz_exe()` over the folder it was handed, so even when it did launch,
+  a running DS6 hijacked the request. The identity is the executable's full
+  PATH: both probes take an install folder and compare against it per component
+  (`daz.rs` → `exe_started_from`; `''` still means "any Daz", which is what the
+  scene-open bridge wants). Three consequences worth keeping: a running instance
+  whose path can't be read (an elevated Daz seen from an unelevated studio)
+  counts as a MATCH, because the export watch deletes the job file of a run it
+  believes dead and over-reporting only costs a redundant launch; the two
+  DESTRUCTIVE readings in `api/execute.ts` (dead-run cleanup, stale-`running_`
+  overwrite) therefore keep asking about ANY Daz rather than the export install
+  — the match is a normalized string compare, not a canonicalization, so a
+  moved install or an unusual path spelling would otherwise read as "gone" and
+  strand a live batch (`DazRunningScope` states both halves); and process
+  enumeration is a ToolHelp snapshot (`procs.rs`), not `tasklist`/`Get-CimInstance`,
+  because these probes sit in one-second UI polls where a child process per tick
+  is felt. **This bug class is invisible on a one-install machine** — nothing in
+  the app targeted the non-active install until "Export only" (#768) shipped.
 - **Three consumers must agree on WHICH Daz runs the export batch**, and they are
   fed by one pure rule (`storage/settings.ts` → `exportInstallFolder`): the
   launcher (`api/core.exportDazInstallFolder`), the Runner GATE
