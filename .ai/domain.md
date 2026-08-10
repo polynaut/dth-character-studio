@@ -436,7 +436,8 @@ older runtimes as stale.
   (`import_character_{dtu,fbx,alembic,rom_fbx}_file` — the ROM FBX is the
   exporter's `<name>_experimental_rom.fbx`, measured on a real export), the
   PoseAsset CSV (`pose_asset_csv_file_path` — needs the CSV-path-driven
-  PoseAsset release, measured on mrpdean's 2026-08-04 test build),
+  PoseAsset release: absent in 2.5, shipped in the standalone
+  `DazToHuePoseAsset.hda` 2.5.1, measured 2026-08-10),
   `export_directory` (TRAILING SLASH — the HDA concatenates it with the
   character name), `import_character_name` (prefilled paths may bypass the
   HDA's auto-fill), and `import_skinning_method` (`characterSkinning`'s

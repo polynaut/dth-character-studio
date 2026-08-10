@@ -1827,8 +1827,8 @@ export function HoudiniUtilsPanel({
           <p className="rounded-md border p-3 text-xs text-muted-foreground">
             Only <strong>blank</strong> parameters are written — anything you set yourself is left
             exactly as it is. A parameter your installed DazToHue version doesn&apos;t have is
-            skipped and named in the report, so this stays useful before the release that adds
-            the PoseAsset CSV path.
+            skipped and named in the report, so this stays useful on an older DazToHue and
+            starts filling the newer parameters by itself once you install one that has them.
           </p>
 
           <p className="text-xs text-muted-foreground">

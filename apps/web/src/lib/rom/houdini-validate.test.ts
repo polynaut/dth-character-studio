@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
 import { HEALTHY, validateHoudiniProject } from './houdini-validate.ts'
-import { emptyScanStore, freshScan, scanCacheKey, withScanResults } from './houdini-project-cache.ts'
+import {
+  emptyScanStore,
+  freshScan,
+  hdaLibraryKey,
+  scanCacheKey,
+  withScanResults,
+} from './houdini-project-cache.ts'
 
 import type { MaterialScanProject } from './api/native-types.ts'
 
@@ -137,6 +143,50 @@ describe('the scan store', () => {
     expect(
       freshScan(store, HIP, scanCacheKey(HIP, 1000, `${CHAR}\\daz3d\\DTH-Exports`)),
     ).not.toBeNull()
+  })
+
+  it('a NEWER installed HDA invalidates the entry, though the .hip never changed', () => {
+    // The bug this pins, measured 2026-08-10: a scan's `prefill.missing` says
+    // "your DazToHue version has no pose_asset_csv_file_path", which was true
+    // when it ran and stopped being true the moment a DazToHuePoseAsset.hda
+    // carrying that parm landed in `otls/`. Neither the `.hip` nor the export
+    // root changed, so the store kept serving the obsolete verdict — and the
+    // drawer's Rescan reads through this same cache, so the UI had no way out.
+    const before = hdaLibraryKey([{ name: 'DazToHue.hda', mtimeMs: 1000, size: 5604603 }])
+    const after = hdaLibraryKey([
+      { name: 'DazToHue.hda', mtimeMs: 1000, size: 5604603 },
+      { name: 'DazToHuePoseAsset.hda', mtimeMs: 2000, size: 460423 },
+    ])
+    const key = scanCacheKey(HIP, 1000, '', before)
+    const store = withScanResults(emptyScanStore(), [{ hipPath: HIP, key, project: scanned() }], 'now')
+
+    expect(freshScan(store, HIP, key)).not.toBeNull()
+    expect(freshScan(store, HIP, scanCacheKey(HIP, 1000, '', after))).toBeNull()
+  })
+
+  it('a library REPLACED in place invalidates too — same name, new bytes', () => {
+    // The other half of the same install: mrpdean ships a new DazToHue.hda over
+    // the old one. Name-only would call that unchanged.
+    const before = hdaLibraryKey([{ name: 'DazToHue.hda', mtimeMs: 1000, size: 10 }])
+    const key = scanCacheKey(HIP, 1000, '', before)
+    const store = withScanResults(emptyScanStore(), [{ hipPath: HIP, key, project: scanned() }], 'now')
+
+    const newMtime = hdaLibraryKey([{ name: 'DazToHue.hda', mtimeMs: 2000, size: 10 }])
+    const newSize = hdaLibraryKey([{ name: 'DazToHue.hda', mtimeMs: 1000, size: 11 }])
+    expect(freshScan(store, HIP, scanCacheKey(HIP, 1000, '', newMtime))).toBeNull()
+    expect(freshScan(store, HIP, scanCacheKey(HIP, 1000, '', newSize))).toBeNull()
+  })
+
+  it('the HDA fingerprint ignores directory order and name case, nothing else', () => {
+    const a = { name: 'DazToHue.hda', mtimeMs: 1, size: 2 }
+    const b = { name: 'DazToHuePoseAsset.hda', mtimeMs: 3, size: 4 }
+    expect(hdaLibraryKey([a, b])).toBe(hdaLibraryKey([b, a]))
+    expect(hdaLibraryKey([{ ...a, name: 'DAZTOHUE.HDA' }])).toBe(hdaLibraryKey([a]))
+    // An unreadable stat is a value, not a wildcard: it must not match a read one.
+    expect(hdaLibraryKey([{ name: a.name }])).not.toBe(hdaLibraryKey([a]))
+    // No libraries at all (or none readable) is the '' key — which is exactly
+    // what the impure half falls back to, so a blind scan stays invalidatable.
+    expect(hdaLibraryKey([])).toBe('')
   })
 
   it('matches a path by separator and case, like every other lookup', () => {

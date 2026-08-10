@@ -97,8 +97,10 @@ node types `DazToHueMaterial` / `DazToHueSkeleton`; multiparm folders
 **0-based**; the HDA's "Linking" writes `ch()` refs that transfer must flatten;
 prefill parm list shared with `apps/desktop/src/houdini.rs`
 (`import_character_*`, `import_skinning_method`, `export_directory`,
-`pose_asset_csv_file_path` — the last one is ALREADY absent in DazToHue 2.5,
-replaced by a `pose_asset_import_csv` button, and is *reported*, not skipped);
+`pose_asset_csv_file_path` — absent in DazToHue 2.5, back in 2.5.1's standalone
+`DazToHuePoseAsset.hda`, and *reported* when absent, not skipped; note a
+standalone library can sit BESIDE the combined one and win on version, so
+"which HDA is installed" is a folder listing, not a Settings value);
 shelf-tool tokens `daztohue` / `refreshassets` (matched on normalized
 label+name); `HOUDINI_USER_PREF_DIR` must be set or the otls never load.
 The card's "Needs attention" verdict comes from `houdini-validate.ts`.

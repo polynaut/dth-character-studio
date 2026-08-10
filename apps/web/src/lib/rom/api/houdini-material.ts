@@ -15,6 +15,7 @@ import {
   HOUDINI_SCAN_FILE,
   emptyScanStore,
   freshScan,
+  hdaLibraryKey,
   houdiniScanStoreJson,
   parseScanStore,
   scanCacheKey,
@@ -372,7 +373,10 @@ export async function scanHoudiniMaterials({
   } catch {
     storePath = ''
   }
-  const keys = await Promise.all(hipPaths.map((hipPath) => scanKey(hipPath, exportRoot)))
+  // ONE fingerprint for the whole batch: read per hip it could straddle an
+  // install finishing mid-scan and file two projects under different vocabularies.
+  const tooling = await installedHdaKey()
+  const keys = await Promise.all(hipPaths.map((hipPath) => scanKey(hipPath, exportRoot, tooling)))
   const cached = new Map<string, MaterialScanProject>()
   const stale: Array<string> = []
   hipPaths.forEach((hipPath, i) => {
@@ -557,9 +561,13 @@ export async function fetchCachedHoudiniScans({
     // included, so a moved root reads as "not scanned yet" rather than serving
     // the pre-move verdict.
     const exportRoot = await scanExportRoot(projectId, id)
+    // Installed HDAs too — a verdict phrased in an older DazToHue's vocabulary
+    // ("your version has no pose_asset_csv_file_path") outlives the install that
+    // made it true, and this reader feeds the drawer that would show it.
+    const tooling = await installedHdaKey()
     const hits = await Promise.all(
       character.houdiniProjects.map(async (hipPath) =>
-        freshScan(stored, hipPath, await scanKey(hipPath, exportRoot)),
+        freshScan(stored, hipPath, await scanKey(hipPath, exportRoot, tooling)),
       ),
     )
     return hits.filter((p): p is MaterialScanProject => p !== null)
@@ -600,10 +608,11 @@ export async function fetchHoudiniProjectStatus({
     // exports USED to live in. A moved root reads as unscanned until the sweep
     // catches up, which is the honest answer.
     const exportRoot = await scanExportRoot(projectId, id)
+    const tooling = await installedHdaKey()
     return Promise.all(
       character.houdiniProjects.map(async (hipPath) => {
         const scan = insideFolder(hipPath, charFolder)
-          ? freshScan(stored, hipPath, await scanKey(hipPath, exportRoot))
+          ? freshScan(stored, hipPath, await scanKey(hipPath, exportRoot, tooling))
           : null
         const health = validateHoudiniProject(scan, charFolder)
         return { hipPath, ok: health.ok, summary: health.summary, scanned: scan !== null }
@@ -646,10 +655,45 @@ function cacheScan(key: string, project: MaterialScanProject): void {
  * remembered as broken. The key FORMAT lives in the pure cache module (where it
  * is tested), not here; this only supplies the mtime.
  */
-async function scanKey(hipPath: string, exportRoot: string): Promise<string> {
+async function scanKey(hipPath: string, exportRoot: string, tooling = ''): Promise<string> {
   try {
     const info = await stat(hipPath)
-    return scanCacheKey(hipPath, info.mtime?.getTime(), exportRoot)
+    return scanCacheKey(hipPath, info.mtime?.getTime(), exportRoot, tooling)
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * Fingerprint of the operator libraries hython will load for a scan — the
+ * `otls/` folder of the SAME prefs directory {@link resolveHython} pairs with the
+ * install, since that pairing is what decides which DazToHue a scan speaks.
+ *
+ * Resolved per call rather than memoized: a user who installs a DazToHue release
+ * (or drops a library in by hand) does it WHILE the app is open, and a value
+ * cached for the session would reintroduce exactly the staleness this fixes. It
+ * costs one readDir plus a stat per library — nothing beside the store read it
+ * sits next to, and nothing at all beside the hython start it protects.
+ *
+ * Every failure is '': no Houdini configured, no matching prefs folder, no
+ * `otls/` yet. That is not a fallback to "assume unchanged" — '' is itself a key
+ * component, so the day the studio CAN read the folder the key changes and every
+ * entry judged blind is rescanned.
+ */
+async function installedHdaKey(): Promise<string> {
+  try {
+    const { houdiniPrefDir } = await resolveHython()
+    const otls = joinPath(houdiniPrefDir.replace(/\\/g, '/'), 'otls')
+    const entries = await readDir(otls)
+    const libraries = await Promise.all(
+      entries
+        .filter((entry) => entry.isFile && /\.(hda|otl)$/i.test(entry.name))
+        .map(async (entry) => {
+          const info = await stat(joinPath(otls, entry.name)).catch(() => null)
+          return { name: entry.name, mtimeMs: info?.mtime?.getTime(), size: info?.size }
+        }),
+    )
+    return hdaLibraryKey(libraries)
   } catch {
     return ''
   }
