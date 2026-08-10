@@ -363,6 +363,10 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   // best-effort inside the run: they must never fail an export that worked.
   const indexSync = {
     morphIndexDir: await storage.dataDir(),
+    // What to file this scene's morphs under when its figures carry no readable
+    // source asset — the character's own generation, which the studio has and
+    // the scan (in Daz Studio 4) could not derive.
+    genesis: character.genesis,
     // The SAME config the standalone Scan_Products script gets, plus the
     // identity it needs, so the two paths cannot drift apart.
     ...(scanProducts

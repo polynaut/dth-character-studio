@@ -95,7 +95,12 @@ ROM run + one export + one groom export:
 - `include()` must stay top-level (`URIError: Legacy Include` inside
   try/catch) — pinned in `generate.test.ts`
 - `getAssetUri()` method on DS4, `assetUri` PROPERTY on DS6 —
-  `dz-snippets.ts`, `DthUtils.dsa`
+  `dz-snippets.ts`, `DthUtils.dsa`. **And a NODE's own asset URI is empty in
+  DS4**: the identity lives on the object — probe node → `getObject()` →
+  `getCurrentShape()` → `getGeometry()` (plus `getAssetFileInfo()`), which is
+  what `dthNodeAssetPath` does since v68. A one-accessor identity probe is the
+  bug this cost: generation detection returned nothing for every DS4 scene and
+  the scene morph scan silently skipped them all (`.ai/gotchas.md`)
 - `DzFigure.isGraftingActive()` / `getGraft()` not exposed to DAZ Script in
   DS6 — `DthShellSurfaces.dsa`
 - the Script IDE is broken on DS6 — never suggest it for debugging

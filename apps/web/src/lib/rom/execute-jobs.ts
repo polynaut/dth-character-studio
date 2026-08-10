@@ -76,6 +76,11 @@ export interface ScanProductsConfig {
 export interface ScanSceneWork {
   /** Scan this scene for morphs the base index doesn't carry. */
   morphs: boolean
+  /** The generation to file this scene's morphs under when its figures carry
+   *  no readable source asset — the owning character's own. Detection is the
+   *  first answer; this is the one that cannot fail (Daz Studio 4 could read
+   *  no figure identity at all, and every scene's scan was skipped). */
+  genesis?: string
   /** Run the Daz Products scan for this scene, with this config. */
   products?: ScanProductsConfig
 }

@@ -25,7 +25,7 @@ function character(over: Partial<Character> = {}): Character {
   })
 }
 
-const SYNC: IndexSyncOptions = { morphIndexDir: 'C:/AppData/dth' }
+const SYNC: IndexSyncOptions = { morphIndexDir: 'C:/AppData/dth', genesis: 'G9' }
 const SYNC_WITH_PRODUCTS: IndexSyncOptions = {
   morphIndexDir: 'C:/AppData/dth',
   products: {
@@ -80,8 +80,13 @@ describe('scan-on-export (indexSync)', () => {
       // The scan runtime has to be loaded, or the guarded call silently no-ops.
       expect(built[name], name).toContain('.DthScanMorphs.dsa')
       // Filed under the SOURCE scene: dthOpenSceneFile is the capture that a
-      // ROM save-as / an opened ROM animation both resolve back to.
-      expect(built[name], name).toContain('DthScanSceneMorphsQuiet("C:/AppData/dth", dthOpenSceneFile)')
+      // ROM save-as / an opened ROM animation both resolve back to. The third
+      // argument is the CHARACTER's generation — what the scan files the finds
+      // under when the scene's own figures carry no readable asset identity
+      // (Daz Studio 4 answers with none, and every scan there was skipped).
+      expect(built[name], name).toContain(
+        'DthScanSceneMorphsQuiet("C:/AppData/dth", dthOpenSceneFile, "G9")',
+      )
     }
   })
 
@@ -114,7 +119,9 @@ describe('scan-on-export (indexSync)', () => {
     for (const name of ['Export_Kira_G9.dsa', 'Export_Hair_Kira_G9.dsa']) {
       expect(byName[name], `${name} missing`).toBeDefined()
       expect(byName[name], name).toContain('.DthScanMorphs.dsa')
-      expect(byName[name], name).toContain('DthScanSceneMorphsQuiet("C:/AppData/dth", dthOpenSceneFile)')
+      expect(byName[name], name).toContain(
+        'DthScanSceneMorphsQuiet("C:/AppData/dth", dthOpenSceneFile, "G9")',
+      )
     }
   })
 

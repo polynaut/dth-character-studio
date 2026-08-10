@@ -94,6 +94,18 @@ offsets byte-identically — if a generation change moves them, the change is wr
     `<stem>_ROM.duf`, and an "Export only" run opened that ROM animation to
     begin with. `dthOpenSceneFile` is the resolved source and is what gets
     passed — anything else files finds under a scene the editor never selects.
+  - **…and under a generation it can always name** (runtime v68). The scan
+    identifies the generation from a figure's SOURCE ASSET
+    (`dthDetectGenesis` → `dthNodeAssetPath`), which in Daz Studio 4 answered
+    nothing at all: every scene scanned there was skipped as "no Genesis figure
+    could be found", about the figure the same run was keying morphs on. Two
+    layers now: `dthNodeAssetPath` walks node → object → shape → geometry (the
+    asset rides on the object — the walk the product scan already used, and it
+    does resolve in DS4), and a studio-started run passes the CHARACTER's
+    generation as the fallback — third argument of `DthScanSceneMorphsQuiet`,
+    `genesis` per scene in the bulk sidecar. Detection still wins where it
+    works; the fallback only fills a blank, and only for a value
+    `dthKnownGenesis` recognises (the generation names the index file).
 - **Tools → Scan project** is the one-click bulk pass: a selection of base
   morphs / character morphs / products, turned into ONE `bulk-export` batch —
   the base row first, then one row per linked scene of every character, with a

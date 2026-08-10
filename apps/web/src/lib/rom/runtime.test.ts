@@ -54,7 +54,8 @@ const RUNTIME_ASSETS = [
 
 // Bump this together with RUNTIME_VERSION whenever a runtime file legitimately
 // changes (this run prints the new value in the failure message).
-const EXPECTED_RUNTIME_HASH = '2da5e9f92fdbb26c04de15bb0ed0670865a47d12c59361d48e9ea5b7c1dfbd10'
+const EXPECTED_RUNTIME_HASH =
+  'ba9de5bb62f1bb40eca9da8199981022b4983c85506c740974311c1cc98fdcde'
 
 function runtimeHash(): string {
   const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
@@ -468,6 +469,7 @@ interface SceneScanModule {
     scenePath: string,
     sceneName: string,
   ) => boolean
+  dthKnownGenesis: (value: unknown) => string
 }
 
 interface SceneIndexFile {
@@ -477,7 +479,8 @@ interface SceneIndexFile {
   morphs: Array<{ node: string; label: string; name: string; scenes: Array<string> }>
 }
 
-const SCENE_EXPORTS = 'dthSceneKey, dthBaseIndexKeys, dthHasBaseIndex, dthWriteSceneIndex'
+const SCENE_EXPORTS =
+  'dthSceneKey, dthBaseIndexKeys, dthHasBaseIndex, dthWriteSceneIndex, dthKnownGenesis'
 
 /** Load DthScanMorphs.dsa over an in-memory filesystem, so the index reads and
  *  writes are real code paths against fake files. */
@@ -519,6 +522,16 @@ function loadSceneScan(files: Map<string, string>): SceneScanModule {
     DzFile,
     Date,
     JSON,
+    // Supplied by DthUtils.dsa at runtime (every script includes it first).
+    // The sandbox loads this ONE file, so the table it leans on is injected;
+    // the real one is pinned in asset-identity.test.ts.
+    dthGenerationAssetFiles: (genesis: string) =>
+      ({
+        G9: ['genesis9.dsf'],
+        'G8.1': ['genesis8_1female.dsf', 'genesis8_1male.dsf'],
+        G8: ['genesis8female.dsf', 'genesis8male.dsf'],
+        G3: ['genesis3female.dsf', 'genesis3male.dsf'],
+      })[genesis] ?? null,
   }) as SceneScanModule
 }
 
@@ -547,6 +560,33 @@ describe('scene morph scan (DthScanMorphs.dsa)', () => {
     // No base index at all: this function still reports an empty filter set —
     // the REFUSAL to scan on that basis is dthHasBaseIndex's job, below.
     expect(Object.keys(scan.dthBaseIndexKeys(OUT, 'G8'))).toEqual([])
+  })
+
+  /**
+   * The guard on the studio-declared generation — the fallback for a scene
+   * whose figures carry no readable asset identity (Daz Studio 4 answers with
+   * none, and every scan there was skipped as "no Genesis figure").
+   *
+   * It has to be a value the index can be read back under: the generation names
+   * the file (`morphs_scenes_<G>.json`) and picks the base index to subtract, so
+   * a string nothing else knows would write a file no reader ever opens.
+   */
+  describe('dthKnownGenesis', () => {
+    const scan = () => loadSceneScan(new Map())
+
+    it('passes the four generations the index actually uses', () => {
+      for (const g of ['G9', 'G8.1', 'G8', 'G3']) expect(scan().dthKnownGenesis(g)).toBe(g)
+    })
+
+    it('trims, because it arrives from a config file', () => {
+      expect(scan().dthKnownGenesis('  G8.1  ')).toBe('G8.1')
+    })
+
+    it('refuses anything else — a fallback may not invent a generation', () => {
+      for (const value of ['G10', 'g9', 'Genesis 9', '', '  ', null, undefined, 9]) {
+        expect(scan().dthKnownGenesis(value)).toBe('')
+      }
+    })
   })
 
   /**

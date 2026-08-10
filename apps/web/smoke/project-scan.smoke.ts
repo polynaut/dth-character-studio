@@ -89,7 +89,10 @@ test('scan project: base row first, then one row per scene, with the sidecar con
   expect(Object.keys(config.scenes).sort()).toEqual(
     [P.scene.toLowerCase(), P.scene2.toLowerCase()].sort(),
   )
-  expect(config.scenes[P.scene.toLowerCase()]).toEqual({ morphs: true })
+  // `genesis` is the owning character's own — what the worker files this
+  // scene's morphs under when its figures carry no readable asset identity
+  // (Daz Studio 4 answers with none; runtime v68).
+  expect(config.scenes[P.scene.toLowerCase()]).toEqual({ morphs: true, genesis: 'G9' })
 
   // NOTHING was seeded at the scripts root: the handoff self-heals via
   // copyRuntimeFiles first (an app updated since the last save has the new

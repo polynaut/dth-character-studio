@@ -952,6 +952,18 @@ function dthScanWholeSceneInto(oAcc){
 }
 
 /**
+ * A generation string the index actually knows ("G9"/"G8.1"/"G8"/"G3"), or ""
+ * for anything else — so a caller-supplied value (the studio's declared
+ * generation) can be trusted as a fallback without letting a typo or a future
+ * generation write an index file nothing can read back.
+ */
+function dthKnownGenesis(sValue){
+	var s = sValue ? String(sValue).trim() : "";
+	if(!s) return "";
+	return dthGenerationAssetFiles(s) ? s : "";
+}
+
+/**
  * Which generation a scene's finds belong to: the first figure root whose stock
  * asset resolves. Clothing has no generation of its own — it is fitted to the
  * figure, and the studio only ever offers a character its OWN generation's
@@ -1092,10 +1104,29 @@ function DthScanSceneMorphs(config){
 	var sSceneName = "";
 	try { sSceneName = String(new DzFileInfo(sScenePath).completeBaseName()); } catch(e){ /* keep '' */ }
 
+	// Which generation to file this scene's morphs under. Read from the figures
+	// in the scene first — their source asset is the ground truth, and it is the
+	// only answer the standalone script can have.
 	var sGenesis = dthSceneGenesis();
 	if(!sGenesis){
-		var sNoFigure = "No Genesis 3, 8, 8.1 or 9 figure could be found in this scene, " +
-			"so there is no generation to file its morphs under.";
+		// …but a run STARTED BY THE STUDIO knows the answer already: it is the
+		// character's own generation, and this scene is that character's scene.
+		// Measured 2026-08-10: in Daz Studio 4 no figure's asset identity could
+		// be read at all, so every scan of every scene was skipped with "no
+		// Genesis figure could be found" — about the figure the very same run
+		// then keyed morphs on. Detection is best-effort by nature (an API
+		// difference, a figure loaded in a way that carries no asset URI); the
+		// declared generation is not, so it is what the fallback uses.
+		sGenesis = dthKnownGenesis(config["genesis"]);
+		if(sGenesis){
+			print("DTH: no figure identity readable in this scene — filing its morphs " +
+				"under the character's generation (" + sGenesis + ").");
+		}
+	}
+	if(!sGenesis){
+		var sNoFigure = "No Genesis 3, 8, 8.1 or 9 figure could be identified in this " +
+			"scene (its figures carry no readable source asset), so there is no " +
+			"generation to file its morphs under.";
 		if(bBulk) throw new Error(sNoFigure);
 		MessageBox.information(sNoFigure, "DTH Character Studio", "&OK");
 		return;
@@ -1162,17 +1193,27 @@ function DthScanSceneMorphs(config){
  * no exception, which the Runner would mark as a FAILED export row for work
  * that actually succeeded. Everything lands in the Daz log instead.
  *
+ * `sGenesis` is the CHARACTER's generation, baked into the generated script —
+ * the fallback for a scene whose figures carry no readable asset identity (see
+ * DthScanSceneMorphs). Older generated scripts pass nothing and simply keep the
+ * detect-or-skip behaviour.
+ *
  * Returns whether the scan wrote an index, for the log line only.
  */
-function DthScanSceneMorphsQuiet(sOutDir, sScenePath){
+function DthScanSceneMorphsQuiet(sOutDir, sScenePath, sGenesis){
 	if(!sOutDir) return false;
 	try {
 		// `bulk` keeps every dialog out; the throws it turns on are caught here.
-		DthScanSceneMorphs({ outDir: sOutDir, scenePath: sScenePath, bulk: true });
+		DthScanSceneMorphs({
+			outDir: sOutDir,
+			scenePath: sScenePath,
+			genesis: sGenesis ? sGenesis : "",
+			bulk: true
+		});
 		return true;
 	} catch(e){
-		// The expected cases are ordinary, not faults: a scene with no Genesis
-		// figure, or one that was never saved. Log and carry on.
+		// The expected cases are ordinary, not faults: a scene that was never
+		// saved, or one with no identifiable figure at all. Log and carry on.
 		print("DTH: scene morph scan skipped -", e);
 		return false;
 	}

@@ -1139,6 +1139,11 @@ export interface IndexSyncOptions {
   /** The studio's app-data folder — where `morphs_scenes_<G>.json` is written.
    *  '' disables the morph sync (pure/web contexts have no app-data path). */
   morphIndexDir: string
+  /** The CHARACTER's generation, as the fallback for filing this scene's
+   *  morphs when no figure in it can be identified from its source asset — a
+   *  Daz Studio 4 reality, where the scan otherwise skipped every scene (see
+   *  `DthScanSceneMorphs`). Omitted = detect-or-skip, as before. */
+  genesis?: string
   /** The per-character `DthScanProducts` config, when the PROJECT has Daz
    *  Products enabled — the same object the standalone `Scan_Products_<Name>.dsa`
    *  bakes in, so the two paths cannot drift. Omitted = no product scan. */
@@ -1168,7 +1173,7 @@ function indexSyncSnippet(sync?: IndexSyncOptions): string {
   if (sync.morphIndexDir) {
     lines.push(
       'if (typeof DthScanSceneMorphsQuiet == "function") {',
-      `    DthScanSceneMorphsQuiet(${dazJson(fwd(sync.morphIndexDir))}, dthOpenSceneFile);`,
+      `    DthScanSceneMorphsQuiet(${dazJson(fwd(sync.morphIndexDir))}, dthOpenSceneFile, ${dazJson(sync.genesis ?? '')});`,
       '}',
     )
   }

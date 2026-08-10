@@ -1503,7 +1503,13 @@ export async function startProjectScan({ data }: { data: unknown }): Promise<Pro
         }
         sceneWork.push({
           scenePath: scene,
-          work: { morphs, ...(productsConfig ? { products: productsConfig } : {}) },
+          work: {
+            morphs,
+            // The owning character's generation — the morph scan's fallback
+            // when the scene's figures carry no readable asset identity.
+            genesis: character.genesis,
+            ...(productsConfig ? { products: productsConfig } : {}),
+          },
         })
         jobs.push({ scenePath: scene, scriptPath: sceneScript })
         any = true
