@@ -24,13 +24,15 @@ import { z } from 'zod'
 export const SCAN_RUN_SCRIPT = '.dth_scan_run.dsa'
 
 /**
- * The CSV the scan will write for `scenePath`.
+ * The name the scan writes its output under, mirroring what the `.dsa` derives
+ * from the OPEN scene (`Scene.getFilename()` → `completeBaseName()` → the same
+ * character strip).
  *
- * **Predicting this is what makes the flow finite.** The script derives its
- * output name from the OPEN scene (`Scene.getFilename()` → `completeBaseName()`
- * → the same character strip), so the studio can name the file it is waiting
- * for before Daz has even started. Guessing wrong would leave the dialog
- * waiting on a file that is already on disk under another name.
+ * Load-bearing for the RESULT file, which is named the same way and is what the
+ * poll waits on: two scans of different scenes must not overwrite each other's
+ * verdict, and a stale result must never read as this run's. The CSV path it
+ * also predicts is a convenience — the poll imports the path the result file
+ * reports, which is authoritative even if this guess were wrong.
  *
  * `completeBaseName()` drops only the LAST extension — `Kira.G9.duf` is
  * `Kira.G9` — which is why this splits on the final dot rather than the first.

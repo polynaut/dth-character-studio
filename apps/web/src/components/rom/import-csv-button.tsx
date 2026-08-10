@@ -42,9 +42,10 @@ export function ImportCsvButton({
       <InfoPopup size="sm" label="Import from Daz scene — how it works">
         Pick a Daz scene and the studio scans its keyed frames for you: it opens the scene in
         Daz Studio, runs <strong>Scan_Frames</strong> there, and imports the result — each
-        frame becomes a pose. Scans you already made are listed too, so one scan can feed
-        several ROM sections.{' '}
-        <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/04-first-character.html#recommended-scan-once-then-autocomplete--tools--scan--index">
+        frame becomes a pose. Needs the <strong>Runner plugin</strong> (the same one DTH
+        Export uses). Scans you already made are listed too, so one scan can feed several ROM
+        sections.{' '}
+        <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/custom-morphs.html">
           Open guide
         </GuideLink>
       </InfoPopup>

@@ -157,6 +157,7 @@ export {
   startProjectScan,
   startSceneScan,
   fetchSceneScanProgress,
+  abortSceneScan,
 } from './api/execute'
 export type {
   ExecuteJobsSummary,

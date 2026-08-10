@@ -12,4 +12,6 @@ Before it offers to scan, it checks the scene: **exactly one figure**, **the cha
 
 **Scans you already made are still listed**, and that is deliberate: one scan of a scene feeds several ROM sections, so importing FBM after RET should not re-run Daz. Browsing to a hand-curated CSV still works too.
 
+The wait has a way out. A Daz Studio that is already open but has no **Runner plugin** never picks the scan up, so the studio takes the job back after a few seconds and says so instead of waiting on it; a scan it started itself can be dropped with **Cancel scan**, or by closing the dialog. Either way the handoff is released — a job left waiting would block your next export batch.
+
 Needs the Runner plugin installed (the same one DTH Export uses) and the DTH runtime in your Daz library.

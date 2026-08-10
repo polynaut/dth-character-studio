@@ -122,7 +122,7 @@ live. What you touch decides how much becomes the scene's override:
 - **Restructure or reconfigure a section** — reorder, insert or delete a
   frame, add a group, switch the **mode** (Preset ⇄ Custom), swap the **preset
   asset**, edit a GEN **Art-direction** frame, set a custom **JCM path**, or
-  **Import from CSV** — and the **whole section** becomes this scene's
+  **Import from Daz scene** — and the **whole section** becomes this scene's
   override, editable exactly like the primary but stored on this scene.
 
 Either way the section's **title cube goes green**; the section-title **reset**
