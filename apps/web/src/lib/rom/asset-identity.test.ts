@@ -52,6 +52,25 @@ const silent = () => ({ getAssetUri: () => null })
 
 const G81 = '/data/Daz 3D/Genesis 8_1/Female/Genesis8_1Female.dsf'
 
+/** `dthKnownGenesis` lives in DthScanMorphs.dsa and calls into DthUtils.dsa —
+ *  load both, in the order the runtime includes them. */
+function loadKnownGenesis(): (value: unknown) => string {
+  const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
+  const src = [
+    readFileSync(join(dir, 'DthUtils.dsa'), 'utf8'),
+    readFileSync(join(dir, 'DthScanMorphs.dsa'), 'utf8'),
+  ].join('\n')
+  return runInNewContext(`${src}\n;dthKnownGenesis`, {
+    print: () => {},
+    Date,
+    JSON,
+    DzFile: function DzFile() {},
+    DzFileInfo: function DzFileInfo() {},
+    MessageBox: { information: () => {} },
+    Scene: { getFilename: () => '' },
+  }) as (value: unknown) => string
+}
+
 describe('dthNodeAssetPath — where the asset identity actually lives', () => {
   const utils = loadUtils()
 
@@ -132,5 +151,42 @@ describe('the generation table the match runs against', () => {
 
   it('the G8.1 files are the ones the failing scene’s figure would match', () => {
     expect(utils.dthGenerationAssetFiles('G8.1')).toContain('genesis8_1female.dsf')
+  })
+})
+
+/**
+ * The other half of the DS4 fix: when no figure in the scene can be identified,
+ * a studio-started run falls back to the CHARACTER's declared generation. That
+ * value comes from outside the scene, so it is gated — an index file named
+ * after a generation the reader doesn't know is one nothing can ever read back.
+ *
+ * Driven against the shipped `DthScanMorphs.dsa` (loaded over `DthUtils.dsa`,
+ * which it requires), so this is the real gate rather than a model of it.
+ */
+describe('dthKnownGenesis — the fallback is trusted only as far as the index is', () => {
+  const known = loadKnownGenesis()
+
+  it('accepts exactly the generations the index can name', () => {
+    for (const g of ['G9', 'G8.1', 'G8', 'G3']) expect(known(g)).toBe(g)
+  })
+
+  it('refuses anything the reader would not recognise', () => {
+    // A future generation, a typo, wrong case — each would write
+    // `morphs_scenes_<G>.json` under a name no reader looks for, which is
+    // worse than the skip this fallback exists to prevent.
+    for (const g of ['G10', 'g9', 'Genesis 9', 'G8_1', 'nonsense']) expect(known(g)).toBe('')
+  })
+
+  it('treats "no answer" as no answer, never as a value', () => {
+    // The standalone script passes nothing at all; the bulk sidecar can carry
+    // an absent or blank field. All of those must fall through to the error.
+    expect(known(undefined)).toBe('')
+    expect(known(null)).toBe('')
+    expect(known('')).toBe('')
+    expect(known('   ')).toBe('')
+  })
+
+  it('tolerates the whitespace a hand-edited sidecar can carry', () => {
+    expect(known('  G8.1  ')).toBe('G8.1')
   })
 })

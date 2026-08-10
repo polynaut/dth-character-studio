@@ -952,13 +952,6 @@ function dthScanWholeSceneInto(oAcc){
 }
 
 /**
- * Which generation a scene's finds belong to: the first figure root whose stock
- * asset resolves. Clothing has no generation of its own — it is fitted to the
- * figure, and the studio only ever offers a character its OWN generation's
- * index, so filing the scene's extras under the figure's generation is what
- * makes them reachable. '' when the scene holds no Genesis figure at all.
- */
-/**
  * A generation string the index actually knows ("G9"/"G8.1"/"G8"/"G3"), or ""
  * for anything else — so a caller-supplied value (the studio's declared
  * generation) can be trusted as a fallback without letting a typo or a future
@@ -970,6 +963,13 @@ function dthKnownGenesis(sValue){
 	return dthGenerationAssetFiles(s) ? s : "";
 }
 
+/**
+ * Which generation a scene's finds belong to: the first figure root whose stock
+ * asset resolves. Clothing has no generation of its own — it is fitted to the
+ * figure, and the studio only ever offers a character its OWN generation's
+ * index, so filing the scene's extras under the figure's generation is what
+ * makes them reachable. '' when the scene holds no Genesis figure at all.
+ */
 function dthSceneGenesis(){
 	var aFigures = dthSceneFigureRoots();
 	for(var i = 0; i < aFigures.length; i++){
