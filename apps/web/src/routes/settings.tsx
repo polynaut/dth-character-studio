@@ -1071,7 +1071,8 @@ function SettingsPage() {
               {houdiniDerived ? (
                 <DerivedTarget
                   value={settings.houdiniDocsFolder}
-                  missing="Houdini documents folder"
+                  missing="documents folder"
+                  source="Houdini"
                 >
                   The release&apos;s Houdini assets (otls/presets/toolbar) merge into it.
                 </DerivedTarget>
@@ -1206,20 +1207,34 @@ function SettingsPage() {
                 </div>
               </div>
             ))}
-            <div className="border-t pt-4">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  setSettings((s) => ({
-                    ...s,
-                    extraHoudiniDocsFolders: [...s.extraHoudiniDocsFolders, ''],
-                  }))
-                }
-              >
-                <Plus /> Add another Houdini folder
-              </Button>
-            </div>
+            {/* Only while the folders are the USER'S. With an activated Houdini
+                installation the destination follows that card — one active
+                installation, one target — so an "add another" here would invite
+                a second, hand-typed target the card cannot account for. Existing
+                entries stay visible (and removable) so a folder added before the
+                card was activated can't strand itself out of sight. */}
+            {!houdiniDerived ? (
+              <div className="border-t pt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setSettings((s) => ({
+                      ...s,
+                      extraHoudiniDocsFolders: [...s.extraHoudiniDocsFolders, ''],
+                    }))
+                  }
+                >
+                  <Plus /> Add another Houdini folder
+                </Button>
+              </div>
+            ) : (
+              <p className="border-t pt-4 text-xs text-muted-foreground">
+                New folders can&apos;t be added while a Houdini installation is activated — the
+                destination follows that card. To drive several folders by hand again, use{' '}
+                <strong>Set the paths manually</strong> in the Houdini installation section above.
+              </p>
+            )}
 
             {houdiniReport && (
               <InstallReportList report={houdiniReport} onClose={() => setHoudiniReport(null)} />
@@ -1244,7 +1259,8 @@ function SettingsPage() {
             {houdiniDerived ? (
               <DerivedTarget
                 value={settings.houdiniInstallFolder}
-                missing="Houdini installation folder"
+                missing="installation folder"
+                source="Houdini"
               >
                 Its <code>bin\hython.exe</code> creates the project.
               </DerivedTarget>
@@ -1515,12 +1531,18 @@ function SettingsPage() {
 function DerivedTarget({
   value,
   missing,
+  source = 'Daz',
   className = '',
   children,
 }: {
   value: string
-  /** What DIM had no value for, named in the warning. */
+  /** What the source had no value for, named in the warning. */
   missing: string
+  /** WHICH installation card this path comes from. It is the card the reader is
+   *  sent back to when the value is missing, so naming the wrong one sends them
+   *  to a section that cannot fix it — the Houdini documents folder is paired by
+   *  the Houdini card, never by DIM. */
+  source?: 'Daz' | 'Houdini'
   className?: string
   children?: ReactNode
 }) {
@@ -1529,16 +1551,18 @@ function DerivedTarget({
       <p className="mt-2 flex items-start gap-1.5 text-sm text-amber-500">
         <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
         <span>
-          The DAZ Install Manager has no {missing} path, so there is nothing to install into. Use{' '}
-          <strong>Set the paths manually</strong> in the Daz installation section to fill it in
-          yourself.
+          {source === 'Daz'
+            ? `The DAZ Install Manager has no ${missing} path`
+            : `The activated Houdini has no ${missing}`}
+          , so there is nothing to install into. Use <strong>Set the paths manually</strong> in the{' '}
+          {source} installation section to fill it in yourself.
         </span>
       </p>
     )
   }
   return (
     <p className={`text-sm text-muted-foreground ${className}`}>
-      Installs into <PathCode path={displayPath(value)} />, from the Daz installation above.{' '}
+      Installs into <PathCode path={displayPath(value)} />, from the {source} installation above.{' '}
       {children}
     </p>
   )

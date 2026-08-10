@@ -234,13 +234,11 @@ export function DazInstallSection({
             <DerivedPath label="My DAZ 3D Library" value={derived.dazLibraryFolder} />
             <DerivedPath label="Daz Studio install folder" value={derived.dazInstallFolder} />
             <DerivedPath label="DIM product database" value={derived.dimManifestsFolder} />
-            {/* Reported, never applied: the download folder is a fine ASSET
-                SOURCE, but that list is the user's own curation (Tools → Daz
-                assets) and rewriting it from here would be the exact surprise
-                this section exists to remove. */}
-            {scan?.paths.downloads ? (
-              <DerivedPath label="DIM downloads" value={scan.paths.downloads} note="not used automatically" />
-            ) : null}
+            {/* DIM's DOWNLOAD folder is deliberately not listed. It is a fine
+                asset SOURCE, but the studio never applies it — that list is the
+                user's own curation (Tools → Daz assets) — and a path this card
+                shows but does not use reads as one it does. This card is "the
+                paths that come from this installation"; nothing else belongs. */}
           </dl>
         </div>
       )}
@@ -249,7 +247,7 @@ export function DazInstallSection({
 }
 
 /** One read-only derived path — or a named reason it is empty. */
-function DerivedPath({ label, value, note }: { label: string; value: string; note?: string }) {
+function DerivedPath({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
       <dt className="w-44 shrink-0 text-muted-foreground">{label}</dt>
@@ -259,7 +257,6 @@ function DerivedPath({ label, value, note }: { label: string; value: string; not
         ) : (
           <span className="text-amber-500">the DAZ Install Manager has no value for this</span>
         )}
-        {note && value ? <span className="ml-2 text-muted-foreground">· {note}</span> : null}
       </dd>
     </div>
   )
