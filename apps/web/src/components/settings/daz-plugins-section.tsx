@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { AlertTriangle, CircleCheck, Download, FolderOpen, Plus, RefreshCw, X } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -94,27 +94,40 @@ export function DazPluginsSection({
   const [busy, setBusy] = useState(false)
   const [report, setReport] = useState<InstallReport | null>(null)
 
+  // Scanned from the FIELDS, not from settings.json: a folder just added is
+  // unsaved, and reading the saved list would describe the list the user had
+  // before they touched it.
+  const foldersKey = folders.join('|')
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      setState(await fetchDazPluginState())
+      setState(await fetchDazPluginState({ data: { folders } }))
       setLoadError('')
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : String(e))
     } finally {
       setLoading(false)
     }
-  }, [])
+    // The folder LIST is the input; `foldersKey` is its stable identity (a new
+    // array every render would re-create this callback forever).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [foldersKey])
 
   // Re-read on focus: installing a Daz Studio, or dropping a new plugin release
-  // into a folder, both happen outside this window.
+  // into a folder, both happen outside this window. Debounced on the folder
+  // list so TYPING a path doesn't walk a network share on every keystroke —
+  // the same 350ms the folder fields on this page have always used.
   useRefetchOnFocus(
     () => {
       void load()
     },
-    [load, folders.join('|')],
-    { immediate: true },
+    [load],
+    { immediate: false },
   )
+  useEffect(() => {
+    const timer = setTimeout(() => void load(), 350)
+    return () => clearTimeout(timer)
+  }, [load])
 
   async function addFolder() {
     const picked = await pickFolder(

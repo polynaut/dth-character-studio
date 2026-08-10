@@ -232,10 +232,23 @@ async function pluginTargets(): Promise<Array<{ key: string; name: string; path:
 /**
  * The whole panel's state in one read: which exporter builds the configured
  * folders hold, and what each detected Daz installation currently has.
+ *
+ * `folders` are the ones to scan — the Settings panel passes what is IN ITS
+ * FIELDS, which is not the same thing as what is on disk: a folder just added
+ * is unsaved, and a readout built from settings.json would show the user a scan
+ * of the list they had a minute ago (measured: two fields on screen, one of
+ * them scanned, the other reported as "no build for this generation"). Omit
+ * them and the saved list is used, which is what the install itself wants —
+ * it runs after the save.
  */
-export async function fetchDazPluginState(): Promise<DazPluginState> {
+export async function fetchDazPluginState({ data }: { data?: unknown } = {}): Promise<DazPluginState> {
+  const { folders } = z
+    .object({ folders: z.array(z.string()).optional() })
+    .parse(data ?? {})
   const settings = await storage.getSettings()
-  const scan = await storage.scanExporterSources(storage.exporterSourceFolders(settings))
+  const scan = await storage.scanExporterSources(
+    folders ?? storage.exporterSourceFolders(settings),
+  )
   const newest = newestReleasePerFlavor(scan.found)
   const found = await pluginTargets()
   const targets = await Promise.all(

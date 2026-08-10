@@ -118,6 +118,47 @@ test('installing copies each build into the install it was built for', async ({ 
   )
 })
 
+test('a folder just ADDED is scanned before it is saved', async ({ page }) => {
+  // Measured on the real app: the panel read the folder list from settings.json,
+  // so a folder typed a second ago was invisible to the scan — two fields on
+  // screen, one of them scanned, and the untouched half of the machine reported
+  // as "no build for this generation". The readout has to describe the FIELDS.
+  const seed = machineSeed((s) => {
+    const settingsPath = `${P.appData}/settings.json`
+    s.files[settingsPath] = JSON.stringify({
+      ...JSON.parse(s.files[settingsPath] ?? '{}'),
+      // Only the DS4 folder is saved…
+      dthExporterFolders: [`${EXPORTER_ROOT}/Daz Studio 4`],
+    })
+  })
+  await openPlugins(page, seed)
+  await expect(page.getByText('dsp_dth_exporter.dll', { exact: true })).toHaveCount(0)
+
+  // …and the DS6 one is typed into a new row, never saved.
+  await page.getByRole('button', { name: 'Add folder' }).click()
+  await page.getByRole('textbox').last().fill(`${EXPORTER_ROOT}\\Daz Studio 6`)
+
+  await expect(page.getByText('dsp_dth_exporter.dll', { exact: true })).toBeVisible()
+  await expect(page.getByText('no Daz Studio 6 build among your release folders')).toHaveCount(0)
+})
+
+test('the pre-list single folder becomes a row instead of an invisible source', async ({ page }) => {
+  // The migration from `dthExporterFolder`: it was merged into the SCAN but not
+  // shown, so the panel listed a build with no field behind it — unremovable,
+  // and impossible to reconcile with what was on screen.
+  const seed = machineSeed((s) => {
+    const settingsPath = `${P.appData}/settings.json`
+    const saved = JSON.parse(s.files[settingsPath] ?? '{}')
+    delete saved.dthExporterFolders
+    saved.dthExporterFolder = `${EXPORTER_ROOT}/Daz Studio 4`
+    s.files[settingsPath] = JSON.stringify(saved)
+  })
+  await openPlugins(page, seed)
+  const section = page.locator('section').filter({ hasText: 'Daz Studio plugins' })
+  await expect(section.getByRole('textbox')).toHaveValue(`${EXPORTER_ROOT}/Daz Studio 4`)
+  await expect(page.getByText('dth_exporter.dll', { exact: true })).toBeVisible()
+})
+
 test('a release folder for only one generation leaves the other install named, not guessed at', async ({
   page,
 }) => {

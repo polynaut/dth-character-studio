@@ -536,6 +536,22 @@ function SettingsPage() {
     }
   }, [settings.dthPosesFolder])
 
+  // The pre-list Exporter folder becomes the first row of the list, once.
+  //
+  // `exporterSourceFolders` already merges it for the SCAN, but a folder that
+  // is scanned and not shown is worse than one that is neither: the panel then
+  // reports a build the user cannot see a field for, and removing it is
+  // impossible. Seeding the list makes what you see the whole input; it marks
+  // the form dirty, so one Save persists the migration and the legacy field
+  // stops mattering.
+  useEffect(() => {
+    setSettings((s) =>
+      s.dthExporterFolders.length > 0 || !s.dthExporterFolder.trim()
+        ? s
+        : { ...s, dthExporterFolders: [s.dthExporterFolder.trim()] },
+    )
+  }, [initial.dthExporterFolder])
+
   // Multi-release with no valid selection yet → pre-select the latest. That
   // marks the form dirty so the user saves once to store CURRENT_DTH_VERSION;
   // later releases never switch the active version on their own.
