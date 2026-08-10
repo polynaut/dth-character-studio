@@ -1230,9 +1230,9 @@ function SettingsPage() {
               </div>
             ) : (
               <p className="border-t pt-4 text-xs text-muted-foreground">
-                The release installs into the activated Houdini installation only. To install into
-                another version&apos;s folder as well, use <strong>Set the paths manually</strong>{' '}
-                in the Houdini installation section above.
+                New folders can&apos;t be added while a Houdini installation is activated — the
+                destination follows that card. To drive several folders by hand again, use{' '}
+                <strong>Set the paths manually</strong> in the Houdini installation section above.
               </p>
             )}
 

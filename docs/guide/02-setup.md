@@ -102,7 +102,8 @@ dropped; usually an uninstall left it.
    Houdini version: each extra folder installs its release independently, so
    an older Houdini can keep an older DTH release. It is offered only while the
    Houdini paths are **yours to edit** — with a Houdini installation activated
-   above, the release installs into that installation and nothing else. Use
+   above, the destination follows that card and no new folders can be added
+   (folders added earlier stay, with their own Install buttons). Use
    **Set the paths manually** in the Houdini installation section if you want to
    drive several folders by hand again.
 
