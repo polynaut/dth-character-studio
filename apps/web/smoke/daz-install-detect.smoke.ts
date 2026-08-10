@@ -120,6 +120,11 @@ test('activating an installation derives the paths and saves them itself', async
   // …and the derived paths are shown read-only, with the manual field gone.
   await expect(page.getByText('Paths from this installation')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Set the paths manually' })).toBeVisible()
+  // DIM's DOWNLOAD folder is NOT among them, though the seed's settings file
+  // has one: the studio never applies it, and a path listed here reads as a
+  // path this installation supplies to the studio.
+  await expect(page.getByText(/DIM downloads/)).toHaveCount(0)
+  await expect(page.getByText(/Install Manager.Downloads/)).toHaveCount(0)
   // Gone from "Setup DTH Release" entirely, not echoed there read-only: the
   // card above already lists it, and a second copy can only ever agree.
   await expect(page.getByLabel('My DAZ 3D Library')).toHaveCount(0)

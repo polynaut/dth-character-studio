@@ -100,7 +100,11 @@ dropped; usually an uninstall left it.
    Houdini isn't on this machine.
 4. **Add another Houdini folder** *(optional)* repeats step 3 for a second
    Houdini version: each extra folder installs its release independently, so
-   an older Houdini can keep an older DTH release.
+   an older Houdini can keep an older DTH release. It is offered only while the
+   Houdini paths are **yours to edit** — with a Houdini installation activated
+   above, the release installs into that installation and nothing else. Use
+   **Set the paths manually** in the Houdini installation section if you want to
+   drive several folders by hand again.
 
 ## Daz Studio plugins
 
