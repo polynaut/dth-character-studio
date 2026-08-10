@@ -348,7 +348,12 @@ function ProjectCharactersPage() {
         params: { projectId, characterId: character.id },
       })
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      const message = e instanceof Error ? e.message : String(e)
+      setError(message)
+      // The inline error lives INSIDE the panel — Esc-close it during a long
+      // "Copy & Create" and the failure vanishes (reopening resets the panel).
+      // The toast survives the dismissal.
+      toast.error(message)
       // A copy/save failure lands AFTER createCharacter succeeded — the character
       // already exists on disk. Refresh the list so it isn't invisible (and a
       // retry doesn't re-run createCharacter against the leftover folder).

@@ -225,7 +225,12 @@ function CharacterPage() {
   // param). Products only appears when the project enables Daz Products.
   const navigate = Route.useNavigate()
   const { tab } = Route.useSearch()
-  const activeTab: 'character' | 'products' | 'notes' = tab ?? 'character'
+  // A stale `?tab=products` URL (history entry, bookmark) with Daz Products
+  // meanwhile disabled has no Products trigger to light up — without the
+  // fallback the strip rendered with NO tab active while the body already fell
+  // back to the character view (see onProductsTab below).
+  const activeTab: 'character' | 'products' | 'notes' =
+    tab === 'products' && !project?.dazProductsEnabled ? 'character' : (tab ?? 'character')
   // Which Daz scene card is selected — groom lists, the header's scene tag and
   // the per-scene ROM override all follow it (lib/use-scene-selection.ts).
   const sceneSel = useSceneSelection(character, patch)

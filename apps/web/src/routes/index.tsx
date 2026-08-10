@@ -94,7 +94,12 @@ function HomePage() {
       await router.invalidate()
       toast.success(`Project “${name.trim()}” created`)
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      const message = e instanceof Error ? e.message : String(e)
+      setError(message)
+      // The inline error lives INSIDE the panel — Esc-close it during a slow
+      // create and the failure vanishes (reopening resets the panel). The toast
+      // survives the dismissal.
+      toast.error(message)
     } finally {
       setBusy(false)
     }
@@ -120,8 +125,14 @@ function HomePage() {
   }
 
   async function onForget(dcsp: string) {
-    await forgetRecent({ data: { path: dcsp } })
-    await router.invalidate()
+    try {
+      await forgetRecent({ data: { path: dcsp } })
+      await router.invalidate()
+    } catch (e) {
+      // Previously an unhandled rejection with zero feedback — the trash
+      // button just looked dead.
+      toast.error(e instanceof Error ? e.message : String(e))
+    }
   }
 
   // Drop a `.dcsp` to open it; drop a folder to start a project there.

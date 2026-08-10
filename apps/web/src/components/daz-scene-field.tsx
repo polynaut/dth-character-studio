@@ -380,6 +380,17 @@ export function DazSceneField({
   const [menuFor, setMenuFor] = useState<string | null>(null)
   const [romReadySet, setRomReadySet] = useState<ReadonlySet<string>>(new Set())
   const [generatingRom, setGeneratingRom] = useState('')
+  // onGenerateRom's poll can run for up to 30 minutes — without a cancellation
+  // flag it outlives this component and auto-opens the ROM scene in Daz long
+  // after the user navigated away. Cleared on unmount (and re-armed on mount,
+  // so StrictMode's mount-cleanup-mount doesn't leave it stuck false).
+  const romPollAlive = useRef(true)
+  useEffect(() => {
+    romPollAlive.current = true
+    return () => {
+      romPollAlive.current = false
+    }
+  }, [])
   const ctrlHeld = useModifierHeld('Control')
   const romScenes = [character.scenePath, ...character.extraScenes].filter(Boolean)
   const romScenesKey = romScenes.join('|')
@@ -422,6 +433,9 @@ export function DazSceneField({
       const deadline = Date.now() + 30 * 60_000
       while (Date.now() < deadline) {
         await new Promise((resolve) => setTimeout(resolve, 3000))
+        // Unmounted (navigated away, character switched) — stop silently; Daz
+        // finishes its run either way, and the auto-open must not fire later.
+        if (!romPollAlive.current) return
         if (await romAnimationFresh({ data: { romPath, sinceMs: startedAt } })) {
           // Just built from the current definition — ready without waiting for
           // the next focus re-read.
@@ -879,11 +893,10 @@ export function DazSceneField({
   // additionally locks the toggle off entirely (deleteFileDisabled below).
   function askRemove(scene: string) {
     setError('')
-    // Default follows WHERE the file is: a scene copied into the character
-    // folder is the studio's copy and goes with the card (the button reads
-    // "Remove"); a scene linked in place is the user's original and is only
-    // unlinked. The toggle overrides either way.
-    setRemoveDeleteFile(insideCharFolder(scene))
+    // Unconditionally OFF — the whole why lives in the comment above. (This
+    // used to follow WHERE the file is, pre-ticking delete for an in-folder
+    // scene, directly contradicting it.)
+    setRemoveDeleteFile(false)
     setPendingRemove(scene)
   }
 
@@ -1465,7 +1478,10 @@ export function DazSceneField({
           // A scene linked in place (outside the character folder) is the user's
           // original — disable delete so it can only be unlinked, never removed.
           deleteFileDisabled={!insideCharFolder(pendingRemove)}
-          deleteLabel="Remove"
+          // The dialog's default "Delete" — with the toggle no longer pre-ticked,
+          // the confirm must read as deletion exactly when the toggle says so
+          // ("Remove" was ambiguous about the file).
+          deleteLabel="Delete"
           busy={busy}
           error={error}
           onConfirm={() => void confirmRemove()}
