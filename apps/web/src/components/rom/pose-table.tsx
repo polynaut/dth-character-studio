@@ -48,6 +48,19 @@ export interface PoseTableMeta {
   startFrame: number
   /** Absolute frames whose morphs failed in the last ROM run — rows marked red. */
   failedFrames?: Set<number>
+  /**
+   * Name errors from the last blocked SAVE, by pose id — the duplicate/reserved
+   * morph-name checks that only a whole-character pass can see.
+   *
+   * The per-cell validator can only judge one value (it catches illegal
+   * characters); a duplicate is a fact about two rows. So the save-time verdict
+   * is threaded back in, or the toast names a frame and the field it points at
+   * looks perfectly fine — which is exactly what was reported.
+   *
+   * `name` is the value that FAILED: the row goes quiet as soon as it is edited
+   * away from it, without touching the marks on any other row.
+   */
+  nameErrors?: ReadonlyMap<string, { message: string; name: string }>
   showBoneScale: boolean
   expandedIds: Set<string>
   toggleExpanded: (poseId: string) => void
@@ -160,11 +173,15 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
           // Houdini only accepts [A-Za-z0-9_] — flag anything else instead of
           // silently rewriting what the user typed (same rule the generator's
           // sanitizePoseName enforces on the CSV).
-          validate={(v) =>
-            v !== sanitizePoseName(v)
-              ? 'Only letters, numbers and underscores — Houdini rejects anything else.'
-              : ''
-          }
+          validate={(v) => {
+            if (v !== sanitizePoseName(v)) {
+              return 'Only letters, numbers and underscores — Houdini rejects anything else.'
+            }
+            // The save-time verdict (duplicate / reserved name), shown only
+            // while the value is still the one that failed.
+            const saved = meta.nameErrors?.get(row.original.id)
+            return saved && saved.name === v ? saved.message : ''
+          }}
           onCommit={(name) => meta.update(row.index, { name })}
         />
       )
