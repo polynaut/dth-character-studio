@@ -2,6 +2,8 @@ import { exists, remove, rename, stat } from '@tauri-apps/plugin-fs'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
+import { newId } from '@dth/rom'
+
 import { withBusyCursor } from '../../busy-cursor.ts'
 import { normalizePathLower } from '#/lib/path.ts'
 
@@ -90,9 +92,50 @@ export async function openProject({ data }: { data: unknown }): Promise<void> {
   const { path } = z.object({ path: z.string().min(1) }).parse(data)
   const dcsp = joinPath(path)
   if (!(await exists(dcsp))) throw new Error(`Project file not found:\n${dcsp}`)
-  const manifest = await storage.readManifest(dirname(dcsp))
+  const manifest = await remintCopiedProjectId(dcsp)
   await storage.rememberRecent(dcsp, manifest.name)
   await openProjectWindow(dcsp)
+}
+
+/**
+ * A byte-copied project folder carries the ORIGINAL's manifest id, and the
+ * app-data product-scan store (`product-scans/<manifest id>/<character id>/`)
+ * keys on it — the "two" projects then cross-pollinate scan rows forever.
+ * First sight of a path NEW to recents whose id another live recents project
+ * still claims = a copy: re-mint this one's id before it enters the registry
+ * (its scan store starts empty; the original keeps the data it owns). The
+ * already-known path is presumptively the original and is NEVER re-minted. A
+ * MOVED project (old path dead) keeps its id — the store follows it.
+ *
+ * Residuals, deliberate: two copies BOTH opened before this shipped are both
+ * in recents already and stay collided until one is deleted/re-created; and
+ * probing siblings costs one manifest read per live recents entry — paid only
+ * on a genuinely new path, never on a routine reopen.
+ *
+ * Returns the manifest as it now stands (re-minted or not).
+ */
+async function remintCopiedProjectId(dcsp: string): Promise<storage.DcspManifest> {
+  const dir = dirname(dcsp)
+  const manifest = await storage.readManifest(dir)
+  const key = dcsp.toLowerCase()
+  const recents = await storage.listRecents()
+  if (recents.some((r) => r.path.toLowerCase() === key)) return manifest
+  for (const other of recents) {
+    try {
+      if (!(await exists(other.path))) continue // a dead entry is a MOVE, not a copy
+      const sibling = await storage.readManifest(dirname(other.path))
+      if (sibling.id !== manifest.id) continue
+      const reminted = { ...manifest, id: newId() }
+      await storage.writeManifest(dir, reminted)
+      console.info(
+        `[DTH] project at ${dir} carried the same id as ${dirname(other.path)} (a byte copy) — minted a fresh id so their product-scan stores separate`,
+      )
+      return reminted
+    } catch {
+      // an unreadable sibling is not evidence of a copy
+    }
+  }
+  return manifest
 }
 
 /**
@@ -107,7 +150,9 @@ export async function rememberActiveProject(dcspPath: string): Promise<void> {
   try {
     const dcsp = joinPath(dcspPath)
     if (!(await exists(dcsp))) return
-    const manifest = await storage.readManifest(dirname(dcsp))
+    // Same copy check as openProject — a `.dcsp` double-clicked in Explorer is
+    // exactly how a fresh byte copy usually gets its first open.
+    const manifest = await remintCopiedProjectId(dcsp)
     await storage.rememberRecent(dcsp, manifest.name)
   } catch {
     // A boot-time recents write must never break window startup.

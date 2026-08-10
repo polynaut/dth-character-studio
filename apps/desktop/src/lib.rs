@@ -182,7 +182,8 @@ pub fn run() {
             windows::release_project_window,
             windows::sync_renamed_project_window,
             fsutil::probe_locked_files,
-            fsutil::scan_files_by_ext
+            fsutil::scan_files_by_ext,
+            fsutil::write_text_file_if_unchanged
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

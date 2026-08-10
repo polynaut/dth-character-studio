@@ -314,6 +314,59 @@ describe('recent projects', () => {
   })
 })
 
+describe('copied-project detection (re-mint on first open of a new path)', () => {
+  it('re-mints a byte copy first seen at a NEW path while the original is alive', async () => {
+    // The product-scan store keys on the manifest id — a byte-copied folder
+    // shares it with the original and the "two" projects cross-pollinate.
+    await storage.createProjectManifest('/games/A', 'A')
+    const original = await storage.readManifest('/games/A')
+    await storage.rememberRecent('/games/A/A.dcsp', 'A')
+    // Explorer copy: same bytes, same id, path not in recents yet.
+    addDir('/games/A-copy')
+    files.set('/games/A-copy/A.dcsp', files.get('/games/A/A.dcsp')!)
+
+    await api.rememberActiveProject('/games/A-copy/A.dcsp')
+
+    const copy = await storage.readManifest('/games/A-copy')
+    expect(copy.id).not.toBe(original.id)
+    // The original keeps ITS id (it owns the scan store) — never re-minted.
+    expect((await storage.readManifest('/games/A')).id).toBe(original.id)
+    // The copy still landed in recents under its own path.
+    expect((await storage.listRecents()).map((r) => r.path)).toContain('/games/A-copy/A.dcsp')
+  })
+
+  it('a MOVED project (old path dead) keeps its id — the scan store follows it', async () => {
+    await storage.createProjectManifest('/games/B', 'B')
+    const before = await storage.readManifest('/games/B')
+    await storage.rememberRecent('/games/B/B.dcsp', 'B')
+    // Simulate the move: the folder is now at /games/B2, the recents entry
+    // still names the dead old path.
+    addDir('/games/B2')
+    files.set('/games/B2/B.dcsp', files.get('/games/B/B.dcsp')!)
+    files.delete('/games/B/B.dcsp')
+    dirs.delete('/games/B')
+
+    await api.rememberActiveProject('/games/B2/B.dcsp')
+
+    expect((await storage.readManifest('/games/B2')).id).toBe(before.id)
+  })
+
+  it('an already-known path is never re-minted, even while its copy exists', async () => {
+    await storage.createProjectManifest('/games/C', 'C')
+    const original = await storage.readManifest('/games/C')
+    await storage.rememberRecent('/games/C/C.dcsp', 'C')
+    addDir('/games/C-copy')
+    files.set('/games/C-copy/C.dcsp', files.get('/games/C/C.dcsp')!)
+    await storage.rememberRecent('/games/C-copy/C.dcsp', 'C')
+
+    // Re-opening the ORIGINAL (known path) must not re-mint it just because a
+    // same-id sibling sits in recents.
+    await api.rememberActiveProject('/games/C/C.dcsp')
+
+    expect((await storage.readManifest('/games/C')).id).toBe(original.id)
+  })
+})
+
 describe('deleteProject', () => {
   it('removes the folder, the Daz-script folder, the scans and the recents entry', async () => {
     // A full project: manifest + a character + meta, remembered in recents…

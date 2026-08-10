@@ -486,6 +486,22 @@ export function installTauriMock(seed: TauriMockSeed): void {
           animationFrames: 1,
           error: '',
         }
+      case 'write_text_file_if_unchanged': {
+        // The recents registry's cross-window compare-and-swap (fsutil.rs).
+        // One webview here, so the compare virtually always matches — but the
+        // mock keeps the contract honest: a stale `expected` conflicts and
+        // writes nothing, exactly like the native command.
+        const { path, expected, next } = args.request as {
+          path: string
+          expected: string
+          next: string
+        }
+        const key = norm(path)
+        const current = isFile(key) ? String(files.get(key)) : ''
+        if (current !== expected) return 'conflict'
+        files.set(key, next)
+        return 'written'
+      }
       case 'housekeeping_sweep':
         return { filesDeleted: 0, bytesFreed: 0 }
       case 'elevated_session':

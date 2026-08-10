@@ -1,4 +1,6 @@
 import { exists, mkdir, readDir, readTextFile, remove, rename } from '@tauri-apps/plugin-fs'
+import { invoke, isTauri } from '@tauri-apps/api/core'
+import { z } from 'zod'
 
 import { newId } from '@dth/rom'
 
@@ -360,13 +362,22 @@ export interface RecentProject {
   lastOpenedAt: string
 }
 
-async function readRecents(): Promise<Array<RecentProject>> {
+/** Parse the recents file's text — tolerant, like every registry read. */
+function parseRecentsText(raw: string): Array<RecentProject> {
   try {
-    const raw = JSON.parse(await readTextFile(await dataPath('recents.json')))
-    if (!Array.isArray(raw)) return []
-    return raw.filter(
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter(
       (r): r is RecentProject => r && typeof r.path === 'string' && typeof r.name === 'string',
     )
+  } catch {
+    return []
+  }
+}
+
+async function readRecents(): Promise<Array<RecentProject>> {
+  try {
+    return parseRecentsText(await readTextFile(await dataPath('recents.json')))
   } catch {
     return []
   }
@@ -382,18 +393,52 @@ export async function listRecents(): Promise<Array<RecentProject>> {
   return readRecents()
 }
 
-// Recents mutations are an unlocked read-modify-write on a file shared across
-// windows — and recents IS the app's only project registry, so a dropped entry
-// is a "lost" project on the Home screen. Serialize the mutations within this
-// window and RE-READ fresh inside each queued step, so two overlapping calls
-// (opening a project while another window forgets one) merge against the
-// latest disk state instead of clobbering each other with stale snapshots.
+// Recents mutations are a read-modify-write on a file shared across windows —
+// and recents IS the app's only project registry, so a dropped entry is a
+// "lost" project on the Home screen. Two layers of serialization:
+//  - the per-window queue below orders THIS window's mutations (and re-reads
+//    fresh inside each step);
+//  - ACROSS windows, the write goes through the native compare-and-swap
+//    command (one process-wide lock — every window shares the one Tauri
+//    process), so an interleaved write from another window turns into a
+//    'conflict' + retry here instead of silently clobbering that window's
+//    entry. A mutation is re-applied on retry, never dropped.
 let recentsMutationQueue: Promise<void> = Promise.resolve()
+
+/** How many straight CAS conflicts before falling back to a plain write. Two
+ *  windows retrying against each other resolve in one or two rounds; hitting
+ *  this many means something rewrites the file in a tight loop — the fallback
+ *  keeps THIS mutation from being dropped (pre-CAS behavior, no worse). */
+const RECENTS_CAS_ATTEMPTS = 8
 
 function mutateRecents(
   mutate: (recents: Array<RecentProject>) => Array<RecentProject>,
 ): Promise<void> {
   const run = recentsMutationQueue.then(async () => {
+    if (isTauri()) {
+      const path = await dataPath('recents.json')
+      for (let attempt = 0; attempt < RECENTS_CAS_ATTEMPTS; attempt++) {
+        const current = await readTextFile(path).catch(() => '')
+        const next = JSON.stringify(mutate(parseRecentsText(current)), null, 2) + '\n'
+        let verdict: 'written' | 'conflict'
+        try {
+          // A primitive return through the FFI ritual — z.enum, no fixture
+          // (the remove_dir_if_empty pattern).
+          verdict = z.enum(['written', 'conflict']).parse(
+            await invoke('write_text_file_if_unchanged', {
+              request: { path, expected: current, next },
+            }),
+          )
+        } catch {
+          // The command is missing or answered garbage — a WEBVIEW newer than
+          // its shell (mid-update) is the real case. Fall back to the plain
+          // write: pre-CAS behavior, strictly no worse.
+          break
+        }
+        if (verdict === 'written') return
+      }
+    }
+    // Browser build (single window), CAS unavailable, or the attempts ran dry.
     await writeRecents(mutate(await readRecents()))
   })
   // The queue survives a failed write — the next mutation still runs.

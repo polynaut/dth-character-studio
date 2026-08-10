@@ -1,10 +1,11 @@
-import { readDir, remove, stat } from '@tauri-apps/plugin-fs'
+import { exists, readDir, remove, stat } from '@tauri-apps/plugin-fs'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
 import * as storage from '../storage'
 import { join, walkFilesStrict } from '../storage/fs'
 import { avatarSourceMaster, parseAvatarName } from '../avatar-names'
+import { characterFolderName } from '../library'
 import { charsRoot, projectsForSweep } from './core'
 import type { ProjectInfo } from './core'
 import { gcNoteMedia } from './notes'
@@ -211,16 +212,96 @@ async function sweepOrphanedCharacterData(): Promise<HousekeepingResult> {
 }
 
 /**
+ * Orphaned per-character SCRIPT dirs in the Daz library
+ * (`Scripts/DTH-Character-Studio/<project>/<character>/`): a character deleted
+ * or renamed OUTSIDE the app (Explorer, another machine's sync) strands its
+ * generated-script folder forever — the in-app delete removes it as a derived
+ * artifact, and a rename whose regeneration threw mid-way leaks the old-name
+ * dir the same way. This sweep is the app-external counterpart, with STRICTER
+ * gates than the in-app delete because it reaches into the user's Daz library:
+ *  - only DIRECTORIES are candidates, and only inside a project folder whose
+ *    sanitized name belongs to a KNOWN project (recents is the registry) — an
+ *    unknown project dir may belong to a project this machine never opened,
+ *    and the runtime files at the root are files, never candidates;
+ *  - names sanitize through {@link characterFolderName}, and two projects can
+ *    sanitize to ONE folder — live sets are UNIONED per folder, and a folder
+ *    claimed by any project that failed its gates is off limits this run;
+ *  - per project, the same strictness as the meta-dir GC: a strict pre-walk of
+ *    the characters root plus a zero-problem scan — an unreadable definition
+ *    is a character that EXISTS, not one whose scripts are orphaned.
+ */
+async function sweepOrphanScriptDirs(): Promise<HousekeepingResult> {
+  const total: HousekeepingResult = { filesDeleted: 0, bytesFreed: 0 }
+  try {
+    const settings = await storage.getSettings()
+    if (!settings.dazLibraryFolder) return total
+    const scriptsRoot = storage.studioScriptsDir(settings.dazLibraryFolder)
+    if (!(await exists(scriptsRoot))) return total
+    // Folder key (lowercased sanitized project name) → the union of live
+    // character dir names; null = a claiming project failed its gates.
+    const liveByFolder = new Map<string, Set<string> | null>()
+    for (const project of await projectsForSweep()) {
+      const key = characterFolderName(project.name).toLowerCase()
+      try {
+        const root = charsRoot(project)
+        // Completeness gate, same shape as the meta-dir GC's.
+        await walkFilesStrict(root, '', (name) => name.startsWith('.'))
+        const scan = await storage.scanCharacterLibrary(root)
+        if (scan.problems.length > 0) throw new Error('incomplete scan')
+        const live = liveByFolder.get(key)
+        if (live === null) continue
+        const names = live ?? new Set<string>()
+        for (const entry of scan.entries) {
+          names.add(characterFolderName(entry.character.name).toLowerCase())
+        }
+        liveByFolder.set(key, names)
+      } catch {
+        liveByFolder.set(key, null)
+      }
+    }
+    const rootKey = scriptsRoot.replace(/\\/g, '/').toLowerCase()
+    for (const projectEntry of await readDir(scriptsRoot)) {
+      if (!projectEntry.isDirectory) continue
+      const live = liveByFolder.get(projectEntry.name.toLowerCase())
+      // undefined = unknown project dir, null = gates tripped — both untouched.
+      if (live == null) continue
+      const projDir = join(scriptsRoot, projectEntry.name)
+      try {
+        for (const child of await readDir(projDir)) {
+          if (!child.isDirectory) continue
+          if (live.has(child.name.toLowerCase())) continue
+          const target = join(projDir, child.name)
+          // Containment re-check, however the names composed.
+          if (!target.replace(/\\/g, '/').toLowerCase().startsWith(`${rootKey}/`)) continue
+          try {
+            addResult(total, await removeDirCounted(target))
+          } catch {
+            // locked/unlistable candidate — left for the next sweep
+          }
+        }
+      } catch {
+        // unlistable project dir — nothing can be judged safely
+      }
+    }
+  } catch {
+    // no settings / unreadable scripts root — deleting nothing is the point
+  }
+  return total
+}
+
+/**
  * Age-out stale app-data scan files (not modified within their retention
  * windows) — the `product-scans` root and the `scan-frames` keyframe CSVs —
  * pruning folders they empty, plus the note-media sweep and the orphaned
- * character-meta/avatar pass across all known projects. Runs on app launch and
- * from the "Clean up now" button. No-op in the plain web build (no native layer).
+ * character-meta/avatar/script-dir passes across all known projects. Runs on
+ * app launch and from the "Clean up now" button. No-op in the plain web build
+ * (no native layer).
  */
 export async function housekeepingSweep(): Promise<HousekeepingResult> {
   if (!isTauri()) return { filesDeleted: 0, bytesFreed: 0 }
   const media = await sweepNoteMedia()
   const orphans = await sweepOrphanedCharacterData()
+  const scriptOrphans = await sweepOrphanScriptDirs()
   const productScansDir = await storage.dataPath('product-scans')
   const scans = housekeepingResultSchema.parse(
     await invoke('housekeeping_sweep', {
@@ -238,8 +319,18 @@ export async function housekeepingSweep(): Promise<HousekeepingResult> {
     }),
   )
   return {
-    filesDeleted: scans.filesDeleted + frames.filesDeleted + media.filesDeleted + orphans.filesDeleted,
-    bytesFreed: scans.bytesFreed + frames.bytesFreed + media.bytesFreed + orphans.bytesFreed,
+    filesDeleted:
+      scans.filesDeleted +
+      frames.filesDeleted +
+      media.filesDeleted +
+      orphans.filesDeleted +
+      scriptOrphans.filesDeleted,
+    bytesFreed:
+      scans.bytesFreed +
+      frames.bytesFreed +
+      media.bytesFreed +
+      orphans.bytesFreed +
+      scriptOrphans.bytesFreed,
     // Locked/readonly files past the cutoff that could NOT be deleted — summed
     // across both native sweeps so "0 files freed" is distinguishable from
     // "every delete failed" (the note-media and orphan GCs report no failures).
