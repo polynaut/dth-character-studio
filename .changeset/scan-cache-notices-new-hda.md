@@ -8,4 +8,6 @@
 
 The key now includes a fingerprint of the operator libraries hython will load (name, size and modification time of each `.hda`/`.otl` in the paired prefs folder), so installing, updating or removing one invalidates every affected entry. Existing entries are re-scanned once, in the background, the first time each project is looked at.
 
+**And Rescan now actually rescans.** It went through the same cache, so on a project whose entry looked fresh it returned the stored answer in a few milliseconds — no hython, no change on screen, indistinguishable from a dead button, and no way out of a wrong verdict. It now bypasses both cache layers and re-reads every project with hython, and says how many it read when it is done.
+
 Consequence on 2.5.1 and newer: the PoseAsset CSV path stops being reported as missing and starts being offered — *Fill network* writes it like every other blank parameter, with no further change needed.

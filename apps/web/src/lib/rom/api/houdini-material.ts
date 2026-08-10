@@ -85,6 +85,18 @@ const scanInput = z.object({
    *  character, and has no root to rebuild a path from. */
   projectId: z.string().default(''),
   characterId: z.string().default(''),
+  /** Ignore both cache layers and re-read every `.hip` with hython, storing the
+   *  results as usual.
+   *
+   *  This is what the drawer's **Rescan** means, and without it that button
+   *  could not do its job: the cache answers on path+mtime+export root+installed
+   *  HDAs, so anything that changes a verdict WITHOUT touching those — a repair
+   *  made in Houdini itself, a file the studio cannot stat, a scan that was
+   *  simply wrong — left the user pressing a button that returned the same
+   *  answer in ten milliseconds and looked broken. Not the default: every other
+   *  caller wants the cache, which is the difference between opening this drawer
+   *  instantly and starting hython every time. */
+  force: z.boolean().default(false),
 })
 
 /**
@@ -344,7 +356,7 @@ export async function scanHoudiniMaterials({
 }: {
   data: unknown
 }): Promise<Array<MaterialScanProject>> {
-  const { hipPaths, projectId, characterId } = scanInput.parse(data)
+  const { hipPaths, projectId, characterId, force } = scanInput.parse(data)
   if (hipPaths.length === 0) return []
   if (!isTauri()) {
     throw new Error('Scanning Houdini projects needs the desktop app (it runs hython).')
@@ -381,7 +393,10 @@ export async function scanHoudiniMaterials({
   const stale: Array<string> = []
   hipPaths.forEach((hipPath, i) => {
     const key = keys[i]
-    const hit = (key ? scanCache.get(key) : undefined) ?? freshScan(stored, hipPath, key)
+    // `force` skips BOTH layers, not just the disk one: the in-memory Map would
+    // otherwise answer for the rest of the session and a second Rescan would go
+    // back to doing nothing.
+    const hit = force ? null : ((key ? scanCache.get(key) : undefined) ?? freshScan(stored, hipPath, key))
     if (hit) cached.set(hipPath, hit)
     else stale.push(hipPath)
   })

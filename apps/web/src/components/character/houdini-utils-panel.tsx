@@ -377,6 +377,8 @@ export function HoudiniUtilsPanel({
     hipPaths: Array<string>,
     set: (next: ScanState) => void,
     scope?: { projectId: string; characterId: string },
+    /** A user-driven Rescan: bypass the cache and SAY what came back. */
+    force = false,
   ): Promise<Array<MaterialScanProject>> {
     if (hipPaths.length === 0) {
       set(EMPTY_SCAN)
@@ -384,20 +386,35 @@ export function HoudiniUtilsPanel({
     }
     set({ loading: true, error: '', projects: [] })
     try {
-      const projects = await scanHoudiniMaterials({ data: { hipPaths, ...scope } })
+      const projects = await scanHoudiniMaterials({ data: { hipPaths, ...scope, force } })
       set({ loading: false, error: '', projects })
+      // A forced rescan usually ends where it started — the checks pass, the
+      // list is identical — and an unchanged screen is indistinguishable from a
+      // button that did nothing. Which is exactly how this read before it could
+      // force at all: the cache answered in ten milliseconds and the spinner
+      // never became visible. Say it ran.
+      if (force) {
+        toast.success(
+          projects.length === 1
+            ? 'Rescanned the Houdini project'
+            : `Rescanned ${projects.length} Houdini projects`,
+        )
+      }
       return projects
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       set({ loading: false, error: message, projects: [] })
+      if (force) toast.error(message)
       return []
     }
   }
 
   /** Every scan of the character's own projects goes through this, so they all
-   *  persist under the character's store. */
-  function scanTargets(): Promise<Array<MaterialScanProject>> {
-    return runScan(targets, setTargetScan, targetScope)
+   *  persist under the character's store. `force` is the Rescan button — every
+   *  other caller follows an operation that SAVED the `.hip`, so its new mtime
+   *  misses the cache on its own merits. */
+  function scanTargets(force = false): Promise<Array<MaterialScanProject>> {
+    return runScan(targets, setTargetScan, targetScope, force)
   }
 
   /**
@@ -1123,7 +1140,7 @@ export function HoudiniUtilsPanel({
               result={actionReport}
               repathReason={repath.reason}
               restore={restore}
-              onRescan={() => void scanTargets()}
+              onRescan={() => void scanTargets(true)}
             />
           </TabsContent>
 
@@ -1157,7 +1174,7 @@ export function HoudiniUtilsPanel({
                   variant="ghost"
                   size="sm"
                   disabled={targetScan.loading || targets.length === 0}
-                  onClick={() => void scanTargets()}
+                  onClick={() => void scanTargets(true)}
                 >
                   <RefreshCw className={targetScan.loading ? 'animate-spin' : ''} /> Rescan
                 </Button>
