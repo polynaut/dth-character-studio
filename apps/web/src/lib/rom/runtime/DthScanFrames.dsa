@@ -232,14 +232,76 @@ function getNodeParents(oNode){
 
 
 /**
+ * Report the outcome of a SILENT run, so the studio has something to poll that
+ * is not "did a CSV appear".
+ *
+ * Without it, every failure looks identical from outside: no selection, no
+ * keyed frames and a write error all leave the folder exactly as it was, and a
+ * dialog waiting for the CSV would spin forever with nothing to say. One small
+ * JSON beside the CSV turns each of those into a sentence.
+ *
+ * Best-effort by construction: a run that cannot write its result has still
+ * done (or not done) the real work, and throwing here would replace a readable
+ * failure with an unreadable one.
+ */
+function dthWriteScanResult(config, bOk, sError, sCsvPath, iFrames){
+	if(!config || !config.resultPath) return;
+	var oFile = new DzFile(config.resultPath);
+	if(!oFile.open(oFile.WriteOnly | oFile.Truncate)) return;
+	// Hand-built rather than JSON.stringify: the paths are the only free text,
+	// and the studio parses this with a tolerant schema.
+	var sJson = "{\n" +
+		'  "ok": ' + (bOk ? "true" : "false") + ",\n" +
+		'  "error": "' + String(sError || "").replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '",\n' +
+		'  "csvPath": "' + String(sCsvPath || "").replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '",\n' +
+		'  "frames": ' + (iFrames || 0) + "\n}\n";
+	oFile.write(sJson);
+	oFile.close();
+}
+
+/**
  * Scan the selected nodes' keyed morph frames and write them as a CSV into the
  * studio's scan output folder (config.outDir, baked in at install time), named
- * after the open scene - the studio's "Import from CSV" picker lists it. Select
- * the character's root node (add more nodes to widen the scan), then run.
+ * after the open scene - the studio's "Import from Daz scene" picker lists it.
+ * Select the character's root node (add more nodes to widen the scan), then run.
+ *
+ * ## Two ways in
+ *
+ * **Interactive** (the shelf script the user runs in Daz): needs a selection,
+ * and reports through MessageBox.
+ *
+ * **Silent** (`config.silent`, the studio's job-runner handoff): reports through
+ * `config.resultPath` and never opens a dialog — a modal in a batch run would
+ * block the runner until someone clicked it, on a Daz nobody is looking at. It
+ * also SELECTS the figure itself, because a freshly opened scene has no
+ * selection at all and the interactive path would stop right there.
+ *
+ * The auto-selection is `dthFindGenerationFigure` — the same helper the ROM
+ * script uses, matching on the figure's ASSET identity (`config.genesis`)
+ * rather than a label a user can rename. The studio only offers this run for a
+ * scene it has already checked holds exactly ONE figure of the character's
+ * generation, so "the first match wins" has nothing to be ambiguous about here.
  */
 function DthScanFrames(config){
+	var bSilent = config && config.silent;
 	var aNodes = Scene.getSelectedNodeList();
+	if((!aNodes || aNodes.length == 0) && bSilent){
+		var oFigure = dthFindGenerationFigure(config.genesis);
+		if(oFigure){
+			print("Auto-selected the " + config.genesis + " figure: " + oFigure.getLabel());
+			Scene.selectAllNodes(false);
+			oFigure.select(true);
+			Scene.setPrimarySelection(oFigure);
+			aNodes = Scene.getSelectedNodeList();
+		}
+	}
 	if(!aNodes || aNodes.length == 0){
+		if(bSilent){
+			dthWriteScanResult(config, false,
+				"No " + (config.genesis ? config.genesis + " " : "") +
+				"figure found in the scene to scan.", "", 0);
+			return;
+		}
 		MessageBox.information(
 			"Select your character's root node first, then run this again.",
 			"DTH Character Studio", "&OK");
@@ -252,6 +314,12 @@ function DthScanFrames(config){
 		if(frameDatas[i] !== undefined) iFrames++;
 	}
 	if(iFrames == 0){
+		if(bSilent){
+			dthWriteScanResult(config, false,
+				"No keyed morph frames in this scene - the timeline holds no ROM to scan.",
+				"", 0);
+			return;
+		}
 		MessageBox.information(
 			"No keyed morph frames found on the selected nodes - build or load a ROM " +
 			"on the timeline first, then run this again.",
@@ -272,9 +340,16 @@ function DthScanFrames(config){
 	if(!oDir.exists()) oDir.mkpath(config.outDir);
 	var sOut = config.outDir + "/" + sName + ".csv";
 	printCSV(frameDatas, sOut);
+	if(bSilent){
+		// LAST, and only after the CSV is on disk: the studio polls for the
+		// result, so writing it earlier would announce a scan that might still
+		// fail to write its own output.
+		dthWriteScanResult(config, true, "", sOut, iFrames);
+		return;
+	}
 	MessageBox.information(
 		"Scanned " + iFrames + " keyed frame" + (iFrames == 1 ? "" : "s") + " into:\n" +
-		sOut + "\n\nSwitch back to DTH Character Studio and use \"Import from CSV\" - " +
+		sOut + "\n\nSwitch back to DTH Character Studio and use \"Import from Daz scene\" - " +
 		"the scan is listed there.",
 		"DTH Character Studio", "&OK");
 }
