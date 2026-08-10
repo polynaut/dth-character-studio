@@ -12,12 +12,13 @@ import type { MaterialScanProject } from './api/native-types.ts'
  * across restarts: the Utils drawer used to re-earn it on every open, from an
  * in-memory Map that died with the window.
  *
- * **Keyed on the file's modification time — and on the export root it was
- * judged against**, so the store answers "is this still true?" without opening
- * anything: a `.hip` the user saved in Houdini gets a new mtime, its entry stops
- * matching, and the background scan picks it up again. A path that cannot be
- * stat'd yields no key at all and is always treated as stale — never as a hit.
- * See {@link scanCacheKey} for why the mtime alone is not enough.
+ * **Keyed on the file's modification time — and on the export root plus the
+ * installed DazToHue libraries it was judged against**, so the store answers "is
+ * this still true?" without opening anything: a `.hip` the user saved in Houdini
+ * gets a new mtime, its entry stops matching, and the background scan picks it up
+ * again. A path that cannot be stat'd yields no key at all and is always treated
+ * as stale — never as a hit. See {@link scanCacheKey} for why the mtime alone is
+ * not enough, twice over.
  *
  * Two stores, deliberately separate (see `characterScanStorePath` /
  * `sourceScanStorePath` in api/houdini-material.ts): a character's own projects
@@ -34,8 +35,8 @@ import type { MaterialScanProject } from './api/native-types.ts'
 export const HOUDINI_SCAN_FILE = 'houdini-scan.json'
 
 const entrySchema = z.object({
-  /** `<normalized path>|<mtime ms>|<normalized export root>` — see
-   *  {@link scanCacheKey}. Opaque: compared by equality, never parsed. */
+  /** `<normalized path>|<mtime ms>|<normalized export root>|<HDA fingerprint>` —
+   *  see {@link scanCacheKey}. Opaque: compared by equality, never parsed. */
   key: z.string().default(''),
   /** ISO timestamp of the scan that produced this entry (diagnostics only). */
   scannedAt: z.string().default(''),
@@ -76,10 +77,10 @@ export function scanStoreKey(hipPath: string): string {
 }
 
 /**
- * The freshness key for one project: its path, the file's mtime, and the export
- * root the scan judged it against. An unreadable mtime yields '' — which never
- * matches a stored key, so a file the studio cannot stat is rescanned rather
- * than served from a guess.
+ * The freshness key for one project: its path, the file's mtime, the export root
+ * the scan judged it against, and the DazToHue libraries it was judged WITH. An
+ * unreadable mtime yields '' — which never matches a stored key, so a file the
+ * studio cannot stat is rescanned rather than served from a guess.
  *
  * **The export root is part of the key because part of the ANSWER is about files
  * that are not the `.hip`.** `refs.broken` says whether the files an import path
@@ -89,17 +90,52 @@ export function scanStoreKey(hipPath: string): string {
  * the user happened to re-save one in Houdini. Anything else a verdict depends
  * on and that can change behind the file's back belongs here too.
  *
- * Optional, defaulting to '': an unscoped scan (the shared source store — the
- * template projects people copy setups from) belongs to no character and has no
- * export root, and its verdict does not depend on one.
+ * **The installed HDAs are the second such thing, measured 2026-08-10.** A scan
+ * answers in the vocabulary of the DazToHue version hython loaded — `prefill`
+ * reports a parm as *missing from your DazToHue version*, and the node/section
+ * counts come from the same templates. Installing a newer HDA changes every one
+ * of those answers without touching a `.hip`, so on path+mtime+root alone the
+ * store kept insisting the PoseAsset CSV path did not exist for a user whose
+ * freshly-installed `DazToHuePoseAsset.hda` 2.5.1 had it — with no way out from
+ * the UI, because the drawer's Rescan reads through this same cache.
+ * `tooling` is {@link hdaLibraryKey} over the otls hython will load.
+ *
+ * Both trailing parts default to '': an unscoped scan (the shared source store —
+ * the template projects people copy setups from) belongs to no character and has
+ * no export root, and a fingerprint the studio cannot read is '' rather than a
+ * guess. '' is a value like any other here — it stops matching the moment the
+ * studio CAN read one, which is the invalidation that matters.
  */
 export function scanCacheKey(
   hipPath: string,
   mtimeMs: number | undefined,
   exportRoot = '',
+  tooling = '',
 ): string {
   if (mtimeMs === undefined || !Number.isFinite(mtimeMs)) return ''
-  return `${scanStoreKey(hipPath)}|${mtimeMs}|${scanStoreKey(exportRoot)}`
+  return `${scanStoreKey(hipPath)}|${mtimeMs}|${scanStoreKey(exportRoot)}|${tooling}`
+}
+
+/**
+ * Fold the installed operator libraries into one comparable string — name, mtime
+ * and size per file, sorted so directory order never matters.
+ *
+ * Deliberately NOT the DazToHue release version from Settings: that records which
+ * release the studio INSTALLED, and the case this exists for is a library that
+ * arrives beside it (a standalone `DazToHuePoseAsset.hda` dropped into `otls/`,
+ * which is exactly how 2.5.1 shipped the CSV path). The files hython will load
+ * are the only honest answer to "which DazToHue is this scan speaking".
+ *
+ * Size joins mtime because a restore-in-place can reinstate an older library
+ * with a NEW mtime; together they catch the swap either way round.
+ */
+export function hdaLibraryKey(
+  files: ReadonlyArray<{ name: string; mtimeMs?: number | undefined; size?: number | undefined }>,
+): string {
+  return [...files]
+    .map((f) => `${f.name.trim().toLowerCase()}:${f.mtimeMs ?? ''}:${f.size ?? ''}`)
+    .sort()
+    .join(';')
 }
 
 /** The stored scan for `hipPath` IF it still describes the file on disk. */

@@ -186,8 +186,11 @@ PREFILL_PARMS = (
         ),
     ),
     # Absent from DazToHue 2.5 (measured — the node has a `pose_asset_import_csv`
-    # BUTTON instead). It is reported as missing rather than skipped silently, so
-    # the day the CSV-path release lands the row simply starts offering it.
+    # BUTTON instead), PRESENT from 2.5.1 on ("Auto CSV File Path", measured
+    # 2026-08-10). It is reported as missing rather than skipped silently, so on
+    # 2.5 the row says why, and on 2.5.1 it simply starts offering it — no code
+    # change was needed for the release, only a scan-cache key that notices the
+    # HDA changed (see `hdaLibraryKey`, and the gotcha that earned it).
     ("daztohueposeasset", (("pose_asset_csv_file_path", "csv"),)),
     ("daztohueexport", (("export_directory", "exportDirectory"),)),
 )

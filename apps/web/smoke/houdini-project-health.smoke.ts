@@ -17,17 +17,27 @@ const STORE = `${P.project}/.dcsmeta/characters/Kira/houdini-scan.json`
 
 /**
  * A stored entry's freshness key, in the shape `scanCacheKey` builds it:
- * `<path>|<mtime>|<export root>`, all normalised. `__MTIME__` is filled in
- * inside the page, because the fake stamps its world when it is installed.
+ * `<path>|<mtime>|<export root>|<installed-HDA fingerprint>`, all normalised.
+ * `__MTIME__` is filled in inside the page, because the fake stamps its world
+ * when it is installed.
  *
  * The EXPORT ROOT is in the key because part of a scan's verdict is about files
  * that are NOT the `.hip` (`refs.broken`), and the export-root move relocated
  * every one of them without touching a single scene file. A seeded entry naming
  * a different root reads as stale here — which is exactly what should happen to
  * a real pre-move entry.
+ *
+ * The HDA FINGERPRINT is there for the same reason, one step further out: a
+ * scan's verdict is phrased in the vocabulary of the DazToHue hython loaded
+ * (`prefill.missing` says "your version has no …"), so installing a new library
+ * has to invalidate it. It is EMPTY here, hence the bare trailing separator:
+ * the fake world has no Houdini install to pair a prefs folder with, so
+ * `installedHdaKey()` takes its documented "cannot read it" path and answers
+ * ''. That is a key component like any other — which is the point of writing it
+ * out here rather than defaulting it away.
  */
 function storeKey(hipPath: string): string {
-  return `${hipPath.toLowerCase()}|__MTIME__|${P.exportDir.toLowerCase()}`
+  return `${hipPath.toLowerCase()}|__MTIME__|${P.exportDir.toLowerCase()}|`
 }
 
 /** A scan result in the shape `material_utils.py` reports. */
@@ -289,4 +299,58 @@ test('Fill network blames the UNKNOWN $JOB, not a lack of work', async ({ page }
   // The button kit renders a `title` prop as `data-tooltip` (its own tooltip),
   // not as the native attribute.
   await expect(fill).toHaveAttribute('data-tooltip', /Repair \$JOB first/)
+})
+
+test('Rescan really rescans — it is not served by the cache', async ({ page }) => {
+  // The drawer's whole point is that opening it is instant: a fresh store entry
+  // answers without starting hython. That made "Rescan" a lie — it went through
+  // the same cache, returned the same answer in milliseconds, and looked like a
+  // dead button. Worse, it was the ONLY way out of a verdict that had gone
+  // stale for a reason the key could not see, so "press Rescan" was not even
+  // advice that worked.
+  //
+  // Pinned by making the two answers DIFFER: the store says CachedBox, the fake
+  // hython says FreshBox. Whichever name is on screen says which path ran.
+  const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true, houdiniProject: true })
+  const settingsPath = `${P.appData}/settings.json`
+  seed.files[settingsPath] = JSON.stringify({
+    ...JSON.parse(seed.files[settingsPath] ?? '{}'),
+    houdiniInstallFolder: HOUDINI_INSTALL,
+    houdiniDocsFolder: 'C:/Users/dev/Documents/houdini22.0',
+  })
+  seed.files[`${HOUDINI_INSTALL}/bin/hython.exe`] = 'hython-exe-fixture'
+  seed.materialScan = { [P.houdini]: [node('FreshBox')] }
+  seed.files[STORE] = JSON.stringify({
+    version: 1,
+    projects: {
+      [P.houdini.toLowerCase()]: {
+        key: storeKey(P.houdini),
+        scannedAt: '2026-08-07T00:00:00.000Z',
+        project: scan({ nodes: [node('CachedBox')] }),
+      },
+    },
+  })
+  await page.addInitScript(installTauriMock, seed)
+  await page.addInitScript((storePath: string) => {
+    const mock = (window as any).__tauriMock
+    const raw = mock.files.get(storePath) as string
+    mock.files.set(storePath, raw.split('__MTIME__').join(String(mock.mtimeMs)))
+  }, STORE)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await expect(page.getByText(/custom ROM frames/)).toBeVisible()
+
+  await page.getByRole('button', { name: /^Utils/ }).first().click()
+  const drawer = page.getByRole('dialog')
+  await drawer.getByRole('tab', { name: 'Material' }).click()
+  // Opening took the store's word — no hython started.
+  await expect(drawer.getByText('CachedBox')).toBeVisible()
+
+  await drawer.getByRole('button', { name: 'Rescan' }).click()
+  // …and Rescan went past it, all the way to hython.
+  await expect(drawer.getByText('FreshBox')).toBeVisible()
+  await expect(drawer.getByText('CachedBox')).toHaveCount(0)
+  // An unchanged screen is indistinguishable from a dead button, so it also
+  // says out loud that it ran.
+  await expect(page.getByText(/Rescanned the Houdini project/)).toBeVisible()
 })

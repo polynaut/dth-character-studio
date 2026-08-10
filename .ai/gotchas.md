@@ -448,8 +448,26 @@ current code before relying on details, but assume the *lesson* still holds.
   when it actually exists. Related dry-run trap: the repaired value is stored
   in its already-collapsed form, because collapsing it in the following pass
   made a real run report one more rewrite than its own dry run.
+- **UPDATE 2026-08-10: it LANDED in 2.5.1, and the studio kept saying it hadn't
+  — a cache bug, not a DazToHue one.** `DazToHuePoseAsset.hda` (version 2.5.1,
+  installed standalone BESIDE the 2.5 `DazToHue.hda`, which still defines the
+  same `Sop/DazToHuePoseAsset` — `hotl -B` lists both) carries
+  `pose_asset_csv_file_path`, labelled "Auto CSV File Path". Verified under the
+  app's own hython invocation: both libraries are loaded, the 2.5.1 one wins on
+  version, and `node.parm('pose_asset_csv_file_path')` resolves. What was stale
+  was the SCAN STORE — its key was `path|mtime|exportRoot`, so a verdict phrased
+  in 2.5's vocabulary ("your DazToHue version has no …") survived the install
+  that falsified it, and the drawer's Rescan could not clear it because Rescan
+  reads through that same cache (`scanHoudiniMaterials` serves any key-matching
+  entry). Fixed by putting an `otls/` fingerprint in the key (`hdaLibraryKey`).
+  **The general rule, now paid for twice: a scan verdict is about the file AND
+  its surroundings, so every surrounding it depends on belongs in the cache key
+  — the export root was the first, the installed HDAs the second.** Before
+  believing "your version doesn't have X", check the store's `scannedAt` in
+  `.dcsmeta/characters/<name>/houdini-scan.json` against the HDA's mtime.
 - **The PoseAsset CSV PATH does not exist in DazToHue 2.5 — the node ships a
-  `pose_asset_import_csv` BUTTON instead.** Measured 2026-08-07 off the
+  `pose_asset_import_csv` BUTTON instead** (superseded by the entry above for
+  2.5.1+; still the measured truth for 2.5 itself). Measured 2026-08-07 off the
   installed HDA's parm template group (no instantiation needed): of the eight
   parms Generate project wires, seven are present today
   (`import_character_name`, the four `import_character_*_file` paths,
