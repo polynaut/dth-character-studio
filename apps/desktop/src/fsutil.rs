@@ -524,10 +524,108 @@ pub(crate) fn join_rel(base: &Path, rel: &str) -> PathBuf {
     p
 }
 
+/// Process-wide guard for {@link write_text_file_if_unchanged}: the compare
+/// and the write must be ONE step. Every window shares this one process, so a
+/// static mutex fully serializes cross-window read-modify-write cycles on the
+/// small shared app-data registries (recents.json) — the exact race the
+/// webview-side per-window queues cannot close on their own.
+static CAS_WRITE_LOCK: Mutex<()> = Mutex::new(());
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CasWriteRequest {
+    /// Absolute path of the text file to update.
+    pub path: String,
+    /// The FULL text the caller last read — `""` for "the file did not exist".
+    pub expected: String,
+    /// The full replacement text.
+    pub next: String,
+}
+
+/// Compare-and-swap text-file write: writes `next` (atomically, via a sibling
+/// temp file + rename) ONLY while the file's current content still equals
+/// `expected`; a changed file returns `"conflict"` and touches nothing, and the
+/// caller re-reads + re-applies its mutation. Returns `"written"` on success.
+/// Intended for the tiny shared app-data registries — the caller loops, so a
+/// conflict is a retry, never a dropped mutation.
+// `(async)`: never on the main thread; the fn body stays sync (no await
+// points), so the CAS lock never crosses a suspension.
+#[tauri::command(async)]
+pub fn write_text_file_if_unchanged(request: CasWriteRequest) -> Result<String, String> {
+    // A poisoned lock must not brick the registry forever — the guarded
+    // section only reads/writes a file, so the state is on disk, not in memory.
+    let _guard = CAS_WRITE_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+    let path = Path::new(&request.path);
+    let current = match fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(format!("read {}: {e}", path.display())),
+    };
+    if current != request.expected {
+        return Ok("conflict".into());
+    }
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("create {}: {e}", parent.display()))?;
+    }
+    // Write-then-rename, like the webview's writeTextFileAtomic: a reader never
+    // sees a torn file. The deterministic temp name is ours by construction —
+    // concurrent CAS writes are serialized by the lock above.
+    let tmp = path.with_extension("cas-tmp");
+    fs::write(&tmp, request.next.as_bytes()).map_err(|e| format!("write {}: {e}", tmp.display()))?;
+    fs::rename(&tmp, path).map_err(|e| {
+        let _ = fs::remove_file(&tmp);
+        format!("replace {}: {e}", path.display())
+    })?;
+    Ok("written".into())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::testutil::unique_temp_dir;
+
+    #[test]
+    fn cas_write_creates_a_missing_file_when_expected_is_empty() {
+        let root = unique_temp_dir("cas-create");
+        let path = root.join("sub").join("recents.json");
+        let verdict = write_text_file_if_unchanged(CasWriteRequest {
+            path: path.to_string_lossy().into_owned(),
+            expected: String::new(),
+            next: "[1]".into(),
+        })
+        .unwrap();
+        assert_eq!(verdict, "written");
+        assert_eq!(fs::read_to_string(&path).unwrap(), "[1]");
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn cas_write_replaces_only_while_the_content_still_matches() {
+        let root = unique_temp_dir("cas-swap");
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join("recents.json");
+        fs::write(&path, "[1]").unwrap();
+        // Stale expectation (another window wrote since the caller's read):
+        // conflict, file untouched — the caller re-reads and retries.
+        let verdict = write_text_file_if_unchanged(CasWriteRequest {
+            path: path.to_string_lossy().into_owned(),
+            expected: "[]".into(),
+            next: "[2]".into(),
+        })
+        .unwrap();
+        assert_eq!(verdict, "conflict");
+        assert_eq!(fs::read_to_string(&path).unwrap(), "[1]");
+        // Matching expectation: written.
+        let verdict = write_text_file_if_unchanged(CasWriteRequest {
+            path: path.to_string_lossy().into_owned(),
+            expected: "[1]".into(),
+            next: "[2]".into(),
+        })
+        .unwrap();
+        assert_eq!(verdict, "written");
+        assert_eq!(fs::read_to_string(&path).unwrap(), "[2]");
+        fs::remove_dir_all(&root).ok();
+    }
 
     #[test]
     fn scan_files_by_ext_matches_extensions_and_prunes_named_dirs() {

@@ -32,11 +32,14 @@ pub(crate) fn dcsp_from_args(args: &[String]) -> Option<String> {
 /// misses different SPELLINGS of one file — a mapped drive (`X:\proj.dcsp`) vs
 /// its UNC (`\\host\share\proj.dcsp`, a routine pair via drives.rs), a
 /// `..`-laden path, a junction — so the canonical form (`rail_target`, like
-/// the dedup source rails) is folded in too. Residual: std can only
-/// canonicalize EXISTING paths, so two spellings of a missing/offline file
-/// keep the fold-only compare and could still open two windows — but a
-/// `.dcsp` being opened exists in practice, and the fold catches the common
-/// same-spelling case regardless.
+/// the dedup source rails) is folded in too. std can only canonicalize
+/// EXISTING paths, so a missing/offline file keeps the fold-only compare —
+/// which is why the fold also normalizes separators (`fold_spelling`): the
+/// routine `\`-vs-`/` and trailing-separator variants of a missing path still
+/// meet in one window. Residual: a `..`-laden or junction spelling of a
+/// MISSING file cannot be unified without the filesystem and could still open
+/// two windows (character saves are then last-write-wins between them) — but
+/// a `.dcsp` being opened exists in practice.
 ///
 /// Both keys are computed in `new` — the only place any I/O happens — so
 /// `matches` is a pair of plain string compares. That split is load-bearing:
@@ -55,13 +58,26 @@ pub(crate) struct ProjectPathKey {
     canon_fold: String,
 }
 
+/// The fold both key halves go through: separators normalized (`\` → `/`,
+/// trailing ones trimmed) BEFORE lowercasing — so the two most routine variant
+/// spellings of a MISSING/offline file (`X:\p\a.dcsp` vs `X:/p/a.dcsp`, a
+/// trailing separator) still identify one project without any filesystem help.
+/// Pure string work, no I/O.
+fn fold_spelling(path: &str) -> String {
+    let mut folded = path.replace('\\', "/").to_lowercase();
+    while folded.len() > 1 && folded.ends_with('/') {
+        folded.pop();
+    }
+    folded
+}
+
 impl ProjectPathKey {
     /// Computes the keys — including the possibly-slow canonicalize. Never
     /// call while holding the windows-map lock.
     pub(crate) fn new(path: &str) -> Self {
         Self {
-            fold: path.to_lowercase(),
-            canon_fold: rail_target(Path::new(path)).to_string_lossy().to_lowercase(),
+            fold: fold_spelling(path),
+            canon_fold: fold_spelling(&rail_target(Path::new(path)).to_string_lossy()),
         }
     }
 
@@ -414,6 +430,17 @@ mod tests {
         assert!(same_project_path("D:/P/Ärger.dcsp", "D:/P/ärger.dcsp"));
         assert!(same_project_path("D:/P/proj.dcsp", "D:/P/PROJ.DCSP"));
         assert!(!same_project_path("D:/P/a.dcsp", "D:/P/b.dcsp"));
+    }
+
+    #[test]
+    fn same_project_path_folds_separator_variants_of_a_missing_file() {
+        // A missing/offline file can't be canonicalized, so the fold is the
+        // only compare — it must at least unify the routine `\` vs `/` and
+        // trailing-separator spellings, or two windows open on one project
+        // and character saves go last-write-wins between them.
+        assert!(same_project_path("D:\\P\\proj.dcsp", "D:/P/proj.dcsp"));
+        assert!(same_project_path("D:/P/proj.dcsp", "D:/P/proj.dcsp/"));
+        assert!(!same_project_path("D:\\P\\a.dcsp", "D:/P/b.dcsp"));
     }
 
     #[test]

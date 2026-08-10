@@ -686,6 +686,34 @@ older runtimes as stale.
   folders survive, failed deletes stay recorded for retry. Clearing
   `exportPath` deletes nothing (those are the user's last exports), it only
   drops the record.
+- **Housekeeping's orphan GCs** (app launch + "Clean up now",
+  api/maintenance.ts): per-project `.dcsmeta` character dirs + avatars, and —
+  since the deferred-findings pass — per-character SCRIPT dirs in the Daz
+  library (`Scripts/DTH-Character-Studio/<project>/<character>/`), the
+  app-external counterpart of the in-app character delete (it also mops the
+  old-name dir a mid-rename generation failure leaks). The library sweep's
+  gates, stricter than app-data because it reaches the user's territory: only
+  DIRECTORIES inside a KNOWN project's folder (recents is the registry — an
+  unknown project folder can belong to a machine that never opened here and is
+  never touched; the shared runtime at the root is files, never candidates),
+  live-character sets are UNIONED per sanitized folder name (two projects can
+  legitimately share one), and per project the same strict pre-walk +
+  zero-problem scan as the meta GC (an unreadable definition is a character
+  that EXISTS, not one whose scripts are orphaned).
+- **A byte-copied project re-mints its manifest id on first open of the new
+  path** (api/projects.ts `remintCopiedProjectId`): the app-data product-scan
+  store (`product-scans/<manifest id>/<character id>/`) keys on that id, so a
+  copy otherwise cross-pollinates scan rows with the original forever. The
+  already-known path is presumptively the ORIGINAL and is never re-minted (it
+  owns the store); a MOVED project — old path dead — keeps its id. Residual,
+  deliberate: two copies both opened before this shipped are both in recents
+  and stay collided until one is deleted/re-created.
+- **Cross-window recents writes go through a native compare-and-swap**
+  (`write_text_file_if_unchanged`, fsutil.rs — one process-wide lock; every
+  window shares the one Tauri process): another window's interleaved write is
+  a 'conflict' + re-read + re-apply here, never a silently dropped registry
+  entry. The command is generic on purpose — `assets.json`'s per-window queue
+  is the next candidate if its cross-window gap ever bites.
 - No export directory set ⇒ the ROM is still fully generated; ticked Bone scale
   rows are a harmless no-op (no validation links the two).
 - The export block ALWAYS nests each run under the open scene's own subfolder
