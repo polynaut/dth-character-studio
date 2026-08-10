@@ -37,6 +37,19 @@ export function normalizePathLower(path: string): string {
 }
 
 /**
+ * Whether a path still contains a parent-traversal (`..`) segment after
+ * {@link normalizePath}. Destructive code that judges containment with a plain
+ * prefix compare MUST refuse such paths outright: normalization collapses
+ * separators but never resolves dot segments, so `a/b/../../victim` passes a
+ * `startsWith('a/')` test while pointing outside `a/`. Stored paths from the
+ * app's own pickers are always resolved — a surviving `..` only ever comes from
+ * hand-edited or hostile data, exactly what the refusal is for.
+ */
+export function hasParentTraversal(path: string): boolean {
+  return normalizePath(path).split('/').includes('..')
+}
+
+/**
  * The extra-scene list with `primary` removed (case-/separator-insensitively). A
  * scene is linked to a character at most once, so when a path becomes the PRIMARY it
  * must drop out of the extras. Without this, relinking the primary to an

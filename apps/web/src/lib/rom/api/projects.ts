@@ -20,6 +20,7 @@ import {
   setActiveProjectDir,
 } from './core'
 import { generateCharacterFiles } from './generate'
+import { relocateExportRoot } from './export-root'
 import { assertMovable } from './move'
 
 import type { ProjectInfo } from './core'
@@ -306,12 +307,28 @@ export async function saveProjectSettings({ data }: { data: unknown }): Promise<
     )
   }
   const project = await resolveProject(dir)
-  // Toggling Daz Products on/off changes which Daz scripts each character emits, so
-  // regenerate the project's Daz scripts to add (or clean up) the per-character
-  // Scan_Products_<Name>.dsa right away — otherwise it wouldn't appear until the
-  // next per-character Save or a Tools → Refresh. Daz target only (the Houdini CSV
-  // is unaffected); per-character failures are swallowed so the save still succeeds.
-  if (dazProductsEnabled !== manifest.dazProductsEnabled) {
+  // Two per-project settings change what the characters' generated files SAY,
+  // so the save has to sweep the library right away — otherwise nothing happens
+  // until each character's next Save or a Tools → Refresh:
+  //  - Daz Products on/off adds (or cleans up) the per-character
+  //    Scan_Products_<Name>.dsa — Daz scripts only.
+  //  - The Houdini subfolder anchors every character's DERIVED export root
+  //    (`<char>/<houdiniSubdir>/daz-export`). Changing it moves the exported
+  //    files and repoints each definition — and a repoint MUST regenerate both
+  //    artifacts, because the .dsa bakes `exportPath`: relocating without
+  //    regenerating leaves every installed script exporting into the vacated
+  //    old root.
+  // Per-character failures are swallowed so the save still succeeds; whatever
+  // is missed here is exactly what Tools → Refresh repairs (the export-root
+  // trigger is derived, so it stays live until actually fixed).
+  const productsToggled = dazProductsEnabled !== manifest.dazProductsEnabled
+  // '' means "use the default" for the Houdini subdir (readManifest fills it
+  // back in), so the change test must compare EFFECTIVE values — comparing the
+  // raw '' against the manifest's filled-in default would re-sweep every save.
+  const effectiveHoudiniSubdir =
+    nextHoudiniSubdir || storage.PROJECT_BEHAVIOR_DEFAULTS.houdiniSubdir
+  const houdiniSubdirChanged = effectiveHoudiniSubdir !== manifest.houdiniSubdir
+  if (productsToggled || houdiniSubdirChanged) {
     try {
       const root = charsRoot(project)
       // One scan resolves every character's location; primed into the session
@@ -320,15 +337,36 @@ export async function saveProjectSettings({ data }: { data: unknown }): Promise<
       for (const { character, location } of scan.entries) {
         cacheCharacterLocation(root, character.id, location)
       }
-      for (const { character } of scan.entries) {
-        try {
-          await generateCharacterFiles({
-            data: { projectId: project.path, id: character.id, targets: { daz: true, houdini: false } },
-          })
-        } catch {
-          // one bad character shouldn't block the others or the settings save
-        }
-      }
+      await withBusyCursor(
+        (async () => {
+          for (const { character, location } of scan.entries) {
+            try {
+              let regenDaz = productsToggled
+              let regenHoudini = false
+              if (houdiniSubdirChanged) {
+                // `project` was resolved AFTER the manifest write, so the
+                // relocation derives with the NEW subfolder.
+                const relocation = await relocateExportRoot(project, root, character, location)
+                if (relocation.repointed) {
+                  regenDaz = true
+                  regenHoudini = true
+                }
+              }
+              if (regenDaz || regenHoudini) {
+                await generateCharacterFiles({
+                  data: {
+                    projectId: project.path,
+                    id: character.id,
+                    targets: { daz: regenDaz, houdini: regenHoudini },
+                  },
+                })
+              }
+            } catch {
+              // one bad character shouldn't block the others or the settings save
+            }
+          }
+        })(),
+      )
     } catch {
       // unreadable characters root — nothing to regenerate
     }

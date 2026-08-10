@@ -14,6 +14,7 @@ import { normalizePathLower } from '#/lib/path.ts'
 import { normalizeRelFolder } from '../library'
 import {
   PRIMARY_SCENE_SUBFOLDER,
+  characterExportRoot,
   deriveScenesRootRel,
   suggestSceneSubfolder,
 } from '#/lib/scene-subfolder.ts'
@@ -1259,18 +1260,44 @@ async function refreshAllAssetsInner(refreshOpts: {
   const counts = { migrated: 0, reset: resetCount, scripts: 0, csv: 0, avatars: 0, exports: 0 }
   for (const item of items) {
     const { project, lib, character, targets } = item
+    // An export root whose stored path disagrees with its own derivation is a
+    // REGEN cause, not a side repair: the relocation rewrites `exportPath`,
+    // which the generated .dsa bakes — moving the files without regenerating
+    // the scripts would leave every installed script exporting into the
+    // vacated old root (recreating it) while the freshness checks watch the
+    // new one. No staleness flag describes this (see relocateExportRoot), so
+    // it is derived here, from the same compare the migration itself uses.
+    const exportRootStale =
+      item.location.relFolder !== '' &&
+      character.exportPath.trim() !== '' &&
+      (() => {
+        const derived = characterExportRoot(item.location.folderAbs, project.houdiniSubdir)
+        return (
+          derived !== '' &&
+          normalizePathLower(derived) !==
+            normalizePathLower(character.exportPath.trim().replace(/\\/g, '/'))
+        )
+      })()
     const regenSchema = force || targets.schema
-    const regenDaz = force || targets.runtime || targets.schema
-    const regenHoudini = force || targets.csv || targets.schema
+    const regenDaz = force || targets.runtime || targets.schema || exportRootStale
+    const regenHoudini = force || targets.csv || targets.schema || exportRootStale
     if (!regenSchema && !regenDaz && !regenHoudini) {
       // Not stale ≠ nothing to do: a character skipped here would keep any
       // old-path internals (e.g. a scene-less one, whose runtime/csv can never
       // read stale) until some other cause regenerated it. The relocation is
       // idempotent and cheap — one readDir when there is nothing to move.
       await relocateCharacterInternals(project.path, item.location, character)
-      // Same argument for the EXPORT root: its trigger is a stored path that
-      // differs from the derived one, which no staleness flag describes.
-      if (await relocateExportRoot(project, lib, character, item.location)) counts.exports += 1
+      // The export-root call here is the carry RETRY only — folders a partial
+      // move left behind, retained in the record. A repoint routes through the
+      // regen path via `exportRootStale` above, so this call never needs to
+      // rewrite the definition; the fresh read guards the residual race (an
+      // editor save landing since pass 1), because relocateExportRoot saves
+      // the exact character object it is handed.
+      const freshSkip = await storage.readCharacterAt(item.location.definitionAbs)
+      if (freshSkip && freshSkip.id === character.id) {
+        const retry = await relocateExportRoot(project, lib, freshSkip, item.location)
+        if (retry.repointed || retry.carried) counts.exports += 1
+      }
       skipped += 1
       continue
     }
@@ -1316,8 +1343,9 @@ async function refreshAllAssetsInner(refreshOpts: {
       // stored path differing from the derived one, and NO staleness flag
       // describes that. In particular a `RUNTIME_VERSION` bump does not — the
       // refresh clears a stale runtime whether or not anything moved.
-      if (await relocateExportRoot(project, lib, fresh, location)) {
-        counts.exports += 1
+      const relocation = await relocateExportRoot(project, lib, fresh, location)
+      if (relocation.repointed || relocation.carried) counts.exports += 1
+      if (relocation.repointed) {
         fresh = (await storage.readCharacterAt(location.definitionAbs)) ?? fresh
       }
       // Take in anything the Daz product scan left for this character. Refresh is
@@ -1381,6 +1409,15 @@ async function refreshAllAssetsInner(refreshOpts: {
               res.movedInternals.length === 1 ? '' : 's'
             } into .dcsmeta`
           : undefined
+      // A partial export-folder move is retried on the next save/Refresh (the
+      // failed folders stay in the record), but it must be VISIBLE now — the
+      // usual cause is Houdini holding a file open, which only the user can fix.
+      const exportMoveNote =
+        relocation.leftBehind.length > 0
+          ? `${relocation.leftBehind.length} export folder${
+              relocation.leftBehind.length === 1 ? '' : 's'
+            } couldn't be moved (file in use?) — will retry on the next Refresh`
+          : undefined
       results.push({
         project: project.name,
         character: character.name,
@@ -1388,6 +1425,7 @@ async function refreshAllAssetsInner(refreshOpts: {
         detail:
           [
             sceneMoveNote,
+            exportMoveNote,
             junctionNote,
             projectDirNote,
             keptProjectDirNote,

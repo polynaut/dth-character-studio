@@ -29,7 +29,7 @@ import {
   romSectionSchema,
 } from '@dth/rom'
 import { fillSectionsFrom, filledSections } from '#/lib/fill-sections.ts'
-import { normalizePath, normalizePathLower, parentDir } from '#/lib/path.ts'
+import { hasParentTraversal, normalizePath, normalizePathLower, parentDir } from '#/lib/path.ts'
 import {
   cacheCharacterLocation,
   characterLocationCache,
@@ -460,8 +460,15 @@ export async function deleteCharacter({ data }: { data: unknown }): Promise<void
       const leaf = normalizePathLower(p).split('/').pop() ?? ''
       return leaf === EXPORTS_FOLDER.toLowerCase() || leaf === LEGACY_EXPORTS_FOLDER.toLowerCase()
     }
+    // `..` refused outright: the containment below is a plain prefix compare,
+    // and `<char>/houdini/../../../X/daz-export` passes BOTH tests while
+    // resolving outside the character folder. `exportPath` is user data for any
+    // character not saved since v29 — exactly the poisoned-input class the
+    // Rust delete rails canonicalize against, and this delete never reaches
+    // Rust (it goes through the fs plugin).
     const deletable = (p: string) =>
       p.trim() !== '' &&
+      !hasParentTraversal(p) &&
       normalizePathLower(p).startsWith(normalizePathLower(location.folderAbs) + '/') &&
       looksLikeExportRoot(p)
     // Deduped by a case-folded KEY while keeping the original spelling: the two

@@ -38,7 +38,11 @@ pub struct MoveExportsRequest {
 /// the migration is idempotent, so a re-run finds most of them already moved.
 /// A destination that already exists is REFUSED rather than merged: two export
 /// trees claiming one folder is the user's call, not ours.
-#[tauri::command]
+///
+/// `(async)`: export trees may be gigabytes and may sit on a NAS — the
+/// cross-drive copy-then-delete fallback on the main thread would freeze every
+/// window for minutes (and tempt the user into killing the app mid-move).
+#[tauri::command(async)]
 pub fn move_exports(request: MoveExportsRequest) -> Vec<String> {
     let mut failures = Vec::new();
     for item in &request.moves {
