@@ -12,6 +12,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  useModifierHeld,
   useRefetchOnFocus,
 } from '@dth/ui'
 import dazLogo from '#/assets/daz-logo.png'
@@ -22,6 +23,7 @@ import { PrimaryBadge } from '#/components/primary-badge.tsx'
 import { RunnerGateNotice } from '#/components/runner-gate-notice.tsx'
 import {
   abortExporterJobs,
+  clearExporterJobFiles,
   dismissExportRun,
   dismissHoudiniRun,
   executeCharacterJobs,
@@ -76,13 +78,16 @@ import type { Character } from '@dth/rom'
  * Runner renames it `running_…` when it starts, so "the un-renamed file
  * exists" is "pending") the button turns into **Abort**: clicking deletes the
  * job file (and rolls the aborted scenes' handoff stamps back). Once the
- * Runner renames it, aborting is over and the button becomes a live
- * **Exporting n%** state — the Runner owns the file's `progress` + per-job
- * statuses, the studio just polls the file (api/execute.ts). At 100% the
- * studio deletes the file and toasts the outcome (including per-scene
- * failures); a run whose Daz exited early toasts a failure instead. Clicking
- * the progress button stops watching only. Status refreshes on window focus
- * and polls lightly while pending/running.
+ * Runner renames it, the button becomes a live **Exporting n/m** state — the
+ * Runner owns the file's `progress` + per-job statuses, the studio just polls
+ * the file (api/execute.ts). At 100% the studio deletes the file and toasts
+ * the outcome (including per-scene failures); a run whose Daz exited early
+ * toasts a failure instead. Clicking the progress button stops watching only —
+ * but holding **Ctrl** turns it into **Abort** as well (see
+ * {@link ExportProgressButton}): the claimed job file is deleted and the
+ * button reset, which is the only way out of a batch that stalled inside a Daz
+ * that is still running. Status refreshes on window focus and polls lightly
+ * while pending/running.
  */
 /** The DazToHue brand mark as a button icon. The button's automatic icon
  *  sizing only targets SVGs, so the img sizes itself — `size-6`, larger than
@@ -121,6 +126,78 @@ function ElapsedSince({ since }: { since?: number }) {
   }, [since])
   if (since === undefined) return null
   return <> · {formatElapsed(Date.now() - since)}</>
+}
+
+/**
+ * The live **Exporting n/m** button — and, while **Ctrl** is held, the way out
+ * of a run that is never going to end: the same **Abort** the pending state
+ * offers, in the phase where aborting is normally over (the Runner has claimed
+ * the file and owns it from then on).
+ *
+ * It exists because the claimed file is the one the studio cannot clean up by
+ * itself: the watch only deletes it at progress 100 or when Daz is gone, so a
+ * Runner that stalled mid-batch — or a batch this window merely ADOPTED for
+ * display and can never consume — leaves the button spinning and every later
+ * export and scan refusing with "a batch is waiting for Daz Studio".
+ *
+ * Its own component for the reason the header's Save/Discard pair is one:
+ * `useModifierHeld` flips on every Ctrl press AND release, and holding that up
+ * in `DthExportAction` would re-render its whole subtree (the scene dialog
+ * included) on each flip.
+ *
+ * The honest limit — which the tooltip states rather than implies: deleting the
+ * job file stops the STUDIO, not Daz. A Runner that is genuinely working keeps
+ * working through the batch it already parsed (and may write the file again on
+ * its next row). What this reliably ends is this window's watch and the block
+ * the file puts on the next handoff.
+ */
+function ExportProgressButton({
+  progress,
+  aborting,
+  onStopWatching,
+  onAbort,
+}: {
+  progress: Extract<ExportRunProgress, { state: 'running' }>
+  aborting: boolean
+  onStopWatching: () => void
+  onAbort: () => void
+}) {
+  const ctrlHeld = useModifierHeld('Control')
+  if (ctrlHeld) {
+    return (
+      <Button
+        variant="outline-destructive"
+        className="px-3"
+        disabled={aborting}
+        onClick={onAbort}
+        title="Abort (Ctrl): deletes the job file and resets this button. A batch Daz Studio has already started keeps running there — this ends the studio's watch and unblocks the next export."
+      >
+        <Ban /> {aborting ? 'Aborting…' : 'Abort'}
+      </Button>
+    )
+  }
+  // The Runner renamed the job file and owns its progress — the studio just
+  // polls the file. Clicking stops the WATCH only (the run in Daz can't be
+  // stopped from here); the next handoff cleans the leftover file up.
+  return (
+    <Button
+      variant="outline"
+      className="px-3"
+      onClick={onStopWatching}
+      title={`Daz Studio is working the batch — ${progress.processed} of ${progress.total} scene${progress.total === 1 ? '' : 's'} processed${progress.failed > 0 ? ` (${progress.failed} failed)` : ''}. Click to stop watching, or hold Ctrl to abort and delete the job file.`}
+    >
+      {/* Processed count, not the percent — the % only moved in row-sized
+          jumps anyway (the Runner's progress is rows ÷ total). The live
+          clock rides along whenever this window saw the handoff go out. The
+          DAZ mark names which app is doing the work — the run happens
+          outside the studio, and this button is where the user looks to
+          know who is busy (the Houdini leg below wears its own mark). */}
+      <Loader2 className="animate-spin" />
+      <img src={dazLogo} alt="Daz Studio" className="size-5 shrink-0 object-contain" />
+      Exporting {progress.processed}/{progress.total}
+      <ElapsedSince since={progress.startedAtMs} />
+    </Button>
+  )
 }
 
 export function DthExportAction({
@@ -447,6 +524,45 @@ export function DthExportAction({
     }
   }
 
+  /**
+   * Ctrl+click on the live progress button: delete the job file(s) and reset
+   * this button. The counterpart to {@link onAbort} for the phase AFTER the
+   * Runner claimed the batch — a run that stalled in Daz, or one this window
+   * only adopted for display and could therefore never consume.
+   *
+   * Deliberately NOT {@link abortExporterJobs}: that one deletes the pending
+   * file and rolls the character's handoff stamps back, and neither fits here.
+   * The claimed file is the one to remove ({@link clearExporterJobFiles} takes
+   * both names and drops the in-memory watch with them), and the batch may well
+   * have exported scenes already — re-flagging those as never handed off would
+   * describe work that DID happen as work that didn't.
+   */
+  async function onAbortRunning() {
+    setAborting(true)
+    try {
+      const removed = await clearExporterJobFiles()
+      // The watch dies with the file either way — clearExporterJobFiles drops
+      // the api-side run, these two drop this button's own state, and the busy
+      // cursor is released by the `running` effect on the same render.
+      dismissExportRun()
+      setProgress(null)
+      setPending(false)
+      toast.success(
+        removed.length > 0
+          ? `Export aborted — deleted ${removed.join(' and ')}. Anything Daz Studio already started keeps running there.`
+          : 'Export watch reset — the job file was already gone.',
+      )
+    } catch (error) {
+      // A locked file: the watch is NOT reset (the blockage is still there) —
+      // saying so beats a cheerful "aborted" that changed nothing.
+      toast.error(
+        `Couldn't delete the job file: ${error instanceof Error ? error.message : String(error)}`,
+      )
+    } finally {
+      setAborting(false)
+    }
+  }
+
   if (pending === true) {
     return (
       <Button
@@ -461,30 +577,16 @@ export function DthExportAction({
   }
 
   if (progress) {
-    // The Runner renamed the job file and owns its progress — the studio just
-    // polls the file. Clicking stops the WATCH only (the run in Daz can't be
-    // stopped from here); the next handoff cleans the leftover file up.
     return (
-      <Button
-        variant="outline"
-        className="px-3"
-        onClick={() => {
+      <ExportProgressButton
+        progress={progress}
+        aborting={aborting}
+        onStopWatching={() => {
           dismissExportRun()
           setProgress(null)
         }}
-        title={`Daz Studio is working the batch — ${progress.processed} of ${progress.total} scene${progress.total === 1 ? '' : 's'} processed${progress.failed > 0 ? ` (${progress.failed} failed)` : ''}. Click to stop watching.`}
-      >
-        {/* Processed count, not the percent — the % only moved in row-sized
-            jumps anyway (the Runner's progress is rows ÷ total). The live
-            clock rides along whenever this window saw the handoff go out. The
-            DAZ mark names which app is doing the work — the run happens
-            outside the studio, and this button is where the user looks to
-            know who is busy (the Houdini leg below wears its own mark). */}
-        <Loader2 className="animate-spin" />
-        <img src={dazLogo} alt="Daz Studio" className="size-5 shrink-0 object-contain" />
-        Exporting {progress.processed}/{progress.total}
-        <ElapsedSince since={progress.startedAtMs} />
-      </Button>
+        onAbort={() => void onAbortRunning()}
+      />
     )
   }
 
