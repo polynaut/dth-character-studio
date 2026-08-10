@@ -178,3 +178,43 @@ test('a release folder for only one generation leaves the other install named, n
     { from: `${EXPORTER_ROOT}/Daz Studio 4`, to: DS4, label: 'Exporter plugin → DAZ Studio 4' },
   ])
 })
+
+test('a migrated folder can be REMOVED — the legacy field does not put it back', async ({
+  page,
+}) => {
+  // The trap in migrating by COPY: `exporterSourceFolders` merges the legacy
+  // single field into every scan, so a value left in settings.json outlives the
+  // row it seeded. Remove that row and the panel (which scans the fields) shows
+  // it gone while the install (which reads the saved settings) keeps installing
+  // from it — the folder is on screen nowhere and in the plan anyway. The
+  // migration therefore MOVES the value: seeds the list, clears the field.
+  const seed = machineSeed((s) => {
+    const settingsPath = `${P.appData}/settings.json`
+    const saved = JSON.parse(s.files[settingsPath] ?? '{}')
+    delete saved.dthExporterFolders
+    saved.dthExporterFolder = EXPORTER_ROOT
+    s.files[settingsPath] = JSON.stringify(saved)
+  })
+  await openPlugins(page, seed)
+  const section = page.locator('section').filter({ hasText: 'Daz Studio plugins' })
+  await expect(section.getByRole('textbox')).toHaveValue(EXPORTER_ROOT)
+
+  // Drop the only row, then save — the legacy value has to go with it.
+  await section.getByRole('button', { name: 'Remove folder' }).click()
+  await expect(section.getByRole('textbox')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByText(/No release folder yet/)).toBeVisible()
+
+  const settings = await page.evaluate(
+    (p) => JSON.parse(((window as any).__tauriMock.files.get(p) ?? '{}') as string),
+    `${P.appData}/settings.json`,
+  )
+  expect(settings.dthExporterFolders).toEqual([])
+  expect(settings.dthExporterFolder).toBe('')
+
+  // …and the install genuinely has no exporter to copy any more (only the two
+  // Runner copies remain), instead of quietly using the removed folder.
+  await page.getByRole('button', { name: /Install \/ update all|Reinstall all/ }).click()
+  await expect.poll(() => installCalls(page)).toHaveLength(2)
+  expect((await installCalls(page)).every((c) => c.label.startsWith('Runner'))).toBe(true)
+})

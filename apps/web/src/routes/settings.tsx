@@ -536,20 +536,27 @@ function SettingsPage() {
     }
   }, [settings.dthPosesFolder])
 
-  // The pre-list Exporter folder becomes the first row of the list, once.
+  // The pre-list Exporter folder becomes the first row of the list, once — and
+  // is CLEARED in the same edit.
   //
-  // `exporterSourceFolders` already merges it for the SCAN, but a folder that
-  // is scanned and not shown is worse than one that is neither: the panel then
-  // reports a build the user cannot see a field for, and removing it is
-  // impossible. Seeding the list makes what you see the whole input; it marks
-  // the form dirty, so one Save persists the migration and the legacy field
-  // stops mattering.
+  // `exporterSourceFolders` merges the legacy field into every scan, which is
+  // what keeps a settings.json that has never been through this page working.
+  // But left in place it is also permanent: removing the migrated row would
+  // leave `dthExporterFolders` empty while the merge silently put the same
+  // folder back, so the panel (which scans the FIELDS) would show it gone while
+  // the install (which reads the saved settings) kept installing from it. Moving
+  // the value instead of copying it makes the list the whole input, which is
+  // what the merge is a fallback for. One Save persists both halves.
   useEffect(() => {
-    setSettings((s) =>
-      s.dthExporterFolders.length > 0 || !s.dthExporterFolder.trim()
-        ? s
-        : { ...s, dthExporterFolders: [s.dthExporterFolder.trim()] },
-    )
+    setSettings((s) => {
+      const legacy = s.dthExporterFolder.trim()
+      if (!legacy) return s
+      return {
+        ...s,
+        dthExporterFolders: s.dthExporterFolders.length > 0 ? s.dthExporterFolders : [legacy],
+        dthExporterFolder: '',
+      }
+    })
   }, [initial.dthExporterFolder])
 
   // Multi-release with no valid selection yet → pre-select the latest. That
@@ -573,6 +580,10 @@ function SettingsPage() {
     settings.dthPosesFolder !== initial.dthPosesFolder ||
     settings.currentDthVersion !== initial.currentDthVersion ||
     JSON.stringify(settings.dthExporterFolders) !== JSON.stringify(initial.dthExporterFolders) ||
+    // The legacy single folder is only ever CLEARED (see the migration above),
+    // and that clear has to reach disk on its own: without it the merge in
+    // `exporterSourceFolders` keeps re-adding a folder the user removed.
+    settings.dthExporterFolder !== initial.dthExporterFolder ||
     settings.dazInstallFolder !== initial.dazInstallFolder ||
     // `dimManifestsFolder` is deliberately NOT here: the Project tab owns its
     // manual edit (and `projectDirty` tracks that), while activating an
@@ -918,8 +929,10 @@ function SettingsPage() {
                 label="DTH release(s) folder"
                 value={settings.dthPosesFolder}
                 // Unset: start at the Exporter-plugin folder's parent — the two
-                // DazToHue downloads almost always live under one root.
-                browseFrom={parentDir(settings.dthExporterFolder)}
+                // DazToHue downloads almost always live under one root. The
+                // FIRST configured release folder, since the single legacy field
+                // is migrated into that list and then cleared.
+                browseFrom={parentDir(settings.dthExporterFolders.find(Boolean) ?? '')}
                 placeholder="D:\DazToHue\Releases"
                 onChange={(value) => setSettings((s) => ({ ...s, dthPosesFolder: value }))}
                 help={

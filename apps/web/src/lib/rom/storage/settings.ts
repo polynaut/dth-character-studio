@@ -270,25 +270,15 @@ export async function saveSettings(
 }
 
 /**
- * The Daz installation that runs EXPORT BATCHES: the one flagged **Export only**
- * when a card carries that flag, else the activated one.
- *
- * Pure, and the single statement of the rule — three layers need the same
- * answer and must never disagree about it: the launcher that starts the batch
- * (`api/core.exportDazInstallFolder`), the Runner gate that says the batch can
- * start, and the Runner install that puts the plugin where the batch will look
- * for it. A gate reading one install while the launcher starts another is a
- * "ready" over an export that opens Daz and waits forever.
- *
- * The KEY is what arms it. A folder left behind by a switch turned off, or by an
- * install that has since been activated in its own right, must not keep quietly
- * taking the exports.
- */
-/**
  * Every folder to look for DTH Exporter Plugin releases in: the configured list,
  * plus the legacy single field when it names something the list doesn't already
  * cover. Trimmed, de-duplicated case-insensitively, order preserved (the user's
  * order decides ties between two copies of the same version).
+ *
+ * The legacy merge is a fallback for a settings.json that has never been through
+ * the Settings page — which MIGRATES the value into the list and clears it, so
+ * that a folder removed from the list is really gone rather than being merged
+ * back in here forever.
  *
  * Pure, and the single statement of "where do the exporter builds come from" —
  * the scan, the install and the Settings readout all ask it.
@@ -305,6 +295,21 @@ export function exporterSourceFolders(settings: StudioSettings): Array<string> {
   return out
 }
 
+/**
+ * The Daz installation that runs EXPORT BATCHES: the one flagged **Export only**
+ * when a card carries that flag, else the activated one.
+ *
+ * Pure, and the single statement of the rule — three layers need the same
+ * answer and must never disagree about it: the launcher that starts the batch
+ * (`api/core.exportDazInstallFolder`), the Runner gate that says the batch can
+ * start, and the Runner install that puts the plugin where the batch will look
+ * for it. A gate reading one install while the launcher starts another is a
+ * "ready" over an export that opens Daz and waits forever.
+ *
+ * The KEY is what arms it. A folder left behind by a switch turned off, or by an
+ * install that has since been activated in its own right, must not keep quietly
+ * taking the exports.
+ */
 export function exportInstallFolder(settings: StudioSettings): string {
   const key = settings.dazExportInstallKey.trim()
   const folder = settings.dazExportInstallFolder.trim()

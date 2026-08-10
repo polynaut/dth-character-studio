@@ -557,12 +557,24 @@ export interface RunnerStatus {
   error: string | null
 }
 
-/** The bundled-vs-installed runner state driving the Settings panel. */
-export async function runnerStatus(dazInstallFolder: string): Promise<RunnerStatus> {
+/**
+ * The bundled-vs-installed runner state driving the Settings panel.
+ *
+ * `knownFlavor` is the caller's already-resolved generation, and it exists so the
+ * two plugins never disagree about one installation: the plugin panel falls back
+ * to DIM's major version when an install's `DAZStudio*.exe` can't be read, and
+ * without passing that down the Exporter would be matched into an install while
+ * the Runner reported "could not detect the Daz Studio version" for the very
+ * same folder. Omitted, this detects the generation itself, exactly as before.
+ */
+export async function runnerStatus(
+  dazInstallFolder: string,
+  knownFlavor?: DazFlavor | null,
+): Promise<RunnerStatus> {
   const bundledVersion = await bundledRunnerVersion()
   if (!dazInstallFolder)
     return { bundledVersion, flavor: null, installed: 'none', installedVersion: '', error: null }
-  const flavor = await detectDazFlavor(dazInstallFolder)
+  const flavor = (await detectDazFlavor(dazInstallFolder)) ?? knownFlavor ?? null
   if (!flavor) {
     return {
       bundledVersion,

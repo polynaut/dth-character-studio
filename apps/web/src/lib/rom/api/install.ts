@@ -261,7 +261,10 @@ export async function fetchDazPluginState({ data }: { data?: unknown } = {}): Pr
         flavor,
         exporterInstalled: await storage.installedExporterVersion(target.path),
         exporterSource: flavor ? newest[flavor] : null,
-        runner: await storage.runnerStatus(target.path),
+        // The SAME generation the exporter was matched on, DIM fallback and all
+        // — otherwise one install can take an Exporter build while reporting the
+        // Runner as undetectable.
+        runner: await storage.runnerStatus(target.path, flavor),
       }
     }),
   )
@@ -290,10 +293,18 @@ export async function fetchDazPluginState({ data }: { data?: unknown } = {}): Pr
  * to fix before any of this means anything.
  */
 export async function installDazPlugins({ data }: { data: unknown }): Promise<InstallReport> {
-  const { dryRun, force } = z
-    .object({ dryRun: z.boolean().optional(), force: z.boolean().optional() })
+  const { dryRun, force, folders } = z
+    .object({
+      dryRun: z.boolean().optional(),
+      force: z.boolean().optional(),
+      /** The release folders to install FROM. The panel passes what is in its
+       *  fields, the same list it scanned to draw the table — otherwise a DRY
+       *  RUN (which deliberately saves nothing) would plan from settings.json
+       *  and report a different set of copies than the table above it shows. */
+      folders: z.array(z.string()).optional(),
+    })
     .parse(data ?? {})
-  const state = await fetchDazPluginState()
+  const state = await fetchDazPluginState({ data: folders ? { folders } : {} })
   if (state.noTargets) {
     throw new Error(
       'No Daz Studio installation to install into — activate one above, or set the Daz Studio install folder.',

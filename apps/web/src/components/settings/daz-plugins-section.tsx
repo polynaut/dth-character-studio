@@ -142,11 +142,13 @@ export function DazPluginsSection({
   async function run(dryRun: boolean, force = false) {
     setBusy(true)
     try {
-      // The install re-reads settings from disk, so an unsaved folder list would
-      // install from the PREVIOUS one — save first, exactly like the other
-      // install buttons on this page.
+      // A real install writes into Daz, so the list it used must be the one on
+      // disk — save first, exactly like the other install buttons on this page.
+      // A DRY RUN saves nothing by design, so it is handed the fields instead;
+      // either way the plan is computed from the same list the table above was
+      // drawn from, never from a settings.json the user has since edited.
       if (!dryRun && !(await saveBeforeInstall())) return
-      const result = await installDazPlugins({ data: { dryRun, force } })
+      const result = await installDazPlugins({ data: { dryRun, force, folders } })
       setReport(result)
       const failed = result.steps.filter((step) => step.status === 'error').length
       if (failed > 0) {
