@@ -14,6 +14,19 @@ export default defineConfig({
   testMatch: /.*\.smoke\.ts/,
   // The suite drives one shared dev server; keep runs deterministic.
   fullyParallel: false,
+  // Playwright's default is HALF the cores — 2 workers on the 4-vCPU public
+  // runner. Pinned to 4 there, with the honest measurement attached: 2 workers
+  // did 99 tests in 4.0m, 4 workers did 105 in 3.9m (both 2026-08-10), i.e.
+  // ~8% per test — the runner is CPU-bound (Chromium + Vite dev-transforms
+  // saturate 4 vCPU at 2 workers already), so more workers can't buy much.
+  // Kept because it is free and mildly positive; the levers that would really
+  // move the wall time are sharding across runners or serving a prebuilt
+  // bundle instead of dev-mode transforms (see .ai/testing.md). Worker-safety
+  // is proven daily by local runs at 8+: tests share nothing but the stateless
+  // Vite server — every page installs its own in-memory native fake — and
+  // `fullyParallel: false` still holds within a file, so per-file ordering
+  // stays deterministic; only FILES spread across workers.
+  workers: process.env.CI ? 4 : undefined,
   forbidOnly: !!process.env.CI,
   retries: 0,
   reporter: process.env.CI ? [['list'], ['github']] : 'list',

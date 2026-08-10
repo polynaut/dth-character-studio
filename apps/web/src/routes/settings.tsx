@@ -1209,18 +1209,32 @@ function SettingsPage() {
                   </TargetRow>
                 </div>
               ))}
-              <Button
-                variant="outline"
-                className="w-full justify-start border-dashed text-muted-foreground"
-                onClick={() =>
-                  setSettings((s) => ({
-                    ...s,
-                    extraHoudiniDocsFolders: [...s.extraHoudiniDocsFolders, ''],
-                  }))
-                }
-              >
-                <Plus /> Add another Houdini folder
-              </Button>
+              {/* Only while the folders are the USER'S. With an activated Houdini
+                  installation the destination follows that card — one active
+                  installation, one target — so an "add another" here would invite
+                  a second, hand-typed target the card cannot account for. Existing
+                  entries stay visible (and removable) so a folder added before the
+                  card was activated can't strand itself out of sight. */}
+              {!houdiniDerived ? (
+                <Button
+                  variant="outline"
+                  className="w-full justify-start border-dashed text-muted-foreground"
+                  onClick={() =>
+                    setSettings((s) => ({
+                      ...s,
+                      extraHoudiniDocsFolders: [...s.extraHoudiniDocsFolders, ''],
+                    }))
+                  }
+                >
+                  <Plus /> Add another Houdini folder
+                </Button>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  New folders can&apos;t be added while a Houdini installation is activated — the
+                  destination follows that card. To drive several folders by hand again, use{' '}
+                  <strong>Set the paths manually</strong> in the Houdini installation section above.
+                </p>
+              )}
 
               {houdiniReport && (
                 <InstallReportList report={houdiniReport} onClose={() => setHoudiniReport(null)} />
@@ -1549,7 +1563,10 @@ function DerivedTarget({
   value: string
   /** What the source had no value for, named in the warning. */
   missing: string
-  /** Which installation section above derived this path. */
+  /** WHICH installation card this path comes from. It is the card the reader is
+   *  sent back to when the value is missing, so naming the wrong one sends them
+   *  to a section that cannot fix it — the Houdini documents folder is paired by
+   *  the Houdini card, never by DIM. */
   source?: 'daz' | 'houdini'
   /** How the path is used — "Installs into" for a destination, "Uses" for a
    *  tool source. The empty-value warning follows it too: a missing

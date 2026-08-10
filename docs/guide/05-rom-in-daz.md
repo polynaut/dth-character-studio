@@ -270,6 +270,14 @@ progress with the elapsed time, and the studio reports the outcome — including
 any per-scene failures and the total time — when the batch finishes. The
 finish report stays on screen until you close it (or start a new run).
 
+Clicking the progress button stops *watching* the run (Daz keeps going). If a
+batch is stuck — Daz is sitting on a dialog, the Runner never finished, and the
+button spins forever — hold **Ctrl**: it turns into **Abort**, which deletes the
+job file and resets the button, so the next export isn't refused with *"a batch
+is waiting for Daz Studio"*. Anything Daz has already started keeps running
+there; what you get back is the studio. (The same file can also be cleared from
+[Settings → App Data](./02-setup.md#the-app-data-tab).)
+
 The dialog refuses to start while the Runner plugin is missing or older than
 the one bundled with the app — the notice links straight to Settings to update
 it first. (A skip-Daz run doesn't need the Runner at all.)
