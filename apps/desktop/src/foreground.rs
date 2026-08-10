@@ -24,11 +24,8 @@ pub fn focus_app_window(exe_names: Vec<String>) -> bool {
 
 #[cfg(windows)]
 mod windows_impl {
-    use windows_sys::Win32::Foundation::{CloseHandle, HWND, LPARAM};
-    use windows_sys::Win32::System::Threading::{
-        AttachThreadInput, GetCurrentThreadId, OpenProcess, QueryFullProcessImageNameW,
-        PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
-    };
+    use windows_sys::Win32::Foundation::{HWND, LPARAM};
+    use windows_sys::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         BringWindowToTop, EnumWindows, GetForegroundWindow, GetWindow, GetWindowThreadProcessId,
         IsIconic, IsWindowVisible, SetForegroundWindow, ShowWindow, GW_OWNER, SW_RESTORE,
@@ -39,23 +36,12 @@ mod windows_impl {
         hwnd: HWND,
     }
 
-    /// The image file name (lowercased) of a process, e.g. `"dazstudio.exe"`.
+    /// The image file name (lowercased) of a process, e.g. `"dazstudio.exe"` —
+    /// the tail of the same executable path the Daz probes match against a
+    /// whole install folder (`procs::exe_path_of_pid`).
     fn exe_name_of(pid: u32) -> Option<String> {
-        unsafe {
-            let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
-            if handle.is_null() {
-                return None;
-            }
-            let mut buf = [0u16; 1024];
-            let mut size = buf.len() as u32;
-            let ok = QueryFullProcessImageNameW(handle, PROCESS_NAME_WIN32, buf.as_mut_ptr(), &mut size);
-            CloseHandle(handle);
-            if ok == 0 {
-                return None;
-            }
-            let full = String::from_utf16_lossy(&buf[..size as usize]);
-            Some(full.rsplit(['\\', '/']).next().unwrap_or(&full).to_lowercase())
-        }
+        let full = crate::procs::exe_path_of_pid(pid)?;
+        Some(full.rsplit(['\\', '/']).next().unwrap_or(&full).to_lowercase())
     }
 
     unsafe extern "system" fn enum_cb(hwnd: HWND, lparam: LPARAM) -> i32 {

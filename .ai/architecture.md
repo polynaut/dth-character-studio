@@ -175,7 +175,8 @@ Rust-side `open_home_window_impl`, no command), Daz bridge
 (`daz_studio_running`/`run_daz_script`/`launch_daz_studio`/`focus_app_window` —
 `launch_daz_studio` starts a scene-less Daz for the Execute job-file handoff,
 see `docs/exporter-plugin-job-file.md`, and **which Daz it starts** is its own
-rule — below), drives
+rule — below; `daz_studio_running` takes that same install folder, `''` = any),
+drives
 (`unc_for_path`/`ensure_network_drives`), avatars
 (`upscale_avatar_file`/`downscale_avatar_png`), `shell_open_file`,
 `housekeeping_sweep`,
@@ -194,7 +195,18 @@ by the `contracts/` fixtures (see `.ai/conventions.md` § FFI ritual).
 **Which Daz `launch_daz_studio` starts has two answers, and they are not
 interchangeable.** Every other caller passes `activeDazInstallFolder()` (the
 activated install); the job-file handoff passes `exportDazInstallFolder()` — the
-installation flagged **Export only** in Settings, else the active one. The split
+installation flagged **Export only** in Settings, else the active one. Rust-side,
+the folder it is GIVEN outranks whatever Daz happens to be running (a live DS6
+used to hijack a launch aimed at DS4); a running instance is still the answer
+when the caller names no folder, and the standard-locations probe is the last
+resort. `daz_studio_running` takes the same folder and answers about THAT
+install (empty = any Daz — what the scene-open bridge asks). `api/execute.ts`
+picks per call site (`DazRunningScope`), and the split is deliberate: a LAUNCH
+decision asks about the export install (being wrong costs one redundant launch
+that a running Daz collapses), while the two DESTRUCTIVE readings — "the run
+died, delete its file" and "that stale `running_` file is nobody's, overwrite
+it" — keep asking about ANY Daz, because a scoped answer would strand a live
+batch whenever the configured folder and the running exe's path disagree. The split
 exists because the handoff is the one path needing a PLUGIN (the Runner), and a
 plugin binary is built against one Studio major, so a machine on the newest
 Studio can still have to export from an older one. Three consumers must agree and

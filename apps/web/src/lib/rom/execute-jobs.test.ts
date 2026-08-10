@@ -9,7 +9,9 @@ import {
   jobSceneForMode,
   jobScriptForMode,
   expectedSceneExportFolders,
+  formatAgo,
   isReclaimableBatch,
+  jobFileMayBeLive,
   migratedExportFolder,
   jobFileJson,
   normalizeSceneKey,
@@ -237,6 +239,67 @@ describe('isReclaimableBatch — a batch a CLOSING Daz claimed but never ran', (
     })
     expect(openScene?.type).toBe('open-scene') // the parse itself is fine
     expect(isReclaimableBatch(openScene)).toBe(false)
+  })
+})
+
+describe('jobFileMayBeLive — may clearing this job file strand a run?', () => {
+  const batch = (over: Record<string, unknown> = {}) =>
+    parseJobFileJson(
+      JSON.stringify({
+        version: 1,
+        type: 'bulk-export',
+        progress: 0,
+        jobs: [{ scenePath: 'X:\\a.duf', scriptPath: 'X:\\s.dsa', status: 'pending' }],
+        ...over,
+      }),
+    )
+
+  it('a pending file was never claimed — deleting it is exactly what Abort does', () => {
+    expect(jobFileMayBeLive('pending', batch())).toBe(false)
+    // …even one that can't be parsed at all: unclaimed is unclaimed.
+    expect(jobFileMayBeLive('pending', null)).toBe(false)
+  })
+
+  it('a finished claimed file is leftover litter', () => {
+    expect(jobFileMayBeLive('running', batch({ progress: 100 }))).toBe(false)
+  })
+
+  it('a claimed but UNTOUCHED batch is the stranded case itself', () => {
+    // The same judgement the reclaim path makes — a closing Daz claimed it and
+    // died before running a row. Nobody is working it.
+    expect(jobFileMayBeLive('running', batch())).toBe(false)
+  })
+
+  it('a part-worked batch belongs to a Runner — that one is live', () => {
+    expect(jobFileMayBeLive('running', batch({ progress: 40 }))).toBe(true)
+    expect(
+      jobFileMayBeLive(
+        'running',
+        batch({ jobs: [{ scenePath: 'X:\\a.duf', scriptPath: 'X:\\s.dsa', status: 'running' }] }),
+      ),
+    ).toBe(true)
+  })
+
+  it('a torn or foreign claimed file is assumed live — the safe guess everywhere else too', () => {
+    expect(jobFileMayBeLive('running', null)).toBe(true)
+  })
+})
+
+describe('formatAgo — is this leftover file mine, or from last week?', () => {
+  const MIN = 60_000
+  it('reads as a single coarse unit', () => {
+    expect(formatAgo(5_000)).toBe('just now')
+    expect(formatAgo(MIN)).toBe('1 minute ago')
+    expect(formatAgo(12 * MIN)).toBe('12 minutes ago')
+    expect(formatAgo(60 * MIN)).toBe('1 hour ago')
+    expect(formatAgo(5 * 60 * MIN)).toBe('5 hours ago')
+    expect(formatAgo(24 * 60 * MIN)).toBe('1 day ago')
+    expect(formatAgo(3 * 24 * 60 * MIN)).toBe('3 days ago')
+  })
+
+  it('an unreadable age (0) says the least alarming thing, not "1970"', () => {
+    expect(formatAgo(0)).toBe('just now')
+    expect(formatAgo(Number.NaN)).toBe('just now')
   })
 })
 

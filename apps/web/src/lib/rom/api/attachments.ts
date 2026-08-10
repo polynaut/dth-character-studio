@@ -446,15 +446,19 @@ async function focusOpenedApp(scenePath: string): Promise<void> {
   await invoke('focus_app_window', { exeNames }).catch(() => {})
 }
 
-/** Whether a Daz Studio instance is currently running (false in a plain browser).
- *  The scene-card UI uses it to warn — the studio can't switch the scene of an
- *  already-running Daz, so it points the user at the per-character open script.
+/** Whether ANY Daz Studio instance is currently running (false in a plain
+ *  browser). The scene-card UI uses it to warn — the studio can't switch the
+ *  scene of an already-running Daz, so it points the user at the per-character
+ *  open script — and any running instance swallows a forwarded open, whichever
+ *  installation it belongs to. The empty `installFolder` is what asks the
+ *  question that way; the export batch asks the install-SPECIFIC one instead
+ *  ({@link exportDazStudioRunning} in api/execute.ts).
  *  A primitive return, still schema-parsed (the FFI ritual — no fixture);
  *  a parse failure reads as "can't tell" = not running, like an invoke failure
  *  always has. */
 export async function dazStudioRunning(): Promise<boolean> {
   try {
-    return z.boolean().parse(await invoke('daz_studio_running'))
+    return z.boolean().parse(await invoke('daz_studio_running', { installFolder: '' }))
   } catch {
     return false
   }
