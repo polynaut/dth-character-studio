@@ -451,7 +451,10 @@ export function jobFileMayBeLive(kind: JobFileKind, parsed: ExporterJobFile | nu
  *
  * Deliberately coarse and single-unit — the readout answers "is this from the
  * batch I started a minute ago, or from last week?", which no second unit makes
- * clearer. `0` (an mtime nothing could read) has no answer at all, so it says so.
+ * clearer. `0` (an mtime nothing could read) has no answer at all, and falls in
+ * with "just now" — the CAUTIOUS end for a delete decision, since a file that
+ * might be seconds old might also still be running. It is not the reassuring
+ * reading; nothing here should reassure on no evidence.
  */
 export function formatAgo(ms: number): string {
   if (!Number.isFinite(ms) || ms <= 0) return 'just now'

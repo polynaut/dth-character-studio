@@ -5,6 +5,8 @@ import { toast } from 'sonner'
 import { Button, InfoPopup, useRefetchOnFocus } from '@dth/ui'
 import {
   clearExporterJobFiles,
+  ExporterJobFilesChangedError,
+  exporterJobFilesSignature,
   fetchExporterJobFiles,
   housekeepingSweep,
   NOTE_MEDIA_RETENTION_DAYS,
@@ -65,17 +67,35 @@ export function HousekeepingSection() {
   // A failed read must not render as "nothing there" — that is the one answer
   // this readout must never give wrongly.
   const [jobFilesError, setJobFilesError] = useState('')
-  const [confirmClear, setConfirmClear] = useState(false)
+  /** '' = the confirm is closed; otherwise the signature of the state the user
+   *  agreed to delete. Kept rather than a boolean because the file can change
+   *  under an open confirm (the Runner claims it inside Daz, whatever this
+   *  window is doing), and "yes, delete" must not survive that. */
+  const [confirmSig, setConfirmSig] = useState('')
   const [clearing, setClearing] = useState(false)
 
   const loadJobFiles = useCallback(async () => {
     try {
-      setJobFiles(await fetchExporterJobFiles())
+      const files = await fetchExporterJobFiles()
+      setJobFiles(files)
       setJobFilesError('')
+      // A confirm that no longer describes what is on disk is withdrawn — the
+      // amber "may be live" warning is the safety on this action, and it is
+      // computed from the state shown, not the state deleted.
+      setConfirmSig((sig) => (sig && sig !== exporterJobFilesSignature(files) ? '' : sig))
+      return files
     } catch (e) {
       setJobFilesError(e instanceof Error ? e.message : String(e))
+      return null
     }
   }, [])
+
+  /** Arm the confirm on a FRESH read, so the warning the user weighs is the
+   *  current one rather than whatever the last focus happened to catch. */
+  async function onAskClear() {
+    const files = await loadJobFiles()
+    if (files && files.length > 0) setConfirmSig(exporterJobFilesSignature(files))
+  }
 
   // On mount and on every refocus: the interesting change (Daz claimed the
   // batch, or died holding it) happens while this window is in the background.
@@ -90,21 +110,29 @@ export function HousekeepingSection() {
   async function onClearJobFiles() {
     setClearing(true)
     try {
-      const removed = await clearExporterJobFiles()
+      // The signature the user agreed to — the api refuses if the file on disk
+      // has become something else since (a Runner claiming it mid-confirm).
+      const removed = await clearExporterJobFiles(confirmSig)
       toast.success(
         removed.length > 0
           ? `Removed ${removed.join(' and ')}`
           : 'Nothing to remove — the job file was already gone',
       )
-      setConfirmClear(false)
+      setConfirmSig('')
       await loadJobFiles()
     } catch (e) {
-      // A locked/read-only file is a real failure: say so rather than leaving
-      // the user believing the blockage is cleared — and re-read, because one
-      // of the two files may well have gone before the other refused.
-      toast.error(
-        `Couldn't delete the job file: ${e instanceof Error ? e.message : String(e)}`,
-      )
+      if (e instanceof ExporterJobFilesChangedError) {
+        // Not a failure — the answer changed while the question was open. Show
+        // the new state and make them look again rather than deleting a batch
+        // that may now be running.
+        toast.warning('The job file changed while you were looking at it — check it again.')
+      } else {
+        // A locked/read-only file is a real failure: say so rather than leaving
+        // the user believing the blockage is cleared — and re-read, because one
+        // of the two files may well have gone before the other refused.
+        toast.error(`Couldn't delete the job file: ${e instanceof Error ? e.message : String(e)}`)
+      }
+      setConfirmSig('')
       await loadJobFiles()
     } finally {
       setClearing(false)
@@ -248,20 +276,24 @@ export function HousekeepingSection() {
               </p>
             )}
             <div className="flex flex-wrap items-center gap-2">
-              {confirmClear ? (
+              {confirmSig ? (
                 <>
                   <span className="text-sm font-medium text-destructive">
                     Delete {jobFiles.length === 1 ? 'this file' : `these ${jobFiles.length} files`}?
                   </span>
-                  <Button variant="destructive" onClick={() => void onClearJobFiles()} disabled={clearing}>
+                  <Button
+                    variant="destructive"
+                    onClick={() => void onClearJobFiles()}
+                    disabled={clearing}
+                  >
                     {clearing ? 'Deleting…' : 'Yes, delete'}
                   </Button>
-                  <Button variant="outline" onClick={() => setConfirmClear(false)} disabled={clearing}>
+                  <Button variant="outline" onClick={() => setConfirmSig('')} disabled={clearing}>
                     Cancel
                   </Button>
                 </>
               ) : (
-                <Button variant="destructive" onClick={() => setConfirmClear(true)}>
+                <Button variant="destructive" onClick={() => void onAskClear()}>
                   <Trash2 /> Delete job file
                 </Button>
               )}

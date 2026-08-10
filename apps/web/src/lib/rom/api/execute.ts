@@ -740,6 +740,23 @@ export async function fetchExporterJobFiles(): Promise<Array<ExporterJobFileStat
 }
 
 /**
+ * A compact identity of what a readout SHOWED — everything the decision to
+ * delete rests on. Age is left out on purpose: it changes every second and
+ * changes nothing about the judgement.
+ */
+export function exporterJobFilesSignature(files: Array<ExporterJobFileState>): string {
+  return files.map((f) => `${f.kind}:${f.jobs}:${f.progress}:${f.mayBeLive}`).join('|')
+}
+
+/** What is on disk is no longer what the user was shown and agreed to delete. */
+export class ExporterJobFilesChangedError extends Error {
+  constructor() {
+    super('The job file changed since you looked at it.')
+    this.name = 'ExporterJobFilesChangedError'
+  }
+}
+
+/**
  * Delete every exporter job file on disk — the manual way out of a batch that
  * can never start or finish, which otherwise blocks every later export AND scan
  * with "a batch is waiting for Daz Studio".
@@ -749,26 +766,54 @@ export async function fetchExporterJobFiles(): Promise<Array<ExporterJobFileStat
  * the action they confirmed. A delete that fails (a locked file) throws, so the
  * UI can say so instead of reporting a cleanup that didn't happen. Returns the
  * file names removed.
+ *
+ * **Both files are settled before anything is thrown.** One locked and one
+ * removed is a real outcome (they are separate files), and letting the first
+ * rejection escape would skip dropping the watch below — leaving this window
+ * watching a batch whose file it had just deleted, i.e. producing the exact
+ * "run died" toast this function exists to avoid.
+ *
+ * `expect` is the {@link exporterJobFilesSignature} of the state the user was
+ * SHOWN, and passing it is what keeps the confirmation honest. The readout is
+ * a snapshot — it refreshes on focus, and nothing else — while the transition
+ * that matters (the Runner renaming the pending file to `running_` and starting
+ * to work it) happens inside Daz, at any moment, with this window focused. So
+ * the user can be looking at "written, never claimed", no warning shown, and
+ * agree to delete a batch that is by then LIVE. Re-reading here and refusing on
+ * a mismatch ({@link ExporterJobFilesChangedError}) means the amber warning is
+ * never bypassed by the file changing under it. Omit `expect` for an unchecked
+ * delete (the tests' blunt path).
  */
-export async function clearExporterJobFiles(): Promise<Array<string>> {
+export async function clearExporterJobFiles(expect?: string): Promise<Array<string>> {
   if (!isTauri()) return []
   const paths = await exporterJobFilePaths()
   if (!paths) return []
+  if (expect !== undefined && exporterJobFilesSignature(await fetchExporterJobFiles()) !== expect) {
+    throw new ExporterJobFilesChangedError()
+  }
   const results = await Promise.all(
     [
       { name: EXPORTER_JOB_FILE, path: paths.pending },
       { name: RUNNING_JOB_FILE, path: paths.running },
     ].map(async ({ name, path }) => {
-      if (!(await exists(path).catch(() => false))) return null
-      await remove(path)
-      return name
+      if (!(await exists(path).catch(() => false))) return { name, error: '' }
+      try {
+        await remove(path)
+        return { name, removed: true, error: '' }
+      } catch (error) {
+        return { name, error: error instanceof Error ? error.message : String(error) }
+      }
     }),
   )
-  const removed = results.filter((name) => name !== null)
+  const removed = results.filter((r) => r.removed).map((r) => r.name)
   // Whatever this window was watching is gone with the file — leaving the watch
   // armed would only produce a "run died" toast for a batch the user just
   // cleared on purpose (same reason abortExporterJobs drops it).
   if (removed.length > 0) activeRun = null
+  const failed = results.filter((r) => r.error)
+  if (failed.length > 0) {
+    throw new Error(failed.map((r) => `${r.name}: ${r.error}`).join('\n'))
+  }
   return removed
 }
 

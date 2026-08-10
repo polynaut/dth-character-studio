@@ -14,3 +14,5 @@ Both checks now identify an installation by the running executable's path, not i
 **New: clear a stuck exporter job file from Settings → App Data.**
 
 The handoff file that caused the above blocks every later export *and* scan with "a batch is waiting for Daz Studio", and until now nothing could remove it once no character owned it anymore. **Storage & housekeeping** now shows which job file is there (waiting for Daz, or claimed by the Runner), how many jobs it holds and how old it is, warns when Daz may still be working through it, and deletes it on confirmation.
+
+The warning is never bypassed by the file changing under it: Daz can claim a batch at any moment, so the readout is re-read when you open the confirmation and again when you press delete — if it has become a different file in between, nothing is deleted and you are asked to look again.

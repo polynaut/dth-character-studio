@@ -174,6 +174,21 @@ current code before relying on details, but assume the *lesson* still holds.
   When the studio LAUNCHED Daz itself the wait can't apply — a cold start
   outlasts it — so that path owes the user an abort instead
   (`abortProjectScanRun`, `abortSceneScan`), including on dialog dismissal.
+- **A destructive confirm built on a focus-refreshed readout is confirming a
+  SNAPSHOT, not the file.** `useRefetchOnFocus` re-reads on mount and window
+  focus — and nothing else — so a readout stays as it was for as long as the
+  window keeps focus. That is fine for anything descriptive, and wrong the
+  moment a warning computed from it is the only guard on an irreversible
+  action: the job-file readout in Settings → App Data can say "written, never
+  claimed" (no amber warning) while the Runner has since renamed the file
+  INSIDE Daz and started working it, and the delete then takes a live batch
+  away. The fix that generalizes: hash what was shown
+  (`exporterJobFilesSignature` — state only, never age, which ticks and
+  decides nothing), pass it to the destructive call, and have that call
+  re-read and refuse on a mismatch (`ExporterJobFilesChangedError`). Re-read
+  when ARMING the confirm too, so the warning being weighed is current.
+  Applies to any future "show state → confirm → mutate" pair over a file
+  something outside the app writes.
 - **Fast runtime test loop:** copying an updated `.DthUtils.dsa`/`.DthWorkflow.dsa`
   over the installed one in `<Daz library>/Scripts/DTH-Character-Studio/` and
   re-running the character's ROM script is enough — no app rebuild needed. (Only

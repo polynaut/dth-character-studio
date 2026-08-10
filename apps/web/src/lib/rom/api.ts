@@ -145,6 +145,8 @@ export {
   clearExporterJobFiles,
   dismissExportRun,
   executeCharacterJobs,
+  ExporterJobFilesChangedError,
+  exporterJobFilesSignature,
   exportDazStudioRunning,
   exporterJobsPending,
   exporterJobsWorking,
