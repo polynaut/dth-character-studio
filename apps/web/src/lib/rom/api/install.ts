@@ -173,10 +173,15 @@ export function fetchRunnerStatus(dazInstallFolder: string): Promise<storage.Run
  *  outdated install blocks the handoff — the dialog routes the user to Settings
  *  instead of writing a job file the runner would mishandle (or never pick up). */
 export async function fetchExportRunnerGate(): Promise<storage.RunnerGate> {
-  const s = await storage.getSettings()
-  if (!s.dazInstallFolder.trim())
+  // The install the batch will actually START, which is the "Export only" one
+  // when a card carries that flag. Checking the ACTIVE install instead would
+  // report "ready" off a Runner sitting in a Studio the export never opens —
+  // the export would then launch the other one, find no Runner to claim the job
+  // file, and wait for a batch that never begins.
+  const folder = storage.exportInstallFolder(await storage.getSettings())
+  if (!folder)
     return { blocked: true, reason: 'no-install-folder', bundledVersion: '', installedVersion: '' }
-  return storage.runnerGate(await storage.runnerStatus(s.dazInstallFolder))
+  return storage.runnerGate(await storage.runnerStatus(folder))
 }
 
 /**

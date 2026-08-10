@@ -299,3 +299,30 @@ export async function activeDazInstallFolder(): Promise<string> {
     return ''
   }
 }
+
+/**
+ * The Daz installation that runs EXPORT BATCHES — the "Export only" one when a
+ * card carries that flag, else the activated one like everything else.
+ *
+ * The batch handoff is the one thing that does not go through
+ * {@link activeDazInstallFolder}, because it is the one thing that needs a
+ * PLUGIN: the Runner claims the job file on startup, and a plugin binary is
+ * built against a single Studio major (`.ai/gotchas.md`). A user on the newest
+ * Studio who is still waiting for a Runner build for it would otherwise have to
+ * put the whole app back a version to export.
+ *
+ * Everything else — opening a scene, running a script, installing content —
+ * stays on the activated install. Two things follow the export install with it,
+ * and must: the Runner's install target and its gate, since a Runner in the
+ * install that does NOT run the batch is a gate reporting "ready" over an
+ * export that will start Daz and sit there forever.
+ */
+export async function exportDazInstallFolder(): Promise<string> {
+  try {
+    // The rule itself lives in the settings module, next to the fields, because
+    // the Runner gate and the Runner install need the same answer.
+    return storage.exportInstallFolder(await storage.getSettings())
+  } catch {
+    return ''
+  }
+}

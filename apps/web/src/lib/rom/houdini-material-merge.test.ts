@@ -191,6 +191,23 @@ describe('planSurfaceMerge', () => {
     expect(mergeTouchCount(plan)).toBe(0)
   })
 
+  it('says NOTHING about an empty target — the question is vacuous there', () => {
+    // Measured 2026-08-10, and the report this fixes: copying a skin into a
+    // freshly generated project (a DTH network with no material slots yet) had
+    // the confirm dialog list all 15 surfaces as "exist on no slot here" and
+    // tell the user to "check both nodes are the same figure" — about two nodes
+    // that WERE the same figure. On a node with nothing on it there is no slot
+    // that could claim a surface, so the count is arithmetic, not evidence.
+    // Setting an empty node up from a template is the normal reason to run this.
+    const plan = planSurfaceMerge([], [slot('Skin', 'Body', 'Head'), slot('Nails', 'Fingernails')])
+
+    expect(plan).toEqual({ evicted: [], trimmed: [], unclaimed: [] })
+    // …so the preview stays silent rather than accusing: nothing is replaced.
+    expect(mergeTouchCount(plan)).toBe(0)
+    // And the blocking check agrees, as it always did — the two had drifted.
+    expect(isFigureMismatch([], [slot('Skin', 'Body')])).toBe(false)
+  })
+
   it('never deletes a slot that claimed nothing to begin with', () => {
     // An empty group is "emptied by the merge" only if it had something to
     // lose. A blank slot the user made is theirs, not this rule's business.

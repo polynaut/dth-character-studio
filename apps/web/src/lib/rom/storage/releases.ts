@@ -2,7 +2,7 @@ import { resolveResource } from '@tauri-apps/api/path'
 import { exists, readDir, readFile } from '@tauri-apps/plugin-fs'
 
 import { basename, isDir, join } from './fs'
-import { getSettings } from './settings'
+import { exportInstallFolder, getSettings } from './settings'
 
 // DTH release + Exporter Plugin scanning: what the Settings pickers list, which
 // release/plugin is active, and the resolved install plans the Tools page runs.
@@ -631,10 +631,15 @@ export async function resolveRunnerInstall(): Promise<RunnerInstall> {
   const s = await getSettings()
   const errors: Array<string> = []
   let runnerFolder = ''
-  if (!s.dazInstallFolder) {
+  // The install the EXPORT runs in, which is the only place a Runner is any use
+  // — and the flavor probe below then picks the DS4/DS6 DLL to match it, so an
+  // "Export only" DS4 beside an active DS6 gets the DS4 binary without anything
+  // here having to know that happened.
+  const dazInstallFolder = exportInstallFolder(s)
+  if (!dazInstallFolder) {
     errors.push('Set the Daz Studio install folder.')
   } else {
-    const flavor = await detectDazFlavor(s.dazInstallFolder)
+    const flavor = await detectDazFlavor(dazInstallFolder)
     if (!flavor) {
       errors.push(
         'Could not detect the Daz Studio version — the install folder has no readable DAZStudio*.exe.',
@@ -648,5 +653,5 @@ export async function resolveRunnerInstall(): Promise<RunnerInstall> {
       }
     }
   }
-  return { runnerFolder, dazInstallFolder: s.dazInstallFolder, errors }
+  return { runnerFolder, dazInstallFolder, errors }
 }

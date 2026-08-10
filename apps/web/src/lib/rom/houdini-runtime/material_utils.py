@@ -636,7 +636,13 @@ def _plan_surface_merge(target_slots, incoming):
       evicted   target slot dicts to remove
       trimmed   `(slot, kept tokens)` pairs to rewrite
       unclaimed incoming tokens NO target slot claims — a handful is ordinary,
-                all of them means the two nodes describe different figures
+                all of them means the two nodes describe different figures.
+                EMPTY when the target has no slots at all: on a node with
+                nothing on it there is no slot that COULD claim a surface, so
+                every incoming one would be listed by arithmetic while saying
+                nothing about the figures. Measured 2026-08-10 — a freshly
+                generated project reported all 15 as unmatched, in a report
+                written just after the run had created them.
     """
     incoming_surfaces = set()
     # First-seen order, so the report is stable and matches the JS mirror (whose
@@ -674,7 +680,8 @@ def _plan_surface_merge(target_slots, incoming):
         else:
             trimmed.append((slot, kept))
 
-    unclaimed = [t for t in incoming_order if t not in claimed]
+    # Vacuous on an empty target — see the docstring.
+    unclaimed = [] if not target_slots else [t for t in incoming_order if t not in claimed]
     return (evicted, trimmed, unclaimed)
 
 

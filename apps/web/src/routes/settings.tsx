@@ -297,6 +297,41 @@ function SettingsPage() {
     }
   }
 
+  /**
+   * Flip the **Export only** flag onto one installation, or off.
+   *
+   * Saved straight to disk like Activate, and for the same reason: it is a
+   * choice about which installation is used, not a form field — leaving it to
+   * the page's Save button would put it behind the `dirty` gate that the Daz
+   * card deliberately sits outside of.
+   *
+   * `key` is the whole exclusivity mechanism: ONE key is stored, so turning a
+   * card on is what turns every other one off. The folder is stored beside it
+   * because that is what the launcher needs, and it is read from the scan the
+   * user is looking at rather than re-derived later.
+   */
+  async function onDazExportOnly(key: string) {
+    const app = key ? dazScan?.apps.find((candidate) => candidate.key === key) : undefined
+    if (key && !app) return
+    const next = {
+      ...settings,
+      dazExportInstallKey: key,
+      dazExportInstallFolder: app?.path ?? '',
+    }
+    try {
+      await saveSettings({ data: { settings: next, baseline: initial } })
+      setSettings(next)
+      await router.invalidate()
+      toast.success(
+        key
+          ? `Export batches will run in ${app?.name ?? 'that installation'}.`
+          : 'Export batches follow the active installation again.',
+      )
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    }
+  }
+
   /** Hand the three paths back to the user, keeping their current values. */
   async function onSetDazPathsManually() {
     const next = { ...settings, dazInstallKey: '' }
@@ -935,6 +970,8 @@ function SettingsPage() {
               onRescan={() => void rescanDazInstalls()}
               onActivate={(key) => void onActivateDazInstall(key)}
               onSetManually={() => void onSetDazPathsManually()}
+              exportOnlyKey={settings.dazExportInstallKey}
+              onExportOnly={(key) => void onDazExportOnly(key)}
             />
           </section>
 

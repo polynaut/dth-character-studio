@@ -78,6 +78,34 @@ export const studioSettingsSchema = z.object({
    */
   dazInstallKey: str,
   /**
+   * An OLDER Daz installation that runs the export batches — DIM's key for it,
+   * the same identity `dazInstallKey` stores. Empty (the default) = exports run
+   * in the activated installation like everything else.
+   *
+   * **Why one installation can be the odd one out.** Everything the studio does
+   * in Daz goes through the activated install — except the batch handoff, which
+   * only works if the DTH **Runner plugin** loaded, and a plugin binary is built
+   * against ONE Studio major version (see `.ai/gotchas.md`, "Export only" may
+   * never point at Daz Studio 4 — which also records the one install this must
+   * never name). So a user who has moved to the newest Studio for authoring can still
+   * be waiting on an exporter/runner build for it, and their exports have to
+   * keep running in the older one. This field is that arrangement, made
+   * explicit and visible, instead of forcing the whole app back a version.
+   *
+   * At most ONE installation carries it: the flag is a single stored key, so
+   * turning it on for one card is what turns it off everywhere else — there is
+   * no state in which two installs both claim the exports.
+   */
+  dazExportInstallKey: str,
+  /**
+   * Where that export installation lives — the folder the launcher needs, kept
+   * beside the key for the same reason `dazInstallFolder` is: the key is the
+   * identity, the folder is what a process can actually be started from, and
+   * resolving one from the other at launch time would mean a registry scan on
+   * the path where Daz is already starting.
+   */
+  dazExportInstallFolder: str,
+  /**
    * The Houdini documents folder (e.g. `D:/User Data/Documents/houdini20.5`).
    * Optional — the DTH install merges the release's Houdini assets
    * (otls/presets/toolbar) into it.
@@ -226,4 +254,25 @@ export async function saveSettings(
   }
   await writeTextFileAtomic(await dataPath('settings.json'), JSON.stringify(merged, null, 2) + '\n')
   return merged
+}
+
+/**
+ * The Daz installation that runs EXPORT BATCHES: the one flagged **Export only**
+ * when a card carries that flag, else the activated one.
+ *
+ * Pure, and the single statement of the rule — three layers need the same
+ * answer and must never disagree about it: the launcher that starts the batch
+ * (`api/core.exportDazInstallFolder`), the Runner gate that says the batch can
+ * start, and the Runner install that puts the plugin where the batch will look
+ * for it. A gate reading one install while the launcher starts another is a
+ * "ready" over an export that opens Daz and waits forever.
+ *
+ * The KEY is what arms it. A folder left behind by a switch turned off, or by an
+ * install that has since been activated in its own right, must not keep quietly
+ * taking the exports.
+ */
+export function exportInstallFolder(settings: StudioSettings): string {
+  const key = settings.dazExportInstallKey.trim()
+  const folder = settings.dazExportInstallFolder.trim()
+  return key && folder ? folder : settings.dazInstallFolder.trim()
 }

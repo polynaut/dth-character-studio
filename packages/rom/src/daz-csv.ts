@@ -1,4 +1,5 @@
 import { parseCsvRecords } from './product-scan'
+import { sanitizePoseName } from './csv'
 import { newId } from './types'
 
 import type { Morph } from './types'
@@ -32,6 +33,30 @@ export function cleanMorphName(prop: string): string {
   s = s.replace(/^Teeth_/i, '')
   s = s.replace(/^[A-Z][A-Z0-9]{2,}_/, '')
   return s.trim() || prop.trim()
+}
+
+/**
+ * The pose NAME an imported row lands with: {@link cleanMorphName}, then made
+ * legal for Houdini.
+ *
+ * Daz property labels are prose — `Torso Muscular`, `5 Belly Shape Muscular`,
+ * `!Breast Large`, `Shape NAVEL FOR PEAR` — and Houdini takes `[A-Za-z0-9_]`
+ * only. Imported verbatim, a Scan_Frames CSV therefore arrives as a grid of
+ * rows the editor immediately flags red, and the user retypes dozens of names
+ * that the studio could have derived. Stripping is the whole fix: `Torso
+ * Muscular` → `TorsoMuscular` reads the same to a human and passes.
+ *
+ * Rewriting an import is not the same thing as rewriting what a user TYPED
+ * (which the editor deliberately refuses to do — it flags and lets them decide).
+ * Nothing is lost either: the raw property stays on the morph and is what the
+ * Parameter-name column shows, so the row still says exactly which Daz morph it
+ * drives.
+ *
+ * Falls back to the raw property when cleaning leaves nothing legal — better a
+ * name derived from the prop than an empty required cell.
+ */
+export function importedPoseName(prop: string): string {
+  return sanitizePoseName(cleanMorphName(prop)) || sanitizePoseName(prop)
 }
 
 /**
@@ -86,7 +111,7 @@ export function posesFromDazCsv(text: string): Array<ImportedPose> {
       morphs.push({ id: newId(), node, prop, value })
     }
     if (morphs.length === 0) continue
-    poses.push({ frame, name: cleanMorphName(morphs[0].prop), morphs })
+    poses.push({ frame, name: importedPoseName(morphs[0].prop), morphs })
   }
   poses.sort((a, b) => a.frame - b.frame)
   return poses

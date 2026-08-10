@@ -36,6 +36,7 @@ export { scriptIconNames, writeScriptIcons } from './storage/script-icons'
 // --- App-global settings (settings.json) ------------------------------------
 export {
   consumeSettingsFileCorrupt,
+  exportInstallFolder,
   getSettings,
   saveSettings,
   studioSettingsSchema,
@@ -144,3 +145,11 @@ export {
 // --- Known network drives (drive → UNC metadata) ------------------------------
 export { forgetDrive, listKnownDrives, rememberDrive } from './storage/network-drives'
 export type { KnownDrive } from './storage/network-drives'
+
+// --- Utils drawer: recently used transfer sources (houdini-sources.json) -----
+export {
+  HOUDINI_SOURCE_RECENTS_MAX,
+  listHoudiniSources,
+  rememberHoudiniSource,
+} from './storage/houdini-sources'
+export type { HoudiniSourceRecent } from './storage/houdini-sources'

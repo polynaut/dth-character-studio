@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   AlertTriangle,
@@ -41,6 +41,8 @@ import {
   discardHoudiniBackups,
   restoreHoudiniBackup,
   fetchCachedHoudiniScans,
+  fetchHoudiniSourceRecents,
+  rememberHoudiniSource,
   scanCharacterHoudiniProjects,
   scanHoudiniMaterials,
   transferHoudiniMaterials,
@@ -70,7 +72,7 @@ import {
   surfaceLabel,
 } from '#/lib/rom/houdini-material-merge.ts'
 import type { SurfaceMergePlan } from '#/lib/rom/houdini-material-merge.ts'
-import type { DazAsset } from '#/lib/rom/storage.ts'
+import type { DazAsset, HoudiniSourceRecent } from '#/lib/rom/storage.ts'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import houdiniLogo from '#/assets/houdini-logo.svg'
 import { pickHipPath } from '#/lib/desktop.ts'
@@ -535,6 +537,42 @@ export function HoudiniUtilsPanel({
     setPickedMaterials(new Set())
   }, [selectedSource])
 
+  /** The shortcut row under the picker — read on open, and again after each
+   *  choice so the order the user just changed is the order they see. */
+  const [sourceRecents, setSourceRecents] = useState<Array<HoudiniSourceRecent>>([])
+  const loadSourceRecents = useCallback(async () => {
+    setSourceRecents(await fetchHoudiniSourceRecents().catch(() => []))
+  }, [])
+  useEffect(() => {
+    if (open) void loadSourceRecents()
+  }, [open, loadSourceRecents])
+
+  /**
+   * Record a source as just used, then re-read the row so the order the user
+   * just changed is the order they see.
+   *
+   * Called at the points where a file is BROWSED FOR — the picker, the drop
+   * zone, and re-picking a chip — never from the effect that reacts to
+   * `activeSourceHip`. Watching that would sweep up the two kinds of source the
+   * row is not for: a project template (already a chip, one row up) and another
+   * character's project (already in the Select), each of which would then appear
+   * twice, in two rows, both highlighted. What this list is for is the file the
+   * studio was never told about, and the only way one arrives is by being found
+   * on disk.
+   *
+   * Remembered on CHOICE, not on a completed transfer: the expensive thing this
+   * saves is the re-browsing, and that cost is paid the moment a file is picked
+   * — whether or not the copy that follows is the one the user ultimately wants.
+   */
+  const rememberSource = useCallback(
+    (hipPath: string) => {
+      void rememberHoudiniSource({ data: { hipPath } })
+        .then(loadSourceRecents)
+        .catch(() => {})
+    },
+    [loadSourceRecents],
+  )
+
   useEffect(() => {
     setSelectedSource('')
     if (!open || !activeSourceHip) {
@@ -553,6 +591,7 @@ export function HoudiniUtilsPanel({
     if (picked) {
       setSourceMode('browse')
       setBrowsedHip(picked)
+      rememberSource(picked)
     }
   }
 
@@ -1291,6 +1330,9 @@ export function HoudiniUtilsPanel({
                     if (!dropped) return
                     setSourceMode('browse')
                     setBrowsedHip(dropped)
+                    // A drop is a browse that skipped the dialog — same file
+                    // found the same way, so it earns the same shortcut.
+                    rememberSource(dropped)
                   }}
                 >
                   <Button variant="outline" size="sm" onClick={() => void onBrowse()}>
@@ -1298,6 +1340,55 @@ export function HoudiniUtilsPanel({
                   </Button>
                 </FileDropZone>
               </div>
+
+              {/* The shortcut row: the last few sources, newest first. Same
+                  affordance as the templates above (a chip that IS the pick),
+                  because it answers the same question — "the file I keep coming
+                  back to" — for the ones the studio was never told about. Files
+                  that have since disappeared are already filtered out, so every
+                  chip here opens. */}
+              {sourceRecents.length > 0 && (
+                <div className="mb-3">
+                  <p className="mb-1 text-xs text-muted-foreground">Recently used</p>
+                  <div className="flex flex-wrap gap-2">
+                    {sourceRecents.map((recent) => {
+                      const active =
+                        normalizePath(activeSourceHip).toLowerCase() ===
+                        normalizePath(recent.path).toLowerCase()
+                      return (
+                        <button
+                          key={recent.path}
+                          type="button"
+                          // The full path, because the chip shows only the file
+                          // name and two templates called `Base.hiplc` in
+                          // different folders are otherwise indistinguishable.
+                          title={displayPath(recent.path)}
+                          onClick={() => {
+                            setSourceMode('browse')
+                            setBrowsedHip(recent.path)
+                            // Re-picking floats it back to the top — the file
+                            // you keep coming back to stays where you look.
+                            rememberSource(recent.path)
+                          }}
+                          className={`flex max-w-full items-center gap-2 rounded-md border px-2.5 py-1.5 text-sm ${
+                            active
+                              ? 'border-houdini-orange bg-houdini-orange/15 font-medium'
+                              : 'text-muted-foreground hover:bg-accent/50'
+                          }`}
+                        >
+                          <img
+                            src={houdiniLogo}
+                            alt=""
+                            aria-hidden
+                            className="size-4 shrink-0 object-contain"
+                          />
+                          <span className="truncate">{fileName(recent.path)}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
 
               {activeSourceHip && (
                 <p className="mb-2 truncate text-xs text-muted-foreground" title={activeSourceHip}>
@@ -2100,28 +2191,45 @@ function GeneralTab({
 }) {
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <Label className="flex w-fit items-center gap-1 text-base font-semibold">
-          Project checks
-          {/* The full `$JOB` story lives here rather than above the cards: it
-              explains WHY the row exists, which is worth one click and not
-              worth six lines of prose on every visit. */}
-          <InfoPopup label="Project checks — more information">
-            <code>$JOB</code> is saved inside each <code>.hip</code>, so a project keeps whatever
-            it was created with — projects made before v0.64 still point it at the shared{' '}
-            <code>houdini/houdini-project</code> folder, which sits below your exports. Houdini
-            only turns a path you pick into a variable when it sits under <code>$HIP</code> or{' '}
-            <code>$JOB</code>, so those projects write an absolute path every time you choose an
-            export by hand. Repairing <code>$JOB</code> fixes what you pick from now on;{' '}
-            <strong>Make paths portable</strong> fixes what is already stored.
-          </InfoPopup>
-        </Label>
-        <span className="text-xs text-muted-foreground">
+      {/* Title + Rescan on one line, the count beneath — one block, so the
+          section's `space-y-4` keeps its distance from the cards below while
+          the count stays tight under its own heading. */}
+      <div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <Label className="flex w-fit items-center gap-1 text-base font-semibold">
+            Project checks
+            {/* The full `$JOB` story lives here rather than above the cards: it
+                explains WHY the row exists, which is worth one click and not
+                worth six lines of prose on every visit. */}
+            <InfoPopup label="Project checks — more information">
+              <div className="space-y-2">
+                <p>
+                  What has to be true for a project to keep working when it — or your library —
+                  moves.
+                </p>
+                <p>
+                  <code>$JOB</code> is saved inside the project file, so an older one can still
+                  point somewhere else. <strong>Repair $JOB</strong> puts it back on the
+                  character folder, which is what makes the paths you pick from now on come out
+                  relative.
+                </p>
+                <p>
+                  <strong>Make paths portable</strong> is the other half: it rewrites paths
+                  already stored absolute to <code>$HIP/…</code> or <code>$JOB/…</code>.
+                </p>
+              </div>
+            </InfoPopup>
+          </Label>
+          {/* Rescan sits beside the title, not after the count: it is an ACTION on
+              the section, and the count is a result of it. Splitting them puts the
+              two things you can click next to each other. */}
+          <Button variant="ghost" size="sm" disabled={scan.loading} onClick={onRescan}>
+            <RefreshCw className={scan.loading ? 'animate-spin' : ''} /> Rescan
+          </Button>
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">
           {scan.projects.length} project{scan.projects.length === 1 ? '' : 's'} read
-        </span>
-        <Button variant="ghost" size="sm" disabled={scan.loading} onClick={onRescan}>
-          <RefreshCw className={scan.loading ? 'animate-spin' : ''} /> Rescan
-        </Button>
+        </p>
       </div>
 
       {scan.loading ? (
