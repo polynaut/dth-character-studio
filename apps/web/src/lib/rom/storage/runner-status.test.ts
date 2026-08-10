@@ -1,7 +1,13 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-// releases.ts imports Tauri modules at the top level; the functions under test
-// are pure, so empty-ish stubs are enough (nothing here touches the fs).
+// releases.ts imports Tauri modules at the top level; most functions under test
+// are pure, so empty-ish stubs are enough. detectDazFlavor is the exception —
+// it lists an install folder and reads exe bytes, so those two mocks read from
+// the mutable `fs` seam below (empty by default = the old inert stubs).
+const fs = vi.hoisted(() => ({
+  dir: [] as Array<{ name: string; isFile: boolean; isDirectory: boolean }>,
+  files: new Map<string, Uint8Array>(),
+}))
 vi.mock('@tauri-apps/api/path', () => ({
   appLocalDataDir: async () => '/appdata',
   resolveResource: async (p: string) => p,
@@ -15,8 +21,9 @@ vi.mock('@tauri-apps/api/core', () => ({
 vi.mock('@tauri-apps/plugin-fs', () => ({
   exists: async () => false,
   mkdir: async () => undefined,
-  readDir: async () => [],
-  readFile: async () => new Uint8Array(),
+  readDir: async () => fs.dir,
+  readFile: async (p: string) =>
+    fs.files.get(p.replace(/\\/g, '/')) ?? new Uint8Array(),
   readTextFile: async () => '',
   remove: async () => undefined,
   rename: async () => undefined,
@@ -24,7 +31,18 @@ vi.mock('@tauri-apps/plugin-fs', () => ({
   writeTextFile: async () => undefined,
 }))
 
-import { fileVersionFromBytes, runnerGate, runnerInstalledNewer } from './releases'
+import {
+  dazFlavorFromExeVersion,
+  detectDazFlavor,
+  fileVersionFromBytes,
+  runnerGate,
+  runnerInstalledNewer,
+} from './releases'
+
+beforeEach(() => {
+  fs.dir = []
+  fs.files.clear()
+})
 
 import type { RunnerStatus } from './releases'
 
@@ -57,6 +75,44 @@ describe('fileVersionFromBytes', () => {
 
   it('returns "" when no signature is present', () => {
     expect(fileVersionFromBytes(new Uint8Array(64))).toBe('')
+  })
+})
+
+describe('dazFlavorFromExeVersion', () => {
+  it('maps major 4 → ds4 and 5+ → ds6', () => {
+    expect(dazFlavorFromExeVersion('4.24.0.3')).toBe('ds4')
+    expect(dazFlavorFromExeVersion('5.1.2.3')).toBe('ds6')
+    expect(dazFlavorFromExeVersion('6.0.1.42')).toBe('ds6')
+    // The rule is >= 5, so an eventual DS7 silently rides the ds6 path —
+    // correct only while it keeps DS6's dsp_*.dll naming/ABI. The closed-world
+    // sites to revisit that day are listed in the /upgrade-daz skill.
+    expect(dazFlavorFromExeVersion('7.0.0.1')).toBe('ds6')
+  })
+
+  it('returns null for an unreadable version — never guess from folder names', () => {
+    // "DAZStudio4 64-bit" contains a 6; only the exe's version resource counts.
+    expect(dazFlavorFromExeVersion('')).toBeNull()
+    expect(dazFlavorFromExeVersion('garbage')).toBeNull()
+    expect(dazFlavorFromExeVersion('0.1.0.0')).toBeNull()
+  })
+})
+
+describe('detectDazFlavor', () => {
+  it('reads the version from a DAZStudio*.exe, ignoring other files', async () => {
+    fs.dir = [
+      { name: 'uninstall.exe', isFile: true, isDirectory: false },
+      { name: 'shaders', isFile: false, isDirectory: true },
+      { name: 'DAZStudio.exe', isFile: true, isDirectory: false },
+    ]
+    fs.files.set('C:/Program Files/DAZ 3D/DAZStudio6/DAZStudio.exe', dllBytes(6, 0, 1, 2))
+    expect(await detectDazFlavor('C:/Program Files/DAZ 3D/DAZStudio6')).toBe('ds6')
+  })
+
+  it('null when no DAZStudio exe carries a readable version', async () => {
+    // The exe exists but its bytes hold no VS_FIXEDFILEINFO → '' → null,
+    // never a folder-name guess.
+    fs.dir = [{ name: 'DAZStudio.exe', isFile: true, isDirectory: false }]
+    expect(await detectDazFlavor('C:/Program Files/DAZ 3D/DAZStudio6')).toBeNull()
   })
 })
 
