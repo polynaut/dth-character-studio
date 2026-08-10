@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { cleanMorphName, posesFromDazCsv } from './daz-csv'
+import { cleanMorphName, importedPoseName, posesFromDazCsv } from './daz-csv'
 
 describe('cleanMorphName', () => {
   it('strips figure/body prefixes and HD suffixes', () => {
@@ -115,5 +115,36 @@ describe('posesFromDazCsv', () => {
     const poses = posesFromDazCsv('5,,,Genesis9,prop_A,1,\n')
     expect(poses).toHaveLength(1)
     expect(poses[0].morphs).toHaveLength(1)
+  })
+})
+
+describe('importedPoseName — what a Scan_Frames CSV row lands with', () => {
+  it('strips the spaces Daz labels carry, so the row is not flagged on arrival', () => {
+    // Measured on a real Scan_Frames import (FBM section): every one of these
+    // came in red, and retyping them by hand is the work this saves.
+    expect(importedPoseName('Torso Muscular')).toBe('TorsoMuscular')
+    expect(importedPoseName('5 Belly Shape Muscular')).toBe('5BellyShapeMuscular')
+    expect(importedPoseName('Shape NAVEL FOR PEAR')).toBe('ShapeNAVELFORPEAR')
+  })
+
+  it('strips the other characters Houdini rejects too, not only spaces', () => {
+    expect(importedPoseName('!Breast Large')).toBe('BreastLarge')
+    expect(importedPoseName('Breast Preset 10')).toBe('BreastPreset10')
+  })
+
+  it('leaves an already-legal name exactly as the cleaner produced it', () => {
+    expect(importedPoseName('PBMNavel')).toBe('PBMNavel')
+    expect(importedPoseName('xMusc_body_bs_AnconeusL_B_HD2')).toBe('AnconeusL')
+  })
+
+  it('falls back to the raw property when cleaning leaves nothing legal', () => {
+    // `cleanMorphName` strips a leading SHOUTY_ prefix; if what remains is all
+    // punctuation, a name derived from the prop beats an empty required cell.
+    // The underscore survives — it is one of the characters Houdini accepts.
+    expect(importedPoseName('PBM_+++')).toBe('PBM_')
+  })
+
+  it('is empty only when the property itself holds nothing legal', () => {
+    expect(importedPoseName('+++')).toBe('')
   })
 })

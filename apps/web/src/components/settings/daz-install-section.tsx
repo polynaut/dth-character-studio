@@ -137,20 +137,37 @@ export function DazInstallSection({
               onActivate={() => onActivate(app.key)}
               footer={
                 exportOnlyCandidates.includes(app.key) ? (
-                  <span className="mt-1.5 flex items-start gap-2 rounded-md border border-dashed p-2">
+                  <span className="mt-1.5 flex items-center gap-2 rounded-md border border-dashed p-2">
                     <Switch
                       checked={exportOnlyKey === app.key}
                       onCheckedChange={(on) => onExportOnly(on ? app.key : '')}
                       disabled={busyKey !== ''}
                       aria-label={`Run export batches in ${app.name}`}
                     />
-                    <span className="min-w-0 text-xs">
-                      <span className="font-medium">Export only</span>
-                      <span className="mt-0.5 block text-muted-foreground">
-                        DTH Export runs its batch in {app.name}; everything else keeps using
-                        the active installation. For when the Runner plugin has no build for
-                        the newer Studio yet.
-                      </span>
+                    {/* The reasoning is one click away, not four lines under
+                        every older card: the switch is a one-line decision and
+                        the paragraph explaining WHY is what makes the section
+                        long enough to skim past. */}
+                    <span className="flex min-w-0 items-center gap-1 text-xs font-medium">
+                      Export only
+                      <InfoPopup label="Export only — more information">
+                        <div className="space-y-2">
+                          <p>
+                            DTH Export runs its batch in <strong>{app.name}</strong>; everything
+                            else — opening scenes, running scripts, installing content — keeps
+                            using the active installation.
+                          </p>
+                          <p>
+                            For when the Runner plugin has no build for the newer Studio yet:
+                            the export batch is the one thing that needs that plugin, so this
+                            lets the rest of the app move on without it.
+                          </p>
+                          <p>
+                            Only one installation can carry it, and the Runner is installed and
+                            checked wherever it points.
+                          </p>
+                        </div>
+                      </InfoPopup>
                     </span>
                   </span>
                 ) : undefined
