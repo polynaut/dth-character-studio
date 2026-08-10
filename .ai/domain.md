@@ -784,7 +784,11 @@ older runtimes as stale.
   its next row. Say that in the UI rather than implying the run was stopped.
   No stamp rollback either (unlike `abortExporterJobs`): a claimed batch may
   already have exported scenes, and re-flagging those as never handed off
-  would describe work that DID happen as work that didn't.
+  would describe work that DID happen as work that didn't. A status poll can
+  straddle the delete — `fetchExportRunProgress` re-checks `activeRun` is
+  still ITS captured run before calling a vanished file a dead run, so the
+  losing poll reports nothing instead of toasting a sticky "run died" over a
+  deliberate abort.
 - **Every script handed to the Runner must run UNATTENDED — no modals, ever.**
   The Runner executes job rows inside a Daz that is often minimized, so any
   `MessageBox` is an invisible dead stop: the row never completes, the batch
