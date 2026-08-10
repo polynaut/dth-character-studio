@@ -123,13 +123,13 @@ test('project window: character editor measures, edits and saves both artifacts'
   const definition = await fileContent(page, `${P.charFolder}/Kira.json`)
   expect(JSON.parse(definition!).generatedDthVersion).toBe('2.4.3')
   // The save's generation emitted the bone-scale reference-skeleton paths
-  // PROJECT-RELATIVE: the script swaps the export root for
-  // `$JOB/houdini/daz-export`. `$JOB` IS the character folder (runtime v64), so
-  // the export tree is one hop from it — and that is what Houdini's own picker
-  // writes, unlike the `$HIP/../…` this used to emit. Pins the emit decision
-  // end-to-end: the manifest's default 'hip' style + the fixture's linked .hip
-  // inside the character folder reach the emitted script.
-  expect(dsa).toContain('"$JOB/houdini/daz-export"')
+  // PROJECT-RELATIVE: the script swaps the export root for `$HIP/daz-export`
+  // (runtime v66). The export tree sits INSIDE the houdini folder since v0.68,
+  // so `$HIP` — the `.hip`'s own folder — reaches it with no `..`, which is
+  // also what Houdini's own picker writes. Pins the emit decision end-to-end:
+  // the manifest's default 'hip' style + the fixture's linked .hip inside the
+  // character folder reach the emitted script.
+  expect(dsa).toContain('"$HIP/daz-export"')
   // …and the same funnel swept the retired junction feature's leftovers,
   // probing exactly where the old versions planted them (beside the linked
   // .hip here) — nothing to remove in the fixture world, but the sweep-on-
@@ -180,7 +180,7 @@ test('project window: inline rename moves the folder and regenerates the script'
     `${P.dazLib}/Scripts/DTH-Character-Studio/Demo/Nova/ROM_Nova_G9.dsa`,
   )
   expect(novaDsa).toContain(`var dthRefRootAbs = "${novaFolder}/houdini/daz-export";`)
-  expect(novaDsa).toContain('"$JOB/houdini/daz-export"')
+  expect(novaDsa).toContain('"$HIP/daz-export"')
   // The app's own folder for this character followed the rename, and the script
   // reads its CSV from the new one — a stale path here would make every export
   // report "PoseAsset CSV not found" while the file sat under the old name.

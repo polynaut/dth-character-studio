@@ -96,11 +96,14 @@ describe('hipAnchorDirs — where $HIP-relative reference paths can anchor', () 
   })
 })
 
-describe('hipRefPrefixFor — the $JOB prefix that replaces the export root', () => {
-  it('standard layout: the export root is one hop from $JOB (the character folder)', () => {
+describe('hipRefPrefixFor — the $HIP/$JOB prefix that replaces the export root', () => {
+  it('standard layout: the export root sits UNDER the .hip, so $HIP reaches it', () => {
+    // Measured against Houdini itself (`hou.text.collapseCommonVars` on a real
+    // project, 2026-08-10): this is the spelling its own file picker writes,
+    // now that daz-export lives inside the houdini folder.
     expect(
       hipRefPrefixFor(['X:/p/Kira/houdini/K.hiplc'], 'X:/p/Kira', 'X:/p/Kira/houdini/daz-export'),
-    ).toBe('$JOB/houdini/daz-export')
+    ).toBe('$HIP/daz-export')
     // Backslash inputs (the stored Windows paths) resolve identically.
     expect(
       hipRefPrefixFor(
@@ -108,23 +111,39 @@ describe('hipRefPrefixFor — the $JOB prefix that replaces the export root', ()
         'X:\\p\\Kira',
         'X:\\p\\Kira\\houdini\\daz-export',
       ),
-    ).toBe('$JOB/houdini/daz-export')
+    ).toBe('$HIP/daz-export')
   })
 
-  it('does not care how DEEP the .hip sits — the whole point of leaving $HIP', () => {
-    // The old $HIP form encoded the scene's depth as `..` hops, so this had to
-    // fall back to absolute. $JOB is the character folder either way.
+  it('the export root IS the hip folder → bare $HIP, not a fallback to absolute', () => {
+    expect(
+      hipRefPrefixFor(['X:/p/Kira/houdini/K.hiplc'], 'X:/p/Kira', 'X:/p/Kira/houdini'),
+    ).toBe('$HIP')
+  })
+
+  it('a DEEPER .hip still anchors on its own folder — $HIP names it, whatever the depth', () => {
+    // $HIP encodes no `..` here: the exports are below the hip, not above it.
+    // What matters is that all projects share ONE folder, not which folder.
     expect(
       hipRefPrefixFor(
-        ['X:/p/Kira/houdini/variants/deep/K.hiplc'],
+        ['X:/p/Kira/houdini/variants/K.hiplc'],
         'X:/p/Kira',
-        'X:/p/Kira/houdini/daz-export',
+        'X:/p/Kira/houdini/variants/daz-export',
       ),
-    ).toBe('$JOB/houdini/daz-export')
+    ).toBe('$HIP/daz-export')
   })
 
-  it('two hips in different folders now share one prefix', () => {
-    // With $HIP this was absolute: no single `..` walk was right for both.
+  it('exports beside the hip folder rather than under it → $JOB, the character folder', () => {
+    // A pre-v0.68 layout: daz-export had not moved into houdini/ yet. $HIP would
+    // have to climb out (`$HIP/../daz3d/…`) — depth-fragile, and Houdini itself
+    // refuses to write it — so this tier keeps the v63 form.
+    expect(
+      hipRefPrefixFor(['X:/p/Kira/houdini/K.hiplc'], 'X:/p/Kira', 'X:/p/Kira/daz3d/dth-exports'),
+    ).toBe('$JOB/daz3d/dth-exports')
+  })
+
+  it('two hips in DIFFERENT folders → $JOB, because there is no single $HIP', () => {
+    // Two anchor folders are two different $HIPs; $JOB is the same folder for
+    // both, so the depth-independent tier is what serves this case.
     expect(
       hipRefPrefixFor(
         ['X:/p/Kira/houdini/A.hiplc', 'X:/p/Kira/archive/B.hiplc'],
@@ -132,6 +151,16 @@ describe('hipRefPrefixFor — the $JOB prefix that replaces the export root', ()
         'X:/p/Kira/houdini/daz-export',
       ),
     ).toBe('$JOB/houdini/daz-export')
+  })
+
+  it('two hips in the SAME folder keep the short form', () => {
+    expect(
+      hipRefPrefixFor(
+        ['X:/p/Kira/houdini/A.hiplc', 'X:/p/Kira/houdini/B.hiplc'],
+        'X:/p/Kira',
+        'X:/p/Kira/houdini/daz-export',
+      ),
+    ).toBe('$HIP/daz-export')
   })
 
   it('no linked projects → absolute (nothing to write a project-relative path into)', () => {

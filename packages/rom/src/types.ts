@@ -1465,8 +1465,24 @@ export const CHARACTER_SCHEMA_VERSION = 30
  *       catastrophic-failure log merges per scene instead of truncating; a
  *       cleared per-scene art direction emits an explicit null; the split
  *       Export_ and the groom script carry the indexSync scan.
+ * v66 — the reference prefix anchors on `$HIP` again where it can:
+ *       `$HIP/daz-export/…` instead of `$JOB/<houdiniSubdir>/daz-export/…`.
+ *       Not a reversal of v63 but its consequence — v64 moved the exports
+ *       INSIDE the houdini folder, so `$HIP` reaches them without the `..` that
+ *       made it depth-fragile, and Houdini's own picker collapses them that way
+ *       (measured 2026-08-10, `hou.text.collapseCommonVars`), so generated and
+ *       hand-picked paths agree in the same node. `$HIP` is DERIVED from where
+ *       the `.hip` sits, so unlike `$JOB` it cannot drift — a project whose
+ *       `$JOB` points at another character still resolves its own imports.
+ *       `$JOB` remains for what `$HIP` cannot reach without climbing out
+ *       (`<char>/export`, and any layout whose exports sit beside rather than
+ *       under the houdini folder) and for projects spread across FOLDERS, where
+ *       there is no single `$HIP`. The emitted bone-scale reference-skeleton
+ *       paths change, hence the bump. Projects generated under v63–v65 keep the
+ *       `$JOB` form — it resolves, so it is NOT flagged; Utils → Make paths
+ *       portable shortens it (`_shorten_job_ref`).
  */
-export const RUNTIME_VERSION = 65
+export const RUNTIME_VERSION = 66
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

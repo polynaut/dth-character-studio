@@ -168,32 +168,52 @@ export function hipAnchorDirs(
 }
 
 /**
- * The `$JOB`-anchored prefix that replaces the export ROOT in generated
- * reference paths — e.g. `$JOB/houdini/daz-export` for the standard layout — or
- * '' when only absolute paths are safe.
+ * The variable-anchored prefix that replaces the export ROOT in generated
+ * reference paths — `$HIP/daz-export` for the standard layout — or '' when only
+ * absolute paths are safe.
  *
- * **`$JOB` is the character folder** (baked by Generate project since v0.64,
- * and repairable from the Utils drawer), so anything in the character's layout
- * is one hop from it. That is also what Houdini itself writes: its file picker
- * collapses a picked export to `$JOB/houdini/daz-export/…` (measured with
- * `hou.text.collapseCommonVars`), so generated and hand-picked paths finally
- * agree inside the same node.
+ * **Two anchors, in this order, because that is what Houdini itself writes.**
+ * Measured 2026-08-10 with `hou.text.collapseCommonVars` (the call behind the
+ * HDA's file picker) on a real project:
  *
- * This used to emit `$HIP/../daz3d/dth-exports` instead, and not by preference:
- * before v0.64 `$JOB` pointed at `<char>/houdini/houdini-project`, BELOW the
- * exports, so it could not express them at all. The `$HIP` form encodes the
- * `.hip`'s DEPTH — a project one folder deeper silently breaks every path — and
- * needed every project to sit in ONE folder for a single prefix to be right.
- * `$JOB` needs none of that, which is why the anchor-count gate is gone.
+ * ```
+ * <char>/houdini/daz-export/primary/x.dth  ->  $HIP/daz-export/primary/x.dth
+ * <char>/export/                           ->  $JOB/export/
+ * ```
+ *
+ * `$HIP` is the folder the `.hip` sits in, and since v0.68 put `daz-export`
+ * INSIDE it (`<char>/houdini/daz-export`) every import, CSV and reference path
+ * is below `$HIP` — no `..` needed, and shorter. `<char>/export/`, Houdini's OWN
+ * output, sits beside the houdini folder rather than under it, so `$HIP` cannot
+ * express it without climbing out; Houdini writes `$JOB/export/` there even when
+ * `$HIP` is the preferred variable, and so does this.
+ *
+ * So the rule is: **`$HIP` when the export root is under the `.hip`'s own folder,
+ * `$JOB` when it is only under the character folder, absolute otherwise.**
+ *
+ * `$HIP` has one property `$JOB` cannot match: it is DERIVED from where the file
+ * sits and can never be wrong. `$JOB` is scene state — it leaks between files in
+ * one hython run (measured, see `.ai/gotchas.md`), the studio ships a *Repair
+ * `$JOB`* action precisely because it drifts, and a project whose `$JOB` points
+ * at another character resolves every `$JOB/…` import to that character's files.
+ * `$HIP`-anchored imports survive that.
+ *
+ * The cost `$HIP` brings back is DEPTH: it names the `.hip`'s own folder, so one
+ * prefix is only right if every linked project shares that folder — hence the
+ * single-anchor gate ({@link hipAnchorDirs} must yield exactly one). Projects
+ * spread across folders fall through to `$JOB`, which encodes no depth; that is
+ * the v63 property, kept for exactly the case that needs it. The studio's own
+ * Generate and Copy-in always land a project directly in the houdini folder, so
+ * the `$HIP` tier is what a managed character actually gets.
  *
  * What still forces absolute paths: no linked project at all, a project OUTSIDE
  * the character folder (hand-linked in the user's own tree, where `$JOB` is
- * whatever they set), or an export root outside the character folder — none of
- * which `$JOB` can express safely.
+ * whatever they set), or an export root outside the character folder.
  *
- * Projects generated before this change carry the old `$HIP/../…` paths. They
- * still resolve; the card's checks flag them (`hip-relative`) and Utils →
- * **Make paths portable** rewrites them.
+ * Older projects carry `$JOB/houdini/…` (v63–v65) or `$HIP/../…` (pre-v63). Both
+ * still resolve. Only the pre-v63 form is FLAGGED (`hip-relative`), because only
+ * it is depth-fragile; the `$JOB` form is merely longer, and Utils → **Make
+ * paths portable** shortens it without the card ever crying wolf.
  */
 export function hipRefPrefixFor(
   houdiniProjects: ReadonlyArray<string>,
@@ -203,14 +223,23 @@ export function hipRefPrefixFor(
   const folder = stripTrailingSeparators(charFolderAbs.replace(/\\/g, '/'))
   const exportRoot = stripTrailingSeparators(exportRootAbs.trim().replace(/\\/g, '/'))
   if (!folder || !exportRoot || houdiniProjects.length === 0) return ''
-  const prefix = `${folder.toLowerCase()}/`
-  const inside = (p: string) => p.trim().replace(/\\/g, '/').toLowerCase().startsWith(prefix)
-  if (!houdiniProjects.every(inside)) return ''
-  // The export root has to be expressible FROM the character folder: `$JOB` is
-  // that folder, so anything outside it has no relative form at all.
-  if (!inside(exportRoot)) return ''
-  // Non-empty by construction: `inside` demands the `<folder>/` prefix and the
-  // trailing separators are already stripped, so the root is strictly deeper.
+  const under = (root: string, p: string) =>
+    p.trim().replace(/\\/g, '/').toLowerCase().startsWith(`${root.toLowerCase()}/`)
+  if (!houdiniProjects.every((p) => under(folder, p))) return ''
+
+  // `$HIP` — every project in ONE folder, and the exports under it. `$HIP` names
+  // that folder, so two anchor folders would be two different `$HIP`s and no
+  // single prefix could be right for both.
+  const anchors = hipAnchorDirs(houdiniProjects, charFolderAbs)
+  const anchor = anchors.length === 1 ? (anchors[0] ?? '') : ''
+  if (anchor && exportRoot.toLowerCase() === anchor.toLowerCase()) return '$HIP'
+  if (anchor && under(anchor, exportRoot)) return `$HIP/${exportRoot.slice(anchor.length + 1)}`
+
+  // `$JOB` — the character folder. Reached when the projects sit in different
+  // folders, or the export root is elsewhere in the character's tree (a layout
+  // from before `daz-export` moved into `houdini/`). Encodes no depth, so it is
+  // right for every project at once.
+  if (!under(folder, exportRoot)) return ''
   return `$JOB/${exportRoot.slice(folder.length + 1)}`
 }
 

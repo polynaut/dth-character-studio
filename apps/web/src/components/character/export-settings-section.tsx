@@ -39,7 +39,7 @@ export function ExportSettingsSection({ character }: { character: Character }) {
             imported by Houdini, so they sit next to the <code>.hip</code> that reads them.
             Each scene exports into its own subfolder here, named after the scene&apos;s folder
             (e.g. <code>primary</code>). A generated Houdini project reaches them by a
-            relative path (<code>$JOB/…</code>), so everything stays moveable.
+            relative path (<code>$HIP/…</code>), so everything stays moveable.
           </p>
         </>
       ) : (

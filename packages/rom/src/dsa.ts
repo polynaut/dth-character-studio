@@ -385,7 +385,7 @@ function buildExportBlock(
   unattended = false,
   /**
    * Project-relative replacement for the export ROOT in bone-scale
-   * reference-skeleton paths (e.g. `$JOB/houdini/daz-export`) — the HOST
+   * reference-skeleton paths (e.g. `$HIP/daz-export`) — the HOST
    * computes it from where the linked `.hip`s live relative to the export
    * root (project "Houdini path style"); this pure core can't see the
    * filesystem, so it obeys, whatever variable the host anchors on. Empty =

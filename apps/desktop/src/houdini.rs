@@ -119,8 +119,12 @@ pub struct CreateHoudiniProjectRequest {
     /// `houdini/houdini-project`, picking an export gave an ABSOLUTE path and
     /// the project stopped being movable — the retired `dth-exports` junction
     /// had been hiding that by making exports appear below `$HIP`. With `$JOB`
-    /// at the character folder, the same pick yields
-    /// `$JOB/houdini/daz-export/…`, and `$HIP` still wins for paths inside it.
+    /// at the character folder, the same pick collapses instead of going
+    /// absolute — and since v0.68 put `daz-export` INSIDE the houdini folder it
+    /// lands as `$HIP/daz-export/…` (`$HIP` wins for anything under it,
+    /// re-measured 2026-08-10), leaving `$JOB` for what sits beside it, such as
+    /// `<char>/export`. Both need `$JOB` baked here: it is what makes the
+    /// second form expressible at all.
     pub job_dir: String,
     /// The new scene file to save.
     pub scene_path: String,

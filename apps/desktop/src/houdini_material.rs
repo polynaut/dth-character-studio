@@ -188,9 +188,12 @@ pub struct ProjectRefInfo {
     /// taskgraph/checkpoint) that simply do not exist until used.
     pub broken: Vec<String>,
     /// Refs still written the pre-v63 way (`$HIP/../…`), as `<node> <parm>`.
-    /// They RESOLVE, so they are not broken — but `$HIP` encodes the scene's
-    /// depth and disagrees with what Houdini's own picker writes, so the card
-    /// flags them and Make paths portable re-anchors them on `$JOB`.
+    /// They RESOLVE, so they are not broken — but the `..` encodes the scene's
+    /// DEPTH, so moving the `.hip` one folder down silently repoints every one
+    /// of them; the card flags them and Make paths portable re-anchors them on
+    /// `$JOB`. Only the escaping form is counted here — a plain `$HIP/…` that
+    /// stays inside the houdini folder is what v66 EMITS (and what Houdini's
+    /// own picker writes), so it is never flagged.
     pub hip_relative: Vec<String>,
 }
 
