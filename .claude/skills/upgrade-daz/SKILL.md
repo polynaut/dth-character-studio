@@ -109,16 +109,22 @@ it.
 
 ## Step 4 — Process & launch
 
-CONTRACT (`apps/desktop/src/daz.rs`): `DAZStudio.exe` is hardcoded in three
-places — `daz_studio_running` (tasklist IMAGENAME), `running_daz_exe`
-(Get-CimInstance), and `installed_daz_exe`'s folder probes; `foreground.rs`
-raises it by image name. Measured single-instance semantics: DS4 and DS6 are
-SEPARATE single-instance apps; a running Daz drops command-line scene
-forwarding once a scene is loaded (that's why the Runner job file exists);
-`openFile(path, false)` replaces without a save prompt.
+CONTRACT (`apps/desktop/src/daz.rs`): `DAZStudio.exe` is hardcoded in two
+places — the `DAZ_EXE` constant (the process probes: `daz_studio_running` /
+`running_daz_exe`, enumerated via `procs::running_exe_paths`) and
+`exe_in_folder`/`probe_daz_exe`'s folder joins; `foreground.rs` raises the app
+by image name. Measured single-instance semantics: DS4 and DS6 are SEPARATE
+single-instance apps; a running Daz drops command-line scene forwarding once a
+scene is loaded (that's why the Runner job file exists); `openFile(path,
+false)` replaces without a save prompt. **Every Studio major ships the same
+`DAZStudio.exe`**, so both probes identify an INSTALL by the running
+executable's full PATH, never by the image name (see `.ai/gotchas.md`).
 
-CHECK on a renamed exe or changed startup: those three sites + one
-launch-with-scene + one launch-scene-less (Runner pickup).
+CHECK on a renamed exe or changed startup: those two sites + one
+launch-with-scene + one launch-scene-less (Runner pickup) — and, on a machine
+with two majors installed, that a running OTHER major neither answers
+`daz_studio_running(<this install>)` nor hijacks a `launch_daz_studio` aimed
+at this one.
 
 ## Step 5 — Content library & DIM
 

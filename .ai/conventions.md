@@ -144,6 +144,17 @@ GH_REPO=polynaut/dth-character-studio \
 
   The three prompt-killers are not optional: without them a wrong credential is
   a hang, not an error, and a hang costs the whole turn's timeout to diagnose.
+- **Never round-trip a source file through Windows PowerShell 5.1.**
+  `Get-Content -Raw` reads a BOM-less UTF-8 file as the ANSI codepage and
+  `Set-Content -Encoding utf8` writes a BOM back, so a single
+  `$x = Get-Content f; … | Set-Content f` **mojibakes every non-ASCII character
+  in the file and prepends a BOM** — in this repo that is every em dash and
+  curly quote, i.e. most comment lines, showing up as a diff touching the whole
+  file. Measured 2026-08-10 on `api/execute.ts` (repaired by decoding the
+  CP1252 round-trip back). Edit files with the editing tools (or `node`/`perl`,
+  which are byte-honest); keep PowerShell for running commands. The tell after
+  any bulk edit is `git diff --numstat` — a line count far above what you wrote,
+  or `file <path>` reporting "with BOM".
 - **Lint gate is oxlint** (type-aware): `pnpm lint` from the **repo root**.
   Notable: `typescript/no-floating-promises` is an **error**, `import/no-cycle`
   is an error; promise rules are relaxed in tests. Config: `.oxlintrc.json`.

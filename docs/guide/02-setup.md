@@ -185,6 +185,15 @@ Settings also has an **App Data** tab — the app's own on-disk state:
   7 days (all three also swept automatically on every launch). Product-scan
   files are normally deleted the moment the studio reads them, so that folder
   is usually empty — the age-out is a safety net for one that was locked.
+- **DTH Exporter job file** — the same section can clear a **stuck batch
+  handoff**. DTH Export and the scans hand Daz Studio their work through one
+  file in your Daz library's `Scripts/DTH-Character-Studio` folder, and if a
+  batch never starts (Daz was closed mid-handoff, or the Runner plugin never
+  picked it up) that file stays behind — after which every export and scan
+  refuses with *"a batch is waiting for Daz Studio"*. The readout names the file
+  that's there, how old it is, and whether Daz might still be working through
+  it; **Delete job file** removes it. Nothing in Daz is undone — the file is a
+  to-do list, not a result.
 
 (Mapped **network drives** the app remembers show as their own pane at the
 bottom of the **General** tab, with a "Re-map missing now" action.)

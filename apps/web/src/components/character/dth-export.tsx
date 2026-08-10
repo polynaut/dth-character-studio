@@ -22,10 +22,10 @@ import { PrimaryBadge } from '#/components/primary-badge.tsx'
 import { RunnerGateNotice } from '#/components/runner-gate-notice.tsx'
 import {
   abortExporterJobs,
-  dazStudioRunning,
   dismissExportRun,
   dismissHoudiniRun,
   executeCharacterJobs,
+  exportDazStudioRunning,
   exporterJobsPending,
   exporterJobsWorking,
   fetchExecuteScenes,
@@ -626,7 +626,11 @@ function WaitForDazCloseModal({
         // before running a row, which looks identical from here — so the dialog
         // closed, nothing launched, and the batch sat orphaned in a `running_`
         // file the Runner never polls for. That is now reclaimed instead.
-        const running = await dazStudioRunning()
+        //
+        // The EXPORT installation, not "any Daz": this waits for the process
+        // that has to restart to run the batch, and with "Export only" set,
+        // another open Daz would keep the modal spinning forever.
+        const running = await exportDazStudioRunning()
         if (!active || settled) return
         if (running) {
           // A LIVE Daz can also claim late — stuck on a modal Save prompt past

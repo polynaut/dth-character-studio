@@ -19,6 +19,7 @@ mod housekeeping;
 mod install;
 mod junction;
 mod poses;
+mod procs;
 mod report;
 mod shellopen;
 #[cfg(test)]
