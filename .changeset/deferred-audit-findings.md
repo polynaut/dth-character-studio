@@ -1,5 +1,7 @@
 ---
-'@dth/web': patch
+# minor: the capability gate is right — this adds a new native command plus two
+# genuinely new behaviors (the Daz-library script-dir GC, copy detection).
+'@dth/web': minor
 ---
 
 The audit's deferred findings (#755), fixed:
