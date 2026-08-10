@@ -94,6 +94,23 @@ The **real SPA in a real browser** against an in-memory fake of the native layer
 - **Locate by ROLE, not `getByTitle`** — the ui kit's TooltipHost rewrites a
   hovered control's `title` into `data-tooltip`/`aria-label`, so title locators
   stop matching controls the test already touched (see `.ai/gotchas.md`).
+- **Read a CI-only failure as a BUDGET failure before a code failure.** The
+  suite runs at Playwright's default 30s *per test*, and that budget covers the
+  `goto` + navigation too — so a loaded runner surfaces as "Test timeout of
+  30000ms exceeded" parked on a locator that resolves instantly everywhere else.
+  Measured (#762, the copy-project move spec): the failing test burned 30.2s
+  while its five siblings in the same file took 1.2–3.2s, the same commit was
+  green on `main` two minutes earlier, and every spec passed locally. Check
+  those three things before touching the app code; the wall-clock of the
+  neighbours is the tell.
+- **A destructive guarantee does not belong ONLY here.** When a flaky spec has
+  to go, first ask what it was the only guard for. The move variant of the
+  copy-project dialog (permanently deleting the user's own `.hip`) was pinned
+  by nothing else, so it moved DOWN a layer to
+  `src/lib/rom/houdini-copy-project.test.ts` — same guarantee, 3ms, no browser.
+  What genuinely does not survive the move is the UI wiring (switch → state →
+  api call); say so in the spec file rather than letting the deletion read as
+  "covered elsewhere".
 
 ## 4. Guide screenshots (`pnpm screenshots` from the repo root)
 
