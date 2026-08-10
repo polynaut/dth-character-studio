@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { AlertTriangle, Download, Plus } from 'lucide-react'
+import { AlertTriangle, Box, Download, Folder, Plus } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 import { Button, Field, InfoPopup, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, Tabs, TabsContent, TabsList, TabsTrigger } from '@dth/ui'
@@ -959,265 +960,265 @@ function SettingsPage() {
               )}
             </div>
 
-            {(canInstallDaz || canInstallHoudini) && (
-              <p className="text-sm text-muted-foreground">
-                Ready to install DTH{' '}
-                <strong className="text-foreground">
-                  {releases.version || settings.currentDthVersion || '?'}
-                </strong>
-                {dirty ? ' — pending changes are saved on install.' : '.'}
-              </p>
-            )}
-
-            <div>
-              {/* No field at all once an installation is active: the library is
-                  derived, and the Daz installation card above already lists it.
-                  A second copy here is the same path shown twice — it can only
-                  ever agree, and it puts a control where there is no choice to
-                  make. What DOES belong at the moment of installing is the
-                  DESTINATION, which is the line below the buttons' gate. */}
-              {!dazDerived && (
-                <FolderField
-                  label="My DAZ 3D Library"
-                  value={settings.dazLibraryFolder}
-                  placeholder="C:\Users\you\Documents\DAZ 3D\Studio\My Library"
-                  onChange={(value) => setSettings((s) => ({ ...s, dazLibraryFolder: value }))}
-                  help={
-                    <>
-                      Your Daz content library — where the release's content is installed.
-                      {settings.dazLibraryFolder && (
-                        <>
-                          {' '}
-                          Generated character scripts install to{' '}
-                          <PathCode
-                            path={displayPath(`${settings.dazLibraryFolder}/Scripts/DTH-Character-Studio`)}
-                          />
-                          .
-                        </>
-                      )}
-                    </>
-                  }
-                />
+            <div className="space-y-4 border-t pt-4">
+              {(canInstallDaz || canInstallHoudini) && (
+                <p className="text-sm text-muted-foreground">
+                  Ready to install DTH{' '}
+                  <strong className="text-foreground">
+                    {releases.version || settings.currentDthVersion || '?'}
+                  </strong>
+                  {dirty ? ' — pending changes are saved on install.' : '.'}
+                </p>
               )}
-              {dazDerived && (
-                <DerivedTarget
-                  value={settings.dazLibraryFolder}
-                  missing="library"
-                  className={canInstallDaz ? '' : 'mt-2'}
-                >
-                  Generated character scripts go to{' '}
-                  <PathCode
-                    path={displayPath(`${settings.dazLibraryFolder}/Scripts/DTH-Character-Studio`)}
+
+              <TargetRow icon={Box}>
+                {/* No field at all once an installation is active: the library is
+                    derived, and the Daz installation card above already lists it.
+                    A second copy here is the same path shown twice — it can only
+                    ever agree, and it puts a control where there is no choice to
+                    make. What DOES belong at the moment of installing is the
+                    DESTINATION, which is the line below the buttons' gate. */}
+                {!dazDerived && (
+                  <FolderField
+                    label="My DAZ 3D Library"
+                    value={settings.dazLibraryFolder}
+                    placeholder="C:\Users\you\Documents\DAZ 3D\Studio\My Library"
+                    onChange={(value) => setSettings((s) => ({ ...s, dazLibraryFolder: value }))}
+                    help={
+                      <>
+                        Your Daz content library — where the release's content is installed.
+                        {settings.dazLibraryFolder && (
+                          <>
+                            {' '}
+                            Generated character scripts install to{' '}
+                            <PathCode
+                              path={displayPath(`${settings.dazLibraryFolder}/Scripts/DTH-Character-Studio`)}
+                            />
+                            .
+                          </>
+                        )}
+                      </>
+                    }
                   />
-                  .
-                </DerivedTarget>
-              )}
-              {!canInstallDaz && (
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Set {dazBlockers.join(', ')} to enable this install.
-                </p>
-              )}
-              <div className="mt-2 flex gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() =>
-                    void runInstall(
-                      (args) => installDthRelease({ data: { ...args.data, target: 'daz' } }),
-                      true,
-                      setReleaseInstalling,
-                      setDazReport,
-                    )
-                  }
-                  disabled={!canInstallDaz || releaseInstalling}
-                >
-                  {releaseInstalling ? 'Working…' : 'Dry run'}
-                </Button>
-                <Button
-                  onClick={() =>
-                    void runInstall(
-                      (args) => installDthRelease({ data: { ...args.data, target: 'daz' } }),
-                      false,
-                      setReleaseInstalling,
-                      setDazReport,
-                      undefined,
-                      // Re-scan poses from the just-installed release so the studio
-                      // can open/generate characters without a separate Save.
-                      async () => {
-                        const result = await rebuildCatalog()
-                        if (result.error)
-                          toast.error(`Installed, but the pose scan failed: ${result.error}`)
-                        else
-                          toast.success(
-                            `Scanned ${result.assets.length} pose presets${
-                              result.releaseName ? ` from ${result.releaseName}` : ''
-                            }`,
-                          )
-                      },
-                    )
-                  }
-                  disabled={!canInstallDaz || releaseInstalling}
-                >
-                  <Download /> {releaseInstalling ? 'Installing…' : 'Install'}
-                </Button>
-              </div>
-              {dazReport && (
-                <InstallReportList report={dazReport} onClose={() => setDazReport(null)} />
-              )}
-            </div>
-
-            <div className="border-t pt-4">
-              {/* Derived with the installation, and listed in its card — same
-                  rule as the Daz half: no second copy, just the destination. */}
-              {houdiniDerived ? (
-                <DerivedTarget
-                  value={settings.houdiniDocsFolder}
-                  missing="documents folder"
-                  source="Houdini"
-                >
-                  The release&apos;s Houdini assets (otls/presets/toolbar) merge into it.
-                </DerivedTarget>
-              ) : (
-                <FolderField
-                  label="Houdini documents folder (optional)"
-                  value={settings.houdiniDocsFolder}
-                  placeholder="C:\Users\you\Documents\houdini20.5"
-                  onChange={(value) => setSettings((s) => ({ ...s, houdiniDocsFolder: value }))}
-                  help={
-                    <>
-                      Your Houdini user folder. The install merges the release's Houdini assets
-                      (otls/presets/toolbar) into it.
-                    </>
-                  }
-                />
-              )}
-              {!canInstallHoudini && (
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Set {houdiniBlockers.join(', ')} to enable this install.
-                </p>
-              )}
-              <div className="mt-2 flex gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() =>
-                    void runInstall(
-                      (args) => installDthRelease({ data: { ...args.data, target: 'houdini' } }),
-                      true,
-                      setReleaseInstalling,
-                      setHoudiniReport,
-                    )
-                  }
-                  disabled={!canInstallHoudini || releaseInstalling}
-                >
-                  {releaseInstalling ? 'Working…' : 'Dry run'}
-                </Button>
-                <Button
-                  onClick={() =>
-                    void runInstall(
-                      (args) => installDthRelease({ data: { ...args.data, target: 'houdini' } }),
-                      false,
-                      setReleaseInstalling,
-                      setHoudiniReport,
-                    )
-                  }
-                  disabled={!canInstallHoudini || releaseInstalling}
-                >
-                  <Download /> {releaseInstalling ? 'Installing…' : 'Install'}
-                </Button>
-              </div>
-            </div>
-
-            {/* Additional Houdini versions: each folder is its own install target,
-                so an OLD Houdini can carry an OLD DTH release (pick that version
-                in the release dropdown above, install here, switch back) while
-                the primary folder stays on the current one. */}
-            {settings.extraHoudiniDocsFolders.map((folder, i) => (
-              <div key={i} className="border-t pt-4">
-                <FolderField
-                  label={`Additional Houdini documents folder ${i + 1}`}
-                  value={folder}
-                  // Unset: the folder holding the primary docs folder — every
-                  // other version's sits right beside it (houdini19.5 next to
-                  // houdini22.0), which is as close as this gets.
-                  browseFrom={parentDir(settings.houdiniDocsFolder)}
-                  placeholder="C:\Users\you\Documents\houdini19.5"
-                  onChange={(value) =>
-                    setSettings((s) => ({
-                      ...s,
-                      extraHoudiniDocsFolders: s.extraHoudiniDocsFolders.map((f, fi) =>
-                        fi === i ? value : f,
-                      ),
-                    }))
-                  }
-                  help={
-                    <>
-                      Another Houdini version's user folder — installs the release picked
-                      above into it, independent of the primary folder.
-                    </>
-                  }
-                />
+                )}
+                {dazDerived && (
+                  <DerivedTarget value={settings.dazLibraryFolder} missing="library">
+                    Generated character scripts go to{' '}
+                    <PathCode
+                      path={displayPath(`${settings.dazLibraryFolder}/Scripts/DTH-Character-Studio`)}
+                    />
+                    .
+                  </DerivedTarget>
+                )}
+                {!canInstallDaz && (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Set {dazBlockers.join(', ')} to enable this install.
+                  </p>
+                )}
                 <div className="mt-2 flex gap-2">
                   <Button
                     variant="outline"
                     onClick={() =>
                       void runInstall(
-                        (args) =>
-                          installDthRelease({
-                            data: { ...args.data, target: 'houdini', houdiniDocsFolder: folder },
-                          }),
+                        (args) => installDthRelease({ data: { ...args.data, target: 'daz' } }),
                         true,
                         setReleaseInstalling,
-                        setHoudiniReport,
+                        setDazReport,
                       )
                     }
-                    disabled={!releaseReady || !folder.trim() || releaseInstalling}
+                    disabled={!canInstallDaz || releaseInstalling}
                   >
                     {releaseInstalling ? 'Working…' : 'Dry run'}
                   </Button>
                   <Button
                     onClick={() =>
                       void runInstall(
-                        (args) =>
-                          installDthRelease({
-                            data: { ...args.data, target: 'houdini', houdiniDocsFolder: folder },
-                          }),
+                        (args) => installDthRelease({ data: { ...args.data, target: 'daz' } }),
                         false,
                         setReleaseInstalling,
-                        setHoudiniReport,
+                        setDazReport,
+                        undefined,
+                        // Re-scan poses from the just-installed release so the studio
+                        // can open/generate characters without a separate Save.
+                        async () => {
+                          const result = await rebuildCatalog()
+                          if (result.error)
+                            toast.error(`Installed, but the pose scan failed: ${result.error}`)
+                          else
+                            toast.success(
+                              `Scanned ${result.assets.length} pose presets${
+                                result.releaseName ? ` from ${result.releaseName}` : ''
+                              }`,
+                            )
+                        },
                       )
                     }
-                    disabled={!releaseReady || !folder.trim() || releaseInstalling}
+                    disabled={!canInstallDaz || releaseInstalling}
                   >
                     <Download /> {releaseInstalling ? 'Installing…' : 'Install'}
                   </Button>
-                  <Button
-                    variant="ghost"
-                    className="text-muted-foreground"
-                    onClick={() =>
-                      setSettings((s) => ({
-                        ...s,
-                        extraHoudiniDocsFolders: s.extraHoudiniDocsFolders.filter(
-                          (_, fi) => fi !== i,
-                        ),
-                      }))
-                    }
-                    disabled={releaseInstalling}
-                  >
-                    Remove
-                  </Button>
                 </div>
-              </div>
-            ))}
-            {/* Only while the folders are the USER'S. With an activated Houdini
-                installation the destination follows that card — one active
-                installation, one target — so an "add another" here would invite
-                a second, hand-typed target the card cannot account for. Existing
-                entries stay visible (and removable) so a folder added before the
-                card was activated can't strand itself out of sight. */}
-            {!houdiniDerived ? (
+                {dazReport && (
+                  <InstallReportList report={dazReport} onClose={() => setDazReport(null)} />
+                )}
+              </TargetRow>
+
               <div className="border-t pt-4">
+                <TargetRow icon={Folder}>
+                  {/* Derived with the installation, and listed in its card — same
+                      rule as the Daz half: no second copy, just the destination. */}
+                  {houdiniDerived ? (
+                    <DerivedTarget
+                      value={settings.houdiniDocsFolder}
+                      missing="documents folder"
+                      source="houdini"
+                    >
+                      The release&apos;s Houdini assets (otls/presets/toolbar) merge into it.
+                    </DerivedTarget>
+                  ) : (
+                    <FolderField
+                      label="Houdini documents folder (optional)"
+                      value={settings.houdiniDocsFolder}
+                      placeholder="C:\Users\you\Documents\houdini20.5"
+                      onChange={(value) => setSettings((s) => ({ ...s, houdiniDocsFolder: value }))}
+                      help={
+                        <>
+                          Your Houdini user folder. The install merges the release's Houdini assets
+                          (otls/presets/toolbar) into it.
+                        </>
+                      }
+                    />
+                  )}
+                  {!canInstallHoudini && (
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      Set {houdiniBlockers.join(', ')} to enable this install.
+                    </p>
+                  )}
+                  <div className="mt-2 flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() =>
+                        void runInstall(
+                          (args) => installDthRelease({ data: { ...args.data, target: 'houdini' } }),
+                          true,
+                          setReleaseInstalling,
+                          setHoudiniReport,
+                        )
+                      }
+                      disabled={!canInstallHoudini || releaseInstalling}
+                    >
+                      {releaseInstalling ? 'Working…' : 'Dry run'}
+                    </Button>
+                    <Button
+                      onClick={() =>
+                        void runInstall(
+                          (args) => installDthRelease({ data: { ...args.data, target: 'houdini' } }),
+                          false,
+                          setReleaseInstalling,
+                          setHoudiniReport,
+                        )
+                      }
+                      disabled={!canInstallHoudini || releaseInstalling}
+                    >
+                      <Download /> {releaseInstalling ? 'Installing…' : 'Install'}
+                    </Button>
+                  </div>
+                </TargetRow>
+              </div>
+
+              {/* Additional Houdini versions: each folder is its own install target,
+                  so an OLD Houdini can carry an OLD DTH release (pick that version
+                  in the release dropdown above, install here, switch back) while
+                  the primary folder stays on the current one. */}
+              {settings.extraHoudiniDocsFolders.map((folder, i) => (
+                <div key={i} className="border-t pt-4">
+                  <TargetRow icon={Folder}>
+                    <FolderField
+                      label={`Additional Houdini documents folder ${i + 1}`}
+                      value={folder}
+                      // Unset: the folder holding the primary docs folder — every
+                      // other version's sits right beside it (houdini19.5 next to
+                      // houdini22.0), which is as close as this gets.
+                      browseFrom={parentDir(settings.houdiniDocsFolder)}
+                      placeholder="C:\Users\you\Documents\houdini19.5"
+                      onChange={(value) =>
+                        setSettings((s) => ({
+                          ...s,
+                          extraHoudiniDocsFolders: s.extraHoudiniDocsFolders.map((f, fi) =>
+                            fi === i ? value : f,
+                          ),
+                        }))
+                      }
+                      help={
+                        <>
+                          Another Houdini version's user folder — installs the release picked
+                          above into it, independent of the primary folder.
+                        </>
+                      }
+                    />
+                    <div className="mt-2 flex gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={() =>
+                          void runInstall(
+                            (args) =>
+                              installDthRelease({
+                                data: { ...args.data, target: 'houdini', houdiniDocsFolder: folder },
+                              }),
+                            true,
+                            setReleaseInstalling,
+                            setHoudiniReport,
+                          )
+                        }
+                        disabled={!releaseReady || !folder.trim() || releaseInstalling}
+                      >
+                        {releaseInstalling ? 'Working…' : 'Dry run'}
+                      </Button>
+                      <Button
+                        onClick={() =>
+                          void runInstall(
+                            (args) =>
+                              installDthRelease({
+                                data: { ...args.data, target: 'houdini', houdiniDocsFolder: folder },
+                              }),
+                            false,
+                            setReleaseInstalling,
+                            setHoudiniReport,
+                          )
+                        }
+                        disabled={!releaseReady || !folder.trim() || releaseInstalling}
+                      >
+                        <Download /> {releaseInstalling ? 'Installing…' : 'Install'}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        className="text-muted-foreground"
+                        onClick={() =>
+                          setSettings((s) => ({
+                            ...s,
+                            extraHoudiniDocsFolders: s.extraHoudiniDocsFolders.filter(
+                              (_, fi) => fi !== i,
+                            ),
+                          }))
+                        }
+                        disabled={releaseInstalling}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  </TargetRow>
+                </div>
+              ))}
+              {/* Only while the folders are the USER'S. With an activated Houdini
+                  installation the destination follows that card — one active
+                  installation, one target — so an "add another" here would invite
+                  a second, hand-typed target the card cannot account for. Existing
+                  entries stay visible (and removable) so a folder added before the
+                  card was activated can't strand itself out of sight. */}
+              {!houdiniDerived ? (
                 <Button
                   variant="outline"
-                  size="sm"
+                  className="w-full justify-start border-dashed text-muted-foreground"
                   onClick={() =>
                     setSettings((s) => ({
                       ...s,
@@ -1227,18 +1228,18 @@ function SettingsPage() {
                 >
                   <Plus /> Add another Houdini folder
                 </Button>
-              </div>
-            ) : (
-              <p className="border-t pt-4 text-xs text-muted-foreground">
-                New folders can&apos;t be added while a Houdini installation is activated — the
-                destination follows that card. To drive several folders by hand again, use{' '}
-                <strong>Set the paths manually</strong> in the Houdini installation section above.
-              </p>
-            )}
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  New folders can&apos;t be added while a Houdini installation is activated — the
+                  destination follows that card. To drive several folders by hand again, use{' '}
+                  <strong>Set the paths manually</strong> in the Houdini installation section above.
+                </p>
+              )}
 
-            {houdiniReport && (
-              <InstallReportList report={houdiniReport} onClose={() => setHoudiniReport(null)} />
-            )}
+              {houdiniReport && (
+                <InstallReportList report={houdiniReport} onClose={() => setHoudiniReport(null)} />
+              )}
+            </div>
           </section>
 
           {/* "Generate project" prerequisite: hython (from the Houdini install)
@@ -1260,7 +1261,8 @@ function SettingsPage() {
               <DerivedTarget
                 value={settings.houdiniInstallFolder}
                 missing="installation folder"
-                source="Houdini"
+                source="houdini"
+                verb="Uses"
               >
                 Its <code>bin\hython.exe</code> creates the project.
               </DerivedTarget>
@@ -1517,22 +1519,45 @@ function SettingsPage() {
 }
 
 /**
+ * One install target of the release panel: an icon tile naming the kind of
+ * destination (the Daz library, a Houdini documents folder), with the target
+ * itself — the derived sentence or the manual field — plus its buttons and
+ * report in the column beside it.
+ */
+function TargetRow({ icon: Icon, children }: { icon: LucideIcon; children: ReactNode }) {
+  return (
+    <div className="flex gap-4">
+      <div className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-muted">
+        <Icon className="size-6 text-muted-foreground" />
+      </div>
+      <div className="min-w-0 flex-1">{children}</div>
+    </div>
+  )
+}
+
+/**
  * Where an install is about to write, when that destination is DERIVED.
  *
  * A sentence, not a field, and deliberately not a labelled read-only copy: the
- * Daz installation card above already lists these paths, so repeating one here
+ * installation card above already lists these paths, so repeating one here
  * would show the same value twice where it can only ever agree — and put a
  * control where there is no choice left to make. What genuinely belongs next to
  * a Dry run / Install button is the destination, so that is all this is.
  *
- * An empty value is called out instead, because "DIM had nothing for this" is a
- * different problem from "you haven't set it yet" and has a different fix.
+ * An empty value is called out instead, because "the source had nothing for
+ * this" is a different problem from "you haven't set it yet" and has a
+ * different fix — one that differs per path: a missing Daz path means DIM had
+ * no value; the Houdini documents folder is created by that Houdini's first
+ * launch, so starting it once is the fix; the Houdini installation folder
+ * comes from the installer, never a launch, so only the manual paths can
+ * supply it — and what's lost is the tool (`verb` "Uses"), not an install
+ * destination.
  */
 function DerivedTarget({
   value,
   missing,
-  source = 'Daz',
-  className = '',
+  source = 'daz',
+  verb = 'Installs into',
   children,
 }: {
   value: string
@@ -1542,29 +1567,49 @@ function DerivedTarget({
    *  sent back to when the value is missing, so naming the wrong one sends them
    *  to a section that cannot fix it — the Houdini documents folder is paired by
    *  the Houdini card, never by DIM. */
-  source?: 'Daz' | 'Houdini'
-  className?: string
+  source?: 'daz' | 'houdini'
+  /** How the path is used — "Installs into" for a destination, "Uses" for a
+   *  tool source. The empty-value warning follows it too: a missing
+   *  destination leaves nothing to install into, a missing tool path leaves
+   *  nothing to run. */
+  verb?: 'Installs into' | 'Uses'
   children?: ReactNode
 }) {
   if (!value) {
     return (
-      <p className="mt-2 flex items-start gap-1.5 text-sm text-amber-500">
+      <p className="flex items-start gap-1.5 text-sm text-amber-500">
         <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-        <span>
-          {source === 'Daz'
-            ? `The DAZ Install Manager has no ${missing} path`
-            : `The activated Houdini has no ${missing}`}
-          , so there is nothing to install into. Use <strong>Set the paths manually</strong> in the{' '}
-          {source} installation section to fill it in yourself.
-        </span>
+        {source === 'daz' ? (
+          <span>
+            The DAZ Install Manager has no {missing} path, so there is nothing to install into.
+            Use <strong>Set the paths manually</strong> in the Daz installation section to fill it
+            in yourself.
+          </span>
+        ) : verb === 'Uses' ? (
+          <span>
+            This Houdini installation has no {missing} recorded, so there is nothing to run.
+            Use <strong>Set the paths manually</strong> in the Houdini installation section to
+            fill it in yourself.
+          </span>
+        ) : (
+          <span>
+            This Houdini installation has no {missing} yet, so there is nothing to install into.
+            Start this Houdini once to create it, or use{' '}
+            <strong>Set the paths manually</strong> in the Houdini installation section.
+          </span>
+        )}
       </p>
     )
   }
   return (
-    <p className={`text-sm text-muted-foreground ${className}`}>
-      Installs into <PathCode path={displayPath(value)} />, from the {source} installation above.{' '}
-      {children}
-    </p>
+    <div className="text-sm">
+      <p>
+        {verb} <PathCode path={displayPath(value)} />
+      </p>
+      <p className="mt-1 text-muted-foreground">
+        from the {source === 'daz' ? 'Daz' : 'Houdini'} installation above. {children}
+      </p>
+    </div>
   )
 }
 
