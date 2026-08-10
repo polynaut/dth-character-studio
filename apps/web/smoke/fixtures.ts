@@ -220,6 +220,9 @@ export interface SeedOptions {
   dazInstallFolder?: string
   /** What the native picker returns — a path to simulate a pick, else cancelled. */
   dialogPath?: string
+  /** Keyed frames per scene path — a scene with a ROM on its timeline, which is
+   *  what Import from Daz scene demands (and adding a scene forbids). */
+  sceneAnimationFrames?: Record<string, number>
   /** The demo scene also carries a Golden Palace geograft item, so a scene read
    *  derives Gender ♀ female (the documented behavior) instead of Unknown.
    *  Screenshot-only — the smoke suite keeps the graft-less scene. */
@@ -419,6 +422,7 @@ export function buildSeed(opts: SeedOptions = {}): TauriMockSeed {
       : undefined,
     // …and its base figure, so the create dialog auto-selects G9 from the scene.
     sceneFigure: opts.demo ? { id: 'Genesis9', label: 'Genesis 9' } : null,
+    sceneAnimationFrames: opts.sceneAnimationFrames,
     dufFrames: {
       [DUF.base]: FRAMES.base,
       [DUF.mouth]: FRAMES.mouth,
