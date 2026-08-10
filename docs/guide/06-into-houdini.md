@@ -58,9 +58,11 @@ your installed DazToHue version doesn't have yet is simply skipped (the CSV
 path needs the release with the CSV-driven PoseAsset node).
 
 **Which scene?** A character with several Daz scenes gets a **Daz scene to
-import** picker in the dialog (a single-scene character isn't asked). Each scene
+import** picker in the dialog — from the **second** project on. Each scene
 exports into its own folder, so the pick decides which export set the imports
-point at — generate one project per scene to cover them all.
+point at — generate one project per scene to cover them all. The **first**
+project isn't asked (nor is a single-scene character): it is the character's
+main project, wired to the primary scene.
 
 The **export directory** is a different folder from the imports, on purpose:
 they read the Daz→Houdini intermediates under `daz-export`, while Houdini
