@@ -17,17 +17,27 @@ const STORE = `${P.project}/.dcsmeta/characters/Kira/houdini-scan.json`
 
 /**
  * A stored entry's freshness key, in the shape `scanCacheKey` builds it:
- * `<path>|<mtime>|<export root>`, all normalised. `__MTIME__` is filled in
- * inside the page, because the fake stamps its world when it is installed.
+ * `<path>|<mtime>|<export root>|<installed-HDA fingerprint>`, all normalised.
+ * `__MTIME__` is filled in inside the page, because the fake stamps its world
+ * when it is installed.
  *
  * The EXPORT ROOT is in the key because part of a scan's verdict is about files
  * that are NOT the `.hip` (`refs.broken`), and the export-root move relocated
  * every one of them without touching a single scene file. A seeded entry naming
  * a different root reads as stale here — which is exactly what should happen to
  * a real pre-move entry.
+ *
+ * The HDA FINGERPRINT is there for the same reason, one step further out: a
+ * scan's verdict is phrased in the vocabulary of the DazToHue hython loaded
+ * (`prefill.missing` says "your version has no …"), so installing a new library
+ * has to invalidate it. It is EMPTY here, hence the bare trailing separator:
+ * the fake world has no Houdini install to pair a prefs folder with, so
+ * `installedHdaKey()` takes its documented "cannot read it" path and answers
+ * ''. That is a key component like any other — which is the point of writing it
+ * out here rather than defaulting it away.
  */
 function storeKey(hipPath: string): string {
-  return `${hipPath.toLowerCase()}|__MTIME__|${P.exportDir.toLowerCase()}`
+  return `${hipPath.toLowerCase()}|__MTIME__|${P.exportDir.toLowerCase()}|`
 }
 
 /** A scan result in the shape `material_utils.py` reports. */
