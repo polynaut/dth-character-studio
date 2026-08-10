@@ -548,21 +548,6 @@ function insideFolder(hip: string, folder: string): boolean {
 }
 
 /**
- * The character's projects as the store has them — no hython, no waiting.
- *
- * This is what the Utils drawer opens on: it reads what the background sweep
- * and the drawer's own previous scans left, and scans only what the store
- * doesn't cover — it never WAITS on the sweep, because a sweep is not
- * guaranteed to deliver (no Houdini configured, a project outside the
- * character folder — the sweep skips those by design, see
- * {@link scanCharacterHoudiniProjects}, but the drawer's scan of one lands
- * here too, so the next open is served from the store).
- *
- * Stale entries are skipped rather than served: a `.hip` saved in Houdini since
- * the last sweep has a new mtime, so it simply isn't in the answer, and the
- * caller sees it as "not scanned yet" while the sweep catches up.
- */
-/**
  * The transfer sources used most recently, newest first — the drawer's shortcut
  * row. Entries whose file no longer exists are dropped by the storage layer, so
  * what comes back is always openable.
@@ -592,6 +577,21 @@ export async function rememberHoudiniSource({ data }: { data: unknown }): Promis
   }
 }
 
+/**
+ * The character's projects as the store has them — no hython, no waiting.
+ *
+ * This is what the Utils drawer opens on: it reads what the background sweep
+ * and the drawer's own previous scans left, and scans only what the store
+ * doesn't cover — it never WAITS on the sweep, because a sweep is not
+ * guaranteed to deliver (no Houdini configured, a project outside the
+ * character folder — the sweep skips those by design, see
+ * {@link scanCharacterHoudiniProjects}, but the drawer's scan of one lands
+ * here too, so the next open is served from the store).
+ *
+ * Stale entries are skipped rather than served: a `.hip` saved in Houdini since
+ * the last sweep has a new mtime, so it simply isn't in the answer, and the
+ * caller sees it as "not scanned yet" while the sweep catches up.
+ */
 export async function fetchCachedHoudiniScans({
   data,
 }: {

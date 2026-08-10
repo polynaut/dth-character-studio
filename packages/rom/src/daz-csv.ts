@@ -26,6 +26,15 @@ export interface ImportedPose {
  *   body_bs_M3DLFC_Claws                   → Claws
  *   head_bs_Teeth_M3DLFC_LowerCanines01    → LowerCanines01
  */
+export function cleanMorphName(prop: string): string {
+  let s = prop.trim()
+  s = s.replace(/(_B)?_HD\d*$/i, '')
+  s = s.replace(/^.*?(?:head|body)_bs_/i, '')
+  s = s.replace(/^Teeth_/i, '')
+  s = s.replace(/^[A-Z][A-Z0-9]{2,}_/, '')
+  return s.trim() || prop.trim()
+}
+
 /**
  * The pose NAME an imported row lands with: {@link cleanMorphName}, then made
  * legal for Houdini.
@@ -48,15 +57,6 @@ export interface ImportedPose {
  */
 export function importedPoseName(prop: string): string {
   return sanitizePoseName(cleanMorphName(prop)) || sanitizePoseName(prop)
-}
-
-export function cleanMorphName(prop: string): string {
-  let s = prop.trim()
-  s = s.replace(/(_B)?_HD\d*$/i, '')
-  s = s.replace(/^.*?(?:head|body)_bs_/i, '')
-  s = s.replace(/^Teeth_/i, '')
-  s = s.replace(/^[A-Z][A-Z0-9]{2,}_/, '')
-  return s.trim() || prop.trim()
 }
 
 /**

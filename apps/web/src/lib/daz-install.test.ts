@@ -132,24 +132,37 @@ describe('defaultDazApp', () => {
 })
 
 describe('exportOnlyCandidateKeys', () => {
-  const KEY4 = 'dzstudio4installdir-64'
   const KEY6 = 'dzstudio6installdir-64'
+  const KEY7 = 'dzstudio7installdir-64'
 
-  it('offers the OLDER install while the newest is active — the DS6 + DS4 case', () => {
-    // The shape this exists for: authoring on DS6, but the Runner plugin has no
-    // DS6 build yet, so the export batch still has to run in DS4.
-    expect(exportOnlyCandidateKeys([app(6, true), app(4, true)], KEY6)).toEqual([KEY4])
+  it('NEVER offers DS4 — that build cannot script an export at all', () => {
+    // The trap this rule exists to close. DS4 takes the Runner plugin happily,
+    // so the gate would go green and the launcher would start it; the Runner
+    // would claim the job file, every scene would run, and every export block
+    // would skip, because the DS4 exporter exposes no `doExport` (measured —
+    // `.ai/gotchas.md`, "The DTH Exporter is only scriptable in Daz Studio 6",
+    // and the generated script's own capability gate). A batch that completes
+    // and exports nothing is precisely the failure Export only exists to
+    // prevent, so DS4 is not an arrangement the studio will hand out.
+    expect(exportOnlyCandidateKeys([app(6, true), app(4, true)], KEY6)).toEqual([])
+  })
+
+  it('offers the older install once BOTH sides can script an export — the 7 + 6 case', () => {
+    // The shape this exists for, and the first one that can actually work:
+    // authoring has moved to a Studio newer than 6, the Runner has no build for
+    // it yet, so the batch keeps running in 6 — which can export.
+    expect(exportOnlyCandidateKeys([app(7, true), app(6, true)], KEY7)).toEqual([KEY6])
   })
 
   it('never offers it on the ACTIVE install — that is just "the default"', () => {
-    expect(exportOnlyCandidateKeys([app(6, true), app(4, true)], KEY6)).not.toContain(KEY6)
+    expect(exportOnlyCandidateKeys([app(7, true), app(6, true)], KEY7)).not.toContain(KEY7)
   })
 
   it('offers nothing when an OLDER install is the active one', () => {
-    // Going back to DS4 for everything is a decision already made with Activate;
-    // a switch on the DS6 card saying "…but exports here" would be a second,
-    // opposite knob for the same question.
-    expect(exportOnlyCandidateKeys([app(6, true), app(4, true)], KEY4)).toEqual([])
+    // Going back to Studio 6 for everything is a decision already made with
+    // Activate; a switch on the 7 card saying "…but exports here" would be a
+    // second, opposite knob for the same question.
+    expect(exportOnlyCandidateKeys([app(7, true), app(6, true)], KEY6)).toEqual([])
   })
 
   it('offers nothing on a single-install machine', () => {
@@ -157,25 +170,30 @@ describe('exportOnlyCandidateKeys', () => {
   })
 
   it('skips an older install whose folder is gone — exports would launch nothing', () => {
-    expect(exportOnlyCandidateKeys([app(6, true), app(4, false)], KEY6)).toEqual([])
+    expect(exportOnlyCandidateKeys([app(7, true), app(6, false)], KEY7)).toEqual([])
   })
 
   it('offers nothing when the active install is not the newest LISTED, even if that one is gone', () => {
-    // A machine whose DS7 folder was deleted but is still listed has not
-    // settled on DS6; the studio cannot see the whole layout, so it does not
+    // A machine whose DS8 folder was deleted but is still listed has not
+    // settled on 7; the studio cannot see the whole layout, so it does not
     // hand out an arrangement that assumes it can.
-    expect(exportOnlyCandidateKeys([app(7, false), app(6, true), app(4, true)], KEY6)).toEqual([])
+    expect(exportOnlyCandidateKeys([app(8, false), app(7, true), app(6, true)], KEY7)).toEqual([])
   })
 
-  it('offers BOTH older installs on a future 7 + 6 + 4 machine', () => {
+  it('offers every exportable older install on a future 8 + 7 + 6 + 4 machine', () => {
     // Exclusivity is not this function's job — it reports what may be offered,
-    // and the single stored key is what allows only one of them to be on.
-    expect(exportOnlyCandidateKeys([app(7, true), app(6, true), app(4, true)], 'dzstudio7installdir-64'))
-      .toEqual([KEY6, KEY4])
+    // and the single stored key is what allows only one of them to be on. DS4
+    // is absent for the reason above, not for being the oldest.
+    expect(
+      exportOnlyCandidateKeys(
+        [app(8, true), app(7, true), app(6, true), app(4, true)],
+        'dzstudio8installdir-64',
+      ),
+    ).toEqual([KEY7, KEY6])
   })
 
   it('offers nothing when the active key matches no listed install', () => {
-    expect(exportOnlyCandidateKeys([app(6, true), app(4, true)], 'gone')).toEqual([])
+    expect(exportOnlyCandidateKeys([app(7, true), app(6, true)], 'gone')).toEqual([])
   })
 })
 

@@ -81,7 +81,9 @@ async function openDazSettings(page: Page, seed: ReturnType<typeof dimSeed>) {
   // A project window opens Settings on its Project tab; the Daz installation
   // lives on General, which leads everywhere else.
   await page.getByRole('tab', { name: 'General' }).click()
-  await expect(page.getByText('Daz installation')).toBeVisible()
+  // The HEADING, not the text: with an installation already active the section
+  // also renders its derived paths, whose prose matches the same substring.
+  await expect(page.getByRole('heading', { name: /Daz installation/ })).toBeVisible()
 }
 
 test('finds both Daz Studios and recommends the newest', async ({ page }) => {
@@ -241,4 +243,111 @@ test('a machine with no DIM says so instead of showing empty cards', async ({ pa
   await expect(page.getByText(/No DAZ Install Manager settings found/)).toBeVisible()
   // The manual field is still there — detection is an offer, not a gate.
   await expect(page.getByLabel('My DAZ 3D Library')).toBeVisible()
+})
+
+// --- "Export only": which installation runs the export batch ----------------
+//
+// Everything the studio does in Daz goes through the activated install — except
+// the batch handoff, which needs the Runner PLUGIN, and a plugin binary is built
+// against one Studio major. So an older install can be flagged to take the
+// exports while the newest stays active. The rule for WHICH installs may carry
+// that flag is unit-tested (`lib/daz-install.test.ts`); what these prove is the
+// half a unit test cannot: that the switch reaches settings.json, and that the
+// flag can always be taken back off again.
+
+const DS7 = 'C:/Program Files/DAZ 3D/DAZStudio7'
+
+/** A machine that has moved to a Studio newer than 6 — the shape Export only is
+ *  actually for, and the only one where it is offered. */
+function ds7Seed() {
+  const seed = dimSeed()
+  seed.files[`${DAZ_APPDATA}/dzInstall.ini`] = [
+    '[General]',
+    'InstalledApplications=dzStudio7InstallDir-64 dzStudio6InstallDir-64 dzStudio4InstallDir-64',
+    '',
+    '[ApplicationPath]',
+    `dzStudio7InstallDir-64=${DS7}`,
+    `dzStudio6InstallDir-64=${DS6}`,
+    `dzStudio4InstallDir-64=${DS4}`,
+    '',
+  ].join('\n')
+  seed.files[`${DS7}/DAZStudio.exe`] = 'ds7'
+  return seed
+}
+
+test('Export only is offered NOWHERE on a DS4 + DS6 machine', async ({ page }) => {
+  // The trap this closes: DS4 takes the Runner plugin happily, so every cheap
+  // check says yes — the gate would go green, the launcher would start it, the
+  // Runner would claim the job file, and then every scene's export would skip,
+  // because that build has no scripted export at all. A batch that completes and
+  // exports nothing is the exact failure Export only exists to prevent, so DS4
+  // is never offered, and on this machine there is nothing else to offer.
+  const seed = dimSeed()
+  await openDazSettings(page, seed)
+  await page.getByRole('button', { name: /DAZ Studio 6/ }).click()
+  await expect(page.getByText(/DAZ Studio 6 activated/)).toBeVisible()
+
+  await expect(page.getByText('Export only')).toHaveCount(0)
+})
+
+test('Export only sends the batch to the older Studio, and only that one', async ({ page }) => {
+  await openDazSettings(page, ds7Seed())
+  await page.getByRole('button', { name: /DAZ Studio 7/ }).click()
+  await expect(page.getByText(/DAZ Studio 7 activated/)).toBeVisible()
+
+  // Offered on DS6 — older than the active one, and able to export. Never on
+  // DS4, and never on the active install itself.
+  const switches = page.getByRole('switch', { name: /Run export batches in/ })
+  await expect(switches).toHaveCount(1)
+  await expect(page.getByRole('switch', { name: 'Run export batches in DAZ Studio 6' })).toBeVisible()
+
+  await switches.click()
+  await expect(page.getByText(/Export batches will run in DAZ Studio 6/)).toBeVisible()
+
+  // Both halves reach disk: the KEY is what arms the redirect, the FOLDER is
+  // what the launcher can actually start.
+  await expect
+    .poll(async () => (await savedSettings(page)).dazExportInstallKey)
+    .toBe('dzstudio6installdir-64')
+  expect((await savedSettings(page)).dazExportInstallFolder).toBe(DS6)
+  // …and the active install is untouched: only the batch moved.
+  expect((await savedSettings(page)).dazInstallFolder).toBe(DS7)
+
+  // Turning it off hands the exports back, clearing both fields — a leftover
+  // folder must never keep quietly taking the batch.
+  await switches.click()
+  await expect(page.getByText(/Export batches follow the active installation again/)).toBeVisible()
+  await expect.poll(async () => (await savedSettings(page)).dazExportInstallKey).toBe('')
+  expect((await savedSettings(page)).dazExportInstallFolder).toBe('')
+})
+
+test('a flagged installation that vanishes can still be handed back', async ({ page }) => {
+  // The one state the switches cannot express, because the card it belonged to
+  // is gone. Left alone it is silent and total: every export would launch a
+  // folder that is not there, and there would be nothing on screen to undo it.
+  const seed = ds7Seed()
+  seed.files[SETTINGS] = JSON.stringify({
+    ...JSON.parse(seed.files[SETTINGS] ?? '{}'),
+    dazInstallKey: 'dzstudio7installdir-64',
+    dazInstallFolder: DS7,
+    dazExportInstallKey: 'dzstudio6installdir-64',
+    dazExportInstallFolder: DS6,
+  })
+  // DIM stops listing DS6 entirely — uninstalled between runs.
+  seed.files[`${DAZ_APPDATA}/dzInstall.ini`] = [
+    '[General]',
+    'InstalledApplications=dzStudio7InstallDir-64',
+    '',
+    '[ApplicationPath]',
+    `dzStudio7InstallDir-64=${DS7}`,
+    '',
+  ].join('\n')
+  await openDazSettings(page, seed)
+
+  await expect(page.getByText(/Export batches are still pointed at an installation/)).toBeVisible()
+  await page.getByRole('button', { name: 'Use the active installation' }).click()
+
+  await expect.poll(async () => (await savedSettings(page)).dazExportInstallKey).toBe('')
+  expect((await savedSettings(page)).dazExportInstallFolder).toBe('')
+  await expect(page.getByText(/Export batches are still pointed at an installation/)).toHaveCount(0)
 })

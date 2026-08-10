@@ -174,18 +174,8 @@ so it continues as a Home window; the home window opens via the native menu's
 Rust-side `open_home_window_impl`, no command), Daz bridge
 (`daz_studio_running`/`run_daz_script`/`launch_daz_studio`/`focus_app_window` —
 `launch_daz_studio` starts a scene-less Daz for the Execute job-file handoff,
-see `docs/exporter-plugin-job-file.md`. **WHICH Daz it starts has two answers,
-and they are not interchangeable:** every other caller passes
-`activeDazInstallFolder()` (the activated install), while the job-file handoff
-passes `exportDazInstallFolder()` — the installation flagged **Export only** in
-Settings, else the active one. That split exists because the handoff is the one
-path needing a PLUGIN (the Runner), and a plugin binary is built against one
-Studio major, so a machine on the newest Studio can still have to export from an
-older one. Three consumers must agree on it and are fed by ONE pure rule
-(`storage/settings.ts` → `exportInstallFolder`): the launcher, the Runner GATE
-(`fetchExportRunnerGate`) and the Runner INSTALL (`resolveRunnerInstall`) — a
-gate reading one install while the launcher starts another reports "ready" over
-an export that opens Daz and waits forever), drives
+see `docs/exporter-plugin-job-file.md`, and **which Daz it starts** is its own
+rule — below), drives
 (`unc_for_path`/`ensure_network_drives`), avatars
 (`upscale_avatar_file`/`downscale_avatar_png`), `shell_open_file`,
 `housekeeping_sweep`,
@@ -200,6 +190,20 @@ migration).
 Nearly all are
 `#[tauri::command(async)]`; structured returns are camelCase serde structs pinned
 by the `contracts/` fixtures (see `.ai/conventions.md` § FFI ritual).
+
+**Which Daz `launch_daz_studio` starts has two answers, and they are not
+interchangeable.** Every other caller passes `activeDazInstallFolder()` (the
+activated install); the job-file handoff passes `exportDazInstallFolder()` — the
+installation flagged **Export only** in Settings, else the active one. The split
+exists because the handoff is the one path needing a PLUGIN (the Runner), and a
+plugin binary is built against one Studio major, so a machine on the newest
+Studio can still have to export from an older one. Three consumers must agree and
+are fed by ONE pure rule (`storage/settings.ts` → `exportInstallFolder`): the
+launcher, the Runner GATE (`fetchExportRunnerGate`) and the Runner INSTALL
+(`resolveRunnerInstall`) — a gate reading one install while the launcher starts
+another reports "ready" over an export that opens Daz and waits forever. Which
+installs may carry the flag is a separate measured rule, and it excludes DS4:
+see `.ai/gotchas.md`, "Export only" may never point at Daz Studio 4.
 
 Window creation must never run on the main thread from a sync command
 (deadlock) — `windows.rs` documents the pattern. `tauri.conf.json`:

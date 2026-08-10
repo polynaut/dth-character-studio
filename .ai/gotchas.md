@@ -674,6 +674,29 @@ current code before relying on details, but assume the *lesson* still holds.
   build has no version resource at all; (3) automated export — the ROM script's
   export block and the whole bulk DTH Export flow — is DS6-only, even though the
   Runner plugin itself does load in DS4.
+- **"Export only" may never point at Daz Studio 4** — the corollary of (3) above,
+  and the reason `exportOnlyCandidateKeys` (`lib/daz-install.ts`) floors its
+  candidates at major ≥ 5. The Export-only flag exists because plugins are built
+  per Studio major: a machine that has moved to the newest Studio can be waiting
+  on a Runner build for it, so the batch keeps running in an older install while
+  everything else uses the active one. The trap is that DS4 looks eligible from
+  every angle the studio can cheaply check — it takes the Runner DLL
+  (`RUNNER_DLL.ds4`), so `fetchExportRunnerGate` goes GREEN, the launcher starts
+  it, and the Runner claims the job file. Every scene then runs and every export
+  block skips, because that build has no `doExport`: a batch that completes and
+  exports nothing, which is the exact failure the flag exists to prevent. The
+  floor is 5, not 6, to mirror `dazFlavorFromExeVersion`'s `major >= 5` → `ds6`
+  split rather than restating the boundary. On today's DS4 + DS6 machines that
+  means the switch is offered nowhere, which is correct — there is no valid
+  arrangement to describe until a Studio newer than 6 ships.
+- **Three consumers must agree on WHICH Daz runs the export batch**, and they are
+  fed by one pure rule (`storage/settings.ts` → `exportInstallFolder`): the
+  launcher (`api/core.exportDazInstallFolder`), the Runner GATE
+  (`fetchExportRunnerGate`) and the Runner INSTALL (`resolveRunnerInstall`).
+  Everything else in the app goes through `activeDazInstallFolder` instead. A
+  gate reading one install while the launcher starts another is a "ready" over an
+  export that opens Daz and waits forever, so a new consumer of "where does the
+  batch run" adds itself to that rule, never a fourth answer.
 - **Creating a directory link on Windows: junction, not symlink** (HISTORICAL
   since v0.63 — the studio no longer creates junctions, but the measured facts
   keep the sweep's test honest). A junction

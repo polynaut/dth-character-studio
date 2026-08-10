@@ -85,8 +85,9 @@ export const studioSettingsSchema = z.object({
    * **Why one installation can be the odd one out.** Everything the studio does
    * in Daz goes through the activated install — except the batch handoff, which
    * only works if the DTH **Runner plugin** loaded, and a plugin binary is built
-   * against ONE Studio major version (see `.ai/gotchas.md` on the plugin SDK
-   * gate). So a user who has moved to the newest Studio for authoring can still
+   * against ONE Studio major version (see `.ai/gotchas.md`, "Export only" may
+   * never point at Daz Studio 4 — which also records the one install this must
+   * never name). So a user who has moved to the newest Studio for authoring can still
    * be waiting on an exporter/runner build for it, and their exports have to
    * keep running in the older one. This field is that arrangement, made
    * explicit and visible, instead of forcing the whole app back a version.

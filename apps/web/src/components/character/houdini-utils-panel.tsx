@@ -547,19 +547,38 @@ export function HoudiniUtilsPanel({
     if (open) void loadSourceRecents()
   }, [open, loadSourceRecents])
 
+  /**
+   * Record a source as just used, then re-read the row so the order the user
+   * just changed is the order they see.
+   *
+   * Called at the points where a file is BROWSED FOR — the picker, the drop
+   * zone, and re-picking a chip — never from the effect that reacts to
+   * `activeSourceHip`. Watching that would sweep up the two kinds of source the
+   * row is not for: a project template (already a chip, one row up) and another
+   * character's project (already in the Select), each of which would then appear
+   * twice, in two rows, both highlighted. What this list is for is the file the
+   * studio was never told about, and the only way one arrives is by being found
+   * on disk.
+   *
+   * Remembered on CHOICE, not on a completed transfer: the expensive thing this
+   * saves is the re-browsing, and that cost is paid the moment a file is picked
+   * — whether or not the copy that follows is the one the user ultimately wants.
+   */
+  const rememberSource = useCallback(
+    (hipPath: string) => {
+      void rememberHoudiniSource({ data: { hipPath } })
+        .then(loadSourceRecents)
+        .catch(() => {})
+    },
+    [loadSourceRecents],
+  )
+
   useEffect(() => {
     setSelectedSource('')
     if (!open || !activeSourceHip) {
       setSourceScan(EMPTY_SCAN)
       return
     }
-    // Remembered on CHOICE, not on a completed transfer: the expensive thing
-    // this row saves is the re-browsing, and that cost is already paid the
-    // moment a file is picked — whether or not the copy that follows is the one
-    // the user ultimately wants. Re-picking a recent moves it back to the top.
-    void rememberHoudiniSource({ data: { hipPath: activeSourceHip } })
-      .then(loadSourceRecents)
-      .catch(() => {})
     void runScan([activeSourceHip], setSourceScan)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, activeSourceHip])
@@ -572,6 +591,7 @@ export function HoudiniUtilsPanel({
     if (picked) {
       setSourceMode('browse')
       setBrowsedHip(picked)
+      rememberSource(picked)
     }
   }
 
@@ -1310,6 +1330,9 @@ export function HoudiniUtilsPanel({
                     if (!dropped) return
                     setSourceMode('browse')
                     setBrowsedHip(dropped)
+                    // A drop is a browse that skipped the dialog — same file
+                    // found the same way, so it earns the same shortcut.
+                    rememberSource(dropped)
                   }}
                 >
                   <Button variant="outline" size="sm" onClick={() => void onBrowse()}>
@@ -1343,6 +1366,9 @@ export function HoudiniUtilsPanel({
                           onClick={() => {
                             setSourceMode('browse')
                             setBrowsedHip(recent.path)
+                            // Re-picking floats it back to the top — the file
+                            // you keep coming back to stays where you look.
+                            rememberSource(recent.path)
                           }}
                           className={`flex max-w-full items-center gap-2 rounded-md border px-2.5 py-1.5 text-sm ${
                             active
