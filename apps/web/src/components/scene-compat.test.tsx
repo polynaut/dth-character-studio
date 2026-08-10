@@ -17,6 +17,7 @@ import {
   sceneCompatRows,
   sceneCreateRows,
   sceneNotLinkedRow,
+  sceneScanRows,
 } from '#/lib/scene-compat.ts'
 import { defaultSections } from '@dth/rom'
 
@@ -415,5 +416,61 @@ describe('SceneValidationTable', () => {
     expect(toggle.getAttribute('aria-checked')).toBe('false')
     fireEvent.click(toggle)
     expect(toggle.getAttribute('aria-checked')).toBe('true')
+  })
+})
+
+describe('sceneScanRows — the Import-from-Daz-scene checks', () => {
+  const KIRA = { genesis: 'G9', gender: 'female' } as const
+  const rowFor = (rows: ReturnType<typeof sceneScanRows>, key: string) =>
+    rows.find((row) => row.key === key)
+
+  it('passes a one-figure G9 scene that HAS animation', () => {
+    const rows = sceneScanRows(scan({ animationFrames: 240 }), KIRA)
+    expect(rows.map((row) => row.state)).toEqual(['ok', 'ok', 'ok'])
+    expect(rowFor(rows, 'animation')?.value).toBe('240 frames')
+  })
+
+  it('FAILS an empty timeline — the inverse of the add-scene rule', () => {
+    // Adding a scene demands an empty timeline (the ROM script fills it);
+    // scanning one demands a full timeline, because those keys are the whole
+    // thing there is to read. Same field, opposite verdict.
+    const rows = sceneScanRows(scan({ animationFrames: 1 }), KIRA)
+    expect(rowFor(rows, 'animation')?.state).toBe('fail')
+    expect(sceneCompatFailed(rows)).toBe(true)
+    // …and that same scene passes the ADD checks, which is the point.
+    expect(rowFor(sceneCreateRows(scan({ animationFrames: 1 })), 'timeline')?.state).toBe('ok')
+  })
+
+  it('FAILS a scene holding two figures — the headless scan picks the figure itself', () => {
+    const rows = sceneScanRows(
+      scan({
+        animationFrames: 240,
+        figures: [
+          { id: 'Genesis9', label: 'Genesis 9' },
+          { id: 'Genesis9-1', label: 'Genesis 9 (2)' },
+        ],
+      }),
+      KIRA,
+    )
+    expect(rowFor(rows, 'figures')?.state).toBe('fail')
+    expect(sceneCompatFailed(rows)).toBe(true)
+  })
+
+  it('FAILS a scene whose figure is a different generation from the character', () => {
+    const rows = sceneScanRows(
+      scan({ animationFrames: 240, figures: [{ id: 'Genesis8Female', label: 'Genesis 8 Female' }] }),
+      KIRA,
+    )
+    expect(rowFor(rows, 'generation')?.state).toBe('fail')
+  })
+
+  it('is all-unchecked while the scene has not been read yet', () => {
+    expect(sceneScanRows(null, KIRA).map((row) => row.state)).toEqual([
+      'unchecked',
+      'unchecked',
+      'unchecked',
+    ])
+    // An unchecked row never blocks — the dialog shows "checking…", not a fail.
+    expect(sceneCompatFailed(sceneScanRows(null, KIRA))).toBe(false)
   })
 })

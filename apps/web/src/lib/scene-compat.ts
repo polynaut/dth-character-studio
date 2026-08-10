@@ -303,6 +303,51 @@ export function sceneCreateRows(scan: SceneWearables | null): Array<SceneCheckRo
   return [figuresRow(scan), timelineRow(scan)]
 }
 
+/**
+ * The **Import from Daz scene** checks — a scene the studio is about to open in
+ * Daz and scan for keyed ROM frames.
+ *
+ * Two are the add-scene checks unchanged: exactly one figure, and the
+ * character's own generation. Both matter more here than they look — the scan
+ * runs headless and selects the figure by asset identity, so a second figure
+ * makes "which one" a coin toss, and a scan of the wrong generation imports
+ * morph names that belong to another skeleton.
+ *
+ * The third INVERTS {@link timelineRow}. Adding a scene demands an EMPTY
+ * timeline, because the generated ROM script fills it; scanning one demands a
+ * FULL timeline, because those keys are the entire thing there is to read. Same
+ * measured field, opposite verdict — which is why it is its own row rather than
+ * a flag on that one.
+ */
+export function sceneScanRows(
+  scan: SceneWearables | null,
+  character: Pick<Character, 'genesis' | 'gender'>,
+): Array<SceneCheckRow> {
+  return [figuresRow(scan), generationRow(scan, character), animationRow(scan)]
+}
+
+/** Animation to scan: the mirror image of {@link timelineRow}'s demand. The
+ *  same `≤ 1` boundary — one frame is the rest-pose key a saved scene carries,
+ *  which is not a ROM. */
+function animationRow(scan: SceneWearables | null): SceneCheckRow {
+  return {
+    key: 'animation',
+    label: 'Animation to scan',
+    why:
+      'The scan reads the keyed morph frames on the timeline — a scene without animation ' +
+      'has nothing to import. Build or load the ROM in Daz, save the scene, then pick it again.',
+    ...(!readable(scan)
+      ? { value: '', state: 'unchecked' as const }
+      : scan.animationFrames <= 1
+        ? {
+            value: 'no animation on the timeline',
+            problem: 'The scene carries no animation — there are no keyed frames to scan.',
+            state: 'fail' as const,
+          }
+        : { value: `${scan.animationFrames} frames`, state: 'ok' as const }),
+  }
+}
+
 /** Any definitively failed check — gates the dialog's confirm actions
  *  (behind the "Add/Create anyway" escape). `unchecked` rows never block. */
 export function sceneCompatFailed(rows: Array<SceneCheckRow>): boolean {
