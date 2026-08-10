@@ -2,19 +2,43 @@ import { Upload } from 'lucide-react'
 
 import { Button, InfoPopup } from '@dth/ui'
 import { GuideLink } from '#/components/guide-link.tsx'
+import { FileDropZone } from '#/components/file-drop-zone.tsx'
 
 /**
- * "Import from CSV" plus an info popup explaining where the CSV comes from: the
- * bundled Scan_Frames.dsa (installed at the DTH-Character-Studio scripts root)
- * exports the open Daz scene's keyed morph frames into the studio's scan
- * folder, and the import picker lists those scans.
+ * "Import from Daz scene" plus an info popup explaining what it does: the studio
+ * opens the picked scene in Daz through the job runner, runs the bundled
+ * `Scan_Frames` there with no dialogs, and imports the CSV that comes back.
+ * Scans already made are listed in the dialog too — one scan feeds several ROM
+ * sections.
+ *
+ * Doubles as a DROP TARGET for a `.duf`, which is the shortest path there is:
+ * drag the scene from Explorer onto the button and the dialog opens already
+ * pointed at it.
  */
-export function ImportCsvButton({ onImport }: { onImport: () => void }) {
+export function ImportCsvButton({
+  onImport,
+  onImportScene,
+}: {
+  onImport: () => void
+  /** A `.duf` dropped straight on the button — opens the dialog with that scene
+   *  already picked and checked, so the drop lands where it was aimed instead of
+   *  opening an empty dialog to pick in again. */
+  onImportScene: (scenePath: string) => void
+}) {
   return (
     <span className="inline-flex items-center gap-1">
-      <Button variant="outline" size="sm" onClick={onImport}>
-        <Upload /> Import from Daz scene
-      </Button>
+      <FileDropZone
+        accept={['duf']}
+        label="Drop a Daz scene to scan"
+        onDrop={(paths) => {
+          const dropped = paths[0]
+          if (dropped) onImportScene(dropped)
+        }}
+      >
+        <Button variant="outline" size="sm" onClick={onImport}>
+          <Upload /> Import from Daz scene
+        </Button>
+      </FileDropZone>
       <InfoPopup size="sm" label="Import from Daz scene — how it works">
         Pick a Daz scene and the studio scans its keyed frames for you: it opens the scene in
         Daz Studio, runs <strong>Scan_Frames</strong> there, and imports the result — each

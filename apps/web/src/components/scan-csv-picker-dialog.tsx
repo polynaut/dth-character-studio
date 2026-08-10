@@ -45,6 +45,7 @@ function truncatePath(p: string): string {
 export function ScanCsvPickerDialog({
   sectionLabel,
   character,
+  initialScenePath,
   onPick,
   onBrowse,
   onClose,
@@ -53,6 +54,10 @@ export function ScanCsvPickerDialog({
   /** Validated against the picked scene — a scan of another generation imports
    *  morph names belonging to another skeleton. */
   character: Pick<Character, 'genesis' | 'gender'>
+  /** A scene dropped on the section's own Import button: the dialog opens with
+   *  it already picked and checked, so the drop lands where the user aimed
+   *  instead of opening an empty dialog they have to pick in again. */
+  initialScenePath?: string
   onPick: (path: string) => void
   onBrowse: () => void
   onClose: () => void
@@ -68,9 +73,10 @@ export function ScanCsvPickerDialog({
   const rows = sceneScanRows(sceneScan, character)
   const blocked = sceneCompatFailed(rows) && !force
 
-  async function onPickScene() {
-    const picked = await pickDufPath('Select the Daz scene to scan', browseStart(scenePath))
-    if (!picked) return
+  /** Take a scene from EITHER route — the picker or a drop — and re-run the
+   *  checks on it. Shared so a dropped scene is never the one that skipped
+   *  validation. */
+  async function applyScene(picked: string) {
     setScenePath(picked)
     setScanError('')
     setForce(false)
@@ -80,6 +86,18 @@ export function ScanCsvPickerDialog({
     setSceneScan(scan)
     setChecking(false)
   }
+
+  async function onPickScene() {
+    const picked = await pickDufPath('Select the Daz scene to scan', browseStart(scenePath))
+    if (picked) await applyScene(picked)
+  }
+
+  // A scene dropped on the Import button opens the dialog already pointed at it.
+  // Mount only: re-running on every render would fight the user's own re-pick.
+  useEffect(() => {
+    if (initialScenePath) void applyScene(initialScenePath)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   async function onStartScan() {
     setScanError('')
@@ -138,9 +156,26 @@ export function ScanCsvPickerDialog({
       <section className="rounded-lg border p-3">
         <p className="mb-2 text-sm font-medium">Scan a Daz scene</p>
         <div className="mb-2 flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" disabled={!!resultPath} onClick={() => void onPickScene()}>
-            <FolderOpen /> {scenePath ? 'Pick another scene…' : 'Pick a scene…'}
-          </Button>
+          {/* Same action as the picker: drag a `.duf` out of Explorer straight
+              onto the button. Inert mid-scan, like the button itself — a drop
+              cannot start a second run while one is out at Daz. */}
+          <FileDropZone
+            accept={['duf']}
+            label="Drop a Daz scene"
+            onDrop={(paths) => {
+              const dropped = paths[0]
+              if (dropped && !resultPath) void applyScene(dropped)
+            }}
+          >
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!!resultPath}
+              onClick={() => void onPickScene()}
+            >
+              <FolderOpen /> {scenePath ? 'Pick another scene…' : 'Pick a scene…'}
+            </Button>
+          </FileDropZone>
           {scenePath && (
             <span className="min-w-0 truncate text-xs text-muted-foreground" title={scenePath}>
               {scenePath.split(/[\\/]/).pop()}

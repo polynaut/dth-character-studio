@@ -176,6 +176,9 @@ export const RomSections = memo(function RomSections({
   const lastCsvDir = useRef('')
   // The section whose scan-CSV picker is open (null = no import in progress).
   const [pickerSection, setPickerSection] = useState<RomSection | null>(null)
+  /** A scene dropped on the Import button — the dialog opens already pointed
+   *  at it. Cleared with the dialog. */
+  const [pickerScene, setPickerScene] = useState('')
   // A picked CSV awaiting its frame-range dialog (null = no import in progress).
   const [pendingCsv, setPendingCsv] = useState<{
     section: RomSection
@@ -1030,7 +1033,13 @@ export const RomSections = memo(function RomSections({
                     {/* CSV import — on a non-primary scene it imports into the scene's own
                         section (escalates), same as adding frames. */}
                     <div className="my-4 flex gap-2">
-                      <ImportCsvButton onImport={() => setPickerSection(section)} />
+                      <ImportCsvButton
+                        onImport={() => setPickerSection(section)}
+                        onImportScene={(scenePath) => {
+                          setPickerScene(scenePath)
+                          setPickerSection(section)
+                        }}
+                      />
                       <Button
                         variant="ghost"
                         size="sm"
@@ -1079,7 +1088,13 @@ export const RomSections = memo(function RomSections({
                       >
                         <Plus /> Add group
                       </Button>
-                      <ImportCsvButton onImport={() => setPickerSection(section)} />
+                      <ImportCsvButton
+                        onImport={() => setPickerSection(section)}
+                        onImportScene={(scenePath) => {
+                          setPickerScene(scenePath)
+                          setPickerSection(section)
+                        }}
+                      />
                       <Button
                         variant="ghost"
                         size="sm"
@@ -1116,9 +1131,13 @@ export const RomSections = memo(function RomSections({
         <ScanCsvPickerDialog
           sectionLabel={SECTION_LABELS[pickerSection]}
           character={{ genesis, gender }}
+          initialScenePath={pickerScene}
           onPick={(path) => void loadCsv(pickerSection, path)}
           onBrowse={() => void browseCsv(pickerSection)}
-          onClose={() => setPickerSection(null)}
+          onClose={() => {
+            setPickerSection(null)
+            setPickerScene('')
+          }}
         />
       )}
       {pendingCsv && (
