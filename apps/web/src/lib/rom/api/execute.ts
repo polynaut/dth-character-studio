@@ -1569,6 +1569,28 @@ export async function startSceneScan({ data }: { data: unknown }): Promise<Scene
   return { csvPath, resultPath, dazWasRunning }
 }
 
+/**
+ * Remove the Runner's claimed job file once it reports the batch finished.
+ *
+ * The export flow's progress watch owns this for its own batches; a scan has no
+ * watch, so this is where it happens. Only a FINISHED file (`progress: 100`) is
+ * removed — a live batch's file is somebody else's, and deleting it would strand
+ * the run that owns it.
+ */
+async function clearFinishedJobFile(): Promise<void> {
+  try {
+    const paths = await exporterJobFilePaths()
+    if (!paths) return
+    if (!(await exists(paths.running))) return
+    const finished = await readTextFile(paths.running)
+      .then((text) => parseJobFileJson(text)?.progress === 100)
+      .catch(() => false)
+    if (finished) await remove(paths.running).catch(() => {})
+  } catch {
+    // A leftover blocks nothing — the next start sweeps a finished one.
+  }
+}
+
 /** A started scan, as the dialog polls it. */
 export interface SceneScanProgress {
   state: 'running' | 'done' | 'failed'
@@ -1600,6 +1622,13 @@ export async function fetchSceneScanProgress({
   if (!text) return { state: 'running', csvPath: '', frames: 0, error: '' }
   const result = parseScanResult(text)
   if (!result) return { state: 'running', csvPath: '', frames: 0, error: '' }
+  // The scan is over either way — clear the claimed job file the Runner left
+  // behind. The EXPORT flow's watch does this for its own batches; a scan has
+  // no watch, so without it a finished `running_…json` sits in the user's
+  // scripts folder until the next scan happens to sweep it (measured on the
+  // first live run). Best-effort: a leftover blocks nothing (the next start
+  // removes a finished one), so failing here must not fail the scan.
+  await clearFinishedJobFile()
   if (!result.ok) {
     return { state: 'failed', csvPath: '', frames: 0, error: result.error || 'The scan failed.' }
   }

@@ -169,6 +169,29 @@ describe('fetchSceneScanProgress', () => {
     expect(progress.error).toContain('No keyed morph frames')
   })
 
+  it('clears the finished job file the Runner left behind', async () => {
+    // Measured on the first live run: the Runner renames the job file to
+    // `running_…` and marks it done, and the EXPORT flow's watch is what
+    // normally deletes it. A scan has no watch, so a finished file sat in the
+    // user's scripts folder until the next scan swept it.
+    const running = '/daz/My DAZ 3D Library/Scripts/DTH-Character-Studio/running_dth_exporter_jobs.json'
+    files.set(running, JSON.stringify({ version: 1, progress: 100, jobs: [] }))
+    files.set(RESULT, `{"ok":true,"csvPath":"${CSV}","frames":51}`)
+    files.set(CSV, 'rows')
+
+    expect((await poll()).state).toBe('done')
+    expect(files.has(running)).toBe(false)
+  })
+
+  it('leaves a LIVE batch of somebody else alone — that file belongs to it', async () => {
+    const running = '/daz/My DAZ 3D Library/Scripts/DTH-Character-Studio/running_dth_exporter_jobs.json'
+    files.set(running, JSON.stringify({ version: 1, progress: 40, jobs: [] }))
+    files.set(RESULT, '{"ok":false,"error":"nope"}')
+
+    expect((await poll()).state).toBe('failed')
+    expect(files.has(running)).toBe(true)
+  })
+
   it('is DONE only when the CSV is actually there', async () => {
     files.set(RESULT, `{"ok":true,"csvPath":"${CSV}","frames":51}`)
     // The result says the script believed it wrote one; the import needs the file.
