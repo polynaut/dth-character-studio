@@ -31,6 +31,13 @@ export function UpdatePromptHost() {
   return <UpdatePromptDialog req={req} onClose={clearUpdatePrompt} />
 }
 
+// ONE install at a time, app-wide. A dialog hidden mid-download unmounts, and a
+// manual "Check for updates" can then mount a FRESH prompt for the same version
+// — its Update button must not start a second downloadAndInstall under the one
+// still running. Module-level because the running install's closure outlives
+// the dialog that started it.
+let installInFlight = false
+
 function UpdatePromptDialog({ req, onClose }: { req: UpdatePromptRequest; onClose: () => void }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -61,6 +68,11 @@ function UpdatePromptDialog({ req, onClose }: { req: UpdatePromptRequest; onClos
   }, [busy, onClose])
 
   async function runInstall() {
+    if (installInFlight) {
+      setError('An update is already downloading — it will announce itself when done.')
+      return
+    }
+    installInFlight = true
     setBusy(true)
     setError('')
     try {
@@ -86,6 +98,8 @@ function UpdatePromptDialog({ req, onClose }: { req: UpdatePromptRequest; onClos
       }
       setError(message)
       setBusy(false)
+    } finally {
+      installInFlight = false
     }
   }
 

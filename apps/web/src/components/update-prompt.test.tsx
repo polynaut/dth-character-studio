@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 afterEach(cleanup)
 
@@ -9,6 +9,15 @@ afterEach(cleanup)
 
 const openExternal = vi.fn()
 vi.mock('#/lib/desktop.ts', () => ({ openExternal: (url: string) => openExternal(url) }))
+
+const toastSuccess = vi.fn()
+const toastError = vi.fn()
+vi.mock('sonner', () => ({
+  toast: {
+    success: (...args: Array<unknown>) => toastSuccess(...args),
+    error: (...args: Array<unknown>) => toastError(...args),
+  },
+}))
 
 import { ReleaseNotes } from './release-notes'
 import { UpdatePromptHost } from './update-prompt'
@@ -95,5 +104,111 @@ describe('update dialog skipped-versions list', () => {
       'https://github.com/polynaut/dth-character-studio/releases/tag/v0.32.3',
     )
     clearUpdatePrompt()
+  })
+})
+
+describe('update dialog hide-while-busy flow', () => {
+  beforeEach(() => {
+    toastSuccess.mockClear()
+    toastError.mockClear()
+  })
+  afterEach(() => {
+    // Unmount BEFORE clearing the store, so the clear can't re-render a
+    // mounted host outside act().
+    cleanup()
+    clearUpdatePrompt()
+  })
+
+  it('hidden + success: persistent "restart to apply" toast, NO auto-relaunch', async () => {
+    let resolveInstall!: () => void
+    const relaunch = vi.fn(async () => {})
+    requestUpdatePrompt({
+      version: '0.99.0',
+      install: () =>
+        new Promise<void>((resolve) => {
+          resolveInstall = resolve
+        }),
+      relaunch,
+    })
+    render(<UpdatePromptHost />)
+    fireEvent.click(screen.getByRole('button', { name: 'Update now' }))
+    // Busy: the dismiss button reads Hide, and hiding unmounts the dialog while
+    // the download keeps running.
+    fireEvent.click(screen.getByRole('button', { name: 'Hide' }))
+    expect(screen.queryByText('Update available')).toBeNull()
+
+    resolveInstall()
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalled())
+    const [message, opts] = toastSuccess.mock.calls[0] as [
+      string,
+      { duration: number; action: { label: string; onClick: () => void } },
+    ]
+    expect(message).toBe('Update ready — restart to apply')
+    // A hidden run must never yank the app away — the toast's action is the
+    // only relaunch trigger.
+    expect(relaunch).not.toHaveBeenCalled()
+    opts.action.onClick()
+    expect(relaunch).toHaveBeenCalledTimes(1)
+  })
+
+  it('hidden + failure: error toast instead of a dialog that no longer exists', async () => {
+    let rejectInstall!: (e: Error) => void
+    const relaunch = vi.fn(async () => {})
+    requestUpdatePrompt({
+      version: '0.99.0',
+      install: () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectInstall = reject
+        }),
+      relaunch,
+    })
+    render(<UpdatePromptHost />)
+    fireEvent.click(screen.getByRole('button', { name: 'Update now' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Hide' }))
+
+    rejectInstall(new Error('feed unreachable'))
+    await waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith('Update failed — feed unreachable'),
+    )
+    expect(relaunch).not.toHaveBeenCalled()
+  })
+
+  it('visible + success: relaunches immediately, no toast', async () => {
+    const relaunch = vi.fn(async () => {})
+    requestUpdatePrompt({ version: '0.99.0', install: async () => {}, relaunch })
+    render(<UpdatePromptHost />)
+    fireEvent.click(screen.getByRole('button', { name: 'Update now' }))
+    await waitFor(() => expect(relaunch).toHaveBeenCalledTimes(1))
+    expect(toastSuccess).not.toHaveBeenCalled()
+  })
+
+  it('a second prompt while an install runs refuses to start another download', async () => {
+    let resolveFirst!: () => void
+    requestUpdatePrompt({
+      version: '0.99.0',
+      install: () =>
+        new Promise<void>((resolve) => {
+          resolveFirst = resolve
+        }),
+      relaunch: async () => {},
+    })
+    render(<UpdatePromptHost />)
+    fireEvent.click(screen.getByRole('button', { name: 'Update now' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Hide' }))
+
+    // A manual "Check for updates" mounts a fresh prompt for the same version —
+    // its Update button must NOT start a second downloadAndInstall under the
+    // one still running.
+    const secondInstall = vi.fn(async () => {})
+    act(() =>
+      requestUpdatePrompt({ version: '0.99.0', install: secondInstall, relaunch: async () => {} }),
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Update now' }))
+    expect(secondInstall).not.toHaveBeenCalled()
+    expect(screen.getByText(/already downloading/)).toBeTruthy()
+
+    // Let the first install finish so the module-level flag resets.
+    resolveFirst()
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalled())
   })
 })

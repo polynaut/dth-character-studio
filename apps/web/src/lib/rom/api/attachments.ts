@@ -54,23 +54,28 @@ async function copySceneInto(
   deleteOriginal: boolean,
 ): Promise<string> {
   await mkdir(destDir, { recursive: true })
-  // Refuse to clobber — same rule as copyHoudiniProject. The destination can
-  // already hold a same-named scene (two same-stem scenes copied into one
-  // .assets subfolder). Overwriting silently replaced the existing bytes, and
-  // with deleteOriginal the source vanished too — two registry assets then
-  // shared one file, and removing either asset deleted the survivor's files.
-  const destDuf = joinPath(destDir, basename(scenePath))
-  if (await exists(destDuf)) {
-    throw new Error(
-      `A scene named ${basename(scenePath)} already exists in ${destDir} — rename or remove it first.`,
-    )
-  }
   const sources = [
     scenePath,
     `${scenePath}.png`,
     `${scenePath}.tip.png`,
     `${sceneBase(scenePath)}.tip.png`,
   ]
+  // Refuse to clobber — same rule as copyHoudiniProject. The destination can
+  // already hold a same-named scene (two same-stem scenes copied into one
+  // .assets subfolder). Overwriting silently replaced the existing bytes, and
+  // with deleteOriginal the source vanished too — two registry assets then
+  // shared one file, and removing either asset deleted the survivor's files.
+  // The SIDECARS are checked too, not just the .duf: a stray same-stem
+  // thumbnail would otherwise be absorbed silently as this copy's.
+  const clobbers = await Promise.all(
+    sources.map(async (src) =>
+      (await exists(joinPath(destDir, basename(src)))) ? basename(src) : '',
+    ),
+  )
+  const clobber = clobbers.find(Boolean)
+  if (clobber) {
+    throw new Error(`${clobber} already exists in ${destDir} — rename or remove it first.`)
+  }
   const copied: Array<string> = []
   for (const src of sources) {
     if (await exists(src)) {

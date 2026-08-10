@@ -342,6 +342,43 @@ describe('migrateCharacterData — v24 (scene-override restructure: rom record +
     const once = migrateCharacterData(v23Character())
     expect(migrateCharacterData(structuredClone(once))).toEqual(once)
   })
+
+  it('drops a hand-edited unknown section string instead of bricking the parse', () => {
+    // `rom` is a partialRecord over the section enum and zod 4 REJECTS unknown
+    // record keys — before the migration validated the section strings, ONE
+    // hand-edited legacy entry (`section: 'JCMX'`) failed the WHOLE character's
+    // parse (heal, don't brick). The invalid entries drop; valid ones survive.
+    const parsed = characterSchema.parse(
+      migrateCharacterData({
+        id: 'c',
+        name: 'X',
+        createdAt: now,
+        updatedAt: now,
+        sections: {},
+        schemaVersion: 23,
+        sceneOverrides: [
+          {
+            scenePath: 'D:/s.duf',
+            enabled: true,
+            poses: [],
+            additions: [],
+            sectionOverrides: [
+              { section: 'JCMX', config: structuredClone(expOwned) }, // unknown → dropped
+              { section: 'EXP', config: structuredClone(expOwned) }, // valid → kept
+            ],
+            sectionEnabled: [
+              { section: 'NOPE', enabled: false }, // unknown → dropped
+              { section: 'GEN', enabled: false }, // valid → kept
+            ],
+          },
+        ],
+      }),
+    )
+    const rom = parsed.sceneOverrides[0].rom
+    expect(rom.EXP?.owned).toBeDefined()
+    expect(rom.GEN?.enabled).toBe(false)
+    expect(Object.keys(rom).sort()).toEqual(['EXP', 'GEN'])
+  })
 })
 
 describe('schema v21 — whole-section overrides (now a rom-record key)', () => {

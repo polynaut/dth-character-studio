@@ -1303,10 +1303,10 @@ function dthWriteFailureLog(sError) {
             dthLogIn.close();
             try { dthPrevLog = JSON.parse(dthPrevTxt); } catch (ePrev) { dthPrevLog = null; }
         }
-        // The scene this failure belongs to: the capture when it exists (a saved
-        // ROM animation already resolved back to its source scene there), else
-        // the live filename — the capture is declared AFTER this function but
-        // always before any call site can fail.
+        // The scene this failure belongs to: the dthOpenSceneFile capture,
+        // declared ABOVE this function (a saved ROM animation is already
+        // resolved back to its source scene there) — the typeof guard is
+        // belt-and-braces, falling back to the live filename.
         var dthFailScene = "";
         try {
             dthFailScene = (typeof dthOpenSceneFile != "undefined" && dthOpenSceneFile)

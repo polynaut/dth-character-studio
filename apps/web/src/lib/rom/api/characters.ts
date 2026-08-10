@@ -766,13 +766,19 @@ export async function moveCharacterScenesFolder({
   // root (`<char>/<houdiniSubdir>/daz-export`). Renaming the scenes root TO
   // that name succeeds whenever the character has no Houdini folder yet — and
   // from then on the export root derives INSIDE the scenes root, scenes and
-  // gigabytes of exports fighting over one tree. The UI's reserved-name check
+  // gigabytes of exports fighting over one tree. NESTED spellings are refused
+  // too (normalizeRelFolder allows separators): "houdini/daz-export" would
+  // land the scenes root exactly ON the derived export root, which the
+  // character-delete rails judge deletable by leaf name — the scenes tree
+  // would read as an export root. The UI's reserved-name check
   // (sceneSubfolderConflict) covers scene SUBFOLDERS only, so this is the
   // api-level backstop for the root itself. Case-insensitive like every other
   // path compare (Windows).
-  if (normalizePathLower(rel) === normalizePathLower(project.houdiniSubdir)) {
+  const houdiniKey = normalizePathLower(project.houdiniSubdir)
+  const relKey = normalizePathLower(rel)
+  if (relKey === houdiniKey || relKey.startsWith(`${houdiniKey}/`)) {
     throw new Error(
-      `"${project.houdiniSubdir}" is the project's Houdini folder — the character's export root lives inside it. Pick another name for the scenes folder.`,
+      `"${project.houdiniSubdir}" is the project's Houdini folder — the character's export root lives inside it. Pick a scenes folder name outside it.`,
     )
   }
   const newDir = `${charFolder}/${rel}`
