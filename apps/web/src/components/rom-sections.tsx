@@ -1115,6 +1115,7 @@ export const RomSections = memo(function RomSections({
       {pickerSection && (
         <ScanCsvPickerDialog
           sectionLabel={SECTION_LABELS[pickerSection]}
+          character={{ genesis, gender }}
           onPick={(path) => void loadCsv(pickerSection, path)}
           onBrowse={() => void browseCsv(pickerSection)}
           onClose={() => setPickerSection(null)}
