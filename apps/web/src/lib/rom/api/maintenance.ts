@@ -1,8 +1,12 @@
+import { readDir, remove, stat } from '@tauri-apps/plugin-fs'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
 import * as storage from '../storage'
-import { projectsForSweep } from './core'
+import { join, walkFilesStrict } from '../storage/fs'
+import { avatarSourceMaster, parseAvatarName } from '../avatar-names'
+import { charsRoot, projectsForSweep } from './core'
+import type { ProjectInfo } from './core'
 import { gcNoteMedia } from './notes'
 import { housekeepingResultSchema, remapResultSchema } from './native-types.ts'
 // Inferred from the zod schemas (parsed at the invoke boundary below) + re-exported.
@@ -54,15 +58,169 @@ export async function sweepNoteMedia(): Promise<HousekeepingResult> {
 }
 
 /**
+ * Recursively delete `dir` (which the caller has containment-checked), first
+ * summing its files into a HousekeepingResult. The STRICT walk is part of the
+ * safety: a subtree that can't be fully listed can't be fully judged, so the
+ * whole candidate is left alone (the caller catches) rather than half-counted
+ * and deleted anyway.
+ */
+async function removeDirCounted(dir: string): Promise<HousekeepingResult> {
+  const result: HousekeepingResult = { filesDeleted: 0, bytesFreed: 0 }
+  for (const rel of await walkFilesStrict(dir)) {
+    result.filesDeleted += 1
+    try {
+      result.bytesFreed += (await stat(join(dir, rel))).size
+    } catch {
+      // counted but unsized — the delete below still covers it
+    }
+  }
+  await remove(dir, { recursive: true })
+  return result
+}
+
+/** Fold `add` into `total` in place (the sweep's running report). */
+function addResult(total: HousekeepingResult, add: HousekeepingResult): void {
+  total.filesDeleted += add.filesDeleted
+  total.bytesFreed += add.bytesFreed
+}
+
+/**
+ * The per-character meta dirs under `.dcsmeta/characters/` that belong to NO
+ * live character — as ABSOLUTE paths, all inside `metaRoot` by construction
+ * (they come out of readDir descent) and re-checked by the caller. `liveKeys`
+ * are the {@link storage.characterMetaDir} keys (the character's
+ * library-relative folder, or its id for a loose root-level definition),
+ * case-folded: keys can NEST (`group a/ita`), so a folder that is an ANCESTOR
+ * of a live key is recursed into rather than judged whole, and a folder that
+ * IS a live key keeps its whole subtree. Loose FILES at any level are left
+ * alone — only keyed character dirs are ever this sweep's to delete.
+ */
+async function collectOrphanMetaDirs(
+  absDir: string,
+  relLower: string,
+  liveKeys: ReadonlySet<string>,
+): Promise<Array<string>> {
+  const out: Array<string> = []
+  for (const entry of await readDir(absDir)) {
+    if (!entry.isDirectory) continue
+    const childAbs = join(absDir, entry.name)
+    const childRel = relLower ? `${relLower}/${entry.name.toLowerCase()}` : entry.name.toLowerCase()
+    if (liveKeys.has(childRel)) continue
+    if ([...liveKeys].some((key) => key.startsWith(`${childRel}/`))) {
+      out.push(...(await collectOrphanMetaDirs(childAbs, childRel, liveKeys)))
+      continue
+    }
+    out.push(childAbs)
+  }
+  return out
+}
+
+/**
+ * One project's orphan pass: delete per-character meta dirs
+ * (`.dcsmeta/characters/<folder>`) and avatar images (`.dcsmeta/images/`) that
+ * match no live character. Deleting a character through the app already prunes
+ * both — this covers EXTERNAL renames/deletes (Explorer, another machine's
+ * sync), which used to strand them forever.
+ *
+ * STRICT guards, in the note-media GC's spirit (an incomplete view must delete
+ * nothing):
+ *  - the characters root is pre-walked STRICTLY — an unreadable subtree (or a
+ *    missing root) aborts the whole pass, because the tolerant scan would have
+ *    silently read its characters as deleted;
+ *  - the scan must report ZERO problems — an unreadable definition is a
+ *    character that EXISTS, not one that was deleted;
+ *  - meta dirs are judged by their {@link storage.characterMetaDir} key,
+ *    avatars by the character id in their filename (avatar-names); anything
+ *    that can't be attributed (loose files, legacy fixed-name avatars) is left
+ *    alone rather than deleted on a guess.
+ */
+async function sweepProjectOrphans(project: ProjectInfo): Promise<HousekeepingResult> {
+  const total: HousekeepingResult = { filesDeleted: 0, bytesFreed: 0 }
+  const root = charsRoot(project)
+  // Completeness gate: same tree, same dot-folder pruning as the scan below,
+  // but ABORTING on any unreadable directory. (A subtree turning unreadable in
+  // the instant between this walk and the scan can still slip through — the
+  // same narrow race the note-media GC accepts between collection and delete.)
+  await walkFilesStrict(root, '', (name) => name.startsWith('.'))
+  const scan = await storage.scanCharacterLibrary(root)
+  if (scan.problems.length > 0) return total
+  const liveKeys = new Set(
+    scan.entries.map((e) => (e.location.relFolder.trim() || e.character.id).toLowerCase()),
+  )
+  const liveIds = new Set(scan.entries.map((e) => e.character.id.toLowerCase()))
+
+  // Meta dirs. Containment re-checked per candidate: only paths under the meta
+  // root are ever removed, however the walk produced them.
+  const metaRoot = storage.metaCharactersDir(project.path)
+  const metaRootKey = metaRoot.toLowerCase()
+  try {
+    for (const orphan of await collectOrphanMetaDirs(metaRoot, '', liveKeys)) {
+      if (!orphan.toLowerCase().startsWith(`${metaRootKey}/`)) continue
+      try {
+        addResult(total, await removeDirCounted(orphan))
+      } catch {
+        // locked/unlistable candidate — left for the next sweep
+      }
+    }
+  } catch {
+    // no meta root yet, or it can't be listed — nothing to judge safely
+  }
+
+  // Avatars. `.src` siblings are classified by their MASTER's name, so they go
+  // with it — a dead character loses both, a live one keeps both.
+  try {
+    const imagesDir = storage.metaImagesDir(project.path)
+    for (const entry of await readDir(imagesDir)) {
+      if (!entry.isFile) continue
+      const owner = avatarSourceMaster(entry.name) ?? entry.name
+      const parsed = parseAvatarName(owner)
+      // Current-scheme names parse; legacy `<id>-<ts>.<ext>` names strip to an
+      // id. A name matching neither is unattributable — never deleted.
+      const id = parsed?.id ?? (/-\d+\.[^.]+$/.test(owner) ? owner.replace(/-\d+\.[^.]+$/, '') : '')
+      if (!id || liveIds.has(id.toLowerCase())) continue
+      const path = join(imagesDir, entry.name)
+      try {
+        const size = (await stat(path)).size
+        await remove(path)
+        addResult(total, { filesDeleted: 1, bytesFreed: size })
+      } catch {
+        // locked / already gone — the next sweep retries
+      }
+    }
+  } catch {
+    // no images dir yet, or it can't be listed
+  }
+  return total
+}
+
+/**
+ * The orphan pass across every known project. Per-project tolerant like the
+ * note-media sweep: an unreachable project (or one failing its strict guards)
+ * contributes nothing this run and is retried next sweep.
+ */
+async function sweepOrphanedCharacterData(): Promise<HousekeepingResult> {
+  const total: HousekeepingResult = { filesDeleted: 0, bytesFreed: 0 }
+  for (const project of await projectsForSweep()) {
+    try {
+      addResult(total, await sweepProjectOrphans(project))
+    } catch {
+      // guards tripped (unreadable root/subtree) — deleting nothing is the point
+    }
+  }
+  return total
+}
+
+/**
  * Age-out stale app-data scan files (not modified within their retention
  * windows) — the `product-scans` root and the `scan-frames` keyframe CSVs —
- * pruning folders they empty, plus the note-media sweep across all known
- * projects. Runs on app launch and from the Tools "Clean up now" button.
- * No-op in the plain web build (no native layer).
+ * pruning folders they empty, plus the note-media sweep and the orphaned
+ * character-meta/avatar pass across all known projects. Runs on app launch and
+ * from the "Clean up now" button. No-op in the plain web build (no native layer).
  */
 export async function housekeepingSweep(): Promise<HousekeepingResult> {
   if (!isTauri()) return { filesDeleted: 0, bytesFreed: 0 }
   const media = await sweepNoteMedia()
+  const orphans = await sweepOrphanedCharacterData()
   const productScansDir = await storage.dataPath('product-scans')
   const scans = housekeepingResultSchema.parse(
     await invoke('housekeeping_sweep', {
@@ -80,11 +238,11 @@ export async function housekeepingSweep(): Promise<HousekeepingResult> {
     }),
   )
   return {
-    filesDeleted: scans.filesDeleted + frames.filesDeleted + media.filesDeleted,
-    bytesFreed: scans.bytesFreed + frames.bytesFreed + media.bytesFreed,
+    filesDeleted: scans.filesDeleted + frames.filesDeleted + media.filesDeleted + orphans.filesDeleted,
+    bytesFreed: scans.bytesFreed + frames.bytesFreed + media.bytesFreed + orphans.bytesFreed,
     // Locked/readonly files past the cutoff that could NOT be deleted — summed
     // across both native sweeps so "0 files freed" is distinguishable from
-    // "every delete failed" (the note-media GC reports no failures).
+    // "every delete failed" (the note-media and orphan GCs report no failures).
     filesFailed: (scans.filesFailed ?? 0) + (frames.filesFailed ?? 0),
   }
 }
@@ -123,7 +281,8 @@ export async function relaunchDeelevated(): Promise<void> {
  *  the path isn't on a (mapped) network drive / the native command is absent. */
 export async function uncForPath(path: string): Promise<string> {
   try {
-    return (await invoke<string | null>('unc_for_path', { path })) ?? ''
+    // A primitive return — schema-parsed, not a bare invoke<T>() cast.
+    return z.string().nullable().parse(await invoke('unc_for_path', { path })) ?? ''
   } catch {
     return ''
   }

@@ -1,5 +1,6 @@
-import { Suspense, lazy, useEffect, useState, useSyncExternalStore } from 'react'
+import { Suspense, lazy, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
+import { toast } from 'sonner'
 
 import { Button } from '@dth/ui'
 import { openExternal } from '#/lib/desktop.ts'
@@ -33,24 +34,57 @@ export function UpdatePromptHost() {
 function UpdatePromptDialog({ req, onClose }: { req: UpdatePromptRequest; onClose: () => void }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  // Whether the user HID the dialog while the download/install ran. Read by the
+  // install continuation — which OUTLIVES the then-unmounted dialog — to pick
+  // the outcome surface: a hidden run must toast ("restart to apply" / the
+  // error) instead of relaunching the app out from under whatever the user
+  // switched to, or setting state on an unmounted component.
+  const hiddenRef = useRef(false)
+
+  // Idle: Later/Escape/backdrop dismiss the prompt outright. BUSY: the same
+  // gestures HIDE it — a stalled download must never leave a permanent modal
+  // over the whole app. The download keeps running either way; only who
+  // reports its outcome changes (see hiddenRef).
+  function dismiss(isBusy: boolean) {
+    if (isBusy) hiddenRef.current = true
+    onClose()
+  }
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !busy) onClose()
+      if (e.key === 'Escape') dismiss(busy)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
+    // dismiss only reads its argument + stable refs — busy is the real dep.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [busy, onClose])
 
   async function runInstall() {
     setBusy(true)
     setError('')
     try {
-      // On success this downloads, installs and relaunches — the process exits, so
-      // control never returns here. A thrown error means it failed; re-enable.
       await req.install()
+      if (hiddenRef.current) {
+        // The dialog was hidden mid-download — never restart unannounced. The
+        // toast stays until acted on (the update applies on any next start
+        // anyway, so dismissing it loses nothing).
+        toast.success('Update ready — restart to apply', {
+          duration: Number.POSITIVE_INFINITY,
+          action: { label: 'Restart', onClick: () => void req.relaunch() },
+        })
+        return
+      }
+      // Visible flow, unchanged from before the hide existed: restart right
+      // away — the process exits, so control never returns here.
+      await req.relaunch()
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      const message = e instanceof Error ? e.message : String(e)
+      if (hiddenRef.current) {
+        toast.error(`Update failed — ${message}`)
+        return
+      }
+      setError(message)
       setBusy(false)
     }
   }
@@ -58,7 +92,7 @@ function UpdatePromptDialog({ req, onClose }: { req: UpdatePromptRequest; onClos
   return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      onClick={() => !busy && onClose()}
+      onClick={() => dismiss(busy)}
     >
       <div
         className="w-full max-w-2xl space-y-4 rounded-lg border bg-background p-5 shadow-lg"
@@ -68,7 +102,9 @@ function UpdatePromptDialog({ req, onClose }: { req: UpdatePromptRequest; onClos
         <p className="text-sm text-muted-foreground">
           Version {req.version} is ready to install
           {req.currentVersion ? <> — you have {req.currentVersion}</> : null}.{' '}
-          {busy ? 'Downloading and installing…' : 'The app will restart to finish.'}
+          {busy
+            ? 'Downloading and installing… You can hide this window — a notification appears when it is ready.'
+            : 'The app will restart to finish.'}
         </p>
         {req.notes ? (
           <div className="max-h-[55vh] overflow-y-auto rounded-md border bg-card p-4 text-sm text-muted-foreground">
@@ -105,8 +141,10 @@ function UpdatePromptDialog({ req, onClose }: { req: UpdatePromptRequest; onClos
         ) : null}
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
         <div className="flex justify-end gap-2">
-          <Button variant="outline" disabled={busy} onClick={onClose}>
-            Later
+          {/* One button, two meanings: dismiss while idle, HIDE while busy —
+              the download keeps running and its outcome arrives as a toast. */}
+          <Button variant="outline" onClick={() => dismiss(busy)}>
+            {busy ? 'Hide' : 'Later'}
           </Button>
           <Button disabled={busy} onClick={() => void runInstall()}>
             {busy ? 'Updating…' : 'Update now'}

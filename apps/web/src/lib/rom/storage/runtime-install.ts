@@ -192,6 +192,21 @@ export function studioCharScriptsDir(
  *  records success. */
 const RUNTIME_MARKER_FILE = '.dth-runtime-installed'
 
+/** Every file whose absence means the install is broken: the dot-prefixed
+ *  runtime files plus the visible/hidden root scripts — exactly the writes that
+ *  would fail {@link copyRuntimeFiles} if they couldn't land. The Content
+ *  Library icons are deliberately NOT probed: their install is best-effort
+ *  (cosmetic), so a permanently unwritable icon must not force the full
+ *  install to re-run on every save forever. */
+function expectedRuntimeFiles(destDir: string): Array<string> {
+  return [
+    ...Object.keys(RUNTIME_FILES).map((name) => join(destDir, `.${name}`)),
+    ...Object.keys({ ...VISIBLE_SCAN_SCRIPTS, ...HIDDEN_ROOT_SCRIPTS }).map((name) =>
+      join(destDir, name),
+    ),
+  ]
+}
+
 /**
  * Install the bundled DTH runtime files into `destDir` (the DTH-Character-Studio
  * root), creating it if missing. They're written dot-prefixed (`.DthWorkflow.dsa`
@@ -203,10 +218,18 @@ const RUNTIME_MARKER_FILE = '.dth-runtime-installed'
  * only change with a RUNTIME_VERSION bump, so rewriting them on EVERY
  * save+generate was pure overhead.
  *
- * `force` bypasses that marker skip (the marker is still re-stamped LAST): the
- * marker only proves an install once COMPLETED — a runtime file deleted or
- * corrupted since would be skipped forever on the routine path. The user-forced
- * Tools → Refresh passes it so "refresh anyway" genuinely repairs the install.
+ * The marker only proves an install once COMPLETED — it says nothing about the
+ * files still being there NOW (a user tidying the Scripts folder deletes them,
+ * and Daz logs nothing on a failed include, so the breakage would be silent
+ * while the studio reports "current"). So a matching marker is backed by a
+ * cheap existence probe of every file the install writes; any missing file
+ * re-runs the full install. Existence only — content corruption still needs
+ * `force` (hashing every file on every save+generate is the overhead the
+ * marker exists to avoid).
+ *
+ * `force` bypasses the marker skip outright (the marker is still re-stamped
+ * LAST). The user-forced Tools → Refresh passes it so "refresh anyway"
+ * genuinely repairs the install, corrupted-in-place files included.
  */
 export async function copyRuntimeFiles(
   destDir: string,
@@ -219,7 +242,16 @@ export async function copyRuntimeFiles(
   const stamp = `v${RUNTIME_VERSION}|${appData}`
   if (!options?.force) {
     try {
-      if ((await readTextFile(markerPath)) === stamp) return // already current
+      if ((await readTextFile(markerPath)) === stamp) {
+        // Marker current — but trust it only as far as the files actually
+        // exist. An exists() that THROWS (unreachable share) reads as missing:
+        // falling through to the install surfaces the real error instead of
+        // silently reporting a runtime nobody can verify.
+        const present = await Promise.all(
+          expectedRuntimeFiles(destDir).map((path) => exists(path).catch(() => false)),
+        )
+        if (present.every(Boolean)) return // already current AND intact
+      }
     } catch {
       // no marker (fresh/legacy/partial install) — do the full install below
     }

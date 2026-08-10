@@ -1,4 +1,4 @@
-import { exists, remove, stat } from '@tauri-apps/plugin-fs'
+import { exists, remove, rename, stat } from '@tauri-apps/plugin-fs'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
@@ -117,17 +117,68 @@ export async function rememberActiveProject(dcspPath: string): Promise<void> {
 const renameProjectInput = z.object({ projectId: z.string().min(1), name: z.string().min(1) })
 
 /**
+ * Follow a project rename with its generated-scripts tree in the Daz library:
+ * `Scripts/DTH-Character-Studio/<old name>/` → `<new name>/`. That tree is keyed
+ * by project NAME (see `studioCharScriptsDir`), so leaving it put would orphan
+ * every generated script while DTH Export looks — and the next save regenerates
+ * — under the new name, silently breaking Export until then. Returns a
+ * user-facing warning ('' = fine): an existing destination is NEVER merged into
+ * or deleted (another project can legitimately sanitize to the same folder
+ * name), and a failed rename leaves the old tree exactly where it was — the
+ * scripts are derived artifacts, so the guidance is to regenerate, not to
+ * rescue.
+ */
+async function renameProjectScriptsDir(oldName: string, newName: string): Promise<string> {
+  if (!isTauri()) return ''
+  const guidance =
+    'Re-save the characters or run Tools → Refresh assets to regenerate the scripts under the new name.'
+  try {
+    const settings = await storage.getSettings()
+    // No Daz library configured — nothing was ever generated there.
+    if (!settings.dazLibraryFolder) return ''
+    const from = storage.studioProjectScriptsDir(settings.dazLibraryFolder, oldName)
+    const to = storage.studioProjectScriptsDir(settings.dazLibraryFolder, newName)
+    // Both names can sanitize to the same folder — nothing to move then. A
+    // case-ONLY difference still renames below: `rename` re-cases in place on
+    // Windows (same rule as moveCharacterMetaDir), and exists(to) would report
+    // the source itself there, so it must not read as a conflict.
+    if (from === to) return ''
+    if (!(await exists(from))) return '' // never generated — nothing to follow
+    if (from.toLowerCase() !== to.toLowerCase() && (await exists(to))) {
+      return (
+        `The project was renamed, but its generated Daz scripts stayed at "${from}" — ` +
+        `"${to}" already exists and is never merged into or replaced. ${guidance}`
+      )
+    }
+    await rename(from, to)
+    return ''
+  } catch (e) {
+    return (
+      `The project was renamed, but its generated Daz scripts folder could not be renamed with it ` +
+      `(${e instanceof Error ? e.message : String(e)}) — the old folder was left in place. ${guidance}`
+    )
+  }
+}
+
+/**
  * Rename a project: update the manifest name AND rename the `.dcsp` file to
  * match (so the filename — and the window title derived from it — track the
  * name). Recents key off the `.dcsp` path, so the old entry is forgotten and
- * the new one remembered. Finally, any open window for the project is
- * live-re-titled and re-pinned to the new file via `sync_renamed_project_window`.
+ * the new one remembered; the generated Daz scripts folder (keyed by project
+ * name) is renamed along, since DTH Export resolves it under the NEW name from
+ * now on. Finally, any open window for the project is live-re-titled and
+ * re-pinned to the new file via `sync_renamed_project_window`.
+ *
+ * Throws AFTER the rename itself completed when the scripts folder could not
+ * follow (same pattern as saveProjectSettings' folder-move report): the caller
+ * toasts the message, which carries the regenerate guidance.
  */
 export async function renameProject({ data }: { data: unknown }): Promise<ProjectInfo> {
   const { projectId, name } = renameProjectInput.parse(data)
   const dir = await projectPath(projectId)
   const oldDcsp = await storage.findManifestPath(dir)
   const manifest = await storage.readManifest(dir)
+  const oldName = manifest.name
   await storage.writeManifest(dir, { ...manifest, name: name.trim() })
   const newDcsp = (await storage.renameManifestFile(dir, name.trim())) ?? oldDcsp
   if (newDcsp) {
@@ -138,7 +189,10 @@ export async function renameProject({ data }: { data: unknown }): Promise<Projec
       await invoke('sync_renamed_project_window', { oldPath: oldDcsp, newPath: newDcsp })
     }
   }
-  return resolveProject(dir)
+  const scriptsWarning = await renameProjectScriptsDir(oldName, name.trim())
+  const project = await resolveProject(dir)
+  if (scriptsWarning) throw new Error(scriptsWarning)
+  return project
 }
 
 /**

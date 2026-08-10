@@ -93,7 +93,9 @@ export function setActiveProjectDir(dir: string): void {
 export async function getActiveProjectDir(): Promise<string> {
   if (!activeProjectDirValue && isTauri()) {
     try {
-      const file = (await invoke<string | null>('active_project_file')) ?? ''
+      // A primitive return — schema-parsed, not a bare invoke<T>() cast (the
+      // same parse relaunchDeelevated and desktop.activeProjectFile use).
+      const file = z.string().nullable().parse(await invoke('active_project_file')) ?? ''
       if (file) activeProjectDirValue = dirname(file)
     } catch {
       // no native layer / Home window — stays '' until a project loader sets it

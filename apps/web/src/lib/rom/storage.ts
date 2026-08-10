@@ -96,7 +96,7 @@ export {
 export type { DcspManifest, Project, RecentProject } from './storage/projects'
 
 // --- Daz-scene assets (.assets registry) --------------------------------------
-export { addAsset, assetsDir, listAssets, removeAsset, updateAsset } from './storage/assets'
+export { addAsset, assetsDir, listAssets, removeAsset } from './storage/assets'
 export type { AssetKind, DazAsset } from './storage/assets'
 
 // --- DTH release / Exporter Plugin scanning + install plans -------------------

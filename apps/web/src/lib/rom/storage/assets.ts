@@ -83,21 +83,28 @@ export async function listAssets(base: string): Promise<Array<DazAsset>> {
   return (await readAssetRegistry(base)).sort((a, b) => a.name.localeCompare(b.name))
 }
 
-export async function addAsset(base: string, asset: DazAsset): Promise<DazAsset> {
-  const assets = await readAssetRegistry(base)
-  assets.push(asset)
-  await writeAssetRegistry(base, assets)
-  return asset
+// assets.json mutations are an unlocked read-modify-write on a file shared
+// across windows — the same hazard the recents registry has (storage/projects.ts
+// `mutateRecents`), with the same cure: serialize the mutations within this
+// window and RE-READ fresh inside each queued step, so two overlapping calls
+// (adding an asset while another dialog removes one) merge against the latest
+// disk state instead of clobbering each other with stale snapshots.
+let assetsMutationQueue: Promise<unknown> = Promise.resolve()
+
+function queueAssetMutation<T>(step: () => Promise<T>): Promise<T> {
+  const run = assetsMutationQueue.then(step)
+  // The queue survives a failed step — the next mutation still runs.
+  assetsMutationQueue = run.catch(() => {})
+  return run
 }
 
-export async function updateAsset(base: string, asset: DazAsset): Promise<DazAsset> {
-  const assets = await readAssetRegistry(base)
-  const idx = assets.findIndex((a) => a.id === asset.id)
-  if (idx < 0) throw new Error(`Asset ${asset.id} not found`)
-  const updated = { ...asset, updatedAt: new Date().toISOString() }
-  assets[idx] = updated
-  await writeAssetRegistry(base, assets)
-  return updated
+export async function addAsset(base: string, asset: DazAsset): Promise<DazAsset> {
+  return queueAssetMutation(async () => {
+    const assets = await readAssetRegistry(base)
+    assets.push(asset)
+    await writeAssetRegistry(base, assets)
+    return asset
+  })
 }
 
 export async function removeAsset(
@@ -105,27 +112,29 @@ export async function removeAsset(
   id: string,
   opts: { keepFiles?: boolean } = {},
 ): Promise<void> {
-  const assets = await readAssetRegistry(base)
-  const asset = assets.find((a) => a.id === id)
-  if (!asset) return
-  // A copied asset owns its scene files under `.assets` — remove them unless the
-  // caller opts to keep them. A linked asset points outside `.assets`, so its
-  // source is never touched.
-  if (!asset.linked && !opts.keepFiles) {
-    const dir = asset.subfolder ? join(assetsDir(base), asset.subfolder) : assetsDir(base)
-    const duf = basename(asset.scenePath)
-    const stem = duf.replace(/\.duf$/i, '')
-    for (const sidecar of [duf, `${duf}.png`, `${duf}.tip.png`, `${stem}.tip.png`, `${stem}.png`]) {
-      const p = join(dir, sidecar)
-      try {
-        if (await exists(p)) await remove(p)
-      } catch {
-        // leave a stray file rather than failing the delete
+  return queueAssetMutation(async () => {
+    const assets = await readAssetRegistry(base)
+    const asset = assets.find((a) => a.id === id)
+    if (!asset) return
+    // A copied asset owns its scene files under `.assets` — remove them unless the
+    // caller opts to keep them. A linked asset points outside `.assets`, so its
+    // source is never touched.
+    if (!asset.linked && !opts.keepFiles) {
+      const dir = asset.subfolder ? join(assetsDir(base), asset.subfolder) : assetsDir(base)
+      const duf = basename(asset.scenePath)
+      const stem = duf.replace(/\.duf$/i, '')
+      for (const sidecar of [duf, `${duf}.png`, `${duf}.tip.png`, `${stem}.tip.png`, `${stem}.png`]) {
+        const p = join(dir, sidecar)
+        try {
+          if (await exists(p)) await remove(p)
+        } catch {
+          // leave a stray file rather than failing the delete
+        }
       }
     }
-  }
-  await writeAssetRegistry(
-    base,
-    assets.filter((a) => a.id !== id),
-  )
+    await writeAssetRegistry(
+      base,
+      assets.filter((a) => a.id !== id),
+    )
+  })
 }

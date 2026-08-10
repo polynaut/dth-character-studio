@@ -47,16 +47,17 @@ export async function checkForUpdates({ manual = false }: { manual?: boolean } =
     }
 
     // App-styled React confirm (see components/update-prompt.tsx) instead of the
-    // native ask(). The dialog drives the download/install + relaunch itself.
+    // native ask(). The dialog drives the download/install + relaunch itself —
+    // install and relaunch stay SEPARATE calls, so a dialog hidden during a
+    // long download can finish the install in the background and offer the
+    // restart as a toast instead of pulling the app away underneath the user.
     requestUpdatePrompt({
       version: update.version,
       currentVersion: update.currentVersion,
       notes: update.body || undefined,
       skipped,
-      install: async () => {
-        await update.downloadAndInstall()
-        await relaunch()
-      },
+      install: () => update.downloadAndInstall(),
+      relaunch: () => relaunch(),
     })
   } catch (err) {
     // Update check is best-effort — a missing/locked release or offline state

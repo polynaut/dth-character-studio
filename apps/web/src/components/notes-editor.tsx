@@ -232,7 +232,8 @@ export function NotesEditor({
     for (const path of paths) {
       try {
         const { markdown } = await addNoteMedia({ data: { projectId, sourcePath: path } })
-        snippets.push(markdown)
+        // '' = the browser build's no-op — nothing was stored, insert nothing.
+        if (markdown) snippets.push(markdown)
       } catch (e) {
         toast.error(e instanceof Error ? e.message : String(e))
       }

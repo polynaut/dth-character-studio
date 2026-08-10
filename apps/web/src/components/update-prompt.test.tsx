@@ -85,6 +85,7 @@ describe('update dialog skipped-versions list', () => {
         },
       ],
       install: async () => {},
+      relaunch: async () => {},
     })
     render(<UpdatePromptHost />)
     expect(screen.getByText('Also included since your version:')).toBeTruthy()

@@ -30,12 +30,17 @@ function formatBytes(bytes: number): string {
  */
 export function HousekeepingSection() {
   const [cleanupBusy, setCleanupBusy] = useState(false)
+  // The last manual sweep's could-not-delete count — kept as a persistent line
+  // under the button (the warning toast above vanishes on its own, and a
+  // failure that will simply be retried shouldn't only exist for 4 seconds).
+  const [lastFailed, setLastFailed] = useState(0)
 
   async function onCleanupNow() {
     setCleanupBusy(true)
     try {
       const result = await housekeepingSweep()
       const failed = result.filesFailed ?? 0
+      setLastFailed(failed)
       // Stale files the sweep could NOT delete (locked/read-only) get their own
       // warning — without it, every delete failing still read as the cheerful
       // "Nothing to clean up".
@@ -91,6 +96,12 @@ export function HousekeepingSection() {
           {NOTE_MEDIA_RETENTION_DAYS} days.
         </span>
       </div>
+      {lastFailed > 0 && (
+        <p className="text-sm text-muted-foreground">
+          {lastFailed} file{lastFailed === 1 ? '' : 's'} couldn&apos;t be removed (locked?) —
+          they&apos;ll be retried next sweep.
+        </p>
+      )}
     </section>
   )
 }

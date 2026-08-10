@@ -39,7 +39,10 @@ vi.mock('@tauri-apps/api/path', () => ({ appLocalDataDir: async () => '/appdata'
 vi.mock('@tauri-apps/api/app', () => ({ getVersion: async () => '0.0.0' }))
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: async () => null,
-  isTauri: () => false,
+  // These tests exercise the DESKTOP notes/GC behaviour against the in-memory
+  // fs mock — saveNotes/addNoteMedia no-op early in the browser build, so a
+  // `false` here would test the no-op instead of the save/conflict/GC logic.
+  isTauri: () => true,
   convertFileSrc: (p: string) => p,
 }))
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))

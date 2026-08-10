@@ -4,6 +4,7 @@ import { stat } from '@tauri-apps/plugin-fs'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import { z } from 'zod'
 
 import { parentDir } from './path.ts'
 import { rememberNetworkPath } from './rom/api.ts'
@@ -206,7 +207,9 @@ export async function pickDcspPath(title: string, defaultPath?: string): Promise
 export async function activeProjectFile(): Promise<string> {
   if (!isTauri()) return ''
   try {
-    return (await invoke<string | null>('active_project_file')) ?? ''
+    // A primitive return — schema-parsed, not a bare invoke<T>() cast (the
+    // same parse the api layer's two active_project_file callers use).
+    return z.string().nullable().parse(await invoke('active_project_file')) ?? ''
   } catch {
     return ''
   }
