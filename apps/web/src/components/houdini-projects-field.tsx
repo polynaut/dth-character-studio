@@ -584,6 +584,7 @@ export function HoudiniProjectsField({
           character={character}
           projectName={projectName}
           houdiniDir={houdiniDir}
+          houdiniSubdir={houdiniSubdir}
           onClose={() => setGenerateOpen(false)}
           onGenerated={async (scenePath, networkAdded, visibleTypes, prefilled) => {
             await addProjects(
@@ -680,6 +681,7 @@ function GenerateProjectDialog({
   character,
   projectName,
   houdiniDir,
+  houdiniSubdir,
   onClose,
   onGenerated,
 }: {
@@ -688,6 +690,11 @@ function GenerateProjectDialog({
   projectName: string
   /** The character's Houdini folder — where the `.hiplc` lands. */
   houdiniDir: string
+  /** The PROJECT's Houdini subfolder name from the `.dcsp` manifest ('houdini'
+   *  by default, '' when the project creates no subfolder). Taken from settings
+   *  rather than assumed, because the info popup names the folder `$HIP` will
+   *  point at and a hardcoded "houdini" would be a lie on a renamed one. */
+  houdiniSubdir: string
   onClose: () => void
   /** Links the generated `.hiplc` (the caller owns the persist + toast). */
   onGenerated: (
@@ -708,6 +715,12 @@ function GenerateProjectDialog({
   // The houdini folder shown relative (".\houdini") — the dialog only needs the
   // WHERE in one word.
   const houdiniDirName = houdiniDir.replace(/\\/g, '/').split('/').filter(Boolean).pop() ?? ''
+  // What `$HIP` will resolve to, named the way the user's own project settings
+  // name it — never a hardcoded "houdini", which is only the DEFAULT subfolder.
+  // A project configured to create no subfolder puts the scene in the character
+  // folder itself, where `$HIP` and `$JOB` coincide; saying `.\` there would be
+  // a folder name the user cannot find.
+  const hipFolderLabel = houdiniSubdir ? `.\\${houdiniSubdir}` : 'the character folder itself'
 
   // Live name-collision check: the api layer hard-refuses an existing target
   // (generatedHoudiniScenePath is the SAME computation), but the dialog should
@@ -765,12 +778,23 @@ function GenerateProjectDialog({
         <span className="flex items-center gap-1.5">
           Generate Houdini project
           <InfoPopup label="Generate Houdini project — more information">
-            Creates a new Houdini scene with the DazToHue network — built by running your
-            installed DazToHue <em>shelf tool</em>, so it always matches the current plugin —
-            and <em>Set Project</em> baked to the character folder, which holds both the
-            scene and the exports: every import resolves relative to that project folder
-            (<code>$JOB/…</code>), so the project stays moveable. Runs Houdini&apos;s <code>hython</code>; the first start
-            can take a moment.
+            <div className="space-y-2">
+              <p>
+                Creates a Houdini scene with the DazToHue network already wired: the Daz
+                import paths, the PoseAsset CSV path and the export path are filled in.
+              </p>
+              <p>
+                <code>$JOB</code> is set to the <strong>character folder</strong>.
+              </p>
+              <p>
+                <code>$HIP</code> follows the scene file itself, so it points at{' '}
+                <code>{hipFolderLabel}</code> — where the <code>daz-export</code> files also
+                live. That is why the imports read <code>$HIP/daz-export/…</code>.
+              </p>
+              <p>
+                Runs Houdini&apos;s <code>hython</code>; the first start can take a moment.
+              </p>
+            </div>
           </InfoPopup>
         </span>
       }
@@ -778,7 +802,7 @@ function GenerateProjectDialog({
     >
       <p className="text-xs text-muted-foreground">
         Creates <code>{(name.trim() || '<name>') + '.hiplc'}</code> into{' '}
-        <code>{`.\\${houdiniDirName}`}</code>, beside the character&apos;s other Houdini scenes.
+        <code>{`.\\${houdiniDirName}`}</code>.
       </p>
       <div>
         <Label htmlFor="generate-houdini-name" className="mb-1">
@@ -825,7 +849,6 @@ function GenerateProjectDialog({
           </Select>
           <p className="mt-1 text-xs text-muted-foreground">
             The network&apos;s import paths are filled from this scene&apos;s export folder.
-            Generate one project per scene to cover them all.
           </p>
         </div>
       )}
