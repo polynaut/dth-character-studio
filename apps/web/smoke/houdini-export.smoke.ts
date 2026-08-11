@@ -320,6 +320,55 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
   expect(await unhandledCommands(page)).toEqual([])
 })
 
+test('a reloaded window ADOPTS the in-flight batch — cards from the rows, log from the file', async ({
+  page,
+}) => {
+  // The batch is already running when the window opens (a reload mid-run, or
+  // another window's run): no armed watch, no memory of the start — the whole
+  // display must be rebuilt from what is ON DISK. The card comes from the job
+  // file's own rows, the log window and meter from the global progress log;
+  // only the Houdini queue and the elapsed clock (memory-only) stay absent.
+  const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true })
+  seed.files[RUNNING_JOB] = JSON.stringify({
+    version: 1,
+    type: 'bulk-export',
+    progress: 40,
+    jobsDone: 0,
+    jobs: [
+      {
+        scenePath: P.scene,
+        scriptPath: `${SCRIPTS_ROOT}/Demo/Kira/.Bulk_ROM_Export.dsa`,
+        status: 'running',
+      },
+    ],
+  })
+  seed.files[`${P.appData}/export-progress.log`] = [
+    '[0] KiraDefault_G9_GP: opening scene',
+    '[20] KiraDefault_G9_GP: scene opened',
+    '[40] KiraDefault_G9_GP: ROM generated',
+    '',
+  ].join('\n')
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  // The fake Daz is alive and working the batch (set before the character
+  // page's first poll).
+  await page.evaluate(() => {
+    ;(window as any).__tauriMock.dazRunning = true
+  })
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+
+  await expect(page.locator(`[data-task="daz:${P.scene}"]`)).toHaveAttribute(
+    'data-task-status',
+    'active',
+    { timeout: 15_000 },
+  )
+  await expect(page.locator('[data-export-log]')).toContainText('ROM generated')
+  await expect(page.locator('[data-progressbar="current"]')).toHaveAttribute('data-percent', '40')
+  await expect(page.locator('[data-task^="hou:"]')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /Working/ })).toBeVisible()
+})
+
 test('rom only: the Houdini list can only OPEN — no auto-select, no export continuation', async ({
   page,
 }) => {

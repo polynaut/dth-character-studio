@@ -351,6 +351,53 @@ describe('launchDazForPendingJobs — the reclaim owner', () => {
   })
 })
 
+describe('display-only adoption — a window with no memory of starting the run', () => {
+  it('serves the job rows + the progress-log view, so the panel can rebuild itself', async () => {
+    // A live batch on disk, NO armed watch (a reloaded window mid-run).
+    dazRunning = true
+    const beach = `${PROJECT}/Ita/daz3d/Beach.duf`
+    files.set(
+      RUNNING,
+      JSON.stringify({
+        version: 1,
+        type: 'bulk-export',
+        progress: 40,
+        jobsDone: 0,
+        jobs: [
+          { scenePath: SCENE, scriptPath: SCRIPT, status: 'running' },
+          { scenePath: beach, scriptPath: SCRIPT, status: 'pending' },
+        ],
+      }),
+    )
+    files.set(
+      '/appdata/export-progress.log',
+      '[0] Ita: opening scene\n[20] Ita: scene opened\n[40] Ita: ROM generated\n',
+    )
+
+    const run = await fetchExportRunProgress()
+    // The batch's identity survives in the file's own rows (→ the task cards)
+    // and the progress log is the same global singleton (→ log window, meter).
+    expect(run).toMatchObject({
+      state: 'running',
+      characterId: '',
+      total: 2,
+      rows: [
+        { scenePath: SCENE, status: 'running' },
+        { scenePath: beach, status: 'pending' },
+      ],
+    })
+    expect(run?.state === 'running' && run.step?.percent).toBe(40)
+    expect(run?.state === 'running' && run.step?.lines).toEqual([
+      'opening scene',
+      'scene opened',
+      'ROM generated',
+    ])
+    // What honestly cannot come back: the start time only ever lived in the
+    // starting window's memory — the clock stays off.
+    expect(run?.state === 'running' ? run.startedAtMs : 'not-running').toBeUndefined()
+  })
+})
+
 describe('fetchExportRunProgress — detects the reclaimable state, defers to the reclaim', () => {
   it("an untouched claimed batch whose Daz is gone reads 'pending', not 'dead' — file untouched", async () => {
     await armClaimedRun()

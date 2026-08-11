@@ -400,7 +400,29 @@ export function DthExportAction({
       return null
     })()
     if (!armed) {
-      setPipeline(log || bars ? { tasks: [], log, bars } : null)
+      // A run this window has no memory of starting (a reloaded window, a
+      // batch from elsewhere) — adopted for display. The Daz cards come from
+      // the job file's OWN rows; only what never left the starting window's
+      // memory stays absent (the Houdini queue's cards, the elapsed clock).
+      const tasks =
+        progressNow?.state === 'running' && progressNow.rows
+          ? // A row without a scene (the contract's "new empty scene" row —
+            // e.g. the genesis-index build) has no card-worthy identity.
+            progressNow.rows
+              .filter((row) => row.scenePath)
+              .map((row) => ({
+              id: `daz:${row.scenePath}`,
+              label: stemOf(row.scenePath),
+              kind: 'daz' as const,
+              status:
+                row.status === 'done' || row.status === 'failed'
+                  ? ('done' as const)
+                  : row.status === 'running'
+                    ? ('active' as const)
+                    : ('waiting' as const),
+            }))
+          : []
+      setPipeline(tasks.length > 0 || log || bars ? { tasks, log, bars } : null)
       return
     }
     const report = runReportRef.current

@@ -500,6 +500,11 @@ export type ExportRunProgress =
       /** When the handoff was written — absent on a display-only adoption
        *  (another window's run; this one never saw the start). */
       startedAtMs?: number
+      /** The job rows as the file carries them — set ONLY on a display-only
+       *  adoption, where the armed selection is gone (a reloaded window):
+       *  the pipeline panel rebuilds its Daz task cards from these. An owned
+       *  run doesn't need them (its cards come from the armed selection). */
+      rows?: Array<{ scenePath: string; status: 'pending' | 'running' | 'done' | 'failed' }>
     }
   /** progress hit 100 — the studio has DELETED the file; final snapshot. */
   | {
@@ -597,6 +602,13 @@ export async function fetchExportRunProgress(watcher?: string): Promise<ExportRu
         processed: parsed.jobsDone ?? done + failed,
         done,
         failed,
+        // The armed selection is gone (a reloaded window) — but the batch's
+        // identity survives in the file's own rows, and the progress log is
+        // the same global singleton the Runner appends to either way: the
+        // pipeline panel rebuilds its Daz cards and its log window from
+        // these, instead of showing an empty shell.
+        step: await readExportProgressState(),
+        rows: parsed.jobs.map((j) => ({ scenePath: j.scenePath, status: j.status })),
       }
     } catch {
       return null
