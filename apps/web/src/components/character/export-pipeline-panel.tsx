@@ -172,7 +172,11 @@ export function ExportActivityLog({ log }: { log: { lines: Array<string> } }) {
     >
       <div
         ref={boxRef}
-        className="min-h-0 flex-1 overflow-y-auto font-mono text-[11px] leading-4 whitespace-pre-wrap break-all text-muted-foreground"
+        // A CONSTANT height, deliberately: the header's own height is
+        // content-driven, so a content-sized log inflated the whole header as
+        // lines arrived (and jumped per line). Fixed box + tail scroll — the
+        // newest lines stay in view, the layout never moves.
+        className="h-56 overflow-y-auto font-mono text-[11px] leading-4 whitespace-pre-wrap break-all text-muted-foreground"
       >
         {log.lines.map((line, index) => (
           // Index keys are sound here: the list is an append-only rolling tail.

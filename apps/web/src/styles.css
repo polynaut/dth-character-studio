@@ -478,18 +478,25 @@ a {
 }
 
 /* The live export-pipeline panel (meters + task cards + log window) is a
-   WORKING view, not a docked control: it fades away as the header collapses
-   into sticky mode and comes back at the top. Fade only — the header's height
-   is avatar-driven, so nothing jumps; visibility flips near the end so the
-   invisible panel can't catch pointer events (log scrollbar) while docked. */
+   WORKING view, not a docked control: it fades AND collapses away as the
+   header shrinks into sticky mode, and comes back at the top. The height
+   collapse matters: the panel (fixed-height log) is taller than the resting
+   avatar, so it is what sizes the running header — a fade alone left a
+   docked header holding the invisible panel's full space. visibility flips
+   near the end so the hidden panel can't catch pointer events. */
 @keyframes dth-pipeline-hide {
+  from {
+    max-height: 480px;
+  }
   to {
+    max-height: 0px;
     opacity: 0;
     visibility: hidden;
   }
 }
 @supports (animation-timeline: scroll()) {
   .pipeline-scroll {
+    overflow: hidden;
     animation: dth-pipeline-hide linear both;
     animation-timeline: scroll(root block);
     animation-range: 100px 242px;
