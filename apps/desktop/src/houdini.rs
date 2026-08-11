@@ -186,11 +186,17 @@ pub fn create_houdini_project(request: CreateHoudiniProjectRequest) -> Result<St
             // here, so there is not a keyframe in it for `setFps` to re-time —
             // whatever it would do to an existing animation cannot apply. Read
             // back rather than assumed, so what the UI reports is the scene's
-            // own answer and not the number we asked for.
+            // own answer and not the number we asked for — and read back in its
+            // OWN try, so a Houdini that refuses the set still reports the rate
+            // the scene really carries (which is what makes the UI warn)
+            // instead of collapsing to 0 = unknown.
             "scene_fps = 0.0\n",
             "try:\n",
             "    if {fps} > 0:\n",
             "        hou.setFps({fps})\n",
+            "except Exception:\n",
+            "    pass\n",
+            "try:\n",
             "    scene_fps = float(hou.fps())\n",
             "except Exception:\n",
             "    scene_fps = 0.0\n",

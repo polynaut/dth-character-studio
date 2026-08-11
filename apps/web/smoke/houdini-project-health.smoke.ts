@@ -318,8 +318,10 @@ test('Fill network blames the UNKNOWN $JOB, not a lack of work', async ({ page }
   const fill = page.getByRole('dialog').getByRole('button', { name: 'Fill network' })
   await expect(fill).toBeDisabled()
   // The button kit renders a `title` prop as `data-tooltip` (its own tooltip),
-  // not as the native attribute.
-  await expect(fill).toHaveAttribute('data-tooltip', /Repair \$JOB first/)
+  // not as the native attribute. Named after the BUTTON (which repairs more
+  // than $JOB since the timeline joined it) — a tooltip pointing at a button
+  // that no longer exists is a dead end.
+  await expect(fill).toHaveAttribute('data-tooltip', /Repair the project settings first/)
 })
 
 test('Rescan really rescans — it is not served by the cache', async ({ page }) => {

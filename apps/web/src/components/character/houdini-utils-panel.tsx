@@ -833,8 +833,8 @@ export function HoudiniUtilsPanel({
    *  narrowed the exposure without removing it: the import/CSV paths anchor on
    *  `$HIP` now, which cannot be wrong, but the final export directory is still
    *  `$JOB/<exportSubdir>` (nothing else can reach a folder BESIDE the houdini
-   *  one), so a wrong `$JOB` still misplaces Houdini's own output. Repair $JOB
-   *  first; the row above says so. */
+   *  one), so a wrong `$JOB` still misplaces Houdini's own output. Repair the
+   *  project settings first; the row above says so. */
   const prefillTargets = useMemo(
     () =>
       targetScan.projects
@@ -1698,7 +1698,7 @@ export function HoudiniUtilsPanel({
               disabled={busy || prefillTargets.length === 0 || !projectId}
               title={
                 prefillBlockedByJob > 0
-                  ? `Repair $JOB first — the values are written relative to it, so ${prefillBlockedByJob} project(s) would get paths anchored on the wrong folder, or on none.`
+                  ? `Repair the project settings first — the values are anchored on $JOB, so ${prefillBlockedByJob} project(s) would get paths anchored on the wrong folder, or on none.`
                   : prefillTargets.length === 0
                     ? 'Nothing blank the studio has an answer for'
                     : undefined

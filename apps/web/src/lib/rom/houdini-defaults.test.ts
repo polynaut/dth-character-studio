@@ -166,6 +166,15 @@ describe('projectsNeedingRepair', () => {
       projectsNeedingRepair([{ hipPath: 'a.hiplc', ok: true, job: ITA, fps: 0 }], ITA),
     ).toEqual([])
   })
+
+  it('queues a project with an unreadable $JOB for its timeline alone', () => {
+    // The queue is per PROJECT but the write is per VALUE: this one is sent for
+    // its 24 fps, and `op_defaults` must still leave the unread $JOB alone —
+    // the smoke's timeline-only spec pins the visible half of that.
+    expect(
+      projectsNeedingRepair([{ hipPath: 'a.hiplc', ok: true, job: '', fps: 24 }], ITA),
+    ).toEqual(['a.hiplc'])
+  })
 })
 
 /**
@@ -190,7 +199,10 @@ describe('planRepath', () => {
 
     expect(plan.targets).toEqual([])
     expect(plan.blockedByJob).toEqual([HIP])
-    expect(plan.reason).toContain('Repair $JOB first')
+    // Named after the BUTTON, which repairs more than `$JOB` since the timeline
+    // joined it — a tooltip pointing at a button that no longer exists is a
+    // dead end.
+    expect(plan.reason).toContain('Repair the project settings first')
     // Nothing is counted from a blocked project — its numbers describe a state
     // the user is about to change.
     expect(plan.collapsible).toBe(0)

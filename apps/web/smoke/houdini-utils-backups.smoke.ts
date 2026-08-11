@@ -61,6 +61,36 @@ async function repairJob(page: Page) {
   return drawer
 }
 
+test('a timeline-only repair says so — and leaves the unread $JOB alone', async ({ page }) => {
+  // Queued for its 24 fps alone: without a `materialJob` seed the scan reports
+  // no $JOB at all — a value nobody read. The run must fix the timeline and
+  // neither make nor claim a $JOB repair on top of it (`op_defaults` skips an
+  // unknown value even when the project was queued for the other one).
+  const seed = staleJobSeed()
+  delete seed.materialJob
+  seed.materialFps = { [P.houdini]: 24 }
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+  await page.getByRole('button', { name: /^Utils/ }).click()
+  const drawer = page.getByRole('dialog')
+
+  // The scan landed: the timeline differs — and that alone arms the repair.
+  await expect(drawer.getByText('Timeline (FPS)')).toBeVisible()
+  await expect(drawer.getByText('differs')).toBeVisible()
+
+  await drawer.getByRole('button', { name: 'Repair project settings' }).click()
+  const confirm = page.getByRole('dialog', { name: 'Repair the project settings?' })
+  await confirm.getByRole('button', { name: 'Run', exact: true }).click()
+
+  // Anchored on purpose: "$JOB on …" anywhere in this toast would be a claim
+  // about a value the scan never read.
+  await expect(page.getByText(/^Repaired the timeline on 1 project\.$/)).toBeVisible()
+  // The report agrees — the rate moved, and there is no $JOB line to show.
+  await expect(drawer.getByText('24 fps → 30 fps')).toBeVisible()
+})
+
 test('a run backs the project up silently — the report never mentions it', async ({ page }) => {
   const drawer = await repairJob(page)
 

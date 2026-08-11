@@ -67,7 +67,11 @@ network exists — no keyframes to re-time), reads `hou.fps()` back and reports 
 scene's own answer rather than the value it asked for; `op_scan` reads it per
 project; `validateHoudiniProject` badges a mismatch; `op_defaults` repairs it
 beside `$JOB`. A scan with **no** value reports `0` and is treated as UNKNOWN
-everywhere — never as wrong (an older stored scan predates the field).
+everywhere — never as wrong (an older stored scan predates the field). The queue
+is per PROJECT but the write is per VALUE: a project queued for its timeline
+alone can carry an unread `$JOB` (`''`), and `op_defaults` must skip that too —
+the "unknown is never repaired" gate has to exist on the WRITING side, not just
+in the drawer's queueing filter.
 
 What `hou.setFps` does to keyframes in an ALREADY animated scene is Houdini
 behaviour this repo has not measured — the repair says so, and takes its rolling

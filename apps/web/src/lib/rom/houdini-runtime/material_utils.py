@@ -1674,18 +1674,23 @@ def op_defaults(request):
             result["previousFps"] = current_fps
             # Case-insensitive: these are Windows paths, and a case-only
             # difference is the same folder — rewriting for it would churn the
-            # file forever.
-            if current.lower() == want.lower():
-                result["job"] = current
-            else:
+            # file forever. An EMPTY current is the sentinel case — the scene
+            # never carried a `$JOB` the scan could read — and a project can
+            # reach this run for its FPS alone, so unknown has to stay
+            # unwritten HERE too, not just unqueued in the drawer.
+            if current and current.lower() != want.lower():
                 result["changedJob"] = True
+            else:
+                result["job"] = current
             # A scene whose FPS could not be read (0) is left alone for the same
             # reason an unknown `$JOB` is: nothing was seen, so nothing is known
-            # to be wrong. Same for a caller that sent no value.
+            # to be wrong. Same for a caller that sent no value. `>=` because
+            # `sameFps` says same on `< FPS_EPSILON` — this is its exact
+            # complement, so the drawer never queues a repair this refuses.
             if (
                 want_fps > 0
                 and current_fps > 0
-                and abs(current_fps - want_fps) > FPS_EPSILON
+                and abs(current_fps - want_fps) >= FPS_EPSILON
             ):
                 result["changedFps"] = True
             else:

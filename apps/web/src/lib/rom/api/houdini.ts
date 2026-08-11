@@ -188,7 +188,7 @@ const copyProjectInput = charScopeInput.extend({
  * `$JOB` and its absolute file references, so its imports point at the character
  * it was copied FROM. That is no longer true — the background scan finds exactly
  * those faults, the card says so, and the Utils drawer repairs all of them
- * (`Repair $JOB`, `Make paths portable`, `Fill network`). So the copy is offered,
+ * (`Repair project settings`, `Make paths portable`, `Fill network`). So the copy is offered,
  * and the caller is expected to point the user at those.
  *
  * Only the scene file moves. Houdini's own output beside it (`backup/`, `geo/`,

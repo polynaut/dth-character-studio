@@ -278,7 +278,7 @@ export function planRepath(
     blockedByJob,
     reason:
       blockedByJob.length > 0
-        ? 'Repair $JOB first — until then these paths would be stored relative to the old project folder.'
+        ? 'Repair the project settings first — until then these paths would be stored relative to the old project folder.'
         : targets.length === 0
           ? 'Every reference is already relative, and nothing is broken.'
           : '',

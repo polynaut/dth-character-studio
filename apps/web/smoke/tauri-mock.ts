@@ -741,9 +741,14 @@ export function installTauriMock(seed: TauriMockSeed): void {
               const wantFps = t.fps ?? 0
               // Each value is compared on its own, exactly as `op_defaults`
               // does — so a spec that seeds only a stale $JOB gets a report
-              // that says the timeline was left alone.
-              const changedJob = previousJob.toLowerCase() !== t.jobDir.toLowerCase()
-              const changedFps = wantFps > 0 && Math.abs(previousFps - wantFps) > 0.001
+              // that says the timeline was left alone. And exactly like the
+              // real op, an UNKNOWN value ('' / 0 — nobody read one) is never
+              // claimed repaired, even when the project was queued for the
+              // other value.
+              const changedJob =
+                previousJob !== '' && previousJob.toLowerCase() !== t.jobDir.toLowerCase()
+              const changedFps =
+                wantFps > 0 && previousFps > 0 && Math.abs(previousFps - wantFps) >= 0.001
               const changed = changedJob || changedFps
               return {
                 hipPath: t.hipPath,
