@@ -88,6 +88,24 @@ test('one release folder feeds BOTH generations, read from the DLL names', async
   await expect(page.getByText('dsp_dth_exporter.dll', { exact: true })).toBeVisible()
   // The companion DLL is not a release of its own.
   await expect(page.getByText('dth_tools.dll')).toHaveCount(0)
+  // Each hint sits under ITS folder row, and shows only the part BELOW the
+  // entry (this fixture's one folder holds a subfolder per generation) — the
+  // full path would just echo the field above it.
+  const section = page.locator('section').filter({ hasText: 'Daz Studio plugins' })
+  await expect(page.getByText('· Daz Studio 4', { exact: true })).toBeVisible()
+  await expect(section.getByText(/· X:/)).toHaveCount(0)
+  // The Runner's "ships with this app" line moved into the table header's
+  // tooltip — a standing hint said it forever, the header says it on demand.
+  await expect(section.getByText(/ships with this app/i)).toHaveCount(0)
+  // Scroll first, then hover from a parked mouse: hover()'s own auto-scroll
+  // fires its (async) scroll event AFTER the tooltip's show-timer armed, and
+  // the host hides on scroll — a real mouse re-triggers on its next tiny
+  // movement, Playwright's single surgical mouseover does not.
+  const runnerTh = page.getByRole('columnheader', { name: 'Runner plugin' })
+  await runnerTh.scrollIntoViewIfNeeded()
+  await page.mouse.move(0, 0)
+  await runnerTh.hover()
+  await expect(page.getByRole('tooltip')).toContainText(/^Ships with this app \(1\.1\.4\)/)
 
   // Both installs are targets, each with its own verdict: DS6 has an older
   // exporter, DS4 has none, and neither has the Runner yet.
