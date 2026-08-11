@@ -8,7 +8,7 @@ import { PathCode } from '#/components/path-code.tsx'
 import { PostInstallElevationNotice } from '#/components/settings/post-install-elevation-notice.tsx'
 import { fetchDazPluginState, installDazPlugins, pendingPluginInstalls } from '#/lib/rom/api.ts'
 import { pickFolder } from '#/lib/desktop.ts'
-import { browseStart, displayPath } from '#/lib/path.ts'
+import { browseStart, displayPath, normalizePath } from '#/lib/path.ts'
 
 import type { DazPluginState, DazPluginTarget, InstallReport } from '#/lib/rom/api.ts'
 import type { DazFlavor } from '#/lib/daz-plugins.ts'
@@ -172,6 +172,52 @@ export function DazPluginsSection({
 
   const pending = state ? pendingPluginInstalls(state) : 0
 
+  // Each found DLL, attached to the configured folder row it came from — the
+  // hint then reads as that row's own detection result, so repeating the full
+  // path would only echo the field right above it. Deepest matching entry wins
+  // (the scan looks one level below a folder, so nested entries could both
+  // match), and the part BELOW the entry is kept: with one parent folder
+  // holding a subfolder per generation, the subfolder is what tells the two
+  // lines apart.
+  const normFolder = (p: string) => normalizePath(p).toLowerCase().replace(/\/+$/, '')
+  const normFolders = folders.map(normFolder)
+  const sourceRows = (state?.sources ?? []).map((source) => {
+    const src = normFolder(source.folder)
+    let index = -1
+    normFolders.forEach((nf, i) => {
+      if (!nf || (src !== nf && !src.startsWith(`${nf}/`))) return
+      if (index === -1 || nf.length > normFolders[index].length) index = i
+    })
+    const below =
+      index === -1
+        ? ''
+        : displayPath(normalizePath(source.folder).slice(normFolders[index].length).replace(/^\/+/, ''))
+    return { source, index, below }
+  })
+  const emptyIndexOf = (folder: string) => normFolders.findIndex((nf) => nf === normFolder(folder))
+
+  const sourceLine = ({ source, below }: (typeof sourceRows)[number], withPath: boolean) => (
+    <li
+      key={`${source.folder}|${source.fileName}`}
+      className="flex flex-wrap items-baseline gap-x-2"
+    >
+      <span className="font-mono text-foreground">{source.fileName}</span>
+      <span className="rounded bg-muted px-1 py-0.5 font-medium">{FLAVOR_LABEL[source.flavor]}</span>
+      <span>{source.version || 'no version resource'}</span>
+      {withPath ? (
+        <span className="min-w-0 truncate">· {displayPath(source.folder)}</span>
+      ) : (
+        below && <span className="min-w-0 truncate">· {below}</span>
+      )}
+      {source.pathHint && source.pathHint !== source.flavor && (
+        <span className="flex items-center gap-1 text-amber-500">
+          <AlertTriangle className="size-3 shrink-0" />
+          the folder says {FLAVOR_LABEL[source.pathHint]} — the DLL name wins
+        </span>
+      )}
+    </li>
+  )
+
   return (
     <section className="space-y-4 rounded-lg border bg-card p-5">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -220,74 +266,76 @@ export function DazPluginsSection({
             app.
           </p>
         )}
-        {folders.map((folder, i) => (
-          <div key={i} className="flex gap-2">
-            <Input
-              value={displayPath(folder)}
-              placeholder={'X:\\…\\DazToHue\\ExporterPlugin'}
-              onChange={(e) => onFoldersChange(folders.map((f, j) => (j === i ? e.target.value : f)))}
-            />
-            <Button
-              type="button"
-              variant="outline"
-              className="shrink-0"
-              disabled={busy}
-              onClick={() => {
-                void (async () => {
-                  const picked = await pickFolder('DTH Exporter Plugin release folder', browseStart(folder))
-                  if (picked) onFoldersChange(folders.map((f, j) => (j === i ? picked : f)))
-                })()
-              }}
-            >
-              <FolderOpen /> Browse
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="shrink-0"
-              title="Remove folder"
-              disabled={busy}
-              onClick={() => onFoldersChange(folders.filter((_, j) => j !== i))}
-            >
-              <X />
-            </Button>
-          </div>
-        ))}
+        {folders.map((folder, i) => {
+          // What the scan found IN this entry, right under its field — the
+          // detection result reads as the row's own, no path repetition.
+          const found = sourceRows.filter((row) => row.index === i)
+          const scannedEmpty = state?.emptyFolders.some((f) => emptyIndexOf(f) === i) ?? false
+          return (
+            <div key={i} className="space-y-1">
+              <div className="flex gap-2">
+                <Input
+                  value={displayPath(folder)}
+                  placeholder={'X:\\…\\DazToHue\\ExporterPlugin'}
+                  onChange={(e) => onFoldersChange(folders.map((f, j) => (j === i ? e.target.value : f)))}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="shrink-0"
+                  disabled={busy}
+                  onClick={() => {
+                    void (async () => {
+                      const picked = await pickFolder('DTH Exporter Plugin release folder', browseStart(folder))
+                      if (picked) onFoldersChange(folders.map((f, j) => (j === i ? picked : f)))
+                    })()
+                  }}
+                >
+                  <FolderOpen /> Browse
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="shrink-0"
+                  title="Remove folder"
+                  disabled={busy}
+                  onClick={() => onFoldersChange(folders.filter((_, j) => j !== i))}
+                >
+                  <X />
+                </Button>
+              </div>
+              {found.length > 0 && (
+                <ul className="space-y-1 pl-1 text-xs text-muted-foreground">
+                  {found.map((row) => sourceLine(row, false))}
+                </ul>
+              )}
+              {scannedEmpty && (
+                <p className="flex items-start gap-1.5 pl-1 text-xs text-amber-500">
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                  <span>No Exporter DLL in this folder (or one level below it).</span>
+                </p>
+              )}
+            </div>
+          )
+        })}
 
-        {/* What the scan actually found — the evidence behind every row below. */}
-        {state && state.sources.length > 0 && (
+        {/* Defensive remainder: a source or empty-folder verdict whose folder no
+            FIELD matches anymore (the scan raced a mid-edit debounce). Rendered
+            with its full path — unanchored, the path is the only identity. */}
+        {sourceRows.some((row) => row.index === -1) && (
           <ul className="space-y-1 pl-1 text-xs text-muted-foreground">
-            {state.sources.map((source) => (
-              <li key={`${source.folder}|${source.fileName}`} className="flex flex-wrap items-baseline gap-x-2">
-                <span className="font-mono text-foreground">{source.fileName}</span>
-                <span className="rounded bg-muted px-1 py-0.5 font-medium">
-                  {FLAVOR_LABEL[source.flavor]}
-                </span>
-                <span>{source.version || 'no version resource'}</span>
-                <span className="min-w-0 truncate">· {displayPath(source.folder)}</span>
-                {source.pathHint && source.pathHint !== source.flavor && (
-                  <span className="flex items-center gap-1 text-amber-500">
-                    <AlertTriangle className="size-3 shrink-0" />
-                    the folder says {FLAVOR_LABEL[source.pathHint]} — the DLL name wins
-                  </span>
-                )}
-              </li>
-            ))}
+            {sourceRows.filter((row) => row.index === -1).map((row) => sourceLine(row, true))}
           </ul>
         )}
-        {state?.emptyFolders.map((folder) => (
-          <p key={folder} className="flex items-start gap-1.5 text-xs text-amber-500">
-            <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-            <span>No Exporter DLL in {displayPath(folder)} (or one level below it).</span>
-          </p>
-        ))}
-        {state && (
-          <p className="pl-1 text-xs text-muted-foreground">
-            <span className="font-medium text-foreground">Runner plugin</span> — ships with this app
-            {state.runnerBundledVersion ? ` (${state.runnerBundledVersion})` : ' (none staged in this build)'}.
-          </p>
-        )}
+        {state?.emptyFolders
+          .filter((folder) => emptyIndexOf(folder) === -1)
+          .map((folder) => (
+            <p key={folder} className="flex items-start gap-1.5 text-xs text-amber-500">
+              <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+              <span>No Exporter DLL in {displayPath(folder)} (or one level below it).</span>
+            </p>
+          ))}
       </div>
 
       {/* --- targets ------------------------------------------------------ */}
@@ -314,7 +362,15 @@ export function DazPluginsSection({
                 <tr className="text-left text-xs text-muted-foreground">
                   <th className="pb-1 pr-3 font-medium">Daz Studio</th>
                   <th className="pb-1 pr-3 font-medium">Exporter plugin</th>
-                  <th className="pb-1 font-medium">Runner plugin</th>
+                  {/* The Runner needs no release folder — it ships inside the
+                      app, which the header says on hover instead of a standing
+                      hint line under the sources. */}
+                  <th
+                    className="pb-1 font-medium"
+                    title={`Ships with this app (${state.runnerBundledVersion || 'none staged in this build'})`}
+                  >
+                    Runner plugin
+                  </th>
                 </tr>
               </thead>
               <tbody>
