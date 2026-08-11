@@ -197,6 +197,35 @@ export async function exportDazStudioRunning(): Promise<boolean> {
   return dazStudioRunningNative(false, 'export')
 }
 
+/**
+ * Whether a launched Daz may take over the screen.
+ *
+ * Stated at every call site on purpose — the same reasoning as
+ * {@link DazRunningScope}, and there is no default that is right for both
+ * kinds of caller:
+ *
+ * - `'minimized'` — UNATTENDED work: an export batch, a project or scene scan,
+ *   the restart of a pending handoff. Nobody asked to look at Daz; it is the
+ *   Runner's workbench, and everything handed to the Runner is dialog-free by
+ *   construction precisely so it can run unwatched (`.ai/domain.md`).
+ * - `'visible'` — the user asked for the SCENE. "Open and Generate ROM
+ *   Animation" opens a scene from its card and leaves the built ROM on the
+ *   timeline to be looked at; minimizing that hides the thing that was asked
+ *   for. (It still doesn't grab focus — only a plain scene-card open does.)
+ *
+ * The other interactive path, opening a scene from its card, never comes
+ * through here at all: it launches Daz WITH the scene as its argument
+ * (`openSceneInActivatedDaz`, api/attachments.ts) or forwards a bridge script
+ * to a running instance.
+ */
+type DazLaunchVisibility = 'minimized' | 'visible'
+
+/** How long the native watch waits for a launched Daz to show its main window
+ *  before dropping the minimize. Generous because a cold Daz with a large
+ *  content library takes tens of seconds to paint one; the launch itself has
+ *  already succeeded either way. */
+const MINIMIZE_WINDOW_TIMEOUT_MS = 60_000
+
 /** Start a scene-less Daz Studio (its Runner claims the pending job file on
  *  startup). The command returns the launched exe path — schema-parsed at the
  *  boundary like every native return, then unused here.
@@ -205,13 +234,22 @@ export async function exportDazStudioRunning(): Promise<boolean> {
  *  Runner plugin, and "Export only" exists so a machine whose newest Studio has
  *  no Runner build yet can still export from the older one. With no card
  *  flagged the two resolve to the same folder. */
-async function launchDazSceneless(): Promise<void> {
+async function launchDazSceneless(visibility: DazLaunchVisibility): Promise<void> {
   z.string().parse(
     await invoke('launch_daz_studio', {
       installFolder: await exportDazInstallFolder(),
       scenePath: '',
     }),
   )
+  if (visibility !== 'minimized') return
+  // Fire-and-forget: the native watch polls for Daz's main window for up to a
+  // minute (a cold start is slow) and the handoff must not wait on it. Purely
+  // best-effort — off Windows, or on a Daz that never shows a window, it just
+  // does nothing and the launch stands on its own.
+  void invoke('minimize_app_window', {
+    exeNames: ['DAZStudio.exe'],
+    timeoutMs: MINIMIZE_WINDOW_TIMEOUT_MS,
+  }).catch(() => {})
 }
 
 /**
@@ -1151,7 +1189,7 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
   let dazLaunched = false
   let dazClosing = false
   if (!dazWasRunning) {
-    await launchDazSceneless()
+    await launchDazSceneless('minimized')
     dazLaunched = true
   } else {
     // A "running" Daz may actually be SHUTTING DOWN — the process lingers a
@@ -1195,7 +1233,7 @@ export async function launchDazForPendingJobs(): Promise<boolean> {
     if (!(await reclaimOrphanedBatch(paths))) return false
   }
   if (await dazStudioRunningNative(false, 'export')) return true
-  await launchDazSceneless()
+  await launchDazSceneless('minimized')
   return true
 }
 
@@ -1291,7 +1329,9 @@ export async function generateRomAnimation({
   const startedAt = Date.now()
   const dazWasRunning = await dazStudioRunningNative(false, 'export')
   if (!dazWasRunning) {
-    await launchDazSceneless()
+    // 'visible': this one opens a scene the user picked and leaves the built ROM
+    // on its timeline to look at — the one job-file flow that is not unattended.
+    await launchDazSceneless('visible')
   }
   return { romPath: romAnimationPath(scene), dazWasRunning, startedAt }
 }
@@ -1579,7 +1619,7 @@ export async function startProjectScan({ data }: { data: unknown }): Promise<Pro
   if (!dazWasRunning) {
     // A fresh launch claims the file on startup — no wait (Daz can take long to
     // come up; the panel's pending state covers it, with Abort as the out).
-    await launchDazSceneless()
+    await launchDazSceneless('minimized')
     return summary
   }
   // A "running" Daz may be SHUTTING DOWN (the process lingers, its Runner poller
@@ -1809,7 +1849,7 @@ export async function startSceneScan({ data }: { data: unknown }): Promise<Scene
   if (!dazWasRunning) {
     // A fresh launch claims the file on startup — no wait (Daz can take long to
     // come up; the dialog's waiting state covers it, with Cancel as the out).
-    await launchDazSceneless()
+    await launchDazSceneless('minimized')
     return { csvPath, resultPath, startedAtMs, dazWasRunning }
   }
   // A "running" Daz may be SHUTTING DOWN (the process lingers, its Runner poller

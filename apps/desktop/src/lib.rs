@@ -158,6 +158,7 @@ pub fn run() {
             daz::run_daz_script,
             daz::launch_daz_studio,
             foreground::focus_app_window,
+            foreground::minimize_app_window,
             houdini::create_houdini_project,
             houdini::launch_houdini_job,
             houdini::houdini_running,

@@ -278,7 +278,10 @@ Press **Start**: the batch is handed to Daz Studio, where the bundled
 [**Runner plugin**](./02-setup.md#daz-studio-plugins)
 works through it unattended — every scene gets its full ROM build, export and
 delivered CSV, exactly as if you had run the scripts by hand. A closed Daz is
-started; a running one picks the batch up by itself. While the batch is still
+started **minimized**, since nobody needs to watch it work: it appears in the
+taskbar and you carry on with what you were doing, while the studio's own
+progress button tells you how far along the batch is. A running Daz picks the
+batch up by itself and is left exactly as you had it. While the batch is still
 waiting the button reads **Abort**; once Daz starts working it shows live
 progress with the elapsed time, and the studio reports the outcome — including
 any per-scene failures and the total time — when the batch finishes. The

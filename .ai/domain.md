@@ -901,7 +901,10 @@ older runtimes as stale.
 - **Every script handed to the Runner must run UNATTENDED — no modals, ever.**
   The Runner executes job rows inside a Daz that is often minimized, so any
   `MessageBox` is an invisible dead stop: the row never completes, the batch
-  sits below 100 and the studio's watch spins forever. Learned on
+  sits below 100 and the studio's watch spins forever. Since the unattended
+  launches MINIMIZE Daz themselves (`DazLaunchVisibility`, `api/execute.ts` →
+  `minimize_app_window`), "often" is now "by default, whenever the studio
+  started it" — this rule got stricter, not looser. Learned on
   Build_Genesis_Index (#653), where even the final SUMMARY box would have held
   a successful build below done. The pattern: the visible Content-Library
   script keeps its dialogs (that path is interactive on purpose); the handoff
