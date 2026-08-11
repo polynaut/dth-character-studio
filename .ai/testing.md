@@ -92,7 +92,14 @@ The **real SPA in a real browser** against an in-memory fake of the native layer
   31430433321). ~8% per test from doubling workers, because Chromium + the
   Vite dev server's on-the-fly transforms saturate the public runner's 4 vCPU
   at 2 workers already (a many-core dev machine does the suite in ~50s on raw
-  CPU). Consequences: adding workers past 4 is pointless; trimming specs WOULD
+  CPU). **The 4-worker pin was reverted a day later (#790):** oversubscribing
+  the saturated box bought ~0.1 min and paid in starvation flakes — six
+  different houdini-* specs across five PR runs failed as timeouts on
+  interactions that are instant locally, a different spec each run, one past
+  a doubled 60 s budget; main stayed green only by scheduling luck. CI runs 2
+  workers + a 60 s per-test budget now (`retries: 0` stays — a retry would
+  hide exactly this class of nondeterminism). Consequences: adding workers on
+  the 4-vCPU runner is a net loss; trimming specs WOULD
   cut wall time (it is linear when CPU-bound) but trades real coverage for
   ~2 minutes on an unwatched gate; the levers that genuinely move it are
   **sharding across runners** (`--shard` + a job matrix — touches the required
