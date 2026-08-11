@@ -459,7 +459,11 @@ export function DthExportAction({
         ...armed.houdini.map((hip, index) => ({
           id: `hou:${hip.path}`,
           label: hip.label,
-          detail: hip.networks.length > 0 ? `Exports: ${hip.networks.join(', ')}` : undefined,
+          // The networks it will export, ONE PER LINE under the full project
+          // name — a comma-joined list wrapped into a wall of text. Each is
+          // named by the scene whose `.dth` the HDA node imports (the actual
+          // node paths only exist mid-run, inside Houdini).
+          detail: hip.networks.length > 0 ? hip.networks.join('\n') : undefined,
           kind: 'houdini' as const,
           status:
             index < houdiniDone

@@ -125,7 +125,8 @@ export function ExportTaskCards({ tasks }: { tasks: Array<ExportTask> }) {
   const visibleIds = tasks.filter((task) => !collapsed.has(task.id)).map((task) => task.id)
 
   return (
-    <div className="col-start-1 row-start-1 row-span-2 flex min-h-0 w-40 shrink-0 flex-col">
+    // A tiny separator line marks the queue off from the log window.
+    <div className="col-start-1 row-start-1 row-span-2 flex min-h-0 w-40 shrink-0 flex-col border-r border-border pr-2">
       {tasks.map((task, index) => {
         const isFlying = flying.has(task.id)
         const isCollapsed = collapsed.has(task.id)
@@ -155,6 +156,14 @@ export function ExportTaskCards({ tasks }: { tasks: Array<ExportTask> }) {
   )
 }
 
+/** Lead the MESSAGE with a capital, leaving the `[HH:MM:SS] ` stamp alone —
+ *  the raw log speaks lowercase ("opening scene"), the window is a caption. */
+function capitalizeLine(line: string): string {
+  return line.replace(/^(\[[^\]]*\]\s*)?(.)/, (_, stamp: string | undefined, first: string) => {
+    return (stamp ?? '') + first.toUpperCase()
+  })
+}
+
 export function ExportActivityLog({ log }: { log: { lines: Array<string> } }) {
   const boxRef = useRef<HTMLDivElement>(null)
   // Tail mode: whenever lines arrive, keep the newest one in view.
@@ -176,13 +185,13 @@ export function ExportActivityLog({ log }: { log: { lines: Array<string> } }) {
         // content-driven, so a content-sized log inflated the whole header as
         // lines arrived (and jumped per line). Fixed box + tail scroll — the
         // newest lines stay in view, the layout never moves.
-        // 7 lines exactly: h-28 = 112px at leading-4 (16px per line).
-        className="h-28 overflow-y-auto font-mono text-[11px] leading-4 whitespace-pre-wrap break-all text-muted-foreground"
+        // 5 lines exactly: h-20 = 80px at leading-4 (16px per line).
+        className="h-20 overflow-y-auto font-mono text-[11px] leading-4 whitespace-pre-wrap break-all text-muted-foreground"
       >
         {log.lines.map((line, index) => (
           // Index keys are sound here: the list is an append-only rolling tail.
           // eslint-disable-next-line react/no-array-index-key
-          <div key={index}>{line}</div>
+          <div key={index}>{capitalizeLine(line)}</div>
         ))}
       </div>
     </div>

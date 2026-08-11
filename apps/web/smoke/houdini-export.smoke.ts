@@ -209,7 +209,8 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
   await expect(page.locator('[data-export-log]')).toContainText('ROM generated', {
     timeout: 15_000,
   })
-  await expect(page.locator('[data-export-log]')).toContainText('scene opened')
+  // Display-capitalized ("Scene opened") — the raw log line is lowercase.
+  await expect(page.locator('[data-export-log]')).toContainText('Scene opened')
   await expect(page.locator(`[data-task="daz:${P.scene}"]`)).toHaveAttribute(
     'data-task-status',
     'active',

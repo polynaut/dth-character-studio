@@ -304,7 +304,9 @@ export function EditorHeader({
             the header-collapse scroll timeline (styles.css), so the docked
             sticky header shows only the buttons — the panel is a working view
             for the top of the page. */}
-        <div className="mb-6 ml-auto grid shrink-0 grid-cols-[auto_auto] grid-rows-[minmax(0,1fr)_auto] justify-end gap-2 self-stretch">
+        {/* gap-y-5: the pipeline area needs room to breathe above the button
+            row — a tight gap read as one crowded block. */}
+        <div className="mb-6 ml-auto grid shrink-0 grid-cols-[auto_auto] grid-rows-[minmax(0,1fr)_auto] justify-end gap-x-2 gap-y-5 self-stretch">
           {exportPipeline && <ExportPipelinePanel view={exportPipeline} />}
           <div className="actions-scroll col-start-2 row-start-2 flex justify-end gap-2">
             <DthExportAction
