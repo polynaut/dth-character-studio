@@ -27,6 +27,7 @@ import {
   formatClock,
   formatElapsed,
   hipSelectionAfterToggle,
+  stampLogLines,
   houdiniModeForSelection,
   scenesMissingExport,
   scenesMissingRomAnimation,
@@ -586,6 +587,36 @@ describe('formatElapsed — the run clock/total, three widths', () => {
     // Zero-padded tail so the ticking clock doesn't jitter in width.
     expect(formatElapsed(60_000 + 5_000)).toBe('1m 05s')
     expect(formatElapsed(60 * 60_000 + 3 * 60_000)).toBe('1h 03m')
+  })
+})
+
+describe('stampLogLines — first-seen [HH:MM:SS] prefixes across polls', () => {
+  it('keeps earlier stamps when the tail extends, stamps only the new lines', () => {
+    const store = { lines: [], stamps: [] }
+    expect(stampLogLines(store, ['a', 'b'], '10:00:00')).toEqual(['[10:00:00] a', '[10:00:00] b'])
+    expect(stampLogLines(store, ['a', 'b', 'c'], '10:00:05')).toEqual([
+      '[10:00:00] a',
+      '[10:00:00] b',
+      '[10:00:05] c',
+    ])
+  })
+
+  it('re-anchors a ROLLING window by its last known line', () => {
+    const store = { lines: [], stamps: [] }
+    stampLogLines(store, ['a', 'b', 'c'], '10:00:00')
+    // The window rolled: 'a' fell off the front, 'd' arrived.
+    expect(stampLogLines(store, ['b', 'c', 'd'], '10:00:05')).toEqual([
+      '[10:00:00] b',
+      '[10:00:00] c',
+      '[10:00:05] d',
+    ])
+  })
+
+  it('an empty tail resets the store; unrecognized content restamps fresh', () => {
+    const store = { lines: [], stamps: [] }
+    stampLogLines(store, ['a'], '10:00:00')
+    expect(stampLogLines(store, [], '10:00:01')).toEqual([])
+    expect(stampLogLines(store, ['x'], '10:00:02')).toEqual(['[10:00:02] x'])
   })
 })
 

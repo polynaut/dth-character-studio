@@ -44,6 +44,7 @@ import {
   formatClock,
   formatElapsed,
   hipSelectionAfterToggle,
+  stampLogLines,
   houdiniModeForSelection,
   normalizeSceneKey,
   preCheckedScenes,
@@ -57,7 +58,7 @@ import type {
   ExportProgressBar,
 } from '#/components/character/export-pipeline-panel.tsx'
 import type { HoudiniRunState } from '#/lib/rom/houdini-jobs.ts'
-import type { HoudiniRunMode, RunChoice } from '#/lib/rom/execute-jobs.ts'
+import type { HoudiniRunMode, RunChoice, StampedLogStore } from '#/lib/rom/execute-jobs.ts'
 import type { Character } from '@dth/rom'
 
 /**
@@ -300,16 +301,21 @@ export function DthExportAction({
     // activity channel goes quiet): every live state returns SOME log, with
     // the last captured Houdini lines carried across the quiet stretches.
     // Lines only — the scene lives on the active task card, the percent on
-    // the meter, the latest status on the meter's label.
+    // the meter, the latest status on the meter's label. Each line wears the
+    // [HH:MM:SS] at which this poll first saw it.
+    const now = new Date()
+    const stamp = [now.getHours(), now.getMinutes(), now.getSeconds()]
+      .map((n) => String(n).padStart(2, '0'))
+      .join(':')
     const log = (() => {
       if (houdiniNow) {
         if (houdiniNow.state === 'running' && houdiniNow.activity) {
           lastHoudiniLinesRef.current = houdiniNow.activity.lines
         }
-        return { lines: lastHoudiniLinesRef.current }
+        return { lines: stampLogLines(houdiniStampsRef.current, lastHoudiniLinesRef.current, stamp) }
       }
       if (progressNow?.state === 'running') {
-        return { lines: progressNow.step?.lines ?? [] }
+        return { lines: stampLogLines(dazStampsRef.current, progressNow.step?.lines ?? [], stamp) }
       }
       return null
     })()
@@ -428,11 +434,17 @@ export function DthExportAction({
   // them up through the quiet stretches (between nodes, project opening)
   // instead of blanking. Reset per project (startHoudiniQueue) and at run end.
   const lastHoudiniLinesRef = useRef<Array<string>>([])
+  // First-seen `[HH:MM:SS]` stamps for the two legs' log tails (the on-disk
+  // logs carry no timestamps — see stampLogLines).
+  const dazStampsRef = useRef<StampedLogStore>({ lines: [], stamps: [] })
+  const houdiniStampsRef = useRef<StampedLogStore>({ lines: [], stamps: [] })
 
   /** The run is over (reported, dead or aborted) — drop the panel. */
   function clearPipeline() {
     pipelineRef.current = null
     lastHoudiniLinesRef.current = []
+    dazStampsRef.current = { lines: [], stamps: [] }
+    houdiniStampsRef.current = { lines: [], stamps: [] }
     setPipeline(null)
   }
   // A handoff written against a SHUTTING-DOWN Daz (running process, batch

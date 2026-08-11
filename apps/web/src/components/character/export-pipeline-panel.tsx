@@ -182,10 +182,13 @@ export function ExportActivityLog({ log }: { log: { lines: Array<string> } }) {
  *  of a two-level display, slightly taller. */
 function ProgressBar({ bar, emphasis = false }: { bar: ExportProgressBar; emphasis?: boolean }) {
   const percent = Math.min(100, Math.max(0, bar.percent))
+  // Status texts arrive lowercase from the logs ("opening scene") — the label
+  // is a caption, so it leads with a capital.
+  const label = bar.label.charAt(0).toUpperCase() + bar.label.slice(1)
   return (
     <div data-progressbar={emphasis ? 'overall' : 'current'} data-percent={Math.round(percent)}>
       <div className="mb-0.5 flex items-baseline justify-between gap-2 text-[11px] text-muted-foreground">
-        <span className="truncate">{bar.label}</span>
+        <span className="truncate">{label}</span>
         <span className="shrink-0 tabular-nums">{Math.round(percent)}%</span>
       </div>
       <div className={cn('overflow-hidden rounded-full bg-muted', emphasis ? 'h-2' : 'h-1.5')}>
