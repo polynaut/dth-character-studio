@@ -43,6 +43,13 @@ export interface TauriMockSeed {
   /** What `houdini_installs` reports — the registry, as the studio sees it.
    *  Omit for a machine with no Houdini installed. */
   houdiniInstalls?: Array<{ version: string; path: string }>
+  /** What `unreal_engine_installs` reports — Epic's registry, as the studio
+   *  sees it. Omit for a machine with no Unreal Engine installed. */
+  unrealEngineInstalls?: Array<{ version: string; path: string }>
+  /** Plugin builds `scan_unreal_plugins` finds — the real folder walk has no
+   *  disk to walk here, so a spec states the builds; the mock serves each scan
+   *  filtered to the folders it was asked about (matched on `sourceFolder`). */
+  unrealPlugins?: Array<{ name: string; path: string; engineVersion: string; sourceFolder: string }>
   /** The `.dcsp` this "window" was opened with — '' for a Home window. */
   activeProjectFile: string
   /** What `getVersion()` reports. */
@@ -837,10 +844,61 @@ export function installTauriMock(seed: TauriMockSeed): void {
         for (const [rel, content] of entries) files.set(`${dest}/${rel}`, content)
         return entries.length
       }
-      case 'unreal_dth_present':
-        // The linked Unreal project in the docs fixture has no DTH content yet
-        // (the footer card's install button is live, not dimmed).
-        return false
+      case 'unreal_dth_present': {
+        // Derived from the fake fs (not a constant): an install in the same
+        // spec marks the folder, and a re-probe must then say so.
+        const dir = norm(args.uprojectPath)
+        return isDir(`${dir.slice(0, dir.lastIndexOf('/'))}/Content/DazToHue`)
+      }
+      case 'unreal_engine_installs':
+        // The Windows registry read (unreal_install.rs) has nothing to stand
+        // in for it here, so a spec states what the machine has.
+        return seed.unrealEngineInstalls ?? []
+      case 'scan_unreal_plugins': {
+        // Filtered to the folders THIS scan asked about, so the Settings
+        // panel's per-folder preview behaves like the real walk.
+        const asked = (args.folders as Array<string>).map(norm)
+        return (seed.unrealPlugins ?? []).filter((p) => asked.includes(norm(p.sourceFolder)))
+      }
+      case 'unreal_project_state': {
+        const up = norm(args.uprojectPath)
+        if (!isFile(up)) throw new Error('Not an Unreal project file (.uproject).')
+        const dir = up.slice(0, up.lastIndexOf('/'))
+        let engineAssociation = ''
+        try {
+          const parsed = JSON.parse(mustRead(up)) as { EngineAssociation?: unknown }
+          engineAssociation = typeof parsed.EngineAssociation === 'string' ? parsed.EngineAssociation : ''
+        } catch {
+          // a fixture .uproject that isn't JSON reads as "no association"
+        }
+        const pluginsDir = `${dir}/Plugins`
+        return {
+          engineAssociation,
+          dthPresent: isDir(`${dir}/Content/DazToHue`),
+          installedPlugins: isDir(pluginsDir)
+            ? listDir(pluginsDir)
+                .filter((e) => e.isDirectory)
+                .map((e) => e.name)
+                .sort()
+            : [],
+        }
+      }
+      case 'install_unreal_dth': {
+        // The real command copies the release's Unreal content; the fake marks
+        // the destination folder so presence probes flip, and answers with a
+        // plausible file count — specs assert the REQUEST shape via `calls`.
+        const up = norm(args.request.uprojectPath)
+        extraDirs.add(`${up.slice(0, up.lastIndexOf('/'))}/Content/DazToHue`)
+        return 7
+      }
+      case 'install_unreal_plugin': {
+        const src = norm(args.request.pluginPath)
+        const plugin = (seed.unrealPlugins ?? []).find((p) => norm(p.path) === src)
+        if (!plugin) throw new Error('Not an Unreal plugin folder (no .uplugin inside).')
+        const up = norm(args.request.uprojectPath)
+        extraDirs.add(`${up.slice(0, up.lastIndexOf('/'))}/Plugins/${plugin.name}`)
+        return 3
+      }
 
       default:
         unhandled.push(cmd)

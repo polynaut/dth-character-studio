@@ -9,20 +9,27 @@ afterEach(() => {
 
 const setUnrealProjects = vi.fn(async (_: { data: { projectId: string; paths: Array<string> } }) => {})
 const unrealDthContentPresent = vi.fn(async (_: { data: { uprojectPath: string } }) => true)
-const installUnrealDthContent = vi.fn(
-  async (_: { data: { uprojectPath: string; overwrite: boolean } }) => 0,
-)
+const unrealProjectState = vi.fn(async (_: { data: { uprojectPath: string } }) => ({
+  engineAssociation: '5.7',
+  dthPresent: false,
+  installedPlugins: [] as Array<string>,
+}))
 vi.mock('#/lib/rom/api.ts', () => ({
   setUnrealProjects: (args: { data: { projectId: string; paths: Array<string> } }) =>
     setUnrealProjects(args),
   unrealDthContentPresent: (args: { data: { uprojectPath: string } }) =>
     unrealDthContentPresent(args),
-  installUnrealDthContent: (args: { data: { uprojectPath: string; overwrite: boolean } }) =>
-    installUnrealDthContent(args),
+  unrealProjectState: (args: { data: { uprojectPath: string } }) => unrealProjectState(args),
+  scanUnrealPlugins: async () => [],
+  detectUnrealEngines: async () => ({ installs: [] }),
+  installUnrealDthContent: async () => 0,
+  installUnrealPlugin: async () => 0,
+  createUnrealProject: async () => ({ uprojectPath: '', projectDir: '' }),
+  fileExists: async () => false,
   openScene: async () => {},
   revealPath: async () => {},
 }))
-vi.mock('#/lib/desktop.ts', () => ({ pickUprojectPath: async () => '' }))
+vi.mock('#/lib/desktop.ts', () => ({ pickUprojectPath: async () => '', pickFolder: async () => '' }))
 // The drop-zone hook registers Tauri webview listeners — inert in jsdom.
 vi.mock('#/lib/file-drop.ts', () => ({ useFileDrop: () => ({ id: 1, isOver: false }) }))
 const invalidate = vi.fn()
@@ -76,7 +83,10 @@ describe('UnrealProjectsBar mutations', () => {
     // busy dialog is modal (the background tree is aria-hidden), so the cards
     // are reached by their labels, not by role.
     expect(screen.getByLabelText('Unlink B')).toHaveProperty('disabled', true)
-    expect(screen.getByLabelText('Install DTH content into B')).toHaveProperty('disabled', true)
+    expect(screen.getByLabelText('Install DTH content and plugins into B')).toHaveProperty(
+      'disabled',
+      true,
+    )
     // A disabled unlink can't even open its confirm — no interleaved write.
     fireEvent.click(screen.getByLabelText('Unlink B'))
     expect(setUnrealProjects).toHaveBeenCalledTimes(1)
@@ -87,56 +97,28 @@ describe('UnrealProjectsBar mutations', () => {
     )
   })
 
-  it('a failed Content/DazToHue probe enables the install button (unknown ≠ disabled forever)', async () => {
+  it('a failed Content/DazToHue probe leaves the install button usable (unknown ≠ disabled)', async () => {
     unrealDthContentPresent.mockRejectedValueOnce(new Error('share offline'))
     render(<UnrealProjectsBar project={projectWith([A])} />)
 
     await waitFor(() => expect(unrealDthContentPresent).toHaveBeenCalledTimes(1))
-    // The probe failed → treated as "not installed": the button is usable, not
-    // permanently disabled with no explanation.
-    await waitFor(() =>
-      expect(screen.getByLabelText('Install DTH content into A')).toHaveProperty(
-        'disabled',
-        false,
-      ),
+    // The probe only drives the button's dim — the dialog does its own probing,
+    // so a failed (or pending) probe must never disable the entry point.
+    expect(screen.getByLabelText('Install DTH content and plugins into A')).toHaveProperty(
+      'disabled',
+      false,
     )
   })
 
-  it('Ctrl+click sends overwrite even when the probe said absent (user intent wins)', async () => {
-    // The probe is WRONG here: content exists on disk but it reported absent
-    // (e.g. the probe failed and defaulted to false). `overwrite: !!present`
-    // alone made Ctrl+click a dead end — the error said "Ctrl+click to
-    // overwrite" while Ctrl+click still sent overwrite:false.
+  it('the install button opens the install dialog for that project', async () => {
     unrealDthContentPresent.mockResolvedValueOnce(false)
     render(<UnrealProjectsBar project={projectWith([A])} />)
-    const install = screen.getByLabelText('Install DTH content into A')
-    await waitFor(() => expect(install).toHaveProperty('disabled', false))
 
-    fireEvent.click(install, { ctrlKey: true })
-    await waitFor(() => expect(installUnrealDthContent).toHaveBeenCalledTimes(1))
-    expect(installUnrealDthContent.mock.calls[0][0].data.overwrite).toBe(true)
-  })
-
-  it('an "already exists" install error flips the status to installed (no dead-end loop)', async () => {
-    unrealDthContentPresent.mockResolvedValueOnce(false)
-    installUnrealDthContent.mockRejectedValueOnce(
-      new Error('Content/DazToHue already exists in this project — Ctrl+click to overwrite.'),
-    )
-    render(<UnrealProjectsBar project={projectWith([A])} />)
-    const install = screen.getByLabelText('Install DTH content into A')
-    await waitFor(() => expect(install).toHaveProperty('disabled', false))
-
-    // Plain click with the wrong probe → the install itself reports "already
-    // exists" — that truth replaces the stale probe result.
-    fireEvent.click(install)
-    await waitFor(() => expect(installUnrealDthContent).toHaveBeenCalledTimes(1))
-    expect(installUnrealDthContent.mock.calls[0][0].data.overwrite).toBe(false)
-
-    // The flipped status dims the button (the "installed" look)…
-    await waitFor(() => expect(install.className).toContain('text-muted-foreground/50'))
-    // …and the next plain click hits the "already installed — Ctrl+click" hint
-    // instead of re-running the same failing install.
-    fireEvent.click(install)
-    expect(installUnrealDthContent).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByLabelText('Install DTH content and plugins into A'))
+    // The dialog probes THIS project and renders its checklist.
+    await waitFor(() => expect(unrealProjectState).toHaveBeenCalledTimes(1))
+    expect(unrealProjectState.mock.calls[0][0].data.uprojectPath).toBe(A)
+    await waitFor(() => expect(screen.getByText('DTH content')).toBeTruthy())
+    expect(screen.getByRole('button', { name: /Install$/ })).toBeTruthy()
   })
 })

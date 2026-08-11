@@ -38,6 +38,27 @@ fn houdini_installs_matches_the_shared_fixture() {
 }
 
 #[test]
+fn unreal_engine_installs_match_the_shared_fixture() {
+    round_trip::<Vec<crate::unreal_install::UnrealEngineInstall>>(include_str!(
+        "../../../contracts/unreal-installs.json"
+    ));
+}
+
+#[test]
+fn unreal_plugin_sources_match_the_shared_fixture() {
+    round_trip::<Vec<crate::unreal_install::UnrealPluginSource>>(include_str!(
+        "../../../contracts/unreal-plugins.json"
+    ));
+}
+
+#[test]
+fn unreal_project_state_matches_the_shared_fixture() {
+    round_trip::<crate::unreal_install::UnrealProjectState>(include_str!(
+        "../../../contracts/unreal-project-state.json"
+    ));
+}
+
+#[test]
 fn scene_wearables_matches_the_shared_fixture() {
     round_trip::<crate::poses::SceneWearables>(include_str!(
         "../../../contracts/scene-wearables.json"

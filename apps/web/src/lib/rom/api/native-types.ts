@@ -124,6 +124,39 @@ export const houdiniInstallSchema = z.object({
   path: z.string(),
 })
 
+/** One Unreal Engine install as `unreal_engine_installs` reports it, straight
+ *  out of `HKLM\SOFTWARE\EpicGames\Unreal Engine` (one subkey per launcher
+ *  install). `version` is the subkey name, always major.minor (`5.7`); `path`
+ *  is its `InstalledDirectory` with the trailing separator trimmed. The
+ *  registry can outlive an uninstall, so callers existence-probe the path
+ *  (`lib/unreal-install.ts` carries the `exists` pairing). */
+export const unrealEngineInstallSchema = z.object({
+  version: z.string(),
+  path: z.string(),
+})
+
+/** One plugin build `scan_unreal_plugins` found under a configured source
+ *  folder (the `unrealPluginFolders` setting). `name` is the `.uplugin` stem —
+ *  also the folder name an install writes under the project's `Plugins/`.
+ *  `engineVersion` is `major.minor` or `''` = any engine; matching against a
+ *  project happens in `lib/unreal-install.ts`. */
+export const unrealPluginSourceSchema = z.object({
+  name: z.string(),
+  path: z.string(),
+  engineVersion: z.string(),
+  sourceFolder: z.string(),
+})
+
+/** What a linked `.uproject` is and already carries (mirrors Rust
+ *  `UnrealProjectState`) — the install dialog's one probe.
+ *  `engineAssociation` is verbatim: `5.7` for a launcher engine, a GUID for a
+ *  source build, `''` when absent. */
+export const unrealProjectStateSchema = z.object({
+  engineAssociation: z.string(),
+  dthPresent: z.boolean(),
+  installedPlugins: z.array(z.string()),
+})
+
 export const poseAssetFramesSchema = z.object({
   path: z.string(),
   /** Frames the asset occupies (0 when it couldn't be measured — see `error`). */
@@ -529,6 +562,9 @@ export type RemapResult = z.infer<typeof remapResultSchema>
 export type PoseAssetFramesResult = z.infer<typeof poseAssetFramesSchema>
 export type SceneWearable = z.infer<typeof sceneWearableSchema>
 export type SceneWearables = z.infer<typeof sceneWearablesSchema>
+export type UnrealEngineInstall = z.infer<typeof unrealEngineInstallSchema>
+export type UnrealPluginSource = z.infer<typeof unrealPluginSourceSchema>
+export type UnrealProjectState = z.infer<typeof unrealProjectStateSchema>
 export type MaterialSlotInfo = z.infer<typeof materialSlotInfoSchema>
 export type MaterialNodeInfo = z.infer<typeof materialNodeInfoSchema>
 export type MaterialSectionResult = z.infer<typeof materialSectionResultSchema>

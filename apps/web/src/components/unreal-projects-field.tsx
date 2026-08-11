@@ -1,64 +1,51 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from '@tanstack/react-router'
-import { ChevronLeft, ChevronRight, ExternalLink, FolderOpen, HardDriveDownload, Plus, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ExternalLink, FolderOpen, HardDriveDownload, Plus, Sparkles, X } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import { Button, RemoveAssetDialog, cn, useModifierHeld } from '@dth/ui'
 import unrealLogo from '#/assets/unreal-logo.svg'
 import {
-  installUnrealDthContent,
-  openScene,
-  revealPath,
-  setUnrealProjects,
-  unrealDthContentPresent,
-} from '#/lib/rom/api.ts'
+  UnrealGenerateDialog,
+  UnrealInstallDialog,
+  uprojectDisplayName,
+} from '#/components/unreal-install-dialog.tsx'
+import { openScene, revealPath, setUnrealProjects, unrealDthContentPresent } from '#/lib/rom/api.ts'
 import { pickUprojectPath } from '#/lib/desktop.ts'
 import { PathCode } from '#/components/path-code.tsx'
 import { browseStart, displayPath, middleTruncatePath, normalizePath, parentDir } from '#/lib/path.ts'
 
 import type { ProjectInfo } from '#/lib/rom/api.ts'
 
-/** "D:\…\ThighGlutes.uproject" → "ThighGlutes" — the card title and the
- *  unlink-confirm dialog name the project the same way. */
-function uprojectDisplayName(uprojectPath: string): string {
-  const fileName = uprojectPath.split(/[\\/]/).pop() ?? uprojectPath
-  return fileName.replace(/\.[^./\\]+$/, '')
-}
-
 /**
  * A linked Unreal project card in the footer bar: the U mark, name + a REAL
  * path chip (click = copy, Alt+click = Explorer). The card body itself is
  * inert — only the explicit buttons act: the open button launches the
- * `.uproject` (OS association → Unreal), and the tiny install button
- * bootstraps the project with the ACTIVE DTH release's Unreal content
- * (`Content/DazToHue`): dimmed once present; Ctrl+click overwrites anyway
- * (e.g. after switching the release in Settings). The hover ✕ only unlinks.
- * The chip middle-truncates to a fixed budget + width so every card lines up
- * (only a long project NAME may widen one).
+ * `.uproject` (OS association → Unreal), and the tiny install button opens
+ * the install dialog (DTH content + the plugin builds matching this project's
+ * engine version, pre-checked): dimmed once `Content/DazToHue` is present,
+ * still clickable — plugins and reinstalls live in the dialog. The hover ✕
+ * only unlinks. The chip middle-truncates to a fixed budget + width so every
+ * card lines up (only a long project NAME may widen one).
  */
 function UnrealCard({
   uprojectPath,
   dthPresent,
-  ctrlHeld,
-  installing,
   disabled,
   onOpen,
   onInstall,
   onRemove,
 }: {
   uprojectPath: string
-  /** undefined while the Content/DazToHue probe is still running. */
+  /** undefined while the Content/DazToHue probe is still running — the button
+   *  stays usable either way; the dialog does its own probing. */
   dthPresent: boolean | undefined
-  /** Ctrl/Cmd is held — an installed project's dimmed install button wakes up
-   *  to hint that a click now re-installs (overwrite). */
-  ctrlHeld: boolean
-  installing: boolean
   /** A list write is in flight — the whole bar is single-flight, so the card's
    *  mutating actions (install / unlink) disable alongside the Add button. */
   disabled: boolean
   onOpen: (e: React.MouseEvent) => void
-  onInstall: (e: React.MouseEvent) => void
+  onInstall: () => void
   onRemove: () => void
 }) {
   const displayName = uprojectDisplayName(uprojectPath)
@@ -70,9 +57,6 @@ function UnrealCard({
   // the budget goes to the file name. Natural width — the chip hugs its text.
   const chipText = middleTruncatePath(shownPath, 40, 8)
   const OpenIcon = altHeld ? FolderOpen : ExternalLink
-  // Ctrl/Cmd held turns the click into a force-overwrite (see `ctrlHeld` above),
-  // so the label reads "Reinstall" to match what the button will actually do.
-  const installVerb = ctrlHeld ? 'Reinstall' : 'Install'
   return (
     <div className="group/card relative">
       <div className="unreal-card flex items-center gap-3 rounded-lg border px-3 py-2 pl-4 transition-colors">
@@ -98,17 +82,16 @@ function UnrealCard({
         <button
           type="button"
           onClick={onInstall}
-          disabled={disabled || installing || dthPresent === undefined}
-          aria-label={`${installVerb} DTH content into ${displayName}`}
-          title={`${installVerb} DTH Content`}
+          disabled={disabled}
+          aria-label={`Install DTH content and plugins into ${displayName}`}
+          title="Install DTH content & plugins…"
           className={cn(
             'shrink-0 rounded-md border p-1.5 transition-colors',
-            // Installed → dimmed; holding Ctrl/Cmd wakes it up as the hint
-            // that a click now re-installs (overwrite from the active release).
-            dthPresent && !ctrlHeld
-              ? 'text-muted-foreground/50'
+            // DTH content installed → dimmed, but still clickable: the dialog
+            // is also where plugins and explicit reinstalls happen.
+            dthPresent
+              ? 'text-muted-foreground/50 hover:bg-accent hover:text-primary'
               : 'text-primary hover:bg-accent hover:text-primary',
-            installing && 'animate-pulse',
           )}
         >
           <HardDriveDownload className="size-4" />
@@ -169,16 +152,17 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
   useEffect(() => {
     latestPaths.current = project.unrealProjects
   }, [project.unrealProjects])
-  // Per-project `Content/DazToHue` presence (undefined = probe in flight) and
-  // which card's install is currently running.
+  // Per-project `Content/DazToHue` presence (undefined = probe in flight) —
+  // drives the install button's dim; the install dialog probes for itself.
   const [dthStatus, setDthStatus] = useState<Record<string, boolean | undefined>>({})
-  const [installingPath, setInstallingPath] = useState('')
+  // The card whose install button was clicked — installing runs in a dialog
+  // (what to install: DTH content + engine-matched plugins). '' = closed.
+  const [installFor, setInstallFor] = useState('')
+  // The ✨ Generate-project dialog (create + install + link in one run).
+  const [generateOpen, setGenerateOpen] = useState(false)
   // The card whose hover-✕ was clicked — unlinking pauses on a confirm dialog
   // (same recipe as removing a Daz scene / Houdini project from a character).
   const [pendingRemove, setPendingRemove] = useState('')
-  // Ctrl/Cmd held → installed cards' dimmed install buttons light up (re-install).
-  const ctrlHeld = useModifierHeld('Control')
-  const metaHeld = useModifierHeld('Meta')
 
   // Subtle edge-fade on the cards rail: fade whichever side still has scrolled-off
   // cards, so a long list hints that it scrolls — and nothing fades when they fit.
@@ -222,41 +206,6 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
       active = false
     }
   }, [project.unrealProjects])
-
-  async function installDth(path: string, e: React.MouseEvent) {
-    const present = dthStatus[path]
-    // Present → the button is a no-op unless Ctrl/Cmd is held (explicit overwrite).
-    if (present && !(e.ctrlKey || e.metaKey)) {
-      toast.info('DTH content is already installed — Ctrl+click to overwrite it.')
-      return
-    }
-    setInstallingPath(path)
-    // Ctrl/Cmd is an explicit overwrite regardless of what the probe said: a
-    // FAILED probe reads as "absent", so `!!present` alone sent overwrite:false,
-    // the install errored "Ctrl+click to overwrite", and Ctrl+click looped the
-    // same error — user intent wins over a possibly-wrong probe.
-    const overwrite = !!present || e.ctrlKey || e.metaKey
-    try {
-      const files = await installUnrealDthContent({
-        data: { uprojectPath: path, overwrite },
-      })
-      toast.success(
-        `${present ? 'Overwrote' : 'Installed'} DTH Unreal content — ${files} file(s)`,
-      )
-      setDthStatus((s) => ({ ...s, [path]: true }))
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      // The install just proved the content IS there — adopt that over the stale
-      // probe result, so the next plain click gets the overwrite hint instead of
-      // re-running into the same error. The matched substring is a CONTRACT with
-      // Rust's UNREAL_CONTENT_EXISTS_ERROR (apps/desktop/src/install.rs), whose
-      // test pins the exact phrase — reword both sides together.
-      if (message.includes('already exists')) setDthStatus((s) => ({ ...s, [path]: true }))
-      toast.error(message)
-    } finally {
-      setInstallingPath('')
-    }
-  }
 
   async function save(paths: Array<string>, okMessage: string) {
     // Single-flight for the whole bar: `busy` disables the buttons, but the
@@ -335,17 +284,33 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
           <span className="text-[0.7rem] font-medium tracking-wide text-muted-foreground uppercase">
             Unreal projects
           </span>
-          <Button
-            variant="outline"
-            size="sm"
-            className={cn('h-7 w-fit gap-1 px-2 text-xs', busy && 'animate-pulse')}
-            disabled={busy}
-            // aria-label only — no tooltip; the visible "+ Add project" says it.
-            aria-label={addLabel}
-            onClick={() => void onPick()}
-          >
-            <Plus className="size-3.5" /> Add project
-          </Button>
+          <div className="flex gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className={cn('h-7 w-fit gap-1 px-2 text-xs', busy && 'animate-pulse')}
+              disabled={busy}
+              // aria-label only — no tooltip; the visible "+ Add project" says it.
+              aria-label={addLabel}
+              onClick={() => void onPick()}
+            >
+              <Plus className="size-3.5" /> Add project
+            </Button>
+            {/* Generate: create a new Unreal project for a detected engine and
+                install DTH content + matched plugins in one run — the Unreal
+                twin of the character pages' Generate Houdini project. */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 w-fit gap-1 px-2 text-xs"
+              disabled={busy}
+              aria-label="Generate a new Unreal project"
+              title="Generate a new Unreal project"
+              onClick={() => setGenerateOpen(true)}
+            >
+              <Sparkles className="size-3.5" />
+            </Button>
+          </div>
         </div>
         {project.unrealProjects.length > 0 && (
           <>
@@ -367,8 +332,6 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
                   key={path}
                   uprojectPath={path}
                   dthPresent={dthStatus[path]}
-                  ctrlHeld={ctrlHeld || metaHeld}
-                  installing={installingPath === path}
                   disabled={busy}
                   onOpen={(e) => {
                     // Alt+click = the app-wide "show in Explorer" hotkey (same as
@@ -382,7 +345,7 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
                       toast.error(err instanceof Error ? err.message : String(err)),
                     )
                   }}
-                  onInstall={(e) => void installDth(path, e)}
+                  onInstall={() => setInstallFor(path)}
                   onRemove={() => setPendingRemove(path)}
                 />
               ))}
@@ -415,6 +378,24 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
           </>
         )}
       </div>
+      {installFor && (
+        <UnrealInstallDialog
+          uprojectPath={installFor}
+          onClose={() => setInstallFor('')}
+          // The dialog's install just proved the content is there — adopt that
+          // over whatever the card's probe said.
+          onInstalled={(dthInstalled) => {
+            if (dthInstalled) setDthStatus((s) => ({ ...s, [installFor]: true }))
+          }}
+        />
+      )}
+      {generateOpen && (
+        <UnrealGenerateDialog
+          suggestedDir={parentDir(latestPaths.current[0] ?? '')}
+          onClose={() => setGenerateOpen(false)}
+          onGenerated={(uprojectPath) => add([uprojectPath])}
+        />
+      )}
       {pendingRemove && (
         <RemoveAssetDialog
           title="Unlink Unreal project?"

@@ -1,0 +1,14 @@
+[
+  {
+    "name": "DazToUnreal",
+    "path": "D:/Unreal Plugins/DazToUnrealBridge/UE_5.7/Plugins/DazToUnreal",
+    "engineVersion": "5.7",
+    "sourceFolder": "D:/Unreal Plugins/DazToUnrealBridge"
+  },
+  {
+    "name": "MyHelper",
+    "path": "D:/Unreal Plugins/MyHelper",
+    "engineVersion": "",
+    "sourceFolder": "D:/Unreal Plugins/MyHelper"
+  }
+]

@@ -146,6 +146,7 @@ describe('settings (settings.json)', () => {
     houdiniInstallFolder: '',
     // No Houdini activated either — both Houdini paths are the user's to edit.
     houdiniInstallKey: '',
+    unrealPluginFolders: [],
     dimManifestsFolder: '',
     dazAssetsFolders: [],
     dazMorphsSource: '',
@@ -197,6 +198,7 @@ describe('settings (settings.json)', () => {
       extraHoudiniDocsFolders: ['D:/Documents/houdini19.5'],
       houdiniInstallFolder: 'C:/Program Files/Side Effects Software/Houdini 22.0.368',
       houdiniInstallKey: '22.0.0.368',
+      unrealPluginFolders: ['X:/unreal/DazToUnrealBridge', 'X:/unreal/MyPlugin_5.7'],
       dimManifestsFolder: 'C:/Users/Public/Documents/DAZ 3D/InstallManager/ManifestFiles',
       dazAssetsFolders: ['X:/assets/a', 'X:/assets/b'],
       dazMorphsSource: 'X:/morphs',

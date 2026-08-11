@@ -152,6 +152,19 @@ export const studioSettingsSchema = z.object({
    */
   houdiniInstallKey: str,
   /**
+   * Folders holding Unreal Engine plugins, as a LIST. Two shapes are accepted
+   * per folder: a plugin folder itself (its `.uplugin` at top level, or one
+   * level down — a folder of plugins), where the UE version it was built for is
+   * read from the `.uplugin`'s `EngineVersion` or a version-looking path
+   * segment; or a MULTI-BUILD root (e.g. `…/DazToUnrealBridge`) whose
+   * subfolders name the engine version (`UE_5.7`, `5.6`, …), each holding that
+   * build's `Plugins`. The install dialog on a project's Unreal card matches
+   * these against the `.uproject`'s engine version at install time — nothing is
+   * resolved when the folder is added, so a new build dropped into a
+   * multi-build root is picked up on the next install.
+   */
+  unrealPluginFolders: stringArray,
+  /**
    * LEGACY (pre-v0.61): how the bone-scale **reference-skeleton FBX** paths in
    * the PoseAsset CSV were anchored, back when this was one app-global knob.
    * The decision is PER PROJECT now — `houdiniPathStyle` in the `.dcsp`

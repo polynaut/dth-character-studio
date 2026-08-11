@@ -13,6 +13,9 @@ import {
   poseAssetFramesSchema,
   remapResultSchema,
   sceneWearablesSchema,
+  unrealEngineInstallSchema,
+  unrealPluginSourceSchema,
+  unrealProjectStateSchema,
 } from './native-types.ts'
 
 // FFI contract tests — the TS half. The shared fixtures under `contracts/`
@@ -35,6 +38,9 @@ const CASES = [
   ['remap-results.json', z.array(remapResultSchema)],
   ['material-util-report.json', materialUtilReportSchema],
   ['houdini-installs.json', z.array(houdiniInstallSchema)],
+  ['unreal-installs.json', z.array(unrealEngineInstallSchema)],
+  ['unreal-plugins.json', z.array(unrealPluginSourceSchema)],
+  ['unreal-project-state.json', unrealProjectStateSchema],
   ['export-zip-report.json', exportZipReportSchema],
 ] as const
 
