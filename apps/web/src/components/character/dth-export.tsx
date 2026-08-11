@@ -634,6 +634,21 @@ export function DthExportAction({
           },
           houdini: [],
         }
+        // A window that RELOADED during the Daz leg and polls late enough to
+        // find the batch already finished never re-armed its cards (that path
+        // needs a 'running' poll) — the continuation would then run with an
+        // empty card column. The finished state carries the plan; the Daz
+        // cards are done anyway, so the Houdini ones are the whole list.
+        if (!pipelineRef.current) {
+          pipelineRef.current = {
+            daz: [],
+            houdini: run.houdiniProjects.map((path) => ({
+              path,
+              label: stemOf(path),
+              networks: run.scenes.map(stemOf),
+            })),
+          }
+        }
         // Every Daz card drops (the report's daz entry marks the leg done).
         publishPipeline(null, houdiniRef.current)
         // No toast here — the panel shows the handover; the report comes at

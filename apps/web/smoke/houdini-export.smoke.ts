@@ -438,6 +438,57 @@ test('the run OWNER reloads mid-batch: the sidecar restores clock, Houdini card 
   // handoff lands, written by this reloaded window.
   await runnerFinishesBatch(page)
   await expect.poll(() => fileContent(page, HOUDINI_JOB), { timeout: 15_000 }).not.toBeNull()
+  // …and the Houdini card is still there for the leg it hands over to. (The
+  // re-arm used to need a 'running' poll: a reload whose first poll found the
+  // batch already finished ran the whole Houdini leg with an empty column.)
+  await expect(page.locator(`[data-task="hou:${P.houdini}"]`)).toBeVisible()
+})
+
+test('a reload whose FIRST poll finds the batch finished still shows the Houdini card', async ({
+  page,
+}) => {
+  // The gap the spec above cannot catch: it reloads while the batch is still
+  // running. Here the window opens onto a batch that is ALREADY at 100 — the
+  // continuation path is the first thing that runs, and it used to arm no
+  // cards at all (the re-arm lived in the 'running' branch alone).
+  const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true })
+  seed.files[RUNNING_JOB] = JSON.stringify({
+    version: 1,
+    type: 'bulk-export',
+    progress: 100,
+    jobsDone: 1,
+    jobs: [
+      {
+        scenePath: P.scene,
+        scriptPath: `${SCRIPTS_ROOT}/Demo/Kira/.Bulk_ROM_Export.dsa`,
+        status: 'done',
+      },
+    ],
+  })
+  seed.files[`${P.appData}/export-run.json`] = JSON.stringify({
+    characterId: 'char-kira',
+    total: 1,
+    startedAtMs: Date.now() - 120_000,
+    houdiniProjects: [P.houdini],
+    houdiniMode: 'export-selected',
+    scenes: [P.scene],
+  })
+  seed.houdiniRunning = true
+  const settingsPath = `${P.appData}/settings.json`
+  seed.files[settingsPath] = JSON.stringify({
+    ...JSON.parse(seed.files[settingsPath] ?? '{}'),
+    houdiniInstallFolder: HOUDINI_INSTALL,
+    houdiniDocsFolder: HOUDINI_DOCS,
+  })
+  seed.files[`${HOUDINI_INSTALL}/bin/hython.exe`] = 'hython-exe-fixture'
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+
+  // The continuation runs (the sidecar carried the plan) AND wears its card.
+  await expect.poll(() => fileContent(page, HOUDINI_JOB), { timeout: 15_000 }).not.toBeNull()
+  await expect(page.locator(`[data-task="hou:${P.houdini}"]`)).toBeVisible()
 })
 
 test('rom only: the Houdini list can only OPEN — no auto-select, no export continuation', async ({
