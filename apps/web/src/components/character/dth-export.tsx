@@ -41,6 +41,7 @@ import {
 } from '#/lib/rom/api.ts'
 import { holdBusyCursor } from '#/lib/busy-cursor.ts'
 import {
+  formatClock,
   formatElapsed,
   hipSelectionAfterToggle,
   houdiniModeForSelection,
@@ -118,11 +119,11 @@ function dismissFinishToasts() {
   toast.dismiss(HOUDINI_TOAST_ID)
 }
 
-/** A live clock riding a progress button (`· 4m 12s`) — self-ticking each
+/** A live digital clock riding a progress button (`· 04:12`, all four digits
+ *  always rendered; an hour-plus run grows to `1:04:12`) — self-ticking each
  *  second, so the watch's 2.5s poll doesn't own the cadence. Renders nothing
  *  when the start is unknown (another window's run, adopted for display).
- *  Fixed-width + tabular digits: the tick must not resize the button
- *  ("59s" → "1m 00s" and every digit in between stay in reserved space). */
+ *  Reserved width + tabular digits: the tick never resizes the button. */
 function ElapsedSince({ since }: { since?: number }) {
   const [, tick] = useState(0)
   useEffect(() => {
@@ -132,8 +133,8 @@ function ElapsedSince({ since }: { since?: number }) {
   }, [since])
   if (since === undefined) return null
   return (
-    <span className="inline-block w-[9ch] text-left tabular-nums">
-      · {formatElapsed(Date.now() - since)}
+    <span className="inline-block min-w-[7ch] text-left tabular-nums">
+      · {formatClock(Date.now() - since)}
     </span>
   )
 }

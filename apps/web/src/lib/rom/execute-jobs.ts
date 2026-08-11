@@ -464,6 +464,16 @@ export function preCheckedScenes(
  * toast's total: `"37s"`, `"4m 12s"`, `"1h 03m"`. Sub-second runs still read
  * `"0s"` rather than vanishing. Pure so the three widths are pinned by tests.
  */
+/** Digital-clock elapsed time for the live buttons — all four digits always
+ *  rendered ("00:01", "12:34"); an hour-plus run grows to "1:02:03". */
+export function formatClock(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000))
+  const seconds = String(totalSeconds % 60).padStart(2, '0')
+  const minutes = String(Math.floor(totalSeconds / 60) % 60).padStart(2, '0')
+  const hours = Math.floor(totalSeconds / 3600)
+  return hours > 0 ? `${hours}:${minutes}:${seconds}` : `${minutes}:${seconds}`
+}
+
 export function formatElapsed(ms: number): string {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000))
   const seconds = totalSeconds % 60

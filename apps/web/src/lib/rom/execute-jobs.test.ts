@@ -24,6 +24,7 @@ import {
   parseJobFileJson,
   preCheckedScenes,
   scanConfigJson,
+  formatClock,
   formatElapsed,
   hipSelectionAfterToggle,
   houdiniModeForSelection,
@@ -581,6 +582,18 @@ describe('formatElapsed — the run clock/total, three widths', () => {
     // Zero-padded tail so the ticking clock doesn't jitter in width.
     expect(formatElapsed(60_000 + 5_000)).toBe('1m 05s')
     expect(formatElapsed(60 * 60_000 + 3 * 60_000)).toBe('1h 03m')
+  })
+})
+
+describe('formatClock — the live buttons’ digital clock', () => {
+  it('always renders all four digits, growing to hours only past 1h', () => {
+    expect(formatClock(0)).toBe('00:00')
+    expect(formatClock(1_000)).toBe('00:01')
+    expect(formatClock(999)).toBe('00:00')
+    expect(formatClock(12 * 60_000 + 34_000)).toBe('12:34')
+    expect(formatClock(60 * 60_000 + 2 * 60_000 + 3_000)).toBe('1:02:03')
+    // Negative clock skew clamps to zero rather than rendering nonsense.
+    expect(formatClock(-5_000)).toBe('00:00')
   })
 })
 
