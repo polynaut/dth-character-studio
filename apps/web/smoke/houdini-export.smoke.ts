@@ -169,9 +169,12 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
   expect(pending.progressLogPath).toBe(`${P.appData}/export-progress.log`)
   expect(pending.jobs[0].steps).toBe(5)
   // The header grew the run's TASK CARDS: the scene, then the Houdini project —
-  // all still waiting (the Runner hasn't picked the batch up yet).
+  // all still waiting (the Runner hasn't picked the batch up yet). The log
+  // window ALREADY stands (empty): while a run is live it must never vanish,
+  // not even in this pending stretch before any lines exist.
   await expect(page.locator(`[data-task="daz:${P.scene}"]`)).toBeVisible()
   await expect(page.locator(`[data-task="hou:${P.houdini}"]`)).toBeVisible()
+  await expect(page.locator('[data-export-log]')).toBeVisible()
 
   // The Runner claims the batch and works the scene: the running job file +
   // the verbose progress log. The scene card goes ACTIVE, the log window

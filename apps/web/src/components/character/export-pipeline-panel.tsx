@@ -219,7 +219,12 @@ export function ExportPipelinePanel({ view }: { view: ExportPipelineView }) {
     // the buttons' "Working" label + reserved clock never resize.
     <div className="pipeline-scroll col-span-2 row-start-1 grid min-h-0 grid-cols-subgrid grid-rows-[minmax(0,1fr)_auto] gap-y-2">
       {view.tasks.length > 0 && <ExportTaskCards tasks={view.tasks} />}
-      {view.log && <ExportActivityLog log={view.log} />}
+      {/* The log window is UNCONDITIONAL: while the panel exists (any live
+          run — pending, either leg, adopted) the window stands, empty until
+          lines arrive. States without a feed used to drop it (the pending
+          stretch before the Runner claims, the Daz→Houdini baton moment),
+          and a working pipeline with no log window reads as broken. */}
+      <ExportActivityLog log={view.log ?? { lines: [] }} />
       {view.bars && (
         <div className="col-start-2 row-start-2 flex min-w-0 flex-col gap-1.5">
           {view.bars.overall && <ProgressBar bar={view.bars.overall} emphasis />}
