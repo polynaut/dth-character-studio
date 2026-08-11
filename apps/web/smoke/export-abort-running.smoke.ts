@@ -5,7 +5,7 @@ import { installTauriMock } from './tauri-mock.ts'
 
 import type { Page } from '@playwright/test'
 
-// Ctrl on the live **Exporting n/m** button turns it into **Abort**.
+// Ctrl on the live **Working..** button turns it into **Abort**.
 //
 // Once the Runner RENAMES the job file (the claim), aborting used to be over:
 // the button only offered "stop watching", and the claimed file stayed on disk
@@ -54,7 +54,7 @@ async function runnerClaimsBatch(page: Page) {
 }
 
 /** Hand the character's one scene off, then have the Runner claim it. Leaves the
- *  header button in its live "Exporting" state. */
+ *  header button in its live "Working.." state. */
 async function startAndClaim(page: Page) {
   const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true, dazInstallFolder: DAZ_INSTALL })
   seed.files[`${SCRIPTS_ROOT}/Demo/Kira/.Bulk_ROM_Export.dsa`] = '// bulk-export fixture'
@@ -70,7 +70,7 @@ async function startAndClaim(page: Page) {
   // Daz was not running, so the handoff returns as soon as the file is written.
   await expect.poll(() => fileExists(page, PENDING_JOB)).toBe(true)
   await runnerClaimsBatch(page)
-  await expect(page.getByRole('button', { name: /Exporting 0\/1/ })).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByRole('button', { name: /Working\.\./ })).toBeVisible({ timeout: 15_000 })
 }
 
 test('Ctrl turns the running export into Abort — and it deletes the claimed job file', async ({
@@ -98,14 +98,14 @@ test('releasing Ctrl puts the progress button back — the run is untouched', as
   await page.keyboard.down('Control')
   await expect(page.getByRole('button', { name: 'Abort' })).toBeVisible()
   await page.keyboard.up('Control')
-  await expect(page.getByRole('button', { name: /Exporting 0\/1/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Working\.\./ })).toBeVisible()
   expect(await fileExists(page, RUNNING_JOB)).toBe(true)
 })
 
 test('a plain click still only stops watching — the job file stays', async ({ page }) => {
   await startAndClaim(page)
 
-  await page.getByRole('button', { name: /Exporting 0\/1/ }).click()
+  await page.getByRole('button', { name: /Working\.\./ }).click()
   // The watch is dropped; the file on disk is deliberately NOT touched (the
   // batch belongs to Daz, and the next handoff cleans a leftover up).
   expect(await fileExists(page, RUNNING_JOB)).toBe(true)

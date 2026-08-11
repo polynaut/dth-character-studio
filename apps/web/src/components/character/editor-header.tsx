@@ -297,11 +297,16 @@ export function EditorHeader({
             header, so they stay reachable as the form scrolls. The column
             SELF-STRETCHES to the header's full height so the live export
             pipeline (meters + task cards + log) can fill everything above the
-            buttons — and, crucially, shrink WITH the header's sticky collapse:
-            bottom-aligned overflowing content used to spill out the top of the
-            docked header and vanish. */}
+            buttons. The panel does NOT dock: `pipeline-scroll` fades it out on
+            the header-collapse scroll timeline (styles.css), so the docked
+            sticky header shows only the buttons — the panel is a working view
+            for the top of the page. */}
         <div className="ml-auto mb-6 flex shrink-0 flex-col items-end justify-end gap-2 self-stretch">
-          {exportPipeline && <ExportPipelinePanel view={exportPipeline} />}
+          {exportPipeline && (
+            <div className="pipeline-scroll flex min-h-0 flex-1">
+              <ExportPipelinePanel view={exportPipeline} />
+            </div>
+          )}
           <div className="actions-scroll flex justify-end gap-2">
             <DthExportAction
               projectId={projectId}

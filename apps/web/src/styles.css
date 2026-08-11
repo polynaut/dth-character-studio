@@ -441,6 +441,25 @@ a {
   }
 }
 
+/* The live export-pipeline panel (meters + task cards + log window) is a
+   WORKING view, not a docked control: it fades away as the header collapses
+   into sticky mode and comes back at the top. Fade only — the header's height
+   is avatar-driven, so nothing jumps; visibility flips near the end so the
+   invisible panel can't catch pointer events (log scrollbar) while docked. */
+@keyframes dth-pipeline-hide {
+  to {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+@supports (animation-timeline: scroll()) {
+  .pipeline-scroll {
+    animation: dth-pipeline-hide linear both;
+    animation-timeline: scroll(root block);
+    animation-range: 100px 242px;
+  }
+}
+
 /* Isolates the character-editor body from the sticky header's collapse. When the
    header's height animates on scroll, every following element would normally be
    re-laid-out on the main thread each frame (the heavy form = the lag). Layout +

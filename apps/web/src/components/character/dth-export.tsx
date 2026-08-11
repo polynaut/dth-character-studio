@@ -120,7 +120,9 @@ function dismissFinishToasts() {
 
 /** A live clock riding a progress button (`· 4m 12s`) — self-ticking each
  *  second, so the watch's 2.5s poll doesn't own the cadence. Renders nothing
- *  when the start is unknown (another window's run, adopted for display). */
+ *  when the start is unknown (another window's run, adopted for display).
+ *  Fixed-width + tabular digits: the tick must not resize the button
+ *  ("59s" → "1m 00s" and every digit in between stay in reserved space). */
 function ElapsedSince({ since }: { since?: number }) {
   const [, tick] = useState(0)
   useEffect(() => {
@@ -129,7 +131,11 @@ function ElapsedSince({ since }: { since?: number }) {
     return () => window.clearInterval(id)
   }, [since])
   if (since === undefined) return null
-  return <> · {formatElapsed(Date.now() - since)}</>
+  return (
+    <span className="inline-block w-[9ch] text-left tabular-nums">
+      · {formatElapsed(Date.now() - since)}
+    </span>
+  )
 }
 
 /**
@@ -190,15 +196,15 @@ function ExportProgressButton({
       onClick={onStopWatching}
       title={`Daz Studio is working the batch — ${progress.processed} of ${progress.total} scene${progress.total === 1 ? '' : 's'} processed${progress.failed > 0 ? ` (${progress.failed} failed)` : ''}. Click to stop watching, or hold Ctrl to abort and delete the job file.`}
     >
-      {/* Processed count, not the percent — the % only moved in row-sized
-          jumps anyway (the Runner's progress is rows ÷ total). The live
-          clock rides along whenever this window saw the handoff go out. The
+      {/* Just "Working.." — the counts and percents live in the pipeline
+          panel above (and this button's tooltip); a constant label plus the
+          reserved-width clock keeps the button from resizing every tick. The
           DAZ mark names which app is doing the work — the run happens
           outside the studio, and this button is where the user looks to
           know who is busy (the Houdini leg below wears its own mark). */}
       <Loader2 className="animate-spin" />
       <img src={dazLogo} alt="Daz Studio" className="size-5 shrink-0 object-contain" />
-      Exporting {progress.processed}/{progress.total}
+      Working..
       <ElapsedSince since={progress.startedAtMs} />
     </Button>
   )
@@ -806,21 +812,6 @@ export function DthExportAction({
     // tooltip must say so. (Reading the ref in render is sound here: every
     // queue mutation is bracketed by a setHoudini, which re-renders.)
     const queuedNote = houdiniQueueRef.current ? ' — the queued projects will not start' : ''
-    // With a node actively exporting (a live activity channel), count the one
-    // being WORKED ON ("1/1"), not the ones done ("0/1") — the chip reads as
-    // "working on n of m". The activity itself renders in the header's log
-    // window ({@link HoudiniActivityLog}), not here.
-    const activity = houdini.state === 'running' ? houdini.activity : undefined
-    const workedOn =
-      houdini.state === 'running' && houdini.total > 0
-        ? activity
-          ? Math.min(houdini.done + 1, houdini.total)
-          : houdini.done
-        : 0
-    const label =
-      houdini.state === 'running' && houdini.total > 0
-        ? `Houdini ${workedOn}/${houdini.total}`
-        : 'Houdini starting…'
     return (
       <Button
         variant="outline"
@@ -836,9 +827,12 @@ export function DthExportAction({
             : `Houdini is loading the project in the background (headless); the export starts once the scene is loaded. Click to stop watching${queuedNote}.`
         }
       >
+        {/* Same constant "Working.." as the Daz leg — the node counts live in
+            the pipeline panel's meters and this tooltip; the Houdini mark is
+            what tells the legs apart. */}
         <Loader2 className="animate-spin" />
         <img src={houdiniLogo} alt="Houdini" className="size-5 shrink-0 object-contain" />
-        {label}
+        Working..
         <ElapsedSince
           since={houdini.state === 'starting' || houdini.state === 'running' ? houdini.startedAtMs : undefined}
         />
