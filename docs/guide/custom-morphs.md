@@ -51,6 +51,17 @@ Each pose row has two name fields with very different jobs:
 - **Parameter name** — must **exactly match the parameter's internal name in
   Daz Studio** (not its display label), or that frame fails in the ROM run.
 
+> [!NOTE]
+> **An import fixes the names for you.** Daz property labels are prose —
+> `Torso Muscular`, `!Breast Large`, `Shape NAVEL FOR PEAR` — so a scanned
+> section used to arrive as a grid of rows flagged red, with dozens of names to
+> retype by hand. **Import from Daz scene** now strips what Houdini rejects:
+> `Torso Muscular` becomes `TorsoMuscular`, which reads the same and passes.
+> Nothing is lost — the raw Daz property stays on the morph and is still what
+> the **Parameter name** column shows, so each row says exactly which morph it
+> drives. This applies to what the studio *derives* on import, not to what you
+> type: a name **you** enter is still flagged rather than silently rewritten.
+
 A pose row can also drive its one output from **several Daz morphs at once** —
 expand its **morphs** toggle.
 

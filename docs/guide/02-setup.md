@@ -1,15 +1,15 @@
 # 2 · One-time setup
 
-Open **Settings** (top right) → **General** tab. Three things get wired up here:
-your **Daz installation**, the **DTH release** (the content your ROMs are built
-from) and the **DTH Exporter Plugin** (for exporting out of Daz). The last two
-come from your
-[DazToHue](https://www.artstation.com/marketplace/p/BLM5K/daztohue) purchase —
-extract the downloaded archives somewhere permanent first.
+Open **Settings** (top right) → **General** tab. Four things get wired up here:
+your **Daz installation**, your **Houdini installation**, the **DTH release**
+(the content your ROMs are built from) and the **Daz Studio plugins** (for
+exporting out of Daz, and for letting the studio drive it). The last two come
+from your [DazToHue](https://www.artstation.com/marketplace/p/BLM5K/daztohue)
+purchase — extract the downloaded archives somewhere permanent first.
 
-The first two are usually already done for you: the tab opens with every Daz
-Studio and every Houdini on the machine listed as a card. Click the one you
-want and its paths are filled in and saved.
+The **two installations** are usually already done for you: the tab opens with
+every Daz Studio and every Houdini on the machine listed as a card. Click the one
+you want and its paths are filled in and saved.
 
 <p align="center">
   <img width="900" alt="Settings → General with a Daz Studio and a Houdini installation card activated" src="screenshots/settings-installations.png" />
@@ -27,7 +27,7 @@ again: every Daz Studio DIM has installed appears as a card at the top of
 <p align="center">
   <img width="900" alt="Daz installation cards with the derived read-only paths" src="screenshots/settings-daz-install.png" />
   <br>
-  <sub><em>Both Daz Studios found; DAZ Studio 6 activated, and the paths it derives shown read-only.</em></sub>
+  <sub><em>Both Daz Studios found; DAZ Studio 6 activated, and the paths it derives shown read-only. The older card carries the <strong>Export only</strong> switch described below.</em></sub>
 </p>
 
 Click one to **activate** it. Three paths are filled and saved on the spot —
@@ -37,7 +37,7 @@ there is no Save to press:
 | --- | --- |
 | **My DAZ 3D Library** | the library DIM currently installs into |
 | **Daz Studio install folder** | that card's own install folder |
-| **DAZ Install Manager manifests folder** | DIM's product database (see [Product scanning](./product-scanning.md)) |
+| **DIM product database** | DIM's manifests folder (see [Product scanning](./product-scanning.md)) |
 
 They stay read-only while an installation is active, and they follow DIM: move
 your library later and opening Settings picks it up, with nothing to
@@ -48,6 +48,49 @@ belong to DIM, not to one Studio version.
 **No DIM, or a machine it doesn't describe?** The section says so and the three
 paths stay ordinary editable fields. **Set the paths manually** does the same
 after activating, keeping the values.
+
+### Export only — run the batch in an older Daz Studio
+
+Skip this unless you have **two** Daz Studios installed.
+
+The [DTH Export batch](./05-rom-in-daz.md#batch-export--dth-export) is the one
+thing that needs the **Runner plugin**, and a Daz plugin is built against a
+single Studio major version. So moving to a brand-new Daz Studio used to mean
+waiting for a Runner build before you could export at all — or putting the whole
+app back a version.
+
+With the newest installation active, each **older** card that can still run a
+batch carries an **Export only** switch. Turn it on and DTH Export starts its
+batch **in that installation**; everything else — opening scenes, running
+scripts, installing content — keeps using the active one. It saves on the spot
+like Activate, and only one installation can carry it: turning it on for one
+card turns it off everywhere else.
+
+Two things follow the switch, and have to — the Runner plugin is **installed
+into** whichever installation runs the batch, and the export dialog **checks for
+it there**. A Runner sitting in the other Daz would let the dialog report
+"ready", then start a Daz with nothing to claim the job, and wait for a batch
+that never begins.
+
+The switch is offered only on installations **older** than the active one, only
+while the active one is the **newest** detected, and never on one whose folder
+has gone missing. With a single Daz Studio it never appears — it exists for the
+machine that has two and whose newer one has no Runner yet.
+
+**Daz Studio 4 can carry it.** It needs the Exporter plugin's scripted export,
+which mrpdean shipped in the Daz Studio 4 build with **Exporter 2.0.2.0** — with
+an older one a DS4 batch opens every scene and exports nothing. Keeping every
+installation on the newest build (below) is what settles that.
+
+If the flagged installation later disappears from the machine, Settings says so
+and offers to send exports back to the active one, rather than leaving every
+export pointed at a folder that isn't there.
+
+> [!NOTE]
+> Don't confuse this with the **Export only** *mode* inside the
+> [DTH Export dialog](./05-rom-in-daz.md#batch-export--dth-export). That one
+> decides *what* a batch does (export the saved ROM animations without
+> rebuilding them); this switch decides *which Daz Studio* runs it.
 
 ## Houdini installation — same idea
 
@@ -80,8 +123,13 @@ dropped; usually an uninstall left it.
 <p align="center">
   <img width="900" alt="settings general, DTH release section" src="screenshots/settings-dth-release.png" />
   <br>
-  <sub><em>The DTH release section in Settings → General.</em></sub>
+  <sub><em>The DTH release section in Settings → General — one release, and the destinations it installs into.</em></sub>
 </p>
+
+Pick the release first; everything below it is a **destination**. Once one is
+selected the panel says *Ready to install DTH x.y* and lists each install target
+on its own row — the Daz library, then the Houdini documents folder — so the
+section reads as one release going to two places.
 
 1. **DTH release(s) folder** — point it at the extracted DTH release, or at a
    folder holding several versions; then pick the **active** one in the

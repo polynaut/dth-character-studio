@@ -454,8 +454,12 @@ older runtimes as stale.
   character name), `import_character_name` (prefilled paths may bypass the
   HDA's auto-fill), and `import_skinning_method` (`characterSkinning`'s
   dqs→`dualquat` / linear→`linear`). Paths ride the same `hipRefPrefixFor`
-  prefix as the CSVs (`$JOB/<houdiniSubdir>/daz-export/...` when the gate
-  passes and the project's path style is `hip`), absolute otherwise.
+  prefix as the CSVs — since runtime **v66** that is `$HIP/daz-export/...` for
+  the managed layout (every linked project in ONE folder with the exports under
+  it), falling back to `$JOB/<houdiniSubdir>/daz-export/...` when projects are
+  spread across folders or the export root sits beside rather than under the
+  houdini folder — when the gate passes and the project's path style is `hip`;
+  absolute otherwise.
   Two things that look like details and are not:
   - **`scenePath` picks the scene** (v0.68 — the Generate dialog's picker, shown
     only with more than one linked scene; an unknown value falls back to the
