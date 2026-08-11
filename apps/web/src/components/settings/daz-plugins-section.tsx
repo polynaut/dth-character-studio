@@ -404,13 +404,13 @@ export function DazPluginsSection({
         >
           <Download /> {pending > 0 ? 'Install / update all' : 'Reinstall all'}
         </Button>
-        <span className="text-sm text-muted-foreground">
-          {pending > 0
-            ? `${pending} plugin cop${pending === 1 ? 'y' : 'ies'} pending`
-            : state && state.targets.length > 0
-              ? 'Everything up to date — Reinstall copies it all again.'
-              : ''}
-        </span>
+        {/* Only the actionable state gets a line — with nothing pending, the
+            button already says "Reinstall all" and the table above is green. */}
+        {pending > 0 && (
+          <span className="text-sm text-muted-foreground">
+            {pending} plugin cop{pending === 1 ? 'y' : 'ies'} pending
+          </span>
+        )}
       </div>
 
       {report && <InstallReportList report={report} onClose={() => setReport(null)} />}
