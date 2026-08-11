@@ -43,13 +43,13 @@ function fbmGroup(): RomGroup {
       {
         id: 'p1',
         name: 'BodyTone',
-        morphs: [{ id: 'm1', node: 'Genesis9', prop: 'body_bs_BodyTone', value: 1 }],
+        morphs: [{ id: 'm1', node: 'Genesis9', prop: 'body_bs_BodyTone', value: 1, autoBase: true }],
         boneScaleRef: false,
       },
       {
         id: 'p2',
         name: 'GluteSize',
-        morphs: [{ id: 'm2', node: 'Genesis9', prop: 'body_bs_GluteSize', value: -1 }],
+        morphs: [{ id: 'm2', node: 'Genesis9', prop: 'body_bs_GluteSize', value: -1, autoBase: true }],
         boneScaleRef: false,
       },
     ],
@@ -91,7 +91,7 @@ describe('applySceneOverride', () => {
             {
               id: 'p1',
               name: 'BeachBodyTone',
-              morphs: [{ id: 'mo1', node: 'Genesis9', prop: 'body_bs_BeachTone', value: 0.5 }],
+              morphs: [{ id: 'mo1', node: 'Genesis9', prop: 'body_bs_BeachTone', value: 0.5, autoBase: true }],
               boneScaleRef: false,
             },
           ],
@@ -122,7 +122,7 @@ describe('applySceneOverride', () => {
                 {
                   id: 'a1',
                   name: 'BeachDress',
-                  morphs: [{ id: 'ma1', node: 'BeachDress', prop: 'dress_bs_Flow', value: 1 }],
+                  morphs: [{ id: 'ma1', node: 'BeachDress', prop: 'dress_bs_Flow', value: 1, autoBase: true }],
                   boneScaleRef: false,
                 },
               ],
@@ -297,7 +297,7 @@ describe('applySceneOverride — full owned config (mode / preset / art directio
 
   it('carries the scene’s own art direction (frame content)', () => {
     const art = [
-      { id: 'ad1', rom: 'gp' as const, frame: 96, name: 'VaginaOpen', morphs: [{ id: 'm', node: 'GoldenPalace_G9', prop: 'GP_Vagina_Open', value: 0.8 }] },
+      { id: 'ad1', rom: 'gp' as const, frame: 96, name: 'VaginaOpen', morphs: [{ id: 'm', node: 'GoldenPalace_G9', prop: 'GP_Vagina_Open', value: 0.8, autoBase: true }] },
     ]
     const merged = applySceneOverride(
       makeSections(),
@@ -337,7 +337,7 @@ describe('mergeSceneOverride — jcm swap', () => {
 
 describe('sceneOverrideBuildsRom — structural (frame-layout) gate', () => {
   const artA: ArtDirectionFrame = { id: 'a', rom: 'gp', frame: 96, name: 'X', morphs: [] }
-  const artB: ArtDirectionFrame = { id: 'a', rom: 'gp', frame: 96, name: 'X', morphs: [{ id: 'm', node: 'GoldenPalace_G9', prop: 'GP_Open', value: 0.8 }] }
+  const artB: ArtDirectionFrame = { id: 'a', rom: 'gp', frame: 96, name: 'X', morphs: [{ id: 'm', node: 'GoldenPalace_G9', prop: 'GP_Open', value: 0.8, autoBase: true }] }
   const genConfig = (artDirection: Array<ArtDirectionFrame>, presetAssets = ['GP9 - Golden Palace.duf']) => ({
     enabled: true, mode: 'preset' as const, presetAssets, artDirection, groups: [], customAssetPath: '',
   })
@@ -456,7 +456,7 @@ describe('generateAll — scene overrides folded into the one script', () => {
           {
             id: 'p1',
             name: 'BeachBodyTone',
-            morphs: [{ id: 'mo2', node: 'Genesis9', prop: 'body_bs_BeachTone', value: 0.5 }],
+            morphs: [{ id: 'mo2', node: 'Genesis9', prop: 'body_bs_BeachTone', value: 0.5, autoBase: true }],
             boneScaleRef: false,
           },
         ],
@@ -467,7 +467,7 @@ describe('generateAll — scene overrides folded into the one script', () => {
               {
                 id: 'a1',
                 name: 'BeachDress',
-                morphs: [{ id: 'ma2', node: 'BeachDress', prop: 'dress_bs_Flow', value: 1 }],
+                morphs: [{ id: 'ma2', node: 'BeachDress', prop: 'dress_bs_Flow', value: 1, autoBase: true }],
                 boneScaleRef: false,
               },
             ],
@@ -577,7 +577,7 @@ describe('generateAll — scene overrides folded into the one script', () => {
               {
                 id: 'p1',
                 name: poseName,
-                morphs: [{ id: 'm', node: 'Genesis9', prop: 'p', value: 1 }],
+                morphs: [{ id: 'm', node: 'Genesis9', prop: 'p', value: 1, autoBase: true }],
                 boneScaleRef: false,
               },
             ],
@@ -647,7 +647,7 @@ describe('generateAll — scene overrides folded into the one script', () => {
             {
               id: 'p1',
               name: 'BeachTone',
-              morphs: [{ id: 'mo', node: 'Genesis9', prop: 'b', value: 0.5 }],
+              morphs: [{ id: 'mo', node: 'Genesis9', prop: 'b', value: 0.5, autoBase: true }],
               boneScaleRef: false,
             },
           ],
@@ -763,7 +763,7 @@ describe('generateAll — scene overrides folded into the one script', () => {
     // OMITS gpArtDirection, the shallow runtime copy can't unset the base's
     // key, and the cleared scene got the base's morphs stamped anyway. The
     // explicit null trips the runtime's truthiness gate instead.
-    const artB = { id: 'a', rom: 'gp' as const, frame: 96, name: 'Open', morphs: [{ id: 'm', node: 'GoldenPalace_G9', prop: 'GP_Open', value: 0.8 }] }
+    const artB = { id: 'a', rom: 'gp' as const, frame: 96, name: 'Open', morphs: [{ id: 'm', node: 'GoldenPalace_G9', prop: 'GP_Open', value: 0.8, autoBase: true }] }
     const cleared = makeOverride({
       scenePath: scene,
       rom: { GEN: { owned: ownedGenConfig({ artDirection: [] }) } },
@@ -850,7 +850,7 @@ describe('generateAll — scene overrides folded into the one script', () => {
   })
 
   it('an art-direction-only scene override emits gpArtDirection but NO scene CSV', () => {
-    const artB = { id: 'a', rom: 'gp' as const, frame: 96, name: 'Open', morphs: [{ id: 'm', node: 'GoldenPalace_G9', prop: 'GP_Open', value: 0.8 }] }
+    const artB = { id: 'a', rom: 'gp' as const, frame: 96, name: 'Open', morphs: [{ id: 'm', node: 'GoldenPalace_G9', prop: 'GP_Open', value: 0.8, autoBase: true }] }
     const ov = makeOverride({ scenePath: scene, rom: { GEN: { owned: ownedGenConfig({ artDirection: [artB] }) } } })
     const files = generateAll(genFemale({ sceneOverrides: [ov] }), {}, FRAMES)
     // Art direction doesn't change the frame layout → no scene-suffixed CSV.
@@ -909,7 +909,7 @@ describe('generateAll — scene overrides folded into the one script', () => {
           suffix: 'centre' as const,
           method: 'individual' as const,
           calculateFrom: 'default' as const,
-          poses: [{ id: 'gp1', name: 'BeachGP', morphs: [{ id: 'm', node: 'Genesis9', prop: 'p', value: 1 }], boneScaleRef: false }],
+          poses: [{ id: 'gp1', name: 'BeachGP', morphs: [{ id: 'm', node: 'Genesis9', prop: 'p', value: 1, autoBase: true }], boneScaleRef: false }],
         },
       ],
       customAssetPath: '',

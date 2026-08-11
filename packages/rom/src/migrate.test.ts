@@ -1054,3 +1054,82 @@ describe('characterSchema — v28 frameZeroMorphs (additive)', () => {
     expect(parsed.sceneOverrides[1].frameZero).toBeUndefined() // shares the base
   })
 })
+
+describe('characterSchema — v31 autoBase default flip (false → true)', () => {
+  const now = '2026-08-11T00:00:00.000Z'
+  const v30Character = (): Record<string, any> => ({
+    id: 'c1',
+    name: 'Kira',
+    createdAt: now,
+    updatedAt: now,
+    schemaVersion: 30,
+    sections: {
+      FBM: {
+        enabled: true,
+        mode: 'custom',
+        groups: [
+          {
+            id: 'g1',
+            poses: [
+              {
+                id: 'p1',
+                name: 'BodyTone',
+                // Pre-v31 shape: OFF was written as an absent key, ON as `true`.
+                morphs: [
+                  { id: 'm1', node: 'Genesis9', prop: 'body_bs_BodyTone', value: 1 },
+                  { id: 'm2', node: 'Genesis9', prop: 'body_bs_GluteSize', value: 1, autoBase: true },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      GEN: {
+        enabled: true,
+        mode: 'preset',
+        artDirection: [
+          {
+            id: 'a1',
+            rom: 'gp',
+            frame: 100,
+            name: 'AnusOpen',
+            morphs: [{ id: 'am1', node: 'GoldenPalace_G9', prop: 'GP9_Anus_Open', value: 0.9 }],
+          },
+        ],
+      },
+    },
+  })
+
+  it('turns auto-base ON for every morph a pre-v31 definition left unset', () => {
+    const parsed = characterSchema.parse(migrateCharacterData(v30Character()))
+    const morphs = parsed.sections.FBM.groups[0].poses[0].morphs
+    // This IS the one-time migration: absent (= off before v31) reads back as on.
+    expect(morphs[0].autoBase).toBe(true)
+    // A stored `true` is unchanged.
+    expect(morphs[1].autoBase).toBe(true)
+    // Art-direction morphs share morphSchema, so they get the same default.
+    expect(parsed.sections.GEN.artDirection[0].morphs[0].autoBase).toBe(true)
+  })
+
+  it('keeps an explicit false — the v31 opt-out survives a round trip', () => {
+    const raw = v30Character()
+    raw.sections.FBM.groups[0].poses[0].morphs[0].autoBase = false
+    const parsed = characterSchema.parse(migrateCharacterData(raw))
+    expect(parsed.sections.FBM.groups[0].poses[0].morphs[0].autoBase).toBe(false)
+    // Idempotent in the saved state: re-parsing the parsed result changes nothing
+    // (a false must NOT be re-flipped to true on the next read).
+    const again = characterSchema.parse(migrateCharacterData(structuredClone(parsed)))
+    expect(again).toEqual(parsed)
+  })
+
+  it('an auto-based morph emits autoBase into the generated config; an opted-out one does not', () => {
+    const on = characterSchema.parse(migrateCharacterData(v30Character()))
+    expect(toCharacterScriptDsa(on).content).toContain('"autoBase": true')
+
+    const raw = v30Character()
+    for (const morph of raw.sections.FBM.groups[0].poses[0].morphs) morph.autoBase = false
+    raw.sections.GEN.artDirection[0].morphs[0].autoBase = false
+    const off = characterSchema.parse(migrateCharacterData(raw))
+    expect(toCharacterScriptDsa(off).content).not.toContain('autoBase')
+  })
+})

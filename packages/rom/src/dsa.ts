@@ -177,6 +177,18 @@ export function stripTrailingSlashes(path: string): string {
   return out
 }
 
+/**
+ * One morph as the runtime reads it. `autoBase` is emitted only when ON (schema
+ * v31's default) — the runtime reads an absent flag as off, so the opt-out costs
+ * no key. Same for `base`, which is unset unless the user typed one.
+ *
+ * MEASURED: only the extraFrames path honours these two. The art-direction path
+ * (`applyArtDirectionData` in DthUtils.dsa) sawtooths through
+ * `createMorphFrame(oProp, frame, value)` with no base argument, so a GP/DK
+ * art-direction morph always returns to 0 whatever this emits. They are emitted
+ * there anyway rather than special-cased away: the field belongs to the morph,
+ * and stripping it would encode the runtime's current limit into the payload.
+ */
 function morphJson(morph: { node: string; prop: string; value: number; base?: number; autoBase?: boolean }) {
   return {
     node: morph.node,

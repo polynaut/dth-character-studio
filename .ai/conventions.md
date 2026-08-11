@@ -255,6 +255,18 @@ The persisted `Character` shape is versioned (`CHARACTER_SCHEMA_VERSION` in
    default and removed fields need **no step** (zod fills/strips).
 3. A value needing host context (settings, fs, installed DTH release) resolves in
    web `parseCharacter` — never in the pure core.
+3b. **Flipping an existing zod default is a schema change too**, and the flip
+   direction decides whether you need a step. `.default()` only fires on an
+   ABSENT key, so it re-reads every old file — which is the migration when you
+   WANT old data to change (v31 turned per-morph `autoBase` on for every stored
+   morph and deliberately added no step), and a data-loss bug when you don't
+   (v20 flipped `sceneOverride.enabled` and added a step to preserve the old
+   meaning of an omitted key). Decide which one you are doing and say so in the
+   History line. When the new default should also hold for freshly minted
+   objects, prefer `.default()` over `.optional()`: it makes the field REQUIRED
+   on the parsed type, so `tsc` names every creation site instead of leaving
+   them to be remembered. Pair it with ONE mint helper (`newMorph` in
+   `types.ts`) so the defaults of a new row live in a single place.
 4. Steps run pre-zod on raw objects, must be idempotent, and guard on
    `=== undefined`.
 5. A new field carrying a **scene path** (or any inside-the-character-folder
