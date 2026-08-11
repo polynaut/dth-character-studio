@@ -1,5 +1,32 @@
 # @dth/desktop
 
+## 0.74.0
+
+### Minor Changes
+
+- [#791](https://github.com/polynaut/dth-character-studio/pull/791) [`2c37033`](https://github.com/polynaut/dth-character-studio/commit/2c37033874e1ff6ddac32a9f61c2c630ca028160) Thanks [@polynaut](https://github.com/polynaut)! - Character **Export & Import** — the character page's Operations card packs the whole character into a self-contained `<Name>_<date>.dcsc.zip` (definition, notes, all Daz scenes, all Houdini projects, avatar and studio metadata always; the regenerable `daz-export` / final `export` trees behind two toggles; already-compressed content is stored, the rest fast-deflated), saved to a folder you pick. Importing the zip onto a character opens an **import wizard** (Fill-style): rename the character (pre-filled from the zip), pick the ROM sections/extras to take over, the Daz scenes to restore (primary mandatory — existing scenes are always replaced) and the Houdini projects (added beside or replacing the character's own); the character entity persists. Dropped on a project page, the zip restores wholesale as a new character. Every stored path is repointed to the new location — including the Houdini projects' `$JOB` and references (via the Utils drawer's repair ops) — and the generated artifacts are refreshed.
+
+- [#792](https://github.com/polynaut/dth-character-studio/pull/792) [`11bc2de`](https://github.com/polynaut/dth-character-studio/commit/11bc2de480be692c873de78ac99ae6de6179a2ec) Thanks [@polynaut](https://github.com/polynaut)! - Houdini projects get the ROM's **30 fps timeline** — set at generation, checked
+  on the card, repaired from the Utils drawer.
+
+  A ROM is one pose per FRAME at 30, and that is what the PoseAsset CSV's frame
+  numbers mean; Houdini's own default is 24, which lands every imported ROM frame
+  between two of the scene's own. DazToHue's import node sets the scene FPS itself
+  _when it loads the files_ — which is exactly what a headless **Generate project**
+  never does (hython instantiates the network and fills its parameters directly), so
+  the studio now sets it up front and reports the FPS the saved scene actually
+  carries rather than the one it asked for.
+
+  The background scan reads each project's timeline in the same pass as `$JOB`, so
+  a project on another rate gets a **Needs attention** badge naming it, and a new
+  **Timeline (FPS)** row in the Utils drawer's General tab. **Repair $JOB** is now
+  **Repair project settings** and fixes both, each judged on its own — a project
+  whose `$JOB` is fine and whose timeline is 24 gets only the timeline written, and
+  the report says which of the two moved. What Houdini's `setFps` does to keys in an
+  already-animated scene is Houdini's behaviour and is not something this studio has
+  measured; the run's usual rolling backup is stated alongside it. A value the scan
+  could not read stays _unknown_ and is never repaired.
+
 ## 0.73.1
 
 ## 0.73.0
