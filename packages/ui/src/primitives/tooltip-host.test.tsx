@@ -91,6 +91,33 @@ describe('TooltipHost (global title → floating tooltip)', () => {
     expect(tip.textContent).toBe('Card tooltip')
   })
 
+  it('hides when the anchor leaves the DOM under a stationary cursor', async () => {
+    // A REMOVED element emits no mouseleave and no blur — a state swap under a
+    // parked cursor (a progress button whose run just finished) stranded its
+    // tooltip on screen forever, pinned to the detached node.
+    render(
+      <>
+        <div data-testid="slot">
+          <button title="Houdini is exporting — 0 of 1 node done. Click to stop watching.">
+            Houdini 0/1
+          </button>
+        </div>
+        <TooltipHost />
+      </>,
+    )
+    const button = screen.getByRole('button')
+    fireEvent.mouseOver(button)
+    await vi.advanceTimersByTimeAsync(700)
+    const tip = screen.getByRole('tooltip', { hidden: true })
+    expect(tip.style.display).toBe('block')
+
+    // The run finishes: the component swaps state and the button unmounts.
+    button.remove()
+    await vi.advanceTimersByTimeAsync(0) // flush the MutationObserver microtask
+
+    expect(tip.style.display).toBe('none')
+  })
+
   it('shows immediately on keyboard focus and never overwrites an existing label', async () => {
     render(
       <>
