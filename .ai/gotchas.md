@@ -1198,3 +1198,20 @@ assertion fails, print what the UI actually says before theorising.
   can fail needs a fallback the caller can supply (the studio passes the
   character's declared generation), because "we could not read it" and "it is
   not there" are different answers that had been collapsed into one message.
+- **DS4 exporter 2.0.2's scripted `doExport` goes STATIC when its output files
+  already exist.** Measured 2026-08-11 (DS 4.24, the exporter DLL installed
+  2026-08-09 08:00): with the target files present, the whole per-frame ROM
+  walk is skipped — the run drops from 3.5 min to 26 s, the viewport never
+  plays, and the Alembic is rewritten with the FULL time range but every
+  sample identical (8 MB instead of 332 MB for the same 240-frame scene).
+  Fresh mtimes, clean run log, no error on any channel — the only tells are
+  the file size and the missing frame walk. Into an EMPTY folder the same
+  build exports correctly, and DS6's build never skipped. Since runtime v69
+  the export block deletes the set's own name patterns (`<name>.dth/.abc/
+  .fbx`, `_base`/`_experimental_rom.fbx`, `_pose_asset.csv`,
+  `_Hair_*_grooms.abc`, `Reference Skeletons/<name>_frame_*`) before calling
+  `doExport`, which both forces the real walk and stops stale grooms/reference
+  skeletons from outliving a rename or a frame-layout change. Verification
+  pattern that caught it: hython `alembicTimeRange` + a two-frame
+  `pointFloatAttribValues('P')` compare (set the Alembic SOP's `frame` parm
+  explicitly — `hou.setFrame` alone does not re-cook the packed prims).
