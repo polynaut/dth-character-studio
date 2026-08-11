@@ -104,8 +104,10 @@ test('houdini only: hands the scenes straight to Houdini — no Daz job at all',
   await page.getByRole('button', { name: 'Start' }).click()
 
   // Straight to Houdini: the job file lands with the scene's `.dth`, Houdini is
-  // launched at the linked project — and NO Daz job file was ever written.
-  await expect(page.getByText(/Houdini is opening Kira — 1 scene handed over/)).toBeVisible()
+  // launched at the linked project — and NO Daz job file was ever written. No
+  // hand-over toast (mid-run toasts read as outcomes) — the live "Working"
+  // button is the run's signal until the one end report.
+  await expect(page.getByRole('button', { name: /Working/ })).toBeVisible()
   await expect.poll(() => fileContent(page, HOUDINI_JOB), { timeout: 15_000 }).not.toBeNull()
   const job = JSON.parse((await fileContent(page, HOUDINI_JOB))!) as {
     scenes: Array<{ dth: string; label: string }>

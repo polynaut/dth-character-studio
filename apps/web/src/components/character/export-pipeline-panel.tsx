@@ -34,8 +34,11 @@ export interface ExportProgressBar {
 export interface ExportPipelineView {
   /** Task cards, chronological. Empty for an adopted run (no identity). */
   tasks: Array<ExportTask>
-  /** The live log-window content — whichever leg is talking right now. */
-  log: { title: string; subtitle: string; lines: Array<string> } | null
+  /** The live log-window content — whichever leg is talking right now. Lines
+   *  only: the scene lives on the active task card, the percent on the meter
+   *  and the latest status text on the meter's label, so the window carries
+   *  no caption row. */
+  log: { lines: Array<string> } | null
   /** The full-width bar row above tasks+log: `current` = the unit being
    *  worked right now (the per-scene progress-log percent on the Daz leg, the
    *  stepwise open-project-then-networks scale on the Houdini leg); `overall`
@@ -49,7 +52,17 @@ export interface ExportPipelineView {
 const FLY_MS = 450
 const COLLAPSE_MS = 350
 
-function ExportTaskCard({ task, departing }: { task: ExportTask; departing: boolean }) {
+function ExportTaskCard({
+  task,
+  ordinal,
+  departing,
+}: {
+  task: ExportTask
+  /** 1-based chronological number, stable for the whole run (finished tasks
+   *  keep their slot in the data, so later cards never renumber). */
+  ordinal: number
+  departing: boolean
+}) {
   const solid =
     task.kind === 'daz'
       ? 'border-emerald-600 bg-emerald-600 text-white'
@@ -69,7 +82,7 @@ function ExportTaskCard({ task, departing }: { task: ExportTask; departing: bool
       style={{ transitionDuration: `${FLY_MS}ms` }}
       title={task.label}
     >
-      {task.label}
+      <span className="opacity-60 tabular-nums">{ordinal}.</span> {task.label}
     </div>
   )
 }
@@ -106,7 +119,7 @@ export function ExportTaskCards({ tasks }: { tasks: Array<ExportTask> }) {
 
   return (
     <div className="col-start-1 row-start-2 flex min-h-0 w-40 shrink-0 flex-col">
-      {tasks.map((task) => {
+      {tasks.map((task, index) => {
         const isFlying = flying.has(task.id)
         const isCollapsed = collapsed.has(task.id)
         const position = visibleIds.indexOf(task.id)
@@ -127,7 +140,7 @@ export function ExportTaskCards({ tasks }: { tasks: Array<ExportTask> }) {
             )}
             style={{ transitionDuration: `${COLLAPSE_MS}ms` }}
           >
-            <ExportTaskCard task={task} departing={isFlying} />
+            <ExportTaskCard task={task} ordinal={index + 1} departing={isFlying} />
           </div>
         )
       })}
@@ -135,11 +148,7 @@ export function ExportTaskCards({ tasks }: { tasks: Array<ExportTask> }) {
   )
 }
 
-export function ExportActivityLog({
-  log,
-}: {
-  log: { title: string; subtitle: string; lines: Array<string> }
-}) {
+export function ExportActivityLog({ log }: { log: { lines: Array<string> } }) {
   const boxRef = useRef<HTMLDivElement>(null)
   // Tail mode: whenever lines arrive, keep the newest one in view.
   useEffect(() => {
@@ -148,13 +157,12 @@ export function ExportActivityLog({
   }, [log.lines])
   return (
     // Fills whatever height the panel row gives it (full header at rest, less
-    // when the sticky header docks) — the line box is the flexible part. The
-    // grid places it in the buttons' shared column, so its width IS theirs.
-    <div className="col-start-2 row-start-2 flex min-h-0 min-w-0 flex-col rounded-md border bg-card/80 px-2.5 py-1.5 text-left">
-      <p className="mb-1 flex shrink-0 items-baseline gap-2 text-[11px] text-muted-foreground">
-        <span className="shrink-0 font-medium text-foreground/80">{log.title}</span>
-        {log.subtitle && <span className="truncate">{log.subtitle}</span>}
-      </p>
+    // when the sticky header docks) — the grid places it in the buttons'
+    // shared column, so its width IS theirs. Lines only, no caption row.
+    <div
+      data-export-log
+      className="col-start-2 row-start-2 flex min-h-0 min-w-0 flex-col rounded-md border bg-card/80 px-2.5 py-1.5 text-left"
+    >
       <div
         ref={boxRef}
         className="min-h-0 flex-1 overflow-y-auto font-mono text-[11px] leading-4 whitespace-pre-wrap break-all text-muted-foreground"

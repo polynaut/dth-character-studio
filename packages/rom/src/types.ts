@@ -1579,8 +1579,11 @@ export const CHARACTER_SCHEMA_VERSION = 31
  *       CSV 80 / hair 100 in the 5-step bulk ROM+export, 50/75/100 in the
  *       4-step export-only, ROM 100 in the 2-step rom-only. The Runner writes
  *       the scene-open and terminal lines; the studio watches the file for
- *       the live per-scene progress display. A script without a baked path
- *       (manual/legacy) logs nothing.
+ *       the live per-scene progress display. Steps also log a START marker
+ *       ("generating ROM", "exporting character", "delivering PoseAsset
+ *       CSV", "exporting hair items") at the percent already reached, so the
+ *       display can name what is running, not only what finished. A script
+ *       without a baked path (manual/legacy) logs nothing.
  */
 export const RUNTIME_VERSION = 71
 

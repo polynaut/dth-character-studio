@@ -200,22 +200,29 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
     },
     [PENDING_JOB, RUNNING_JOB, `${P.appData}/export-progress.log`],
   )
-  await expect(page.getByText('[40%] KiraDefault_G9_GP: ROM generated')).toBeVisible({
+  // The log window shows display-clean lines (no percent bracket, no scene
+  // prefix — the card carries the scene, the meter the percent), and the
+  // meter's label is the LATEST status text.
+  await expect(page.locator('[data-export-log]')).toContainText('ROM generated', {
     timeout: 15_000,
   })
+  await expect(page.locator('[data-export-log]')).toContainText('scene opened')
   await expect(page.locator(`[data-task="daz:${P.scene}"]`)).toHaveAttribute(
     'data-task-status',
     'active',
   )
+  // The numbered card: chronological ordinal, stable for the whole run.
+  await expect(page.locator(`[data-task="daz:${P.scene}"]`)).toContainText('1.')
   // The meter row above: a single-scene run shows ONE bar, riding the same
   // per-scene percent the log lines carry — no overall bar for a one-unit leg.
   await expect(page.locator('[data-progressbar="current"]')).toHaveAttribute('data-percent', '40')
+  await expect(page.locator('[data-progressbar="current"]')).toContainText('ROM generated')
   await expect(page.locator('[data-progressbar="overall"]')).toHaveCount(0)
-  // …and picked up + finished by the Runner. NO finish toast yet — the batch
-  // outcome is stashed for the one end-of-everything report, and only the
-  // transient hand-over info shows while Houdini takes over.
+  // …and picked up + finished by the Runner. NO toast on the baton pass (a
+  // mid-run toast reads as an outcome) and NO finish toast yet — the batch
+  // outcome is stashed for the one end-of-everything report.
   await runnerFinishesBatch(page)
-  await expect(page.getByText(/Starting the Houdini export in the background/)).toBeVisible()
+  await expect(page.getByText(/Starting the Houdini export/)).toHaveCount(0)
   await expect(page.getByText(/DTH Export finished/)).toHaveCount(0)
   // The baton passed: the Houdini project's card is the active one now (the
   // finished scene card has tetris'd away).
@@ -271,20 +278,21 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
   expect(await fileKeys(page)).toContain(`${scriptsDir}/headless_export.py`)
 
   // Mid-node, the result's `activity` channel carries what the HDA is saying —
-  // the header grows the tail-mode LOG WINDOW above the button cluster (scene
-  // caption + the captured lines in monospace). The chip itself stays a
-  // constant "Working" (counts live in the panel's meters + the tooltip).
+  // the log window tails the captured lines (no caption row) and the meter's
+  // label shows the newest one. The chip itself stays a constant "Working"
+  // (counts live in the panel's meters + the tooltip).
   await houdiniReportsExporting(page)
-  await expect(page.getByText('Baking textures 3/12…')).toBeVisible({ timeout: 15_000 })
-  await expect(page.getByText('Importing Alembic…')).toBeVisible()
-  // The caption names the import — the scene label itself also appears in the
-  // header's scene tag, so the import line is the log window's unique marker.
-  await expect(page.getByText('import: Kira.dth')).toBeVisible()
+  await expect(page.locator('[data-export-log]')).toContainText('Baking textures 3/12…', {
+    timeout: 15_000,
+  })
+  await expect(page.locator('[data-export-log]')).toContainText('Importing Alembic…')
   await expect(page.getByRole('button', { name: /Working/ })).toBeVisible()
   // The Houdini meter is STEPWISE — open-project + each network, all equal
   // (hython's console has no percents to read): 1 network → 2 steps, the open
-  // one done → 50%. One network = one bar, no overall.
+  // one done → 50%. One network = one bar, no overall; its label is the
+  // latest captured line.
   await expect(page.locator('[data-progressbar="current"]')).toHaveAttribute('data-percent', '50')
+  await expect(page.locator('[data-progressbar="current"]')).toContainText('Baking textures 3/12…')
   await expect(page.locator('[data-progressbar="overall"]')).toHaveCount(0)
 
   // 456.py works through it and reports — and NOW the one summary toast fires,

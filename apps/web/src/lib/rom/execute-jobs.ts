@@ -250,12 +250,20 @@ export function parseExportProgressLog(text: string): Array<ExportProgressLine> 
 
 /** The live view the UI shows of a progress log: the newest line's percent +
  *  message, WHICH scene it belongs to (the `<stem>: ` message prefix; '' for
- *  batch-level lines), and the capped message tail for the log window. */
+ *  batch-level lines), and the capped message tail for the log window.
+ *  `message` and `lines` are display-clean: no percent bracket, no scene
+ *  prefix — the scene shows on the active task card and the percent on the
+ *  meter, so repeating them per line was pure noise. */
 export interface ExportProgressState {
   percent: number
   message: string
   scene: string
   lines: Array<string>
+}
+
+/** `<stem>: message` → `message` (the display carries the scene elsewhere). */
+function stripSceneMessagePrefix(message: string): string {
+  return /^.+?:\s+(.*)$/.exec(message)?.[1] ?? message
 }
 
 export function exportProgressStateFrom(
@@ -267,9 +275,9 @@ export function exportProgressStateFrom(
   const scene = /^(.+?):\s/.exec(last.message)?.[1] ?? ''
   return {
     percent: last.percent,
-    message: last.message,
+    message: stripSceneMessagePrefix(last.message),
     scene,
-    lines: parsed.slice(-keep).map((line) => `[${line.percent}%] ${line.message}`),
+    lines: parsed.slice(-keep).map((line) => stripSceneMessagePrefix(line.message)),
   }
 }
 

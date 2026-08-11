@@ -299,82 +299,64 @@ export function DthExportAction({
     // between the legs — Houdini "starting", and between two nodes when the
     // activity channel goes quiet): every live state returns SOME log, with
     // the last captured Houdini lines carried across the quiet stretches.
+    // Lines only — the scene lives on the active task card, the percent on
+    // the meter, the latest status on the meter's label.
     const log = (() => {
       if (houdiniNow) {
         if (houdiniNow.state === 'running' && houdiniNow.activity) {
-          const activity = houdiniNow.activity
-          const dthName = activity.dth ? (activity.dth.split(/[\\/]/).pop() ?? '') : ''
-          lastHoudiniLinesRef.current = activity.lines
-          return {
-            title: activity.scene || activity.node,
-            subtitle: dthName ? `import: ${dthName}` : '',
-            lines: activity.lines,
-          }
+          lastHoudiniLinesRef.current = houdiniNow.activity.lines
         }
-        return {
-          title: currentHipRef.current || 'Houdini',
-          subtitle: houdiniNow.state === 'running' ? 'exporting…' : 'opening project…',
-          lines: lastHoudiniLinesRef.current,
-        }
+        return { lines: lastHoudiniLinesRef.current }
       }
       if (progressNow?.state === 'running') {
-        const step = progressNow.step
-        if (step) {
-          return {
-            title: step.scene ? `${step.scene} — ${step.percent}%` : 'Daz batch',
-            subtitle: step.message,
-            lines: step.lines,
-          }
-        }
-        // Before the first progress line lands (or under an old Runner that
-        // writes none) the window still stands, just quiet.
-        return { title: 'Daz batch', subtitle: 'working…', lines: [] }
+        return { lines: progressNow.step?.lines ?? [] }
       }
       return null
     })()
     // The full-width meter row above tasks+log. `current` = the unit under
     // work; `overall` joins in only when the leg spans several units (scenes /
-    // networks) — the two-level display.
+    // networks) — the two-level display. Labels carry the latest STATUS text,
+    // never the scene name — that's what the active task card is for.
     const bars = ((): ExportPipelineView['bars'] => {
       // Once the Houdini leg exists it owns the meters — the Daz batch is
       // finished and reported by the time a project starts opening.
       if (houdiniNow?.state === 'running') {
-        const hip = currentHipRef.current || 'Houdini'
         const total = houdiniNow.total
+        const activity = houdiniNow.activity
+        // The latest status text: the newest captured HDA line, else the
+        // leg's own state.
+        const status = activity?.lines.at(-1) || 'exporting…'
         // The stepwise scale the run can actually measure: opening the
         // project is one step, each DazToHue network another — hython's
         // console speaks in phase lines, never percents. `running` means the
         // project IS open, so that step already counts.
         const stepwisePct = total > 0 ? ((1 + houdiniNow.done) / (1 + total)) * 100 : 100
         if (total > 1) {
-          const activity = houdiniNow.activity
           // Within the ACTIVE network the only signal is the HDA's phase
           // lines (measured: 9 on a full node run) — a coarse estimate,
-          // capped so it never claims a network done.
+          // capped so it never claims a network done. The current bar names
+          // the network's SCENE (it appears on no card — cards are per
+          // project) plus the status.
           const phasePct = activity ? Math.min((activity.lines.length / 9) * 100, 95) : 0
+          const network =
+            activity?.scene || `network ${Math.min(houdiniNow.done + 1, total)}/${total}`
           return {
             overall: {
               percent: stepwisePct,
-              label: `${hip} — ${houdiniNow.done}/${total} networks`,
+              label: `Networks ${houdiniNow.done}/${total}`,
               kind: 'houdini',
             },
             current: {
               percent: phasePct,
-              label: activity?.scene || `network ${Math.min(houdiniNow.done + 1, total)}/${total}`,
+              label: activity ? `${network}: ${status}` : network,
               kind: 'houdini',
             },
           }
         }
-        return { current: { percent: stepwisePct, label: hip, kind: 'houdini' } }
+        return { current: { percent: stepwisePct, label: status, kind: 'houdini' } }
       }
       if (houdiniNow?.state === 'starting') {
-        return {
-          current: {
-            percent: 0,
-            label: `${currentHipRef.current || 'Houdini'} — opening project`,
-            kind: 'houdini',
-          },
-        }
+        return { current: { percent: 0, label: 'opening project…', kind: 'houdini' } }
       }
       if (progressNow?.state === 'running') {
         const step = progressNow.step
@@ -384,10 +366,7 @@ export function DthExportAction({
         const currentPct = step?.percent ?? 0
         const current: ExportProgressBar = {
           percent: currentPct,
-          label:
-            step?.scene ||
-            pipelineRef.current?.daz[Math.min(progressNow.processed, progressNow.total)]?.label ||
-            'Daz scene',
+          label: step?.message || 'working…',
           kind: 'daz',
         }
         if (progressNow.total > 1) {
@@ -527,14 +506,13 @@ export function DthExportAction({
     // A fresh project must not open showing the previous project's lines.
     lastHoudiniLinesRef.current = []
     try {
-      const started = await startHoudiniExport({
+      await startHoudiniExport({
         data: { projectId, id: character.id, hipPath: first, scenes },
       })
       setHoudini({ state: 'starting', startedAtMs: Date.now() })
       publishPipeline(progressRef.current, { state: 'starting', startedAtMs: Date.now() })
-      const count = `${started.scenes} scene${started.scenes === 1 ? '' : 's'}`
-      // Transient hand-over feedback — the sticky report waits for the END.
-      toast.info(`Houdini is opening ${stem} — ${count} handed over.`)
+      // NO hand-over toast: the pipeline panel already shows the baton pass
+      // (mid-run toasts read as outcomes) — the one report comes at the END.
     } catch (err) {
       // A project that cannot start must not strand the ones behind it — its
       // failure joins the report and the queue moves on.
@@ -588,8 +566,8 @@ export function DthExportAction({
         }
         // Every Daz card drops (the report's daz entry marks the leg done).
         publishPipeline(null, houdiniRef.current)
-        // Transient — the report waits for the end of the whole process.
-        toast.info('Starting the Houdini export in the background…')
+        // No toast here — the panel shows the handover; the report comes at
+        // the very end of the whole process.
         void startHoudiniQueue(
           run.houdiniProjects,
           run.houdiniMode === 'export-all'

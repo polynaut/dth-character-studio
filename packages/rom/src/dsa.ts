@@ -412,11 +412,13 @@ function buildExportBlock(
    *  per-scene CSVs are sized by) — the reference-skeleton frames below must
    *  follow the OPEN scene's merged walk, like the CSV it is delivered with. */
   sceneFrames: Record<string, PresetFrames> = {},
-  /** Percents the block's finished steps report to the verbose progress log
+  /** Percents the block's steps report to the verbose progress log
    *  (`dthProgressLog` — the carrier emits the appender): the job row's step
-   *  scale, e.g. 60/80/100 inside the 5-step bulk ROM+export. Omitted = the
+   *  scale, e.g. 60/80/100 inside the 5-step bulk ROM+export, plus `begin` =
+   *  the percent already reached when the block starts (start markers reuse
+   *  the reached percents so the meter never runs ahead). Omitted = the
    *  block logs no progress (manual/legacy carriers). */
-  progressPcts?: { character: number; csv: number; hair: number },
+  progressPcts?: { begin: number; character: number; csv: number; hair: number },
 ): string {
   const exportDir = character.exportPath.trim()
   if (!exportDir) return ''
@@ -567,9 +569,17 @@ ${refDirBlock}
   // is the run-time dthExportName (scene-suffixed), never the bare base name;
   // the reference frames are the OPEN scene's (see refFramesBlock above).
   const exportCore = `${clearPreviousSetBlock}
-${refFramesBlock}
+${refFramesBlock}${
+    // Start markers carry the percent ALREADY reached — the meter must not
+    // jump ahead of finished work, only the status text moves.
+    progressPcts ? `\n    dthProgressLog(${progressPcts.begin}, "exporting character");` : ''
+  }
     dthExportAction.doExport(dthExportDir, dthExportName, dthRefFrames, false);${
       progressPcts ? `\n    dthProgressLog(${progressPcts.character}, "character exported");` : ''
+    }${
+      progressPcts && csvCopyBlock.trim()
+        ? `\n    dthProgressLog(${progressPcts.character}, "delivering PoseAsset CSV");`
+        : ''
     }
 ${csvCopyBlock}${
       progressPcts && csvCopyBlock.trim()
@@ -583,7 +593,11 @@ ${csvCopyBlock}${
   // figure resolves under its OWN name — the standalone Export_ script already
   // declares `dthFig`, and this block must work in both carriers.
   const hairPassCore = `        // Export hair assets too: the Export_Hair pass, right after the main
-        // export — same action, same (scene-resolved) export dir.
+        // export — same action, same (scene-resolved) export dir.${
+          progressPcts
+            ? `\n        dthProgressLog(${csvCopyBlock.trim() ? progressPcts.csv : progressPcts.character}, "exporting hair items");`
+            : ''
+        }
 ${indentBlock(indentBlock(figureAutoSelectSnippet(character.genesis, 'dthHairFig').trimEnd()))}
         if (!dthHairFig) {
             print("No ${character.genesis} figure found - hair export skipped.");
@@ -1413,7 +1427,7 @@ ${buildExportBlock(
   // this carrier's job rows declare (`jobStepsForMode`), matching the real
   // runtime order: the CSV delivery sits inside the export core, the hair
   // pass runs after it.
-  progressLogPath ? { character: 60, csv: 80, hair: 100 } : undefined,
+  progressLogPath ? { begin: 40, character: 60, csv: 80, hair: 100 } : undefined,
 )
   .split('\n')
   .map((line) => (line ? `            ${line}` : line))
@@ -1587,7 +1601,10 @@ if (dthSceneLinkErr) {
 ${bulk ? `        // The Runner just loaded this scene — give Daz a beat before the first
         // scripted work touches it.
         dthSettle(1000);
-` : ''}${indentLines(indentLines(indexSyncSnippet(indexSync)))}        var dthRomOk = ApplyDTHCharacter(dthCharacterConfig);
+` : ''}${indentLines(indentLines(indexSyncSnippet(indexSync)))}        // Start marker: the ROM build begins (the percent stays at the
+        // scene-open step — only the status text moves until it finishes).
+        dthProgressLog(${exportBlock ? 20 : 50}, "generating ROM");
+        var dthRomOk = ApplyDTHCharacter(dthCharacterConfig);
         // G9: retarget the tear shader's UV set to UE5 after the ROM (before any
         // export). No-op unless the character opted in.
         if (dthCharacterConfig.bApplyUE5TearUV) { dthApplyUE5TearUV(); }
@@ -1756,7 +1773,7 @@ ${indentLines(indexSyncSnippet(indexSync))}${buildExportBlock(
     sceneFrames,
     // The 4-step scale (open 25 / character 50 / CSV 75 / hair 100) the
     // export-only job rows declare — no ROM step in this carrier.
-    progressLogPath ? { character: 50, csv: 75, hair: 100 } : undefined,
+    progressLogPath ? { begin: 25, character: 50, csv: 75, hair: 100 } : undefined,
   )
   .split('\n')
   .map((line) => (line ? `    ${line}` : line))

@@ -130,14 +130,18 @@ describe('the JSON job file (contract v2)', () => {
       { percent: 100, message: 'clamped' },
     ])
     const state = exportProgressStateFrom(parsed.slice(0, 3))
+    // Display-clean: the scene prefix and the percent bracket are stripped —
+    // the scene shows on the task card, the percent on the meter.
     expect(state).toEqual({
       percent: 40,
-      message: 'Kira: ROM generated',
+      message: 'ROM generated',
       scene: 'Kira',
-      lines: ['[0%] Kira: opening scene', '[20%] Kira: scene opened', '[40%] Kira: ROM generated'],
+      lines: ['opening scene', 'scene opened', 'ROM generated'],
     })
     // Batch-level lines carry no scene; an empty log has no view at all.
-    expect(exportProgressStateFrom([{ percent: 100, message: 'batch finished' }])?.scene).toBe('')
+    const batch = exportProgressStateFrom([{ percent: 100, message: 'batch finished' }])
+    expect(batch?.scene).toBe('')
+    expect(batch?.message).toBe('batch finished')
     expect(exportProgressStateFrom([])).toBeNull()
   })
 

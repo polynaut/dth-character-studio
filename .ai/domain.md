@@ -694,6 +694,13 @@ older runtimes as stale.
   (scenes / networks). The multi-network current bar estimates within the
   active network from the HDA's phase-line count (measured: 9 on a full node
   run), capped at 95% — an estimate, not a contract.
+  Display division of labor (deliberate, user-driven): the NUMBERED task
+  cards carry the scene/project identity, the meter carries percent + the
+  latest status text as its label, and the log window is a pure line tail
+  (exportProgressStateFrom strips the `[pct]` bracket and `<stem>: ` prefix
+  for display — the on-disk format is unchanged). The scripts log step START
+  markers too ("generating ROM", …) at the already-reached percent. No
+  mid-run toasts: the one report fires at the very end.
   Contract: docs/exporter-plugin-job-file.md.
   Mid-NODE the result also carries a live `activity` channel: 456.py's
   `ActivityCapture` tees `sys.stdout`/`stderr` + `hou.ui.setStatusMessage` while
