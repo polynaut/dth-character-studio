@@ -146,7 +146,7 @@ import {
 import type { GeneratedFile } from './csv'
 import type { PresetFrames } from './frames'
 import type { RomPaths } from './resolve'
-import type { ArtDirectionFrame, Character } from './types'
+import type { ArtDirectionFrame, Character, Morph } from './types'
 
 /**
  * The `.dsa` generators: the self-contained character/ROM script, the split
@@ -188,8 +188,12 @@ export function stripTrailingSlashes(path: string): string {
  * art-direction morph always returns to 0 whatever this emits. They are emitted
  * there anyway rather than special-cased away: the field belongs to the morph,
  * and stripping it would encode the runtime's current limit into the payload.
+ *
+ * Takes `Morph` itself, not a structural subset: v31 made `autoBase` REQUIRED on
+ * the parsed type precisely so tsc names every site that handles a morph, and a
+ * local `autoBase?: boolean` here would have quietly opted the emitter out of it.
  */
-function morphJson(morph: { node: string; prop: string; value: number; base?: number; autoBase?: boolean }) {
+function morphJson(morph: Morph) {
   return {
     node: morph.node,
     prop: morph.prop,

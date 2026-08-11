@@ -267,6 +267,13 @@ The persisted `Character` shape is versioned (`CHARACTER_SCHEMA_VERSION` in
    on the parsed type, so `tsc` names every creation site instead of leaving
    them to be remembered. Pair it with ONE mint helper (`newMorph` in
    `types.ts`) so the defaults of a new row live in a single place.
+   Then **test the WRITE side too**, in the component that owns the control: a
+   flip makes the old default the OPT-OUT, and an opt-out that reaches disk as
+   an absent key reads back as the NEW default and silently undoes the user's
+   choice. So the handler must write the value EXPLICITLY (v31's Auto checkbox
+   writes `autoBase: false`, not the pre-v31 `checked ? true : undefined`) — a
+   one-character regression that the `migrate.test.ts` case cannot see, because
+   it only ever exercises the read side.
 4. Steps run pre-zod on raw objects, must be idempotent, and guard on
    `=== undefined`.
 5. A new field carrying a **scene path** (or any inside-the-character-folder
