@@ -88,7 +88,8 @@ function buildItems(
 interface InstallOutcome {
   /** Success summaries, in run order ("DTH content (12 files)"). */
   installed: Array<string>
-  failed: Array<{ label: string; message: string }>
+  /** `key` kept so a partial-failure retry can re-check exactly these. */
+  failed: Array<{ key: string; label: string; message: string }>
   dthInstalled: boolean
 }
 
@@ -114,7 +115,11 @@ async function runChecked(
       outcome.installed.push(`${item.label} (${files} file${files === 1 ? '' : 's'})`)
       if (!item.plugin) outcome.dthInstalled = true
     } catch (e) {
-      outcome.failed.push({ label: item.label, message: e instanceof Error ? e.message : String(e) })
+      outcome.failed.push({
+        key: item.key,
+        label: item.label,
+        message: e instanceof Error ? e.message : String(e),
+      })
     }
   }
   return outcome
@@ -210,7 +215,7 @@ export function UnrealInstallDialog({
   const [checked, setChecked] = useState<ReadonlySet<string>>(new Set())
   const [busy, setBusy] = useState(false)
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (): Promise<Array<ChecklistItem> | null> => {
     setLoadState('loading')
     try {
       const [state, scan] = await Promise.all([
@@ -226,9 +231,11 @@ export function UnrealInstallDialog({
       // engine: only the engine-independent DTH content starts checked.
       setChecked(new Set(version === null ? [DTH_CONTENT_KEY] : list.map((item) => item.key)))
       setLoadState('ready')
+      return list
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : String(e))
       setLoadState('error')
+      return null
     }
   }, [uprojectPath])
   useEffect(() => {
@@ -245,8 +252,15 @@ export function UnrealInstallDialog({
         onClose()
       } else {
         // Partial failure: stay open and re-probe, so the checklist tells the
-        // truth about what IS there now instead of repeating the stale state.
-        await load()
+        // truth about what IS there now instead of repeating the stale state —
+        // and keep only the FAILED items checked: the retry redoes what went
+        // wrong, not what already succeeded (and never discards a hand-picked
+        // GUID-project selection back to the DTH-only default).
+        const fresh = await load()
+        const failedKeys = new Set(outcome.failed.map((f) => f.key))
+        if (fresh) {
+          setChecked(new Set(fresh.filter((item) => failedKeys.has(item.key)).map((item) => item.key)))
+        }
       }
     } finally {
       setBusy(false)
@@ -366,12 +380,26 @@ export function UnrealGenerateDialog({
 
   useEffect(() => {
     let active = true
-    void Promise.all([detectUnrealEngines(), scanUnrealPlugins()]).then(([scan, builds]) => {
-      if (!active) return
-      setEngines(scan.installs)
-      setEngineVersion(defaultUnrealEngine(scan.installs)?.version ?? '')
-      setPlugins(builds)
-    })
+    // Separate loads: the plugin scan can fail (settings read, transport) and
+    // must not take the engine list down with it — engines render either way,
+    // a failed scan just offers no builds. Unguarded, a rejection would pin
+    // the dialog on "Looking for engines…" forever.
+    void detectUnrealEngines()
+      .then((scan) => {
+        if (!active) return
+        setEngines(scan.installs)
+        setEngineVersion(defaultUnrealEngine(scan.installs)?.version ?? '')
+      })
+      .catch(() => {
+        if (active) setEngines([])
+      })
+    void scanUnrealPlugins()
+      .then((builds) => {
+        if (active) setPlugins(builds)
+      })
+      .catch(() => {
+        if (active) setPlugins([])
+      })
     return () => {
       active = false
     }

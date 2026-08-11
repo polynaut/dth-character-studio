@@ -120,8 +120,9 @@ export function pluginMatchesEngine(plugin: UnrealPluginSource, engineVersion: s
  *
  * One per name because the install target is `Plugins/<name>`: offering two
  * builds of one plugin would offer two writes to the same folder. An exact
- * version match beats an any-engine build; ties keep the scan's own order
- * (name, version, path — so the first configured folder wins).
+ * version match beats an any-engine build; a same-version tie keeps the scan's
+ * own order — the Rust scan sorts by name, version, then PATH, so the
+ * alphabetically first build path wins, deterministically.
  */
 export function matchPluginsToEngine(
   plugins: ReadonlyArray<UnrealPluginSource>,

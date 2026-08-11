@@ -133,6 +133,12 @@ describe('UnrealInstallDialog', () => {
     // A failed item keeps the dialog open, and the state is re-read from disk.
     await waitFor(() => expect(unrealProjectState).toHaveBeenCalledTimes(2))
     expect(onClose).not.toHaveBeenCalled()
+    // Only the FAILED items stay checked for the retry — the succeeded DTH
+    // content is unchecked, so a second Install redoes just what went wrong.
+    await waitFor(() => {
+      const boxes = screen.getAllByRole('checkbox') as Array<HTMLInputElement>
+      expect(boxes.map((box) => box.checked)).toEqual([false, true, true])
+    })
   })
 })
 

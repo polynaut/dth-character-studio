@@ -88,7 +88,7 @@ describe('plugin matching', () => {
     ])
   })
 
-  it('keeps the first configured folder on a same-version tie', () => {
+  it('keeps the scan order on a same-version tie (the scan sorts by path — deterministic)', () => {
     const offered = matchPluginsToEngine(
       [
         plugin({ engineVersion: '5.7', path: 'D:/first/DazToUnreal' }),
