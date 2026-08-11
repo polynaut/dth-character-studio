@@ -1,6 +1,7 @@
 mod archive;
 mod assets;
 mod avatar;
+mod character_zip;
 mod content;
 #[cfg(test)]
 mod contract_tests;
@@ -184,7 +185,12 @@ pub fn run() {
             windows::sync_renamed_project_window,
             fsutil::probe_locked_files,
             fsutil::scan_files_by_ext,
-            fsutil::write_text_file_if_unchanged
+            fsutil::write_text_file_if_unchanged,
+            character_zip::export_character_zip,
+            character_zip::read_character_zip_manifest,
+            character_zip::list_character_zip_entries,
+            character_zip::read_character_zip_entry,
+            character_zip::extract_character_zip
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -21,6 +21,8 @@ import {
   resolvePresetFrames,
 } from '#/lib/rom/api.ts'
 import { CharacterProductsTab } from '#/components/character-products-tab.tsx'
+import { useImportCharacterZip } from '#/components/character/import-character.tsx'
+import { useFileDrop } from '#/lib/file-drop.ts'
 import { DetectedFilesBanner } from '#/components/character/detected-files-banner.tsx'
 import { DetectedFilesWizard } from '#/components/character/detected-files-wizard.tsx'
 import { EditorHeader } from '#/components/character/editor-header.tsx'
@@ -166,13 +168,24 @@ function SceneLock({ locked, children }: { locked: boolean; children: ReactNode 
  * navigation (e.g. Clone jumping to the new copy). Without this, only the URL
  * param changes — the same `CharacterPage` instance stays mounted and its draft
  * state, seeded from the loader at mount, keeps showing the previous character.
+ *
+ * The epoch covers the one same-id case: an Import that overwrites this
+ * character with a zip carrying the SAME id changes everything on disk but
+ * neither the URL nor the key — bumping the epoch forces the remount that
+ * reseeds the draft from the freshly imported definition.
  */
 function CharacterPageRoute() {
   const { characterId } = Route.useParams()
-  return <CharacterPage key={characterId} />
+  const [importEpoch, setImportEpoch] = useState(0)
+  return (
+    <CharacterPage
+      key={`${characterId}:${importEpoch}`}
+      onImportRemount={() => setImportEpoch((epoch) => epoch + 1)}
+    />
+  )
 }
 
-function CharacterPage() {
+function CharacterPage({ onImportRemount }: { onImportRemount: () => void }) {
   const { projectId } = Route.useParams()
   const {
     character: initial,
@@ -393,6 +406,27 @@ function CharacterPage() {
   // through the lock gate + retry dialog (useFolderMove) so a scene open in Daz
   // surfaces the "close it and continue" prompt.
   const router = useRouter()
+
+  // Import-from-zip (the OVERWRITE wizard): the Operations card's Import
+  // button and the page-wide `.dcsc.zip` drop both feed the same flow. The
+  // character ENTITY persists through an overwrite (same id, same route) but
+  // everything about it changed on disk — bypass the unsaved guard (the edited
+  // state no longer exists) and remount by epoch to reseed the draft.
+  const importer = useImportCharacterZip({
+    projectId,
+    target: { id: initial.id, name: initial.name, genesis: initial.genesis, gender: initial.gender },
+    onImported: async () => {
+      draft.unsavedGuard.bypass()
+      await router.invalidate()
+      onImportRemount()
+    },
+  })
+  const { id: zipDropId, isOver: zipDropOver } = useFileDrop({
+    accept: ['zip'],
+    onDrop: (paths) => {
+      if (paths[0]) importer.openZip(paths[0])
+    },
+  })
   const { runMove, dialog: folderMoveDialog } = useFolderMove()
   async function moveCharacterFolder(nextSubdir: string) {
     if (!location) return
@@ -442,7 +476,13 @@ function CharacterPage() {
   const onProductsTab = !!project?.dazProductsEnabled && activeTab === 'products'
 
   return (
-    <main className="p-8 pb-24">
+    <main data-filedrop-id={zipDropId} className="p-8 pb-24">
+      {zipDropOver && (
+        <div className="pointer-events-none fixed inset-4 z-[60] flex items-center justify-center rounded-lg border-2 border-dashed border-primary bg-primary/10 text-base font-medium text-primary">
+          Drop a character export (.dcsc.zip) to overwrite “{initial.name}”
+        </div>
+      )}
+      {importer.dialog}
       {folderMoveDialog}
       <EditorHeader
         projectId={projectId}
@@ -671,6 +711,9 @@ function CharacterPage() {
         patch={patch}
         dazSubdir={project?.dazSubdir ?? 'daz3d'}
         houdiniSubdir={project?.houdiniSubdir ?? 'houdini'}
+        exportSubdir={project?.exportSubdir ?? 'export'}
+        dirty={draft.dirty}
+        onImportRequest={importer.openPicker}
         bypassUnsavedGuard={draft.unsavedGuard.bypass}
         fillDisabled={!sceneLinked}
       />

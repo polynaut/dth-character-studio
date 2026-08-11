@@ -180,6 +180,24 @@ export async function folderFromDrop(path: string): Promise<string> {
 }
 
 /**
+ * Native character-export-zip picker via the Tauri dialog plugin. Filtered on
+ * the plain `zip` extension (Windows filters can't express the `.dcsc.zip`
+ * double extension) — the caller validates the manifest inside. Returns the
+ * picked absolute path, or '' if the user cancelled.
+ */
+export async function pickZipPath(title: string, defaultPath?: string): Promise<string> {
+  if (!isTauri()) return ''
+  const selected = await open({
+    multiple: false,
+    directory: false,
+    title,
+    defaultPath,
+    filters: [{ name: 'Character exports (*.dcsc.zip)', extensions: ['zip'] }],
+  })
+  return notePick(typeof selected === 'string' ? selected : '')
+}
+
+/**
  * Native `.dcsp` project-file picker via the Tauri dialog plugin. Returns the
  * picked absolute path, or '' if the user cancelled.
  */

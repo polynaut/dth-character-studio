@@ -41,8 +41,10 @@ pub fn remove_junction(request: RemoveJunctionRequest) -> Result<String, String>
     }
 }
 
+// pub(crate): other modules' tests use it too (character_zip's skipped-links
+// export test) — junction CREATION survives only as this test helper.
 #[cfg(all(test, windows))]
-fn create_junction_impl(link: &Path, target: &Path) -> Result<(), String> {
+pub(crate) fn create_junction_impl(link: &Path, target: &Path) -> Result<(), String> {
     use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
     use windows_sys::Win32::Storage::FileSystem::{
