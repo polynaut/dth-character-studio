@@ -826,10 +826,14 @@ function GenerateProjectDialog({
           </p>
         )}
       </div>
-      {/* Only worth asking when there IS a choice: one scene has exactly one
-          export set, and a picker with a single option is a question with one
-          answer. */}
-      {scenes.length > 1 && (
+      {/* Only worth asking when there IS a choice — and never for the FIRST
+          project: one scene has exactly one export set, and a character's
+          first project is its main one, wired to the primary scene without a
+          question. The picker earns its place from the second project on —
+          the per-outfit ones, where "which scene's export set?" genuinely
+          differs. (Unlink every project and the next generate counts as first
+          again.) */}
+      {scenes.length > 1 && character.houdiniProjects.length > 0 && (
         <div>
           <Label htmlFor="generate-houdini-scene" className="mb-1">
             Daz scene to import

@@ -132,7 +132,7 @@ detailed in [Build the ROM in Daz](./05-rom-in-daz.md#direct-export-optional-rec
 The **Export directory** section shows where [direct export](./05-rom-in-daz.md#direct-export-optional-recommended)
 lands. It's fixed and read-only: `daz-export` inside the character's Houdini
 folder, created with the character. Those files exist only to be imported by
-Houdini, so they sit next to the `.hip` that reads them (`$JOB/houdini/daz-export/…`)
+Houdini, so they sit next to the `.hip` that reads them (`$HIP/daz-export/…`)
 — see [where the Houdini project fits](./05-rom-in-daz.md#where-the-houdini-project-fits).
 
 <details>

@@ -65,7 +65,12 @@ Instead of exporting by hand, let the script drive the **DTH Exporter Plugin**
    `<Name>_<Scene>.*`), and the
    **PoseAsset CSV** (plus a **reference-skeleton FBX** for each **Bone scale**
    frame, under a `Reference Skeletons` subfolder — the CSV already points at
-   each one).
+   each one). The script **deletes the scene's previous export set first** —
+   an export always replaces the whole set, so files from an earlier layout
+   (or a renamed hair item) never linger beside a fresh one, and Daz Studio
+   4's exporter, which skips the ROM walk when its output files already
+   exist, always gets the empty folder it needs. Anything else you keep in
+   the folder is left alone.
 
 After a clean ROM build — right before any export — the script also **saves
 the ROM'd scene** as `<scene>_ROM.duf` into a `rom-animations/` subfolder next
@@ -133,12 +138,14 @@ Exporter writes. All three names can be changed per project in
 There is no plumbing between the two sides: from a `.hip` in the houdini
 folder, the exports are a subfolder away (`daz-export/…`), and ticking Houdini's
 **Make path relative to current directory** in the file picker gives you the
-portable `$JOB/…` form ($JOB is the character folder). Everything the studio
-writes is an ordinary file or folder — nothing needs special treatment from
-Perforce, Git or backup tools.
+portable `$HIP/daz-export/…` form — the same spelling the studio generates, so a
+path you pick by hand and one it wrote read identically inside the same node.
+Everything the studio writes is an ordinary file or folder — nothing needs
+special treatment from Perforce, Git or backup tools.
 
 **Generate project** bakes `$JOB` in for you, so a generated scene needs no
-Set Project at all.
+Set Project at all. `$HIP` never needs setting up either way — Houdini derives
+it from wherever the `.hip` sits.
 
 > [!NOTE]
 > **Upgrading?** Versions before v0.68 also made a `houdini-project` subfolder,
@@ -153,25 +160,32 @@ Set Project at all.
 ### Reference-skeleton paths — `$HIP` by default
 
 Every **Bone scale** frame gets a reference-skeleton FBX, and the PoseAsset CSV
-has to point Houdini at it. Those paths are written relative to **`$JOB`** —
-the character folder, which **Generate project** bakes in — so they reach
-straight across to the Daz side:
+has to point Houdini at it. Those paths are written relative to **`$HIP`** — the
+folder the `.hip` itself sits in — which now reaches the exports without leaving
+the project folder:
 
 ```
-$JOB/houdini/daz-export/primary/Kira_frame_432.fbx
+$HIP/daz-export/primary/Kira_frame_432.fbx
 ```
 
 so the project keeps resolving after you move, rename or copy the character
-tree — including onto another machine. **Settings → Project → Houdini path
-style** controls it: `hip` (the default) writes these relative paths,
-`absolute` forces absolute ones.
+tree — including onto another machine. `$HIP` has a property no other anchor
+has: Houdini derives it from where the file *is*, so it can't go stale — a
+project whose `$JOB` points at another character still resolves its own imports.
+**Settings → Project → Houdini path style** controls this: `hip` (the default)
+writes the relative paths, `absolute` forces absolute ones.
 
-Relative paths need every linked `.hip` to live inside the character folder —
-`$JOB` is that folder, so anything below it can be addressed, however deep, and
-several projects in different subfolders all share one prefix. What still falls
-back to absolute paths: no linked project yet, or a `.hip` hand-linked somewhere
-in your own tree, where `$JOB` is whatever you set it to. Generate a project (or
-link one in the character's houdini folder) and save again to switch it over.
+Two layouts fall back to **`$JOB`**, the character folder, which encodes no
+depth and so is right for every project at once: linked projects sitting in
+**different folders** (there is no single `$HIP` to name), and exports sitting
+**beside** the houdini folder rather than under it — the arrangement before
+v0.68. Both still resolve, so neither is flagged; **Utils → Make paths
+portable** shortens the older form to today's when you ask.
+
+What still falls back to **absolute** paths: no linked project yet, a `.hip`
+hand-linked somewhere in your own tree (where `$JOB` is whatever you set it to),
+or an export root outside the character folder. Generate a project — or link one
+in the character's houdini folder — and save again to switch it over.
 
 **Old folders clean themselves up**: the studio remembers which export folders
 the current layout uses, and when a scene's subfolder is renamed or moved, the

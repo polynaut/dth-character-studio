@@ -1212,10 +1212,12 @@ function SettingsPage() {
               {/* Only while the folders are the USER'S. With an activated Houdini
                   installation the destination follows that card — one active
                   installation, one target — so an "add another" here would invite
-                  a second, hand-typed target the card cannot account for. Existing
-                  entries stay visible (and removable) so a folder added before the
-                  card was activated can't strand itself out of sight. */}
-              {!houdiniDerived ? (
+                  a second, hand-typed target the card cannot account for. Nothing
+                  replaces the button: a standing line explaining an absent
+                  control was noise (the guide documents the rule). Existing
+                  entries stay visible (and removable) so a folder added before
+                  the card was activated can't strand itself out of sight. */}
+              {!houdiniDerived && (
                 <Button
                   variant="outline"
                   className="w-full justify-start border-dashed text-muted-foreground"
@@ -1228,12 +1230,6 @@ function SettingsPage() {
                 >
                   <Plus /> Add another Houdini folder
                 </Button>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  New folders can&apos;t be added while a Houdini installation is activated — the
-                  destination follows that card. To drive several folders by hand again, use{' '}
-                  <strong>Set the paths manually</strong> in the Houdini installation section above.
-                </p>
               )}
 
               {houdiniReport && (

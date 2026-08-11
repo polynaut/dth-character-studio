@@ -1630,6 +1630,28 @@ describe('exporter integration', () => {
     expect(content).not.toContain('dthRefFramesByScene')
   })
 
+  it('clears the previous export set BEFORE doExport (runtime v69)', () => {
+    // Measured 2026-08-11 (DS4 exporter 2.0.2): doExport with its output files
+    // already present skips the per-frame ROM walk and rewrites them as one
+    // static frame — no error anywhere. The emitted script deletes the set's
+    // own name patterns first, so the exporter always sees an empty target.
+    const content = toCharacterScriptDsa(
+      withReferencePose({ name: 'Electra', exportPath: 'X:\\exports\\electra' }),
+      {},
+      FRAMES,
+    ).content
+    // The set's own patterns, nothing else in the folder.
+    expect(content).toContain('dthOldName == dthExportName + ".abc"')
+    expect(content).toContain('dthOldName == dthExportName + "_experimental_rom.fbx"')
+    expect(content).toContain('dthOldName.indexOf(dthExportName + "_Hair_") == 0')
+    expect(content).toContain('dthOldRef.indexOf(dthExportName + "_frame_") != 0')
+    // Ordering is the point: the clear must run before the exporter does.
+    const clearAt = content.indexOf('var dthOldSetDir')
+    const exportAt = content.indexOf('dthExportAction.doExport(')
+    expect(clearAt).toBeGreaterThan(-1)
+    expect(exportAt).toBeGreaterThan(clearAt)
+  })
+
   it('files an export failure under the open scene RUN of a v2 log, never only the top level', () => {
     // The studio's reader flattens runs[].errors and ANDs runs[].ok whenever a
     // v2 log exists — a top-level-only errors push is invisible to it, which is

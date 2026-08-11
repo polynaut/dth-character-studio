@@ -50,6 +50,7 @@ const NAV = [
     pages: [
       'custom-morphs.md',
       'advanced.md',
+      'houdini-utils.md',
       'tools.md',
       'attachments.md',
       'product-scanning.md',

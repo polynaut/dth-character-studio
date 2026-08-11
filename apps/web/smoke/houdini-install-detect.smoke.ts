@@ -87,14 +87,13 @@ test('activating pairs the install with its own prefs folder and saves both', as
   await expect(page.getByLabel('Houdini installation folder (optional)')).toHaveCount(0)
   await expect(page.getByLabel('Houdini documents folder (optional)')).toHaveCount(0)
   // …and so does "add another folder": with a card driving the destination
-  // there is ONE target, so a second hand-typed one would contradict it. The
-  // line that replaces the button says where extra folders went.
+  // there is ONE target, so a second hand-typed one would contradict it.
+  // Nothing replaces the button — a standing line explaining an absent
+  // control was noise.
   await expect(page.getByRole('button', { name: /Add another Houdini folder/ })).toHaveCount(0)
-  await expect(
-    page.getByText(/New folders can't be added while a Houdini installation is activated/i),
-  ).toBeVisible()
-  // The whole "Generate Houdini Projects" panel goes with them: activated, it
-  // could only restate the card's own install path — no field, no choice.
+  await expect(page.getByText(/New folders can't be added/)).toHaveCount(0)
+  // The whole "Generate Houdini Projects" panel goes the same way: activated,
+  // it could only restate the card's own install path — no field, no choice.
   await expect(page.getByRole('heading', { name: 'Generate Houdini Projects' })).toHaveCount(0)
 })
 

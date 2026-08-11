@@ -5,7 +5,7 @@ organized inside a project alongside its characters. Two kinds:
 
 - a **Daz scene** (`.duf`) — a base figure, a prop, an outfit, a look you start from
 - a **Houdini template** (`.hip`) — a ready-made skeleton or material + texture-baker
-  setup that the [Utils drawer](06-into-houdini.md#utils--copy-a-texture-baker-setup-between-projects)
+  setup that the [Utils drawer](houdini-utils.md#copy-a-texture-baker-setup-between-projects)
   copies from
 
 It's an **opt-in, per-project** feature.
@@ -44,8 +44,9 @@ panel gains a **Character / Attachment** choice.
 
 Pick **Houdini template** in the Add panel and choose (or drop) a `.hip`. Give it
 a name and a description — "G9 skeleton, UE5 twist bones" — and it becomes a
-one-click source in the Utils drawer: the **Source** section lists this project's
-templates by name, so copying a setup never starts with hunting for a file.
+one-click source in the [Utils drawer](./houdini-utils.md): the **Source**
+section lists this project's templates by name, so copying a setup never starts
+with hunting for a file.
 
 A Houdini template is **always linked, never copied**. Moving a Houdini project
 safely needs every reference to be relative *and* its `$JOB` project folder to
