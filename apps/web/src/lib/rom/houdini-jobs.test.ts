@@ -311,7 +311,9 @@ describe('houdiniRunStateFrom', () => {
       activity: {
         node: '/obj/DazToHue1/export',
         scene: 'KiraDefault',
+        dth: 'X:/p/Kira/houdini/daz-export/primary/Kira.dth',
         lines: ['Baking textures…', 'Exporting FBX…'],
+        startedAtMs: 100,
         updatedAtMs: 123,
       },
     })
@@ -322,7 +324,9 @@ describe('houdiniRunStateFrom', () => {
       activity: {
         node: '/obj/DazToHue1/export',
         scene: 'KiraDefault',
+        dth: 'X:/p/Kira/houdini/daz-export/primary/Kira.dth',
         lines: ['Baking textures…', 'Exporting FBX…'],
+        startedAtMs: 100,
         updatedAtMs: 123,
       },
     })

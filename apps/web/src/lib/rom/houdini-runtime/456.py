@@ -268,12 +268,17 @@ class Report(object):
         self.data["done"] = len(self.data["nodes"])
         self.flush(force=True)
 
-    def begin_activity(self, node_path, scene):
+    def begin_activity(self, node_path, scene, dth=""):
+        now_ms = int(time.time() * 1000)
         self.data["activity"] = {
             "node": node_path,
             "scene": scene,
+            # The `.dth` the node's network imports — the run's identity for
+            # the studio ("which export set is this working through?").
+            "dth": dth,
             "lines": [],
-            "updatedAtMs": int(time.time() * 1000),
+            "startedAtMs": now_ms,
+            "updatedAtMs": now_ms,
         }
         self.flush(force=True)
 
@@ -426,7 +431,7 @@ def run(job):
         print("DTH Character Studio: exporting {} ({})".format(node.path(), label))
         # The live-activity window: whatever the HDA emits during this node's
         # do_export streams into the polled result file as it happens.
-        report.begin_activity(node.path(), label)
+        report.begin_activity(node.path(), label, source)
         entry = export_one(node, fallback, report.note_activity)
         report.end_activity()
         entry["scene"] = label

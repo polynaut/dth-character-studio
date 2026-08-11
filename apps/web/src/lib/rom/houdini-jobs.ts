@@ -109,8 +109,11 @@ export const houdiniActivitySchema = z.object({
   node: z.string().default(''),
   /** The scene label the node belongs to — what the studio shows. */
   scene: z.string().default(''),
+  /** The `.dth` the node's network imports — which export set it works through. */
+  dth: z.string().default(''),
   /** Rolling tail, oldest first. */
   lines: z.array(z.string()).default([]),
+  startedAtMs: z.number().default(0),
   updatedAtMs: z.number().default(0),
 })
 export type HoudiniActivity = z.infer<typeof houdiniActivitySchema>

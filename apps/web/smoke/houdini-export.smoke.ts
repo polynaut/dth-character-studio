@@ -78,7 +78,9 @@ async function houdiniReportsExporting(page: Page) {
         activity: {
           node: '/obj/DazToHue1/export',
           scene: 'KiraDefault_G9_GP',
+          dth: 'D:/DTH Projects/Demo/Kira/houdini/daz-export/KiraDefault_G9_GP/Kira.dth',
           lines: ['Importing Alembic…', 'Baking textures 3/12…'],
+          startedAtMs: Date.now(),
           updatedAtMs: Date.now(),
         },
       }))
@@ -202,9 +204,13 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
   )
 
   // Mid-node, the result's `activity` channel carries what the HDA is saying —
-  // the watch chip shows the LAST line live (the poll runs every 2.5s).
+  // the watch chip names the scene and shows the LAST line live (the poll runs
+  // every 2.5s), counting the node being WORKED ON (1/1, not "0 done").
   await houdiniReportsExporting(page)
-  await expect(page.getByText('Baking textures 3/12…')).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByText('KiraDefault_G9_GP · Baking textures 3/12…')).toBeVisible({
+    timeout: 15_000,
+  })
+  await expect(page.getByText('Houdini 1/1')).toBeVisible()
 
   // 456.py works through it and reports — and NOW the one summary toast fires,
   // covering the whole process: the Daz leg and the Houdini leg, per line.

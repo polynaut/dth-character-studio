@@ -599,18 +599,32 @@ export function DthExportAction({
     // tooltip must say so. (Reading the ref in render is sound here: every
     // queue mutation is bracketed by a setHoudini, which re-renders.)
     const queuedNote = houdiniQueueRef.current ? ' — the queued projects will not start' : ''
-    const label =
-      houdini.state === 'running' && houdini.total > 0
-        ? `Houdini ${houdini.done}/${houdini.total}`
-        : 'Houdini opening…'
     // The live mid-node channel: what the currently exporting node is SAYING
     // (456.py streams the HDA's own output into the polled result). The chip
-    // shows the last line; the tooltip carries the recent tail.
+    // shows the scene + last line; the tooltip carries the recent tail plus
+    // WHICH export set (.dth) the node works through.
     const activity = houdini.state === 'running' ? houdini.activity : undefined
+    // With a node actively exporting, count the one being WORKED ON ("1/1"),
+    // not the ones done ("0/1") — the chip reads as "working on n of m".
+    const workedOn =
+      houdini.state === 'running' && houdini.total > 0
+        ? activity
+          ? Math.min(houdini.done + 1, houdini.total)
+          : houdini.done
+        : 0
+    const label =
+      houdini.state === 'running' && houdini.total > 0
+        ? `Houdini ${workedOn}/${houdini.total}`
+        : 'Houdini opening…'
     const lastActivity = activity?.lines[activity.lines.length - 1] ?? ''
-    const activityTail = activity
-      ? `\n\nHoudini says (${activity.scene || activity.node}):\n${activity.lines.slice(-8).join('\n')}`
+    const chipActivity = activity
+      ? [activity.scene, lastActivity].filter(Boolean).join(' · ')
       : ''
+    const dthName = activity?.dth ? (activity.dth.split(/[\\/]/).pop() ?? '') : ''
+    const activityTail =
+      activity && houdini.state === 'running'
+        ? `\n\nWorking on ${activity.scene || activity.node}${dthName ? ` (import: ${dthName})` : ''} — node ${workedOn} of ${houdini.total}:\n${activity.lines.slice(-8).join('\n')}`
+        : ''
     return (
       <Button
         variant="outline"
@@ -628,9 +642,9 @@ export function DthExportAction({
         <Loader2 className="animate-spin" />
         <img src={houdiniLogo} alt="Houdini" className="size-5 shrink-0 object-contain" />
         {label}
-        {lastActivity && (
-          <span className="max-w-48 truncate text-xs font-normal text-muted-foreground">
-            {lastActivity}
+        {chipActivity && (
+          <span className="max-w-56 truncate text-xs font-normal text-muted-foreground">
+            {chipActivity}
           </span>
         )}
         <ElapsedSince
