@@ -294,20 +294,19 @@ export function EditorHeader({
         </div>
         {/* Bottom-right in the header, on the path-chip's baseline (mb-6 lifts the
             box so the scale below anchors on that line). They ride the sticky
-            header, so they stay reachable as the form scrolls. The column
-            SELF-STRETCHES to the header's full height so the live export
-            pipeline (meters + task cards + log) can fill everything above the
+            header, so they stay reachable as the form scrolls. A GRID, not a
+            flex column: the button row and the pipeline panel's log window
+            share the second column track (subgrid), so the log is always
+            EXACTLY as wide as all the buttons together — the task cards sit in
+            their own first column left of it. The area SELF-STRETCHES to the
+            header's full height so the panel can fill everything above the
             buttons. The panel does NOT dock: `pipeline-scroll` fades it out on
             the header-collapse scroll timeline (styles.css), so the docked
             sticky header shows only the buttons — the panel is a working view
             for the top of the page. */}
-        <div className="ml-auto mb-6 flex shrink-0 flex-col items-end justify-end gap-2 self-stretch">
-          {exportPipeline && (
-            <div className="pipeline-scroll flex min-h-0 flex-1">
-              <ExportPipelinePanel view={exportPipeline} />
-            </div>
-          )}
-          <div className="actions-scroll flex justify-end gap-2">
+        <div className="mb-6 ml-auto grid shrink-0 grid-cols-[auto_auto] grid-rows-[minmax(0,1fr)_auto] justify-end gap-2 self-stretch">
+          {exportPipeline && <ExportPipelinePanel view={exportPipeline} />}
+          <div className="actions-scroll col-start-2 row-start-2 flex justify-end gap-2">
             <DthExportAction
               projectId={projectId}
               character={character}

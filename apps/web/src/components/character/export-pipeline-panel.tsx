@@ -105,7 +105,7 @@ export function ExportTaskCards({ tasks }: { tasks: Array<ExportTask> }) {
   const visibleIds = tasks.filter((task) => !collapsed.has(task.id)).map((task) => task.id)
 
   return (
-    <div className="flex w-40 shrink-0 flex-col">
+    <div className="col-start-1 row-start-2 flex min-h-0 w-40 shrink-0 flex-col">
       {tasks.map((task) => {
         const isFlying = flying.has(task.id)
         const isCollapsed = collapsed.has(task.id)
@@ -148,8 +148,9 @@ export function ExportActivityLog({
   }, [log.lines])
   return (
     // Fills whatever height the panel row gives it (full header at rest, less
-    // when the sticky header docks) — the line box is the flexible part.
-    <div className="flex min-w-0 flex-1 flex-col rounded-md border bg-card/80 px-2.5 py-1.5 text-left">
+    // when the sticky header docks) — the line box is the flexible part. The
+    // grid places it in the buttons' shared column, so its width IS theirs.
+    <div className="col-start-2 row-start-2 flex min-h-0 min-w-0 flex-col rounded-md border bg-card/80 px-2.5 py-1.5 text-left">
       <p className="mb-1 flex shrink-0 items-baseline gap-2 text-[11px] text-muted-foreground">
         <span className="shrink-0 font-medium text-foreground/80">{log.title}</span>
         {log.subtitle && <span className="truncate">{log.subtitle}</span>}
@@ -195,26 +196,22 @@ function ProgressBar({ bar, emphasis = false }: { bar: ExportProgressBar; emphas
 export function ExportPipelinePanel({ view }: { view: ExportPipelineView }) {
   if (view.tasks.length === 0 && !view.log && !view.bars) return null
   return (
-    // FIXED width (the log/labels must not resize the header's button cluster
-    // mid-run) and flex-1/min-h-0 so the panel fills whatever height the
-    // header has — full when at rest, and it shrinks in lockstep with the
-    // sticky collapse instead of spilling out (the log is the shrink victim;
-    // the meter row keeps its size).
-    <div className="flex min-h-0 w-[580px] flex-1 flex-col gap-2">
+    // Lives inside the header's 2-column grid and inherits its tracks
+    // (subgrid): the LOG WINDOW shares its column with the button row below,
+    // so the two are always exactly as wide as each other — the task cards
+    // fill the first column, the meter row spans both. min-h-0 rows so the
+    // panel fills whatever height the header has (the log is the flexible
+    // part; the meter row keeps its size). Width is content-stable mid-run:
+    // the buttons' "Working" label + reserved clock never resize.
+    <div className="pipeline-scroll col-span-2 row-start-1 grid min-h-0 grid-cols-subgrid grid-rows-[auto_minmax(0,1fr)] gap-y-2">
       {view.bars && (
-        <div className="flex shrink-0 flex-col gap-1.5">
+        <div className="col-span-2 row-start-1 flex min-w-0 flex-col gap-1.5">
           {view.bars.overall && <ProgressBar bar={view.bars.overall} emphasis />}
           <ProgressBar bar={view.bars.current} />
         </div>
       )}
-      {(view.tasks.length > 0 || view.log) && (
-        // overflow-hidden so a docked (collapsed) header clips the row instead
-        // of letting cards/log spill over the page below.
-        <div className="flex min-h-0 flex-1 items-stretch gap-2 overflow-hidden">
-          {view.tasks.length > 0 && <ExportTaskCards tasks={view.tasks} />}
-          {view.log && <ExportActivityLog log={view.log} />}
-        </div>
-      )}
+      {view.tasks.length > 0 && <ExportTaskCards tasks={view.tasks} />}
+      {view.log && <ExportActivityLog log={view.log} />}
     </div>
   )
 }
