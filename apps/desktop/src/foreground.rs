@@ -22,10 +22,17 @@ pub fn focus_app_window(exe_names: Vec<String>) -> bool {
     }
 }
 
-/// Minimize the main window of the first process among `exe_names`, waiting up
+/// Minimize the main window of the first process among `exe_paths`, waiting up
 /// to `timeout_ms` for that window to exist — a just-launched Daz Studio has no
 /// main window for many seconds. Returns whether one was minimized (`false` on
 /// timeout, or off Windows).
+///
+/// `exe_paths` are FULL executable paths (the caller passes the very path
+/// `launch_daz_studio` returned), never bare image names: DS4 and DS6 are both
+/// `DAZStudio.exe`, and a name match would find the OTHER install's window —
+/// the one the user is working in, which exists long before the launched
+/// instance shows its own — and yank it down. (A bare name still degrades to a
+/// tail match rather than matching nothing, but no studio caller sends one.)
 ///
 /// Used for the UNATTENDED Daz launches (export batches, project/scene scans,
 /// the pending-handoff restart), which have no reason to take over the screen.
@@ -34,14 +41,14 @@ pub fn focus_app_window(exe_names: Vec<String>) -> bool {
 ///
 /// `(async)`: it polls and sleeps, so it must not sit on the main thread.
 #[tauri::command(async)]
-pub fn minimize_app_window(exe_names: Vec<String>, timeout_ms: u64) -> bool {
+pub fn minimize_app_window(exe_paths: Vec<String>, timeout_ms: u64) -> bool {
     #[cfg(windows)]
     {
-        windows_impl::minimize(&exe_names, timeout_ms)
+        windows_impl::minimize(&exe_paths, timeout_ms)
     }
     #[cfg(not(windows))]
     {
-        let _ = (exe_names, timeout_ms);
+        let _ = (exe_paths, timeout_ms);
         false
     }
 }
@@ -68,7 +75,13 @@ mod windows_impl {
     const SETTLE_MS: u64 = 4_000;
 
     struct Ctx {
-        names: Vec<String>,
+        /// Lowercased, `/`-separated matchers. An entry WITH a path separator
+        /// must equal the process's full image path; a bare file name matches
+        /// the path's tail. Full paths are what the minimize caller sends —
+        /// DS4 and DS6 are BOTH `DAZStudio.exe`, so a name can hit the other
+        /// install's window (see `minimize_app_window`); `focus` keeps its
+        /// long-standing name matching.
+        matchers: Vec<String>,
         /// Only match a window with a title bar. The MINIMIZE path sets this:
         /// Daz shows a frameless splash before its main window, and that splash
         /// is a visible, unowned top-level window that would otherwise match
@@ -78,12 +91,17 @@ mod windows_impl {
         hwnd: HWND,
     }
 
-    /// The image file name (lowercased) of a process, e.g. `"dazstudio.exe"` —
-    /// the tail of the same executable path the Daz probes match against a
-    /// whole install folder (`procs::exe_path_of_pid`).
-    fn exe_name_of(pid: u32) -> Option<String> {
-        let full = crate::procs::exe_path_of_pid(pid)?;
-        Some(full.rsplit(['\\', '/']).next().unwrap_or(&full).to_lowercase())
+    /// Whether the process behind `pid` matches one of the ctx matchers (see
+    /// `Ctx::matchers` for the full-path-vs-name rule). Case- and separator-
+    /// insensitive: the launch path may carry the settings folder's forward
+    /// slashes while `QueryFullProcessImageNameW` answers with backslashes.
+    fn process_matches(pid: u32, matchers: &[String]) -> bool {
+        let Some(full) = crate::procs::exe_path_of_pid(pid) else {
+            return false;
+        };
+        let full = full.to_lowercase().replace('\\', "/");
+        let name = full.rsplit('/').next().unwrap_or(&full);
+        matchers.iter().any(|m| if m.contains('/') { m == &full } else { m == name })
     }
 
     unsafe extern "system" fn enum_cb(hwnd: HWND, lparam: LPARAM) -> i32 {
@@ -103,21 +121,20 @@ mod windows_impl {
         }
         let mut pid = 0u32;
         GetWindowThreadProcessId(hwnd, &mut pid);
-        if pid != 0 {
-            if let Some(name) = exe_name_of(pid) {
-                if ctx.names.contains(&name) {
-                    ctx.hwnd = hwnd;
-                    return 0; // found — stop enumerating
-                }
-            }
+        if pid != 0 && process_matches(pid, &ctx.matchers) {
+            ctx.hwnd = hwnd;
+            return 0; // found — stop enumerating
         }
         1
     }
 
     /// The first matching top-level window, or null when none is up yet.
-    fn find(exe_names: &[String], require_caption: bool) -> HWND {
+    fn find(exe_matchers: &[String], require_caption: bool) -> HWND {
         let mut ctx = Ctx {
-            names: exe_names.iter().map(|s| s.to_lowercase()).collect(),
+            matchers: exe_matchers
+                .iter()
+                .map(|s| s.to_lowercase().replace('\\', "/"))
+                .collect(),
             require_caption,
             hwnd: std::ptr::null_mut(),
         };
@@ -125,10 +142,10 @@ mod windows_impl {
         ctx.hwnd
     }
 
-    pub fn minimize(exe_names: &[String], timeout_ms: u64) -> bool {
+    pub fn minimize(exe_paths: &[String], timeout_ms: u64) -> bool {
         let deadline = Instant::now() + Duration::from_millis(timeout_ms);
         loop {
-            let hwnd = find(exe_names, true);
+            let hwnd = find(exe_paths, true);
             if !hwnd.is_null() {
                 // Cross-process ShowWindow is what `focus` already does. It can
                 // stall against a window whose thread isn't pumping (a Daz deep

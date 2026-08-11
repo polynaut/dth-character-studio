@@ -228,14 +228,14 @@ const MINIMIZE_WINDOW_TIMEOUT_MS = 60_000
 
 /** Start a scene-less Daz Studio (its Runner claims the pending job file on
  *  startup). The command returns the launched exe path — schema-parsed at the
- *  boundary like every native return, then unused here.
+ *  boundary like every native return, and what the minimize watch matches on.
  *
  *  The EXPORT install, not the active one: this is the launch that needs the
  *  Runner plugin, and "Export only" exists so a machine whose newest Studio has
  *  no Runner build yet can still export from the older one. With no card
  *  flagged the two resolve to the same folder. */
 async function launchDazSceneless(visibility: DazLaunchVisibility): Promise<void> {
-  z.string().parse(
+  const exePath = z.string().parse(
     await invoke('launch_daz_studio', {
       installFolder: await exportDazInstallFolder(),
       scenePath: '',
@@ -246,8 +246,14 @@ async function launchDazSceneless(visibility: DazLaunchVisibility): Promise<void
   // minute (a cold start is slow) and the handoff must not wait on it. Purely
   // best-effort — off Windows, or on a Daz that never shows a window, it just
   // does nothing and the launch stands on its own.
+  //
+  // Matched by the FULL path of the exe just launched, never a bare name: DS4
+  // and DS6 are both `DAZStudio.exe`, and the launch decision is scoped to
+  // the EXPORT install — so with another install open and visible, a name
+  // match would find the USER'S window first (the launched Daz has none for
+  // many seconds) and yank it down.
   void invoke('minimize_app_window', {
-    exeNames: ['DAZStudio.exe'],
+    exePaths: [exePath],
     timeoutMs: MINIMIZE_WINDOW_TIMEOUT_MS,
   }).catch(() => {})
 }

@@ -23,10 +23,14 @@ const files = new Map<string, string>()
 const dirs = new Set<string>()
 
 let dazRunning = false
+/** The exe path the fake `launch_daz_studio` answers with — the minimize watch
+ *  must hunt exactly this (DS4 and DS6 are both `DAZStudio.exe`, so a bare
+ *  NAME could match the other install's window; the full path cannot). */
+const LAUNCHED_EXE = 'C:/Daz4/DAZStudio.exe'
 /** `launch_daz_studio` calls, in order. */
 const launches: Array<string> = []
 /** `minimize_app_window` calls with their args — the assertion target. */
-const minimizes: Array<{ exeNames: Array<string>; timeoutMs: number }> = []
+const minimizes: Array<{ exePaths: Array<string>; timeoutMs: number }> = []
 
 function norm(p: string): string {
   let s = p.replace(/\\/g, '/')
@@ -59,11 +63,11 @@ vi.mock('@tauri-apps/api/core', () => ({
     if (cmd === 'daz_studio_running') return dazRunning
     if (cmd === 'launch_daz_studio') {
       launches.push(cmd)
-      return ''
+      return LAUNCHED_EXE
     }
     if (cmd === 'minimize_app_window') {
       minimizes.push({
-        exeNames: (args?.exeNames as Array<string>) ?? [],
+        exePaths: (args?.exePaths as Array<string>) ?? [],
         timeoutMs: (args?.timeoutMs as number) ?? 0,
       })
       return true
@@ -135,7 +139,12 @@ vi.mock('@tauri-apps/plugin-fs', () => ({
 
 import { CHARACTER_SCHEMA_VERSION, characterSchema } from '@dth/rom'
 import * as storage from './storage'
-import { generateRomAnimation, launchDazForPendingJobs, startSceneScan } from './api/execute'
+import {
+  generateRomAnimation,
+  launchDazForPendingJobs,
+  startProjectScan,
+  startSceneScan,
+} from './api/execute'
 
 /** The Daz library — where the job file and the generated scripts live. */
 const DAZ_LIB = '/daz/My DAZ 3D Library'
@@ -183,10 +192,22 @@ describe('unattended launches start Daz minimized', () => {
 
     expect(launches).toHaveLength(1)
     expect(minimizes).toHaveLength(1)
-    // The exe the watch looks for, and a timeout generous enough for a cold Daz
-    // (which can take tens of seconds to paint a main window).
-    expect(minimizes[0].exeNames).toEqual(['DAZStudio.exe'])
+    // The watch hunts the FULL path of the exe that was just launched — never
+    // a bare name, which could match the OTHER install's open window (DS4 and
+    // DS6 are both DAZStudio.exe) — with a timeout generous enough for a cold
+    // Daz (which can take tens of seconds to paint a main window).
+    expect(minimizes[0].exePaths).toEqual([LAUNCHED_EXE])
     expect(minimizes[0].timeoutMs).toBeGreaterThanOrEqual(30_000)
+  })
+
+  it('a project scan (base index pass) launches Daz minimized', async () => {
+    addFile(`${SCRIPTS}/${storage.GENESIS_INDEX_BULK_SCRIPT}`)
+
+    await startProjectScan({ data: { base: true, morphs: false, products: false } })
+
+    expect(launches).toHaveLength(1)
+    expect(minimizes).toHaveLength(1)
+    expect(minimizes[0].exePaths).toEqual([LAUNCHED_EXE])
   })
 
   it('restarting Daz for a pending export handoff minimizes it too', async () => {
@@ -196,6 +217,7 @@ describe('unattended launches start Daz minimized', () => {
 
     expect(launches).toHaveLength(1)
     expect(minimizes).toHaveLength(1)
+    expect(minimizes[0].exePaths).toEqual([LAUNCHED_EXE])
   })
 
   it('does NOT touch a Daz that was already running — we only minimize what we start', async () => {
