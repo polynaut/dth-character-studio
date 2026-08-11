@@ -26,6 +26,7 @@ import {
   FillFromCharacterDialog,
   type FillExtra,
 } from '#/components/character/fill-from-character-dialog.tsx'
+import { useImportCharacterZip } from '#/components/character/import-character.tsx'
 import {
   characterKeepFolders,
   copyDazScene,
@@ -263,8 +264,35 @@ function ProjectCharactersPage() {
     setPanelOpen(true)
   }
 
-  // The whole page is a .duf drop target — `data-filedrop-id` goes on <main>.
-  const { id: dropId, isOver: dropOver } = useFileDrop({ accept: ['duf'], onDrop: onDropScene })
+  // Import-from-zip (CREATE): a character export (.dcsc.zip) dropped on the
+  // page restores the zip's character — all of its data — as a NEW character
+  // of this project, then opens its editor.
+  const importer = useImportCharacterZip({
+    projectId,
+    target: null,
+    onImported: async (imported) => {
+      await router.invalidate()
+      await router.navigate({
+        to: '/projects/$projectId/characters/$characterId',
+        params: { projectId, characterId: imported.id },
+      })
+    },
+  })
+
+  // The whole page is a drop target for both — `data-filedrop-id` goes on
+  // <main>. A zip goes to the import flow, a .duf to the create panel.
+  function onDropFiles(paths: Array<string>) {
+    const zip = paths.find((p) => p.toLowerCase().endsWith('.zip'))
+    if (zip) {
+      importer.openZip(zip)
+      return
+    }
+    onDropScene(paths.filter((p) => p.toLowerCase().endsWith('.duf')))
+  }
+  const { id: dropId, isOver: dropOver } = useFileDrop({
+    accept: ['duf', 'zip'],
+    onDrop: onDropFiles,
+  })
 
   /** Is the picked scene located inside the project folder? */
   function sceneInsideProject(): boolean {
@@ -456,9 +484,11 @@ function ProjectCharactersPage() {
     <main data-filedrop-id={dropId} className="relative min-h-screen p-8 pb-24">
       {dropOver && (
         <div className="pointer-events-none fixed inset-4 z-[60] flex items-center justify-center rounded-lg border-2 border-dashed border-primary bg-primary/10 text-base font-medium text-primary">
-          Drop a Daz scene (.duf) to create a character
+          Drop a Daz scene (.duf) to create a character — or a character export (.dcsc.zip) to
+          import one
         </div>
       )}
+      {importer.dialog}
       <header className="mb-8 flex items-start justify-between gap-4">
         <div>
           <EditableTitle

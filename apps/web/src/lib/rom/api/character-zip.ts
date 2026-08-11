@@ -328,16 +328,22 @@ export async function importCharacterZip({
       await repointMetaFiles(metaDest, manifest.sourceFolder, destFolder)
     }
 
-    // The avatar images, re-keyed when the id changed.
+    // The avatar images, re-keyed when the id changed (independent files, in
+    // parallel — the removeCharacterAvatars pattern).
     const stagedImages = joinPath(staging, ZIP_IMAGES_PREFIX)
     if (await exists(stagedImages)) {
       const imagesDir = storage.metaImagesDir(project.path)
       await mkdir(imagesDir, { recursive: true })
-      for (const entry of await readDir(stagedImages)) {
-        if (!entry.isFile) continue
-        const name = rekeyAvatarFileName(entry.name, staged.id, finalId)
-        await renameWithRetry(joinPath(stagedImages, entry.name), joinPath(imagesDir, name))
-      }
+      await Promise.all(
+        (await readDir(stagedImages))
+          .filter((entry) => entry.isFile)
+          .map((entry) =>
+            renameWithRetry(
+              joinPath(stagedImages, entry.name),
+              joinPath(imagesDir, rekeyAvatarFileName(entry.name, staged.id, finalId)),
+            ),
+          ),
+      )
     }
 
     // The definition: every stored in-folder path repointed from the export-time

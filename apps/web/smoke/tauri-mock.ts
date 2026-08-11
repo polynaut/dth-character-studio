@@ -109,6 +109,13 @@ export interface TauriMockSeed {
       availableTools?: Array<string>
     }
   >
+  /** What `read_character_zip_manifest` returns for a picked/dropped character
+   *  export zip (the manifest JSON text). Omit for "not a character export". */
+  characterZipManifest?: string
+  /** What `extract_character_zip` inflates: zip-relative path → content,
+   *  written under the requested staging dir. The zip bytes themselves never
+   *  exist in the fake — the entries ARE the archive. */
+  characterZipEntries?: Record<string, string>
 }
 
 /** What the spec reads back via `page.evaluate` from `window.__tauriMock`. */
@@ -769,6 +776,24 @@ export function installTauriMock(seed: TauriMockSeed): void {
         if (!isFile(backup)) throw new Error(`The backup is no longer there:\n${backup}`)
         files.set(hip, mustRead(backup))
         return null
+      }
+      case 'export_character_zip':
+        // Packing happens in Rust on the desktop; the fake acknowledges with a
+        // plausible report — specs assert the REQUEST shape via `calls`.
+        return { files: 7, bytes: 12345, skippedLinks: 0 }
+      case 'read_character_zip_manifest': {
+        if (!seed.characterZipManifest) {
+          throw new Error(
+            'This zip is not a DTH Character Studio character export (no manifest.json at its root).',
+          )
+        }
+        return seed.characterZipManifest
+      }
+      case 'extract_character_zip': {
+        const dest = norm(args.request.destDir)
+        const entries = Object.entries(seed.characterZipEntries ?? {})
+        for (const [rel, content] of entries) files.set(`${dest}/${rel}`, content)
+        return entries.length
       }
       case 'unreal_dth_present':
         // The linked Unreal project in the docs fixture has no DTH content yet
