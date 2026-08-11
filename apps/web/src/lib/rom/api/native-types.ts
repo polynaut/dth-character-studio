@@ -386,6 +386,12 @@ export const materialScanProjectSchema = z.object({
    *  nodes (opening a `.hip` costs tens of seconds). Empty only when the
    *  project could not be read. */
   job: z.string(),
+  /** The scene's timeline FPS, read in that same pass. `0` = no value: the
+   *  project could not be opened — or the entry is a STORED scan written before
+   *  this field existed, which is the reason for the default. Every reader
+   *  treats 0 as "unknown", never as "differs", so an old cache entry can never
+   *  produce a badge or queue a repair. */
+  fps: z.number().default(0),
   /** What a repath would do to this project's stored file references. */
   refs: projectRefInfoSchema,
   /** Which DazToHue parms the studio could fill here, and which this DazToHue
@@ -393,12 +399,16 @@ export const materialScanProjectSchema = z.object({
   prefill: projectPrefillInfoSchema,
 })
 
-/** What the `defaults` operation did (or would do) to one project's `$JOB`.
+/** What the `defaults` operation did (or would do) to one project's `$JOB` and
+ *  timeline.
  *
  *  Houdini's file picker collapses a chosen path to a variable only when it
  *  sits under `$HIP` or `$JOB`. A pre-v0.64 project carries
  *  `<char>/houdini/houdini-project` — BELOW the exports, so it could never
- *  help and every hand-picked export came back absolute. */
+ *  help and every hand-picked export came back absolute.
+ *
+ *  The FPS rides along because both are scene state in the same file: one open,
+ *  one backup, one save. */
 export const houdiniDefaultsResultSchema = z.object({
   hipPath: z.string(),
   ok: z.boolean(),
@@ -407,8 +417,18 @@ export const houdiniDefaultsResultSchema = z.object({
   previousJob: z.string(),
   /** The `$JOB` it carries now — for a dry run, what it WOULD carry. */
   job: z.string(),
-  /** false = already correct, so nothing was written. */
+  /** The FPS the scene carried before the run (0 = it could not be read, in
+   *  which case the run leaves it alone). */
+  previousFps: z.number().default(0),
+  /** The FPS it carries now — for a dry run, what it WOULD carry. */
+  fps: z.number().default(0),
+  /** false = already correct, so nothing was written. The OR of the two below,
+   *  and what the report renders "left untouched" from. */
   changed: z.boolean(),
+  /** Which of the two this run actually rewrote — so a toast can say what
+   *  happened instead of claiming both. */
+  changedJob: z.boolean().default(false),
+  changedFps: z.boolean().default(false),
   /** Pre-repair backup (empty for a dry run, and when nothing changed). */
   backupPath: z.string(),
 })

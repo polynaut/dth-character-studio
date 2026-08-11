@@ -10,14 +10,14 @@ Six operations:
 
   scan      list every DazToHueMaterial node in a set of `.hip` files, with the
             counts the panel shows (materials / UV channels / bakers / layers)
-            — plus each scene's `$JOB` and `$HIP`, read in the same pass.
+            — plus each scene's `$JOB` and timeline FPS, read in the same pass.
   transfer  copy one source node's material SETUP onto one or more target nodes
             — any combination of the material slots, the UV channels and the
             texture bakers — appending or replacing, with a dry-run mode that
             changes nothing and reports what a real run would do.
   defaults  repoint a project's `$JOB` at the folder the studio expects, so a
             hand-picked export collapses to a variable instead of an absolute
-            path (`op_defaults`).
+            path — and put its timeline on the pipeline's 30 fps (`op_defaults`).
   prefill   fill the blank DazToHue parms the studio already knows (the
             Generate-project wiring, for projects that already exist), feature
             detected per parm (`op_prefill`).
@@ -775,6 +775,23 @@ def _scene_job():
     return "" if value == JOB_SENTINEL else _norm_path(value)
 
 
+def _scene_fps():
+    """The timeline FPS the open scene carries, `0.0` when it can't be read.
+
+    Scene state saved with the `.hip`, exactly like `$JOB` — which is why it is
+    checkable and repairable at all. It needs no sentinel of its own: `$JOB` got
+    one because a `.hip` saved without ever setting it leaves the PREVIOUS file's
+    value visible (measured), whereas every scene carries an FPS and a load
+    applies it. `0.0` is therefore the guard for a hython that cannot answer at
+    all, not a state the UI has to render — and every reader treats it as
+    "unknown", never as "wrong".
+    """
+    try:
+        return float(hou.fps())
+    except Exception:
+        return 0.0
+
+
 def _network_box_label(node):
     """Title of the network box the node sits in, or ''.
 
@@ -1039,6 +1056,7 @@ def op_scan(request):
             "error": "",
             "nodes": [],
             "job": "",
+            "fps": 0.0,
             "refs": {"collapsible": 0, "foreign": 0, "broken": []},
             "prefill": {"fillable": [], "missing": []},
         }
@@ -1048,6 +1066,7 @@ def op_scan(request):
             # Read in the SAME pass as the nodes — opening a `.hip` costs tens
             # of seconds, and the General tab must not pay it a second time.
             entry["job"] = _scene_job()
+            entry["fps"] = _scene_fps()
             entry["refs"] = _project_ref_info(export_dir)
             entry["prefill"] = _prefill_scan()
         except Exception as exc:
@@ -1583,33 +1602,63 @@ def op_repath(request):
     return {"op": "repath", "projects": [], "targets": [], "repath": results, "dryRun": dry_run}
 
 
+#: How close a scene's FPS has to be to count as the wanted one. Houdini's FPS
+#: is a float and 29.97/23.976 are real values, so an exact compare on a number
+#: that made a JSON round trip is the wrong kind of strict. MIRROR of `sameFps`
+#: in `lib/rom/houdini-defaults.ts` — the studio decides what to send, this
+#: decides whether to write it, and the two must agree or the drawer offers a
+#: repair that then reports "already correct".
+FPS_EPSILON = 0.001
+
+
 def op_defaults(request):
-    """Repoint each project's `$JOB` at the folder the studio expects.
+    """Repoint each project's `$JOB`, and put its timeline on the studio's FPS.
 
-    `$JOB` is scene state saved with the `.hip` (`hou.putenv`, the programmatic
-    File → Set Project), so an EXISTING project keeps whatever it was created
-    with — which is the whole reason this exists. Houdini collapses a picked
-    path to a variable only when it sits under `$HIP` or `$JOB`, so a `$JOB` on
-    `<char>/houdini/houdini-project` (below the exports) can never help and a
-    hand-picked export comes back ABSOLUTE.
+    Both are scene state saved with the `.hip` — `$JOB` via `hou.putenv` (the
+    programmatic File → Set Project), the FPS via `hou.setFps` — so an EXISTING
+    project keeps whatever it was created with, which is the whole reason this
+    exists. Houdini collapses a picked path to a variable only when it sits
+    under `$HIP` or `$JOB`, so a `$JOB` on `<char>/houdini/houdini-project`
+    (below the exports) can never help and a hand-picked export comes back
+    ABSOLUTE. And a scene left on Houdini's own default 24 fps puts every
+    imported ROM frame between two of its own, while the PoseAsset CSV names
+    frame numbers generated at 30.
 
-    Only ever repairs what DIFFERS: a project already on the right folder is
-    reported and left untouched, so a run never rewrites a `.hip` for nothing.
-    Same guarantees as the transfer — dry run, and one rolling backup beside
-    Houdini's own before any save.
+    They travel together because they are one file open, one backup, one save —
+    and each is compared separately, so a project needing only one gets only
+    that one written.
+
+    `fps` is what the caller wants; it is only ever applied when it is a real
+    positive number AND the scene's own reads differently. `hou.setFps` is
+    called with the value alone, so what it does to any keyframes already in the
+    scene is Houdini's documented default — NOT something this studio has
+    measured. The rolling backup below is what makes that recoverable.
+
+    Only ever repairs what DIFFERS: a project already on the right folder and
+    the right timeline is reported and left untouched, so a run never rewrites a
+    `.hip` for nothing. Same guarantees as the transfer — dry run, and one
+    rolling backup beside Houdini's own before any save.
     """
     dry_run = bool(request.get("dryRun"))
     results = []
     for target in request.get("targets", []):
         path = target.get("hipPath", "")
         want = _norm_path(target.get("jobDir", ""))
+        try:
+            want_fps = float(target.get("fps") or 0)
+        except (TypeError, ValueError):
+            want_fps = 0.0
         result = {
             "hipPath": path,
             "ok": True,
             "error": "",
             "previousJob": "",
             "job": want,
+            "previousFps": 0.0,
+            "fps": want_fps,
             "changed": False,
+            "changedJob": False,
+            "changedFps": False,
             "backupPath": "",
         }
         if not want:
@@ -1621,21 +1670,47 @@ def op_defaults(request):
             _load(path)
             current = _scene_job()
             result["previousJob"] = current
+            current_fps = _scene_fps()
+            result["previousFps"] = current_fps
             # Case-insensitive: these are Windows paths, and a case-only
             # difference is the same folder — rewriting for it would churn the
-            # file forever.
-            if current.lower() == want.lower():
+            # file forever. An EMPTY current is the sentinel case — the scene
+            # never carried a `$JOB` the scan could read — and a project can
+            # reach this run for its FPS alone, so unknown has to stay
+            # unwritten HERE too, not just unqueued in the drawer.
+            if current and current.lower() != want.lower():
+                result["changedJob"] = True
+            else:
                 result["job"] = current
+            # A scene whose FPS could not be read (0) is left alone for the same
+            # reason an unknown `$JOB` is: nothing was seen, so nothing is known
+            # to be wrong. Same for a caller that sent no value. `>=` because
+            # `sameFps` says same on `< FPS_EPSILON` — this is its exact
+            # complement, so the drawer never queues a repair this refuses.
+            if (
+                want_fps > 0
+                and current_fps > 0
+                and abs(current_fps - want_fps) >= FPS_EPSILON
+            ):
+                result["changedFps"] = True
+            else:
+                result["fps"] = current_fps
+            result["changed"] = result["changedJob"] or result["changedFps"]
+            if not result["changed"]:
                 results.append(result)
                 continue
-            result["changed"] = True
             if not dry_run:
                 result["backupPath"] = _backup(path)
-                hou.putenv("JOB", want)
+                if result["changedJob"]:
+                    hou.putenv("JOB", want)
+                if result["changedFps"]:
+                    hou.setFps(want_fps)
                 hou.hipFile.save(path)
         except Exception as exc:
             result["ok"] = False
             result["changed"] = False
+            result["changedJob"] = False
+            result["changedFps"] = False
             result["error"] = str(exc).strip() or exc.__class__.__name__
         results.append(result)
     return {"op": "defaults", "projects": [], "targets": [], "defaults": results, "dryRun": dry_run}

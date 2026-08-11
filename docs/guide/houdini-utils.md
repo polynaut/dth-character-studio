@@ -257,11 +257,26 @@ variable that reached them:
 | `$JOB` | picking an export gave you |
 | --- | --- |
 | `<character>/houdini/houdini-project` | `D:\…\Ita\houdini\daz-export\primary\Ita.fbx` |
-| `<character>` — what **Repair `$JOB`** writes | `$JOB/houdini/daz-export/primary/Ita.fbx` |
+| `<character>` — what **Repair project settings** writes | `$JOB/houdini/daz-export/primary/Ita.fbx` |
 
 > **It fixes what you pick from now on.** Repointing `$JOB` does not rewrite
 > references that are *already* stored absolute — that is what **Make paths
 > portable** below is for.
+
+**Timeline (FPS)** is the second value the same button repairs, and it is scene
+state in exactly the same way. The ROM is **one pose per frame at 30 fps** — that
+is the rate Daz writes it at and the rate the PoseAsset CSV's frame numbers mean
+— while Houdini's own default is 24. DazToHue's import node sets the scene's FPS
+for you *when it loads the files*, so this row is about the projects where that
+hasn't happened: one the studio generated headlessly (nothing loads a file there,
+so generation sets it up front) and one you built by hand before importing
+anything.
+
+> **What it does to existing animation is Houdini's business.** The repair calls
+> Houdini's own `setFps`; how that treats keys already in a scene is Houdini
+> behaviour this studio has not measured. As with every other run here, the
+> project is backed up first and a failed one can be put straight back from the
+> report.
 
 **Reference paths** and **Import references** are the other half. Repairing
 `$JOB` decides how *future* picks are written down; these two fix what is
@@ -316,11 +331,14 @@ Two things make it safe to run on a project you set up by hand:
   re-generate: install the newer DazToHue and the same action simply starts
   filling it.
 
-**Repair `$JOB`** is enabled only when at least one project actually differs,
-and it touches only those — a project already on the right folder is listed and
-left alone, so running it twice rewrites nothing the second time. It offers the
-same **Dry run** as the transfer, and the same backup before saving. A project
-the scan couldn't read is never repaired: its `$JOB` is *unknown*, not wrong.
+**Repair project settings** is enabled only when at least one project actually
+differs, and it touches only those — a project already on the right folder *and*
+the right timeline is listed and left alone, so running it twice rewrites nothing
+the second time. The two values are judged separately: a project whose `$JOB` is
+fine and whose timeline is 24 gets its timeline written and nothing else, and the
+report says which of them moved. It offers the same **Dry run** as the transfer,
+and the same backup before saving. A value the scan couldn't read is never
+repaired: it is *unknown*, not wrong.
 
 **Refresh assets** is the odd one out, and deliberately so. A `.hip` stores the
 DazToHue asset definitions it was built with, so switching your installed

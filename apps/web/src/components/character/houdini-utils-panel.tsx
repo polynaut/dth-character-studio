@@ -48,7 +48,9 @@ import {
   transferHoudiniMaterials,
 } from '#/lib/rom/api.ts'
 import {
+  DTH_FPS,
   defaultsRowsFor,
+  formatFps,
   planRepath,
   projectsNeedingRepair,
   sameFolder,
@@ -806,10 +808,11 @@ export function HoudiniUtilsPanel({
     }
   }
 
-  /** Projects whose `$JOB` differs from the character folder — what a repair
-   *  would actually write. A project the scan couldn't read is never queued:
-   *  its `$JOB` is unknown, not wrong. */
-  const staleJobProjects = useMemo(
+  /** Projects whose `$JOB` differs from the character folder, or whose timeline
+   *  is not the pipeline's 30 fps — what a repair would actually write. A
+   *  project the scan couldn't read is never queued: those values are unknown,
+   *  not wrong. */
+  const staleSettingProjects = useMemo(
     () => projectsNeedingRepair(targetScan.projects, charFolder),
     [targetScan, charFolder],
   )
@@ -830,8 +833,8 @@ export function HoudiniUtilsPanel({
    *  narrowed the exposure without removing it: the import/CSV paths anchor on
    *  `$HIP` now, which cannot be wrong, but the final export directory is still
    *  `$JOB/<exportSubdir>` (nothing else can reach a folder BESIDE the houdini
-   *  one), so a wrong `$JOB` still misplaces Houdini's own output. Repair $JOB
-   *  first; the row above says so. */
+   *  one), so a wrong `$JOB` still misplaces Houdini's own output. Repair the
+   *  project settings first; the row above says so. */
   const prefillTargets = useMemo(
     () =>
       targetScan.projects
@@ -882,7 +885,7 @@ export function HoudiniUtilsPanel({
    *  answers to no check, so counting it would put a number on the tab that
    *  never reaches zero. */
   const fixesAvailable = [
-    staleJobProjects.length > 0,
+    staleSettingProjects.length > 0,
     repath.targets.length > 0,
     prefillTargets.length > 0,
   ].filter(Boolean).length
@@ -1101,13 +1104,13 @@ export function HoudiniUtilsPanel({
   }
 
   async function runDefaults(dryRun: boolean) {
-    if (staleJobProjects.length === 0) return
+    if (staleSettingProjects.length === 0) return
     setRunning(dryRun ? 'dry' : 'run')
     setActionReport(null)
     try {
       const result = await repairHoudiniDefaults({
         data: {
-          targets: staleJobProjects.map((hipPath) => ({ hipPath, jobDir: charFolder })),
+          targets: staleSettingProjects.map((hipPath) => ({ hipPath, jobDir: charFolder })),
           dryRun,
         },
       })
@@ -1119,12 +1122,25 @@ export function HoudiniUtilsPanel({
         if (failed.length > 0) {
           toast.error(`${failed.length} of ${result.defaults.length} projects failed — see below.`)
         } else {
+          // Named by what the run actually rewrote: a project can need only the
+          // timeline, and "$JOB repaired" on that one would be a claim about
+          // something nobody touched.
+          const jobs = result.defaults.filter((d) => d.ok && d.changedJob).length
+          const fpsFixed = result.defaults.filter((d) => d.ok && d.changedFps).length
+          const parts = [
+            jobs > 0 ? `$JOB on ${jobs} project${jobs === 1 ? '' : 's'}` : '',
+            fpsFixed > 0
+              ? `the timeline on ${fpsFixed} project${fpsFixed === 1 ? '' : 's'}`
+              : '',
+          ].filter(Boolean)
           toast.success(
-            `$JOB repaired on ${changed} project${changed === 1 ? '' : 's'}. Paths you pick from now on stay relative.`,
+            parts.length > 0
+              ? `Repaired ${parts.join(' and ')}.`
+              : `Nothing needed changing on ${changed === 1 ? 'the project' : 'these projects'}.`,
           )
           setDefaultsOpen(false)
         }
-        // The files changed on disk — their scanned $JOB is now stale.
+        // The files changed on disk — their scanned $JOB and FPS are now stale.
         void scanTargets()
       }
     } catch (error) {
@@ -1647,12 +1663,12 @@ export function HoudiniUtilsPanel({
                 whatever $JOB the scene carries, so the repair comes first. */}
             <Button
               variant="outline"
-              disabled={busy || staleJobProjects.length === 0 || !charFolder}
+              disabled={busy || staleSettingProjects.length === 0 || !charFolder}
               title={
                 !charFolder
                   ? 'The character folder could not be resolved'
-                  : staleJobProjects.length === 0
-                    ? 'Nothing differs — every project already points $JOB at the character folder'
+                  : staleSettingProjects.length === 0
+                    ? 'Nothing differs — every project already points $JOB at the character folder and runs at 30 fps'
                     : undefined
               }
               onClick={() => {
@@ -1660,7 +1676,7 @@ export function HoudiniUtilsPanel({
                 setDefaultsOpen(true)
               }}
             >
-              <Wrench /> Repair $JOB
+              <Wrench /> Repair project settings
             </Button>
             <Button
               variant="outline"
@@ -1682,7 +1698,7 @@ export function HoudiniUtilsPanel({
               disabled={busy || prefillTargets.length === 0 || !projectId}
               title={
                 prefillBlockedByJob > 0
-                  ? `Repair $JOB first — the values are written relative to it, so ${prefillBlockedByJob} project(s) would get paths anchored on the wrong folder, or on none.`
+                  ? `Repair the project settings first — the values are anchored on $JOB, so ${prefillBlockedByJob} project(s) would get paths anchored on the wrong folder, or on none.`
                   : prefillTargets.length === 0
                     ? 'Nothing blank the studio has an answer for'
                     : undefined
@@ -1805,16 +1821,18 @@ export function HoudiniUtilsPanel({
           open
           onClose={() => setDefaultsOpen(false)}
           dismissible={!busy}
-          title="Repair $JOB on these projects?"
+          title="Repair the project settings?"
         >
           <div className="space-y-2 text-sm">
             <p>
-              Point <code>$JOB</code> at <strong>{displayPath(charFolder)}</strong> in{' '}
-              <strong>{staleJobProjects.length}</strong> project
-              {staleJobProjects.length === 1 ? '' : 's'}.
+              Put <code>$JOB</code> on <strong>{displayPath(charFolder)}</strong> and the
+              timeline on <strong>{DTH_FPS} fps</strong> in{' '}
+              <strong>{staleSettingProjects.length}</strong> project
+              {staleSettingProjects.length === 1 ? '' : 's'} — whichever of the two actually
+              differs there.
             </p>
             <ul className="max-h-32 list-inside list-disc overflow-y-auto text-xs text-muted-foreground">
-              {staleJobProjects.map((hip) => (
+              {staleSettingProjects.map((hip) => (
                 <li key={hip}>
                   <code>{fileName(hip)}</code>
                 </li>
@@ -1826,11 +1844,22 @@ export function HoudiniUtilsPanel({
               project CAPABLE of being movable; it does not move anything that
               is already stored absolute. */}
           <p className="rounded-md border p-3 text-xs text-muted-foreground">
-            This fixes paths you pick <strong>from now on</strong>: Houdini will collapse an
-            export you choose to <code>$HIP/…</code> (or <code>$JOB/…</code> when it sits outside
-            the project&apos;s own folder) instead of writing it absolute. Paths already
-            stored absolute stay exactly as they are — repointing <code>$JOB</code> does not
-            rewrite existing references.
+            The <code>$JOB</code> half fixes paths you pick <strong>from now on</strong>:
+            Houdini will collapse an export you choose to <code>$HIP/…</code> (or{' '}
+            <code>$JOB/…</code> when it sits outside the project&apos;s own folder) instead of
+            writing it absolute. Paths already stored absolute stay exactly as they are —
+            repointing <code>$JOB</code> does not rewrite existing references.
+          </p>
+
+          {/* Named because it is the one thing here that can touch existing
+              WORK rather than metadata, and the studio has not measured what
+              Houdini does to keyframes at that moment. The backup is the
+              answer, so it is mentioned in the same breath. */}
+          <p className="rounded-md border p-3 text-xs text-muted-foreground">
+            The timeline is changed with Houdini&apos;s own <code>setFps</code>. On a scene that
+            already holds animation, how it treats those keys is Houdini&apos;s behaviour and
+            not something this studio has measured — the run backs each project up first, and
+            a failed one can be put straight back from the report.
           </p>
 
           <p className="text-xs text-muted-foreground">
@@ -2209,9 +2238,16 @@ function GeneralTab({
                 </p>
                 <p>
                   <code>$JOB</code> is saved inside the project file, so an older one can still
-                  point somewhere else. <strong>Repair $JOB</strong> puts it back on the
-                  character folder, which is what makes the paths you pick from now on come out
-                  relative.
+                  point somewhere else. <strong>Repair project settings</strong> puts it back on
+                  the character folder, which is what makes the paths you pick from now on come
+                  out relative.
+                </p>
+                <p>
+                  The same run puts the <strong>timeline</strong> on {DTH_FPS} fps. A ROM is one
+                  pose per frame at {DTH_FPS}, so a scene left on Houdini&apos;s own 24 lands
+                  every imported frame between two of its own. DazToHue&apos;s import node sets
+                  this itself when it loads the files — this is for the projects where that
+                  hasn&apos;t happened.
                 </p>
                 <p>
                   <strong>Make paths portable</strong> is the other half: it rewrites paths
@@ -2683,16 +2719,20 @@ function DefaultsReport({
               <strong>{fileName(entry.hipPath)}</strong>
             </p>
             {entry.ok ? (
-              <p className="text-muted-foreground">
-                {entry.changed ? (
-                  <>
+              <div className="space-y-0.5 text-muted-foreground">
+                {entry.changedJob && (
+                  <p>
                     <code>{displayPath(entry.previousJob) || '—'}</code> →{' '}
                     <code>{displayPath(entry.job)}</code>
-                  </>
-                ) : (
-                  'Already on the right folder — left untouched.'
+                  </p>
                 )}
-              </p>
+                {entry.changedFps && (
+                  <p>
+                    {formatFps(entry.previousFps) || '—'} fps → {formatFps(entry.fps)} fps
+                  </p>
+                )}
+                {!entry.changed && <p>Already correct — left untouched.</p>}
+              </div>
             ) : (
               <>
                 <p className="text-destructive">{entry.error}</p>
