@@ -167,9 +167,13 @@ the builders), and a rename re-titles an already-marked window. Renaming a proje
 (`storage.renameManifestFile`) and calls `sync_renamed_project_window` to
 live-re-title + re-pin every open window on the old file (no close/reopen).
 
-**FFI surface: 48 commands** (count re-verified 2026-08-11 — the previous "36"
+**FFI surface: 52 commands** (count re-verified 2026-08-11 — the previous "36"
 had drifted) registered in `generate_handler!` — installs
-(`install_dth_release/plugin/daz_assets/daz_merge/houdini_presets/unreal_dth`),
+(`install_dth_release/plugin/daz_assets/daz_merge/houdini_presets/unreal_dth`,
+plus `install_unreal_plugin`), the Unreal side (`unreal_engine_installs` — HKLM
+Epic-launcher registry, `scan_unreal_plugins` — the configured plugin-source
+folders, `unreal_project_state` — a `.uproject`'s engine association + what it
+already carries; see unreal_install.rs),
 scans (`list_daz_assets`, `scan_duf_files`, `pose_asset_frames`,
 `scene_wearables`), dedup/uninstall, windows
 (`open_project_window`/`active_project_file`/`sync_renamed_project_window`/

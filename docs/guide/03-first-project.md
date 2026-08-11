@@ -80,13 +80,23 @@ they are, and unlinking never deletes anything.
   **Alt+click** shows it in Explorer instead. The card's path chip works like
   every path chip (click copies, Alt+click reveals). The rest of the card is
   inert — no accidental launches.
-- **The small install button** on each card bootstraps the Unreal project with
-  DTH: it copies the linked DTH release's *Unreal Engine Content* into the
-  project's `Content/DazToHue` — a fresh Unreal project is DTH-ready in one
-  click. The button dims once the folder exists; **Ctrl+click always
-  installs**, overwriting with whatever release is selected in Settings
-  (project-local additions inside the folder survive) — handy after switching
-  the DTH release.
+- **The small install button** on each card opens the **install dialog**: what
+  goes into this Unreal project — the linked DTH release's *Unreal Engine
+  Content* (into `Content/DazToHue`) plus every plugin build from your
+  [Unreal Engine Plugins folders](./02-setup.md#unreal-engine-plugins) that
+  matches this project's engine version (read from its `.uproject` when the
+  dialog opens). Everything is pre-checked; uncheck what you don't want and
+  press **Install**. A checked item that is already in the project is
+  overwritten with the offered build (project-local additions inside the
+  folders survive — installing never deletes first). The button dims once
+  `Content/DazToHue` exists, but stays clickable — reinstalls and plugins live
+  in the dialog. A project whose engine association is a source-build GUID
+  lists every build unchecked instead: only you know what fits it.
+- **The ✨ Generate button** (next to *Add project*) creates a **fresh
+  Blueprint-only Unreal project** for one of the engine versions the Epic
+  launcher has installed, installs the checked DTH content + plugins into it in
+  the same run, and links it to this studio project — a DTH-ready Unreal
+  project from nothing, without opening Unreal first.
 
 <p align="center">
   <img width="900" alt="Unreal projects footer bar with a linked project card" src="screenshots/project-unreal-footer.png" />

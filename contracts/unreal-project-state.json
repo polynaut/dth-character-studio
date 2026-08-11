@@ -1,0 +1,5 @@
+{
+  "engineAssociation": "5.7",
+  "dthPresent": true,
+  "installedPlugins": ["DazToUnreal", "MyHelper"]
+}

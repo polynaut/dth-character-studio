@@ -170,18 +170,6 @@ Add project-level "Backup" and "Restore" operations:
   projects are created) to start a restore.
 ```
 
-### Installation & environment
-
-**C21. One-click Unreal Engine plugin install** `[external]`
-
-```text
-Extend the install feature to a DTH Unreal Engine plugin (if/when one exists) — and
-optionally other UE plugins: one click installs "DTH content + DTH plugin + custom
-plugins" so a new UE project is immediately ready for the DTH importer and e.g. Kawaii
-Physics. Add a folder setting in project settings where the user can point at a folder
-of plugins that always get installed.
-```
-
 ### Product catalog & licensing (big initiative)
 
 **C22. Product catalog enrichment + licensing overview**

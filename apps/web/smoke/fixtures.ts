@@ -232,8 +232,18 @@ export interface SeedOptions {
   assetsEnabled?: boolean
   /** `.dcsp` manifest: opt-in Daz Products feature (adds the Products tab). */
   dazProductsEnabled?: boolean
-  /** `.dcsp` manifest: linked Unreal `.uproject` paths (the footer bar). */
+  /** `.dcsp` manifest: linked Unreal `.uproject` paths (the footer bar). Each
+   *  is also seeded as a real file (EngineAssociation 5.7) so the install
+   *  dialog's project probe reads it like a real `.uproject`. */
   unrealProjects?: Array<string>
+  /** settings.json: the UE plugin source folders (Settings → General panel +
+   *  what the install dialog's scan reads). */
+  unrealPluginFolders?: Array<string>
+  /** What `unreal_engine_installs` reports (the detected-engines Settings
+   *  section + the Generate Unreal project dialog). */
+  unrealEngineInstalls?: Array<{ version: string; path: string }>
+  /** Plugin builds the fake `scan_unreal_plugins` finds (see tauri-mock). */
+  unrealPlugins?: Array<{ name: string; path: string; engineVersion: string; sourceFolder: string }>
   /** settings.json: the DIM manifests folder (Settings → Project product config). */
   dimManifestsFolder?: string
   /** settings.json: the Daz Studio install folder. The DTH Export dialog's
@@ -331,7 +341,16 @@ export function buildSeed(opts: SeedOptions = {}): TauriMockSeed {
       // Machine-wide, but edited on the Settings → Project tab (product scanning).
       ...(opts.dimManifestsFolder ? { dimManifestsFolder: opts.dimManifestsFolder } : {}),
       ...(opts.dazInstallFolder ? { dazInstallFolder: opts.dazInstallFolder } : {}),
+      ...(opts.unrealPluginFolders ? { unrealPluginFolders: opts.unrealPluginFolders } : {}),
     }),
+    // Every linked .uproject exists as a real (JSON) file — the install
+    // dialog's probe reads its EngineAssociation like the real command does.
+    ...Object.fromEntries(
+      (opts.unrealProjects ?? []).map((p) => [
+        p,
+        JSON.stringify({ FileVersion: 3, EngineAssociation: '5.7' }),
+      ]),
+    ),
     // Morph + bone index (a Build_Genesis_Index.dsa run's output) — feeds the
     // Morph-name autocomplete (and its guide screenshot) and the JCM bone
     // autocomplete.
@@ -455,6 +474,8 @@ export function buildSeed(opts: SeedOptions = {}): TauriMockSeed {
     appDataDir: P.appData,
     activeProjectFile: opts.activeProjectFile ?? '',
     lockedFiles: opts.lockedFiles,
+    unrealEngineInstalls: opts.unrealEngineInstalls,
+    unrealPlugins: opts.unrealPlugins,
     version: '0.0.0-e2e',
   }
 }

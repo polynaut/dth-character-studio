@@ -26,6 +26,7 @@ mod shellopen;
 #[cfg(test)]
 mod testutil;
 mod uninstall;
+mod unreal_install;
 mod windows;
 
 use crate::windows::{dcsp_from_args, lock_windows, ProjectMapping, WindowProjects};
@@ -171,6 +172,10 @@ pub fn run() {
             install::install_houdini_presets,
             install::install_unreal_dth,
             install::unreal_dth_present,
+            unreal_install::unreal_engine_installs,
+            unreal_install::scan_unreal_plugins,
+            unreal_install::unreal_project_state,
+            unreal_install::install_unreal_plugin,
             drives::unc_for_path,
             drives::ensure_network_drives,
             elevation::elevated_session,

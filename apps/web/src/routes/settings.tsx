@@ -38,6 +38,8 @@ import { HousekeepingSection } from '#/components/settings/housekeeping-section.
 import { NetworkDrivesSection } from '#/components/settings/network-drives-section.tsx'
 import { ReleasePicker } from '#/components/settings/release-pickers.tsx'
 import { DazPluginsSection } from '#/components/settings/daz-plugins-section.tsx'
+import { UnrealInstallSection } from '#/components/settings/unreal-install-section.tsx'
+import { UnrealPluginsSection } from '#/components/settings/unreal-plugins-section.tsx'
 import { toast } from 'sonner'
 
 import type { ReleasesState } from '#/components/settings/release-pickers.tsx'
@@ -593,7 +595,8 @@ function SettingsPage() {
     settings.houdiniDocsFolder !== initial.houdiniDocsFolder ||
     settings.houdiniInstallFolder !== initial.houdiniInstallFolder ||
     JSON.stringify(settings.extraHoudiniDocsFolders) !==
-      JSON.stringify(initial.extraHoudiniDocsFolders)
+      JSON.stringify(initial.extraHoudiniDocsFolders) ||
+    JSON.stringify(settings.unrealPluginFolders) !== JSON.stringify(initial.unrealPluginFolders)
   // Leaving with unsaved settings asks first — covers BOTH the machine settings
   // and the Project-tab manifest edits (install flows save before acting; they
   // gate on `dirty` for the machine half specifically).
@@ -914,6 +917,12 @@ function SettingsPage() {
               onActivate={(version) => void onActivateHoudini(version)}
               onSetManually={() => void onSetHoudiniPathsManually()}
             />
+          </section>
+
+          {/* Informational only — a .uproject names its own engine version, so
+              there is nothing to activate. See UnrealInstallSection. */}
+          <section className="space-y-4 rounded-lg border bg-card p-5">
+            <UnrealInstallSection />
           </section>
 
           <section className="space-y-4 rounded-lg border bg-card p-5">
@@ -1301,6 +1310,13 @@ function SettingsPage() {
             folders={settings.dthExporterFolders}
             onFoldersChange={(next) => setSettings((s) => ({ ...s, dthExporterFolders: next }))}
             saveBeforeInstall={saveBeforePluginInstall}
+          />
+
+          {/* UE plugin source folders — matched per project at install time,
+              so this panel only edits the list. See UnrealPluginsSection. */}
+          <UnrealPluginsSection
+            folders={settings.unrealPluginFolders}
+            onFoldersChange={(next) => setSettings((s) => ({ ...s, unrealPluginFolders: next }))}
           />
 
           {/* Renders its own card, or nothing when no network drives are

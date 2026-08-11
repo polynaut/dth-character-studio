@@ -559,6 +559,35 @@ older runtimes as stale.
   at generation time, and the node ships its own "Auto-Populate Skinned
   Shapes" button for exactly that job. Applied parms come back as the
   report's third segment (`prefilled` on `GeneratedHoudiniProject`).
+- **The Unreal leg** (v0.75): the project window's footer bar links
+  `.uproject` files; each card's install button opens a DIALOG, not a one-shot
+  copy: DTH content (`install_unreal_dth` — the release's
+  `Unreal Engine Content/DazToHue` → `Content/DazToHue`) plus every configured
+  plugin build matching the project's engine version, all pre-checked, each
+  installed with overwrite (a checked item IS the explicit intent the retired
+  Ctrl+click used to carry; installs copy over, never delete first). The
+  engine version is read from the `.uproject`'s `EngineAssociation` at
+  dialog-open (`unreal_project_state`) and NEVER stored — a project can be
+  retargeted in Unreal any time; a GUID association (source build) lists every
+  build UNCHECKED instead, because a wrong plugin binary is a startup error in
+  Unreal. Plugin sources are the `unrealPluginFolders` setting, scanned by
+  Rust `scan_unreal_plugins` (a bounded 3-deep walk covering three shapes: a
+  plugin folder, a folder of plugins, a multi-build root
+  `…/UE_5.7/Plugins/…`). Which engine a build is FOR: the deepest
+  version-looking PATH segment wins, falling back to the `.uplugin`'s own
+  `EngineVersion` — the path is the signal the user can see and fix, a stale
+  manifest field is neither; no version anywhere = offered for every engine.
+  Matching is TS (`lib/unreal-install.ts`): one build per plugin NAME (the
+  install target is `Plugins/<uplugin stem>` — two builds of one name would be
+  two writes to one folder), exact version beats any-engine. **Generate
+  Unreal project** (the bar's ✨) creates a Blueprint-only project — plain TS
+  file writes (`.uproject` + `Config`/`Content` skeleton), no Rust, no engine
+  run, since a module-less project needs no compile — bound to a DETECTED
+  launcher engine (`unreal_engine_installs`: HKLM
+  `SOFTWARE\EpicGames\Unreal Engine` subkeys' `InstalledDirectory`; the
+  registry can outlive an uninstall — measured on the dev machine — so paths
+  are existence-probed), installs the checked items, then links the result
+  through the same path a hand-picked `.uproject` takes.
 - **Running a DazToHue shelf tool is now a shared strategy, used twice.**
   `create_houdini_project` (houdini.rs) builds a network by `exec`-ing the
   `daztohue` shelf tool's own script; `op_refresh` (material_utils.py, v0.72)

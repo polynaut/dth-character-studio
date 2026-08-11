@@ -118,6 +118,17 @@ activating — it exists so an older Houdini can keep an older DTH release. A
 `houdini…` folder with no Houdini behind it is reported there rather than
 dropped; usually an uninstall left it.
 
+## Unreal Engine — detected, nothing to pick
+
+Every Unreal Engine version the Epic Games launcher has installed is listed
+below the Houdini section. Unlike Daz and Houdini there is **nothing to
+activate**: each linked `.uproject` names its own engine version, and the
+studio matches DTH content and plugins to it per project, at install time. The
+list is what the project windows' **Generate project** action (Unreal bar) can
+create a new project for — and your confirmation that detection sees what the
+launcher sees. An engine whose folder is gone (uninstalled outside the
+launcher) is flagged rather than hidden.
+
 ## Setup DTH Release
 
 <p align="center">
@@ -218,6 +229,26 @@ Daz Studio it finds on this machine:
    take it: while the studio runs as administrator, Windows silently blocks
    drag-and-drop from Explorer into its window (nothing happens, no error).
    The restart reopens your project without elevation and drops work again.
+
+## Unreal Engine Plugins
+
+The folders the studio looks in for **Unreal Engine plugins** to offer when
+installing into a linked Unreal project. A folder can be:
+
+- a **plugin itself** (its `.uplugin` at the top), with the UE version it was
+  built for usually in the path — `…\DazToUnreal_5.7`;
+- a **folder of plugins**, one subfolder per plugin;
+- a **multi-build root** with one subfolder per engine version — e.g.
+  `…\DazToUnrealBridge\UE_5.7\Plugins` next to `…\UE_5.6\Plugins`. The studio
+  picks the build matching each project's engine version at install time, so a
+  new build dropped in later is found on the next install.
+
+Under each folder the panel previews exactly what was recognized, with the
+engine version each build was matched to (from a version in its path — deepest
+wins — falling back to the `.uplugin`'s own `EngineVersion`; no version
+anywhere means the build is offered for every engine). Nothing installs from
+here: the install dialog on a project's Unreal card does that, per project —
+see [Linking Unreal projects](./03-first-project.md#linking-unreal-projects).
 
 ## Save
 
