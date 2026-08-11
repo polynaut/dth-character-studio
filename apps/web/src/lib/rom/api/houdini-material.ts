@@ -22,6 +22,7 @@ import {
   withScanResults,
 } from '../houdini-project-cache.ts'
 import type { HoudiniScanStore } from '../houdini-project-cache.ts'
+import { DTH_FPS } from '../houdini-defaults.ts'
 import { validateHoudiniProject } from '../houdini-validate.ts'
 import { charsRoot, locateCharacter, resolveProject } from './core'
 import type { Character } from '@dth/rom'
@@ -784,29 +785,41 @@ const defaultsInput = z.object({
 })
 
 /**
- * Repoint each project's `$JOB` at the folder the studio expects.
+ * Repoint each project's `$JOB` at the folder the studio expects, and put its
+ * timeline on the pipeline's FPS.
  *
- * `$JOB` is scene state saved with the `.hip`, so an EXISTING project keeps
- * whatever it was created with — v0.64 fixed only newly generated ones. This is
- * that migration: without it, a hand-picked export path in an old project keeps
- * coming back absolute, because Houdini collapses a path above `$HIP` to a
- * variable only when it sits under `$JOB` (and the old value sat BELOW the
- * exports).
+ * Both are scene state saved with the `.hip`, so an EXISTING project keeps
+ * whatever it was created with — v0.64 fixed `$JOB` only for newly generated
+ * ones, and the FPS is set by DazToHue's import node only when it LOADS the
+ * files. This is that migration: without it, a hand-picked export path in an old
+ * project keeps coming back absolute (Houdini collapses a path above `$HIP` to a
+ * variable only when it sits under `$JOB`, and the old value sat BELOW the
+ * exports), and a scene left on Houdini's 24 fps puts every imported ROM frame
+ * between two of its own.
+ *
+ * The FPS is sent from here rather than named in the Python, so {@link DTH_FPS}
+ * stays the single place the studio states what the pipeline runs at. Each value
+ * is compared separately on the other side — a project needing only one gets
+ * only that one written.
  *
  * Writes a `.hip`, so it carries the transfer's guarantees: a dry run that
  * changes nothing, and one rolling backup beside Houdini's own before any save.
- * A project already on the right folder is reported and left untouched.
+ * A project already correct is reported and left untouched.
  */
 export async function repairHoudiniDefaults({
   data,
 }: {
   data: unknown
 }): Promise<MaterialUtilReport> {
-  const input = defaultsInput.parse(data)
+  const { targets, dryRun } = defaultsInput.parse(data)
   if (!isTauri()) {
     throw new Error('Repairing Houdini project settings needs the desktop app (it runs hython).')
   }
-  return runMaterialUtil({ op: 'defaults', ...input })
+  return runMaterialUtil({
+    op: 'defaults',
+    targets: targets.map((target) => ({ ...target, fps: DTH_FPS })),
+    dryRun,
+  })
 }
 
 const repathInput = z.object({

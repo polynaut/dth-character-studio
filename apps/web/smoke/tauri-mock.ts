@@ -92,6 +92,10 @@ export interface TauriMockSeed {
   /** The `$JOB` a scanned project reports — the General tab's input. Omit and
    *  the project reads as unreadable, which the tab reports and never repairs. */
   materialJob?: Record<string, string>
+  /** The timeline FPS a scanned project reports, per `.hip` path. Omit and the
+   *  project reads as the pipeline's 30 — i.e. nothing to repair, which is what
+   *  keeps the General tab quiet in every spec that isn't about this. */
+  materialFps?: Record<string, number>
   /** What the DazToHue shelf's "Refresh Assets" answered for a project, per
    *  `.hip` path. The real op executes a shelf tool that nothing here can
    *  impersonate, so a spec states the outcome; omit and the tool ran and the
@@ -464,7 +468,11 @@ export function installTauriMock(seed: TauriMockSeed): void {
         // the imports point at, where Houdini writes). So write the `.hiplc` the
         // caller then links, and report a network that was created and filled.
         files.set(norm(args.request.scenePath), 'hiplc-fixture')
-        return 'daztohueimport|daztohueimport|import_character_dtu_file'
+        // The fourth field is the FPS the saved scene reports. The real command
+        // reads it back off `hou.fps()` AFTER setting it, so echoing the
+        // request is the honest fake here: this world has no Houdini that could
+        // refuse the call.
+        return `daztohueimport|daztohueimport|import_character_dtu_file|${args.request.fps ?? 0}`
       }
       case 'open_project_window': // opens a separate OS window on the desktop —
         return null //              recorded (see `calls`), nothing to do here
@@ -654,6 +662,10 @@ export function installTauriMock(seed: TauriMockSeed): void {
               // may name a $JOB; without one the project reads as already
               // correct, so the General tab is quiet unless a spec asks for it.
               job: seed.materialJob?.[norm(hipPath)] ?? '',
+              // The timeline, off the same scan. Defaults to the pipeline's 30
+              // so a project reads as already correct — a spec that wants the
+              // General tab to complain seeds another number.
+              fps: seed.materialFps?.[norm(hipPath)] ?? 30,
               // No hython here to read real parms: a scanned project reports
               // nothing to repath, so the General tab's reference rows stay
               // quiet unless a spec seeds them.
@@ -722,16 +734,36 @@ export function installTauriMock(seed: TauriMockSeed): void {
           return {
             ...base,
             defaults: (
-              request.targets as Array<{ hipPath: string; jobDir: string }>
-            ).map((t) => ({
-              hipPath: t.hipPath,
-              ok: true,
-              error: '',
-              previousJob: seed.materialJob?.[norm(t.hipPath)] ?? '',
-              job: t.jobDir,
-              changed: true,
-              backupPath: backupFor(t.hipPath),
-            })),
+              request.targets as Array<{ hipPath: string; jobDir: string; fps?: number }>
+            ).map((t) => {
+              const previousJob = seed.materialJob?.[norm(t.hipPath)] ?? ''
+              const previousFps = seed.materialFps?.[norm(t.hipPath)] ?? 30
+              const wantFps = t.fps ?? 0
+              // Each value is compared on its own, exactly as `op_defaults`
+              // does — so a spec that seeds only a stale $JOB gets a report
+              // that says the timeline was left alone. And exactly like the
+              // real op, an UNKNOWN value ('' / 0 — nobody read one) is never
+              // claimed repaired, even when the project was queued for the
+              // other value.
+              const changedJob =
+                previousJob !== '' && previousJob.toLowerCase() !== t.jobDir.toLowerCase()
+              const changedFps =
+                wantFps > 0 && previousFps > 0 && Math.abs(previousFps - wantFps) >= 0.001
+              const changed = changedJob || changedFps
+              return {
+                hipPath: t.hipPath,
+                ok: true,
+                error: '',
+                previousJob,
+                job: changedJob ? t.jobDir : previousJob,
+                previousFps,
+                fps: changedFps ? wantFps : previousFps,
+                changed,
+                changedJob,
+                changedFps,
+                backupPath: changed ? backupFor(t.hipPath) : '',
+              }
+            }),
           }
         }
         // No hython here, so no transfer really happens: each target reports

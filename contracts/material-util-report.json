@@ -8,6 +8,7 @@
       "ok": true,
       "error": "",
       "job": "D:/chars/Kira",
+      "fps": 24.0,
       "refs": {
         "collapsible": 131,
         "foreign": 0,
@@ -79,6 +80,7 @@
       "ok": false,
       "error": "Unable to open file",
       "job": "",
+      "fps": 0.0,
       "refs": { "collapsible": 0, "foreign": 0, "broken": [], "hipRelative": [] },
       "prefill": { "fillable": [], "missing": [] },
       "nodes": []
@@ -117,7 +119,11 @@
       "error": "",
       "previousJob": "D:/chars/Ita/houdini/houdini-project",
       "job": "D:/chars/Ita",
+      "previousFps": 24.0,
+      "fps": 30.0,
       "changed": true,
+      "changedJob": true,
+      "changedFps": true,
       "backupPath": "D:/chars/Ita/houdini/backup/Ita_dthbak.hiplc"
     },
     {
@@ -126,8 +132,25 @@
       "error": "",
       "previousJob": "D:/chars/Ita",
       "job": "D:/chars/Ita",
+      "previousFps": 30.0,
+      "fps": 30.0,
       "changed": false,
+      "changedJob": false,
+      "changedFps": false,
       "backupPath": ""
+    },
+    {
+      "hipPath": "D:/chars/Ita/houdini/Ita_Dance.hiplc",
+      "ok": true,
+      "error": "",
+      "previousJob": "",
+      "job": "",
+      "previousFps": 24.0,
+      "fps": 30.0,
+      "changed": true,
+      "changedJob": false,
+      "changedFps": true,
+      "backupPath": "D:/chars/Ita/houdini/backup/Ita_Dance_dthbak.hiplc"
     }
   ],
   "repath": [
