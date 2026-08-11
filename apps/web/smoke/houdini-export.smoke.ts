@@ -210,12 +210,15 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
   expect(await fileKeys(page)).toContain(`${scriptsDir}/headless_export.py`)
 
   // Mid-node, the result's `activity` channel carries what the HDA is saying —
-  // the watch chip names the scene and shows the LAST line live (the poll runs
-  // every 2.5s), counting the node being WORKED ON (1/1, not "0 done").
+  // the header grows the tail-mode LOG WINDOW above the button cluster (scene
+  // caption + the captured lines in monospace), and the chip counts the node
+  // being WORKED ON (1/1, not "0 done").
   await houdiniReportsExporting(page)
-  await expect(page.getByText('KiraDefault_G9_GP · Baking textures 3/12…')).toBeVisible({
-    timeout: 15_000,
-  })
+  await expect(page.getByText('Baking textures 3/12…')).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByText('Importing Alembic…')).toBeVisible()
+  // The caption names the import — the scene label itself also appears in the
+  // header's scene tag, so the import line is the log window's unique marker.
+  await expect(page.getByText('import: Kira.dth')).toBeVisible()
   await expect(page.getByText('Houdini 1/1')).toBeVisible()
 
   // 456.py works through it and reports — and NOW the one summary toast fires,

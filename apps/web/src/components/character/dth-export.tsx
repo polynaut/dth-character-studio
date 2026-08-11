@@ -51,7 +51,7 @@ import {
 } from '#/lib/rom/execute-jobs.ts'
 
 import type { ExecuteSceneStatus, ExportRunProgress, RunnerGate } from '#/lib/rom/api.ts'
-import type { HoudiniRunState } from '#/lib/rom/houdini-jobs.ts'
+import type { HoudiniActivity, HoudiniRunState } from '#/lib/rom/houdini-jobs.ts'
 import type { HoudiniRunMode, RunChoice } from '#/lib/rom/execute-jobs.ts'
 import type { Character } from '@dth/rom'
 
@@ -200,12 +200,49 @@ function ExportProgressButton({
   )
 }
 
+/**
+ * The header's live Houdini log — a small tail-mode window the EditorHeader
+ * places ABOVE the whole button cluster (spanning its width) while an export
+ * node runs: the scene + import caption, then the captured HDA output in
+ * monospace, newest line kept in view.
+ */
+export function HoudiniActivityLog({ activity }: { activity: HoudiniActivity }) {
+  const boxRef = useRef<HTMLDivElement>(null)
+  // Tail mode: whenever lines arrive, keep the newest one in view.
+  useEffect(() => {
+    const box = boxRef.current
+    if (box) box.scrollTop = box.scrollHeight
+  }, [activity.lines])
+  const dthName = activity.dth ? (activity.dth.split(/[\\/]/).pop() ?? '') : ''
+  return (
+    <div className="rounded-md border bg-card/80 px-2.5 py-1.5 text-left">
+      <p className="mb-1 flex items-baseline gap-2 text-[11px] text-muted-foreground">
+        <span className="font-medium text-foreground/80">
+          {activity.scene || activity.node}
+        </span>
+        {dthName && <span className="truncate">import: {dthName}</span>}
+      </p>
+      <div
+        ref={boxRef}
+        className="max-h-20 overflow-y-auto font-mono text-[11px] leading-4 whitespace-pre-wrap break-all text-muted-foreground"
+      >
+        {activity.lines.map((line, index) => (
+          // Index keys are sound here: the list is an append-only rolling tail.
+          // eslint-disable-next-line react/no-array-index-key
+          <div key={index}>{line}</div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function DthExportAction({
   projectId,
   character,
   saving,
   dirty,
   dazLibraryConfigured,
+  onHoudiniActivity,
 }: {
   projectId: string
   character: Character
@@ -213,6 +250,10 @@ export function DthExportAction({
   dirty: boolean
   /** “My DAZ 3D Library” is set — where the job file and scripts live. */
   dazLibraryConfigured: boolean
+  /** The live mid-node channel, reported up so the header can render the
+   *  {@link HoudiniActivityLog} ABOVE the whole button cluster (this component
+   *  only owns its own buttons). Null = nothing exporting right now. */
+  onHoudiniActivity?: (activity: HoudiniActivity | null) => void
 }) {
   const [open, setOpen] = useState(false)
   // null = not yet checked (renders as the normal export button).
@@ -224,6 +265,16 @@ export function DthExportAction({
   // The Houdini half of an "Export too" run, once the Daz batch has finished
   // and handed over. Its own watch: Houdini works long after Daz is done.
   const [houdini, setHoudini] = useState<HoudiniRunState | null>(null)
+  // Report the live mid-node channel up to the header (the log window spans
+  // the WHOLE button cluster, which this component doesn't own).
+  useEffect(() => {
+    onHoudiniActivity?.(
+      houdini?.state === 'running' && houdini.activity ? houdini.activity : null,
+    )
+    // The setter from useState is identity-stable; re-arming on the callback
+    // would churn for inline lambdas.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [houdini])
   // A handoff written against a SHUTTING-DOWN Daz (running process, batch
   // never claimed) — the modal below waits out the exit and relaunches.
   const [dazClosing, setDazClosing] = useState(false)
@@ -599,13 +650,11 @@ export function DthExportAction({
     // tooltip must say so. (Reading the ref in render is sound here: every
     // queue mutation is bracketed by a setHoudini, which re-renders.)
     const queuedNote = houdiniQueueRef.current ? ' — the queued projects will not start' : ''
-    // The live mid-node channel: what the currently exporting node is SAYING
-    // (456.py streams the HDA's own output into the polled result). The chip
-    // shows the scene + last line; the tooltip carries the recent tail plus
-    // WHICH export set (.dth) the node works through.
+    // With a node actively exporting (a live activity channel), count the one
+    // being WORKED ON ("1/1"), not the ones done ("0/1") — the chip reads as
+    // "working on n of m". The activity itself renders in the header's log
+    // window ({@link HoudiniActivityLog}), not here.
     const activity = houdini.state === 'running' ? houdini.activity : undefined
-    // With a node actively exporting, count the one being WORKED ON ("1/1"),
-    // not the ones done ("0/1") — the chip reads as "working on n of m".
     const workedOn =
       houdini.state === 'running' && houdini.total > 0
         ? activity
@@ -616,15 +665,6 @@ export function DthExportAction({
       houdini.state === 'running' && houdini.total > 0
         ? `Houdini ${workedOn}/${houdini.total}`
         : 'Houdini starting…'
-    const lastActivity = activity?.lines[activity.lines.length - 1] ?? ''
-    const chipActivity = activity
-      ? [activity.scene, lastActivity].filter(Boolean).join(' · ')
-      : ''
-    const dthName = activity?.dth ? (activity.dth.split(/[\\/]/).pop() ?? '') : ''
-    const activityTail =
-      activity && houdini.state === 'running'
-        ? `\n\nWorking on ${activity.scene || activity.node}${dthName ? ` (import: ${dthName})` : ''} — node ${workedOn} of ${houdini.total}:\n${activity.lines.slice(-8).join('\n')}`
-        : ''
     return (
       <Button
         variant="outline"
@@ -635,18 +675,13 @@ export function DthExportAction({
         }}
         title={
           houdini.state === 'running'
-            ? `Houdini is exporting — ${houdini.done} of ${houdini.total} node${houdini.total === 1 ? '' : 's'} done. Click to stop watching${queuedNote}.${activityTail}`
+            ? `Houdini is exporting — ${houdini.done} of ${houdini.total} node${houdini.total === 1 ? '' : 's'} done. Click to stop watching${queuedNote}.`
             : `Houdini is loading the project in the background (headless); the export starts once the scene is loaded. Click to stop watching${queuedNote}.`
         }
       >
         <Loader2 className="animate-spin" />
         <img src={houdiniLogo} alt="Houdini" className="size-5 shrink-0 object-contain" />
         {label}
-        {chipActivity && (
-          <span className="max-w-56 truncate text-xs font-normal text-muted-foreground">
-            {chipActivity}
-          </span>
-        )}
         <ElapsedSince
           since={houdini.state === 'starting' || houdini.state === 'running' ? houdini.startedAtMs : undefined}
         />

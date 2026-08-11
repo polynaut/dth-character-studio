@@ -4,7 +4,7 @@ import { ArrowLeft, CircleX, Pencil, Save, Undo2 } from 'lucide-react'
 
 import { Avatar } from '#/components/avatar.tsx'
 import { DirPathChip } from '#/components/dir-path-chip.tsx'
-import { DthExportAction } from '#/components/character/dth-export.tsx'
+import { DthExportAction, HoudiniActivityLog } from '#/components/character/dth-export.tsx'
 import { FolderMoveChip } from '#/components/folder-move-chip.tsx'
 import { ImageDialog } from '#/components/image-dialog.tsx'
 import { Button, EditableTitle, useModifierHeld, useStickyHeaderInset } from '@dth/ui'
@@ -12,6 +12,7 @@ import { useConfirm } from '#/lib/use-confirm.tsx'
 import { characterSkinning, countPoses } from '@dth/rom'
 
 import type { RootedDir } from '#/lib/character-paths.ts'
+import type { HoudiniActivity } from '#/lib/rom/houdini-jobs.ts'
 import type { CharacterDraft } from '#/lib/use-character-draft.ts'
 
 /**
@@ -99,6 +100,10 @@ export function EditorHeader({
   const { character } = draft
   const [imageDialogOpen, setImageDialogOpen] = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
+  // The live Houdini activity, reported up by DthExportAction — rendered as
+  // the tail-log window above the whole button cluster (which spans more than
+  // that component's own buttons). Null = nothing exporting right now.
+  const [houdiniActivity, setHoudiniActivity] = useState<HoudiniActivity | null>(null)
   const swallowNavRef = useRef(false)
   const headerRef = useRef<HTMLElement>(null)
 
@@ -288,16 +293,23 @@ export function EditorHeader({
         </div>
         {/* Bottom-right in the header, on the path-chip's baseline (mb-6 lifts the
             box so the scale below anchors on that line). They ride the sticky
-            header, so they stay reachable as the form scrolls. */}
-        <div className="actions-scroll ml-auto flex shrink-0 gap-2 mb-6">
-          <DthExportAction
-            projectId={projectId}
-            character={character}
-            saving={draft.saving}
-            dirty={draft.dirty}
-            dazLibraryConfigured={dazLibraryConfigured}
-          />
-          <HeaderActions draft={draft} />
+            header, so they stay reachable as the form scrolls. The column exists
+            for the live Houdini log: while an export node runs, its captured
+            output tails in a small monospace window ABOVE the buttons, spanning
+            the cluster's width (items-stretch — the row is the width driver). */}
+        <div className="ml-auto mb-6 flex shrink-0 flex-col items-stretch justify-end gap-2">
+          {houdiniActivity && <HoudiniActivityLog activity={houdiniActivity} />}
+          <div className="actions-scroll flex justify-end gap-2">
+            <DthExportAction
+              projectId={projectId}
+              character={character}
+              saving={draft.saving}
+              dirty={draft.dirty}
+              dazLibraryConfigured={dazLibraryConfigured}
+              onHoudiniActivity={setHoudiniActivity}
+            />
+            <HeaderActions draft={draft} />
+          </div>
         </div>
       </header>
 
