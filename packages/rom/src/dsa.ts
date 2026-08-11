@@ -412,6 +412,11 @@ function buildExportBlock(
    *  per-scene CSVs are sized by) — the reference-skeleton frames below must
    *  follow the OPEN scene's merged walk, like the CSV it is delivered with. */
   sceneFrames: Record<string, PresetFrames> = {},
+  /** Percents the block's finished steps report to the verbose progress log
+   *  (`dthProgressLog` — the carrier emits the appender): the job row's step
+   *  scale, e.g. 60/80/100 inside the 5-step bulk ROM+export. Omitted = the
+   *  block logs no progress (manual/legacy carriers). */
+  progressPcts?: { character: number; csv: number; hair: number },
 ): string {
   const exportDir = character.exportPath.trim()
   if (!exportDir) return ''
@@ -563,8 +568,14 @@ ${refDirBlock}
   // the reference frames are the OPEN scene's (see refFramesBlock above).
   const exportCore = `${clearPreviousSetBlock}
 ${refFramesBlock}
-    dthExportAction.doExport(dthExportDir, dthExportName, dthRefFrames, false);
-${csvCopyBlock}`
+    dthExportAction.doExport(dthExportDir, dthExportName, dthRefFrames, false);${
+      progressPcts ? `\n    dthProgressLog(${progressPcts.character}, "character exported");` : ''
+    }
+${csvCopyBlock}${
+      progressPcts && csvCopyBlock.trim()
+        ? `\n    dthProgressLog(${progressPcts.csv}, "PoseAsset CSV delivered");`
+        : ''
+    }`
   const groomMap = groomSceneMap(character)
   const indentBlock = indentLines
   // "Export hair assets too": the Export_Hair per-item pass appended after the
@@ -578,7 +589,7 @@ ${indentBlock(indentBlock(figureAutoSelectSnippet(character.genesis, 'dthHairFig
             print("No ${character.genesis} figure found - hair export skipped.");
         } else {
 ${indentBlock(indentBlock(indentBlock(hairExportLoopSnippet(character, { fig: 'dthHairFig', action: 'dthExportAction', hideTree: 'dthGroomHideTree', hidden: 'dthGroomHidden' }).trimEnd())))}
-        }
+        }${progressPcts ? `\n        dthProgressLog(${progressPcts.hair}, "hair items exported");` : ''}
 `
   // `exportHairAssets` decides whether the pass ships at all — the bulk
   // script forces the toggle on before building, so it always carries it.
@@ -1093,6 +1104,8 @@ export function toCharacterScriptDsa(
   hipRefPrefix = '',
   /** Scan-sync settings — see {@link IndexSyncOptions}. */
   indexSync?: IndexSyncOptions,
+  /** See {@link buildRomScriptDsa}. */
+  progressLogPath = '',
 ): GeneratedFile {
   return buildRomScriptDsa(
     character,
@@ -1105,6 +1118,7 @@ export function toCharacterScriptDsa(
     scenesRootAbs,
     hipRefPrefix,
     indexSync,
+    progressLogPath,
   )
 }
 
@@ -1135,6 +1149,38 @@ function dthSettle(nMs) {
 }
 
 /**
+ * The verbose-progress appender emitted into the ROM/export carriers (inline —
+ * the Export_ script has no runtime include, and dthSettle sets the pattern):
+ * appends a Runner-v1.2.0 progress-log line `[<pct>] <scene stem>: <message>`
+ * to the baked `dthProgressLogPath`. The percent scale is the job row's step
+ * count (see the studio's `jobStepsForMode`); the Runner writes the scene-open
+ * and terminal lines, these calls the interior steps. Best-effort and silent
+ * by construction — progress must never fail a run — and a script generated
+ * without a path no-ops entirely.
+ */
+function dthProgressSnippet(): string {
+  return `// Verbose per-scene progress for the studio's live display (Runner v1.2.0
+// contract): "[<percent>] <scene>: <message>" appended per finished step.
+function dthProgressLog(nPct, sMsg) {
+    try {
+        if (typeof dthProgressLogPath == "undefined" || !dthProgressLogPath) return;
+        var dthPStem = "scene";
+        try {
+            var dthPScene = (typeof dthOpenSceneFile != "undefined" && dthOpenSceneFile)
+                ? String(dthOpenSceneFile) : String(Scene.getFilename());
+            if (dthPScene) dthPStem = String(new DzFileInfo(dthPScene).completeBaseName());
+        } catch (dthPStemErr) {}
+        var dthPFile = new DzFile(dthProgressLogPath);
+        if (dthPFile.open(dthPFile.Append)) {
+            dthPFile.write("[" + Math.round(nPct) + "] " + dthPStem + ": " + sMsg + "\\n");
+            dthPFile.close();
+        }
+    } catch (dthPErr) { /* progress is best-effort - never fail the run over it */ }
+}
+`
+}
+
+/**
  * The hidden BULK variant ({@link BULK_ROM_EXPORT_SCRIPT}) the DTH Character
  * Studio Runner executes on job-file runs (the studio's DTH Export button):
  * the SAME one-script build with both export toggles FORCED on — it always
@@ -1158,6 +1204,8 @@ export function toBulkRomExportScriptDsa(
   hipRefPrefix = '',
   /** Scan-sync settings — see {@link IndexSyncOptions}. */
   indexSync?: IndexSyncOptions,
+  /** See {@link buildRomScriptDsa}. */
+  progressLogPath = '',
 ): GeneratedFile {
   return buildRomScriptDsa(
     { ...character, exportWithRomScript: true, exportHairAssets: true },
@@ -1170,6 +1218,7 @@ export function toBulkRomExportScriptDsa(
     scenesRootAbs,
     hipRefPrefix,
     indexSync,
+    progressLogPath,
   )
 }
 
@@ -1191,6 +1240,9 @@ export function toBuildRomAnimationScriptDsa(
   scenesRootAbs?: string,
   /** Scan-sync settings — see {@link IndexSyncOptions}. */
   indexSync?: IndexSyncOptions,
+  /** See {@link buildRomScriptDsa} — the ROM line reports 100 here (the
+   *  rom-only job rows declare the 2-step scale). */
+  progressLogPath = '',
 ): GeneratedFile {
   const file = buildRomScriptDsa(
     { ...character, exportWithRomScript: false, exportHairAssets: false },
@@ -1203,6 +1255,7 @@ export function toBuildRomAnimationScriptDsa(
     scenesRootAbs,
     '', // export forced off — there are no reference paths to anchor
     indexSync,
+    progressLogPath,
   )
   // Hidden (dot-prefixed) → no Content Library tile, no icon artwork.
   return { fileName: BUILD_ROM_ANIMATION_SCRIPT, content: file.content, target: 'daz' }
@@ -1311,6 +1364,10 @@ function buildRomScriptDsa(
   hipRefPrefix = '',
   /** Scan-sync settings — see {@link IndexSyncOptions}. */
   indexSync?: IndexSyncOptions,
+  /** The Runner-v1.2.0 verbose progress log this script appends its finished
+   *  steps to (host-resolved app-data path; see {@link dthProgressSnippet}).
+   *  '' = the script logs no progress. */
+  progressLogPath = '',
 ): GeneratedFile {
   const config = buildCharacterConfig(character, romPaths, frames, metaDirAbs)
 
@@ -1343,7 +1400,21 @@ function buildRomScriptDsa(
   const exportBlock =
     exportDir && character.exportWithRomScript !== false
       ? `            // Export to the DTH pipeline via the Exporter Plugin (v1.8.1+).
-${buildExportBlock(character, frames, metaDirAbs, sceneCsvMap, scenesRootAbs, bulk, hipRefPrefix, sceneFrames)
+${buildExportBlock(
+  character,
+  frames,
+  metaDirAbs,
+  sceneCsvMap,
+  scenesRootAbs,
+  bulk,
+  hipRefPrefix,
+  sceneFrames,
+  // The 5-step scale (open 20 / ROM 40 / character 60 / CSV 80 / hair 100)
+  // this carrier's job rows declare (`jobStepsForMode`), matching the real
+  // runtime order: the CSV delivery sits inside the export core, the hair
+  // pass runs after it.
+  progressLogPath ? { character: 60, csv: 80, hair: 100 } : undefined,
+)
   .split('\n')
   .map((line) => (line ? `            ${line}` : line))
   .join('\n')}`
@@ -1372,6 +1443,9 @@ ${scriptTitle}${sceneSelectBlock ? `
 // this script's <project>/<character>/ subfolder.
 
 var dthCharacterConfig = ${dazJson(config, 2)};
+// The verbose progress log (Runner v1.2.0) this run appends its finished
+// steps to — '' when this script was generated without one.
+var dthProgressLogPath = ${dazJson(progressLogPath)};
 // The wrong-scene guard: refuse to build when the OPEN scene isn't one of this
 // character's linked scenes (see dthSceneLinkError below the config).
 ${sceneGuardSnippet(character)}
@@ -1490,6 +1564,7 @@ function dthApplyUE5TearUV() {
 }
 
 ${dthSettleSnippet()}
+${dthProgressSnippet()}
 // The include MUST stay at the top level: Daz resolves include() through its
 // legacy-include mechanism, which fails inside try/catch ("URIError: Legacy Include").
 var dir_self = new DzDir(new DzFileInfo(getScriptFileName()).path());
@@ -1578,6 +1653,11 @@ ${bulk ? `        // The Runner just loaded this scene — give Daz a beat befor
             } catch (dthSaveErr) {
                 print("ROM-scene save failed: " + dthSaveErr);
             }
+        }
+        // The ROM step is complete (build + reopenable save): 40% on the
+        // 5-step export scale, 100% when this carrier's whole job IS the ROM.
+        if (dthRomOk === true) {
+            dthProgressLog(${exportBlock ? 40 : 100}, "ROM generated");
         }${exportBlock ? `
         // Export only when the ROM built CLEAN (runtime v20: failed morphs count
         // as failure too, not just hard aborts) — a broken ROM must never ship
@@ -1634,6 +1714,9 @@ export function toExportScriptDsa(
   indexSync?: IndexSyncOptions,
   /** Per-scene preset-block frames — see {@link buildExportBlock}. */
   sceneFrames: Record<string, PresetFrames> = {},
+  /** The Runner-v1.2.0 verbose progress log — see {@link dthProgressSnippet}.
+   *  '' = the script logs no progress. */
+  progressLogPath = '',
 ): GeneratedFile {
   const content = `// DAZ Studio version 4.22.0.16 filetype DAZ Script
 
@@ -1648,9 +1731,11 @@ include(dir_self_scan.filePath("../../.DthUtils.dsa"));
 include(dir_self_scan.filePath("../../.DthScanMorphs.dsa"));` : ''}${indexSync?.products ? `
 include(dir_self_scan.filePath("../../.DthProducts.dsa"));` : ''}
 
+var dthProgressLogPath = ${dazJson(progressLogPath)};
 ${sceneGuardSnippet(character)}
 ${openSceneFileSnippet()}${romAnimationSourceSnippet(romAnimationSourceMap(character))}
 ${dthSettleSnippet()}
+${dthProgressSnippet()}
 ${figureAutoSelectSnippet(character.genesis)}var dthSceneLinkErr = dthSceneLinkError();
 if (dthSceneLinkErr) {
     MessageBox.critical(dthSceneLinkErr, "DTH Character Studio", "&OK");
@@ -1660,7 +1745,19 @@ if (dthSceneLinkErr) {
     // A beat before the exporter touches the scene: the Runner's scene load —
     // or the ROM build run just before this script — may still be settling.
     dthSettle(1000);
-${indentLines(indexSyncSnippet(indexSync))}${buildExportBlock(character, frames, metaDirAbs, buildSceneCsvMap(character), scenesRootAbs, unattended, hipRefPrefix, sceneFrames)
+${indentLines(indexSyncSnippet(indexSync))}${buildExportBlock(
+    character,
+    frames,
+    metaDirAbs,
+    buildSceneCsvMap(character),
+    scenesRootAbs,
+    unattended,
+    hipRefPrefix,
+    sceneFrames,
+    // The 4-step scale (open 25 / character 50 / CSV 75 / hair 100) the
+    // export-only job rows declare — no ROM step in this carrier.
+    progressLogPath ? { character: 50, csv: 75, hair: 100 } : undefined,
+  )
   .split('\n')
   .map((line) => (line ? `    ${line}` : line))
   .join('\n')}}
@@ -1698,6 +1795,8 @@ export function toBulkExportOnlyScriptDsa(
   indexSync?: IndexSyncOptions,
   /** Per-scene preset-block frames — see {@link buildExportBlock}. */
   sceneFrames: Record<string, PresetFrames> = {},
+  /** See {@link buildRomScriptDsa}. */
+  progressLogPath = '',
 ): GeneratedFile {
   const built = toExportScriptDsa(
     { ...character, exportHairAssets: true },
@@ -1709,6 +1808,7 @@ export function toBulkExportOnlyScriptDsa(
     hipRefPrefix,
     indexSync,
     sceneFrames,
+    progressLogPath,
   )
   // Hidden (dot-prefixed) → the Content Library never shows it: no tile.
   return { fileName: BULK_EXPORT_ONLY_SCRIPT, content: built.content, target: 'daz' }
@@ -1902,6 +2002,9 @@ export function generateAll(
   /** Scan-sync settings for the generated ROM/export scripts — see
    *  {@link IndexSyncOptions}. Omitted = the scripts scan nothing. */
   indexSync?: IndexSyncOptions,
+  /** The Runner-v1.2.0 verbose progress log every generated carrier appends
+   *  its finished steps to (host-resolved app-data path). '' = no progress. */
+  progressLogPath = '',
 ): Array<GeneratedFile> {
   // With an export dir and exportWithRomScript off, the export is split into a
   // standalone Export_ script alongside the ROM_ script.
@@ -1937,6 +2040,7 @@ export function generateAll(
       scenesRootAbs,
       hipRefPrefix,
       indexSync,
+      progressLogPath,
     ),
     ...(split
       ? [
@@ -1953,6 +2057,7 @@ export function generateAll(
             // could not see.
             indexSync,
             sceneFrames,
+            progressLogPath,
           ),
         ]
       : []),
@@ -1970,6 +2075,7 @@ export function generateAll(
             scenesRootAbs,
             hipRefPrefix,
             indexSync,
+            progressLogPath,
           ),
           // …and its export-only twin (DTH Export's "Export only" mode): the
           // exporter + hair pass over an already-built ROM, no rebuild.
@@ -1981,6 +2087,7 @@ export function generateAll(
             hipRefPrefix,
             indexSync,
             sceneFrames,
+            progressLogPath,
           ),
         ]
       : []),
@@ -1996,6 +2103,7 @@ export function generateAll(
       sceneFrames,
       scenesRootAbs,
       indexSync,
+      progressLogPath,
     ),
     ...(groom ? [toGroomExportScriptDsa(character, scenesRootAbs, indexSync)] : []),
     ...(scanProducts ? [toScanProductsScriptDsa(character, scanProducts)] : []),

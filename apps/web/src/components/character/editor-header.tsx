@@ -4,7 +4,8 @@ import { ArrowLeft, CircleX, Pencil, Save, Undo2 } from 'lucide-react'
 
 import { Avatar } from '#/components/avatar.tsx'
 import { DirPathChip } from '#/components/dir-path-chip.tsx'
-import { DthExportAction, HoudiniActivityLog } from '#/components/character/dth-export.tsx'
+import { DthExportAction } from '#/components/character/dth-export.tsx'
+import { ExportPipelinePanel } from '#/components/character/export-pipeline-panel.tsx'
 import { FolderMoveChip } from '#/components/folder-move-chip.tsx'
 import { ImageDialog } from '#/components/image-dialog.tsx'
 import { Button, EditableTitle, useModifierHeld, useStickyHeaderInset } from '@dth/ui'
@@ -12,7 +13,7 @@ import { useConfirm } from '#/lib/use-confirm.tsx'
 import { characterSkinning, countPoses } from '@dth/rom'
 
 import type { RootedDir } from '#/lib/character-paths.ts'
-import type { HoudiniActivity } from '#/lib/rom/houdini-jobs.ts'
+import type { ExportPipelineView } from '#/components/character/export-pipeline-panel.tsx'
 import type { CharacterDraft } from '#/lib/use-character-draft.ts'
 
 /**
@@ -100,10 +101,10 @@ export function EditorHeader({
   const { character } = draft
   const [imageDialogOpen, setImageDialogOpen] = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
-  // The live Houdini activity, reported up by DthExportAction — rendered as
-  // the tail-log window above the whole button cluster (which spans more than
-  // that component's own buttons). Null = nothing exporting right now.
-  const [houdiniActivity, setHoudiniActivity] = useState<HoudiniActivity | null>(null)
+  // The live DTH-Export pipeline view, reported up by DthExportAction —
+  // rendered as the task cards + tail-log window above the whole button
+  // cluster (which spans more than that component's own buttons). Null = no run.
+  const [exportPipeline, setExportPipeline] = useState<ExportPipelineView | null>(null)
   const swallowNavRef = useRef(false)
   const headerRef = useRef<HTMLElement>(null)
 
@@ -298,7 +299,7 @@ export function EditorHeader({
             output tails in a small monospace window ABOVE the buttons, spanning
             the cluster's width (items-stretch — the row is the width driver). */}
         <div className="ml-auto mb-6 flex shrink-0 flex-col items-stretch justify-end gap-2">
-          {houdiniActivity && <HoudiniActivityLog activity={houdiniActivity} />}
+          {exportPipeline && <ExportPipelinePanel view={exportPipeline} />}
           <div className="actions-scroll flex justify-end gap-2">
             <DthExportAction
               projectId={projectId}
@@ -306,7 +307,7 @@ export function EditorHeader({
               saving={draft.saving}
               dirty={draft.dirty}
               dazLibraryConfigured={dazLibraryConfigured}
-              onHoudiniActivity={setHoudiniActivity}
+              onPipeline={setExportPipeline}
             />
             <HeaderActions draft={draft} />
           </div>

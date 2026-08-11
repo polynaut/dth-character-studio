@@ -49,7 +49,9 @@ async function runnerFinishesBatch(page: Page) {
   await page.evaluate(
     ([pending, running]) => {
       const files = (window as any).__tauriMock.files as Map<string, string>
-      const job = JSON.parse(files.get(pending) ?? '{}')
+      // The batch may already sit CLAIMED (a spec that staged mid-run progress
+      // first) — finish whichever file holds it.
+      const job = JSON.parse(files.get(pending) ?? files.get(running) ?? '{}')
       files.delete(pending)
       files.set(running, JSON.stringify({
         ...job,
@@ -158,12 +160,66 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
 
   // The Daz batch is handed off…
   await expect.poll(() => fileContent(page, PENDING_JOB)).not.toBeNull()
+  // …carrying the verbose-progress contract (Runner v1.2.0): the log path and
+  // the per-scene step scale (5 = open/ROM/character/CSV/hair).
+  const pending = JSON.parse((await fileContent(page, PENDING_JOB))!) as {
+    progressLogPath: string
+    jobs: Array<{ steps: number }>
+  }
+  expect(pending.progressLogPath).toBe(`${P.appData}/export-progress.log`)
+  expect(pending.jobs[0].steps).toBe(5)
+  // The header grew the run's TASK CARDS: the scene, then the Houdini project —
+  // all still waiting (the Runner hasn't picked the batch up yet).
+  await expect(page.locator(`[data-task="daz:${P.scene}"]`)).toBeVisible()
+  await expect(page.locator(`[data-task="hou:${P.houdini}"]`)).toBeVisible()
+
+  // The Runner claims the batch and works the scene: the running job file +
+  // the verbose progress log. The scene card goes ACTIVE, the log window
+  // tails the per-step lines with their percents.
+  await page.evaluate(
+    ([pendingPath, runningPath, progressPath]) => {
+      const mock = (window as any).__tauriMock
+      // A sub-100 running file with no Daz alive reads as a DEAD run (the
+      // liveness rule) — the mid-run stage needs the fake Daz up.
+      mock.dazRunning = true
+      const files = mock.files as Map<string, string>
+      const job = JSON.parse(files.get(pendingPath) ?? '{}')
+      files.delete(pendingPath)
+      files.set(runningPath, JSON.stringify({
+        ...job,
+        progress: 10,
+        jobsDone: 0,
+        jobs: job.jobs.map((row: Record<string, unknown>) => ({ ...row, status: 'running' })),
+      }))
+      files.set(progressPath, [
+        '[0] KiraDefault_G9_GP: opening scene',
+        '[20] KiraDefault_G9_GP: scene opened',
+        '[40] KiraDefault_G9_GP: ROM generated',
+        '',
+      ].join('\n'))
+    },
+    [PENDING_JOB, RUNNING_JOB, `${P.appData}/export-progress.log`],
+  )
+  await expect(page.getByText('[40%] KiraDefault_G9_GP: ROM generated')).toBeVisible({
+    timeout: 15_000,
+  })
+  await expect(page.locator(`[data-task="daz:${P.scene}"]`)).toHaveAttribute(
+    'data-task-status',
+    'active',
+  )
   // …and picked up + finished by the Runner. NO finish toast yet — the batch
   // outcome is stashed for the one end-of-everything report, and only the
   // transient hand-over info shows while Houdini takes over.
   await runnerFinishesBatch(page)
   await expect(page.getByText(/Starting the Houdini export in the background/)).toBeVisible()
   await expect(page.getByText(/DTH Export finished/)).toHaveCount(0)
+  // The baton passed: the Houdini project's card is the active one now (the
+  // finished scene card has tetris'd away).
+  await expect(page.locator(`[data-task="hou:${P.houdini}"]`)).toHaveAttribute(
+    'data-task-status',
+    'active',
+    { timeout: 15_000 },
+  )
 
   // The hand-over: the job file lands in the character folder, both runner
   // scripts are staged in app-data, and HEADLESS hython is launched at them.
@@ -237,6 +293,8 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
   // in the character folder for good.
   await expect.poll(() => fileKeys(page)).not.toContain(HOUDINI_JOB)
   expect(await fileKeys(page)).not.toContain(HOUDINI_RESULT)
+  // The run is over — the task cards left with it.
+  await expect(page.locator('[data-task]')).toHaveCount(0)
 
   expect(await unhandledCommands(page)).toEqual([])
 })

@@ -127,6 +127,11 @@ export interface ExporterJob {
   /** Absolute path of the `.dsa` script to run in that scene. Empty only on an
    *  `open-scene` row, where nothing is executed. */
   scriptPath: string
+  /** How many equal steps this row's export comprises — the per-scene percent
+   *  scale of the verbose progress log (Runner v1.2.0; see
+   *  {@link jobStepsForMode}). Absent = the Runner writes 0/100 boundary
+   *  lines only. */
+  steps?: number
 }
 
 /** One job row in the JSON job file — the Runner updates `status`/`error` as
@@ -152,6 +157,11 @@ export interface ExporterJobFile {
    *  every rewrite; absent on the studio-written pending file and on older
    *  Runners (the reader then derives it from the row statuses). */
   jobsDone?: number
+  /** The verbose per-scene progress log (Runner v1.2.0): when present the
+   *  Runner truncates this file at batch start and appends
+   *  `[<percent>] <message>` lines; the generated export script appends the
+   *  interior steps to the same file. Older Runners ignore the field. */
+  progressLogPath?: string
   jobs: Array<ExporterJobEntry>
 }
 
@@ -184,14 +194,83 @@ export function normalizeSceneKey(scenePath: string): string {
 export function jobFileJson(
   jobs: Array<ExporterJob>,
   type: ExporterJobType = 'bulk-export',
+  /** Arms the Runner's verbose progress log (v1.2.0) — see {@link ExporterJobFile}. */
+  progressLogPath?: string,
 ): string {
   const file: ExporterJobFile = {
     version: 1,
     type,
     progress: 0,
+    ...(progressLogPath ? { progressLogPath } : {}),
     jobs: jobs.map((job) => ({ ...job, status: 'pending' as const })),
   }
   return `${JSON.stringify(file, null, 2)}\n`
+}
+
+// --- The verbose progress log (Runner v1.2.0) --------------------------------
+
+/** The progress log's app-data file name — ONE file, truncated by the Runner at
+ *  every batch start (and by the studio at every handoff), so it can never
+ *  accrete: the housekeeping bound is the file itself. */
+export const EXPORT_PROGRESS_FILE = 'export-progress.log'
+
+/**
+ * How many equal steps a mode's job row comprises — the per-scene percent
+ * scale both writers share: the Runner reports the scene OPEN (step 1) and the
+ * terminal done/failed, the generated script the interior steps.
+ *
+ *  - rom+export (5): open / generate ROM / export character / export hair /
+ *    deliver the PoseAsset CSV
+ *  - export-only (4): the same minus the ROM build
+ *  - rom-only (2): open / generate + save the ROM
+ */
+export function jobStepsForMode(mode: ExportMode): number {
+  if (mode === 'rom-only') return 2
+  if (mode === 'export-only') return 4
+  return 5
+}
+
+export interface ExportProgressLine {
+  /** 0–100, per scene (each `[0] <scene>: opening scene` starts a new scene). */
+  percent: number
+  message: string
+}
+
+/** Parse the progress log's text — `[<percent>] <message>` per line, anything
+ *  else ignored (tolerant: the file is read while it is being appended to). */
+export function parseExportProgressLog(text: string): Array<ExportProgressLine> {
+  const lines: Array<ExportProgressLine> = []
+  for (const raw of text.split(/\r?\n/)) {
+    const match = /^\[(\d{1,3})\]\s+(.*\S)\s*$/.exec(raw)
+    if (!match) continue
+    lines.push({ percent: Math.min(100, Number(match[1])), message: match[2] })
+  }
+  return lines
+}
+
+/** The live view the UI shows of a progress log: the newest line's percent +
+ *  message, WHICH scene it belongs to (the `<stem>: ` message prefix; '' for
+ *  batch-level lines), and the capped message tail for the log window. */
+export interface ExportProgressState {
+  percent: number
+  message: string
+  scene: string
+  lines: Array<string>
+}
+
+export function exportProgressStateFrom(
+  parsed: Array<ExportProgressLine>,
+  keep = 40,
+): ExportProgressState | null {
+  if (parsed.length === 0) return null
+  const last = parsed[parsed.length - 1]
+  const scene = /^(.+?):\s/.exec(last.message)?.[1] ?? ''
+  return {
+    percent: last.percent,
+    message: last.message,
+    scene,
+    lines: parsed.slice(-keep).map((line) => `[${line.percent}%] ${line.message}`),
+  }
 }
 
 /**

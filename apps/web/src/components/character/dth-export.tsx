@@ -51,7 +51,8 @@ import {
 } from '#/lib/rom/execute-jobs.ts'
 
 import type { ExecuteSceneStatus, ExportRunProgress, RunnerGate } from '#/lib/rom/api.ts'
-import type { HoudiniActivity, HoudiniRunState } from '#/lib/rom/houdini-jobs.ts'
+import type { ExportPipelineView } from '#/components/character/export-pipeline-panel.tsx'
+import type { HoudiniRunState } from '#/lib/rom/houdini-jobs.ts'
 import type { HoudiniRunMode, RunChoice } from '#/lib/rom/execute-jobs.ts'
 import type { Character } from '@dth/rom'
 
@@ -200,49 +201,13 @@ function ExportProgressButton({
   )
 }
 
-/**
- * The header's live Houdini log — a small tail-mode window the EditorHeader
- * places ABOVE the whole button cluster (spanning its width) while an export
- * node runs: the scene + import caption, then the captured HDA output in
- * monospace, newest line kept in view.
- */
-export function HoudiniActivityLog({ activity }: { activity: HoudiniActivity }) {
-  const boxRef = useRef<HTMLDivElement>(null)
-  // Tail mode: whenever lines arrive, keep the newest one in view.
-  useEffect(() => {
-    const box = boxRef.current
-    if (box) box.scrollTop = box.scrollHeight
-  }, [activity.lines])
-  const dthName = activity.dth ? (activity.dth.split(/[\\/]/).pop() ?? '') : ''
-  return (
-    <div className="rounded-md border bg-card/80 px-2.5 py-1.5 text-left">
-      <p className="mb-1 flex items-baseline gap-2 text-[11px] text-muted-foreground">
-        <span className="font-medium text-foreground/80">
-          {activity.scene || activity.node}
-        </span>
-        {dthName && <span className="truncate">import: {dthName}</span>}
-      </p>
-      <div
-        ref={boxRef}
-        className="max-h-20 overflow-y-auto font-mono text-[11px] leading-4 whitespace-pre-wrap break-all text-muted-foreground"
-      >
-        {activity.lines.map((line, index) => (
-          // Index keys are sound here: the list is an append-only rolling tail.
-          // eslint-disable-next-line react/no-array-index-key
-          <div key={index}>{line}</div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
 export function DthExportAction({
   projectId,
   character,
   saving,
   dirty,
   dazLibraryConfigured,
-  onHoudiniActivity,
+  onPipeline,
 }: {
   projectId: string
   character: Character
@@ -250,10 +215,10 @@ export function DthExportAction({
   dirty: boolean
   /** “My DAZ 3D Library” is set — where the job file and scripts live. */
   dazLibraryConfigured: boolean
-  /** The live mid-node channel, reported up so the header can render the
-   *  {@link HoudiniActivityLog} ABOVE the whole button cluster (this component
-   *  only owns its own buttons). Null = nothing exporting right now. */
-  onHoudiniActivity?: (activity: HoudiniActivity | null) => void
+  /** The run's live pipeline view (task cards + the tail-mode log), reported
+   *  up so the header can render {@link ExportPipelinePanel} ABOVE the whole
+   *  button cluster (this component only owns its own buttons). Null = no run. */
+  onPipeline?: (view: ExportPipelineView | null) => void
 }) {
   const [open, setOpen] = useState(false)
   // null = not yet checked (renders as the normal export button).
@@ -265,16 +230,114 @@ export function DthExportAction({
   // The Houdini half of an "Export too" run, once the Daz batch has finished
   // and handed over. Its own watch: Houdini works long after Daz is done.
   const [houdini, setHoudini] = useState<HoudiniRunState | null>(null)
-  // Report the live mid-node channel up to the header (the log window spans
-  // the WHOLE button cluster, which this component doesn't own).
+  // The run's task identity (the selection the user started), armed at Start —
+  // what the header's task cards are built from. Null = no run of OURS (an
+  // adopted foreign run still shows the log, just no cards).
+  const pipelineRef = useRef<{
+    daz: Array<{ path: string; label: string }>
+    houdini: Array<{ path: string; label: string }>
+  } | null>(null)
+  const [pipeline, setPipeline] = useState<ExportPipelineView | null>(null)
+  // Ref mirrors of the two legs' states, for the OTHER leg's poller: the
+  // interval closures are armed once, so reading the state there is stale.
+  const progressRef = useRef<typeof progress>(null)
+  const houdiniRef = useRef<typeof houdini>(null)
   useEffect(() => {
-    onHoudiniActivity?.(
-      houdini?.state === 'running' && houdini.activity ? houdini.activity : null,
-    )
+    progressRef.current = progress
+  }, [progress])
+  useEffect(() => {
+    houdiniRef.current = houdini
+  }, [houdini])
+  // Report the pipeline view up to the header (the panel spans the WHOLE
+  // button cluster, which this component doesn't own).
+  useEffect(() => {
+    onPipeline?.(pipeline)
     // The setter from useState is identity-stable; re-arming on the callback
     // would churn for inline lambdas.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [houdini])
+  }, [pipeline])
+
+  /** File stem for a task-card label. */
+  function stemOf(path: string): string {
+    return (path.split(/[\\/]/).pop() ?? path).replace(/\.[^./\\]+$/, '')
+  }
+
+  /**
+   * Rebuild the header's pipeline view from the FRESH poll values (state
+   * lags a poll behind, the refs don't). Chronology: the Daz scenes in run
+   * order, then the Houdini projects in queue order. Daz statuses ride the
+   * Runner's processed count; Houdini statuses ride the queue's report
+   * entries + the currently watched project.
+   */
+  function publishPipeline(
+    progressNow: ExportRunProgress | null,
+    houdiniNow: HoudiniRunState | null,
+  ) {
+    const armed = pipelineRef.current
+    const log = (() => {
+      if (houdiniNow?.state === 'running' && houdiniNow.activity) {
+        const activity = houdiniNow.activity
+        const dthName = activity.dth ? (activity.dth.split(/[\\/]/).pop() ?? '') : ''
+        return {
+          title: activity.scene || activity.node,
+          subtitle: dthName ? `import: ${dthName}` : '',
+          lines: activity.lines,
+        }
+      }
+      if (progressNow?.state === 'running' && progressNow.step) {
+        const step = progressNow.step
+        return {
+          title: step.scene ? `${step.scene} — ${step.percent}%` : 'Daz batch',
+          subtitle: step.message,
+          lines: step.lines,
+        }
+      }
+      return null
+    })()
+    if (!armed) {
+      setPipeline(log ? { tasks: [], log } : null)
+      return
+    }
+    const report = runReportRef.current
+    const dazFinished = report?.daz !== undefined || armed.daz.length === 0
+    const processed =
+      progressNow?.state === 'running' ? progressNow.processed : dazFinished ? armed.daz.length : 0
+    const houdiniDone = report?.houdini.length ?? 0
+    const houdiniActive = houdiniNow !== null ? currentHipRef.current : ''
+    setPipeline({
+      tasks: [
+        ...armed.daz.map((scene, index) => ({
+          id: `daz:${scene.path}`,
+          label: scene.label,
+          kind: 'daz' as const,
+          status:
+            dazFinished || processed > index
+              ? ('done' as const)
+              : processed === index && progressNow?.state === 'running'
+                ? ('active' as const)
+                : ('waiting' as const),
+        })),
+        ...armed.houdini.map((hip, index) => ({
+          id: `hou:${hip.path}`,
+          label: hip.label,
+          kind: 'houdini' as const,
+          status:
+            index < houdiniDone
+              ? ('done' as const)
+              : hip.label === houdiniActive && houdiniNow !== null
+                ? ('active' as const)
+                : ('waiting' as const),
+        })),
+      ],
+      log,
+    })
+  }
+
+  /** The run is over (reported, dead or aborted) — drop the panel. */
+  function clearPipeline() {
+    pipelineRef.current = null
+    setPipeline(null)
+  }
   // A handoff written against a SHUTTING-DOWN Daz (running process, batch
   // never claimed) — the modal below waits out the exit and relaunches.
   const [dazClosing, setDazClosing] = useState(false)
@@ -300,6 +363,7 @@ export function DthExportAction({
   /** The one end-of-everything toast: a line for the Daz leg, one per Houdini
    *  project, the failures inline, and the total time across all legs. */
   function emitFinalReport() {
+    clearPipeline()
     const report = runReportRef.current
     runReportRef.current = null
     if (!report) return
@@ -347,6 +411,7 @@ export function DthExportAction({
         data: { projectId, id: character.id, hipPath: first, scenes },
       })
       setHoudini({ state: 'starting', startedAtMs: Date.now() })
+      publishPipeline(progressRef.current, { state: 'starting', startedAtMs: Date.now() })
       const count = `${started.scenes} scene${started.scenes === 1 ? '' : 's'}`
       // Transient hand-over feedback — the sticky report waits for the END.
       toast.info(`Houdini is opening ${stem} — ${count} handed over.`)
@@ -401,6 +466,8 @@ export function DthExportAction({
           },
           houdini: [],
         }
+        // Every Daz card drops (the report's daz entry marks the leg done).
+        publishPipeline(null, houdiniRef.current)
         // Transient — the report waits for the end of the whole process.
         toast.info('Starting the Houdini export in the background…')
         void startHoudiniQueue(
@@ -426,6 +493,8 @@ export function DthExportAction({
           duration: Infinity,
         })
       }
+      // No continuation — the run ends here, and its cards with it.
+      clearPipeline()
       // Open only (single-project by the dialog's own rule): opening is not a
       // watched leg — the report above stands, the project just opens.
       if (run.houdiniProjects.length > 0 && run.failed < run.total && run.houdiniMode === 'open') {
@@ -440,6 +509,7 @@ export function DthExportAction({
     }
     if (run.state === 'dead') {
       setProgress(null)
+      clearPipeline()
       // As sticky as the finish: a run dying while the user is away must not
       // evaporate before they return.
       toast.error(
@@ -451,6 +521,7 @@ export function DthExportAction({
     // 'pending' renders through the Abort button (isPending); only a live
     // Runner-owned run shows the progress state.
     setProgress(run.state === 'running' ? run : null)
+    publishPipeline(run, houdiniRef.current)
   }
 
   /** The Houdini half's own poll — armed only after an "Export too" handoff.
@@ -493,6 +564,7 @@ export function DthExportAction({
       if (report) {
         emitFinalReport()
       } else {
+        clearPipeline()
         // No accumulated run (a watch armed outside the queue) — report this
         // leg alone, the pre-report behavior.
         const options = {
@@ -510,6 +582,7 @@ export function DthExportAction({
     }
     if (run.state === 'dead') {
       setHoudini(null)
+      clearPipeline()
       // Houdini itself is gone — starting the next project would open a fresh
       // Houdini nobody asked for. Drop the rest of the queue; what already
       // finished rides the error as context, so it isn't lost with the run.
@@ -532,6 +605,7 @@ export function DthExportAction({
       return
     }
     setHoudini(run)
+    publishPipeline(progressRef.current, run)
   }
   useRefetchOnFocus(
     () => {
@@ -570,6 +644,7 @@ export function DthExportAction({
     try {
       await abortExporterJobs({ data: { projectId, id: character.id } })
       setPending(false)
+      clearPipeline()
       toast.success('Pending export jobs aborted — the job file was deleted.')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
@@ -601,6 +676,7 @@ export function DthExportAction({
       dismissExportRun()
       setProgress(null)
       setPending(false)
+      clearPipeline()
       toast.success(
         removed.length > 0
           ? `Export aborted — deleted ${removed.join(' and ')}. Anything Daz Studio already started keeps running there.`
@@ -675,6 +751,7 @@ export function DthExportAction({
         onClick={() => {
           dismissHoudiniRun()
           setHoudini(null)
+          clearPipeline()
         }}
         title={
           houdini.state === 'running'
@@ -724,11 +801,19 @@ export function DthExportAction({
           projectId={projectId}
           character={character}
           onClose={() => setOpen(false)}
-          onExported={() => {
+          onExported={(run) => {
             // A new run supersedes the previous outcome (see dismissFinishToasts).
             dismissFinishToasts()
             runReportRef.current = null
             setPending(true)
+            // The header's task cards: the run's selection in run order —
+            // the Daz scenes, then the Houdini projects (rom-only continues
+            // into nothing, so its houdini list is already empty here).
+            pipelineRef.current = {
+              daz: run.scenes.map((path) => ({ path, label: stemOf(path) })),
+              houdini: run.houdiniProjects.map((path) => ({ path, label: stemOf(path) })),
+            }
+            publishPipeline(null, houdiniRef.current)
             // Arm the progress view right away (0/n until Daz delivers).
             void refreshStatus()
           }}
@@ -737,6 +822,10 @@ export function DthExportAction({
           onHoudiniQueue={(projects, scenes) => {
             dismissFinishToasts()
             runReportRef.current = null
+            pipelineRef.current = {
+              daz: [],
+              houdini: projects.map((path) => ({ path, label: stemOf(path) })),
+            }
             void startHoudiniQueue(projects, scenes)
           }}
           onDazClosing={() => setDazClosing(true)}
@@ -1104,8 +1193,10 @@ function DthExportDialog({
   projectId: string
   character: Character
   onClose: () => void
-  /** A handoff was written — the header button flips to Abort. */
-  onExported: () => void
+  /** A handoff was written — the header button flips to Abort. Carries the
+   *  run's selection (run order) for the header's task cards; `houdiniProjects`
+   *  is empty when the Houdini leg won't run exports (open-only, rom-only). */
+  onExported: (run: { scenes: Array<string>; houdiniProjects: Array<string> }) => void
   /** A skip-Daz run handed its selection straight to Houdini (no Daz batch) —
    *  the caller starts the sequential project queue on these scenes. */
   onHoudiniQueue: (projects: Array<string>, scenes: Array<string>) => void
@@ -1383,7 +1474,10 @@ function DthExportDialog({
           houdiniMode,
         },
       })
-      onExported()
+      onExported({
+        scenes: chosenScenes,
+        houdiniProjects: mode === 'rom-only' || houdiniMode === 'open' ? [] : chosenHips,
+      })
       onClose()
       if (result.dazClosing) {
         // No toast — the wait modal explains what happens next.

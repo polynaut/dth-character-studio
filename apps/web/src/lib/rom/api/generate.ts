@@ -4,6 +4,7 @@ import { z } from 'zod'
 
 import {
   EXPORT_FOLDERS_FILE,
+  EXPORT_PROGRESS_FILE,
   expectedSceneExportFolders,
   parseExportFoldersRecord,
   staleExportFolders,
@@ -455,6 +456,11 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
     scenesRootAbs,
     hipRefPrefix,
     indexSync,
+    // The Runner-v1.2.0 verbose progress log the generated carriers append
+    // their finished steps to — the same app-data file the export handoff
+    // writes into the job (execute.ts). Machine-specific by design, like the
+    // baked CSV-delivery path.
+    await storage.dataPath(EXPORT_PROGRESS_FILE),
   )
   // Scene-suffixed SCRIPT names of every stored override (active or not) — the
   // sweep candidates. Filtered against what was just written, this removes the

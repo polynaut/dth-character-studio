@@ -62,15 +62,18 @@ content directory** for that relative path and process the first file it finds.
   "version": 1,
   "type": "bulk-export",
   "progress": 0,
+  "progressLogPath": "C:\\Users\\x\\AppData\\Local\\com.polynaut.dthcharacterstudio\\export-progress.log",
   "jobs": [
     {
       "scenePath": "X:\\Projects\\Sol\\Electra\\daz3d\\primary\\Electra.duf",
       "scriptPath": "X:\\DazLibrary\\Scripts\\DTH-Character-Studio\\Sol\\Electra\\.Bulk_ROM_Export.dsa",
+      "steps": 5,
       "status": "pending"
     },
     {
       "scenePath": "X:\\Projects\\Sol\\Electra\\daz3d\\armor\\Electra_Armor.duf",
       "scriptPath": "X:\\DazLibrary\\Scripts\\DTH-Character-Studio\\Sol\\Electra\\.Bulk_ROM_Export.dsa",
+      "steps": 5,
       "status": "pending"
     }
   ]
@@ -90,6 +93,23 @@ content directory** for that relative path and process the first file it finds.
   written by the plugin on every rewrite, computed from the row statuses so
   the two can never disagree. Absent on the studio-written pending file and
   from older Runners; a reader without it derives the count from the statuses.
+- `progressLogPath` (Runner v1.2.0, optional) — absolute path of the
+  **verbose progress log**. When present the plugin TRUNCATES that file at
+  batch start and appends `[<percent>] <message>` lines as it works; older
+  Runners ignore the field. The percent is **per scene**: each row's export is
+  `steps` equal steps, and the plugin reports the ones it owns —
+  `[0] <scene>: opening scene`, `[100/steps] <scene>: scene opened`, terminal
+  `[100] <scene>: done|failed — <reason>`, `[100] batch cancelled — <reason>`
+  / `batch finished` — while the studio-GENERATED export script appends the
+  interior steps to the same file on the same scale as `DzScript::execute()`
+  runs (runtime v71's `dthProgressLog`: ROM 40 / character 60 / CSV 80 /
+  hair 100 on the 5-step scale; 50/75/100 on the 4-step export-only scale;
+  ROM 100 on the 2-step rom-only scale). The studio watches the file for its
+  live per-scene progress display. The whole-batch `progress` field keeps
+  working regardless — it stays the finish signal.
+- Per row, `steps` (v1.2.0, optional) — that row's step count for the log's
+  percent scale: 5 (ROM + export), 4 (export-only), 2 (rom-only). Absent = the
+  plugin writes only the 0/100 boundary lines.
 - `jobs` is the ordered row array — run top to bottom. Per row:
   - `scenePath`: absolute `.duf` to open (full replace, never saving) — or
     **empty**, meaning the script runs in a **new empty scene** the plugin must

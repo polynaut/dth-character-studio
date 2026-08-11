@@ -6,9 +6,12 @@ import {
   EXPORTER_JOB_FILE,
   RUNNING_JOB_FILE,
   executeSceneSignature,
+  exportProgressStateFrom,
   jobSceneForMode,
   jobScriptForMode,
+  jobStepsForMode,
   expectedSceneExportFolders,
+  parseExportProgressLog,
   formatAgo,
   isReclaimableBatch,
   jobFileMayBeLive,
@@ -87,6 +90,54 @@ describe('the JSON job file (contract v2)', () => {
       progress: 0,
       jobs: [{ scenePath: 'X:\\a.duf', scriptPath: 'X:\\s.dsa', status: 'pending' }],
     })
+  })
+
+  it('carries the verbose-progress contract: progressLogPath + per-row steps', () => {
+    const text = jobFileJson(
+      [{ scenePath: 'X:\\a.duf', scriptPath: 'X:\\s.dsa', steps: 5 }],
+      'bulk-export',
+      'C:\\Users\\x\\AppData\\Local\\dth\\export-progress.log',
+    )
+    const raw = JSON.parse(text) as Record<string, unknown>
+    expect(raw.progressLogPath).toBe('C:\\Users\\x\\AppData\\Local\\dth\\export-progress.log')
+    expect((raw.jobs as Array<{ steps: number }>)[0].steps).toBe(5)
+    // Without a path the field stays absent — an old-style file byte-for-byte.
+    expect(JSON.parse(jobFileJson([])).progressLogPath).toBeUndefined()
+  })
+
+  it('jobStepsForMode: the per-scene step scale both writers share', () => {
+    expect(jobStepsForMode('rom-export')).toBe(5)
+    expect(jobStepsForMode('export-only')).toBe(4)
+    expect(jobStepsForMode('rom-only')).toBe(2)
+  })
+
+  it('parseExportProgressLog + exportProgressStateFrom: the live view', () => {
+    const parsed = parseExportProgressLog(
+      [
+        '[0] Kira: opening scene',
+        'noise the parser must ignore',
+        '[20] Kira: scene opened',
+        '[40] Kira: ROM generated',
+        '[999] clamped',
+        '',
+      ].join('\n'),
+    )
+    expect(parsed).toEqual([
+      { percent: 0, message: 'Kira: opening scene' },
+      { percent: 20, message: 'Kira: scene opened' },
+      { percent: 40, message: 'Kira: ROM generated' },
+      { percent: 100, message: 'clamped' },
+    ])
+    const state = exportProgressStateFrom(parsed.slice(0, 3))
+    expect(state).toEqual({
+      percent: 40,
+      message: 'Kira: ROM generated',
+      scene: 'Kira',
+      lines: ['[0%] Kira: opening scene', '[20%] Kira: scene opened', '[40%] Kira: ROM generated'],
+    })
+    // Batch-level lines carry no scene; an empty log has no view at all.
+    expect(exportProgressStateFrom([{ percent: 100, message: 'batch finished' }])?.scene).toBe('')
+    expect(exportProgressStateFrom([])).toBeNull()
   })
 
   it('parseJobFileJson reads Runner-updated progress + statuses + errors', () => {

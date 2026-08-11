@@ -1572,6 +1572,15 @@ export const CHARACTER_SCHEMA_VERSION = 31
  *       the event loop instead of blocking it (a plain sleep would hold the
  *       very queue the pause exists to flush). Capability-gated: a Daz build
  *       missing either global proceeds immediately.
+ * v71 — the generated carriers append their finished steps to the Runner
+ *       v1.2.0 verbose progress log (`dthProgressLog`, baked
+ *       `dthProgressLogPath` from app-data): "[<percent>] <scene>: <message>"
+ *       per step, on the job row's step scale — ROM 40 / character 60 /
+ *       CSV 80 / hair 100 in the 5-step bulk ROM+export, 50/75/100 in the
+ *       4-step export-only, ROM 100 in the 2-step rom-only. The Runner writes
+ *       the scene-open and terminal lines; the studio watches the file for
+ *       the live per-scene progress display. A script without a baked path
+ *       (manual/legacy) logs nothing.
  */
 export const RUNTIME_VERSION = 71
 

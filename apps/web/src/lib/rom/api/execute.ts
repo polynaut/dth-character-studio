@@ -7,18 +7,22 @@ import {
   EXECUTE_STAMPS_FILE,
   EXPORTER_JOB_FILE,
   EXPORT_MODES,
+  EXPORT_PROGRESS_FILE,
   HOUDINI_RUN_MODES,
   RUNNING_JOB_FILE,
   SCAN_CONFIG_FILE,
   executeSceneSignature,
+  exportProgressStateFrom,
   jobFileJson,
   isReclaimableBatch,
   jobFileMayBeLive,
   jobSceneForMode,
   jobScriptForMode,
+  jobStepsForMode,
   normalizeSceneKey,
   openSceneJobFileJson,
   parseExecuteStamps,
+  parseExportProgressLog,
   parseJobFileJson,
   romAnimationPath,
   scanConfigJson,
@@ -53,6 +57,7 @@ import type {
   ExecuteStamps,
   ExporterJob,
   ExporterJobType,
+  ExportProgressState,
   HoudiniRunMode,
   JobFileKind,
   ScanProductsConfig,
@@ -488,6 +493,10 @@ export type ExportRunProgress =
       processed: number
       done: number
       failed: number
+      /** The verbose per-scene view from the progress log (Runner v1.2.0):
+       *  the newest line's percent/message/scene + the message tail for the
+       *  live log window. Null on an old Runner or before the first line. */
+      step?: ExportProgressState | null
       /** When the handoff was written — absent on a display-only adoption
        *  (another window's run; this one never saw the start). */
       startedAtMs?: number
@@ -539,6 +548,19 @@ export type ExportRunProgress =
  * nothing (their runs predate the parameter and stay first-poll-consumed —
  * within one window only one editor is mounted at a time).
  */
+/** The verbose progress log's current view (Runner v1.2.0), read fresh per
+ *  poll. Best-effort by construction: an unreadable/absent/empty file is null
+ *  — an old Runner simply never writes one. */
+async function readExportProgressState(): Promise<ExportProgressState | null> {
+  try {
+    const path = await storage.dataPath(EXPORT_PROGRESS_FILE)
+    if (!(await exists(path))) return null
+    return exportProgressStateFrom(parseExportProgressLog(await readTextFile(path)))
+  } catch {
+    return null
+  }
+}
+
 export async function fetchExportRunProgress(watcher?: string): Promise<ExportRunProgress | null> {
   const run = activeRun
   const paths = await exporterJobFilePaths()
@@ -663,6 +685,10 @@ export async function fetchExportRunProgress(watcher?: string): Promise<ExportRu
         done,
         failed,
         startedAtMs: run.startedAtMs,
+        // The verbose per-scene view (Runner v1.2.0 + the generated script's
+        // own lines) — null on an old Runner / an empty log; the UI then
+        // shows the row counts alone, exactly as before.
+        step: await readExportProgressState(),
       }
     }
   } catch {
@@ -1117,7 +1143,9 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
         `No saved ROM animation for this scene yet:\n${scene}\nRun a ROM build for it first (DTH Export → ROM + Export or ROM only), then export.`,
       )
     }
-    jobs.push({ scenePath: jobScene, scriptPath })
+    // `steps` = the row's per-scene percent scale in the verbose progress log
+    // (Runner v1.2.0 + the generated script's own dthProgressLog lines).
+    jobs.push({ scenePath: jobScene, scriptPath, steps: jobStepsForMode(mode) })
   }
   const scriptsRoot = storage.studioScriptsDir(settings.dazLibraryFolder)
   const jobFile = joinPath(scriptsRoot, EXPORTER_JOB_FILE)
@@ -1150,7 +1178,12 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
       // best effort — the Runner also clears a stale running file before renaming
     })
   }
-  await storage.writeTextFileAtomic(jobFile, jobFileJson(jobs))
+  // The verbose progress log (Runner v1.2.0): one app-data file, truncated at
+  // every handoff so a stale log never reads as this run's — the Runner
+  // truncates it again at pickup, and both writers append from there.
+  const progressLogPath = await storage.dataPath(EXPORT_PROGRESS_FILE)
+  await storage.writeTextFileAtomic(progressLogPath, '')
+  await storage.writeTextFileAtomic(jobFile, jobFileJson(jobs, 'bulk-export', progressLogPath))
 
   // Arm the watch: the run's identity only — all live state (progress,
   // per-job statuses) is Runner-owned inside the renamed job file.

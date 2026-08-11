@@ -679,6 +679,15 @@ older runtimes as stale.
   which is a long silence on a big project), works (`running done/total`) and
   finishes. Liveness comes from `houdini_running`, without which a result file
   stuck at "running" after the user closed Houdini would poll forever.
+  The DAZ leg has its own live channel since Runner v1.2.0: the job file
+  carries `progressLogPath` (app-data `export-progress.log`, truncated at
+  handoff AND at pickup) + per-row `steps`; the Runner writes the
+  `[<percent>] <message>` lines it owns and the generated scripts (runtime
+  v71, `dthProgressLog`) append the interior steps on the same per-scene
+  scale (`jobStepsForMode`: 5/4/2). `fetchExportRunProgress` parses the log
+  (`parseExportProgressLog`/`exportProgressStateFrom`, pure) into
+  `running.step`; the header's `ExportPipelinePanel` (task cards + tail log)
+  renders both legs. Contract: docs/exporter-plugin-job-file.md.
   Mid-NODE the result also carries a live `activity` channel: 456.py's
   `ActivityCapture` tees `sys.stdout`/`stderr` + `hou.ui.setStatusMessage` while
   `do_export` runs and streams the lines (throttled 0.5 s, rolling 40) into the
