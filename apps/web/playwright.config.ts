@@ -27,6 +27,17 @@ export default defineConfig({
   // `fullyParallel: false` still holds within a file, so per-file ordering
   // stays deterministic; only FILES spread across workers.
   workers: process.env.CI ? 4 : undefined,
+  // Playwright's default per-test budget is 30 s — comfortable locally (the
+  // heaviest spec runs ~12 s), but on the saturated 4-vCPU runner a spec that
+  // draws the short straw against three busy siblings starves: measured
+  // 2026-08-10/11, four different houdini-* specs across three PR runs failed
+  // as 30 s click-timeouts waiting for dialogs that open instantly locally,
+  // each a different spec each run (contention decides who loses), every one
+  // green on rerun or locally. 60 s on CI absorbs the starvation without
+  // masking real breakage — a genuinely broken spec still fails, 30 s later.
+  // NOT retries: a retry hides exactly the nondeterminism this suite exists
+  // to catch; `retries: 0` stays load-bearing.
+  timeout: process.env.CI ? 60_000 : undefined,
   forbidOnly: !!process.env.CI,
   retries: 0,
   reporter: process.env.CI ? [['list'], ['github']] : 'list',
