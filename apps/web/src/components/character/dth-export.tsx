@@ -295,23 +295,40 @@ export function DthExportAction({
     houdiniNow: HoudiniRunState | null,
   ) {
     const armed = pipelineRef.current
+    // The log window must NEVER disappear mid-run (it did, in the states
+    // between the legs — Houdini "starting", and between two nodes when the
+    // activity channel goes quiet): every live state returns SOME log, with
+    // the last captured Houdini lines carried across the quiet stretches.
     const log = (() => {
-      if (houdiniNow?.state === 'running' && houdiniNow.activity) {
-        const activity = houdiniNow.activity
-        const dthName = activity.dth ? (activity.dth.split(/[\\/]/).pop() ?? '') : ''
+      if (houdiniNow) {
+        if (houdiniNow.state === 'running' && houdiniNow.activity) {
+          const activity = houdiniNow.activity
+          const dthName = activity.dth ? (activity.dth.split(/[\\/]/).pop() ?? '') : ''
+          lastHoudiniLinesRef.current = activity.lines
+          return {
+            title: activity.scene || activity.node,
+            subtitle: dthName ? `import: ${dthName}` : '',
+            lines: activity.lines,
+          }
+        }
         return {
-          title: activity.scene || activity.node,
-          subtitle: dthName ? `import: ${dthName}` : '',
-          lines: activity.lines,
+          title: currentHipRef.current || 'Houdini',
+          subtitle: houdiniNow.state === 'running' ? 'exporting…' : 'opening project…',
+          lines: lastHoudiniLinesRef.current,
         }
       }
-      if (progressNow?.state === 'running' && progressNow.step) {
+      if (progressNow?.state === 'running') {
         const step = progressNow.step
-        return {
-          title: step.scene ? `${step.scene} — ${step.percent}%` : 'Daz batch',
-          subtitle: step.message,
-          lines: step.lines,
+        if (step) {
+          return {
+            title: step.scene ? `${step.scene} — ${step.percent}%` : 'Daz batch',
+            subtitle: step.message,
+            lines: step.lines,
+          }
         }
+        // Before the first progress line lands (or under an old Runner that
+        // writes none) the window still stands, just quiet.
+        return { title: 'Daz batch', subtitle: 'working…', lines: [] }
       }
       return null
     })()
@@ -428,9 +445,15 @@ export function DthExportAction({
     })
   }
 
+  // The last lines the Houdini activity channel showed — the log window keeps
+  // them up through the quiet stretches (between nodes, project opening)
+  // instead of blanking. Reset per project (startHoudiniQueue) and at run end.
+  const lastHoudiniLinesRef = useRef<Array<string>>([])
+
   /** The run is over (reported, dead or aborted) — drop the panel. */
   function clearPipeline() {
     pipelineRef.current = null
+    lastHoudiniLinesRef.current = []
     setPipeline(null)
   }
   // A handoff written against a SHUTTING-DOWN Daz (running process, batch
@@ -501,6 +524,8 @@ export function DthExportAction({
     houdiniQueueRef.current = rest.length > 0 ? { projects: rest, scenes } : null
     const stem = (first.split(/[\\/]/).pop() ?? first).replace(/\.[^./\\]+$/, '')
     currentHipRef.current = stem
+    // A fresh project must not open showing the previous project's lines.
+    lastHoudiniLinesRef.current = []
     try {
       const started = await startHoudiniExport({
         data: { projectId, id: character.id, hipPath: first, scenes },

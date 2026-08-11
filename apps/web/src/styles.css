@@ -462,7 +462,7 @@ a {
   position: absolute;
   bottom: 0;
   left: 0;
-  height: 3px;
+  height: 1px;
   width: var(--export-progress, 0%);
   background: var(--export-progress-color, var(--color-emerald-600));
   opacity: 0;
