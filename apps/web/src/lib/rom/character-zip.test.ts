@@ -13,6 +13,7 @@ import {
   repointPath,
   repointProductScansText,
   repointRomRunLogText,
+  sceneWipeTarget,
 } from './character-zip.ts'
 
 import type { Character } from '@dth/rom'
@@ -106,6 +107,37 @@ describe('repointPath', () => {
       `${TO}/daz3d/primary/Kira.duf`,
     )
     expect(repointPath('D:/Elsewhere/Scene.duf', FROM, TO)).toBe('D:/Elsewhere/Scene.duf')
+  })
+})
+
+describe('sceneWipeTarget', () => {
+  const DEST = 'D:/Projects/Demo/Vera'
+  const ROOT = `${DEST}/daz3d`
+  const base = { destFolder: DEST, scenesRoot: ROOT, keptScenes: [`${ROOT}/primary/Vera.duf`] }
+
+  it('removes a deselected scene’s own subfolder (sidecars live in it)', () => {
+    expect(sceneWipeTarget({ ...base, scene: `${ROOT}/yoga/Vera_Yoga.duf` })).toBe(`${ROOT}/yoga`)
+  })
+
+  it('removes only the file at the scenes root and at the character folder', () => {
+    expect(sceneWipeTarget({ ...base, scene: `${ROOT}/Vera_Loose.duf` })).toBe(
+      `${ROOT}/Vera_Loose.duf`,
+    )
+    expect(sceneWipeTarget({ ...base, scene: `${DEST}/Vera_Rootly.duf` })).toBe(
+      `${DEST}/Vera_Rootly.duf`,
+    )
+  })
+
+  it('never removes a folder that also holds a KEPT scene', () => {
+    // Two scenes in one hand-arranged subfolder, one deselected: removing the
+    // folder would take the kept one — the PRIMARY here — along with it.
+    expect(
+      sceneWipeTarget({ ...base, scene: `${ROOT}/primary/Vera_Alt.duf` }),
+    ).toBe(`${ROOT}/primary/Vera_Alt.duf`)
+    // Case/separator noise is not a different folder (Windows semantics).
+    expect(
+      sceneWipeTarget({ ...base, scene: `${ROOT.toUpperCase()}\\PRIMARY\\Vera_Alt.duf` }),
+    ).toBe(`${ROOT.toUpperCase()}\\PRIMARY\\Vera_Alt.duf`)
   })
 })
 
@@ -281,6 +313,25 @@ describe('mergeImportedCharacter', () => {
     ])
     // imageScene pointed at the deselected yoga scene — dropped.
     expect(merged.imageScene).toBe('')
+  })
+
+  it('houdini add keeps an outside link once, even when the zip names the same file', () => {
+    // The api layer feeds the target's OUTSIDE-linked projects through
+    // keptHoudini (their files are never touched by the teardown, but the
+    // merge keeps exactly what this list carries). A zip selection naming the
+    // same outside file must not duplicate the ref.
+    const outside = 'D:/Templates/G9_Skin_Base.hiplc'
+    const zipWithOutside = { ...zip, houdiniProjects: [`${DEST}/houdini/Vera.hip`, outside] }
+    const merged = mergeImportedCharacter({
+      zip: zipWithOutside,
+      target,
+      choices: {
+        ...baseChoices,
+        houdini: { mode: 'add', projects: [`${DEST}/houdini/Vera.hip`, outside] },
+      },
+      keptHoudini: [outside],
+    })
+    expect(merged.houdiniProjects).toEqual([outside, `${DEST}/houdini/Vera.hip`])
   })
 
   it('houdini add keeps the target’s projects beside the zip’s; overwrite takes the selection only', () => {

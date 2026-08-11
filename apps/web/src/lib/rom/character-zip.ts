@@ -6,7 +6,7 @@ import { avatarFileName, avatarSourceMaster, avatarSourceName, parseAvatarName }
 import { normalizeSceneKey } from './execute-jobs.ts'
 import { HOUDINI_JOB_FILE, HOUDINI_RESULT_FILE } from './houdini-jobs.ts'
 import { characterFolderName } from './library'
-import { join, relativeInside } from './storage/fs'
+import { dirname, join, relativeInside } from './storage/fs'
 
 import type { Character, RomSection } from '@dth/rom'
 
@@ -120,12 +120,45 @@ export function rekeyAvatarFileName(fileName: string, fromId: string, toId: stri
   return fileName
 }
 
+const lowerKey = (p: string) => p.trim().replace(/\\/g, '/').toLowerCase()
+
 /** A path repointed from one folder to another IF it lived inside it —
  *  otherwise returned untouched (the same rule as `repointCharacterPaths`). */
 export function repointPath(p: string, fromFolder: string, toFolder: string): string {
   if (!p || !fromFolder || !toFolder) return p
   const rel = relativeInside(fromFolder, p)
   return rel ? join(toFolder, rel) : p
+}
+
+/**
+ * What removing a DESELECTED zip scene may take with it: its own subfolder
+ * (the sidecars and rom-animations live beside the file), or just the FILE
+ * when that folder is shared — with the character folder itself, with the
+ * scenes root (a legacy scene sitting directly there), or with a scene the
+ * import KEEPS. The last one is the reason this is a function: two scenes in
+ * one hand-arranged subfolder, one deselected, and removing "its" folder
+ * would take the kept scene along — the primary included.
+ *
+ * Pure (all paths in destination space) so the decision is testable — the
+ * same pattern as `defaultsRowsFor`.
+ */
+export function sceneWipeTarget(opts: {
+  /** The deselected scene's destination path. */
+  scene: string
+  /** The restored character folder. */
+  destFolder: string
+  /** The scenes root (parent of the primary's subfolder), '' when unknown. */
+  scenesRoot: string
+  /** Destination paths of the scenes the import keeps. */
+  keptScenes: ReadonlyArray<string>
+}): string {
+  const { scene, destFolder, scenesRoot, keptScenes } = opts
+  const parent = dirname(scene)
+  const shared =
+    lowerKey(parent) === lowerKey(destFolder) ||
+    (scenesRoot !== '' && lowerKey(parent) === lowerKey(scenesRoot)) ||
+    keptScenes.some((kept) => lowerKey(dirname(kept)) === lowerKey(parent))
+  return shared ? scene : parent
 }
 
 // --- The overwrite-import merge ----------------------------------------------
@@ -148,8 +181,6 @@ export interface CharacterZipImportChoices {
    *  beside them, `overwrite` replaces them. */
   houdini: { mode: 'add' | 'overwrite'; projects: Array<string> }
 }
-
-const lowerKey = (p: string) => p.trim().replace(/\\/g, '/').toLowerCase()
 
 /**
  * Compose the definition an overwrite import writes — pure, so the wizard's

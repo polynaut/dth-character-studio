@@ -155,10 +155,14 @@ fn pack_dir(
                 .add_directory(format!("{prefix}/{child_rel}"), zip_options())
                 .map_err(|e| format!("zip dir {child_rel}: {e}"))?;
             pack_dir(writer, &entry.path(), prefix, &child_rel, spec, report)?;
-        } else if file_type.is_symlink() && entry.path().is_dir() {
-            // A directory link is a LEAF, never followed — same policy as every
-            // walker in the crate (a cycle would loop forever; a link can
-            // escape the tree). Counted, so the caller can say so.
+        } else if file_type.is_symlink() && !entry.path().is_file() {
+            // A directory link (junctions read as symlinks too) is a LEAF,
+            // never followed — same policy as every walker in the crate (a
+            // cycle would loop forever; a link can escape the tree). A BROKEN
+            // link lands here as well: it has no content to pack, and failing
+            // a gigabyte export over a dead reparse point helps nobody.
+            // Counted, so the caller can say so. A RESOLVING file link still
+            // packs its target's content below.
             report.skipped_links += 1;
         } else {
             pack_file(writer, &entry.path(), &format!("{prefix}/{child_rel}"), report)?;
@@ -532,6 +536,31 @@ mod tests {
         })
         .unwrap_err();
         assert!(err.contains("no \"character/Nope.json\" entry"), "{err}");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    /// The `skipped_links` counter, exercised with a REAL directory junction
+    /// (creation needs no elevation, unlike a symlink): the link is a leaf —
+    /// its target's content stays out of the zip — and the report says so
+    /// instead of letting the omission pass silently.
+    #[cfg(windows)]
+    #[test]
+    fn export_counts_a_directory_junction_and_leaves_its_target_out() {
+        let base = unique_temp_dir("charzip_junction");
+        let (char_dir, meta_dir) = seed_character(&base);
+        let outside = base.join("outside-target");
+        write_file(&outside.join("huge.abc"), b"payload");
+        crate::junction::create_junction_impl(&char_dir.join("linked"), &outside).unwrap();
+
+        let report =
+            export_character_zip(export_request(&base, &char_dir, &meta_dir, true)).unwrap();
+        assert_eq!(report.skipped_links, 1);
+        let names = zip_entry_names(&base.join("Kira.dcsc.zip"));
+        assert!(!names.iter().any(|n| n.contains("linked")), "the link is a leaf: {names:?}");
+        assert!(!names.iter().any(|n| n.contains("huge.abc")), "its target is not packed");
+        // Removing the junction first: remove_dir_all follows into a junction's
+        // target on some setups — never risk the outside tree.
+        let _ = fs::remove_dir(char_dir.join("linked"));
         let _ = fs::remove_dir_all(&base);
     }
 

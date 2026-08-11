@@ -270,7 +270,12 @@ toggled: the regenerable `daz-export` (+ legacy `dth-exports`) and final
 `exportSubdir` trees (already-compressed formats are STORED, the rest deflates
 at level 1 — level-6 deflate measured "takes forever" on a real character).
 Never packed: the transient `.dth_houdini_job/result` transport. Import stages
-to `.dcsmeta/import-*`, validates BEFORE touching the live character, then
+to `.dcsmeta/import-*`, validates BEFORE touching the live character — and on a
+FAILURE the staging folder is deliberately PRESERVED and named in the error:
+past the overwrite teardown it holds the only remaining copy of the zip's
+content and the keep-captured files, and nothing sweeps `.dcsmeta/import-*`
+automatically (the housekeeping sweep covers the app-data scan roots only).
+A successful import removes it, then
 repoints **everything path-shaped**: the definition (via
 `repointCharacterPaths`), the meta records (export-folder record, execute-stamp
 keys, run-log scenes, product-scan scenes — pure transforms in

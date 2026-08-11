@@ -21,6 +21,7 @@ import {
   repointPath,
   repointProductScansText,
   repointRomRunLogText,
+  sceneWipeTarget,
 } from '../character-zip'
 import { LAST_ROM_RUN_FILE } from '../character-internals.ts'
 import { PRODUCTS_FILE } from '../character-products.ts'
@@ -427,13 +428,28 @@ export async function importCharacterZip({
       )),
     )
 
-    return { character: restored.character, warnings }
-  } finally {
+    // Cleanup ONLY on success. Nothing sweeps `.dcsmeta/import-*` later, so a
+    // failed removal is surfaced rather than silently orphaned.
     try {
       if (await exists(staging)) await remove(staging, { recursive: true })
     } catch {
-      // a leftover staging folder is swept with the rest of `.dcsmeta` housekeeping
+      warnings.push(
+        `The import's staging folder could not be removed — delete it by hand: ${staging}`,
+      )
     }
+    return { character: restored.character, warnings }
+  } catch (e) {
+    // DELIBERATELY no cleanup here: past the overwrite teardown, staging holds
+    // the ONLY remaining copy of the zip's content and the keep-captured files
+    // — deleting it on failure would turn a refused rename into total loss.
+    // The error names the folder so the user can recover (or discard) it.
+    const message = e instanceof Error ? e.message : String(e)
+    throw new Error(
+      (await exists(staging))
+        ? `${message}\n\nThe zip's extracted files were kept at ${staging} — nothing there is deleted automatically.`
+        : message,
+      { cause: e },
+    )
   }
 }
 
@@ -580,18 +596,27 @@ async function overwriteFromStaging(opts: {
   const relFolder = normalizeRelFolder(relativeInside(lib, destFolder) ?? '')
 
   // Deselected zip scenes: their restored subfolder goes (sidecars +
-  // rom-animations live in it); a legacy scene sitting directly at the scenes
-  // root (or the folder itself) loses just its file.
+  // rom-animations live in it) — unless the folder is shared with the
+  // character root, the scenes root, or a KEPT scene, where only the file may
+  // go (`sceneWipeTarget`, pure + tested: removing a shared folder would take
+  // the kept scene along, the primary included).
   const scenesRoot = staged.scenePath
     ? dirname(dirname(repointPath(staged.scenePath, manifest.sourceFolder, destFolder)))
     : ''
+  const keptSceneDests = choices.scenes.map((scene) =>
+    repointPath(scene, manifest.sourceFolder, destFolder),
+  )
   for (const scene of [staged.scenePath, ...staged.extraScenes]) {
     if (!scene || sceneKeys.has(normalizeSceneKey(scene))) continue
     const dest = repointPath(scene, manifest.sourceFolder, destFolder)
     if (!relativeInside(destFolder, dest)) continue // an outside link only drops its ref
     try {
-      const parent = dirname(dest)
-      const removeTarget = parent !== destFolder && parent !== scenesRoot ? parent : dest
+      const removeTarget = sceneWipeTarget({
+        scene: dest,
+        destFolder,
+        scenesRoot,
+        keptScenes: keptSceneDests,
+      })
       if (await exists(removeTarget)) await remove(removeTarget, { recursive: true })
     } catch {
       warnings.push(`The deselected scene “${basename(scene)}” could not be fully removed.`)
@@ -625,6 +650,16 @@ async function overwriteFromStaging(opts: {
     await mkdir(dirname(dest), { recursive: true })
     await renameWithRetry(joinPath(staging, 'keep/houdini', rel), dest)
     keptHoudiniAbs.push(dest)
+  }
+  // `add` also keeps the target's OUTSIDE-linked projects. Their files were
+  // never touched (the teardown reaches only the character folder), but the
+  // merge keeps exactly what this list carries — without them the refs would
+  // silently drop from the definition. A zip selection naming the same
+  // outside file dedupes in the merge.
+  if (choices.houdini.mode === 'add') {
+    keptHoudiniAbs.push(
+      ...targetChar.houdiniProjects.filter((hip) => relativeInside(targetFolder, hip) === null),
+    )
   }
   if (keptImages.length > 0) {
     const imagesDir = storage.metaImagesDir(project.path)
@@ -857,7 +892,7 @@ async function fixImportedHoudiniPaths(
     }
   } catch (e) {
     problems.push(
-      `Houdini project paths were not adjusted (${e instanceof Error ? e.message : String(e)}). Fix them later via the character's Houdini Utils drawer: Repair $JOB, then Make paths portable.`,
+      `Houdini project paths were not adjusted (${e instanceof Error ? e.message : String(e)}). Fix them later via the character's Houdini Utils drawer: Repair project settings, then Make paths portable.`,
     )
   }
   return problems

@@ -407,8 +407,9 @@ Import fixes every stored path for the new location: the definition's scene /
 Houdini / avatar references, the studio's metadata records, and the Houdini
 projects themselves — their `$JOB` is repointed at the new character folder and
 their stored references repaired, the same fixes the Utils drawer's *Repair
-$JOB* + *Make paths portable* run (this needs a paired Houdini install; without
-one the import finishes and tells you to run those two later). The `.dsa`
+project settings* + *Make paths portable* run (this needs a paired Houdini
+install; without one the import finishes and tells you to run those two later).
+The `.dsa`
 scripts and PoseAsset CSV are regenerated to match. A scene or `.hip` that was
 **linked in place outside** the character folder keeps its original absolute
 path — on another machine it shows as missing and is relinked in the editor.
