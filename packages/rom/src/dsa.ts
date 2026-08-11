@@ -1109,6 +1109,32 @@ export function toCharacterScriptDsa(
 }
 
 /**
+ * The settle helper emitted into every generated ROM/export script (inline —
+ * the Export_ scripts don't include the runtime, so nothing shared can carry
+ * it): pump Daz's event loop for `nMs` so work queued by the PREVIOUS step (a
+ * Runner scene load's deferred setup, the ROM build's timeline churn) lands
+ * before the next step starts. sleep() in 50 ms slices WITH processEvents
+ * between them — a single blocking sleep would hold the very event loop the
+ * pause exists to drain. Capability-gated and try-wrapped: a Daz build missing
+ * either global just proceeds.
+ */
+function dthSettleSnippet(): string {
+  return `// Let Daz settle between automation steps: pump the event loop briefly so
+// queued work (a scene load's deferred setup, the ROM build's churn) lands
+// before the next step starts. Best effort by construction.
+function dthSettle(nMs) {
+    try {
+        var dthSettleT0 = new Date().getTime();
+        while (new Date().getTime() - dthSettleT0 < nMs) {
+            if (typeof processEvents == "function") processEvents();
+            if (typeof sleep == "function") { sleep(50); } else { break; }
+        }
+    } catch (dthSettleErr) { /* never fail a run over a pause */ }
+}
+`
+}
+
+/**
  * The hidden BULK variant ({@link BULK_ROM_EXPORT_SCRIPT}) the DTH Character
  * Studio Runner executes on job-file runs (the studio's DTH Export button):
  * the SAME one-script build with both export toggles FORCED on — it always
@@ -1463,6 +1489,7 @@ function dthApplyUE5TearUV() {
     } catch (dthUvErr) { /* leave the tear UV as-is; the ROM build continues */ }
 }
 
+${dthSettleSnippet()}
 // The include MUST stay at the top level: Daz resolves include() through its
 // legacy-include mechanism, which fails inside try/catch ("URIError: Legacy Include").
 var dir_self = new DzDir(new DzFileInfo(getScriptFileName()).path());
@@ -1482,7 +1509,10 @@ if (dthSceneLinkErr) {
     dthFailureDialog();
 } else {
     try {
-${indentLines(indentLines(indexSyncSnippet(indexSync)))}        var dthRomOk = ApplyDTHCharacter(dthCharacterConfig);
+${bulk ? `        // The Runner just loaded this scene — give Daz a beat before the first
+        // scripted work touches it.
+        dthSettle(1000);
+` : ''}${indentLines(indentLines(indexSyncSnippet(indexSync)))}        var dthRomOk = ApplyDTHCharacter(dthCharacterConfig);
         // G9: retarget the tear shader's UV set to UE5 after the ROM (before any
         // export). No-op unless the character opted in.
         if (dthCharacterConfig.bApplyUE5TearUV) { dthApplyUE5TearUV(); }
@@ -1553,6 +1583,9 @@ ${indentLines(indentLines(indexSyncSnippet(indexSync)))}        var dthRomOk = A
         // as failure too, not just hard aborts) — a broken ROM must never ship
         // a PoseAsset CSV/FBX as if it were good. Fix the problem and re-run.
         if (dthRomOk === true) {
+            // The ROM build (and the ROM-scene save) just finished — give Daz
+            // a beat before the exporter starts.
+            dthSettle(1000);
 ${exportBlock}        }` : ''}
     } catch (dthErr) {
         // Unexpected exception — ApplyDTHCharacter couldn't log/report it itself.
@@ -1617,12 +1650,16 @@ include(dir_self_scan.filePath("../../.DthProducts.dsa"));` : ''}
 
 ${sceneGuardSnippet(character)}
 ${openSceneFileSnippet()}${romAnimationSourceSnippet(romAnimationSourceMap(character))}
+${dthSettleSnippet()}
 ${figureAutoSelectSnippet(character.genesis)}var dthSceneLinkErr = dthSceneLinkError();
 if (dthSceneLinkErr) {
     MessageBox.critical(dthSceneLinkErr, "DTH Character Studio", "&OK");
 } else if (!dthFig) {
     MessageBox.critical("No ${character.genesis} figure found in the scene - load the character's scene and re-run.", "DTH Character Studio", "&OK");
 } else {
+    // A beat before the exporter touches the scene: the Runner's scene load —
+    // or the ROM build run just before this script — may still be settling.
+    dthSettle(1000);
 ${indentLines(indexSyncSnippet(indexSync))}${buildExportBlock(character, frames, metaDirAbs, buildSceneCsvMap(character), scenesRootAbs, unattended, hipRefPrefix, sceneFrames)
   .split('\n')
   .map((line) => (line ? `    ${line}` : line))

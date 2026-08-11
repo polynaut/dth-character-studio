@@ -1564,8 +1564,16 @@ export const CHARACTER_SCHEMA_VERSION = 31
  *       marks every existing character stale: saving a character in the editor
  *       re-stamps its schemaVersion WITHOUT regenerating, which would otherwise
  *       hide a pre-v70 script on disk from the staleness check for good.
+ * v71 — the generated scripts pause ~1 s at the automation seams: the BULK
+ *       (Runner) ROM script settles right after the scene load, before the
+ *       first scripted work; every export — bulk or manual — settles after
+ *       the ROM build, before the exporter starts. `dthSettle` sleeps in
+ *       50 ms slices WITH processEvents between them, so the pause drains
+ *       the event loop instead of blocking it (a plain sleep would hold the
+ *       very queue the pause exists to flush). Capability-gated: a Daz build
+ *       missing either global proceeds immediately.
  */
-export const RUNTIME_VERSION = 70
+export const RUNTIME_VERSION = 71
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a
