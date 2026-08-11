@@ -120,6 +120,11 @@ function dismissFinishToasts() {
   toast.dismiss(HOUDINI_TOAST_ID)
 }
 
+/** Status texts arrive lowercase from the logs — tooltips lead with a capital. */
+function capitalizeStatus(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1)
+}
+
 /** A live digital clock riding a progress button (`04:12`, all four digits
  *  always rendered; an hour-plus run grows to `1:04:12`) — self-ticking each
  *  second, so the watch's 2.5s poll doesn't own the cadence. Renders nothing
@@ -207,7 +212,9 @@ function ExportProgressButton({
           '--export-progress-color': 'var(--color-emerald-600)',
         } as CSSProperties
       }
-      title={`Daz Studio is working the batch — ${progress.processed} of ${progress.total} scene${progress.total === 1 ? '' : 's'} processed${progress.failed > 0 ? ` (${progress.failed} failed)` : ''}. Hold Ctrl to abort and delete the job file.`}
+      // Just the latest status — counts live in the panel; Ctrl (the abort)
+      // reveals itself the moment it is held.
+      title={capitalizeStatus(progress.step?.message || 'working…')}
     >
       {/* Just "Working" — the counts and percents live in the pipeline
           panel above (and this button's tooltip); a constant label plus the
@@ -257,7 +264,9 @@ export function DthExportAction({
   // adopted foreign run still shows the log, just no cards).
   const pipelineRef = useRef<{
     daz: Array<{ path: string; label: string }>
-    houdini: Array<{ path: string; label: string }>
+    /** `networks` = the scene stems the project will export (the DazToHue
+     *  networks are matched per scene) — the card tooltip names them. */
+    houdini: Array<{ path: string; label: string; networks: Array<string> }>
   } | null>(null)
   const [pipeline, setPipeline] = useState<ExportPipelineView | null>(null)
   // Ref mirrors of the two legs' states, for the OTHER leg's poller: the
@@ -416,6 +425,7 @@ export function DthExportAction({
         ...armed.houdini.map((hip, index) => ({
           id: `hou:${hip.path}`,
           label: hip.label,
+          detail: hip.networks.length > 0 ? `Exports: ${hip.networks.join(', ')}` : undefined,
           kind: 'houdini' as const,
           status:
             index < houdiniDone
@@ -848,11 +858,11 @@ export function DthExportAction({
             '--export-progress-color': 'var(--color-orange-600)',
           } as CSSProperties
         }
-        title={
-          houdini.state === 'running'
-            ? `Houdini is exporting — ${houdini.done} of ${houdini.total} node${houdini.total === 1 ? '' : 's'} done.`
-            : 'Houdini is loading the project in the background (headless); the export starts once the scene is loaded.'
-        }
+        // Just the latest status, like the Daz leg's button.
+        title={capitalizeStatus(
+          (houdini.state === 'running' && houdini.activity?.lines.at(-1)) ||
+            (houdini.state === 'running' ? 'exporting…' : 'opening project…'),
+        )}
       >
         {/* Same constant "Working" as the Daz leg — the node counts live in
             the pipeline panel's meters and this tooltip; the Houdini mark is
@@ -909,7 +919,11 @@ export function DthExportAction({
             // into nothing, so its houdini list is already empty here).
             pipelineRef.current = {
               daz: run.scenes.map((path) => ({ path, label: stemOf(path) })),
-              houdini: run.houdiniProjects.map((path) => ({ path, label: stemOf(path) })),
+              houdini: run.houdiniProjects.map((path) => ({
+                path,
+                label: stemOf(path),
+                networks: run.houdiniScenes.map(stemOf),
+              })),
             }
             publishPipeline(null, houdiniRef.current)
             // Arm the progress view right away (0/n until Daz delivers).
@@ -922,7 +936,11 @@ export function DthExportAction({
             runReportRef.current = null
             pipelineRef.current = {
               daz: [],
-              houdini: projects.map((path) => ({ path, label: stemOf(path) })),
+              houdini: projects.map((path) => ({
+                path,
+                label: stemOf(path),
+                networks: scenes.map(stemOf),
+              })),
             }
             void startHoudiniQueue(projects, scenes)
           }}
@@ -1293,8 +1311,13 @@ function DthExportDialog({
   onClose: () => void
   /** A handoff was written — the header button flips to Abort. Carries the
    *  run's selection (run order) for the header's task cards; `houdiniProjects`
-   *  is empty when the Houdini leg won't run exports (open-only, rom-only). */
-  onExported: (run: { scenes: Array<string>; houdiniProjects: Array<string> }) => void
+   *  is empty when the Houdini leg won't run exports (open-only, rom-only),
+   *  `houdiniScenes` = the scene scope that leg will export (its networks). */
+  onExported: (run: {
+    scenes: Array<string>
+    houdiniProjects: Array<string>
+    houdiniScenes: Array<string>
+  }) => void
   /** A skip-Daz run handed its selection straight to Houdini (no Daz batch) —
    *  the caller starts the sequential project queue on these scenes. */
   onHoudiniQueue: (projects: Array<string>, scenes: Array<string>) => void
@@ -1575,6 +1598,9 @@ function DthExportDialog({
       onExported({
         scenes: chosenScenes,
         houdiniProjects: mode === 'rom-only' || houdiniMode === 'open' ? [] : chosenHips,
+        // The scene scope the Houdini leg will export (→ the networks its
+        // task cards name) — the continuation recomputes the same set.
+        houdiniScenes: houdiniMode === 'export-all' ? linked : chosenScenes,
       })
       onClose()
       if (result.dazClosing) {

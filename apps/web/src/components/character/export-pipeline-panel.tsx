@@ -18,6 +18,8 @@ import { cn } from '@dth/ui'
 export interface ExportTask {
   id: string
   label: string
+  /** Extra tooltip context — e.g. the networks a Houdini project exports. */
+  detail?: string
   kind: 'daz' | 'houdini'
   status: 'waiting' | 'active' | 'done'
 }
@@ -80,7 +82,7 @@ function ExportTaskCard({
         departing && 'translate-x-28 translate-y-12 rotate-6 opacity-0',
       )}
       style={{ transitionDuration: `${FLY_MS}ms` }}
-      title={task.label}
+      title={task.detail ? `${task.label}\n${task.detail}` : task.label}
     >
       <span className="opacity-60 tabular-nums">{ordinal}.</span> {task.label}
     </div>
@@ -110,20 +112,20 @@ export function ExportTaskCards({ tasks }: { tasks: Array<ExportTask> }) {
     return () => pending.forEach(clearTimeout)
   }, [])
 
-  // Only 3 cards show in full; the 4th fades out through a gradient mask and
-  // everything past it sits in a collapsed slot (which ANIMATES open as the
-  // queue moves up — the same slide the tetris collapse uses). Position counts
-  // only live slots, so a flying card still occupies its place until its slot
-  // has collapsed.
+  // Only 4 cards show in full (the column spans the log AND meter rows); the
+  // 5th fades out through a gradient mask and everything past it sits in a
+  // collapsed slot (which ANIMATES open as the queue moves up — the same
+  // slide the tetris collapse uses). Position counts only live slots, so a
+  // flying card still occupies its place until its slot has collapsed.
   const visibleIds = tasks.filter((task) => !collapsed.has(task.id)).map((task) => task.id)
 
   return (
-    <div className="col-start-1 row-start-2 flex min-h-0 w-40 shrink-0 flex-col">
+    <div className="col-start-1 row-start-1 row-span-2 flex min-h-0 w-40 shrink-0 flex-col">
       {tasks.map((task, index) => {
         const isFlying = flying.has(task.id)
         const isCollapsed = collapsed.has(task.id)
         const position = visibleIds.indexOf(task.id)
-        const hidden = isCollapsed || position >= 4
+        const hidden = isCollapsed || position >= 5
         return (
           <div
             key={task.id}
@@ -134,7 +136,7 @@ export function ExportTaskCards({ tasks }: { tasks: Array<ExportTask> }) {
               // window. A LIVE slot must not, or the fly-out would be cut off
               // mid-flight.
               hidden ? 'overflow-hidden' : 'overflow-visible',
-              position === 3 &&
+              position === 4 &&
                 !isCollapsed &&
                 '[mask-image:linear-gradient(to_bottom,#000_0%,transparent_90%)]',
             )}
@@ -161,7 +163,7 @@ export function ExportActivityLog({ log }: { log: { lines: Array<string> } }) {
     // shared column, so its width IS theirs. Lines only, no caption row.
     <div
       data-export-log
-      className="col-start-2 row-start-2 flex min-h-0 min-w-0 flex-col rounded-md border bg-card/80 px-2.5 py-1.5 text-left"
+      className="col-start-2 row-start-1 flex min-h-0 min-w-0 flex-col rounded-md border bg-card/80 px-2.5 py-1.5 text-left"
     >
       <div
         ref={boxRef}
@@ -209,20 +211,21 @@ export function ExportPipelinePanel({ view }: { view: ExportPipelineView }) {
   return (
     // Lives inside the header's 2-column grid and inherits its tracks
     // (subgrid): the LOG WINDOW shares its column with the button row below,
-    // so the two are always exactly as wide as each other — the task cards
-    // fill the first column, the meter row spans both. min-h-0 rows so the
+    // so the two are always exactly as wide as each other — and the meter row
+    // sits UNDER the log at the same width. The task cards fill the first
+    // column across BOTH rows (room for 4 full cards). min-h-0 rows so the
     // panel fills whatever height the header has (the log is the flexible
     // part; the meter row keeps its size). Width is content-stable mid-run:
     // the buttons' "Working" label + reserved clock never resize.
-    <div className="pipeline-scroll col-span-2 row-start-1 grid min-h-0 grid-cols-subgrid grid-rows-[auto_minmax(0,1fr)] gap-y-2">
+    <div className="pipeline-scroll col-span-2 row-start-1 grid min-h-0 grid-cols-subgrid grid-rows-[minmax(0,1fr)_auto] gap-y-2">
+      {view.tasks.length > 0 && <ExportTaskCards tasks={view.tasks} />}
+      {view.log && <ExportActivityLog log={view.log} />}
       {view.bars && (
-        <div className="col-span-2 row-start-1 flex min-w-0 flex-col gap-1.5">
+        <div className="col-start-2 row-start-2 flex min-w-0 flex-col gap-1.5">
           {view.bars.overall && <ProgressBar bar={view.bars.overall} emphasis />}
           <ProgressBar bar={view.bars.current} />
         </div>
       )}
-      {view.tasks.length > 0 && <ExportTaskCards tasks={view.tasks} />}
-      {view.log && <ExportActivityLog log={view.log} />}
     </div>
   )
 }
