@@ -38,7 +38,10 @@ async function lastPrefill(page: Page): Promise<Record<string, string>> {
 const HOUDINI_INSTALL = 'C:/Program Files/Side Effects Software/Houdini 22.0.368'
 const HOUDINI_DOCS = 'C:/Users/You/Documents/houdini22.0'
 
-async function openGenerateDialog(page: Page, opts: { extraScene?: boolean } = {}) {
+async function openGenerateDialog(
+  page: Page,
+  opts: { extraScene?: boolean; noProjects?: boolean } = {},
+) {
   const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true, extraScene: opts.extraScene })
   const settingsPath = `${P.appData}/settings.json`
   seed.files[settingsPath] = JSON.stringify({
@@ -46,6 +49,14 @@ async function openGenerateDialog(page: Page, opts: { extraScene?: boolean } = {
     houdiniInstallFolder: HOUDINI_INSTALL,
     houdiniDocsFolder: HOUDINI_DOCS,
   })
+  if (opts.noProjects) {
+    // The FIRST-project state: the demo character links one Houdini project,
+    // and the scene picker only appears from the second project on.
+    const charPath = `${P.charFolder}/Kira.json`
+    const char = JSON.parse(seed.files[charPath] ?? '{}') as Record<string, unknown>
+    char.houdiniProjects = []
+    seed.files[charPath] = JSON.stringify(char, null, 2)
+  }
   seed.files[`${HOUDINI_INSTALL}/bin/hython.exe`] = 'hython-exe-fixture'
   await page.addInitScript(installTauriMock, seed)
   await page.goto('/')
@@ -69,10 +80,26 @@ test('a single-scene character is not asked which scene — there is only one', 
   expect(await commandCalls(page, 'create_houdini_project')).toHaveLength(1)
 })
 
+test('the first project is not asked either — it is the primary scene\'s', async ({ page }) => {
+  const dialog = await openGenerateDialog(page, { extraScene: true, noProjects: true })
+
+  // TWO scenes are linked, but no Houdini project is yet: the character's
+  // first project is its main one, wired to the primary without a question.
+  await expect(dialog.getByLabel('Daz scene to import')).toHaveCount(0)
+  await dialog.getByRole('button', { name: 'Generate', exact: true }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+
+  const prefill = await lastPrefill(page)
+  expect(prefill.dth).toBe('$HIP/daz-export/KiraDefault_G9_GP/Kira.dth')
+  expect(prefill.dth).not.toContain('KiraSummertide')
+})
+
 test('the chosen scene decides the import paths', async ({ page }) => {
   const dialog = await openGenerateDialog(page, { extraScene: true })
 
-  // With two scenes the picker appears, defaulting to the primary.
+  // With two scenes AND a project already linked (the demo's — load-bearing:
+  // the first project never asks) the picker appears, defaulting to the
+  // primary.
   const picker = dialog.getByLabel('Daz scene to import')
   await expect(picker).toBeVisible()
   await picker.click()
