@@ -220,6 +220,8 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
   // per-scene percent the log lines carry — no overall bar for a one-unit leg.
   await expect(page.locator('[data-progressbar="current"]')).toHaveAttribute('data-percent', '40')
   await expect(page.locator('[data-progressbar="current"]')).toContainText('ROM generated')
+  // The per-step clock: silent stretches inside a step visibly tick.
+  await expect(page.locator('[data-progressbar="current"]')).toContainText(/· \d+:\d{2}/)
   await expect(page.locator('[data-progressbar="overall"]')).toHaveCount(0)
   // …and picked up + finished by the Runner. NO toast on the baton pass (a
   // mid-run toast reads as an outcome) and NO finish toast yet — the batch

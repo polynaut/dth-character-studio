@@ -399,6 +399,18 @@ export function DthExportAction({
       }
       return null
     })()
+    // Arm the current bar's per-step clock: the silent minutes inside one
+    // synchronous exporter call tick visibly instead of reading as stuck.
+    // Any new log line or label flip is a new step; the ref survives polls.
+    if (bars) {
+      const stepKey = `${log?.lines.join('\n') ?? ''}|${bars.current.label}`
+      if (stepStartRef.current?.key !== stepKey) {
+        stepStartRef.current = { key: stepKey, atMs: Date.now() }
+      }
+      bars.current.sinceMs = stepStartRef.current.atMs
+    } else {
+      stepStartRef.current = null
+    }
     if (!armed) {
       // A run this window has no memory of starting (a reloaded window, a
       // batch from elsewhere) — adopted for display. The Daz cards come from
@@ -470,6 +482,9 @@ export function DthExportAction({
   // logs carry no timestamps — see stampLogLines).
   const dazStampsRef = useRef<StampedLogStore>({ lines: [], stamps: [] })
   const houdiniStampsRef = useRef<StampedLogStore>({ lines: [], stamps: [] })
+  // When the CURRENT step began — feeds the meter's per-step clock. Keyed on
+  // the log tail + the bar's label: any new line (or state flip) resets it.
+  const stepStartRef = useRef<{ key: string; atMs: number } | null>(null)
 
   /** The run is over (reported, dead or aborted) — drop the panel. */
   function clearPipeline() {
@@ -477,6 +492,7 @@ export function DthExportAction({
     lastHoudiniLinesRef.current = []
     dazStampsRef.current = { lines: [], stamps: [] }
     houdiniStampsRef.current = { lines: [], stamps: [] }
+    stepStartRef.current = null
     setPipeline(null)
   }
   // A handoff written against a SHUTTING-DOWN Daz (running process, batch

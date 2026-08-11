@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 import { cn } from '@dth/ui'
+import { formatClock } from '#/lib/rom/execute-jobs.ts'
 
 /**
  * The header's live DTH-Export pipeline display: a narrow task-card column
@@ -31,6 +32,10 @@ export interface ExportProgressBar {
   /** Which leg the bar measures — the fill wears that kind's color, the same
    *  identity the task cards carry. */
   kind: 'daz' | 'houdini'
+  /** When the CURRENT step began (first seen) — the label then carries a
+   *  self-ticking `· 02:10`, so the minutes-long silent stretches inside a
+   *  synchronous exporter call visibly tick instead of reading as stuck. */
+  sinceMs?: number
 }
 
 export interface ExportPipelineView {
@@ -187,11 +192,22 @@ function ProgressBar({ bar, emphasis = false }: { bar: ExportProgressBar; emphas
   // Status texts arrive lowercase from the logs ("opening scene") — the label
   // is a caption, so it leads with a capital.
   const label = bar.label.charAt(0).toUpperCase() + bar.label.slice(1)
+  // The per-step clock ticks on its own — the poll only moves at step
+  // boundaries, and the whole point is showing life BETWEEN them.
+  const [, tick] = useState(0)
+  useEffect(() => {
+    if (bar.sinceMs === undefined) return
+    const id = window.setInterval(() => tick((n) => n + 1), 1000)
+    return () => window.clearInterval(id)
+  }, [bar.sinceMs])
   return (
     <div data-progressbar={emphasis ? 'overall' : 'current'} data-percent={Math.round(percent)}>
-      <div className="mb-0.5 flex items-baseline justify-between gap-2 text-[11px] text-muted-foreground">
+      <div className="mb-0.5 flex items-baseline gap-2 text-[11px] text-muted-foreground">
         <span className="truncate">{label}</span>
-        <span className="shrink-0 tabular-nums">{Math.round(percent)}%</span>
+        {bar.sinceMs !== undefined && (
+          <span className="shrink-0 tabular-nums">· {formatClock(Date.now() - bar.sinceMs)}</span>
+        )}
+        <span className="ml-auto shrink-0 tabular-nums">{Math.round(percent)}%</span>
       </div>
       <div className={cn('overflow-hidden rounded-full bg-muted', emphasis ? 'h-2' : 'h-1.5')}>
         <div
