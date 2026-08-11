@@ -51,7 +51,10 @@ import {
 } from '#/lib/rom/execute-jobs.ts'
 
 import type { ExecuteSceneStatus, ExportRunProgress, RunnerGate } from '#/lib/rom/api.ts'
-import type { ExportPipelineView } from '#/components/character/export-pipeline-panel.tsx'
+import type {
+  ExportPipelineView,
+  ExportProgressBar,
+} from '#/components/character/export-pipeline-panel.tsx'
 import type { HoudiniRunState } from '#/lib/rom/houdini-jobs.ts'
 import type { HoudiniRunMode, RunChoice } from '#/lib/rom/execute-jobs.ts'
 import type { Character } from '@dth/rom'
@@ -294,8 +297,81 @@ export function DthExportAction({
       }
       return null
     })()
+    // The full-width meter row above tasks+log. `current` = the unit under
+    // work; `overall` joins in only when the leg spans several units (scenes /
+    // networks) — the two-level display.
+    const bars = ((): ExportPipelineView['bars'] => {
+      // Once the Houdini leg exists it owns the meters — the Daz batch is
+      // finished and reported by the time a project starts opening.
+      if (houdiniNow?.state === 'running') {
+        const hip = currentHipRef.current || 'Houdini'
+        const total = houdiniNow.total
+        // The stepwise scale the run can actually measure: opening the
+        // project is one step, each DazToHue network another — hython's
+        // console speaks in phase lines, never percents. `running` means the
+        // project IS open, so that step already counts.
+        const stepwisePct = total > 0 ? ((1 + houdiniNow.done) / (1 + total)) * 100 : 100
+        if (total > 1) {
+          const activity = houdiniNow.activity
+          // Within the ACTIVE network the only signal is the HDA's phase
+          // lines (measured: 9 on a full node run) — a coarse estimate,
+          // capped so it never claims a network done.
+          const phasePct = activity ? Math.min((activity.lines.length / 9) * 100, 95) : 0
+          return {
+            overall: {
+              percent: stepwisePct,
+              label: `${hip} — ${houdiniNow.done}/${total} networks`,
+              kind: 'houdini',
+            },
+            current: {
+              percent: phasePct,
+              label: activity?.scene || `network ${Math.min(houdiniNow.done + 1, total)}/${total}`,
+              kind: 'houdini',
+            },
+          }
+        }
+        return { current: { percent: stepwisePct, label: hip, kind: 'houdini' } }
+      }
+      if (houdiniNow?.state === 'starting') {
+        return {
+          current: {
+            percent: 0,
+            label: `${currentHipRef.current || 'Houdini'} — opening project`,
+            kind: 'houdini',
+          },
+        }
+      }
+      if (progressNow?.state === 'running') {
+        const step = progressNow.step
+        // Per-scene percent straight from the Runner's progress log; an old
+        // Runner writes none — the bar then rests at 0 while the overall one
+        // (row counts) still moves.
+        const currentPct = step?.percent ?? 0
+        const current: ExportProgressBar = {
+          percent: currentPct,
+          label:
+            step?.scene ||
+            pipelineRef.current?.daz[Math.min(progressNow.processed, progressNow.total)]?.label ||
+            'Daz scene',
+          kind: 'daz',
+        }
+        if (progressNow.total > 1) {
+          const done = Math.min(progressNow.processed, progressNow.total)
+          return {
+            overall: {
+              percent: ((done + currentPct / 100) / progressNow.total) * 100,
+              label: `Scenes ${done}/${progressNow.total}`,
+              kind: 'daz',
+            },
+            current,
+          }
+        }
+        return { current }
+      }
+      return null
+    })()
     if (!armed) {
-      setPipeline(log ? { tasks: [], log } : null)
+      setPipeline(log || bars ? { tasks: [], log, bars } : null)
       return
     }
     const report = runReportRef.current
@@ -330,6 +406,7 @@ export function DthExportAction({
         })),
       ],
       log,
+      bars,
     })
   }
 

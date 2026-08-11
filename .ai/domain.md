@@ -686,8 +686,15 @@ older runtimes as stale.
   v71, `dthProgressLog`) append the interior steps on the same per-scene
   scale (`jobStepsForMode`: 5/4/2). `fetchExportRunProgress` parses the log
   (`parseExportProgressLog`/`exportProgressStateFrom`, pure) into
-  `running.step`; the header's `ExportPipelinePanel` (task cards + tail log)
-  renders both legs. Contract: docs/exporter-plugin-job-file.md.
+  `running.step`; the header's `ExportPipelinePanel` (meter row + task cards +
+  tail log) renders both legs. The meters: `current` = the unit under work
+  (Daz = the progress-log percent; Houdini = a stepwise scale, 1 open-project
+  step + 1 per network, because hython's console has phase lines but no
+  percents), plus an `overall` bar ONLY when the leg spans several units
+  (scenes / networks). The multi-network current bar estimates within the
+  active network from the HDA's phase-line count (measured: 9 on a full node
+  run), capped at 95% — an estimate, not a contract.
+  Contract: docs/exporter-plugin-job-file.md.
   Mid-NODE the result also carries a live `activity` channel: 456.py's
   `ActivityCapture` tees `sys.stdout`/`stderr` + `hou.ui.setStatusMessage` while
   `do_export` runs and streams the lines (throttled 0.5 s, rolling 40) into the

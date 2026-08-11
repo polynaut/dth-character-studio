@@ -22,11 +22,26 @@ export interface ExportTask {
   status: 'waiting' | 'active' | 'done'
 }
 
+export interface ExportProgressBar {
+  /** 0–100. */
+  percent: number
+  label: string
+  /** Which leg the bar measures — the fill wears that kind's color, the same
+   *  identity the task cards carry. */
+  kind: 'daz' | 'houdini'
+}
+
 export interface ExportPipelineView {
   /** Task cards, chronological. Empty for an adopted run (no identity). */
   tasks: Array<ExportTask>
   /** The live log-window content — whichever leg is talking right now. */
   log: { title: string; subtitle: string; lines: Array<string> } | null
+  /** The full-width bar row above tasks+log: `current` = the unit being
+   *  worked right now (the per-scene progress-log percent on the Daz leg, the
+   *  stepwise open-project-then-networks scale on the Houdini leg); `overall`
+   *  appears only when the leg spans more than one unit (several scenes /
+   *  several networks) — the two-level display. */
+  bars: { current: ExportProgressBar; overall?: ExportProgressBar } | null
 }
 
 /** How long the fly-out plays before the slot collapses, and how long the
@@ -138,12 +153,46 @@ export function ExportActivityLog({
   )
 }
 
-export function ExportPipelinePanel({ view }: { view: ExportPipelineView }) {
-  if (view.tasks.length === 0 && !view.log) return null
+/** One progress meter. The fill wears the LEG's color (the entity, like its
+ *  cards); every text stays in muted ink. `emphasis` = the overall (top) bar
+ *  of a two-level display, slightly taller. */
+function ProgressBar({ bar, emphasis = false }: { bar: ExportProgressBar; emphasis?: boolean }) {
+  const percent = Math.min(100, Math.max(0, bar.percent))
   return (
-    <div className="flex items-stretch gap-2">
-      {view.tasks.length > 0 && <ExportTaskCards tasks={view.tasks} />}
-      {view.log && <ExportActivityLog log={view.log} />}
+    <div data-progressbar={emphasis ? 'overall' : 'current'} data-percent={Math.round(percent)}>
+      <div className="mb-0.5 flex items-baseline justify-between gap-2 text-[11px] text-muted-foreground">
+        <span className="truncate">{bar.label}</span>
+        <span className="shrink-0 tabular-nums">{Math.round(percent)}%</span>
+      </div>
+      <div className={cn('overflow-hidden rounded-full bg-muted', emphasis ? 'h-2' : 'h-1.5')}>
+        <div
+          className={cn(
+            'h-full rounded-full transition-[width] duration-500',
+            bar.kind === 'daz' ? 'bg-emerald-600' : 'bg-orange-600',
+          )}
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+    </div>
+  )
+}
+
+export function ExportPipelinePanel({ view }: { view: ExportPipelineView }) {
+  if (view.tasks.length === 0 && !view.log && !view.bars) return null
+  return (
+    <div className="flex flex-col gap-2">
+      {view.bars && (
+        <div className="flex flex-col gap-1.5">
+          {view.bars.overall && <ProgressBar bar={view.bars.overall} emphasis />}
+          <ProgressBar bar={view.bars.current} />
+        </div>
+      )}
+      {(view.tasks.length > 0 || view.log) && (
+        <div className="flex items-stretch gap-2">
+          {view.tasks.length > 0 && <ExportTaskCards tasks={view.tasks} />}
+          {view.log && <ExportActivityLog log={view.log} />}
+        </div>
+      )}
     </div>
   )
 }

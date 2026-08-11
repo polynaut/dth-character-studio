@@ -207,6 +207,10 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
     'data-task-status',
     'active',
   )
+  // The meter row above: a single-scene run shows ONE bar, riding the same
+  // per-scene percent the log lines carry — no overall bar for a one-unit leg.
+  await expect(page.locator('[data-progressbar="current"]')).toHaveAttribute('data-percent', '40')
+  await expect(page.locator('[data-progressbar="overall"]')).toHaveCount(0)
   // …and picked up + finished by the Runner. NO finish toast yet — the batch
   // outcome is stashed for the one end-of-everything report, and only the
   // transient hand-over info shows while Houdini takes over.
@@ -277,6 +281,11 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
   // header's scene tag, so the import line is the log window's unique marker.
   await expect(page.getByText('import: Kira.dth')).toBeVisible()
   await expect(page.getByText('Houdini 1/1')).toBeVisible()
+  // The Houdini meter is STEPWISE — open-project + each network, all equal
+  // (hython's console has no percents to read): 1 network → 2 steps, the open
+  // one done → 50%. One network = one bar, no overall.
+  await expect(page.locator('[data-progressbar="current"]')).toHaveAttribute('data-percent', '50')
+  await expect(page.locator('[data-progressbar="overall"]')).toHaveCount(0)
 
   // 456.py works through it and reports — and NOW the one summary toast fires,
   // covering the whole process: the Daz leg and the Houdini leg, per line.
@@ -293,8 +302,9 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
   // in the character folder for good.
   await expect.poll(() => fileKeys(page)).not.toContain(HOUDINI_JOB)
   expect(await fileKeys(page)).not.toContain(HOUDINI_RESULT)
-  // The run is over — the task cards left with it.
+  // The run is over — the task cards and the meters left with it.
   await expect(page.locator('[data-task]')).toHaveCount(0)
+  await expect(page.locator('[data-progressbar]')).toHaveCount(0)
 
   expect(await unhandledCommands(page)).toEqual([])
 })
