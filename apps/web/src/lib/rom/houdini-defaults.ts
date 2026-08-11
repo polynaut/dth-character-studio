@@ -19,17 +19,52 @@
  * value sits BELOW the exports, so it could never help. `$HIP` still wins for
  * paths inside the houdini folder, so repointing `$JOB` disturbs nothing.
  *
- * `$JOB` is the only row: `$HIP` is derived from the scene's own location and
- * was never actionable, so reporting it was noise (dropped in v0.68).
+ * The scene's **FPS** is the second value of this kind, and it is scene state in
+ * exactly the same way. `$HIP` is not: it is derived from the scene's own
+ * location and was never actionable, so reporting it was noise (dropped in
+ * v0.68).
  *
  * The rows are computed here rather than in the panel so the decision is
  * testable, and so the "does this project differ?" comparison is the same one
  * `op_defaults` (`houdini-runtime/material_utils.py`) makes before it writes.
  */
 
-/** A folder-valued setting the studio can check, and sometimes repair. */
+/**
+ * The timeline the DazToHue pipeline runs at.
+ *
+ * A ROM is one pose per FRAME, and the Daz side emits its keys in SECONDS —
+ * `apps/desktop/src/poses.rs` turns a `.duf`'s key times back into frames with
+ * the same 30, and the PoseAsset CSV names frame numbers. So a Houdini scene on
+ * Houdini's own default (24) lands every imported ROM frame somewhere between
+ * two of its own, and the CSV's frame numbers stop naming the poses they were
+ * generated for.
+ *
+ * DazToHue itself sets this: per mrpdean, *"the DTH import node sets the FPS for
+ * you when you load the files"*. That is the load-bearing detail for the studio —
+ * it means the value is only ever wrong where that trigger has not run, which is
+ * precisely a project the studio generated HEADLESSLY (hython builds the network
+ * and sets the parms directly; nothing loads a file), and a project the user
+ * built before importing anything. Both are covered here: generation sets it
+ * (`create_houdini_project`), the scan reads it back, and this checks it.
+ */
+export const DTH_FPS = 30
+
+/** Whether a scanned FPS is the pipeline's. Tolerant because Houdini's FPS is a
+ *  float (23.976, 29.97 are real values) and an exact `===` on a value that made
+ *  the JSON round trip is the wrong kind of strict. */
+export function sameFps(value: number, expected: number = DTH_FPS): boolean {
+  return Number.isFinite(value) && Math.abs(value - expected) < 0.001
+}
+
+/** How a scanned FPS reads on screen — `30` rather than `30.0`, but `29.97`
+ *  intact. */
+export function formatFps(value: number): string {
+  return Number.isFinite(value) ? String(Math.round(value * 1000) / 1000) : ''
+}
+
+/** A per-project setting the studio can check, and sometimes repair. */
 export interface DefaultsRow {
-  key: 'job' | 'csv'
+  key: 'job' | 'fps' | 'csv'
   label: string
   /** What the scene carries today ('' when the scan could not read it). */
   current: string
@@ -79,7 +114,14 @@ export function sameFolder(a: string, b: string): boolean {
  * next to an action that could never run.
  */
 export function defaultsRowsFor(
-  scanned: { job: string; prefill?: { fillable: ReadonlyArray<string>; missing: ReadonlyArray<string> } },
+  scanned: {
+    job: string
+    /** The scene's FPS. `0` = the scan has no value (an older stored scan, or a
+     *  project it could not open) and the row reads `unknown` — never
+     *  `differs`, which would offer to write over something nobody read. */
+    fps?: number
+    prefill?: { fillable: ReadonlyArray<string>; missing: ReadonlyArray<string> }
+  },
   charFolder: string,
 ): Array<DefaultsRow> {
   const matches = sameFolder(scanned.job, charFolder)
@@ -97,6 +139,26 @@ export function defaultsRowsFor(
       reason: '',
     },
   ]
+  // The timeline. A scan that has no number for it (0) says so rather than
+  // guessing — the same rule as an unreadable `$JOB`.
+  const fps = scanned.fps
+  if (fps !== undefined) {
+    const fpsKnown = Number.isFinite(fps) && fps > 0
+    const fpsMatches = sameFps(fps)
+    const fpsStatus = !fpsKnown ? 'unknown' : fpsMatches ? 'matches' : 'differs'
+    rows.push({
+      key: 'fps',
+      label: 'Timeline (FPS)',
+      current: fpsKnown ? formatFps(fps) : '',
+      expected: formatFps(DTH_FPS),
+      status: fpsStatus,
+      verdict: fpsStatus === 'unknown' ? 'could not be read' : fpsStatus,
+      matches: fpsMatches,
+      // Repaired by the same run as `$JOB` — one file open, one backup.
+      actionable: true,
+      reason: '',
+    })
+  }
   // The PoseAsset CSV path — reported only once the scan has an opinion about
   // it. Three states, and the middle one is why this row exists at all: the
   // parameter arrived in a later DazToHue, so "not filled in" and "your version
@@ -224,17 +286,26 @@ export function planRepath(
 }
 
 /**
- * The projects a repair would actually write — those whose `$JOB` differs.
+ * The projects a repair would actually write — those whose `$JOB` or FPS
+ * differs.
  *
- * A project the scan could not read, or that reported no `$JOB` at all, is
- * never queued: its value is UNKNOWN, not wrong, and writing one would be a
- * guess over something nobody managed to look at.
+ * A project the scan could not read, or that reported no `$JOB`/no FPS at all,
+ * is never queued for THAT value: it is UNKNOWN, not wrong, and writing one
+ * would be a guess over something nobody managed to look at. The two are judged
+ * independently, so a project with a correct `$JOB` and a 24 fps timeline is
+ * still queued — one run opens the file once and fixes whichever of the two is
+ * actually off (`op_defaults` compares each before it writes).
  */
 export function projectsNeedingRepair(
-  projects: ReadonlyArray<{ hipPath: string; ok: boolean; job: string }>,
+  projects: ReadonlyArray<{ hipPath: string; ok: boolean; job: string; fps?: number }>,
   charFolder: string,
 ): Array<string> {
   return projects
-    .filter((p) => p.ok && p.job.trim() !== '' && !sameFolder(p.job, charFolder))
+    .filter((p) => {
+      if (!p.ok) return false
+      const staleJob = p.job.trim() !== '' && !sameFolder(p.job, charFolder)
+      const staleFps = p.fps !== undefined && p.fps > 0 && !sameFps(p.fps)
+      return staleJob || staleFps
+    })
     .map((project) => project.hipPath)
 }

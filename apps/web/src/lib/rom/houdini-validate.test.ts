@@ -20,6 +20,7 @@ function scanned(over: Partial<MaterialScanProject> = {}): MaterialScanProject {
     error: '',
     nodes: [],
     job: CHAR,
+    fps: 30,
     refs: { collapsible: 0, foreign: 0, broken: [], hipRelative: [] },
     prefill: { fillable: [], missing: [] },
     ...over,
@@ -59,6 +60,28 @@ describe('validateHoudiniProject', () => {
   it('accepts a $JOB that differs only by separator or case', () => {
     expect(validateHoudiniProject(scanned({ job: 'd:\\proj\\kira' }), CHAR).ok).toBe(true)
     expect(validateHoudiniProject(scanned({ job: `${CHAR}/` }), CHAR).ok).toBe(true)
+  })
+
+  it('catches a timeline that is not the pipeline’s 30 fps', () => {
+    // Houdini's own default is 24. A ROM is one pose per FRAME at 30, so every
+    // imported frame would land between two of the scene's own.
+    const health = validateHoudiniProject(scanned({ fps: 24 }), CHAR)
+    expect(health.ok).toBe(false)
+    expect(health.problems.map((p) => p.code)).toEqual(['fps-differs'])
+    expect(health.summary).toContain('24')
+    expect(health.summary).toContain('30')
+  })
+
+  it('an FPS the scan has no value for is never a fault', () => {
+    // 0 is "nobody read it" — a project that would not open, or an entry stored
+    // before the scan reported FPS at all. Badging that would invent a fault,
+    // and the repair skips it for the same reason.
+    expect(validateHoudiniProject(scanned({ fps: 0 }), CHAR).ok).toBe(true)
+    // Float noise is not a difference either — Houdini's FPS is a float that
+    // made a JSON round trip.
+    expect(validateHoudiniProject(scanned({ fps: 30.0000001 }), CHAR).ok).toBe(true)
+    // …but a real broadcast rate IS one: 29.97 is not 30.
+    expect(validateHoudiniProject(scanned({ fps: 29.97 }), CHAR).ok).toBe(false)
   })
 
   it('reports unresolved import paths and blank parms, and names them', () => {

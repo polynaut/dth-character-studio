@@ -1,12 +1,12 @@
-import { sameFolder } from './houdini-defaults.ts'
+import { DTH_FPS, formatFps, sameFolder, sameFps } from './houdini-defaults.ts'
 
 import type { MaterialScanProject } from './api/native-types.ts'
 
 /**
  * Is this Houdini project actually wired up?
  *
- * Everything here is read off a scan the studio already has (`job`, `refs`,
- * `prefill` on {@link MaterialScanProject}) — no extra hython trip. The point is
+ * Everything here is read off a scan the studio already has (`job`, `fps`,
+ * `refs`, `prefill` on {@link MaterialScanProject}) — no extra hython trip. The point is
  * the card badge: a project that will fail when you open it should say so on the
  * character page, not the first time an import comes up empty in Houdini.
  *
@@ -26,7 +26,14 @@ import type { MaterialScanProject } from './api/native-types.ts'
 /** One thing wrong with a project. `code` is for tests and styling, `label` is
  *  what the card's tooltip shows. */
 export interface HoudiniProjectProblem {
-  code: 'unreadable' | 'job-unknown' | 'job-differs' | 'broken-refs' | 'hip-relative' | 'blank-parms'
+  code:
+    | 'unreadable'
+    | 'job-unknown'
+    | 'job-differs'
+    | 'fps-differs'
+    | 'broken-refs'
+    | 'hip-relative'
+    | 'blank-parms'
   label: string
 }
 
@@ -70,6 +77,19 @@ export function validateHoudiniProject(
     problems.push({
       code: 'job-differs',
       label: `$JOB points at ${project.job} instead of the character folder.`,
+    })
+  }
+
+  // The timeline. Only when the scan actually READ one: `0` is an older stored
+  // scan or a project that never opened, and badging that would be inventing a
+  // fault. DazToHue's own import node sets this when it loads the files (per
+  // mrpdean), so a wrong value here is a project where that has not happened
+  // yet — including one the studio generated headlessly, where nothing loads a
+  // file at all.
+  if (project.fps > 0 && !sameFps(project.fps)) {
+    problems.push({
+      code: 'fps-differs',
+      label: `The timeline runs at ${formatFps(project.fps)} fps instead of ${DTH_FPS} — the ROM is one pose per frame at ${DTH_FPS}.`,
     })
   }
 

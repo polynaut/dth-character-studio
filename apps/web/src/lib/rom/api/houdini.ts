@@ -29,12 +29,14 @@ import type { Character } from '@dth/rom'
 import houdiniRunnerScript from '../houdini-runtime/456.py?raw'
 import { characterScenesRoot } from './execute'
 import { normalizeRelFolder } from '../library'
+import { DTH_FPS } from '../houdini-defaults.ts'
 import { normalizePathLower } from '#/lib/path.ts'
 import { charScopeInput, charsRoot, joinPath, locateCharacter, resolveProject } from './core'
 
 // "Generate project": create a ready-made DazToHue Houdini project for a
 // character. hython starts a fresh scene, bakes $JOB to the character's ONE
-// shared `houdini-project` folder, creates the DazToHue network FROM THE USER'S
+// shared `houdini-project` folder, puts the timeline on the pipeline's 30 fps,
+// creates the DazToHue network FROM THE USER'S
 // INSTALLED HDA (no template scene: a template would rot against newer
 // Houdini/DazToHue versions; instantiating the installed asset is always
 // current) and saves <name>.hiplc beside that folder. Path resolution lives
@@ -246,6 +248,10 @@ export interface GeneratedHoudiniProject {
    *  installed HDA predates a parm (each is skipped when absent) or the
    *  network wasn't built. */
   prefilled: Array<string>
+  /** The timeline FPS the saved scene actually carries — READ BACK off
+   *  `hou.fps()` after the set, never the value we asked for, so the caller can
+   *  report a fact. `0` = hython could not answer. */
+  fps: number
 }
 
 export async function generateHoudiniProject({
@@ -372,7 +378,7 @@ export async function generateHoudiniProject({
   })
 
   // zod-parsed, not a bare invoke<T>() cast (primitive
-  // "<created>|<visible>|<prefilled>" report — no fixture needed).
+  // "<created>|<visible>|<prefilled>|<fps>" report — no fixture needed).
   const report = z.string().parse(
     await invoke('create_houdini_project', {
       request: {
@@ -381,15 +387,25 @@ export async function generateHoudiniProject({
         scenePath,
         houdiniPrefDir,
         prefillJson: JSON.stringify(prefill),
+        // The timeline. DazToHue's import node sets this itself WHEN IT LOADS
+        // THE FILES (mrpdean) — and a headless generation never loads one: the
+        // network is instantiated and its parms set directly, so that trigger
+        // cannot fire and the scene would save on Houdini's own 24 while the
+        // ROM wired into it is 30.
+        fps: DTH_FPS,
       },
     }),
   )
-  const [created = 'none', visible = 'none', prefilledRaw = 'none'] = report.split('|')
+  const [created = 'none', visible = 'none', prefilledRaw = 'none', fpsRaw = 'none'] =
+    report.split('|')
   return {
     scenePath,
     networkAdded: created !== 'none',
     visibleTypes: visible === 'none' ? [] : visible.split(',').filter(Boolean),
     prefilled: prefilledRaw === 'none' ? [] : prefilledRaw.split(',').filter(Boolean),
+    // An older report (or a hython that could not answer) has no fourth field —
+    // 0 reads as "unknown" everywhere, never as "wrong".
+    fps: Number.parseFloat(fpsRaw) || 0,
   }
 }
 

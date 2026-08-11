@@ -62,6 +62,14 @@ says so — and the **character name** is set with them. A parameter
 your installed DazToHue version doesn't have yet is simply skipped (the CSV
 path needs the release with the CSV-driven PoseAsset node).
 
+The new scene's **timeline is set to 30 fps**, the rate the ROM is built at —
+one pose per frame. DazToHue's import node sets this itself *when it loads the
+files*, and a generated project never loads one (the studio builds the network
+and fills its parameters directly), so the studio sets it up front. Houdini's
+own default is 24, which would put every imported ROM frame between two of the
+scene's own — and the PoseAsset CSV names frame numbers. If the generated scene
+comes back on some other rate, the studio says so instead of assuming.
+
 **Which scene?** A character with several Daz scenes gets a **Daz scene to
 import** picker in the dialog — from the **second** project on. Each scene
 exports into its own folder, so the pick decides which export set the imports
@@ -130,21 +138,24 @@ with the reason in the tooltip:
 | What it says | What it means |
 | --- | --- |
 | `$JOB` points at … | the project's Set Project is another character's folder — every path it stores collapses against the wrong root |
+| the timeline runs at … | the scene is not on the ROM's 30 fps (Houdini's own default is 24), so imported ROM frames don't land on the scene's frames |
 | import paths do not resolve | a `.dth`/FBX/Alembic reference points at a file that isn't there |
 | Not filled in yet | a DazToHue parameter the studio knows the value for is still blank |
 
 All of them are repaired from the
 [**Utils** drawer's *General* tab](./houdini-utils.md#the-general-tab)
-(**Repair $JOB**, **Make paths portable**, **Fill network**) — which is exactly
-what makes **copying** a project workable: a copy arrives carrying the source's
-`$JOB` and file references, the card tells you so, and three buttons fix it.
-That drawer also copies a **material or skeleton setup** from one project into
-another; it has [its own page](./houdini-utils.md).
+(**Repair project settings**, **Make paths portable**, **Fill network**) — which
+is exactly what makes **copying** a project workable: a copy arrives carrying the
+source's `$JOB` and file references, the card tells you so, and three buttons fix
+it. That drawer also copies a **material or skeleton setup** from one project
+into another; it has [its own page](./houdini-utils.md).
 
 > [!NOTE]
-> The checks cover `$JOB`, the DazToHue import paths and blank parameters. They
-> do **not** verify material texture paths — a clean card is not a promise that
-> every path in the scene resolves.
+> The checks cover `$JOB`, the timeline, the DazToHue import paths and blank
+> parameters. They do **not** verify material texture paths — a clean card is
+> not a promise that every path in the scene resolves. A project the studio has
+> never managed to read a value from is reported as *could not be read*, never
+> as wrong: an unknown is not a fault, and nothing repairs one.
 
 ## `$DAZ3D_LIB` — your Daz library, as a variable
 

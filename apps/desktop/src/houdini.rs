@@ -89,9 +89,10 @@ pub fn launch_houdini_job(request: LaunchHoudiniJobRequest) -> Result<(), String
 
 /// Create a ready-made Houdini project for a character: `hython` starts a
 /// fresh scene, bakes `$JOB` to the project folder (`hou.putenv` — the
-/// programmatic File → Set Project, saved with the hip), builds the DazToHue
-/// network by RUNNING THE DAZTOHUE SHELF TOOL'S OWN SCRIPT, and saves the
-/// scene.
+/// programmatic File → Set Project, saved with the hip), puts the timeline on
+/// the pipeline's FPS (`hou.setFps` — see `fps` below for why this is the
+/// studio's job here and nowhere else), builds the DazToHue network by RUNNING
+/// THE DAZTOHUE SHELF TOOL'S OWN SCRIPT, and saves the scene.
 ///
 /// No template scene and no synthetic network on purpose: a template would
 /// rot against newer Houdini/DazToHue releases, and a hand-built
@@ -141,16 +142,28 @@ pub struct CreateHoudiniProjectRequest {
     /// so no value ever has to be escaped into the Python source. Empty =
     /// prefill nothing.
     pub prefill_json: String,
+    /// The timeline FPS to bake into the new scene — the pipeline's 30
+    /// (`DTH_FPS` in `lib/rom/houdini-defaults.ts`, which is the ONE place the
+    /// studio states it). 0 = leave Houdini's default alone.
+    ///
+    /// Why the studio sets it at all, when DazToHue's import node does it
+    /// itself: per mrpdean, that node sets the FPS *when it loads the files* —
+    /// and nothing loads a file here. hython instantiates the network and sets
+    /// its parms directly, so the trigger never fires and the scene would be
+    /// saved on Houdini's own 24 while the ROM it is wired to is 30.
+    pub fps: f64,
 }
 
-/// Returns `"<created>|<visible>|<prefilled>"`: `Shelf/<tool>` when the shelf
-/// tool built the network ('none' when it couldn't — the scene saved empty,
-/// `$JOB` still baked), every DazToHue-ish node type hython could see across
-/// ALL categories (comma-joined, 'none' when zero) — the UI surfaces the
+/// Returns `"<created>|<visible>|<prefilled>|<fps>"`: `Shelf/<tool>` when the
+/// shelf tool built the network ('none' when it couldn't — the scene saved
+/// empty, `$JOB` still baked), every DazToHue-ish node type hython could see
+/// across ALL categories (comma-joined, 'none' when zero) — the UI surfaces the
 /// list so a missing network is diagnosable (otls not loading vs the shelf
-/// tool failing headless) — and the `node.parm` names the prefill actually
+/// tool failing headless) — the `node.parm` names the prefill actually
 /// set (comma-joined, 'none' when zero: parms missing on an older HDA are
-/// skipped one by one, never an error).
+/// skipped one by one, never an error), and the FPS the saved scene ACTUALLY
+/// carries, read back off `hou.fps()` rather than echoing the request ('none'
+/// when hython could not answer).
 #[tauri::command(async)]
 pub fn create_houdini_project(request: CreateHoudiniProjectRequest) -> Result<String, String> {
     let escape = |s: &str| s.replace('\\', "/").replace('\'', "\\'");
@@ -169,6 +182,18 @@ pub fn create_houdini_project(request: CreateHoudiniProjectRequest) -> Result<St
             "import hou\n",
             "hou.hipFile.clear(suppress_save_prompt=True)\n",
             "hou.putenv('JOB', '{job}')\n",
+            // The timeline, BEFORE the network is built: the scene is empty
+            // here, so there is not a keyframe in it for `setFps` to re-time —
+            // whatever it would do to an existing animation cannot apply. Read
+            // back rather than assumed, so what the UI reports is the scene's
+            // own answer and not the number we asked for.
+            "scene_fps = 0.0\n",
+            "try:\n",
+            "    if {fps} > 0:\n",
+            "        hou.setFps({fps})\n",
+            "    scene_fps = float(hou.fps())\n",
+            "except Exception:\n",
+            "    scene_fps = 0.0\n",
             "added = ''\n",
             "visible = []\n",
             "try:\n",
@@ -245,9 +270,11 @@ pub fn create_houdini_project(request: CreateHoudiniProjectRequest) -> Result<St
             "print('DTH_NETWORK=' + (added or 'none'))\n",
             "print('DTH_TYPES=' + (','.join(visible) or 'none'))\n",
             "print('DTH_PREFILL=' + (','.join(prefilled) or 'none'))\n",
+            "print('DTH_FPS=' + str(scene_fps))\n",
         ),
         job = escape(&request.job_dir),
         scene = escape(&request.scene_path),
+        fps = request.fps,
     );
     let mut command = std::process::Command::new(&request.hython_path);
     command.arg("-c").arg(python);
@@ -302,10 +329,11 @@ pub fn create_houdini_project(request: CreateHoudiniProjectRequest) -> Result<St
             .unwrap_or_else(|| "none".to_string())
     };
     Ok(format!(
-        "{}|{}|{}",
+        "{}|{}|{}|{}",
         marker("DTH_NETWORK="),
         marker("DTH_TYPES="),
-        marker("DTH_PREFILL=")
+        marker("DTH_PREFILL="),
+        marker("DTH_FPS=")
     ))
 }
 

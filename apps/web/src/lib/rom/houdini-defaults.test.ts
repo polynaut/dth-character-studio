@@ -79,6 +79,46 @@ describe('defaultsRowsFor', () => {
   })
 })
 
+// The timeline row. DazToHue's import node sets the FPS when it LOADS the files
+// (mrpdean), so this is about the projects where that has not happened: one the
+// studio generated headlessly, and one built by hand before any import.
+describe('defaultsRowsFor — the timeline row', () => {
+  const rowFor = (fps: number | undefined) =>
+    defaultsRowsFor({ job: ITA, fps }, ITA).find((row) => row.key === 'fps')
+
+  it('is absent when the scan has no FPS at all', () => {
+    // An older stored scan predates the field entirely — it must not produce a
+    // verdict about something nobody read.
+    expect(rowFor(undefined)).toBeUndefined()
+  })
+
+  it('flags Houdini’s own 24 as differing, and is actionable', () => {
+    const row = rowFor(24)
+    expect(row?.status).toBe('differs')
+    expect(row?.current).toBe('24')
+    expect(row?.expected).toBe('30')
+    expect(row?.actionable).toBe(true)
+  })
+
+  it('reports 30 as matching', () => {
+    expect(rowFor(30)?.status).toBe('matches')
+    expect(rowFor(30)?.matches).toBe(true)
+  })
+
+  it('calls a 0 unknown, not different', () => {
+    // 0 is what a project that would not open reports. "differs" invites a
+    // repair over a value nobody managed to read.
+    expect(rowFor(0)?.status).toBe('unknown')
+    expect(rowFor(0)?.verdict).toBe('could not be read')
+    expect(rowFor(0)?.current).toBe('')
+  })
+
+  it('keeps a real broadcast rate legible rather than rounding it away', () => {
+    expect(rowFor(29.97)?.status).toBe('differs')
+    expect(rowFor(29.97)?.current).toBe('29.97')
+  })
+})
+
 describe('projectsNeedingRepair', () => {
   const projects = [
     { hipPath: `${ITA_HIP_DIR}/PlaygroundAssets_Ita.hiplc`, ok: true, job: ITA_STALE_JOB },
@@ -107,6 +147,24 @@ describe('projectsNeedingRepair', () => {
 
   it('returns nothing once every project is repaired', () => {
     expect(projectsNeedingRepair([{ hipPath: 'a.hiplc', ok: true, job: ITA }], ITA)).toEqual([])
+  })
+
+  it('queues a project whose $JOB is fine but whose timeline is not', () => {
+    // The two are judged independently: one run opens the file once and writes
+    // whichever of them is actually off. Missing this is what would leave the
+    // card badging a 24 fps project while the button sat disabled.
+    expect(
+      projectsNeedingRepair([{ hipPath: 'a.hiplc', ok: true, job: ITA, fps: 24 }], ITA),
+    ).toEqual(['a.hiplc'])
+    expect(
+      projectsNeedingRepair([{ hipPath: 'a.hiplc', ok: true, job: ITA, fps: 30 }], ITA),
+    ).toEqual([])
+  })
+
+  it('never queues a project whose FPS could not be read', () => {
+    expect(
+      projectsNeedingRepair([{ hipPath: 'a.hiplc', ok: true, job: ITA, fps: 0 }], ITA),
+    ).toEqual([])
   })
 })
 

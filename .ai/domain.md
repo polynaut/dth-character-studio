@@ -44,6 +44,35 @@ frames 0–327 (328 frames), GP block @ 328–431 (104 frames), custom sections 
 @ 432. DK is 54 frames; the PHY preset block is 43. `generate.test.ts` pins these
 offsets byte-identically — if a generation change moves them, the change is wrong.
 
+### The rate those frame numbers mean: 30 fps
+
+A frame number is only a pose at ONE rate. The pipeline's is **30 fps**, and it
+shows up in three places that must never disagree:
+
+- `DTH_FPS` in `apps/desktop/src/poses.rs` — a Daz `.duf` keys in SECONDS, so a
+  pose preset's length is `round(maxKeyTime × 30) + 1` frames.
+- The Daz side writes the ROM at 30 (the runtime's timeline math, `.DthUtils.dsa`).
+- `DTH_FPS` in `apps/web/src/lib/rom/houdini-defaults.ts` — the ONE place the
+  studio states it for the Houdini leg: what generation bakes into a new scene,
+  what the project check compares against, what the repair writes.
+
+**Houdini's own default is 24**, so a scene nobody set lands every imported ROM
+frame between two of its own while the PoseAsset CSV names frames generated at 30.
+Per mrpdean, **DazToHue's import node sets the scene FPS itself — when it LOADS
+the files.** That is the whole shape of the studio's involvement: the trigger
+covers the interactive case and cannot cover a HEADLESS generation, where hython
+instantiates the network and sets its parms directly and no file is ever loaded.
+So `create_houdini_project` calls `hou.setFps` on the empty scene (before the
+network exists — no keyframes to re-time), reads `hou.fps()` back and reports the
+scene's own answer rather than the value it asked for; `op_scan` reads it per
+project; `validateHoudiniProject` badges a mismatch; `op_defaults` repairs it
+beside `$JOB`. A scan with **no** value reports `0` and is treated as UNKNOWN
+everywhere — never as wrong (an older stored scan predates the field).
+
+What `hou.setFps` does to keyframes in an ALREADY animated scene is Houdini
+behaviour this repo has not measured — the repair says so, and takes its rolling
+backup first.
+
 ## Generated artifacts (per character)
 
 `generateAll()` (`packages/rom/src/generate.ts`) returns `{fileName, content, target: 'daz'|'houdini'}`:

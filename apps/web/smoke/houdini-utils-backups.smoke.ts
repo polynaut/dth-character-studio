@@ -52,10 +52,12 @@ async function repairJob(page: Page) {
   await expect(drawer.getByText('Project folder ($JOB)')).toBeVisible()
   await expect(drawer.getByText('differs')).toBeVisible()
 
-  await drawer.getByRole('button', { name: 'Repair $JOB' }).click()
-  const confirm = page.getByRole('dialog', { name: 'Repair $JOB on these projects?' })
+  await drawer.getByRole('button', { name: 'Repair project settings' }).click()
+  const confirm = page.getByRole('dialog', { name: 'Repair the project settings?' })
   await confirm.getByRole('button', { name: 'Run', exact: true }).click()
-  await expect(page.getByText(/\$JOB repaired on 1 project/)).toBeVisible()
+  // Named by what the run actually rewrote: this project's timeline was already
+  // 30, so the toast must not claim it touched that too.
+  await expect(page.getByText(/Repaired \$JOB on 1 project/)).toBeVisible()
   return drawer
 }
 

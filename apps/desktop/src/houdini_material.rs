@@ -116,6 +116,11 @@ pub struct MaterialScanProject {
     /// nodes: opening a `.hip` costs tens of seconds and the General tab must
     /// not pay it twice. Empty only when the project could not be read.
     pub job: String,
+    /// The scene's timeline FPS, read in that same pass. `0` = no value: the
+    /// project could not be opened. The DazToHue pipeline is 30 (one ROM pose
+    /// per frame), and DazToHue's own import node sets it when it loads the
+    /// files — so a wrong value means that has not happened here yet.
+    pub fps: f64,
     /// What a repath would do to this project's stored file references.
     pub refs: ProjectRefInfo,
     /// Which DazToHue parms the studio could fill here, and which this
@@ -257,13 +262,17 @@ pub struct HoudiniRefreshResult {
     pub backup_path: String,
 }
 
-/// What the `defaults` operation did (or would do) to one project's `$JOB`.
+/// What the `defaults` operation did (or would do) to one project's `$JOB` and
+/// timeline FPS.
 ///
 /// `$JOB` decides whether Houdini's file picker can collapse a chosen path to a
 /// variable: a path above `$HIP` collapses only when it sits under `$JOB`. A
 /// pre-v0.64 project carries `<char>/houdini/houdini-project`, which is BELOW
 /// the exports and so can never help — every hand-picked export came back
 /// absolute. Repointing it at the character folder is that migration.
+///
+/// The FPS travels with it because both are scene state in the same file: one
+/// open, one rolling backup, one save.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HoudiniDefaultsResult {
@@ -274,9 +283,18 @@ pub struct HoudiniDefaultsResult {
     pub previous_job: String,
     /// The `$JOB` it carries now — for a dry run, what it WOULD carry.
     pub job: String,
+    /// The FPS the scene carried before the run (0 = unreadable, left alone).
+    pub previous_fps: f64,
+    /// The FPS it carries now — for a dry run, what it WOULD carry.
+    pub fps: f64,
     /// false = already correct, so nothing was written. A project on the right
-    /// folder is reported and left alone rather than rewritten for nothing.
+    /// folder AND the right timeline is reported and left alone rather than
+    /// rewritten for nothing. The OR of the two flags below.
     pub changed: bool,
+    /// Which of the two this run actually rewrote — so the UI can report what
+    /// happened rather than claiming both.
+    pub changed_job: bool,
+    pub changed_fps: bool,
     /// Where the pre-repair state was backed up (empty for a dry run, and for
     /// a project that needed no change).
     pub backup_path: String,

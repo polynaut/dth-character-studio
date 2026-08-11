@@ -48,6 +48,7 @@ function scan(over: Record<string, unknown> = {}) {
     error: '',
     nodes: [],
     job: P.charFolder,
+    fps: 30,
     refs: { collapsible: 0, foreign: 0, broken: [], hipRelative: [] },
     prefill: { fillable: [], missing: [] },
     ...over,
@@ -91,6 +92,26 @@ test('a project whose $JOB points elsewhere is flagged on its card', async ({ pa
 
 test('a wired project shows no badge', async ({ page }) => {
   await openWithStore(page, scan())
+  await expect(page.getByText('Needs attention')).toHaveCount(0)
+})
+
+test('a project on Houdini’s own 24 fps is flagged on its card', async ({ page }) => {
+  // The ROM is one pose per FRAME at 30. DazToHue's import node sets the scene's
+  // FPS when it loads the files, so a project reading 24 is one where that has
+  // not happened — including one generated headlessly, where nothing loads a file.
+  await openWithStore(page, scan({ fps: 24 }))
+
+  const badge = page.getByText('Needs attention')
+  await expect(badge).toBeVisible()
+  await expect(badge).toHaveAttribute('title', /timeline runs at 24 fps instead of 30/)
+})
+
+test('a stored scan from before the FPS was read is not flagged', async ({ page }) => {
+  // The compatibility case: an entry written by an older build carries no `fps`
+  // at all, which reads as 0 = nobody looked. Badging that would invent a fault
+  // for every project cached before this shipped.
+  const { fps: _dropped, ...withoutFps } = scan()
+  await openWithStore(page, withoutFps)
   await expect(page.getByText('Needs attention')).toHaveCount(0)
 })
 
