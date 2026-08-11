@@ -31,9 +31,13 @@ What it drives (all of it measured off the installed HDA, not assumed):
   * 456.py fires after the SCENE loads but before the main window ever paints
     (measured 2026-08-03, the first live run): work done inline here blocks the
     window, so the whole batch ground through inside startup and Houdini
-    "opened" only after the last node finished. Hence the deferral at the
-    bottom — the batch waits for the first event-loop idle, so Houdini is
-    visibly open and interactive before the first export starts.
+    "opened" only after the last node finished. And `hdefereval` alone does not
+    fix that — startup pumps the event loop, so the deferred callback plus a
+    fixed timer can still fire pre-paint on a slow scene load, and with
+    `closeWhenDone` the run is then completely invisible (measured 2026-08-11).
+    Hence the launch() at the bottom: defer, then WAIT FOR THE MAIN WINDOW to
+    report visible, then breathe — Houdini is visibly open and interactive
+    before the first export starts.
 
 The scene is never saved. Any parm this touches is restored afterwards. With
 `closeWhenDone` in the job (the DTH Export flow always sets it), the instance
@@ -336,22 +340,35 @@ def main():
 # the user watches the whole export against a clay-white figure.
 STARTUP_BREATHER_MS = 10000
 
+# The main-window wait below polls at this cadence, bounded so a session whose
+# window never reports visible still exports instead of idling forever.
+WINDOW_POLL_MS = 500
+WINDOW_WAIT_ATTEMPTS = 240  # × 500 ms = 2 minutes
+
 
 def launch():
-    """Run the batch AFTER Houdini has finished opening, not during.
+    """Run the batch AFTER Houdini's main window is visibly open, not during
+    startup.
 
     456.py executes inside the startup sequence, before the main window paints
     — inline work here holds the whole window back (the batch ran to the last
     node against a blank screen on the first live run). `hdefereval
     .executeDeferred` is Houdini's own "run this once the UI is up and idle"
-    idiom, so the window opens first; a Qt single-shot then adds
-    STARTUP_BREATHER_MS on top (a sleep would freeze the very event loop this
-    defers around) before the exports run in a visible, painted session. The
-    studio's result-file watch covers progress either way ("Houdini opening…"
-    simply lasts until the batch writes its first state). Without hdefereval
-    (hython / no UI event loop) there is no window to wait for — run inline,
-    exactly as before. A session with no job keeps the do-nothing-immediately
-    promise: nothing is scheduled at all."""
+    idiom — but it is NOT a paint guarantee: the startup sequence pumps the
+    event loop (the splash screen updates through it), so the deferred callback
+    can fire while the scene is still loading, and a fixed timer from there
+    LOSES THE RACE against a slow first load — the batch then seizes the UI
+    thread before the window ever paints, and with `closeWhenDone` the whole
+    run comes and goes without a window (measured 2026-08-11: a four-minute
+    export, delivered, fully invisible). So the breather only STARTS once
+    `hou.qt.mainWindow().isVisible()` says the window is actually up, polled on
+    a Qt timer (a sleep would freeze the very event loop this waits on) and
+    bounded by WINDOW_WAIT_ATTEMPTS — a session whose window never shows still
+    exports. The studio's result-file watch covers progress either way
+    ("Houdini opening…" simply lasts until the batch writes its first state).
+    Without hdefereval (hython / no UI event loop) there is no window to wait
+    for — run inline, exactly as before. A session with no job keeps the
+    do-nothing-immediately promise: nothing is scheduled at all."""
     if not os.environ.get(JOB_ENV, ""):
         return
     try:
@@ -371,7 +388,24 @@ def launch():
             except Exception:
                 main()
                 return
-        QTimer.singleShot(STARTUP_BREATHER_MS, main)
+
+        state = {"attempts": WINDOW_WAIT_ATTEMPTS}
+
+        def poll():
+            visible = False
+            try:
+                window = hou.qt.mainWindow()
+                visible = bool(window is not None and window.isVisible())
+            except Exception:
+                # Can't tell — don't hold the batch hostage on a probe.
+                visible = True
+            state["attempts"] -= 1
+            if visible or state["attempts"] <= 0:
+                QTimer.singleShot(STARTUP_BREATHER_MS, main)
+            else:
+                QTimer.singleShot(WINDOW_POLL_MS, poll)
+
+        poll()
 
     hdefereval.executeDeferred(breathe)
 

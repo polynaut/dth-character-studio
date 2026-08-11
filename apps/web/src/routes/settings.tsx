@@ -1242,27 +1242,25 @@ function SettingsPage() {
               creates a ready-made DazToHue project — the network is instantiated
               from the INSTALLED DazToHue HDA (no template scene to rot across
               Houdini/DazToHue versions), Set Project baked to the character's
-              Houdini project folder. */}
-          <section className="space-y-4 rounded-lg border bg-card p-5">
-            <div>
-              <h2 className="font-semibold">Generate Houdini Projects</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Used by the character page&apos;s <em>Generate project</em> button: hython
-                creates a new Houdini scene with the DazToHue network (from your installed
-                DazToHue HDA) and <span className="font-mono">Set Project</span> baked in.
-              </p>
-            </div>
+              Houdini project folder.
 
-            {houdiniDerived ? (
-              <DerivedTarget
-                value={settings.houdiniInstallFolder}
-                missing="installation folder"
-                source="houdini"
-                verb="Uses"
-              >
-                Its <code>bin\hython.exe</code> creates the project.
-              </DerivedTarget>
-            ) : (
+              Shown only while the Houdini paths are the USER'S. With an
+              installation activated, everything here is settled by the card —
+              the install folder is the card's own, the docs pairing is the
+              card's whole point — so the panel could only restate a path
+              already listed above. A panel with no field and no choice is
+              noise; the feature it describes lives on the character page. */}
+          {!houdiniDerived && (
+            <section className="space-y-4 rounded-lg border bg-card p-5">
+              <div>
+                <h2 className="font-semibold">Generate Houdini Projects</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Used by the character page&apos;s <em>Generate project</em> button: hython
+                  creates a new Houdini scene with the DazToHue network (from your installed
+                  DazToHue HDA) and <span className="font-mono">Set Project</span> baked in.
+                </p>
+              </div>
+
               <FolderField
                 label="Houdini installation folder (optional)"
                 value={settings.houdiniInstallFolder}
@@ -1277,22 +1275,24 @@ function SettingsPage() {
                   </>
                 }
               />
-            )}
-            {/* The install ↔ documents pairing is load-bearing: hython gets the
-                MATCHING docs folder as HOUDINI_USER_PREF_DIR — mismatched, the
-                DazToHue otls never load. Warn live; Generate refuses too. */}
-            {settings.houdiniInstallFolder.trim() !== '' &&
-              !matchingHoudiniDocsFolder(settings.houdiniInstallFolder, [
-                settings.houdiniDocsFolder,
-                ...settings.extraHoudiniDocsFolders,
-              ]) && (
-                <p className="text-sm text-destructive">
-                  {houdiniVersionFromInstall(settings.houdiniInstallFolder)
-                    ? `No matching Houdini documents folder for this install — add "…\\Documents\\houdini${houdiniVersionFromInstall(settings.houdiniInstallFolder)}" above, or Generate project cannot load the DazToHue assets.`
-                    : 'No Houdini version found in this path — point it at a versioned install (e.g. "…\\Houdini 22.0.368").'}
-                </p>
-              )}
-          </section>
+              {/* The install ↔ documents pairing is load-bearing: hython gets the
+                  MATCHING docs folder as HOUDINI_USER_PREF_DIR — mismatched, the
+                  DazToHue otls never load. Warn live; Generate refuses too. (An
+                  activated card pairs the two by construction — this warning is
+                  a manual-paths concern, like the whole panel.) */}
+              {settings.houdiniInstallFolder.trim() !== '' &&
+                !matchingHoudiniDocsFolder(settings.houdiniInstallFolder, [
+                  settings.houdiniDocsFolder,
+                  ...settings.extraHoudiniDocsFolders,
+                ]) && (
+                  <p className="text-sm text-destructive">
+                    {houdiniVersionFromInstall(settings.houdiniInstallFolder)
+                      ? `No matching Houdini documents folder for this install — add "…\\Documents\\houdini${houdiniVersionFromInstall(settings.houdiniInstallFolder)}" above, or Generate project cannot load the DazToHue assets.`
+                      : 'No Houdini version found in this path — point it at a versioned install (e.g. "…\\Houdini 22.0.368").'}
+                  </p>
+                )}
+            </section>
+          )}
 
           {/* Both Daz plugins — mrpdean's Exporter (from the release folders
               below) and the bundled Runner — into EVERY detected Daz Studio, paired
@@ -1544,16 +1544,12 @@ function TargetRow({ icon: Icon, children }: { icon: LucideIcon; children: React
  * this" is a different problem from "you haven't set it yet" and has a
  * different fix — one that differs per path: a missing Daz path means DIM had
  * no value; the Houdini documents folder is created by that Houdini's first
- * launch, so starting it once is the fix; the Houdini installation folder
- * comes from the installer, never a launch, so only the manual paths can
- * supply it — and what's lost is the tool (`verb` "Uses"), not an install
- * destination.
+ * launch, so starting it once is the fix.
  */
 function DerivedTarget({
   value,
   missing,
   source = 'daz',
-  verb = 'Installs into',
   children,
 }: {
   value: string
@@ -1564,11 +1560,6 @@ function DerivedTarget({
    *  to a section that cannot fix it — the Houdini documents folder is paired by
    *  the Houdini card, never by DIM. */
   source?: 'daz' | 'houdini'
-  /** How the path is used — "Installs into" for a destination, "Uses" for a
-   *  tool source. The empty-value warning follows it too: a missing
-   *  destination leaves nothing to install into, a missing tool path leaves
-   *  nothing to run. */
-  verb?: 'Installs into' | 'Uses'
   children?: ReactNode
 }) {
   if (!value) {
@@ -1580,12 +1571,6 @@ function DerivedTarget({
             The DAZ Install Manager has no {missing} path, so there is nothing to install into.
             Use <strong>Set the paths manually</strong> in the Daz installation section to fill it
             in yourself.
-          </span>
-        ) : verb === 'Uses' ? (
-          <span>
-            This Houdini installation has no {missing} recorded, so there is nothing to run.
-            Use <strong>Set the paths manually</strong> in the Houdini installation section to
-            fill it in yourself.
           </span>
         ) : (
           <span>
@@ -1600,7 +1585,7 @@ function DerivedTarget({
   return (
     <div className="text-sm">
       <p>
-        {verb} <PathCode path={displayPath(value)} />
+        Installs into <PathCode path={displayPath(value)} />
       </p>
       <p className="mt-1 text-muted-foreground">
         from the {source === 'daz' ? 'Daz' : 'Houdini'} installation above. {children}
