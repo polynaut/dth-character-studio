@@ -336,6 +336,48 @@ current code before relying on details, but assume the *lesson* still holds.
     Keep both, and keep the read-back that turns a wrong assumption into a named
     failure rather than a silently still-animated scene.
 
+- **Mesh Resolution / subdivision lives on the SHAPE, and its LABELS lie**
+  (measured DS4 **and** DS6, byte-identical on both, 2026-08-11, G8.1 +
+  12 wearables). `Render SubD Level (Minimum)` drives the Alembic cache's mesh
+  resolution, so one fitted item left above 1 silently multiplies the exported
+  geometry — and it is per-node state you cannot see without clicking each node.
+  Four facts, each of which cost a probe round:
+  - **It is not on the node and not on the object.** The walk is
+    `node.getObject().getCurrentShape()` (a `DzGraftingFigureShape` on a fitted
+    figure), path `/General/Mesh Resolution`. `DzObject` carries exactly ONE
+    property — `"Geometry"` / *Geometry Switching* — so a probe that stops at
+    the object finds nothing and reads as "not scriptable". It is scriptable.
+  - **Property NAMES are stable, LABELS are not.** `SubDIALevel` and
+    `SubDRenderLevel` (both `DzIntProperty`) plus `lodlevel`
+    (`DzEnumProperty`, 0 = Base, 1 = High Resolution). But the base figure
+    labels `SubDIALevel` *"SubDivision Level"* while **every fitted item labels
+    the same property "View SubD Level"**. So `findPropertyByLabel` — the
+    fallback `DthUtils.dsa` reaches for elsewhere — clamps the figure and
+    silently misses all the clothing, which is the exact bug. Look up by NAME.
+  - **Getters exist, setters do not.** The shape exposes `getSubDDrawLevel()`
+    and `getSubDRenderLevel()`, but no `setSubDDrawLevel`/`setSubDRenderLevel`
+    (probed by name across both builds). Writes go through
+    `DzIntProperty.setValue()`.
+  - **`lodlevel == 0` makes the levels inert** — a Base-resolution node ignores
+    both SubD values, so clamping it is meaningless. Report it; do not flip
+    Resolution Level to "fix" it.
+
+  `subdClampSnippet` (`dz-snippets.ts`, runtime v70) encodes all of this. Two
+  design points that are not obvious from the code: it is emitted BEFORE the
+  `rom-animations` save so the saved scene carries the clamp (a later hand
+  export of that scene cannot reintroduce the bloat — the user asked for
+  persistence, not a restore bracket), and it resolves its OWN figure root
+  because **the ROM script has no `dthFig`** — that variable exists only in the
+  standalone scripts (`figureAutoSelectSnippet`), while the ROM script's figure
+  is resolved inside the runtime's `ApplyDTHCharacter`. Emitting `dthFig` there
+  is a `ReferenceError` on every ROM run.
+- **An animated level must not be written.** `setValue()` on an animatable
+  property lands a KEY at the current time; that key would then ride into the
+  export, which is worse than the bloat being fixed. The clamp guards on
+  `isAnimatable() && getNumKeys() > 0` and reports those instead. Whether these
+  two properties are animatable in practice is **still unmeasured** — the guard
+  is defensive, and the run report is what will eventually answer it.
+
 ## Desktop / Tauri
 
 - **Never create a webview window from a synchronous `#[tauri::command]`** — it

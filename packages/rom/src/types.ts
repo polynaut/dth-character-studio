@@ -1502,8 +1502,28 @@ export const CHARACTER_SCHEMA_VERSION = 30
  *       a fallback — `DthScanSceneMorphsQuiet(dir, scene, genesis)` from the
  *       generated script, `genesis` per scene in the bulk scan's sidecar.
  *       Detection still wins where it works; the fallback only fills a blank.
+ * v70 — the generated scripts CLAMP Mesh Resolution before they export.
+ *       `Render SubD Level (Minimum)` drives the Alembic cache's mesh
+ *       resolution, so one fitted item left above 1 silently multiplies the
+ *       exported geometry — per-NODE state, invisible without clicking each
+ *       node (measured on a real G8.1 scene 2026-08-11: the figure and 12
+ *       wearables at 1, `Genesis 8 Female Genitalia` at 2). `subdClampSnippet`
+ *       walks the figure + `getNodeChildren(true)` and writes `SubDIALevel` /
+ *       `SubDRenderLevel` down to 1 on each node's SHAPE
+ *       (`getObject().getCurrentShape()`, path `/General/Mesh Resolution` —
+ *       NOT the node and NOT the object, which carries one property). Lookup
+ *       is by property NAME because the LABELS differ per shape ("SubDivision
+ *       Level" on the figure, "View SubD Level" on every fitted item), so a
+ *       label lookup would miss every wearable. Identical on DS4 and DS6
+ *       (measured). Emitted BEFORE the rom-animations save so the saved scene
+ *       carries the clamp — deliberately NOT restored, so a later hand export
+ *       of that scene cannot reintroduce the bloat. A `lodlevel == 0` node
+ *       (Base resolution) is reported, never rewritten; an ANIMATED level is
+ *       reported and left alone rather than keyed at the current time. Emitted
+ *       CONTENT changes, hence the bump. (v69 belongs to the in-flight
+ *       clear-export-set-before-doExport change; this is deliberately v70.)
  */
-export const RUNTIME_VERSION = 68
+export const RUNTIME_VERSION = 70
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

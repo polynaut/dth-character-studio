@@ -10,6 +10,7 @@ import {
   sceneConfigLookupSnippet,
   sceneGuardSnippet,
   sceneCsvLookupSnippet,
+  subdClampSnippet,
   sceneExportSubfolderSnippet,
   romAnimationSourceSnippet,
 } from './dz-snippets'
@@ -1425,7 +1426,10 @@ if (dthSceneLinkErr) {
     dthFailureDialog();
 } else {
     try {
-${indentLines(indentLines(indexSyncSnippet(indexSync)))}        var dthRomOk = ApplyDTHCharacter(dthCharacterConfig);
+${indentLines(indentLines(indexSyncSnippet(indexSync)))}        // Clamp Mesh Resolution BEFORE the ROM build and the rom-animations
+        // save, so the saved scene carries it (see subdClampSnippet).
+${indentLines(indentLines(subdClampSnippet(character.genesis).trimEnd()))}
+        var dthRomOk = ApplyDTHCharacter(dthCharacterConfig);
         // G9: retarget the tear shader's UV set to UE5 after the ROM (before any
         // export). No-op unless the character opted in.
         if (dthCharacterConfig.bApplyUE5TearUV) { dthApplyUE5TearUV(); }
@@ -1566,7 +1570,10 @@ if (dthSceneLinkErr) {
 } else if (!dthFig) {
     MessageBox.critical("No ${character.genesis} figure found in the scene - load the character's scene and re-run.", "DTH Character Studio", "&OK");
 } else {
-${indentLines(indexSyncSnippet(indexSync))}${buildExportBlock(character, frames, metaDirAbs, buildSceneCsvMap(character), scenesRootAbs, unattended, hipRefPrefix, sceneFrames)
+${indentLines(indexSyncSnippet(indexSync))}    // The split Export_ runs without the ROM build, so it clamps too - a scene
+    // tweaked by hand between the ROM run and the export must not ship bloat.
+${indentLines(subdClampSnippet(character.genesis).trimEnd())}
+${buildExportBlock(character, frames, metaDirAbs, buildSceneCsvMap(character), scenesRootAbs, unattended, hipRefPrefix, sceneFrames)
   .split('\n')
   .map((line) => (line ? `    ${line}` : line))
   .join('\n')}}

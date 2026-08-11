@@ -2438,3 +2438,89 @@ describe('exportHairAssets — the hair pass rides the main export', () => {
     )
   })
 })
+
+describe('Mesh Resolution clamp (runtime v70)', () => {
+  // The measured contract, and the trap it exists to avoid: the property NAMES
+  // are stable across shapes while the LABELS are not — the base figure labels
+  // SubDIALevel "SubDivision Level", every fitted item labels the SAME property
+  // "View SubD Level" (measured DS4 + DS6, 2026-08-11). A label lookup would
+  // clamp the figure and silently miss every wearable, which is precisely the
+  // bug the feature is for.
+  it('looks the levels up by property NAME, never by label', () => {
+    const content = toCharacterScriptDsa(makeCharacter(), {}, FRAMES).content
+    expect(content).toContain('var aSubDProps = ["SubDIALevel", "SubDRenderLevel"];')
+    expect(content).toContain('oSubDShape.findProperty(sSubDName)')
+    // The labels must not appear as lookup keys anywhere in the emitted script.
+    expect(content).not.toContain('findPropertyByLabel("SubDivision Level")')
+    expect(content).not.toContain('findPropertyByLabel("View SubD Level")')
+  })
+
+  // The group lives on the SHAPE. Walking to the object and stopping there
+  // finds one unrelated property ("Geometry Switching") and clamps nothing —
+  // measured, and the reason the first probe came back empty.
+  it('reads the levels off the shape, not the node or the object', () => {
+    const content = toCharacterScriptDsa(makeCharacter(), {}, FRAMES).content
+    expect(content).toContain('oSubDObj.getCurrentShape()')
+  })
+
+  it('covers the fitted children, not just the figure', () => {
+    const content = toCharacterScriptDsa(makeCharacter(), {}, FRAMES).content
+    expect(content).toContain('oSubDRoot.getNodeChildren(true)')
+  })
+
+  // Persisted on purpose: emitted BEFORE the rom-animations save so the saved
+  // scene carries the clamp, and never put back — a later hand export of that
+  // scene must not be able to reintroduce the bloat.
+  it('clamps before the ROM build and the rom-animations save, and never restores', () => {
+    const content = toCharacterScriptDsa(makeCharacter(), {}, FRAMES).content
+    const clamp = content.indexOf('var aSubDProps')
+    const apply = content.indexOf('ApplyDTHCharacter(dthCharacterConfig)')
+    const save = content.indexOf('saveScene(dthRomSavePath)')
+    expect(clamp).toBeGreaterThan(-1)
+    expect(clamp).toBeLessThan(apply)
+    expect(clamp).toBeLessThan(save)
+    // No restore pass: nothing writes the old value back.
+    expect(content).not.toContain('dthSubDRestore')
+  })
+
+  // An animated level would be KEYED by setValue() at the current time, and
+  // that key would ride into the export — worse than the bloat. Left alone and
+  // named instead.
+  it('refuses to write an animated level, and reports it', () => {
+    const content = toCharacterScriptDsa(makeCharacter(), {}, FRAMES).content
+    expect(content).toContain('oSubDProp.isAnimatable()')
+    expect(content).toContain('oSubDProp.getNumKeys() > 0')
+    expect(content).toContain('(animated - left alone)')
+  })
+
+  // lodlevel 0 is "Base" resolution, where the SubD levels do nothing. Report,
+  // never rewrite — flipping resolution is a bigger change than clamping.
+  it('reports Base-resolution nodes instead of rewriting them', () => {
+    const content = toCharacterScriptDsa(makeCharacter(), {}, FRAMES).content
+    expect(content).toContain('oSubDShape.findProperty("lodlevel")')
+    expect(content).toContain('Base resolution, subdivision inert')
+  })
+
+  // The ROM script has no `dthFig` — the runtime resolves the figure inside
+  // ApplyDTHCharacter — so the snippet must resolve its own root. Emitting a
+  // reference to `dthFig` there would ReferenceError on every ROM run.
+  it('resolves its own figure, without depending on dthFig', () => {
+    const content = toCharacterScriptDsa(makeCharacter(), {}, FRAMES).content
+    const clamp = content.slice(
+      content.indexOf('var aSubDFiles'),
+      content.indexOf('ApplyDTHCharacter(dthCharacterConfig)'),
+    )
+    expect(clamp).toContain('Scene.getPrimarySelection()')
+    expect(clamp).not.toContain('dthFig')
+  })
+
+  // The split Export_ runs without the ROM build, so a scene hand-tweaked
+  // between the two must still be clamped.
+  it('the split Export_ script clamps too', () => {
+    const character = makeCharacter({ exportPath: 'X:/exports', exportWithRomScript: false })
+    const scripts = generateAll(character, {}, FRAMES)
+    const exportScript = scripts.find((s) => s.fileName.startsWith('Export_'))
+    expect(exportScript).toBeDefined()
+    expect(exportScript?.content).toContain('var aSubDProps = ["SubDIALevel", "SubDRenderLevel"];')
+  })
+})

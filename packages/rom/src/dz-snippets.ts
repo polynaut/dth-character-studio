@@ -337,3 +337,156 @@ if (dthSelPath == null || (dthSelPath != "" && !dthMatchesAsset(dthSelPath))) {
 }
 `
 }
+
+/**
+ * Snippet: clamp every **Mesh Resolution** subdivision level on the character's
+ * figure and its fitted children to `max`, permanently.
+ *
+ * WHY: `Render SubD Level (Minimum)` drives the Alembic cache's mesh
+ * resolution, so one fitted item left at 2 silently multiplies the exported
+ * geometry. It is per-NODE state, invisible unless you click each node, so a
+ * scene drifts into it (measured on a real G8.1 scene 2026-08-11: the figure
+ * and 12 wearables at 1, `Genesis 8 Female Genitalia` at 2).
+ *
+ * MEASURED (Daz Studio 4 AND 6 - byte-identical on both, 2026-08-11):
+ *  - the group is on the SHAPE, not the node and not the object:
+ *    `node.getObject().getCurrentShape()`, at path `/General/Mesh Resolution`.
+ *    `DzObject` carries exactly ONE property ("Geometry Switching").
+ *  - property NAMES are stable: `SubDIALevel` and `SubDRenderLevel`
+ *    (both `DzIntProperty`), `lodlevel` (`DzEnumProperty`).
+ *  - **LABELS are NOT stable** - the base figure labels `SubDIALevel`
+ *    "SubDivision Level" while every fitted item labels the SAME property
+ *    "View SubD Level". This looks up by NAME only; `findPropertyByLabel`
+ *    (used as a fallback elsewhere in the runtime) would clamp the figure and
+ *    silently miss all 13 wearables.
+ *  - the shape exposes `getSubDDrawLevel()`/`getSubDRenderLevel()` but NO
+ *    setters, so writes go through `DzIntProperty.setValue()`.
+ *
+ * NOT restored afterwards, deliberately: it is emitted BEFORE the
+ * `rom-animations` save so the saved scene carries the clamp - which is what
+ * stops the bloat recurring when that scene is later opened and exported by
+ * hand.
+ *
+ * SELF-CONTAINED. Every identifier lives inside the IIFE, so this can be
+ * emitted in the ROM script (where `dthFig` does NOT exist - the runtime
+ * resolves the figure inside `ApplyDTHCharacter`) and alongside
+ * {@link figureAutoSelectSnippet}'s fixed helper names without colliding.
+ */
+export function subdClampSnippet(genesis: GenesisVersion, max = 1): string {
+  const files = dazJson(GENERATIONS[genesis].assetFiles)
+  return `(function () {
+    var aSubDFiles = ${files};
+    var fnSubDPath = function (oNode) {
+        try {
+            if (oNode && typeof oNode.getAssetUri == "function") {
+                var oSubDUri = oNode.getAssetUri();
+                return String(oSubDUri && typeof oSubDUri.getFilePath == "function" ? oSubDUri.getFilePath() : oSubDUri).toLowerCase();
+            }
+            // DS6 has no getAssetUri() - the assetUri PROPERTY is the way there.
+            if (oNode && oNode.assetUri != undefined) return String(oNode.assetUri).toLowerCase();
+        } catch (eSubDUri) {}
+        return "";
+    };
+    var fnSubDMatches = function (sPath) {
+        for (var dthSf = 0; dthSf < aSubDFiles.length; dthSf++) {
+            if (sPath.indexOf("/" + aSubDFiles[dthSf]) >= 0 || sPath == aSubDFiles[dthSf]) return true;
+        }
+        return false;
+    };
+    // The selection's root when it is the character's figure, else the scene's
+    // first matching root figure - the same rename-proof identity the rest of
+    // the runtime uses, resolved locally so nothing outside is required.
+    var oSubDRoot = Scene.getPrimarySelection();
+    while (oSubDRoot && oSubDRoot.getNodeParent()) oSubDRoot = oSubDRoot.getNodeParent();
+    var bSubDIsFig = oSubDRoot && (oSubDRoot.inherits("DzFigure") || oSubDRoot.inherits("DzSkeleton"));
+    var sSubDSel = bSubDIsFig ? fnSubDPath(oSubDRoot) : null;
+    if (sSubDSel == null || (sSubDSel != "" && !fnSubDMatches(sSubDSel))) {
+        oSubDRoot = null;
+        for (var dthSi = 0; dthSi < Scene.getNumNodes(); dthSi++) {
+            var oSubDCand = Scene.getNode(dthSi);
+            if (!oSubDCand || oSubDCand.getNodeParent()) continue;
+            if (!oSubDCand.inherits("DzFigure") && !oSubDCand.inherits("DzSkeleton")) continue;
+            if (fnSubDMatches(fnSubDPath(oSubDCand))) { oSubDRoot = oSubDCand; break; }
+        }
+    }
+    if (!oSubDRoot) {
+        print("Mesh Resolution: no ${genesis} figure resolved - subdivision left untouched.");
+        return;
+    }
+
+    var aSubDNodes = [oSubDRoot];
+    try {
+        var aSubDKids = oSubDRoot.getNodeChildren(true);
+        for (var dthSk = 0; dthSk < aSubDKids.length; dthSk++) aSubDNodes.push(aSubDKids[dthSk]);
+    } catch (eSubDKids) { /* no children API: the figure alone is still worth clamping */ }
+
+    var aSubDProps = ["SubDIALevel", "SubDRenderLevel"];
+    var aSubDDone = [], aSubDSkip = [], aSubDBase = [];
+    for (var dthSn = 0; dthSn < aSubDNodes.length; dthSn++) {
+        var oSubDNode = aSubDNodes[dthSn];
+        var oSubDShape = null;
+        try {
+            if (typeof oSubDNode.getObject != "function") continue;
+            var oSubDObj = oSubDNode.getObject();
+            if (!oSubDObj || typeof oSubDObj.getCurrentShape != "function") continue;
+            oSubDShape = oSubDObj.getCurrentShape();
+        } catch (eSubDShape) { continue; }
+        if (!oSubDShape || typeof oSubDShape.findProperty != "function") continue;
+
+        var sSubDLabel = "?";
+        try { sSubDLabel = String(oSubDNode.getLabel()); } catch (eSubDLbl) {}
+
+        // Resolution Level "Base" (lodlevel 0) makes the SubD levels inert -
+        // reported, never rewritten: flipping resolution is a bigger change
+        // than clamping a level and is not this routine's call.
+        try {
+            var oSubDLod = oSubDShape.findProperty("lodlevel");
+            if (oSubDLod && oSubDLod.getValue() == 0) { aSubDBase.push(sSubDLabel); continue; }
+        } catch (eSubDLod) {}
+
+        for (var dthSp = 0; dthSp < aSubDProps.length; dthSp++) {
+            var sSubDName = aSubDProps[dthSp];
+            try {
+                var oSubDProp = oSubDShape.findProperty(sSubDName);
+                if (!oSubDProp) continue;
+                var nSubDVal = oSubDProp.getValue();
+                if (!(nSubDVal > ${max})) continue;
+                // An ANIMATABLE property that already carries keys must not be
+                // written: setValue() would land a KEY at the current time and
+                // that key would ride into the export - worse than the bloat
+                // this exists to prevent. Named instead, never silently keyed.
+                var bSubDKeyed = false;
+                try {
+                    if (typeof oSubDProp.isAnimatable == "function" && oSubDProp.isAnimatable()
+                        && typeof oSubDProp.getNumKeys == "function" && oSubDProp.getNumKeys() > 0) {
+                        bSubDKeyed = true;
+                    }
+                } catch (eSubDKeys) {}
+                if (bSubDKeyed) {
+                    aSubDSkip.push(sSubDLabel + " / " + sSubDName + " = " + nSubDVal + " (animated - left alone)");
+                    continue;
+                }
+                oSubDProp.setValue(${max});
+                aSubDDone.push(sSubDLabel + " / " + sSubDName + ": " + nSubDVal + " -> ${max}");
+            } catch (eSubDSet) {
+                aSubDSkip.push(sSubDLabel + " / " + sSubDName + " (could not be read or written)");
+            }
+        }
+    }
+
+    if (aSubDDone.length > 0) {
+        print("Mesh Resolution clamped to ${max} on " + aSubDDone.length + " value(s):");
+        for (var dthSd = 0; dthSd < aSubDDone.length; dthSd++) print("  " + aSubDDone[dthSd]);
+    } else {
+        print("Mesh Resolution: nothing above ${max} - no change.");
+    }
+    if (aSubDSkip.length > 0) {
+        print("Mesh Resolution NOT changed on " + aSubDSkip.length + " value(s):");
+        for (var dthSs = 0; dthSs < aSubDSkip.length; dthSs++) print("  " + aSubDSkip[dthSs]);
+    }
+    if (aSubDBase.length > 0) {
+        print("Mesh Resolution: " + aSubDBase.length + " node(s) on Base resolution, subdivision inert: " + aSubDBase.join(", "));
+    }
+})();
+`
+}
