@@ -1,5 +1,107 @@
 # @dth/web
 
+## 0.73.0
+
+### Minor Changes
+
+- [#779](https://github.com/polynaut/dth-character-studio/pull/779) [`68d861b`](https://github.com/polynaut/dth-character-studio/commit/68d861b726a20371bd319e57fa0aa6aeac2f02a4) Thanks [@polynaut](https://github.com/polynaut)! - **Hold Ctrl on a running DTH Export to abort it.**
+
+  While a batch is waiting for Daz Studio the header button reads **Abort**, and clicking it takes the handoff back. The moment the Runner claims the file, that was over: the button became a live **Exporting n/m** counter whose only action was "stop watching", and the claimed job file stayed on disk.
+
+  Which is fine when Daz is working — and a dead end when it isn't. A Runner that stalls (a modal in the way, a plugin that died mid-batch) leaves the button spinning forever, and the file it left behind makes every later export _and_ scan refuse with _"a batch is waiting for Daz Studio"_.
+
+  Now holding **Ctrl** turns the progress button into **Abort**, the same way it turns Save into Re-save: clicking deletes the job file and resets the button. Release Ctrl and the progress counter is back, untouched. A plain click still only stops watching, and still deletes nothing.
+
+  The toast says what actually happened, because this is the honest limit of it: the studio can delete its handoff file, it cannot stop Daz. A run Daz has genuinely started keeps going there (and a working Runner may even write the file again on its next scene). What you reliably get back is the studio — the watch, and the next export.
+
+  Deleting a claimed batch rolls no handoff stamps back, deliberately: unlike the pending Abort, this batch may already have exported scenes, and marking those as never handed off would report work that happened as work that didn't.
+
+- [#768](https://github.com/polynaut/dth-character-studio/pull/768) [`8a24f72`](https://github.com/polynaut/dth-character-studio/commit/8a24f72116e1b27b860110e7e93a612297963477) Thanks [@polynaut](https://github.com/polynaut)! - **"Export only": run the export batch in an older Daz Studio while everything else uses the new one.**
+
+  The batch handoff is the one thing that needs a _plugin_ — the DTH Runner claims the job file when Daz starts — and a plugin binary is built against a single Studio major version. So moving to the newest Studio for authoring used to mean waiting for a Runner build before you could export at all, or putting the whole app back a version.
+
+  With the newest installation active, each **older** Daz card in Settings that can still run a batch now offers an **Export only** switch. Turn it on and DTH Export starts its batch in that installation; opening scenes, running scripts and installing content stay on the active one. Only one installation can carry it — turning it on for one card turns it off everywhere else.
+
+  Two things follow the switch, and have to: the Runner plugin's **install target** and its **gate**. A Runner sitting in the installation that does _not_ run the batch would let the export dialog report "ready", then start the other Daz, find nothing to claim the job file, and wait for a batch that never begins. The install also picks the DS4/DS6 build to match wherever it is going.
+
+  The switch is offered only on installations older than the active one, only while the active one is the newest detected, and never on one whose folder is missing. It is also **never offered on Daz Studio 4**, which takes the Runner plugin but has no scripted export at all — a batch sent there would open Daz, run every scene and export nothing. On a DS4 + DS6 machine that means the switch appears nowhere: it becomes available once a Studio newer than 6 is installed and active, which is the situation it is for.
+
+  If the flagged installation later disappears from the machine, Settings says so and offers to send exports back to the active one, rather than leaving them pointed at a folder that is not there.
+
+- [#776](https://github.com/polynaut/dth-character-studio/pull/776) [`599364d`](https://github.com/polynaut/dth-character-studio/commit/599364d11ecb55e05b01ca2038f237b99e4da4b6) Thanks [@polynaut](https://github.com/polynaut)! - **Daz plugins now install into every Daz Studio on the machine.**
+
+  Both plugins the studio puts inside Daz — the **DTH Exporter** (mrpdean's) and the **DTH Character Studio Runner** (bundled) — ship one binary per Studio generation. The old panels asked for one Exporter release folder and installed into one Daz, which on a machine with Daz Studio 4 _and_ 6 could only ever describe half the setup: it would happily offer to copy a Daz Studio 4 build into a Daz Studio 6 install, which cannot even load it.
+
+  Settings → General now has one **Daz Studio plugins** section instead of two. Add as many Exporter release folders as you like — or just the folder holding `Daz Studio 4` and `Daz Studio 6` subfolders, which is how the plugin is published; both are scanned, one level deep. Which Studio a build is for is read from the DLL's own name (Daz Studio 6 only loads `dsp_*.dll`, so the name is the contract, not a guess), with the folder name kept as a cross-check the panel flags when the two disagree. Underneath, every Daz Studio detected on the machine is listed with what it has now and what it would get, and **Install / update all** copies each build into the installations it was built for — one labelled line per copy in the report, so one Daz needing admin rights while another doesn't reads as exactly that. An installation with no matching build is named, never served the wrong binary.
+
+  **"Export only" can point at Daz Studio 4 again.** It was blocked there because the Studio 4 exporter had no scripted export — a batch would run every scene and export nothing. mrpdean shipped scripted export in the Daz Studio 4 plugin with **Exporter 2.0.2.0**, and a DS4 batch was measured writing its files, so the restriction is gone.
+
+  The single `dthExporterFolder` setting is superseded by a list and carried over automatically; the Exporter version picker is gone with it — each generation simply installs the newest build found across your folders.
+
+- [#765](https://github.com/polynaut/dth-character-studio/pull/765) [`7c762ad`](https://github.com/polynaut/dth-character-studio/commit/7c762ad9ed7f112db6f7f5234ce63ddd106f3d13) Thanks [@polynaut](https://github.com/polynaut)! - **Generated Houdini paths are shorter again: `$HIP/daz-export/…` instead of `$JOB/houdini/daz-export/…`.**
+
+  Since the export folder moved inside the character's `houdini/` folder (v0.68), every import, PoseAsset CSV and reference-skeleton path sits directly below the `.hip` that reads it — so `$HIP`, the project's own folder, reaches all of them without climbing out. That is also what Houdini itself writes: its file picker collapses a chosen export to `$HIP/…` (measured with `hou.text.collapseCommonVars`), so a path you pick by hand and one the studio generates now read identically inside the same node.
+
+  `$HIP` has a second advantage over `$JOB`: it is derived from where the file sits, so it cannot be wrong. A project whose `$JOB` still points at another character keeps resolving its own imports.
+
+  `$JOB` is still used where `$HIP` cannot reach — Houdini's own output folder (`<character>/export/`, which sits beside the houdini folder, not under it), layouts from before the export move, and characters whose projects are spread across several folders, where there is no single `$HIP`. Houdini's picker falls back the same way.
+
+  **Existing projects keep working and are not nagged about.** Projects generated under v63–v65 hold the `$JOB` form; it resolves, so no card flags it — **Utils → Make paths portable** shortens it when you ask, and only on DazToHue nodes (a `$JOB` path on your own cache or render nodes is your choice of anchor and is left alone). The older `$HIP/../…` form is still flagged, because its `..` breaks if the project ever moves a folder deeper. Characters regenerate into the new form on the next save or via Tools → Refresh assets.
+
+- [#768](https://github.com/polynaut/dth-character-studio/pull/768) [`8a24f72`](https://github.com/polynaut/dth-character-studio/commit/8a24f72116e1b27b860110e7e93a612297963477) Thanks [@polynaut](https://github.com/polynaut)! - **Utils drawer: a "Recently used" row for transfer sources.** The source of a material or skeleton transfer is nearly always the same personal template, re-browsed from scratch every time. The last five are now offered as chips under the picker, in both the Material and Skeleton tabs, so the second use is one click. They are remembered per machine (a template usually lives outside any project), files that have since disappeared are filtered out, and re-picking one moves it back to the top.
+
+  **An empty target node no longer reads as a figure mismatch.** Copying materials into a freshly generated project — a DTH network with no material slots yet — put an amber warning in the confirm dialog listing every incoming surface as "exist on no slot here" and telling you to check both nodes are the same figure. They were: with no slots there, every surface is unclaimed by arithmetic, and setting an empty node up from a template is the normal reason to run a transfer. The preview now stays silent, and the post-run report no longer says it about surfaces the run had just created.
+
+  **Clearer explanations.** The Generate-project popup says what it creates in four short lines (network wired, `$JOB` on the character folder, `$HIP` on the project's own folder where `daz-export` lives) and names your project's actual Houdini subfolder instead of assuming "houdini". The Project-checks popup drops the version history for what its two repairs do. A Houdini `.hip` is called a _project_ throughout, never a "scene". And Rescan sits next to the section title rather than after the count.
+
+- [#772](https://github.com/polynaut/dth-character-studio/pull/772) [`ad5fe72`](https://github.com/polynaut/dth-character-studio/commit/ad5fe72b3a2a43f4cc859d59f7b05e67bbd0a872) Thanks [@polynaut](https://github.com/polynaut)! - **"Import from CSV" is now "Import from Daz scene" — the studio makes the scan for you.**
+
+  Producing a ROM import used to be a trip through Daz: select the figure's root node, find `Scan_Frames` in the content library, run it, read the dialog, come back. Now you pick the scene and the studio does that: it opens the `.duf` in Daz Studio through the job runner, runs `Scan_Frames` there with no dialogs, waits for the CSV and takes you straight to the frame-range picker.
+
+  Before it offers to scan, it checks the scene: **exactly one figure**, **the character's own Genesis generation**, and **animation on the timeline** — the inverse of the add-scene check, since a scan with nothing keyed has nothing to read. A failed check blocks the scan and says why, with the usual "anyway" escape.
+
+  **Scans you already made are still listed**, and that is deliberate: one scan of a scene feeds several ROM sections, so importing FBM after RET should not re-run Daz. Browsing to a hand-curated CSV still works too.
+
+  The wait has a way out. A Daz Studio that is already open but has no **Runner plugin** never picks the scan up, so the studio takes the job back after a few seconds and says so instead of waiting on it; a scan it started itself can be dropped with **Cancel scan**, or by closing the dialog. Either way the handoff is released — a job left waiting would block your next export batch.
+
+  Needs the Runner plugin installed (the same one DTH Export uses) and the DTH runtime in your Daz library.
+
+### Patch Changes
+
+- [#774](https://github.com/polynaut/dth-character-studio/pull/774) [`5cf6dcb`](https://github.com/polynaut/dth-character-studio/commit/5cf6dcb7267867a99a8601c8d7c44de886669f16) Thanks [@polynaut](https://github.com/polynaut)! - Dependency refresh: TanStack Router 1.170.22 and Lucide icons 1.30 in the app.
+
+- [#780](https://github.com/polynaut/dth-character-studio/pull/780) [`feebdb2`](https://github.com/polynaut/dth-character-studio/commit/feebdb238aee0be9bd66c91f716dc234d4c45124) Thanks [@polynaut](https://github.com/polynaut)! - **Settings shows only the paths it actually uses, and only the choices that still exist.**
+
+  Three small corrections in the same place — the installation cards and the destinations they drive:
+
+  - **The DIM downloads folder is no longer listed** under "Paths from this installation". The studio never applies it (your asset sources are your own curation, in Tools → Daz assets), and the "· not used automatically" note beside it did not make that any less confusing: a path shown on a card called _paths from this installation_ reads as a path the studio takes from it.
+  - **"Add another Houdini folder" is hidden while a Houdini installation is activated.** The destination follows that card then — one active installation, one target — so an extra hand-typed folder was an invitation to a second target the card could not account for. A line in its place says where the option went (**Set the paths manually**, in the Houdini installation section). Folders added before the card was activated stay visible and removable.
+  - **The Houdini destination no longer claims to come from the Daz installation.** It reads "from the Houdini installation above", and a missing one now sends you to the Houdini section — the one that can actually fix it — instead of to the DAZ Install Manager, which never had that path in the first place.
+
+- [#777](https://github.com/polynaut/dth-character-studio/pull/777) [`44a814a`](https://github.com/polynaut/dth-character-studio/commit/44a814ad376f3836e297c1a770d7833b27b0e04b) Thanks [@polynaut](https://github.com/polynaut)! - **Fixed: the scene morph scan did nothing at all in Daz Studio 4.**
+
+  Every ROM and export run also scans its scene, so the Morph-name autocomplete keeps up with what your outfits and hair add. In Daz Studio 4 that scan was skipped every single time, with _"No Genesis 3, 8, 8.1 or 9 figure could be found in this scene"_ — logged seconds before the same run dialled morphs onto the figure it claimed not to find. The ROM and the product scan were unaffected, which is why it stayed quiet: only the morph index missed out.
+
+  The generation is identified from a figure's source asset, and that asset lives on the figure's _object_ — asking the node alone works in Daz Studio 6 and returns nothing in Daz Studio 4. It now walks the whole chain (object → shape → geometry, the same one the product scan has always used), and a run started by the studio also carries the character's own generation as a fallback, so a scene whose figures cannot be identified is still filed correctly instead of being dropped. When neither can answer, the message finally says what actually happened.
+
+  Runtime v68 — **Tools → Refresh assets** installs it and regenerates the character scripts.
+
+- [#764](https://github.com/polynaut/dth-character-studio/pull/764) [`8212b1d`](https://github.com/polynaut/dth-character-studio/commit/8212b1d142af173cbebc804177e62bc3bbf17547) Thanks [@polynaut](https://github.com/polynaut)! - **A newly installed DazToHue no longer reads as the old one.** The Houdini project scan is cached per `.hip` so reopening the Utils drawer costs nothing, but its key was the project path, its modification time and the export root — not the DazToHue libraries the scan was speaking. So a verdict phrased in the installed version's vocabulary outlived the install that replaced it: with `DazToHuePoseAsset.hda` 2.5.1 sitting in `otls/`, the General tab kept reporting _"Your DazToHue version has no `pose_asset_csv_file_path`"_ — and Rescan could not clear it, because Rescan is served by the same cache. Only re-saving the `.hip` in Houdini would have.
+
+  The key now includes a fingerprint of the operator libraries hython will load (name, size and modification time of each `.hda`/`.otl` in the paired prefs folder), so installing, updating or removing one invalidates every affected entry. Existing entries are re-scanned once, in the background, the first time each project is looked at.
+
+  **And Rescan now actually rescans.** It went through the same cache, so on a project whose entry looked fresh it returned the stored answer in a few milliseconds — no hython, no change on screen, indistinguishable from a dead button, and no way out of a wrong verdict. It now bypasses both cache layers and re-reads every project with hython, and says how many it read when it is done.
+
+  Consequence on 2.5.1 and newer: the PoseAsset CSV path stops being reported as missing and starts being offered — _Fill network_ writes it like every other blank parameter, with no further change needed.
+
+- [#781](https://github.com/polynaut/dth-character-studio/pull/781) [`87e14f2`](https://github.com/polynaut/dth-character-studio/commit/87e14f2635ec649b3932aa0786bb7e9494d6496d) Thanks [@polynaut](https://github.com/polynaut)! - **The Setup DTH Release panel reads as install targets now.** The two halves of a release install — Daz content into the library, Houdini assets into a documents folder — each get an icon-tile row under one "Ready to install DTH x.y" lead-in, so the panel reads as "one release, these destinations" instead of a run of look-alike fields and buttons. "Add another Houdini folder" became the dashed add-row it acts like, and extra folders join as further target rows.
+
+  **Derived destinations name their true source.** The "Installs into … from the Daz installation above" sentence was hardcoded — even under the Houdini documents folder (derived from the _Houdini_ installation) and under Generate Houdini Projects' hython path, which is a tool source, not an install destination. Each now names the section it actually derives from, an empty Houdini documents folder gets the real fix ("start this Houdini once"), and the hython line says "Uses" instead of "Installs into" — including when its path is empty, where "start this Houdini once" would have been the wrong advice (a launch creates the documents folder, never the installation folder).
+
+- Updated dependencies [[`44a814a`](https://github.com/polynaut/dth-character-studio/commit/44a814ad376f3836e297c1a770d7833b27b0e04b), [`8a24f72`](https://github.com/polynaut/dth-character-studio/commit/8a24f72116e1b27b860110e7e93a612297963477)]:
+  - @dth/rom@0.73.0
+  - @dth/ui@0.73.0
+
 ## 0.72.0
 
 ### Minor Changes
