@@ -578,7 +578,13 @@ export function DthExportAction({
   // is the in-memory export watch (→ Exporting n/m)? Runs on mount + window
   // focus (tabbing back from Daz) and polls while either state is live.
   async function refreshStatus() {
-    const [isPending, run] = await Promise.all([exporterJobsPending(), fetchExportRunProgress()])
+    // The watcher id lets a RELOADED window restore its own run from the
+    // handoff sidecar (full ownership: clock, finish report, the Houdini
+    // continuation) — anyone else's run stays a display-only adoption.
+    const [isPending, run] = await Promise.all([
+      exporterJobsPending(),
+      fetchExportRunProgress(character.id),
+    ])
     setPending(isPending)
     // '' = a batch adopted for display only (a scene-card ROM generate, a run
     // this window didn't start, or a sentinel run like the Tools genesis-index
@@ -663,6 +669,29 @@ export function DthExportAction({
     // 'pending' renders through the Abort button (isPending); only a live
     // Runner-owned run shows the progress state.
     setProgress(run.state === 'running' ? run : null)
+    // A sidecar-restored watch (this window reloaded mid-run): the module
+    // watch is whole again, but the component's armed selection is not —
+    // re-arm the task cards from the run itself, once. Rows carry the Daz
+    // leg; the persisted plan carries the Houdini projects (their network
+    // tooltip shows the batch's scenes — export-all's exact scope is
+    // recomputed at the continuation as always).
+    if (
+      run.state === 'running' &&
+      run.characterId === character.id &&
+      !pipelineRef.current &&
+      run.rows
+    ) {
+      pipelineRef.current = {
+        daz: run.rows
+          .filter((row) => row.scenePath)
+          .map((row) => ({ path: row.scenePath, label: stemOf(row.scenePath) })),
+        houdini: (run.houdiniProjects ?? []).map((path) => ({
+          path,
+          label: stemOf(path),
+          networks: (run.scenes ?? []).map(stemOf),
+        })),
+      }
+    }
     publishPipeline(run, houdiniRef.current)
   }
 

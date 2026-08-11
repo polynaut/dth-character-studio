@@ -701,6 +701,16 @@ older runtimes as stale.
   for display — the on-disk format is unchanged). The scripts log step START
   markers too ("generating ROM", …) at the already-reached percent. No
   mid-run toasts: the one report fires at the very end.
+  RELOAD SURVIVAL: every character handoff writes its plan to the app-data
+  sidecar `export-run.json` (characterId, startedAtMs, houdiniProjects/mode,
+  scenes; deleted on every run end). The owning character's editor passes its
+  id as `fetchExportRunProgress`'s watcher and RESTORES the full watch from
+  the sidecar after a reload — clock, cards (re-armed from the run's `rows` +
+  plan) and the Export-too continuation, which previously died silently with
+  the window's memory. Non-owners get display-only adoption, itself rebuilt
+  from disk (`rows` + the progress log). The Runner must never learn of the
+  sidecar — it rewrites the job file from its own model, so anything stored
+  IN the job file beyond the v1.2.0 contract would be dropped at pickup.
   Contract: docs/exporter-plugin-job-file.md.
   Mid-NODE the result also carries a live `activity` channel: 456.py's
   `ActivityCapture` tees `sys.stdout`/`stderr` + `hou.ui.setStatusMessage` while

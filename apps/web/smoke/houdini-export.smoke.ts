@@ -369,6 +369,74 @@ test('a reloaded window ADOPTS the in-flight batch — cards from the rows, log 
   await expect(page.getByRole('button', { name: /Working/ })).toBeVisible()
 })
 
+test('the run OWNER reloads mid-batch: the sidecar restores clock, Houdini card AND the continuation', async ({
+  page,
+}) => {
+  // Same in-flight batch as the adoption spec — but the handoff's sidecar
+  // names THIS character as the owner, so the editor restores the FULL watch
+  // instead of the display-only adoption: the clock ticks again (persisted
+  // start time), the chosen Houdini project's card is back, and — the part
+  // that used to be silently LOST on reload — the "Export too" continuation
+  // still fires when the batch finishes.
+  const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true })
+  seed.files[RUNNING_JOB] = JSON.stringify({
+    version: 1,
+    type: 'bulk-export',
+    progress: 40,
+    jobsDone: 0,
+    jobs: [
+      {
+        scenePath: P.scene,
+        scriptPath: `${SCRIPTS_ROOT}/Demo/Kira/.Bulk_ROM_Export.dsa`,
+        status: 'running',
+      },
+    ],
+  })
+  seed.files[`${P.appData}/export-run.json`] = JSON.stringify({
+    characterId: 'char-kira',
+    total: 1,
+    startedAtMs: Date.now() - 65_000,
+    houdiniProjects: [P.houdini],
+    houdiniMode: 'export-selected',
+    scenes: [P.scene],
+  })
+  seed.files[`${P.appData}/export-progress.log`] = '[40] KiraDefault_G9_GP: ROM generated\n'
+  // The continuation launches headless hython — same install/docs pairing the
+  // full round-trip spec seeds.
+  seed.houdiniRunning = true
+  const settingsPath = `${P.appData}/settings.json`
+  seed.files[settingsPath] = JSON.stringify({
+    ...JSON.parse(seed.files[settingsPath] ?? '{}'),
+    houdiniInstallFolder: HOUDINI_INSTALL,
+    houdiniDocsFolder: HOUDINI_DOCS,
+  })
+  seed.files[`${HOUDINI_INSTALL}/bin/hython.exe`] = 'hython-exe-fixture'
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await page.evaluate(() => {
+    ;(window as any).__tauriMock.dazRunning = true
+  })
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+
+  // Both legs' cards are back — and the clock (the run started ~a minute ago).
+  await expect(page.locator(`[data-task="daz:${P.scene}"]`)).toHaveAttribute(
+    'data-task-status',
+    'active',
+    { timeout: 15_000 },
+  )
+  await expect(page.locator(`[data-task="hou:${P.houdini}"]`)).toHaveAttribute(
+    'data-task-status',
+    'waiting',
+  )
+  await expect(page.getByRole('button', { name: /Working \d+:\d{2}/ })).toBeVisible()
+
+  // The batch finishes — the RESTORED watch owns the outcome: the Houdini
+  // handoff lands, written by this reloaded window.
+  await runnerFinishesBatch(page)
+  await expect.poll(() => fileContent(page, HOUDINI_JOB), { timeout: 15_000 }).not.toBeNull()
+})
+
 test('rom only: the Houdini list can only OPEN — no auto-select, no export continuation', async ({
   page,
 }) => {

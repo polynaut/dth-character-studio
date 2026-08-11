@@ -351,6 +351,53 @@ describe('launchDazForPendingJobs — the reclaim owner', () => {
   })
 })
 
+describe('sidecar restore — the run OWNER reloads mid-batch', () => {
+  it("the character's own editor restores the full watch: clock, plan, ownership", async () => {
+    // beforeEach's dismissExportRun schedules a deferred sidecar delete —
+    // flush it before seeding, or it would eat this test's sidecar.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    dazRunning = true
+    files.set(
+      RUNNING,
+      JSON.stringify({
+        version: 1,
+        type: 'bulk-export',
+        progress: 40,
+        jobsDone: 0,
+        jobs: [{ scenePath: SCENE, scriptPath: SCRIPT, status: 'running' }],
+      }),
+    )
+    files.set(
+      '/appdata/export-run.json',
+      JSON.stringify({
+        characterId: 'c1',
+        total: 1,
+        startedAtMs: 1_754_000_000_000,
+        houdiniProjects: ['/games/P/Ita/houdini/Ita.hip'],
+        houdiniMode: 'export-selected',
+        scenes: [SCENE],
+      }),
+    )
+
+    // A sentinel/other watcher gets the display-only adoption…
+    const foreign = await fetchExportRunProgress()
+    expect(foreign).toMatchObject({ state: 'running', characterId: '' })
+
+    // …the owning character's editor gets its run BACK, whole: the persisted
+    // start time (the clock), the rows and the Houdini plan (the cards), and
+    // ownership — the finish report + continuation will fire here.
+    const run = await fetchExportRunProgress('c1')
+    expect(run).toMatchObject({
+      state: 'running',
+      characterId: 'c1',
+      startedAtMs: 1_754_000_000_000,
+      houdiniProjects: ['/games/P/Ita/houdini/Ita.hip'],
+      scenes: [SCENE],
+      rows: [{ scenePath: SCENE, status: 'running' }],
+    })
+  })
+})
+
 describe('display-only adoption — a window with no memory of starting the run', () => {
   it('serves the job rows + the progress-log view, so the panel can rebuild itself', async () => {
     // A live batch on disk, NO armed watch (a reloaded window mid-run).
