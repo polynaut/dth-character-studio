@@ -1,10 +1,14 @@
 """DTH Character Studio — Houdini-side export runner.
 
 Houdini runs a `456.py` found on HOUDINI_SCRIPT_PATH after a scene finishes
-loading. The studio launches Houdini with its own scripts folder on that path
-and `DTH_HOUDINI_JOB` pointing at a job file — the same handoff shape the Daz
-side uses for the Runner plugin: the studio writes a JSON job, the other side
-works through it and writes results back, the studio polls.
+loading. The studio launches HEADLESS hython via the sibling
+`headless_export.py` bootstrap (which loads the scene and runs this file with
+`DTH_HEADLESS` set) with `DTH_HOUDINI_JOB` pointing at a job file — the same
+handoff shape the Daz side uses for the Runner plugin: the studio writes a
+JSON job, the other side works through it and writes results back, the studio
+polls. The GUI path (a visible Houdini picking this up through the scene-load
+mechanism) remains fully supported — it was the original shape, and the
+window-wait machinery below exists for it.
 
 WITHOUT that environment variable this file does nothing at all, immediately.
 That matters: HOUDINI_SCRIPT_PATH is only set on the process the studio spawns,
@@ -519,11 +523,19 @@ def launch():
     a Qt timer (a sleep would freeze the very event loop this waits on) and
     bounded by WINDOW_WAIT_ATTEMPTS — a session whose window never shows still
     exports. The studio's result-file watch covers progress either way
-    ("Houdini opening…" simply lasts until the batch writes its first state).
+    ("Houdini starting…" simply lasts until the batch writes its first state).
     Without hdefereval (hython / no UI event loop) there is no window to wait
     for — run inline, exactly as before. A session with no job keeps the
     do-nothing-immediately promise: nothing is scheduled at all."""
     if not os.environ.get(JOB_ENV, ""):
+        return
+    # The studio's headless hython launch (headless_export.py sets the flag):
+    # no window to wait for, no event loop to defer into — run inline, now.
+    # Explicit rather than trusting the hdefereval import to fail under hython,
+    # because an import that SUCCEEDS without a UI event loop would defer the
+    # batch into a callback that never fires.
+    if os.environ.get("DTH_HEADLESS", ""):
+        main()
         return
     try:
         import hdefereval

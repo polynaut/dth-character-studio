@@ -137,7 +137,8 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
     houdiniInstallFolder: HOUDINI_INSTALL,
     houdiniDocsFolder: HOUDINI_DOCS,
   })
-  seed.files[`${HOUDINI_INSTALL}/bin/houdini.exe`] = 'houdini-exe-fixture'
+  // The headless launch probes hython.exe (the export leg never opens the GUI).
+  seed.files[`${HOUDINI_INSTALL}/bin/hython.exe`] = 'hython-exe-fixture'
   // The batch runs the HIDDEN bulk script, not the visible `ROM_…` one the
   // fixture seeds — a missing one is refused up front, before any job file.
   seed.files[`${SCRIPTS_ROOT}/Demo/Kira/.Bulk_ROM_Export.dsa`] = '// bulk-export fixture'
@@ -161,11 +162,11 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
   // outcome is stashed for the one end-of-everything report, and only the
   // transient hand-over info shows while Houdini takes over.
   await runnerFinishesBatch(page)
-  await expect(page.getByText(/Opening the Houdini project to export/)).toBeVisible()
+  await expect(page.getByText(/Starting the Houdini export in the background/)).toBeVisible()
   await expect(page.getByText(/DTH Export finished/)).toHaveCount(0)
 
-  // The hand-over: the job file lands in the character folder, 456.py is
-  // staged in app-data, and Houdini is launched pointed at both.
+  // The hand-over: the job file lands in the character folder, both runner
+  // scripts are staged in app-data, and HEADLESS hython is launched at them.
   await expect.poll(() => fileContent(page, HOUDINI_JOB), { timeout: 15_000 }).not.toBeNull()
   const job = JSON.parse((await fileContent(page, HOUDINI_JOB))!) as {
     version: number
@@ -193,15 +194,20 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
   expect(job.closeWhenDone).toBe(true)
 
   const [launch] = await callsNamed(page, 'launch_houdini_job')
+  expect(launch.request.hythonPath).toBe(`${HOUDINI_INSTALL}/bin/hython.exe`)
   expect(launch.request.scenePath).toBe(P.houdini)
   expect(launch.request.jobPath).toBe(HOUDINI_JOB)
   expect(launch.request.houdiniPrefDir).toBe(HOUDINI_DOCS)
+  // The full console (C++ cook chatter included) streams into a per-run log
+  // in the character folder — the reason the leg went headless.
+  expect(launch.request.logPath).toBe(`${P.charFolder}/.dth_houdini_console.log`)
   // The trailing `;&` is load-bearing: without it HOUDINI_SCRIPT_PATH REPLACES
   // Houdini's default and the user's own startup scripts stop running.
   expect(launch.request.scriptPath).toMatch(/;&$/)
-  expect(await fileKeys(page)).toContain(
-    `${launch.request.scriptPath.replace(/;&$/, '')}/456.py`,
-  )
+  const scriptsDir = launch.request.scriptPath.replace(/;&$/, '')
+  expect(launch.request.runnerPath).toBe(`${scriptsDir}/headless_export.py`)
+  expect(await fileKeys(page)).toContain(`${scriptsDir}/456.py`)
+  expect(await fileKeys(page)).toContain(`${scriptsDir}/headless_export.py`)
 
   // Mid-node, the result's `activity` channel carries what the HDA is saying —
   // the watch chip names the scene and shows the LAST line live (the poll runs

@@ -25,6 +25,16 @@ import type { Character } from '@dth/rom'
 export const HOUDINI_JOB_FILE = '.dth_houdini_job.json'
 export const HOUDINI_RESULT_FILE = '.dth_houdini_result.json'
 
+/** The headless run's console log (hython's full stdout+stderr, redirected by
+ *  the Rust spawn — the C++ cook chatter the in-process tee can never see).
+ *  One file per character, overwritten each run; cleared with the job/result. */
+export const HOUDINI_CONSOLE_FILE = '.dth_houdini_console.log'
+
+/** The hython bootstrap (`headless_export.py`) written beside `456.py` into
+ *  the app-data scripts folder before every launch — loads the `.hip`, then
+ *  runs `456.py` exactly once (see its docstring). */
+export const HOUDINI_HEADLESS_RUNNER = 'headless_export.py'
+
 /** The env var 456.py reads the job path from ('' = do nothing at all). */
 export const HOUDINI_JOB_ENV = 'DTH_HOUDINI_JOB'
 
@@ -423,10 +433,14 @@ export function houdiniRunFilesToClear(options: {
   hasResult: boolean
   jobPath: string
   resultPath: string
+  /** The headless run's console log — cleared with the rest (the report
+   *  already carries error/log/problems). A run that died WITHOUT a result
+   *  keeps it: then the console is the only evidence of what happened. */
+  consolePath?: string
 }): Array<string> {
   if (options.state !== 'finished' && options.state !== 'dead') return []
   if (!options.hasResult) return []
-  return [options.resultPath, options.jobPath].filter(Boolean)
+  return [options.resultPath, options.jobPath, options.consolePath ?? ''].filter(Boolean)
 }
 
 /** A finished run's one-line summary for the toast, e.g.

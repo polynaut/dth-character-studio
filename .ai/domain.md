@@ -692,10 +692,23 @@ older runtimes as stale.
   breather (`STARTUP_BREATHER_MS`) so the viewport finishes its first cook —
   textures included — before `do_export` hogs the main thread. Sessions
   without the module (hython) run inline — no window to wait for.
-  Chosen shape is **visible GUI + a startup script reading a job file**, not
-  headless hython and not `hrpyc` remote control, so it mirrors the Daz Runner
-  handoff. Houdini runs a `456.py` found on `HOUDINI_SCRIPT_PATH` after a scene
-  loads; without `DTH_HOUDINI_JOB` it does nothing at all.
+  Chosen shape was **visible GUI + a startup script reading a job file** (not
+  `hrpyc` remote control), mirroring the Daz Runner handoff — **flipped to
+  HEADLESS hython 2026-08-11** (Remo's call, reversing his earlier
+  watch-it-happen preference once the live progress chip covered it): the
+  studio now runs `hython headless_export.py`, which loads the `.hip`
+  (`DTH_HOUDINI_HIP`) and runs `456.py` inline (`DTH_HEADLESS` — explicit,
+  because an hdefereval import that succeeds without a UI event loop would
+  defer the batch into a callback that never fires). Wins: the whole
+  window/paint fragility class is gone, and the process's FULL console (C++
+  cook chatter the in-process tee can't see) streams into
+  `.dth_houdini_console.log` beside the job/result files (cleared with them; a
+  dead run without a result keeps it as the only evidence). Liveness is the
+  TRACKED child (`try_wait` in houdini.rs — immune to the Utils drawer's own
+  hython scans), with the GUI process list as fallback. The GUI path itself
+  still works (456.py's scene-load mechanism + window-wait machinery remain);
+  "Open only" still opens the visible GUI via `openScene`. Without
+  `DTH_HOUDINI_JOB`, 456.py does nothing at all.
   Networks match scenes by the **`.dth` path**: a `DazToHueImport` stores it in
   `import_character_dtu_file`, and the studio WROTE that file — an identity that
   survives a renamed network, which a name match would not. A project may hold

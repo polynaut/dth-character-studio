@@ -51,7 +51,8 @@ function houdiniSeed(withExport: boolean) {
     houdiniInstallFolder: HOUDINI_INSTALL,
     houdiniDocsFolder: HOUDINI_DOCS,
   })
-  seed.files[`${HOUDINI_INSTALL}/bin/houdini.exe`] = 'houdini-exe-fixture'
+  // The headless launch probes hython.exe (the export leg never opens the GUI).
+  seed.files[`${HOUDINI_INSTALL}/bin/hython.exe`] = 'hython-exe-fixture'
   if (withExport) seed.files[DELIVERED_DTH] = 'dth-fixture'
   return seed
 }

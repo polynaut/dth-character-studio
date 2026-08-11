@@ -1,52 +1,86 @@
+use std::sync::Mutex;
+
 use serde::Deserialize;
 
-/// Open a Houdini project in the GUI and let it run the studio's export job.
+/// Run the studio's export job HEADLESS: `hython <bootstrap>` loads the
+/// project and works the job — no Houdini window at all (flipped from the
+/// original GUI launch 2026-08-11; the live progress chip replaced "watching
+/// it happen", and headless removes the whole window/paint fragility class
+/// while exposing the FULL console).
 ///
-/// The handoff is entirely through the environment of THIS process: Houdini
-/// runs a `456.py` found on `HOUDINI_SCRIPT_PATH` once a scene has loaded, and
-/// that script does nothing at all unless `DTH_HOUDINI_JOB` names a job file.
-/// Both are set here and nowhere else, so an ordinary Houdini the user starts
-/// themselves is untouched.
+/// The handoff is entirely through the environment of THIS process:
+/// `DTH_HOUDINI_JOB` names the job file, `DTH_HOUDINI_HIP` the project, and
+/// `DTH_HEADLESS` tells `456.py` to run its batch inline. An ordinary
+/// Houdini/hython the user starts themselves sees none of it.
 ///
-/// GUI rather than headless hython, deliberately: the user wants to watch the
-/// exports happen, and the DazToHue HDA's pre-flight dialog exists only in a
-/// UI session (456.py answers it and records what it said).
+/// stdout+stderr are redirected to `log_path` — the whole point of headless:
+/// the C++-side cook chatter (node warnings, geometry I/O) never flows through
+/// Python's stdout, so the in-process tee can't see it; the process pipe can.
 ///
 /// Fire-and-forget — `spawn`, never `wait`. The export takes minutes and the
-/// studio's window must stay live to poll the result file; the process outlives
-/// the command. Whether Houdini stays open afterwards is the JOB's decision:
-/// with `closeWhenDone` set (the DTH Export flow always sets it), 456.py exits
-/// the instance from inside once the final result is written.
+/// studio's window must stay live to poll the result file. The child handle is
+/// KEPT (see `houdini_running`): headless liveness can't come from a window
+/// list, and matching `hython.exe` by name would read the Utils drawer's scans
+/// as this run being alive.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LaunchHoudiniJobRequest {
-    /// Absolute path of `houdini.exe` (from the Houdini install folder).
-    pub houdini_path: String,
-    /// The `.hip`/`.hiplc` project to open.
+    /// Absolute path of `hython.exe` (from the Houdini install folder).
+    pub hython_path: String,
+    /// The bootstrap script hython runs (`headless_export.py`, written into
+    /// the studio's scripts folder beside `456.py` before every launch).
+    pub runner_path: String,
+    /// The `.hip`/`.hiplc` project to load (`DTH_HOUDINI_HIP`).
     pub scene_path: String,
     /// The job file 456.py reads (`DTH_HOUDINI_JOB`).
     pub job_path: String,
     /// The value for `HOUDINI_SCRIPT_PATH` — the studio's script folder plus
     /// `&`, composed in TS (`houdiniScriptPathValue`) so the `&` that preserves
-    /// Houdini's own default path is covered by a unit test.
+    /// Houdini's own default path is covered by a unit test. Still set
+    /// headless: harmless, and it covers a Houdini build whose scene load runs
+    /// on-load scripts under hython too (456.py's env-pop makes that a no-op
+    /// for the bootstrap's own attempt).
     pub script_path: String,
     /// The Houdini user-prefs folder, as HOUDINI_USER_PREF_DIR. Same reason as
     /// `create_houdini_project`: inherited env can resolve the prefs elsewhere,
     /// and then the user's otls — the DazToHue HDA itself — never load, so the
     /// export nodes this job drives would not exist. Empty = inherit.
     pub houdini_pref_dir: String,
+    /// The console log the process writes into (created/truncated here).
+    pub log_path: String,
 }
 
-/// Whether a Houdini GUI is up — the liveness half of the export poll, exactly
-/// like `daz_studio_running` is for the Daz batch. A result file stuck at
-/// "running" with no Houdini left means the user closed the window (or it
-/// crashed) and the poll must stop instead of spinning forever.
+/// The last export job's child process — the PRECISE liveness answer for the
+/// headless run. One at a time by design (the job/result files are
+/// per-character singletons and the queue is sequential), so a single slot is
+/// the whole story. Dropping a previous handle never kills its process.
+static JOB_CHILD: Mutex<Option<std::process::Child>> = Mutex::new(None);
+
+/// Whether the export job is still alive — the liveness half of the export
+/// poll, exactly like `daz_studio_running` is for the Daz batch. A result file
+/// stuck at "running" with nothing left to write it means the run died and the
+/// poll must stop instead of spinning forever.
 ///
-/// Matches `houdini.exe` and `houdinifx.exe`/`houdinicore.exe` — the licence
-/// tier decides the binary name, and the studio must not care which one the
-/// user runs.
+/// Two answers, in order: the TRACKED child of the last headless launch
+/// (`try_wait` — precise, and immune to unrelated hython processes like the
+/// Utils drawer's background scans), then the GUI process list
+/// (`houdini.exe`/`houdinifx.exe`/`houdinicore.exe` — the licence tier decides
+/// the binary name). The GUI fallback still matters: a job can also be picked
+/// up by a visible Houdini through the scene-load mechanism (the original
+/// shape), and an app restart loses the tracked handle while such a session
+/// keeps working.
 #[tauri::command(async)]
 pub fn houdini_running() -> bool {
+    if let Ok(mut slot) = JOB_CHILD.lock() {
+        if let Some(child) = slot.as_mut() {
+            match child.try_wait() {
+                Ok(None) => return true,
+                // Exited (or unprobeable) — drop the handle; the GUI fallback
+                // below still gets its say.
+                _ => *slot = None,
+            }
+        }
+    }
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -71,9 +105,19 @@ pub fn houdini_running() -> bool {
 
 #[tauri::command(async)]
 pub fn launch_houdini_job(request: LaunchHoudiniJobRequest) -> Result<(), String> {
-    let mut command = std::process::Command::new(&request.houdini_path);
-    command.arg(&request.scene_path);
+    // The console log — created fresh per run, one file per character
+    // (overwritten, never accreted: the housekeeping bound). Two handles, one
+    // per stream; both append to the same file.
+    let log = std::fs::File::create(&request.log_path)
+        .map_err(|e| format!("Could not create the console log {}: {e}", request.log_path))?;
+    let log_err = log
+        .try_clone()
+        .map_err(|e| format!("Could not open the console log twice: {e}"))?;
+    let mut command = std::process::Command::new(&request.hython_path);
+    command.arg(&request.runner_path);
     command.env("DTH_HOUDINI_JOB", &request.job_path);
+    command.env("DTH_HOUDINI_HIP", &request.scene_path);
+    command.env("DTH_HEADLESS", "1");
     command.env("HOUDINI_SCRIPT_PATH", &request.script_path);
     if !request.houdini_pref_dir.is_empty() {
         command.env(
@@ -82,9 +126,24 @@ pub fn launch_houdini_job(request: LaunchHoudiniJobRequest) -> Result<(), String
         );
     }
     command
+        .stdin(std::process::Stdio::null())
+        .stdout(log)
+        .stderr(log_err);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        // No console window — hython would otherwise flash one up over the
+        // studio (the same suppression every other hython spawn here uses).
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    let child = command
         .spawn()
-        .map(|_| ())
-        .map_err(|e| format!("Could not start Houdini: {e}"))
+        .map_err(|e| format!("Could not start hython: {e}"))?;
+    if let Ok(mut slot) = JOB_CHILD.lock() {
+        *slot = Some(child);
+    }
+    Ok(())
 }
 
 /// Create a ready-made Houdini project for a character: `hython` starts a

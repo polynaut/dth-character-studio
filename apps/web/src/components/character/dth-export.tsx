@@ -351,7 +351,7 @@ export function DthExportAction({
           houdini: [],
         }
         // Transient — the report waits for the end of the whole process.
-        toast.info('Opening the Houdini project to export…')
+        toast.info('Starting the Houdini export in the background…')
         void startHoudiniQueue(
           run.houdiniProjects,
           run.houdiniMode === 'export-all'
@@ -615,7 +615,7 @@ export function DthExportAction({
     const label =
       houdini.state === 'running' && houdini.total > 0
         ? `Houdini ${workedOn}/${houdini.total}`
-        : 'Houdini opening…'
+        : 'Houdini starting…'
     const lastActivity = activity?.lines[activity.lines.length - 1] ?? ''
     const chipActivity = activity
       ? [activity.scene, lastActivity].filter(Boolean).join(' · ')
@@ -636,7 +636,7 @@ export function DthExportAction({
         title={
           houdini.state === 'running'
             ? `Houdini is exporting — ${houdini.done} of ${houdini.total} node${houdini.total === 1 ? '' : 's'} done. Click to stop watching${queuedNote}.${activityTail}`
-            : `Houdini is opening the project; the export starts once the scene has loaded. Click to stop watching${queuedNote}.`
+            : `Houdini is loading the project in the background (headless); the export starts once the scene is loaded. Click to stop watching${queuedNote}.`
         }
       >
         <Loader2 className="animate-spin" />
