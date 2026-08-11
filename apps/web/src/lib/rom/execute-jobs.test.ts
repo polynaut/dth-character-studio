@@ -137,8 +137,23 @@ describe('the JSON job file (contract v2)', () => {
       percent: 40,
       message: 'ROM generated',
       scene: 'Kira',
-      lines: ['opening scene', 'scene opened', 'ROM generated'],
+      // With no job rows to resolve a file name, the scene-open lines fall
+      // back to the stem the log itself carries.
+      lines: ['opening scene Kira', 'scene opened Kira', 'ROM generated'],
     })
+    // The scene-OPEN lines name the file they opened, resolved from the job
+    // rows' scene paths (the log carries only the stem — an extension would
+    // be a guess); everything else stays bare.
+    const named = exportProgressStateFrom(parsed.slice(0, 3), 40, ['X:/p/Kira/daz3d/Kira.duf'])
+    expect(named?.lines).toEqual([
+      'opening scene Kira.duf',
+      'scene opened Kira.duf',
+      'ROM generated',
+    ])
+    // A stem with no matching row falls back to the stem itself.
+    expect(exportProgressStateFrom(parsed.slice(0, 1), 40, [])?.lines).toEqual([
+      'opening scene Kira',
+    ])
     // Batch-level lines carry no scene; an empty log has no view at all.
     const batch = exportProgressStateFrom([{ percent: 100, message: 'batch finished' }])
     expect(batch?.scene).toBe('')

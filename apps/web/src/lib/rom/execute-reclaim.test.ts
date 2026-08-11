@@ -434,9 +434,11 @@ describe('display-only adoption — a window with no memory of starting the run'
       ],
     })
     expect(run?.state === 'running' && run.step?.percent).toBe(40)
+    // The scene-open lines carry the file name, resolved from the job rows'
+    // own scene paths (the log line carries only the stem).
     expect(run?.state === 'running' && run.step?.lines).toEqual([
-      'opening scene',
-      'scene opened',
+      'opening scene Ita.duf',
+      'scene opened Ita.duf',
       'ROM generated',
     ])
     // What honestly cannot come back: the start time only ever lived in the

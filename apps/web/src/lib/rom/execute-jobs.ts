@@ -266,6 +266,11 @@ function stripSceneMessagePrefix(message: string): string {
   return /^.+?:\s+(.*)$/.exec(message)?.[1] ?? message
 }
 
+/** The two SCENE-OPEN steps name the file they opened — the only lines where
+ *  the scene is the news (the rest all happen to the scene the card already
+ *  shows, and a per-scene run works several of them in a row). */
+const SCENE_OPEN_MESSAGES: ReadonlySet<string> = new Set(['opening scene', 'scene opened'])
+
 /** First-seen stamps for a rolling/appending line tail, carried across polls
  *  by the caller. */
 export interface StampedLogStore {
@@ -313,15 +318,31 @@ export function stampLogLines(
 export function exportProgressStateFrom(
   parsed: Array<ExportProgressLine>,
   keep = 40,
+  /** Scene paths of the batch's job rows — the scene-open lines are rendered
+   *  with the real FILE NAME resolved from these (the log itself carries only
+   *  the stem, and guessing an extension would be a lie). A stem with no row
+   *  falls back to the stem. */
+  scenePaths: ReadonlyArray<string> = [],
 ): ExportProgressState | null {
   if (parsed.length === 0) return null
+  const fileNameByStem = new Map<string, string>()
+  for (const path of scenePaths) {
+    const fileName = path.split(/[\\/]/).pop() ?? ''
+    if (fileName) fileNameByStem.set(fileName.replace(/\.[^./\\]+$/, ''), fileName)
+  }
+  const display = (message: string): string => {
+    const stem = /^(.+?):\s/.exec(message)?.[1] ?? ''
+    const text = stripSceneMessagePrefix(message)
+    if (!stem || !SCENE_OPEN_MESSAGES.has(text)) return text
+    return `${text} ${fileNameByStem.get(stem) ?? stem}`
+  }
   const last = parsed[parsed.length - 1]
   const scene = /^(.+?):\s/.exec(last.message)?.[1] ?? ''
   return {
     percent: last.percent,
-    message: stripSceneMessagePrefix(last.message),
+    message: display(last.message),
     scene,
-    lines: parsed.slice(-keep).map((line) => stripSceneMessagePrefix(line.message)),
+    lines: parsed.slice(-keep).map((line) => display(line.message)),
   }
 }
 

@@ -616,11 +616,19 @@ export type ExportRunProgress =
 /** The verbose progress log's current view (Runner v1.2.0), read fresh per
  *  poll. Best-effort by construction: an unreadable/absent/empty file is null
  *  — an old Runner simply never writes one. */
-async function readExportProgressState(): Promise<ExportProgressState | null> {
+async function readExportProgressState(
+  /** The batch's job rows — their scene paths resolve the scene-open lines'
+   *  real file names (the log carries only the stem). */
+  scenePaths: ReadonlyArray<string> = [],
+): Promise<ExportProgressState | null> {
   try {
     const path = await storage.dataPath(EXPORT_PROGRESS_FILE)
     if (!(await exists(path))) return null
-    return exportProgressStateFrom(parseExportProgressLog(await readTextFile(path)))
+    return exportProgressStateFrom(
+      parseExportProgressLog(await readTextFile(path)),
+      undefined,
+      scenePaths,
+    )
   } catch {
     return null
   }
@@ -683,7 +691,7 @@ export async function fetchExportRunProgress(watcher?: string): Promise<ExportRu
         // the same global singleton the Runner appends to either way: the
         // pipeline panel rebuilds its Daz cards and its log window from
         // these, instead of showing an empty shell.
-        step: await readExportProgressState(),
+        step: await readExportProgressState(parsed.jobs.map((j) => j.scenePath)),
         rows: parsed.jobs.map((j) => ({ scenePath: j.scenePath, status: j.status })),
       }
     } catch {
@@ -778,7 +786,7 @@ export async function fetchExportRunProgress(watcher?: string): Promise<ExportRu
         // The verbose per-scene view (Runner v1.2.0 + the generated script's
         // own lines) — null on an old Runner / an empty log; the UI then
         // shows the row counts alone, exactly as before.
-        step: await readExportProgressState(),
+        step: await readExportProgressState(parsed.jobs.map((j) => j.scenePath)),
         // The rows + the run's Houdini plan, so an editor whose component
         // state was reloaded away (sidecar-restored watch) can re-arm its
         // task cards without having seen the Start.
