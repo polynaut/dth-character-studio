@@ -65,7 +65,12 @@ Instead of exporting by hand, let the script drive the **DTH Exporter Plugin**
    `<Name>_<Scene>.*`), and the
    **PoseAsset CSV** (plus a **reference-skeleton FBX** for each **Bone scale**
    frame, under a `Reference Skeletons` subfolder — the CSV already points at
-   each one).
+   each one). The script **deletes the scene's previous export set first** —
+   an export always replaces the whole set, so files from an earlier layout
+   (or a renamed hair item) never linger beside a fresh one, and Daz Studio
+   4's exporter, which skips the ROM walk when its output files already
+   exist, always gets the empty folder it needs. Anything else you keep in
+   the folder is left alone.
 
 After a clean ROM build — right before any export — the script also **saves
 the ROM'd scene** as `<scene>_ROM.duf` into a `rom-animations/` subfolder next

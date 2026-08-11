@@ -1502,8 +1502,19 @@ export const CHARACTER_SCHEMA_VERSION = 30
  *       a fallback — `DthScanSceneMorphsQuiet(dir, scene, genesis)` from the
  *       generated script, `genesis` per scene in the bulk scan's sidecar.
  *       Detection still wins where it works; the fallback only fills a blank.
+ * v69 — the export block clears the scene's PREVIOUS export set before running
+ *       the exporter. Measured 2026-08-11 (DS4 exporter plugin 2.0.2, DS
+ *       4.24): a scripted `doExport` whose output files already exist SKIPS
+ *       the per-frame ROM walk and rewrites them as a single static frame —
+ *       fresh mtimes, rest-pose content, no error anywhere (the Alembic
+ *       carries the full time range with every sample identical). Deleting
+ *       the set first forces the real walk; DS6 never had the problem, and
+ *       clearing also stops stale files (renamed hair items' grooms, a
+ *       changed frame layout's reference skeletons) lingering beside a fresh
+ *       set. Only the set's own name patterns are removed — anything else in
+ *       the folder is the user's.
  */
-export const RUNTIME_VERSION = 68
+export const RUNTIME_VERSION = 69
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

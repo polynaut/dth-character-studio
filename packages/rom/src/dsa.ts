@@ -501,11 +501,52 @@ ${refDirBlock}
     }
 `
     : ''
+  // Clear THIS set's previous output before the exporter runs. Measured
+  // 2026-08-11 (DS4 exporter plugin 2.0.2, DS 4.24): a scripted doExport whose
+  // output files already exist SKIPS the per-frame ROM walk and rewrites them
+  // as a single static frame — fresh mtimes, rest-pose content, no error
+  // anywhere (26 s and an 8 MB Alembic against the same scene's 3.5 min and
+  // 332 MB into an empty folder). Deleting the old set first forces the real
+  // walk; DS6 never skipped, and a fresh set also stops stale files (a renamed
+  // hair item's grooms, a changed frame layout's reference skeletons)
+  // lingering beside it. Only the set's OWN name patterns are removed —
+  // anything else in the folder (a user's zip, another scene's set) is not
+  // ours to touch. DzFile.remove + DzDir.entryList are the runtime's own
+  // DS4-proven idioms (DthProducts.dsa).
+  const clearPreviousSetBlock = `    var dthOldSetDir = new DzDir(dthExportDir);
+    if (dthOldSetDir.exists()) {
+        var dthOldNames = dthOldSetDir.entryList();
+        var dthCleared = 0;
+        for (var dthCi = 0; dthCi < dthOldNames.length; dthCi++) {
+            var dthOldName = String(dthOldNames[dthCi]);
+            var dthOwnFile =
+                dthOldName == dthExportName + ".dth" ||
+                dthOldName == dthExportName + ".abc" ||
+                dthOldName == dthExportName + ".fbx" ||
+                dthOldName == dthExportName + "_base.fbx" ||
+                dthOldName == dthExportName + "_experimental_rom.fbx" ||
+                dthOldName == dthExportName + "_pose_asset.csv" ||
+                (dthOldName.indexOf(dthExportName + "_Hair_") == 0 && dthOldName.indexOf("_grooms.abc") > 0);
+            if (!dthOwnFile) continue;
+            if (new DzFile(dthOldSetDir.absoluteFilePath(dthOldName)).remove()) dthCleared++;
+        }
+        var dthOldRefDir = new DzDir(dthExportDir + "/Reference Skeletons");
+        if (dthOldRefDir.exists()) {
+            var dthOldRefs = dthOldRefDir.entryList();
+            for (var dthCr = 0; dthCr < dthOldRefs.length; dthCr++) {
+                var dthOldRef = String(dthOldRefs[dthCr]);
+                if (dthOldRef.indexOf(dthExportName + "_frame_") != 0) continue;
+                if (new DzFile(dthOldRefDir.absoluteFilePath(dthOldRef)).remove()) dthCleared++;
+            }
+        }
+        if (dthCleared > 0) print("Cleared " + dthCleared + " previous export file(s) from " + dthExportDir);
+    }`
   // The export call + CSV delivery. With groom items listed it is wrapped in the
   // hide bracket below; without any, the emitted script is unchanged. The name
   // is the run-time dthExportName (scene-suffixed), never the bare base name;
   // the reference frames are the OPEN scene's (see refFramesBlock above).
-  const exportCore = `${refFramesBlock}
+  const exportCore = `${clearPreviousSetBlock}
+${refFramesBlock}
     dthExportAction.doExport(dthExportDir, dthExportName, dthRefFrames, false);
 ${csvCopyBlock}`
   const groomMap = groomSceneMap(character)
