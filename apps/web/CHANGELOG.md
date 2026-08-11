@@ -1,5 +1,36 @@
 # @dth/web
 
+## 0.73.1
+
+### Patch Changes
+
+- [#782](https://github.com/polynaut/dth-character-studio/pull/782) [`c151d6f`](https://github.com/polynaut/dth-character-studio/commit/c151d6fd1bc3604d3b74e1d98df2c1619783b3f1) Thanks [@polynaut](https://github.com/polynaut)! - **The first Generate project no longer asks which Daz scene to import.**
+
+  A character's first Houdini project is its main one — wired to the primary scene, which is what everyone answered anyway. The **Daz scene to import** picker now appears from the **second** project on, where "which scene's export set?" genuinely differs (one project per outfit scene). A single-scene character stays unasked, as before; unlink every project and the next generate counts as the first again.
+
+- [#786](https://github.com/polynaut/dth-character-studio/pull/786) [`e92357a`](https://github.com/polynaut/dth-character-studio/commit/e92357aa2c3531acac4469107c8d577bc2470f5f) Thanks [@polynaut](https://github.com/polynaut)! - **Settings hides the "Generate Houdini Projects" panel while a Houdini installation is activated.**
+
+  With a card activated there is nothing left in it: the install folder is the card's own (already listed on it), the docs pairing is the card's whole point, and the panel had no field and no choice — it could only restate a path shown two sections above. It now appears only while the Houdini paths are yours to type (no card activated), where its manual install-folder field and the live pairing warning actually earn their place. Same rule as the derived Daz/Houdini destinations: show only the paths the studio uses, and only the choices that exist.
+
+- [#785](https://github.com/polynaut/dth-character-studio/pull/785) [`bc29ccb`](https://github.com/polynaut/dth-character-studio/commit/bc29ccbf0eae6fa9cf1e0711184c54db0f7e9871) Thanks [@polynaut](https://github.com/polynaut)! - **The Houdini export leg opens visibly again, and a finished run's tooltip lets go of the screen.**
+
+  - **Houdini ran the whole export invisibly** — window never painted, exports delivered, session closed itself (measured 2026-08-11: a four-minute run with nothing on screen). The deferral that was supposed to wait for the window (`hdefereval.executeDeferred` + a 10 s timer) is not a paint guarantee: Houdini pumps the event loop during startup, so on a slow first scene load the timer fired **before the main window painted**, the batch seized the UI thread for the whole run, and `closeWhenDone` closed the never-shown window. 456.py now polls `hou.qt.mainWindow().isVisible()` and only starts the breather once the window is actually up (bounded at 2 minutes, so an odd session still exports).
+  - **The DTH Export button's tooltip stayed on screen after a run finished.** The tooltip hides on mouse-leave — but a button that **unmounts under a stationary cursor** (exactly what a finishing progress state does) never emits one, leaving the tooltip pinned to a detached element forever. The tooltip host now watches for its anchor leaving the DOM and hides with it. App-wide fix: every state-swapped control gets it, not just this button.
+
+- [#788](https://github.com/polynaut/dth-character-studio/pull/788) [`c765f71`](https://github.com/polynaut/dth-character-studio/commit/c765f71c70dc83cab63d261ce763eb1e4a67a140) Thanks [@polynaut](https://github.com/polynaut)! - **The Daz Studio plugins panel anchors each detection under its folder — and two standing hint lines retire.**
+
+  Each found Exporter DLL is now listed directly **under the release-folder field it came from**, instead of in one block below the whole list — and the hint drops the folder path, which only echoed the field above it. When one folder holds a subfolder per generation, the subfolder still shows (`· Daz Studio 4`), since that's what tells the two builds apart. The standing _"Runner plugin — ships with this app (…)"_ line is gone too: the **Runner plugin** table header says it on hover instead.
+
+  Two hint lines that only explained the obvious are removed outright: _"Everything up to date — Reinstall copies it all again."_ beside the plugin install buttons (the button already reads **Reinstall all** and the table above is green — the pending counter stays, it's the actionable state), and the _"New folders can't be added while a Houdini installation is activated…"_ paragraph at the bottom of Setup DTH Release (the button simply disappears; the guide documents the rule).
+
+- [#784](https://github.com/polynaut/dth-character-studio/pull/784) [`37f6e70`](https://github.com/polynaut/dth-character-studio/commit/37f6e70a724582a626a92a339123a8aaf17a917c) Thanks [@polynaut](https://github.com/polynaut)! - **The Setup DTH Release panel reads as install targets now.** The two halves of a release install — Daz content into the library, Houdini assets into a documents folder — each get an icon-tile row under one "Ready to install DTH x.y" lead-in, so the panel reads as "one release, these destinations" instead of a run of look-alike fields and buttons. "Add another Houdini folder" became the dashed add-row it acts like, and extra folders join as further target rows.
+
+  **Derived destinations name their true source.** The "Installs into … from the Daz installation above" sentence was hardcoded — even under the Houdini documents folder (derived from the _Houdini_ installation) and under Generate Houdini Projects' hython path, which is a tool source, not an install destination. Each now names the section it actually derives from, an empty Houdini documents folder gets the real fix ("start this Houdini once"), and the hython line says "Uses" instead of "Installs into" — including when its path is empty, where "start this Houdini once" would have been the wrong advice (a launch creates the documents folder, never the installation folder).
+
+- Updated dependencies [[`2e061a2`](https://github.com/polynaut/dth-character-studio/commit/2e061a2fd405d060a8c3587e53113cb2796cabff), [`bc29ccb`](https://github.com/polynaut/dth-character-studio/commit/bc29ccbf0eae6fa9cf1e0711184c54db0f7e9871)]:
+  - @dth/rom@0.73.1
+  - @dth/ui@0.73.1
+
 ## 0.73.0
 
 ### Minor Changes
