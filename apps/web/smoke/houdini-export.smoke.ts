@@ -62,6 +62,31 @@ async function runnerFinishesBatch(page: Page) {
   )
 }
 
+/** Stand in for 456.py MID-node: the result file says "running" with the live
+ *  `activity` channel — the lines ActivityCapture caught from the HDA's own
+ *  output while its synchronous do_export works. */
+async function houdiniReportsExporting(page: Page) {
+  await page.evaluate(
+    ([result]) => {
+      const mock = (window as any).__tauriMock
+      ;(mock.files as Map<string, string>).set(result, JSON.stringify({
+        version: 1,
+        state: 'running',
+        total: 1,
+        done: 0,
+        nodes: [],
+        activity: {
+          node: '/obj/DazToHue1/export',
+          scene: 'KiraDefault_G9_GP',
+          lines: ['Importing Alembic…', 'Baking textures 3/12…'],
+          updatedAtMs: Date.now(),
+        },
+      }))
+    },
+    [HOUDINI_RESULT],
+  )
+}
+
 /** Stand in for 456.py: the result file reports one node exported — carrying a
  *  `problems` entry, which the HDA's auto-answered "Continue anyway?" dialog
  *  produced and which nothing else would ever show. (Houdini itself has been
@@ -175,6 +200,11 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
   expect(await fileKeys(page)).toContain(
     `${launch.request.scriptPath.replace(/;&$/, '')}/456.py`,
   )
+
+  // Mid-node, the result's `activity` channel carries what the HDA is saying —
+  // the watch chip shows the LAST line live (the poll runs every 2.5s).
+  await houdiniReportsExporting(page)
+  await expect(page.getByText('Baking textures 3/12…')).toBeVisible({ timeout: 15_000 })
 
   // 456.py works through it and reports — and NOW the one summary toast fires,
   // covering the whole process: the Daz leg and the Houdini leg, per line.

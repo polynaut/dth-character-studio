@@ -303,6 +303,47 @@ describe('houdiniRunStateFrom', () => {
     expect(houdiniRunStateFrom(result({}), true)).toEqual({ state: 'running', done: 1, total: 3 })
   })
 
+  it('carries the live mid-node activity — only when it has something to say', () => {
+    // 456.py streams the HDA's own output (stdout/status bar) into the result
+    // while a node's synchronous do_export runs — the studio's only window
+    // into the minutes-long call.
+    const withActivity = result({
+      activity: {
+        node: '/obj/DazToHue1/export',
+        scene: 'KiraDefault',
+        lines: ['Baking textures…', 'Exporting FBX…'],
+        updatedAtMs: 123,
+      },
+    })
+    expect(houdiniRunStateFrom(withActivity, true)).toEqual({
+      state: 'running',
+      done: 1,
+      total: 3,
+      activity: {
+        node: '/obj/DazToHue1/export',
+        scene: 'KiraDefault',
+        lines: ['Baking textures…', 'Exporting FBX…'],
+        updatedAtMs: 123,
+      },
+    })
+    // An EMPTY channel is dropped — the UI must not clear its last-activity
+    // line between nodes for nothing.
+    const emptyActivity = result({ activity: { node: '/obj/x', scene: '', lines: [] } })
+    expect(houdiniRunStateFrom(emptyActivity, true)).toEqual({ state: 'running', done: 1, total: 3 })
+  })
+
+  it('keeps a node’s captured log tail on its report entry', () => {
+    const done = parseHoudiniResult(
+      JSON.stringify({
+        state: 'done',
+        total: 1,
+        done: 1,
+        nodes: [{ node: '/obj/a', status: 'ok', log: ['line one', 'line two'] }],
+      }),
+    )!
+    expect(done.nodes[0].log).toEqual(['line one', 'line two'])
+  })
+
   it('calls a half-finished run dead once Houdini exits — the poll must not spin', () => {
     // The user closed the window (or it crashed) mid-batch: the result file
     // stays at "running" forever, so liveness is the only way out.

@@ -603,6 +603,14 @@ export function DthExportAction({
       houdini.state === 'running' && houdini.total > 0
         ? `Houdini ${houdini.done}/${houdini.total}`
         : 'Houdini opening…'
+    // The live mid-node channel: what the currently exporting node is SAYING
+    // (456.py streams the HDA's own output into the polled result). The chip
+    // shows the last line; the tooltip carries the recent tail.
+    const activity = houdini.state === 'running' ? houdini.activity : undefined
+    const lastActivity = activity?.lines[activity.lines.length - 1] ?? ''
+    const activityTail = activity
+      ? `\n\nHoudini says (${activity.scene || activity.node}):\n${activity.lines.slice(-8).join('\n')}`
+      : ''
     return (
       <Button
         variant="outline"
@@ -613,13 +621,18 @@ export function DthExportAction({
         }}
         title={
           houdini.state === 'running'
-            ? `Houdini is exporting — ${houdini.done} of ${houdini.total} node${houdini.total === 1 ? '' : 's'} done. Click to stop watching${queuedNote}.`
+            ? `Houdini is exporting — ${houdini.done} of ${houdini.total} node${houdini.total === 1 ? '' : 's'} done. Click to stop watching${queuedNote}.${activityTail}`
             : `Houdini is opening the project; the export starts once the scene has loaded. Click to stop watching${queuedNote}.`
         }
       >
         <Loader2 className="animate-spin" />
         <img src={houdiniLogo} alt="Houdini" className="size-5 shrink-0 object-contain" />
         {label}
+        {lastActivity && (
+          <span className="max-w-48 truncate text-xs font-normal text-muted-foreground">
+            {lastActivity}
+          </span>
+        )}
         <ElapsedSince
           since={houdini.state === 'starting' || houdini.state === 'running' ? houdini.startedAtMs : undefined}
         />

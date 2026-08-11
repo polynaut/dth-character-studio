@@ -676,6 +676,14 @@ older runtimes as stale.
   which is a long silence on a big project), works (`running done/total`) and
   finishes. Liveness comes from `houdini_running`, without which a result file
   stuck at "running" after the user closed Houdini would poll forever.
+  Mid-NODE the result also carries a live `activity` channel: 456.py's
+  `ActivityCapture` tees `sys.stdout`/`stderr` + `hou.ui.setStatusMessage` while
+  `do_export` runs and streams the lines (throttled 0.5 s, rolling 40) into the
+  polled file — the studio's only window into the minutes-long synchronous call;
+  each node's report entry keeps a capped `log` tail. WHAT the HDA actually
+  emits there is unmeasured until the first live run — the capture is
+  deliberately broad so that run is the probe; nothing emitted = the chip just
+  shows elapsed time.
   MEASURED on the first live run (2026-08-03): 456.py fires BEFORE the main
   window paints, and inline work there holds the window back — the whole batch
   ran against a blank screen and Houdini "opened" only after the last node.

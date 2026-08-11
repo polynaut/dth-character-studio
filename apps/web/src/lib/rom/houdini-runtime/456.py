@@ -47,6 +47,7 @@ the batch, and a queue of projects must not stack open windows.
 
 import json
 import os
+import sys
 import time
 import traceback
 
@@ -54,6 +55,14 @@ import hou
 
 JOB_ENV = "DTH_HOUDINI_JOB"
 EXPORT_TYPES = ("daztohueexport", "daztohuegroomexport")
+
+# The result file's live-activity channel is BOUNDED (the studio polls it, and
+# a print-happy export must not grow it without limit): the rolling window the
+# studio shows, the per-node tail kept in the final report, and how often the
+# file is rewritten mid-node at most.
+ACTIVITY_LINES_KEPT = 40
+NODE_LOG_LINES_KEPT = 200
+ACTIVITY_FLUSH_SECONDS = 0.5
 
 
 def normalize(path):
@@ -147,29 +156,157 @@ class DialogAnswers(object):
         return False
 
 
+class ActivityCapture(object):
+    """Record every line the HDA emits while ONE export node runs — the only
+    progress channel a synchronous `do_export` has. Three sources, all TEE'd
+    (forwarded, never swallowed — the Houdini console keeps its own log):
+    `sys.stdout` and `sys.stderr` (prints and tracebacks), and
+    `hou.ui.setStatusMessage` (the status-bar updates an HDA shows the user).
+
+    Deliberately broad, because what `do_export` actually emits is UNMEASURED
+    until the first live run — capturing all three channels makes that run the
+    probe: whatever arrives lands in the report; if nothing arrives, the studio
+    simply keeps showing elapsed time.
+    """
+
+    def __init__(self, on_line):
+        self._on_line = on_line
+        self._saved_streams = []
+        self._saved_status = None
+        self.lines = []
+
+    def _emit(self, text):
+        line = str(text).strip()
+        if not line:
+            return
+        self.lines.append(line)
+        if len(self.lines) > NODE_LOG_LINES_KEPT:
+            del self.lines[: len(self.lines) - NODE_LOG_LINES_KEPT]
+        if self._on_line is not None:
+            try:
+                self._on_line(line)
+            except Exception:
+                pass
+
+    class _Tee(object):
+        def __init__(self, original, emit):
+            self._original = original
+            self._emit = emit
+            self._buffer = ""
+
+        def write(self, text):
+            try:
+                if self._original is not None:
+                    self._original.write(text)
+            except Exception:
+                pass
+            try:
+                self._buffer += str(text)
+                while "\n" in self._buffer:
+                    line, self._buffer = self._buffer.split("\n", 1)
+                    self._emit(line)
+            except Exception:
+                pass
+
+        def flush(self):
+            try:
+                if self._original is not None:
+                    self._original.flush()
+            except Exception:
+                pass
+
+    def __enter__(self):
+        for name in ("stdout", "stderr"):
+            original = getattr(sys, name, None)
+            self._saved_streams.append((name, original))
+            setattr(sys, name, self._Tee(original, self._emit))
+        # The status bar only exists with a UI; entered BEFORE DialogAnswers, so
+        # its headless stand-in module is never mistaken for a real status bar.
+        ui = getattr(hou, "ui", None)
+        original_status = getattr(ui, "setStatusMessage", None) if ui is not None else None
+        if original_status is not None:
+            emit = self._emit
+
+            def recording_status(message, *args, **kwargs):
+                emit(message)
+                try:
+                    return original_status(message, *args, **kwargs)
+                except Exception:
+                    return None
+
+            self._saved_status = original_status
+            ui.setStatusMessage = recording_status
+        return self
+
+    def __exit__(self, *exc):
+        for name, original in self._saved_streams:
+            if original is not None:
+                setattr(sys, name, original)
+        if self._saved_status is not None:
+            try:
+                hou.ui.setStatusMessage = self._saved_status
+            except Exception:
+                pass
+        return False
+
+
 class Report(object):
     """The result file. Written after every node so the studio's poll sees
-    progress rather than one silent block and a result at the end."""
+    progress rather than one silent block and a result at the end — and, while
+    a node is EXPORTING, rewritten (throttled) with the `activity` channel: the
+    lines {@ActivityCapture} caught mid-`do_export`, so the studio can show
+    what the minutes-long synchronous call is doing."""
 
     def __init__(self, path, total):
         self.path = path
         self.data = {"version": 1, "state": "running", "total": total, "done": 0, "nodes": []}
-        self.flush()
+        self._last_flush = 0.0
+        self.flush(force=True)
 
     def add(self, entry):
         self.data["nodes"].append(entry)
         self.data["done"] = len(self.data["nodes"])
+        self.flush(force=True)
+
+    def begin_activity(self, node_path, scene):
+        self.data["activity"] = {
+            "node": node_path,
+            "scene": scene,
+            "lines": [],
+            "updatedAtMs": int(time.time() * 1000),
+        }
+        self.flush(force=True)
+
+    def note_activity(self, line):
+        activity = self.data.get("activity")
+        if activity is None:
+            return
+        activity["lines"].append(line)
+        if len(activity["lines"]) > ACTIVITY_LINES_KEPT:
+            del activity["lines"][: len(activity["lines"]) - ACTIVITY_LINES_KEPT]
+        activity["updatedAtMs"] = int(time.time() * 1000)
         self.flush()
+
+    def end_activity(self):
+        # The following add() carries the flush.
+        self.data.pop("activity", None)
 
     def finish(self, state="done", error=""):
         self.data["state"] = state
+        self.data.pop("activity", None)
         if error:
             self.data["error"] = error
-        self.flush()
+        self.flush(force=True)
 
-    def flush(self):
+    def flush(self, force=False):
         if not self.path:
             return
+        # Throttled between nodes' boundary writes: a print-happy do_export
+        # would otherwise rewrite the file per line.
+        now = time.time()
+        if not force and now - self._last_flush < ACTIVITY_FLUSH_SECONDS:
+            return
+        self._last_flush = now
         try:
             # Write-then-rename: the studio polls this file, and a half-written
             # JSON would parse as garbage exactly once per run.
@@ -205,10 +342,12 @@ def collect_targets(wanted):
     return targets
 
 
-def export_one(node, fallback_directory):
-    """Trigger one export node. Returns the report entry for it."""
+def export_one(node, fallback_directory, on_line=None):
+    """Trigger one export node. Returns the report entry for it. `on_line`
+    receives every line the HDA emits mid-export (see ActivityCapture)."""
     entry = {"node": node.path(), "type": node.type().name(), "status": "ok", "problems": []}
     started = time.time()
+    activity = ActivityCapture(on_line)
 
     directory_parm = node.parm("export_directory")
     if directory_parm is None:
@@ -235,9 +374,10 @@ def export_one(node, fallback_directory):
             directory_parm.set(wanted)
             changed = True
         hou.setPwd(node)
-        with DialogAnswers() as dialogs:
-            node.parm("export_trigger").pressButton()
-        entry["problems"] = dialogs.messages
+        with activity:
+            with DialogAnswers() as dialogs:
+                node.parm("export_trigger").pressButton()
+            entry["problems"] = dialogs.messages
     except SystemExit:
         # do_export's own `exit()` guard. Pre-checked above, so reaching this
         # means the HDA bailed for a reason of its own — one node's bail must
@@ -257,6 +397,11 @@ def export_one(node, fallback_directory):
             except Exception:
                 pass
         entry["seconds"] = round(time.time() - started, 1)
+        # The node's captured output rides its report entry (tail-capped) — the
+        # per-node record of what the HDA said, surviving after the live
+        # `activity` window has moved on.
+        if activity.lines:
+            entry["log"] = list(activity.lines)
     return entry
 
 
@@ -279,7 +424,11 @@ def run(job):
 
     for node, source, label in targets:
         print("DTH Character Studio: exporting {} ({})".format(node.path(), label))
-        entry = export_one(node, fallback)
+        # The live-activity window: whatever the HDA emits during this node's
+        # do_export streams into the polled result file as it happens.
+        report.begin_activity(node.path(), label)
+        entry = export_one(node, fallback, report.note_activity)
+        report.end_activity()
         entry["scene"] = label
         entry["dth"] = source
         report.add(entry)
