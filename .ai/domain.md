@@ -234,18 +234,32 @@ Layout is fixed: `manifest.json` at the root (`characterZipManifestSchema` in
 `.dcsmeta/characters/<folder>` files under `meta/`, avatars under `images/`.
 Always packed: definition, notes, Daz scenes, Houdini projects, meta, avatars;
 toggled: the regenerable `daz-export` (+ legacy `dth-exports`) and final
-`exportSubdir` trees. Never packed: the transient `.dth_houdini_job/result`
-transport. Import stages to `.dcsmeta/import-*`, validates BEFORE touching the
-live character, then repoints **everything path-shaped**: the definition (via
+`exportSubdir` trees (already-compressed formats are STORED, the rest deflates
+at level 1 — level-6 deflate measured "takes forever" on a real character).
+Never packed: the transient `.dth_houdini_job/result` transport. Import stages
+to `.dcsmeta/import-*`, validates BEFORE touching the live character, then
+repoints **everything path-shaped**: the definition (via
 `repointCharacterPaths`), the meta records (export-folder record, execute-stamp
 keys, run-log scenes, product-scan scenes — pure transforms in
-`lib/rom/character-zip.ts`), avatar refs (re-keyed if the id collides), the
+`lib/rom/character-zip.ts`), avatar refs (re-keyed if the id changes), the
 Houdini projects' `$JOB` + stored references (the Utils drawer's
 `defaults`/`repath` hython ops, best-effort with surfaced warnings), and
 regenerates the `.dsa`/CSV. An in-place link OUTSIDE the character folder keeps
 its absolute path by design. The zip inside carries the character's own
 `schemaVersion` and migrates on read like any definition; a too-new zip or
 definition refuses with "update the app".
+
+Two restore modes: project-level drop = wholesale NEW character (zip id kept
+unless taken). Character-page import = the **overwrite wizard**
+(`mergeImportedCharacter` in `lib/rom/character-zip.ts`, pure + tested): the
+ENTITY persists (target id + createdAt), name editable (zip-prefilled), checked
+ROM sections/extras from the zip vs. target-kept (forced all-zip across a
+generation/gender mismatch; GEN plumbing always follows the zip — its scene IS
+the primary now), scenes always wipe-and-replace (zip primary mandatory,
+deselected zip scenes' subfolders pruned), Houdini projects add-or-overwrite.
+Keep-capture carries what the teardown would lose: unchecked sections' custom
+base-ROM files, add-mode `.hip`s (name collisions suffixed), and the target's
+avatar/notes when the zip has none.
 
 ## The DTH runtime is studio-owned
 

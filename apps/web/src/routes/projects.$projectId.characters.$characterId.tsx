@@ -407,25 +407,18 @@ function CharacterPage({ onImportRemount }: { onImportRemount: () => void }) {
   // surfaces the "close it and continue" prompt.
   const router = useRouter()
 
-  // Import-from-zip (OVERWRITE this character): the Operations card's Import
-  // button and the page-wide `.dcsc.zip` drop both feed the same flow. After a
-  // successful import the character on disk is a different one — bypass the
-  // unsaved guard (the edited character no longer exists), then remount: by
-  // navigation when the id changed, by epoch when it didn't.
+  // Import-from-zip (the OVERWRITE wizard): the Operations card's Import
+  // button and the page-wide `.dcsc.zip` drop both feed the same flow. The
+  // character ENTITY persists through an overwrite (same id, same route) but
+  // everything about it changed on disk — bypass the unsaved guard (the edited
+  // state no longer exists) and remount by epoch to reseed the draft.
   const importer = useImportCharacterZip({
     projectId,
-    target: { id: initial.id, name: initial.name },
-    onImported: async (imported) => {
+    target: { id: initial.id, name: initial.name, genesis: initial.genesis, gender: initial.gender },
+    onImported: async () => {
       draft.unsavedGuard.bypass()
       await router.invalidate()
-      if (imported.id !== initial.id) {
-        await router.navigate({
-          to: '/projects/$projectId/characters/$characterId',
-          params: { projectId, characterId: imported.id },
-        })
-      } else {
-        onImportRemount()
-      }
+      onImportRemount()
     },
   })
   const { id: zipDropId, isOver: zipDropOver } = useFileDrop({

@@ -167,7 +167,7 @@ the builders), and a rename re-titles an already-marked window. Renaming a proje
 (`storage.renameManifestFile`) and calls `sync_renamed_project_window` to
 live-re-title + re-pin every open window on the old file (no close/reopen).
 
-**FFI surface: 46 commands** (count re-verified 2026-08-11 — the previous "36"
+**FFI surface: 48 commands** (count re-verified 2026-08-11 — the previous "36"
 had drifted) registered in `generate_handler!` — installs
 (`install_dth_release/plugin/daz_assets/daz_merge/houdini_presets/unreal_dth`),
 scans (`list_daz_assets`, `scan_duf_files`, `pose_asset_frames`,
@@ -191,8 +191,10 @@ leftover `dth-exports` junctions from the retired feature —
 the "Export too" handoff, `run_houdini_material_util` (scan a set of `.hip`
 files for DazToHueMaterial nodes / transfer one node's texture bakers onto
 others — the Houdini card's **Utils** drawer), plus `move_exports` for the v29
-migration and the character-zip trio
-(`export_character_zip`/`read_character_zip_manifest`/`extract_character_zip`).
+migration and the character-zip five
+(`export_character_zip`/`read_character_zip_manifest`/`list_character_zip_entries`/
+`read_character_zip_entry`/`extract_character_zip` — the two read-only ones feed
+the import wizard's preview without extracting).
 Nearly all are
 `#[tauri::command(async)]`; structured returns are camelCase serde structs pinned
 by the `contracts/` fixtures (see `.ai/conventions.md` § FFI ritual).

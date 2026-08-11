@@ -1,11 +1,14 @@
 import { z } from 'zod'
 
+import { fillSectionsFrom } from '#/lib/fill-sections.ts'
 import { EXPORTS_FOLDER, LEGACY_EXPORTS_FOLDER } from '#/lib/scene-subfolder.ts'
 import { avatarFileName, avatarSourceMaster, avatarSourceName, parseAvatarName } from './avatar-names'
 import { normalizeSceneKey } from './execute-jobs.ts'
 import { HOUDINI_JOB_FILE, HOUDINI_RESULT_FILE } from './houdini-jobs.ts'
 import { characterFolderName } from './library'
 import { join, relativeInside } from './storage/fs'
+
+import type { Character, RomSection } from '@dth/rom'
 
 /**
  * Whole-character export/import archives (`<Name>_<date>.dcsc.zip`) — the PURE
@@ -123,6 +126,94 @@ export function repointPath(p: string, fromFolder: string, toFolder: string): st
   if (!p || !fromFolder || !toFolder) return p
   const rel = relativeInside(fromFolder, p)
   return rel ? join(toFolder, rel) : p
+}
+
+// --- The overwrite-import merge ----------------------------------------------
+
+/** What the import wizard collected — the granular half of an overwrite
+ *  import. Scene/Houdini paths are as the ZIP's definition stores them (the
+ *  api layer repoints them to the destination before merging). */
+export interface CharacterZipImportChoices {
+  /** The character's name after the import (pre-filled with the zip's). */
+  name: string
+  /** ROM sections taken FROM THE ZIP; unchecked sections keep the target's
+   *  config (RET rides with JCM — the caller resolves that, like Fill). */
+  sections: Array<RomSection>
+  /** The Fill wizard's "Also copy" extras, zip's when true / target's when not. */
+  extras: { jcmRules: boolean; preserveMorphs: boolean; preserveNodeTransforms: boolean }
+  /** Zip scenes to restore. Must include the zip's primary (when it has one);
+   *  the target's existing scenes are always wiped. */
+  scenes: Array<string>
+  /** Zip Houdini projects to restore — `add` keeps the target's own projects
+   *  beside them, `overwrite` replaces them. */
+  houdini: { mode: 'add' | 'overwrite'; projects: Array<string> }
+}
+
+const lowerKey = (p: string) => p.trim().replace(/\\/g, '/').toLowerCase()
+
+/**
+ * Compose the definition an overwrite import writes — pure, so the wizard's
+ * semantics are testable without a filesystem. ALL paths are in destination
+ * space already: the api layer repoints the zip character, the target
+ * character AND the choice lists to the destination folder first.
+ *
+ * The zip is the base (identity, frame-zero, advanced options, per-scene
+ * records ride its scenes); the target contributes what the user chose to
+ * keep: unchecked ROM sections, unchecked extras — plus its id and creation
+ * stamp, because the character ENTITY persists through an overwrite. GEN's
+ * scene-derived plumbing (enabled + preset assets) always follows the ZIP:
+ * its primary scene is the character's primary scene after the import.
+ */
+export function mergeImportedCharacter(opts: {
+  zip: Character
+  target: Character
+  choices: CharacterZipImportChoices
+  /** Target Houdini projects preserved on disk in `add` mode (repointed, and
+   *  already renamed where a zip project claimed the same file name). */
+  keptHoudini: Array<string>
+}): Character {
+  const { zip, target, choices, keptHoudini } = opts
+  const sceneKeys = new Set(choices.scenes.map(lowerKey))
+  const houdiniKeys = new Set(choices.houdini.projects.map(lowerKey))
+  const extraScenes = zip.extraScenes.filter((scene) => sceneKeys.has(lowerKey(scene)))
+  const zipHoudini = zip.houdiniProjects.filter((hip) => houdiniKeys.has(lowerKey(hip)))
+  const houdiniProjects =
+    choices.houdini.mode === 'add'
+      ? [
+          ...keptHoudini,
+          ...zipHoudini.filter(
+            (hip) => !keptHoudini.some((kept) => lowerKey(kept) === lowerKey(hip)),
+          ),
+        ]
+      : zipHoudini
+  // Checked sections come from the zip, unchecked keep the target's config —
+  // then GEN's plumbing is pinned to the zip's regardless (see the doc above;
+  // fillSectionsFrom would keep the TARGET's, which is right for Fill and
+  // exactly wrong here, where the scene owner is the zip).
+  const sections = fillSectionsFrom(target.sections, zip.sections, choices.sections)
+  sections.GEN = {
+    ...sections.GEN,
+    enabled: zip.sections.GEN.enabled,
+    presetAssets: [...zip.sections.GEN.presetAssets],
+  }
+  return {
+    ...zip,
+    id: target.id,
+    createdAt: target.createdAt,
+    name: choices.name,
+    sections,
+    extraScenes,
+    houdiniProjects,
+    // Per-scene records (overrides + hair) belong to the scenes they key — the
+    // deselected scenes' records go with them.
+    sceneOverrides: zip.sceneOverrides.filter((o) => sceneKeys.has(lowerKey(o.scenePath))),
+    imageScene: sceneKeys.has(lowerKey(zip.imageScene)) ? zip.imageScene : '',
+    jcmMorphMods: choices.extras.jcmRules ? zip.jcmMorphMods : target.jcmMorphMods,
+    preserveMorphs: choices.extras.preserveMorphs ? zip.preserveMorphs : target.preserveMorphs,
+    preserveNodeTransforms: choices.extras.preserveNodeTransforms
+      ? zip.preserveNodeTransforms
+      : target.preserveNodeTransforms,
+  }
 }
 
 // --- Meta-file repointers -----------------------------------------------------

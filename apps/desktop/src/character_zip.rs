@@ -81,9 +81,32 @@ pub struct ExportZipReport {
     pub skipped_links: u64,
 }
 
-/// Deflate + zip64 for every entry: a character's Alembic caches routinely
-/// pass the 4 GiB classic-zip limit, and `large_file` is what keeps
-/// `start_file` from erroring on them.
+/// Extensions that are already compressed on disk — deflating them again costs
+/// real minutes on a gigabyte export tree and saves nothing: Daz writes `.duf`
+/// (and its `.tip.png` sidecars) compressed, images/zips likewise. These are
+/// STORED verbatim.
+const STORED_EXTS: &[&str] = &["duf", "png", "jpg", "jpeg", "webp", "gif", "zip"];
+
+/// Zip64 for every entry: a character's Alembic caches routinely pass the
+/// 4 GiB classic-zip limit, and `large_file` is what keeps `start_file` from
+/// erroring on them. Compressible entries use the FASTEST deflate level — the
+/// zip crate's default level 6 measured "takes forever" on a real character
+/// (single-threaded deflate over gigabytes); level 1 is several times faster
+/// for a few percent of size.
+fn zip_options_for(name: &str) -> zip::write::SimpleFileOptions {
+    let stored = name
+        .rsplit('.')
+        .next()
+        .is_some_and(|ext| STORED_EXTS.iter().any(|s| ext.eq_ignore_ascii_case(s)));
+    let base = zip::write::SimpleFileOptions::default().large_file(true);
+    if stored {
+        base.compression_method(zip::CompressionMethod::Stored)
+    } else {
+        base.compression_level(Some(1))
+    }
+}
+
+/// Options for entries with no meaningful content (directories, the manifest).
 fn zip_options() -> zip::write::SimpleFileOptions {
     zip::write::SimpleFileOptions::default().large_file(true)
 }
@@ -151,7 +174,7 @@ fn pack_file(
     report: &mut ExportZipReport,
 ) -> Result<(), String> {
     writer
-        .start_file(zip_path, zip_options())
+        .start_file(zip_path, zip_options_for(zip_path))
         .map_err(|e| format!("zip entry {zip_path}: {e}"))?;
     let mut file = fs::File::open(path).map_err(|e| format!("open {}: {e}", path.display()))?;
     let bytes = std::io::copy(&mut file, writer).map_err(|e| format!("pack {zip_path}: {e}"))?;
@@ -233,6 +256,60 @@ pub fn read_character_zip_manifest(zip_path: String) -> Result<String, String> {
         .take(MANIFEST_MAX_BYTES)
         .read_to_string(&mut text)
         .map_err(|e| format!("read {MANIFEST_ENTRY}: {e}"))?;
+    Ok(text)
+}
+
+/// Every entry name of a character export zip, as stored (files AND directory
+/// entries) — the import wizard's "which of the definition's scenes/Houdini
+/// projects are actually IN the zip" check. Central-directory only; nothing is
+/// inflated.
+#[tauri::command(async)]
+pub fn list_character_zip_entries(zip_path: String) -> Result<Vec<String>, String> {
+    let file = fs::File::open(&zip_path).map_err(|e| format!("open {zip_path}: {e}"))?;
+    let mut archive =
+        zip::ZipArchive::new(file).map_err(|e| format!("{zip_path} is not a readable zip: {e}"))?;
+    InflateBudget::new(zip_path, 0)
+        .check_entry_count(archive.len())
+        .map_err(|e| e.to_string())?;
+    let mut names = Vec::with_capacity(archive.len());
+    for i in 0..archive.len() {
+        let entry = archive.by_index(i).map_err(|e| format!("read zip entry {i}: {e}"))?;
+        names.push(entry.name().to_string());
+    }
+    Ok(names)
+}
+
+/// A real definition is single-digit megabytes; anything past this is not one.
+const TEXT_ENTRY_MAX_BYTES: u64 = 32 * 1024 * 1024;
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadZipEntryRequest {
+    pub zip_path: String,
+    /// Full entry path inside the zip (e.g. `character/Kira.json`).
+    pub entry_path: String,
+}
+
+/// One TEXT entry of a character export zip — how the import wizard reads the
+/// zip's definition (for its section/scene/Houdini lists) without extracting
+/// the archive.
+#[tauri::command(async)]
+pub fn read_character_zip_entry(request: ReadZipEntryRequest) -> Result<String, String> {
+    let file = fs::File::open(&request.zip_path)
+        .map_err(|e| format!("open {}: {e}", request.zip_path))?;
+    let mut archive = zip::ZipArchive::new(file)
+        .map_err(|e| format!("{} is not a readable zip: {e}", request.zip_path))?;
+    let entry = archive
+        .by_name(&request.entry_path)
+        .map_err(|_| format!("the zip has no \"{}\" entry", request.entry_path))?;
+    if entry.size() > TEXT_ENTRY_MAX_BYTES {
+        return Err(format!("\"{}\" is implausibly large — refusing to read it", request.entry_path));
+    }
+    let mut text = String::new();
+    entry
+        .take(TEXT_ENTRY_MAX_BYTES)
+        .read_to_string(&mut text)
+        .map_err(|e| format!("read {}: {e}", request.entry_path))?;
     Ok(text)
 }
 
@@ -430,6 +507,31 @@ mod tests {
         // The manifest reads back verbatim.
         let manifest = read_character_zip_manifest(zip_path).unwrap();
         assert_eq!(manifest, "{\"format\":\"dcs-character\"}");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn entries_list_and_entry_read_serve_the_wizard_preview() {
+        let base = unique_temp_dir("charzip_preview");
+        let (char_dir, meta_dir) = seed_character(&base);
+        let request = export_request(&base, &char_dir, &meta_dir, false);
+        let zip_path = request.zip_path.clone();
+        export_character_zip(request).unwrap();
+
+        let names = list_character_zip_entries(zip_path.clone()).unwrap();
+        assert!(names.contains(&"character/daz3d/primary/Kira.duf".to_string()));
+        let text = read_character_zip_entry(ReadZipEntryRequest {
+            zip_path: zip_path.clone(),
+            entry_path: "character/Kira.json".into(),
+        })
+        .unwrap();
+        assert_eq!(text, "{\"id\":\"char-kira\"}");
+        let err = read_character_zip_entry(ReadZipEntryRequest {
+            zip_path,
+            entry_path: "character/Nope.json".into(),
+        })
+        .unwrap_err();
+        assert!(err.contains("no \"character/Nope.json\" entry"), "{err}");
         let _ = fs::remove_dir_all(&base);
     }
 

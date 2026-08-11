@@ -388,10 +388,17 @@ changes are not packed — Save first.
 The zip restores in two ways:
 
 - **Onto a character** — that character's **Operations → Import** button, or
-  just drop the zip anywhere on its page: the character is **replaced
-  completely** with the zip's data (its current files are deleted first — a
-  confirmation stands in the way, but this can't be undone). Ideal as a
-  restore-from-backup.
+  just drop the zip anywhere on its page. An **import wizard** (in the spirit
+  of the Fill dialog) opens with everything pre-selected for a full restore,
+  and lets you dial it back: edit the **character name** (pre-filled with the
+  zip's), pick which of the zip's **ROM sections** and extras to take
+  (unchecked sections keep this character's config — unless the zip is a
+  different generation/gender, where the full ROM must come along), pick the
+  **Daz scenes** to restore (the primary is always included; the character's
+  existing scenes are **always wiped** and replaced), and pick the **Houdini
+  projects** — either replacing the character's own or added beside them. The
+  character itself persists (same entry, same page); notes, avatar and
+  metadata come from the zip when it has them. This can't be undone.
 - **Onto a project** — drop the zip anywhere on the project page: the zip's
   character is restored, with *all* of its data, as a **new character** of that
   project.

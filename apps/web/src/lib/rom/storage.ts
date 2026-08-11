@@ -61,6 +61,7 @@ export {
   moveCharacter,
   moveCharactersRoot,
   moveFolder,
+  parseCharacterJson,
   readCharacterAt,
   repointCharacterPaths,
   resetDefinitionToCurrentVersion,

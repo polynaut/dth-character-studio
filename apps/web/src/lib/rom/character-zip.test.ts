@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
+import { characterSchema } from '@dth/rom'
+
 import {
   characterZipExclusions,
   characterZipFileName,
   characterZipManifestSchema,
+  mergeImportedCharacter,
   rekeyAvatarFileName,
   repointExecuteStampsText,
   repointExportFoldersRecordText,
@@ -11,6 +14,8 @@ import {
   repointProductScansText,
   repointRomRunLogText,
 } from './character-zip.ts'
+
+import type { Character } from '@dth/rom'
 
 const DATE = new Date('2026-08-11T14:30:00Z')
 
@@ -162,5 +167,140 @@ describe('meta-file repointers', () => {
         TO,
       ),
     ).toBeNull()
+  })
+})
+
+describe('mergeImportedCharacter', () => {
+  const DEST = 'D:/Projects/Demo/Vera'
+  const character = (over: Record<string, unknown>): Character =>
+    characterSchema.parse({
+      genesis: 'G9',
+      gender: 'female',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      ...over,
+    })
+  const zip = character({
+    id: 'char-vera',
+    name: 'Vera',
+    createdAt: '2026-05-05T00:00:00.000Z',
+    scenePath: `${DEST}/daz3d/primary/Vera.duf`,
+    extraScenes: [`${DEST}/daz3d/yoga/Vera_Yoga.duf`, `${DEST}/daz3d/beach/Vera_Beach.duf`],
+    houdiniProjects: [`${DEST}/houdini/Vera.hip`, `${DEST}/houdini/Vera_Face.hip`],
+    imageScene: `${DEST}/daz3d/yoga/Vera_Yoga.duf`,
+    sceneOverrides: [
+      { scenePath: `${DEST}/daz3d/primary/Vera.duf`, hair: [{ nodeLabel: 'Vera Hair' }] },
+      { scenePath: `${DEST}/daz3d/yoga/Vera_Yoga.duf`, hair: [{ nodeLabel: 'Yoga Hair' }] },
+    ],
+    preserveMorphs: [{ name: 'zipMorph', keepValue: 1 }],
+    sections: {
+      FBM: {
+        enabled: true,
+        mode: 'custom',
+        groups: [{ id: 'g1', label: 'Zip', poses: [{ id: 'p1', name: 'ZipPose', morphs: [] }] }],
+      },
+      GEN: { enabled: true, presetAssets: ['GP'] },
+    },
+  })
+  const target = character({
+    id: 'char-kira',
+    name: 'Kira',
+    preserveMorphs: [{ name: 'targetMorph', keepValue: 0.5 }],
+    sections: {
+      FBM: {
+        enabled: true,
+        mode: 'custom',
+        groups: [{ id: 'g2', label: 'Mine', poses: [{ id: 'p2', name: 'MinePose', morphs: [] }] }],
+      },
+      JCM: { enabled: true, mode: 'preset' },
+      GEN: { enabled: false, presetAssets: [] },
+    },
+  })
+  const baseChoices = {
+    name: 'Vera',
+    sections: ['FBM'] as Array<'FBM'>,
+    extras: { jcmRules: true, preserveMorphs: true, preserveNodeTransforms: true },
+    scenes: [
+      `${DEST}/daz3d/primary/Vera.duf`,
+      `${DEST}/daz3d/yoga/Vera_Yoga.duf`,
+      `${DEST}/daz3d/beach/Vera_Beach.duf`,
+    ],
+    houdini: {
+      mode: 'overwrite' as const,
+      projects: [`${DEST}/houdini/Vera.hip`, `${DEST}/houdini/Vera_Face.hip`],
+    },
+  }
+
+  it('the entity persists (id + createdAt), the zip is the base, the name is the choice', () => {
+    const merged = mergeImportedCharacter({
+      zip,
+      target,
+      choices: { ...baseChoices, name: 'Vera Restored' },
+      keptHoudini: [],
+    })
+    expect(merged.id).toBe('char-kira')
+    expect(merged.createdAt).toBe('2026-01-01T00:00:00.000Z')
+    expect(merged.name).toBe('Vera Restored')
+    expect(merged.scenePath).toBe(`${DEST}/daz3d/primary/Vera.duf`)
+  })
+
+  it('checked sections take the zip config, unchecked keep the target’s — GEN plumbing follows the zip', () => {
+    const merged = mergeImportedCharacter({ zip, target, choices: baseChoices, keptHoudini: [] })
+    expect(merged.sections.FBM.groups[0].label).toBe('Zip')
+    // JCM was not checked — the target's enabled preset survives.
+    expect(merged.sections.JCM.enabled).toBe(true)
+    expect(merged.sections.JCM.mode).toBe('preset')
+    // GEN's scene-derived plumbing is the ZIP's (its scene is now primary).
+    expect(merged.sections.GEN.enabled).toBe(true)
+    expect(merged.sections.GEN.presetAssets).toEqual(['GP'])
+  })
+
+  it('unchecked extras keep the target’s tuning', () => {
+    const merged = mergeImportedCharacter({
+      zip,
+      target,
+      choices: { ...baseChoices, extras: { ...baseChoices.extras, preserveMorphs: false } },
+      keptHoudini: [],
+    })
+    expect(merged.preserveMorphs).toEqual([{ name: 'targetMorph', keepValue: 0.5 }])
+  })
+
+  it('deselected scenes drop their files’ refs, per-scene records and the avatar-source link', () => {
+    const merged = mergeImportedCharacter({
+      zip,
+      target,
+      choices: {
+        ...baseChoices,
+        scenes: [`${DEST}/daz3d/primary/Vera.duf`, `${DEST}/daz3d/beach/Vera_Beach.duf`],
+      },
+      keptHoudini: [],
+    })
+    expect(merged.extraScenes).toEqual([`${DEST}/daz3d/beach/Vera_Beach.duf`])
+    expect(merged.sceneOverrides.map((o) => o.scenePath)).toEqual([
+      `${DEST}/daz3d/primary/Vera.duf`,
+    ])
+    // imageScene pointed at the deselected yoga scene — dropped.
+    expect(merged.imageScene).toBe('')
+  })
+
+  it('houdini add keeps the target’s projects beside the zip’s; overwrite takes the selection only', () => {
+    const kept = [`${DEST}/houdini/Kira.hip`]
+    const added = mergeImportedCharacter({
+      zip,
+      target,
+      choices: { ...baseChoices, houdini: { mode: 'add', projects: [`${DEST}/houdini/Vera.hip`] } },
+      keptHoudini: kept,
+    })
+    expect(added.houdiniProjects).toEqual([`${DEST}/houdini/Kira.hip`, `${DEST}/houdini/Vera.hip`])
+    const overwritten = mergeImportedCharacter({
+      zip,
+      target,
+      choices: {
+        ...baseChoices,
+        houdini: { mode: 'overwrite', projects: [`${DEST}/houdini/Vera_Face.hip`] },
+      },
+      keptHoudini: [],
+    })
+    expect(overwritten.houdiniProjects).toEqual([`${DEST}/houdini/Vera_Face.hip`])
   })
 })

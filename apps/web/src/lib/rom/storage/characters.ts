@@ -279,6 +279,17 @@ export async function readCharacterAt(definitionAbs: string): Promise<Character 
 }
 
 /**
+ * Parse raw definition JSON (already read from SOMEWHERE — a zip entry, a
+ * fixture) into a current-shape Character: the same migration + avatar
+ * canonicalization + schema parse every on-disk read goes through. Throws —
+ * including {@link CharacterSchemaTooNewError} — so callers can name the
+ * reason instead of collapsing everything to null.
+ */
+export function parseCharacterJson(raw: unknown): Character {
+  return parseCharacter(raw)
+}
+
+/**
  * Force a forward-version definition (one saved by a NEWER build, which the scan
  * refuses via {@link CharacterSchemaTooNewError}) back down to THIS build's
  * schema: read it raw with the too-new guard suppressed, let zod drop the fields

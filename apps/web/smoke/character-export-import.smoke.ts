@@ -82,7 +82,7 @@ test('export: toggle dialog → folder pick → the pack request Rust receives',
   expect(await unhandledCommands(page)).toEqual([])
 })
 
-test('import: overwrite confirm → restore with every stored path repointed', async ({ page }) => {
+test('import: overwrite wizard → merge-restore with every stored path repointed', async ({ page }) => {
   const seed = buildSeed({ activeProjectFile: P.dcsp })
   const veraFolder = 'D:/Old Machine/Projects/Vera'
   const vera = characterSchema.parse({
@@ -125,26 +125,32 @@ test('import: overwrite confirm → restore with every stored path repointed', a
   await openKira(page)
 
   await page.getByRole('button', { name: 'Import', exact: true }).click()
-  // The confirm names both sides: the zip's character and the one it replaces.
-  await expect(page.getByRole('heading', { name: 'Overwrite “Kira”?' })).toBeVisible()
-  await expect(page.getByRole('dialog')).toContainText('Character: Vera')
-  await expect(page.getByRole('dialog')).toContainText('from “Old Machine”')
-  await page.getByRole('button', { name: 'Overwrite', exact: true }).click()
+  // The wizard: name pre-filled with the zip's, the primary scene locked in.
+  await expect(page.getByRole('heading', { name: 'Import over “Kira”' })).toBeVisible()
+  await expect(page.getByLabel('Character name')).toHaveValue('Vera')
+  const primaryRow = page.getByRole('dialog').locator('label', { hasText: 'Vera.duf' })
+  await expect(primaryRow).toContainText('primary')
+  await expect(primaryRow.locator('input[type=checkbox]')).toBeDisabled()
+  await expect(primaryRow.locator('input[type=checkbox]')).toBeChecked()
+  await page.getByRole('button', { name: 'Import', exact: true }).click()
 
   await expect(page.getByText('Imported “Vera” over “Kira”')).toBeVisible()
-  // The editor navigated to the imported character (a different id).
-  await expect(page).toHaveURL(/char-vera/)
+  // The character ENTITY persists: same id, same route — the page remounts.
+  await expect(page).toHaveURL(/char-kira/)
 
   // Kira's folder is gone; Vera's took its place — with the definition's stored
-  // paths repointed from the export-time folder to the new one.
+  // paths repointed from the export-time folder to the new one, and the id
+  // staying the target's (the zip's avatar file re-keys with it).
   expect(await fileContent(page, `${P.project}/Kira/Kira.json`)).toBeNull()
   const imported = JSON.parse((await fileContent(page, `${P.project}/Vera/Vera.json`))!) as {
     id: string
+    image: string
     scenePath: string
     projectPath: string
     exportPath: string
   }
-  expect(imported.id).toBe('char-vera')
+  expect(imported.id).toBe('char-kira')
+  expect(imported.image).toBe('char-kira--sc-1.png')
   expect(imported.scenePath).toBe(`${P.project}/Vera/daz3d/primary/Vera.duf`)
   expect(imported.projectPath).toBe(P.project)
   expect(imported.exportPath).toBe(`${P.project}/Vera/houdini/daz-export`)
@@ -155,8 +161,8 @@ test('import: overwrite confirm → restore with every stored path repointed', a
     (await fileContent(page, `${P.project}/.dcsmeta/characters/Vera/.dth_export_folders.json`))!,
   ) as { exportDir: string }
   expect(record.exportDir).toBe(`${P.project}/Vera/houdini/daz-export`)
-  // The avatar bytes landed in the project's image store.
-  expect(await fileContent(page, `${P.project}/.dcsmeta/images/char-vera--sc-1.png`)).toBe(
+  // The avatar bytes landed in the project's image store, re-keyed to the id.
+  expect(await fileContent(page, `${P.project}/.dcsmeta/images/char-kira--sc-1.png`)).toBe(
     'png-bytes',
   )
   // The staging folder was cleaned up.

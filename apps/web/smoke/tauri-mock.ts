@@ -789,6 +789,16 @@ export function installTauriMock(seed: TauriMockSeed): void {
         }
         return seed.characterZipManifest
       }
+      case 'list_character_zip_entries':
+        // The seeded entries ARE the archive; manifest.json always sits beside them.
+        return ['manifest.json', ...Object.keys(seed.characterZipEntries ?? {})]
+      case 'read_character_zip_entry': {
+        const entry = (seed.characterZipEntries ?? {})[args.request.entryPath]
+        if (entry === undefined) {
+          throw new Error(`the zip has no "${args.request.entryPath}" entry`)
+        }
+        return entry
+      }
       case 'extract_character_zip': {
         const dest = norm(args.request.destDir)
         const entries = Object.entries(seed.characterZipEntries ?? {})

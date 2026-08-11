@@ -86,10 +86,13 @@ export {
   exportCharacterZip,
   importCharacterZip,
   readCharacterZipManifest,
+  readCharacterZipSummary,
 } from './api/character-zip'
 export type {
+  CharacterZipImportChoices,
   CharacterZipImportResult,
   CharacterZipManifest,
+  CharacterZipSummary,
   ExportZipReport,
 } from './api/character-zip'
 
