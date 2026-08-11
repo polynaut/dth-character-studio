@@ -128,6 +128,23 @@ The **real SPA in a real browser** against an in-memory fake of the native layer
   green on `main` two minutes earlier, and every spec passed locally. Check
   those three things before touching the app code; the wall-clock of the
   neighbours is the tell.
+- **The fake answers instantly, so a LATENCY bug passes by default.** The mock
+  serves `invoke` from an in-memory map in well under a frame, which means any
+  bug whose cause is "the real IPC round trip is slower than the first paint"
+  simply does not reproduce: the project-window Home flash (see `.ai/gotchas.md`)
+  was invisible here until the spec wrapped the mock's own `invoke` to make
+  `active_project_file` take 300ms — the delay a real window pays. Wrap it in a
+  THIRD init script added after `installTauriMock` (they run in order), and say
+  in a comment which real cost the number stands for.
+  `apps/web/smoke/project-window-boot.smoke.ts` is the pattern.
+- **An init script runs at `document_start`, where `document.documentElement`
+  is still null** — `new MutationObserver(…).observe(document.documentElement)`
+  throws there and the watcher dies SILENTLY, leaving its flag at the initial
+  value forever. Measured while writing the boot spec above: the "did Home ever
+  render?" flag read `false` even for a window that plainly rendered Home. Poll
+  from the first tick and attach the observer on `DOMContentLoaded` — and prove
+  the detector by asserting it TRIPS in the case where it should, or a
+  never-firing guard passes for the wrong reason.
 - **A destructive guarantee does not belong ONLY here.** When a flaky spec has
   to go, first ask what it was the only guard for. The move variant of the
   copy-project dialog (permanently deleting the user's own `.hip`) was pinned
