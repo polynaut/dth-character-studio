@@ -834,6 +834,21 @@ current code before relying on details, but assume the *lesson* still holds.
 
 ## Web app
 
+- **Every window loads the SAME document, so the start URL never says which
+  project it is for.** The config window starts on `/` — which the Home route
+  matches — and a runtime window (`WebviewUrl::App("index.html")`) on
+  `/index.html`, which matches no route; the window→project mapping only comes
+  back from Rust's `active_project_file`. Mounting the router before that answer
+  arrives therefore made "recents for half a second, then a jump" the DESIGNED
+  boot order of every project window, not a race occasionally lost: Home's
+  loader is one small local read while the project's is a manifest read plus a
+  character scan, so Home won every time (and got slower to correct the more
+  characters a project had). `main.tsx` resolves the destination, `router.load()`s
+  it, and only THEN calls `createRoot().render()` — the window shows its own dark
+  `backgroundColor` (tauri.conf.json) until the finished screen is ready. Anything
+  new on the boot path belongs INSIDE `resolveStartRoute`, before the render, and
+  independent lookups there belong in its `Promise.all` rather than stacked in
+  front of each other. Guarded by `apps/web/smoke/project-window-boot.smoke.ts`.
 - **A `disabled` button still RECEIVES pointer events in Chromium** — only
   click/activation is suppressed. So `fieldset[disabled]` does NOT stop
   dnd-kit's `onPointerDown` drag handles: a read-only ROM section stayed
