@@ -373,6 +373,43 @@ keeps this character's own scene-derived Golden Palace / Dicktator setup.
 </details>
 
 <details>
+<summary><strong>Export &amp; import — the whole character as one zip</strong></summary>
+<table><tr><td>
+
+**Operations → Export** packs the character into a single, self-contained
+`<Name>_<date>.dcsc.zip`: the definition, notes, **all Daz scenes**, **all
+Houdini project files**, the avatar and the studio's metadata (run log, Execute
+stamps, PoseAsset CSVs) are always in it. Two toggles add the regenerable —
+and often gigabyte-sized — export trees: **Daz exports** (`houdini/daz-export`,
+the Daz→Houdini intermediate) and **Houdini exports** (the final `export`
+folder). Confirm, pick a folder, and the zip lands there. Unsaved editor
+changes are not packed — Save first.
+
+The zip restores in two ways:
+
+- **Onto a character** — that character's **Operations → Import** button, or
+  just drop the zip anywhere on its page: the character is **replaced
+  completely** with the zip's data (its current files are deleted first — a
+  confirmation stands in the way, but this can't be undone). Ideal as a
+  restore-from-backup.
+- **Onto a project** — drop the zip anywhere on the project page: the zip's
+  character is restored, with *all* of its data, as a **new character** of that
+  project.
+
+Import fixes every stored path for the new location: the definition's scene /
+Houdini / avatar references, the studio's metadata records, and the Houdini
+projects themselves — their `$JOB` is repointed at the new character folder and
+their stored references repaired, the same fixes the Utils drawer's *Repair
+$JOB* + *Make paths portable* run (this needs a paired Houdini install; without
+one the import finishes and tells you to run those two later). The `.dsa`
+scripts and PoseAsset CSV are regenerated to match. A scene or `.hip` that was
+**linked in place outside** the character folder keeps its original absolute
+path — on another machine it shows as missing and is relinked in the editor.
+
+</td></tr></table>
+</details>
+
+<details>
 <summary><strong>Deleting a character</strong></summary>
 <table><tr><td>
 
