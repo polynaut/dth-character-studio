@@ -464,7 +464,10 @@ export function DthExportAction({
     }
     if (run.state === 'finished') {
       setHoudini(null)
-      const summary = run.summary || 'nothing to export'
+      // A bare "nothing to export" is undiagnosable — point at the console
+      // log, which names what was wanted vs found and survives the run.
+      const summary =
+        run.summary || 'nothing to export (details: .dth_houdini_console.log in the character folder)'
       const took = run.elapsedMs !== undefined ? ` in ${formatElapsed(run.elapsedMs)}` : ''
       // The HDA's pre-flight check asks "Continue anyway?" and 456.py answers
       // Yes — so the run report is the only place its complaints are ever

@@ -201,11 +201,12 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
   // The full console (C++ cook chatter included) streams into a per-run log
   // in the character folder — the reason the leg went headless.
   expect(launch.request.logPath).toBe(`${P.charFolder}/.dth_houdini_console.log`)
-  // The trailing `;&` is load-bearing: without it HOUDINI_SCRIPT_PATH REPLACES
-  // Houdini's default and the user's own startup scripts stop running.
-  expect(launch.request.scriptPath).toMatch(/;&$/)
-  const scriptsDir = launch.request.scriptPath.replace(/;&$/, '')
-  expect(launch.request.runnerPath).toBe(`${scriptsDir}/headless_export.py`)
+  // NO scriptPath: putting the studio's folder on HOUDINI_SCRIPT_PATH made the
+  // startup EMPTY scene run 456.py and eat the job (measured on the first
+  // headless run) — the bootstrap execs it, exactly once, after the load.
+  expect(launch.request.scriptPath).toBeUndefined()
+  expect(launch.request.runnerPath).toMatch(/\/headless_export\.py$/)
+  const scriptsDir = launch.request.runnerPath.replace(/\/headless_export\.py$/, '')
   expect(await fileKeys(page)).toContain(`${scriptsDir}/456.py`)
   expect(await fileKeys(page)).toContain(`${scriptsDir}/headless_export.py`)
 

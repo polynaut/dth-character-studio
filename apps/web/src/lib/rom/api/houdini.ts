@@ -21,7 +21,6 @@ import {
   buildHoudiniPrefill,
   houdiniRunFilesToClear,
   houdiniRunStateFrom,
-  houdiniScriptPathValue,
   parseHoudiniResult,
 } from '../houdini-jobs'
 import type { HoudiniResult, HoudiniRunState } from '../houdini-jobs'
@@ -481,8 +480,6 @@ interface ActiveHoudiniRun {
   jobPath: string
   /** Absolute path of the result file 456.py writes. */
   resultPath: string
-  /** Absolute path of the headless run's console log (hython stdout+stderr). */
-  consolePath: string
   /** Scenes that went into the job — the count shown until 456.py reports its
    *  own node total (one scene may hold several export nodes, or none). */
   scenes: number
@@ -600,9 +597,11 @@ export async function startHoudiniExport({
     // locked — houdiniRunStateFrom tolerates the stale read until it is rewritten
   }
 
-  // Both runner scripts into app-data, and HOUDINI_SCRIPT_PATH pointed at that
-  // folder (still set headless — harmless, and it covers a build whose scene
-  // load runs on-load scripts under hython too).
+  // Both runner scripts into app-data. Deliberately NOT on HOUDINI_SCRIPT_PATH:
+  // Houdini runs a 456.py found there on the startup EMPTY scene too (measured
+  // 2026-08-11, the first headless run — the job was consumed against the empty
+  // scene and hython exited before the project ever loaded). The bootstrap
+  // execs 456.py itself, exactly once, after the load.
   const scriptsDir = await storage.dataPath(HOUDINI_SCRIPTS_FOLDER)
   await mkdir(scriptsDir, { recursive: true })
   await storage.writeTextFileAtomic(joinPath(scriptsDir, '456.py'), houdiniRunnerScript)
@@ -619,7 +618,6 @@ export async function startHoudiniExport({
       runnerPath: joinPath(scriptsDir, HOUDINI_HEADLESS_RUNNER),
       scenePath: linkedHip,
       jobPath: jobFile,
-      scriptPath: houdiniScriptPathValue(scriptsDir),
       houdiniPrefDir,
       logPath: consolePath,
     },
@@ -629,7 +627,6 @@ export async function startHoudiniExport({
     characterId: character.id,
     jobPath: jobFile,
     resultPath,
-    consolePath,
     scenes: job.scenes.length,
     startedAtMs: Date.now(),
   }
@@ -671,7 +668,6 @@ export async function fetchHoudiniRunProgress(): Promise<
       hasResult: result !== null,
       jobPath: run.jobPath,
       resultPath: run.resultPath,
-      consolePath: run.consolePath,
     })) {
       try {
         if (await exists(path)) await remove(path)

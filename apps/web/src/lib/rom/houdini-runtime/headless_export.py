@@ -6,11 +6,14 @@ the job file, the sibling `456.py` works through it and writes the polled
 result); this file only supplies what a GUI session got for free: loading the
 `.hip` (`DTH_HOUDINI_HIP`) and then making sure `456.py` runs exactly once.
 
-Why a bootstrap instead of trusting the `456.py` scene-load mechanism: whether
-`hou.hipFile.load()` under hython fires the on-load scripts is a version
-detail the studio has not measured. Both cases are safe here — `456.py` pops
-`DTH_HOUDINI_JOB` when it runs, so if the load already triggered it, the
-explicit run below finds no job and does nothing at all.
+Why the studio's folder is NOT on HOUDINI_SCRIPT_PATH (measured 2026-08-11,
+the first headless run): Houdini runs a `456.py` found there for the startup
+EMPTY scene too, which consumed the job against zero nodes and exited before
+this bootstrap ever loaded the project. The explicit exec below is the ONLY
+trigger — and it stays guarded anyway: `456.py` pops `DTH_HOUDINI_JOB` when it
+runs, so if some Houdini build ever fires an on-load 456 for `hipFile.load()`
+from an inherited script path, the second attempt finds no job and does
+nothing at all.
 
 `DTH_HEADLESS` tells `456.py` to run its batch inline (there is no main window
 to wait for and no event loop to defer into). A scene that fails to load still

@@ -33,14 +33,14 @@ pub struct LaunchHoudiniJobRequest {
     /// The `.hip`/`.hiplc` project to load (`DTH_HOUDINI_HIP`).
     pub scene_path: String,
     /// The job file 456.py reads (`DTH_HOUDINI_JOB`).
+    ///
+    /// `HOUDINI_SCRIPT_PATH` is deliberately NOT set. Measured on the first
+    /// headless run (2026-08-11): Houdini runs a `456.py` found there on the
+    /// INITIAL EMPTY scene at startup too — the job was consumed against the
+    /// empty scene ("nothing to export" in 2 s) and `closeWhenDone` exited
+    /// hython before the bootstrap ever loaded the real project. The
+    /// bootstrap's explicit exec of `456.py` is the only trigger.
     pub job_path: String,
-    /// The value for `HOUDINI_SCRIPT_PATH` — the studio's script folder plus
-    /// `&`, composed in TS (`houdiniScriptPathValue`) so the `&` that preserves
-    /// Houdini's own default path is covered by a unit test. Still set
-    /// headless: harmless, and it covers a Houdini build whose scene load runs
-    /// on-load scripts under hython too (456.py's env-pop makes that a no-op
-    /// for the bootstrap's own attempt).
-    pub script_path: String,
     /// The Houdini user-prefs folder, as HOUDINI_USER_PREF_DIR. Same reason as
     /// `create_houdini_project`: inherited env can resolve the prefs elsewhere,
     /// and then the user's otls — the DazToHue HDA itself — never load, so the
@@ -118,7 +118,10 @@ pub fn launch_houdini_job(request: LaunchHoudiniJobRequest) -> Result<(), String
     command.env("DTH_HOUDINI_JOB", &request.job_path);
     command.env("DTH_HOUDINI_HIP", &request.scene_path);
     command.env("DTH_HEADLESS", "1");
-    command.env("HOUDINI_SCRIPT_PATH", &request.script_path);
+    // See job_path's doc: HOUDINI_SCRIPT_PATH is NOT set here — putting the
+    // studio's folder on it made the startup empty scene run our 456.py and
+    // eat the job. An inherited value stays inherited: the user's own script
+    // path is their configuration, and their scripts don't know our job env.
     if !request.houdini_pref_dir.is_empty() {
         command.env(
             "HOUDINI_USER_PREF_DIR",

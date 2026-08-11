@@ -14,10 +14,13 @@ import type { Character } from '@dth/rom'
  * results back, the studio polls. Same shape, same failure story, so there is
  * one handoff pattern in this codebase rather than two.
  *
- * Houdini's half is `houdini-runtime/456.py`, which Houdini runs after a scene
- * loads when the studio's scripts folder is on HOUDINI_SCRIPT_PATH. The job path
- * travels in the `DTH_HOUDINI_JOB` environment variable, set only on the process
- * the studio spawns.
+ * Houdini's half is `houdini-runtime/456.py`, run HEADLESS: the studio spawns
+ * `hython headless_export.py`, which loads the `.hip` and execs 456.py exactly
+ * once. The job path travels in the `DTH_HOUDINI_JOB` environment variable,
+ * set only on the process the studio spawns. Deliberately NOT via
+ * HOUDINI_SCRIPT_PATH — Houdini runs a 456.py found there on the startup
+ * EMPTY scene too, which consumed the job before the project loaded (measured
+ * 2026-08-11, the first headless run).
  */
 
 /** Job + result file names, written into the character's folder beside the
@@ -27,7 +30,11 @@ export const HOUDINI_RESULT_FILE = '.dth_houdini_result.json'
 
 /** The headless run's console log (hython's full stdout+stderr, redirected by
  *  the Rust spawn — the C++ cook chatter the in-process tee can never see).
- *  One file per character, overwritten each run; cleared with the job/result. */
+ *  One file per character, OVERWRITTEN each run and deliberately NOT cleared
+ *  with the job/result: it is the diagnosis channel for a run that reports
+ *  something puzzling (the first headless run's bare "nothing to export"
+ *  proved that the hard way), and one bounded file per character is exactly
+ *  the retention the housekeeping rule asks for. */
 export const HOUDINI_CONSOLE_FILE = '.dth_houdini_console.log'
 
 /** The hython bootstrap (`headless_export.py`) written beside `456.py` into
@@ -42,21 +49,6 @@ export const HOUDINI_JOB_ENV = 'DTH_HOUDINI_JOB'
  *  NOT installed once and forgotten: the file is rewritten every run, so a
  *  deleted or half-written copy repairs itself and an app update always wins. */
 export const HOUDINI_SCRIPTS_FOLDER = 'houdini-scripts'
-
-/**
- * What to set `HOUDINI_SCRIPT_PATH` to so Houdini runs OUR `456.py` after a
- * scene loads — `<our folder>;&`.
- *
- * The `&` is load-bearing and easy to miss: in a Houdini path variable it
- * stands for the path Houdini would have used by itself. Setting the variable
- * to our folder ALONE replaces the default, which would silently disable the
- * user's own startup scripts (and Houdini's) for the whole session. Windows
- * separates entries with `;`.
- */
-export function houdiniScriptPathValue(scriptsDir: string): string {
-  const dir = stripTrailingSeparators(scriptsDir.trim().replace(/\\/g, '/'))
-  return dir ? `${dir};&` : '&'
-}
 
 export interface HoudiniJobScene {
   /**
@@ -433,14 +425,12 @@ export function houdiniRunFilesToClear(options: {
   hasResult: boolean
   jobPath: string
   resultPath: string
-  /** The headless run's console log — cleared with the rest (the report
-   *  already carries error/log/problems). A run that died WITHOUT a result
-   *  keeps it: then the console is the only evidence of what happened. */
-  consolePath?: string
 }): Array<string> {
   if (options.state !== 'finished' && options.state !== 'dead') return []
   if (!options.hasResult) return []
-  return [options.resultPath, options.jobPath, options.consolePath ?? ''].filter(Boolean)
+  // The console log ({@link HOUDINI_CONSOLE_FILE}) is deliberately NOT in this
+  // list — see its doc: it survives as the last run's diagnosis channel.
+  return [options.resultPath, options.jobPath].filter(Boolean)
 }
 
 /** A finished run's one-line summary for the toast, e.g.

@@ -8,7 +8,6 @@ import {
   houdiniResultSummary,
   houdiniRunFilesToClear,
   houdiniRunStateFrom,
-  houdiniScriptPathValue,
   parseHoudiniResult,
   sceneDthPath,
 } from './houdini-jobs.ts'
@@ -261,27 +260,6 @@ describe('houdiniResultSummary', () => {
       '1 exported, 1 skipped, 1 failed',
     )
     expect(houdiniResultSummary(make([]))).toBe('')
-  })
-})
-
-describe('HOUDINI_SCRIPT_PATH composition', () => {
-  it('keeps Houdini’s own default path with a trailing &', () => {
-    // Without the `&` the variable REPLACES Houdini's default script path, and
-    // the user's own startup scripts silently stop running for the session.
-    expect(houdiniScriptPathValue('C:/Users/x/AppData/Local/dth/houdini-scripts')).toBe(
-      'C:/Users/x/AppData/Local/dth/houdini-scripts;&',
-    )
-  })
-
-  it('normalises separators and a trailing slash', () => {
-    expect(houdiniScriptPathValue('C:\\Users\\x\\dth\\houdini-scripts\\')).toBe(
-      'C:/Users/x/dth/houdini-scripts;&',
-    )
-  })
-
-  it('degrades to the default path alone rather than emitting an empty entry', () => {
-    expect(houdiniScriptPathValue('')).toBe('&')
-    expect(houdiniScriptPathValue('   ')).toBe('&')
   })
 })
 

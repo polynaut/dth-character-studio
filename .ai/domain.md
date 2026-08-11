@@ -662,15 +662,18 @@ older runtimes as stale.
   user ticked. The toggle sits beside the dialog's Houdini project select,
   appears only once a project is picked, and is off by default (it drives the
   user's own Houdini). Pieces: `lib/rom/houdini-jobs.ts` (job/result contract,
-  `houdiniScriptPathValue`, `houdiniRunStateFrom`),
-  `lib/rom/houdini-runtime/456.py` (Houdini's half),
+  `houdiniRunStateFrom`),
+  `lib/rom/houdini-runtime/456.py` + `headless_export.py` (Houdini's half),
   `api/houdini.ts` (`startHoudiniExport`/`fetchHoudiniRunProgress`) and Rust
   `launch_houdini_job`/`houdini_running` (houdini.rs).
-  `456.py` is written into `<appLocalData>/houdini-scripts/` **before every
-  run** — not installed once — so it is self-repairing and always matches the
-  app version; `HOUDINI_SCRIPT_PATH` is set to `<that folder>;&`, and the `&`
-  is load-bearing (it stands for the path Houdini would have used, so omitting
-  it silently disables the user's own startup scripts for the session).
+  Both scripts are written into `<appLocalData>/houdini-scripts/` **before
+  every run** — not installed once — so they are self-repairing and always
+  match the app version. `HOUDINI_SCRIPT_PATH` is deliberately NOT touched
+  anymore: MEASURED 2026-08-11 (first headless run), Houdini runs a `456.py`
+  found there on the startup EMPTY scene too — the job was consumed against it
+  ("nothing to export" in 2 s) and `closeWhenDone` exited hython before the
+  project ever loaded. The bootstrap execs 456.py itself, exactly once, after
+  the load.
   The run's own watch outlives the Daz batch: the batch finishes and reports,
   THEN Houdini opens (`starting` — 456.py runs only after the scene has loaded,
   which is a long silence on a big project), works (`running done/total`) and

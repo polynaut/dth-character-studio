@@ -341,6 +341,15 @@ current code before relying on details, but assume the *lesson* still holds.
 - **Never create a webview window from a synchronous `#[tauri::command]`** — it
   deadlocks (white frozen window). Use `#[tauri::command(async)]` and
   `tauri::async_runtime::spawn` (the single-instance handler does this).
+- **Houdini runs a `456.py` on HOUDINI_SCRIPT_PATH for the startup EMPTY scene
+  too, not only for a loaded `.hip`** — measured 2026-08-11 on the first
+  headless "Export too" run: hython started, the empty initial scene triggered
+  the studio's 456.py, the job was consumed against zero nodes ("nothing to
+  export" in 2 s), the env popped, and `closeWhenDone` exited the process
+  before the bootstrap ever loaded the real project. The headless launch
+  therefore never touches HOUDINI_SCRIPT_PATH; `headless_export.py` loads the
+  scene and execs `456.py` itself, exactly once. Any future script that hooks
+  scene loads via that variable must expect the empty-scene call.
 - **Apps launched via the shell plugin's `open()` inherit the STUDIO's process
   environment** — not the user session's. Measured 2026-07-30: a `.hiplc`
   opened from the studio started Houdini WITHOUT the DazToHue shelf (Houdini

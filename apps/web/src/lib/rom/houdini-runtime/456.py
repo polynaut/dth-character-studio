@@ -1,18 +1,23 @@
 """DTH Character Studio — Houdini-side export runner.
 
-Houdini runs a `456.py` found on HOUDINI_SCRIPT_PATH after a scene finishes
-loading. The studio launches HEADLESS hython via the sibling
-`headless_export.py` bootstrap (which loads the scene and runs this file with
-`DTH_HEADLESS` set) with `DTH_HOUDINI_JOB` pointing at a job file — the same
+The studio launches HEADLESS hython via the sibling `headless_export.py`
+bootstrap, which loads the scene and then RUNS THIS FILE explicitly (with
+`DTH_HEADLESS` set), `DTH_HOUDINI_JOB` pointing at a job file — the same
 handoff shape the Daz side uses for the Runner plugin: the studio writes a
 JSON job, the other side works through it and writes results back, the studio
-polls. The GUI path (a visible Houdini picking this up through the scene-load
-mechanism) remains fully supported — it was the original shape, and the
-window-wait machinery below exists for it.
+polls.
 
-WITHOUT that environment variable this file does nothing at all, immediately.
-That matters: HOUDINI_SCRIPT_PATH is only set on the process the studio spawns,
-but even if it ever leaked into a normal session, an ordinary scene load must
+The studio deliberately does NOT put this file on HOUDINI_SCRIPT_PATH anymore.
+MEASURED on the first headless run (2026-08-11): Houdini runs a `456.py` found
+there on the INITIAL EMPTY scene at startup too, not only on a `.hip` load —
+the job was consumed against the empty scene ("nothing to export" in 2 s), the
+env popped, and `closeWhenDone` exited hython before the bootstrap ever loaded
+the real project. The bootstrap's explicit exec is the only trigger now; the
+GUI's scene-load mechanism still works if a user wires it up by hand, and the
+window-wait machinery below exists for that shape.
+
+WITHOUT `DTH_HOUDINI_JOB` this file does nothing at all, immediately. That
+matters: even if it ever ran in a normal session, an ordinary scene load must
 stay an ordinary scene load.
 
 What it drives (all of it measured off the installed HDA, not assumed):
@@ -428,6 +433,23 @@ def run(job):
 
     if not targets:
         # Not an error: the project may simply hold no network for these scenes.
+        # But say WHY into the console log — the first headless run burned an
+        # afternoon on a bare "nothing to export": what was wanted, what export
+        # nodes exist at all (none = the DazToHue otls likely didn't load in
+        # this session), and what each one's network imports.
+        for key in sorted(wanted):
+            print("DTH Character Studio: wanted .dth import: {} ({})".format(key, wanted[key]))
+        found_any = False
+        for node in hou.node("/obj").allSubChildren():
+            if not is_export_node(node):
+                continue
+            found_any = True
+            print("DTH Character Studio: export node {} imports {}".format(
+                node.path(), normalize(import_path_of(node.parent())) or "(nothing)"))
+        if not found_any:
+            print("DTH Character Studio: the scene has NO DazToHue export nodes at all - "
+                  "did the DazToHue otls load in this session? (scene: {})".format(
+                      hou.hipFile.path()))
         report.finish("done")
         return
 
