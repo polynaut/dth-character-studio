@@ -143,7 +143,14 @@ export function TooltipHost() {
     // the change — this is what lets click feedback like PathCode's "Copied!"
     // reach the styled tooltip at all.
     const observer = new MutationObserver((mutations) => {
+      // An anchor REMOVED from the DOM emits no mouseleave and no blur — a
+      // state swap under a stationary cursor (a progress button whose run just
+      // finished) would otherwise leave its tooltip on screen forever, pinned
+      // to a detached node. childList is observed for exactly this check; the
+      // common no-tooltip case is one null test.
+      if (anchor && !anchor.isConnected) hide()
       for (const m of mutations) {
+        if (m.type !== 'attributes') continue
         const el = m.target as HTMLElement
         const title = el.getAttribute('title')
         if (title === null) continue // our own removeAttribute echoing back
@@ -157,7 +164,12 @@ export function TooltipHost() {
         }
       }
     })
-    observer.observe(document.body, { attributes: true, attributeFilter: ['title'], subtree: true })
+    observer.observe(document.body, {
+      attributes: true,
+      attributeFilter: ['title'],
+      childList: true,
+      subtree: true,
+    })
 
     const onPointerDown = (e: Event) => {
       // Clicking usually stales the position — get out of the way. But when the

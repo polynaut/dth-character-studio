@@ -768,6 +768,27 @@ older runtimes as stale.
   the outcome (failed rows + errors); a running file whose Daz exited below
   100 is a dead run (cleaned + reported). No export-folder watching anymore —
   the old delivered-CSV mtime watch is gone.
+- **The claimed batch has TWO manual escape hatches, and neither stops Daz.**
+  "Only an un-renamed file is abortable" is the CONTRACT's rule (the Runner
+  owns the file after its rename) — it was never a rule about the user, who
+  can be left with a spinning button and a blocked handoff when a batch stalls
+  inside a live Daz (a modal in the way, a Runner that died mid-batch). Both
+  hatches are `clearExporterJobFiles()` (api/execute.ts: deletes BOTH names,
+  settles both before throwing, drops the in-memory `activeRun`):
+  Settings → App Data (the readout + its signature-guarded confirm, #775) and
+  **Ctrl on the live progress button**, which flips it to Abort
+  (`ExportProgressButton` in character/dth-export.tsx — its own component
+  because `useModifierHeld` re-renders on every Ctrl press AND release).
+  What they end is the STUDIO's watch and the block on the next handoff; a
+  Runner that is genuinely working carries on and can even rewrite the file on
+  its next row. Say that in the UI rather than implying the run was stopped.
+  No stamp rollback either (unlike `abortExporterJobs`): a claimed batch may
+  already have exported scenes, and re-flagging those as never handed off
+  would describe work that DID happen as work that didn't. A status poll can
+  straddle the delete — `fetchExportRunProgress` re-checks `activeRun` is
+  still ITS captured run before calling a vanished file a dead run, so the
+  losing poll reports nothing instead of toasting a sticky "run died" over a
+  deliberate abort.
 - **Every script handed to the Runner must run UNATTENDED — no modals, ever.**
   The Runner executes job rows inside a Daz that is often minimized, so any
   `MessageBox` is an invisible dead stop: the row never completes, the batch

@@ -86,6 +86,16 @@ test('activating pairs the install with its own prefs folder and saves both', as
   // Both fields give way to their destinations, like the Daz half.
   await expect(page.getByLabel('Houdini installation folder (optional)')).toHaveCount(0)
   await expect(page.getByLabel('Houdini documents folder (optional)')).toHaveCount(0)
+  // …and so does "add another folder": with a card driving the destination
+  // there is ONE target, so a second hand-typed one would contradict it. The
+  // line that replaces the button says where extra folders went.
+  await expect(page.getByRole('button', { name: /Add another Houdini folder/ })).toHaveCount(0)
+  await expect(
+    page.getByText(/New folders can't be added while a Houdini installation is activated/i),
+  ).toBeVisible()
+  // The whole "Generate Houdini Projects" panel goes with them: activated, it
+  // could only restate the card's own install path — no field, no choice.
+  await expect(page.getByRole('heading', { name: 'Generate Houdini Projects' })).toHaveCount(0)
 })
 
 test('activating the older Houdini re-pairs to its own prefs folder', async ({ page }) => {
@@ -114,4 +124,10 @@ test('a machine with no Houdini says so and keeps the manual fields', async ({ p
 
   await expect(page.getByText(/No installed Houdini found/)).toBeVisible()
   await expect(page.getByLabel('Houdini documents folder (optional)')).toBeVisible()
+  // The folders are the user's here, so adding another one still is too.
+  await expect(page.getByRole('button', { name: /Add another Houdini folder/ })).toBeVisible()
+  // …and so is the Generate panel, with its manual install-folder field — the
+  // one place that path can come from on a machine with no card to activate.
+  await expect(page.getByRole('heading', { name: 'Generate Houdini Projects' })).toBeVisible()
+  await expect(page.getByLabel('Houdini installation folder (optional)')).toBeVisible()
 })

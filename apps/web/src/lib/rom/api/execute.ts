@@ -625,8 +625,14 @@ export async function fetchExportRunProgress(watcher?: string): Promise<ExportRu
     // transient fs error — keep the watch alive, retry next poll
     return { state: 'pending', characterId: run.characterId, total: run.total }
   }
-  // Neither file exists: aborted externally or cleaned behind our back.
-  if (activeRun === run) activeRun = null
+  // Neither file exists — but only a watch that is STILL ARMED was aborted
+  // externally / cleaned behind our back. A poll straddling the moment someone
+  // here resolved the run (clearExporterJobFiles on a Ctrl/Settings abort,
+  // dismissExportRun, a new handoff replacing `activeRun`) captured `run`
+  // before the files went away — reporting 'dead' would toast a sticky
+  // "run died" over a deliberate abort. That poll lost the race: say nothing.
+  if (activeRun !== run) return null
+  activeRun = null
   return { state: 'dead', characterId: run.characterId, total: run.total }
 }
 
