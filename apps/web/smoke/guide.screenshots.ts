@@ -607,6 +607,17 @@ test('houdini-utils-materials', async ({ page }) => {
   await shoot(page, join(OUT, 'houdini-utils-materials.png'), materials)
 })
 
+test('houdini-utils-recent-sources', async ({ page }) => {
+  const drawer = await openMaterialTab(page)
+  // The Browse… pick `openMaterialTab` already made IS what seeds the row: a
+  // source is remembered the moment it lands, and the row re-reads itself — so
+  // the chip is there without a second trip through the drawer.
+  const source = drawer.locator('section').filter({ hasText: 'Recently used' })
+  await source.getByText('Recently used').waitFor()
+  await source.evaluate((el) => el.scrollIntoView({ block: 'center' }))
+  await shoot(page, join(OUT, 'houdini-utils-recent-sources.png'), source)
+})
+
 test('dth-export-dialog', async ({ page }) => {
   // A configured Daz install folder lets the dialog's Runner-update check
   // settle open (the fake holds no readable install, and an unreadable Runner

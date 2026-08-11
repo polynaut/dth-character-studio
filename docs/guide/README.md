@@ -33,6 +33,9 @@ None of these are needed to generate a ROM:
 - [Advanced character options](./advanced.md) — multiple Daz scenes on one
   character (outfits, per-scene hair, per-scene overrides), and driving extra
   morphs off bone rotations (Modify JCM frames).
+- [The Utils drawer](./houdini-utils.md) — the Houdini project card's 🔧:
+  checking and repairing a project's `$JOB` and paths, and copying a material or
+  skeleton setup from one project into another.
 - [The Tools page](./tools.md) — one-click **Scan & index** of a project (the
   morph/bone index behind the autocompletes), installing/maintaining your own
   Daz & Houdini content, deduplicating downloads, and refreshing generated

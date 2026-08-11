@@ -43,8 +43,8 @@ Download the `…_aarch64.dmg` and drag the app to Applications.
 >   the [bone-scale reference skeletons](./custom-morphs.md) that depend on it.
 > - Everything that **drives Houdini** through `hython` —
 >   [Generate project](./06-into-houdini.md#generate-the-houdini-project-automatically),
->   [Fill network](./06-into-houdini.md#the-general-tab), and the whole
->   [Utils drawer](./06-into-houdini.md#utils--copy-a-texture-baker-setup-between-projects).
+>   [Fill network](./houdini-utils.md#the-general-tab), and the whole
+>   [Utils drawer](./houdini-utils.md).
 > - The **installation cards** in Settings, which read DIM's and SideFX's
 >   Windows registration — on macOS you fill the folder paths in yourself.
 >
