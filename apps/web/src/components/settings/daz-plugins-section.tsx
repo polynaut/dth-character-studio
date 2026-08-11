@@ -340,7 +340,7 @@ export function DazPluginsSection({
 
       {/* --- targets ------------------------------------------------------ */}
       <div className="space-y-2">
-        <p className="text-sm font-medium">Installed in</p>
+        <p className="text-sm font-medium mt-10">Installed in</p>
         {loadError && (
           <div className="flex items-center gap-2 text-sm text-destructive">
             <span>Couldn&apos;t read the Daz installations: {loadError}</span>
