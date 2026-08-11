@@ -294,11 +294,13 @@ export function EditorHeader({
         </div>
         {/* Bottom-right in the header, on the path-chip's baseline (mb-6 lifts the
             box so the scale below anchors on that line). They ride the sticky
-            header, so they stay reachable as the form scrolls. The column exists
-            for the live Houdini log: while an export node runs, its captured
-            output tails in a small monospace window ABOVE the buttons, spanning
-            the cluster's width (items-stretch — the row is the width driver). */}
-        <div className="ml-auto mb-6 flex shrink-0 flex-col items-stretch justify-end gap-2">
+            header, so they stay reachable as the form scrolls. The column
+            SELF-STRETCHES to the header's full height so the live export
+            pipeline (meters + task cards + log) can fill everything above the
+            buttons — and, crucially, shrink WITH the header's sticky collapse:
+            bottom-aligned overflowing content used to spill out the top of the
+            docked header and vanish. */}
+        <div className="ml-auto mb-6 flex shrink-0 flex-col items-end justify-end gap-2 self-stretch">
           {exportPipeline && <ExportPipelinePanel view={exportPipeline} />}
           <div className="actions-scroll flex justify-end gap-2">
             <DthExportAction

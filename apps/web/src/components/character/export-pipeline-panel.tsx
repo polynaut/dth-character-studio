@@ -97,20 +97,33 @@ export function ExportTaskCards({ tasks }: { tasks: Array<ExportTask> }) {
     return () => pending.forEach(clearTimeout)
   }, [])
 
+  // Only 3 cards show in full; the 4th fades out through a gradient mask and
+  // everything past it sits in a collapsed slot (which ANIMATES open as the
+  // queue moves up — the same slide the tetris collapse uses). Position counts
+  // only live slots, so a flying card still occupies its place until its slot
+  // has collapsed.
+  const visibleIds = tasks.filter((task) => !collapsed.has(task.id)).map((task) => task.id)
+
   return (
     <div className="flex w-40 shrink-0 flex-col">
       {tasks.map((task) => {
         const isFlying = flying.has(task.id)
         const isCollapsed = collapsed.has(task.id)
+        const position = visibleIds.indexOf(task.id)
+        const hidden = isCollapsed || position >= 4
         return (
           <div
             key={task.id}
             className={cn(
               'transition-all',
-              isCollapsed ? 'max-h-0 pb-0 opacity-0' : 'max-h-10 pb-1.5',
-              // The collapsing slot may clip — its card is long gone. A LIVE
-              // slot must not, or the fly-out would be cut off mid-flight.
-              isCollapsed ? 'overflow-hidden' : 'overflow-visible',
+              hidden ? 'max-h-0 pb-0 opacity-0' : 'max-h-10 pb-1.5',
+              // A hidden slot may clip — its card is gone or beyond the list's
+              // window. A LIVE slot must not, or the fly-out would be cut off
+              // mid-flight.
+              hidden ? 'overflow-hidden' : 'overflow-visible',
+              position === 3 &&
+                !isCollapsed &&
+                '[mask-image:linear-gradient(to_bottom,#000_0%,transparent_90%)]',
             )}
             style={{ transitionDuration: `${COLLAPSE_MS}ms` }}
           >
@@ -134,14 +147,16 @@ export function ExportActivityLog({
     if (box) box.scrollTop = box.scrollHeight
   }, [log.lines])
   return (
-    <div className="min-w-0 flex-1 rounded-md border bg-card/80 px-2.5 py-1.5 text-left">
-      <p className="mb-1 flex items-baseline gap-2 text-[11px] text-muted-foreground">
+    // Fills whatever height the panel row gives it (full header at rest, less
+    // when the sticky header docks) — the line box is the flexible part.
+    <div className="flex min-w-0 flex-1 flex-col rounded-md border bg-card/80 px-2.5 py-1.5 text-left">
+      <p className="mb-1 flex shrink-0 items-baseline gap-2 text-[11px] text-muted-foreground">
         <span className="shrink-0 font-medium text-foreground/80">{log.title}</span>
         {log.subtitle && <span className="truncate">{log.subtitle}</span>}
       </p>
       <div
         ref={boxRef}
-        className="max-h-24 overflow-y-auto font-mono text-[11px] leading-4 whitespace-pre-wrap break-all text-muted-foreground"
+        className="min-h-0 flex-1 overflow-y-auto font-mono text-[11px] leading-4 whitespace-pre-wrap break-all text-muted-foreground"
       >
         {log.lines.map((line, index) => (
           // Index keys are sound here: the list is an append-only rolling tail.
@@ -180,15 +195,22 @@ function ProgressBar({ bar, emphasis = false }: { bar: ExportProgressBar; emphas
 export function ExportPipelinePanel({ view }: { view: ExportPipelineView }) {
   if (view.tasks.length === 0 && !view.log && !view.bars) return null
   return (
-    <div className="flex flex-col gap-2">
+    // FIXED width (the log/labels must not resize the header's button cluster
+    // mid-run) and flex-1/min-h-0 so the panel fills whatever height the
+    // header has — full when at rest, and it shrinks in lockstep with the
+    // sticky collapse instead of spilling out (the log is the shrink victim;
+    // the meter row keeps its size).
+    <div className="flex min-h-0 w-[580px] flex-1 flex-col gap-2">
       {view.bars && (
-        <div className="flex flex-col gap-1.5">
+        <div className="flex shrink-0 flex-col gap-1.5">
           {view.bars.overall && <ProgressBar bar={view.bars.overall} emphasis />}
           <ProgressBar bar={view.bars.current} />
         </div>
       )}
       {(view.tasks.length > 0 || view.log) && (
-        <div className="flex items-stretch gap-2">
+        // overflow-hidden so a docked (collapsed) header clips the row instead
+        // of letting cards/log spill over the page below.
+        <div className="flex min-h-0 flex-1 items-stretch gap-2 overflow-hidden">
           {view.tasks.length > 0 && <ExportTaskCards tasks={view.tasks} />}
           {view.log && <ExportActivityLog log={view.log} />}
         </div>
