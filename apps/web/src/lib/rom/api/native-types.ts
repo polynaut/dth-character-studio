@@ -190,6 +190,20 @@ export const housekeepingResultSchema = z.object({
   filesFailed: z.number().optional(),
 })
 
+// --- character export zip (character_zip.rs `ExportZipReport`) ----------------
+
+/** What packing a character export zip did (mirrors Rust `ExportZipReport`).
+ *  Pinned by contracts/export-zip-report.json. */
+export const exportZipReportSchema = z.object({
+  /** File entries written (the manifest included). */
+  files: z.number(),
+  /** Uncompressed input bytes packed. */
+  bytes: z.number(),
+  /** Directory links/junctions inside a packed root — never followed, so their
+   *  targets are NOT in the zip. Surfaced by the export toast. */
+  skippedLinks: z.number(),
+})
+
 // --- network-drive remap (drives.rs `RemapResult`) ----------------------------
 
 /** Outcome of ensuring one known network drive is mapped (mirrors Rust
@@ -490,6 +504,7 @@ export type DupMember = z.infer<typeof dupMemberSchema>
 export type AssetDup = z.infer<typeof assetDupSchema>
 export type DedupReport = z.infer<typeof dedupReportSchema>
 export type HousekeepingResult = z.infer<typeof housekeepingResultSchema>
+export type ExportZipReport = z.infer<typeof exportZipReportSchema>
 export type RemapResult = z.infer<typeof remapResultSchema>
 export type PoseAssetFramesResult = z.infer<typeof poseAssetFramesSchema>
 export type SceneWearable = z.infer<typeof sceneWearableSchema>

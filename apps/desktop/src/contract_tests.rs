@@ -73,6 +73,13 @@ fn material_util_report_matches_the_shared_fixture() {
 }
 
 #[test]
+fn export_zip_report_matches_the_shared_fixture() {
+    round_trip::<crate::character_zip::ExportZipReport>(include_str!(
+        "../../../contracts/export-zip-report.json"
+    ));
+}
+
+#[test]
 fn remap_results_match_the_shared_fixture() {
     round_trip::<Vec<crate::drives::RemapResult>>(include_str!(
         "../../../contracts/remap-results.json"

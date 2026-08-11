@@ -81,6 +81,18 @@ export type {
   ScanFrameCsv,
 } from './api/characters'
 
+// --- character export/import zips (.dcsc.zip) --------------------------------
+export {
+  exportCharacterZip,
+  importCharacterZip,
+  readCharacterZipManifest,
+} from './api/character-zip'
+export type {
+  CharacterZipImportResult,
+  CharacterZipManifest,
+  ExportZipReport,
+} from './api/character-zip'
+
 // --- avatars: avatar images + scene thumbnails ------------------------------
 export {
   deleteCharacterUpload,
