@@ -119,10 +119,39 @@ export const morphSchema = z.object({
    * For morphs already dialed in as part of the base shape.
    */
   base: z.number().optional(),
-  /** Resolve `base` from the morph's current scene value at apply time. */
-  autoBase: z.boolean().optional(),
+  /**
+   * Resolve `base` from the morph's current scene value at apply time —
+   * **on by default** (schema v31).
+   *
+   * A morph the character already dials as part of its base shape (a "shaped"
+   * variant reusing an FBM the ROM also walks) must sawtooth back to THAT value,
+   * not to 0, or the ROM erases the base shape on every frame around the pose.
+   * Auto-base makes that the automatic case: the runtime reads the morph's own
+   * frame-0 value and reuses it as the sawtooth floor. A morph that ISN'T dialed
+   * in the scene reads 0 there, so the behaviour is identical to the old default —
+   * which is why on is the safe default and off is the opt-out.
+   *
+   * `.default(true)` is the migration: a pre-v31 definition stored the flag only
+   * when it was ON (off was written as absent), so every existing morph reads
+   * back with auto-base ON. Being a `.default` and not `.optional`, the field is
+   * required on the parsed type — every morph-creation site must state its
+   * intent, which is what keeps "on by default" true no matter how a morph is
+   * added.
+   */
+  autoBase: z.boolean().default(true),
 })
 export type Morph = z.infer<typeof morphSchema>
+
+/**
+ * A freshly added morph row — the ONE place a new morph's defaults live, so
+ * "auto-base is on however a morph is added" is a single fact and not a rule
+ * every call site has to remember. Used by every add path: the pose grid's
+ * Add morph / Add pose / insert-between, the art-direction rows and the DAZ
+ * morph-CSV import.
+ */
+export function newMorph(node: string, patch: Partial<Morph> = {}): Morph {
+  return { id: newId(), node, prop: '', value: 1, autoBase: true, ...patch }
+}
 
 /**
  * One ROM pose (= one frame, computed from order). The name becomes the
@@ -939,8 +968,21 @@ export function jcmMorphModForRuntime(mod: JcmMorphMod): {
  *       zod-stripped, so no migration step; the web layer carries an existing
  *       definition's stored products into the new file BEFORE the save that
  *       strips them (`carryStoredProductsToMeta`, api/products.ts).
+ *  31 — the per-morph `autoBase` zod default flipped false → true: resolving a
+ *       morph's sawtooth floor from its own frame-0 scene value is the default
+ *       now, and off is the opt-out. A pre-v31 definition stored the flag ONLY
+ *       when it was on (the editor wrote `undefined` for off), so absent is
+ *       indistinguishable from "never touched" — the default therefore turns
+ *       auto-base ON for every existing morph on read, which IS the intended
+ *       one-time migration; no step. It is deliberately NOT the v20 treatment
+ *       (that step preserved the old meaning of an omitted flag) because here
+ *       the flip is the point: a morph the character dials as part of its base
+ *       shape must return to that value, and a morph that isn't dialed reads 0
+ *       at frame 0 and behaves exactly as before. `.default` (not `.optional`)
+ *       also makes the field REQUIRED on the parsed type, so every
+ *       morph-creation site has to state its intent — see `newMorph`.
  */
-export const CHARACTER_SCHEMA_VERSION = 30
+export const CHARACTER_SCHEMA_VERSION = 31
 
 /**
  * Version of the generated **script runtime** — the bundled DTH `.dsa` runtime
@@ -1513,8 +1555,17 @@ export const CHARACTER_SCHEMA_VERSION = 30
  *       changed frame layout's reference skeletons) lingering beside a fresh
  *       set. Only the set's own name patterns are removed — anything else in
  *       the folder is the user's.
+ * v70 — auto-base is the default (schema v31), so the emitted `config.extraFrames`
+ *       now carries `"autoBase": true` on every morph that hasn't opted out and
+ *       the runtime resolves each morph's sawtooth floor from its own frame-0
+ *       scene value. The `.dsa` runtime FILES are unchanged (resolveAutoBaseValues
+ *       has honoured the flag since it was introduced) — what changed is the
+ *       generated script's config. Bumped even though the v31 schema bump already
+ *       marks every existing character stale: saving a character in the editor
+ *       re-stamps its schemaVersion WITHOUT regenerating, which would otherwise
+ *       hide a pre-v70 script on disk from the staleness check for good.
  */
-export const RUNTIME_VERSION = 69
+export const RUNTIME_VERSION = 70
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

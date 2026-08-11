@@ -81,10 +81,20 @@ Every entry in that expanded list carries its own:
 - **Base** *(optional)* — the value the morph **returns to** on the frames
   around the pose (default `0`). Set it for a morph that's part of the
   character's base shape, so the ROM keys the *delta* instead of snapping the
-  morph up from zero.
-- **Auto** — instead of a fixed **Base**, read the base from the morph's
-  **current scene value** when the script runs — for resting values that
-  differ per character.
+  morph up from zero. Only read when **Auto** is off.
+- **Auto** — **on by default.** Instead of a fixed **Base**, read the base from
+  the morph's **current scene value** when the script runs.
+
+> **Why Auto is on by default.** ROM morphs and base-shape morphs are allowed to
+> overlap. A "shaped" variant of a character — its own scene, built partly from
+> FBM morphs the ROM also walks — is a perfectly normal thing to make, and you
+> shouldn't have to think about it. With **Auto** on, a morph the open scene
+> already dials to, say, 100% sawtooths back to *that* value around its pose
+> instead of being flattened to `0`, so the ROM stops erasing the base shape on
+> every neighbouring frame. A morph the scene does **not** dial reads `0` at
+> frame 0 anyway, so for every non-overlapping morph — which is most of them —
+> Auto changes nothing at all. Turn it off only when you want a fixed **Base**
+> (or a hard reset to `0`) regardless of what the scene is doing.
 
 <details>
 <summary><strong>Combining several morphs into one output — why you'd do it</strong></summary>

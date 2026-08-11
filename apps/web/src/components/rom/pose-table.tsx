@@ -490,7 +490,10 @@ export function SortablePoseRow({
               <span className="flex items-center gap-1">
                 Auto
                 <InfoPopup label="Auto — more information">
-                  Resolve the base from the morph's current scene value at apply time.
+                  Resolve the base from the morph's current scene value at apply time — on by
+                  default. A morph the scene already dials as part of the base shape returns to
+                  THAT value around its pose instead of 0; one that isn't dialed reads 0 there, so
+                  nothing changes. Uncheck to always return to the Base value.
                 </InfoPopup>
               </span>
             </td>
@@ -532,7 +535,7 @@ export function SortablePoseRow({
                   <OptionalNumberCell
                     value={morph.base}
                     placeholder="0"
-                    disabled={morph.autoBase === true}
+                    disabled={morph.autoBase}
                     onCommit={(base) => meta.updateMorphAt(row.index, morphIndex, { base })}
                   />
                 </div>
@@ -542,12 +545,10 @@ export function SortablePoseRow({
                   <input
                     type="checkbox"
                     className={`size-3.5 ${overridden ? 'accent-daz-green' : 'accent-primary'}`}
-                    title="Resolve the base from the morph's current scene value at apply time"
-                    checked={morph.autoBase === true}
+                    title="Resolve the base from the morph's current scene value at apply time — on by default; uncheck to always reset this morph to Base"
+                    checked={morph.autoBase}
                     onChange={(e) =>
-                      meta.updateMorphAt(row.index, morphIndex, {
-                        autoBase: e.target.checked ? true : undefined,
-                      })
+                      meta.updateMorphAt(row.index, morphIndex, { autoBase: e.target.checked })
                     }
                   />
                 </div>

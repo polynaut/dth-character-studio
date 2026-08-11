@@ -146,7 +146,7 @@ import {
 import type { GeneratedFile } from './csv'
 import type { PresetFrames } from './frames'
 import type { RomPaths } from './resolve'
-import type { ArtDirectionFrame, Character } from './types'
+import type { ArtDirectionFrame, Character, Morph } from './types'
 
 /**
  * The `.dsa` generators: the self-contained character/ROM script, the split
@@ -177,7 +177,23 @@ export function stripTrailingSlashes(path: string): string {
   return out
 }
 
-function morphJson(morph: { node: string; prop: string; value: number; base?: number; autoBase?: boolean }) {
+/**
+ * One morph as the runtime reads it. `autoBase` is emitted only when ON (schema
+ * v31's default) — the runtime reads an absent flag as off, so the opt-out costs
+ * no key. Same for `base`, which is unset unless the user typed one.
+ *
+ * MEASURED: only the extraFrames path honours these two. The art-direction path
+ * (`applyArtDirectionData` in DthUtils.dsa) sawtooths through
+ * `createMorphFrame(oProp, frame, value)` with no base argument, so a GP/DK
+ * art-direction morph always returns to 0 whatever this emits. They are emitted
+ * there anyway rather than special-cased away: the field belongs to the morph,
+ * and stripping it would encode the runtime's current limit into the payload.
+ *
+ * Takes `Morph` itself, not a structural subset: v31 made `autoBase` REQUIRED on
+ * the parsed type precisely so tsc names every site that handles a morph, and a
+ * local `autoBase?: boolean` here would have quietly opted the emitter out of it.
+ */
+function morphJson(morph: Morph) {
   return {
     node: morph.node,
     prop: morph.prop,

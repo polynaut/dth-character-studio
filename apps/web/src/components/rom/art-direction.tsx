@@ -8,6 +8,7 @@ import {
   genRomIncludes,
   genRomStartFrame,
   newId,
+  newMorph,
 } from '@dth/rom'
 
 import type {
@@ -65,7 +66,7 @@ export function ArtDirectionEditor({
   // A frame is a per-scene override when its morph content differs from the base's
   // (ids ignored — they're editing handles). Only meaningful on a non-primary scene.
   const morphKey = (ms: Array<Morph>) =>
-    JSON.stringify(ms.map((m) => [m.node, m.prop, m.value, m.base ?? null, m.autoBase ?? false]))
+    JSON.stringify(ms.map((m) => [m.node, m.prop, m.value, m.base ?? null, m.autoBase]))
   const baseFrameMorphs = (rom: 'gp' | 'dk', frame: number): Array<Morph> =>
     baseConfig?.artDirection.find((e) => e.rom === rom && e.frame === frame)?.morphs ?? []
 
@@ -239,13 +240,10 @@ function ArtDirectionFrameRow({
                 ...entry,
                 morphs: [
                   ...entry.morphs,
-                  {
-                    id: newId(),
-                    node: entry.morphs[entry.morphs.length - 1]?.node ??
+                  newMorph(
+                    entry.morphs[entry.morphs.length - 1]?.node ??
                       (entry.rom === 'gp' ? 'GoldenPalace_G9' : 'DicktatorG9'),
-                    prop: '',
-                    value: 1,
-                  },
+                  ),
                 ],
               })
             }

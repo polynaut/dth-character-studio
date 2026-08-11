@@ -1,6 +1,6 @@
 import { parseCsvRecords } from './product-scan'
 import { sanitizePoseName } from './csv'
-import { newId } from './types'
+import { newMorph } from './types'
 
 import type { Morph } from './types'
 
@@ -107,8 +107,9 @@ export function posesFromDazCsv(text: string): Array<ImportedPose> {
       if (!node || !prop || raw === '') continue
       const value = Number(raw)
       if (!Number.isFinite(value)) continue
-      // New grid rows → new stable ids (schema v19), same as the editor mints.
-      morphs.push({ id: newId(), node, prop, value })
+      // New grid rows → new stable ids (schema v19) and auto-base on (v31),
+      // exactly as the editor mints them.
+      morphs.push(newMorph(node, { prop, value }))
     }
     if (morphs.length === 0) continue
     poses.push({ frame, name: importedPoseName(morphs[0].prop), morphs })
