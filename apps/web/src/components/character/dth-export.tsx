@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type { CSSProperties } from 'react'
 import { Ban, Loader2, Play, Wand } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -25,7 +26,6 @@ import {
   abortExporterJobs,
   clearExporterJobFiles,
   dismissExportRun,
-  dismissHoudiniRun,
   executeCharacterJobs,
   exportDazStudioRunning,
   exporterJobsPending,
@@ -83,16 +83,16 @@ import type { Character } from '@dth/rom'
  * Runner renames it `running_…` when it starts, so "the un-renamed file
  * exists" is "pending") the button turns into **Abort**: clicking deletes the
  * job file (and rolls the aborted scenes' handoff stamps back). Once the
- * Runner renames it, the button becomes a live **Exporting n/m** state — the
+ * Runner renames it, the button becomes a live **Working** state — the
  * Runner owns the file's `progress` + per-job statuses, the studio just polls
  * the file (api/execute.ts). At 100% the studio deletes the file and toasts
  * the outcome (including per-scene failures); a run whose Daz exited early
- * toasts a failure instead. Clicking the progress button stops watching only —
- * but holding **Ctrl** turns it into **Abort** as well (see
- * {@link ExportProgressButton}): the claimed job file is deleted and the
- * button reset, which is the only way out of a batch that stalled inside a Daz
- * that is still running. Status refreshes on window focus and polls lightly
- * while pending/running.
+ * toasts a failure instead. A plain click on the working button is IGNORED
+ * (a stray click must not reset the run's watch) — holding **Ctrl** turns it
+ * into **Abort** (see {@link ExportProgressButton}): the claimed job file is
+ * deleted and the button reset, which is the only way out of a batch that
+ * stalled inside a Daz that is still running. Status refreshes on window
+ * focus and polls lightly while pending/running.
  */
 /** The DazToHue brand mark as a button icon. The button's automatic icon
  *  sizing only targets SVGs, so the img sizes itself — `size-6`, larger than
@@ -119,7 +119,7 @@ function dismissFinishToasts() {
   toast.dismiss(HOUDINI_TOAST_ID)
 }
 
-/** A live digital clock riding a progress button (`· 04:12`, all four digits
+/** A live digital clock riding a progress button (`04:12`, all four digits
  *  always rendered; an hour-plus run grows to `1:04:12`) — self-ticking each
  *  second, so the watch's 2.5s poll doesn't own the cadence. Renders nothing
  *  when the start is unknown (another window's run, adopted for display).
@@ -133,17 +133,17 @@ function ElapsedSince({ since }: { since?: number }) {
   }, [since])
   if (since === undefined) return null
   return (
-    <span className="inline-block min-w-[7ch] text-left tabular-nums">
-      · {formatClock(Date.now() - since)}
+    <span className="inline-block min-w-[5ch] text-left tabular-nums">
+      {formatClock(Date.now() - since)}
     </span>
   )
 }
 
 /**
- * The live **Exporting n/m** button — and, while **Ctrl** is held, the way out
- * of a run that is never going to end: the same **Abort** the pending state
- * offers, in the phase where aborting is normally over (the Runner has claimed
- * the file and owns it from then on).
+ * The live **Working** button — inert to plain clicks — and, while **Ctrl** is
+ * held, the way out of a run that is never going to end: the same **Abort**
+ * the pending state offers, in the phase where aborting is normally over (the
+ * Runner has claimed the file and owns it from then on).
  *
  * It exists because the claimed file is the one the studio cannot clean up by
  * itself: the watch only deletes it at progress 100 or when Daz is gone, so a
@@ -165,12 +165,10 @@ function ElapsedSince({ since }: { since?: number }) {
 function ExportProgressButton({
   progress,
   aborting,
-  onStopWatching,
   onAbort,
 }: {
   progress: Extract<ExportRunProgress, { state: 'running' }>
   aborting: boolean
-  onStopWatching: () => void
   onAbort: () => void
 }) {
   const ctrlHeld = useModifierHeld('Control')
@@ -188,16 +186,29 @@ function ExportProgressButton({
     )
   }
   // The Runner renamed the job file and owns its progress — the studio just
-  // polls the file. Clicking stops the WATCH only (the run in Daz can't be
-  // stopped from here); the next handoff cleans the leftover file up.
+  // polls the file. A plain click is IGNORED: a stray click must never reset
+  // the watch mid-run (measured: it did, and read as "the export vanished").
+  // Ctrl+click (above) is the one deliberate way out; the wait-cursor says
+  // "busy, not clickable" on hover.
+  // The mini bar (::after, appears only in the collapsed header — styles.css)
+  // mirrors the pipeline's CURRENT meter: the per-scene progress-log percent,
+  // falling back to row counts under an old Runner.
+  const percent =
+    progress.step?.percent ??
+    (progress.total > 0 ? Math.round((progress.processed / progress.total) * 100) : 0)
   return (
     <Button
       variant="outline"
-      className="px-3"
-      onClick={onStopWatching}
-      title={`Daz Studio is working the batch — ${progress.processed} of ${progress.total} scene${progress.total === 1 ? '' : 's'} processed${progress.failed > 0 ? ` (${progress.failed} failed)` : ''}. Click to stop watching, or hold Ctrl to abort and delete the job file.`}
+      className="export-button-progress cursor-wait px-3"
+      style={
+        {
+          '--export-progress': `${percent}%`,
+          '--export-progress-color': 'var(--color-emerald-600)',
+        } as CSSProperties
+      }
+      title={`Daz Studio is working the batch — ${progress.processed} of ${progress.total} scene${progress.total === 1 ? '' : 's'} processed${progress.failed > 0 ? ` (${progress.failed} failed)` : ''}. Hold Ctrl to abort and delete the job file.`}
     >
-      {/* Just "Working.." — the counts and percents live in the pipeline
+      {/* Just "Working" — the counts and percents live in the pipeline
           panel above (and this button's tooltip); a constant label plus the
           reserved-width clock keeps the button from resizing every tick. The
           DAZ mark names which app is doing the work — the run happens
@@ -205,7 +216,7 @@ function ExportProgressButton({
           know who is busy (the Houdini leg below wears its own mark). */}
       <Loader2 className="animate-spin" />
       <img src={dazLogo} alt="Daz Studio" className="size-5 shrink-0 object-contain" />
-      Working..
+      Working
       <ElapsedSince since={progress.startedAtMs} />
     </Button>
   )
@@ -795,45 +806,45 @@ export function DthExportAction({
       <ExportProgressButton
         progress={progress}
         aborting={aborting}
-        onStopWatching={() => {
-          dismissExportRun()
-          setProgress(null)
-        }}
         onAbort={() => void onAbortRunning()}
       />
     )
   }
 
   if (houdini) {
-    // The Daz batch is done and reported; Houdini is opening the project (or
-    // already working through it). Same deal as above — clicking stops the
-    // WATCH, never the export, which keeps running in the user's Houdini. But
-    // the STUDIO drives the project queue, so with projects still waiting
-    // their turn, stopping the watch also stops the orchestration — the
-    // tooltip must say so. (Reading the ref in render is sound here: every
-    // queue mutation is bracketed by a setHoudini, which re-renders.)
-    const queuedNote = houdiniQueueRef.current ? ' — the queued projects will not start' : ''
+    // The Daz batch is done and reported; Houdini is working (or opening the
+    // project). Like the Daz leg's button, a plain click is IGNORED — the
+    // STUDIO drives the project queue, so a stray click didn't just stop the
+    // watch, it silently stopped the orchestration of every queued project.
+    // A watch whose Houdini actually dies ends itself (liveness detection).
+    // The mini bar mirrors the panel's stepwise Houdini scale (1 open-project
+    // step + 1 per network).
+    const houdiniPercent =
+      houdini.state === 'running' && houdini.total > 0
+        ? Math.round(((1 + houdini.done) / (1 + houdini.total)) * 100)
+        : 0
     return (
       <Button
         variant="outline"
-        className="px-3"
-        onClick={() => {
-          dismissHoudiniRun()
-          setHoudini(null)
-          clearPipeline()
-        }}
+        className="export-button-progress cursor-wait px-3"
+        style={
+          {
+            '--export-progress': `${houdiniPercent}%`,
+            '--export-progress-color': 'var(--color-orange-600)',
+          } as CSSProperties
+        }
         title={
           houdini.state === 'running'
-            ? `Houdini is exporting — ${houdini.done} of ${houdini.total} node${houdini.total === 1 ? '' : 's'} done. Click to stop watching${queuedNote}.`
-            : `Houdini is loading the project in the background (headless); the export starts once the scene is loaded. Click to stop watching${queuedNote}.`
+            ? `Houdini is exporting — ${houdini.done} of ${houdini.total} node${houdini.total === 1 ? '' : 's'} done.`
+            : 'Houdini is loading the project in the background (headless); the export starts once the scene is loaded.'
         }
       >
-        {/* Same constant "Working.." as the Daz leg — the node counts live in
+        {/* Same constant "Working" as the Daz leg — the node counts live in
             the pipeline panel's meters and this tooltip; the Houdini mark is
             what tells the legs apart. */}
         <Loader2 className="animate-spin" />
         <img src={houdiniLogo} alt="Houdini" className="size-5 shrink-0 object-contain" />
-        Working..
+        Working
         <ElapsedSince
           since={houdini.state === 'starting' || houdini.state === 'running' ? houdini.startedAtMs : undefined}
         />

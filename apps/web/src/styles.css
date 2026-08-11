@@ -441,6 +441,42 @@ a {
   }
 }
 
+/* A miniature copy of the pipeline's CURRENT progress bar riding the export
+   button's bottom edge (::after — width + color come from custom properties
+   the button sets inline). Hidden at the top of the page, where the full
+   meter row is visible; fades in on the SAME scroll timeline that shrinks
+   the header buttons, so the docked header keeps showing live progress after
+   the panel has faded away. Base opacity 0 also covers browsers without
+   scroll timelines (their header never collapses — the full panel stays). */
+@keyframes dth-export-mini-appear {
+  to {
+    opacity: 1;
+  }
+}
+.export-button-progress {
+  position: relative;
+  overflow: hidden;
+}
+.export-button-progress::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  width: var(--export-progress, 0%);
+  background: var(--export-progress-color, var(--color-emerald-600));
+  opacity: 0;
+  transition: width 500ms;
+  pointer-events: none;
+}
+@supports (animation-timeline: scroll()) {
+  .export-button-progress::after {
+    animation: dth-export-mini-appear linear both;
+    animation-timeline: scroll(root block);
+    animation-range: 100px 242px;
+  }
+}
+
 /* The live export-pipeline panel (meters + task cards + log window) is a
    WORKING view, not a docked control: it fades away as the header collapses
    into sticky mode and comes back at the top. Fade only — the header's height
