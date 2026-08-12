@@ -421,6 +421,27 @@ current code before relying on details, but assume the *lesson* still holds.
   `scanCacheKey` now — **bump it whenever the scan starts reporting a new
   field.** A new field is a new question, and a cache that can't tell the
   question changed will serve the old answer forever.
+- **Two sides comparing "the same" path can normalize differently — so a
+  no-match is not evidence.** 456.py folds `.dth` import paths through
+  `os.path.realpath` (mapped drive → UNC, the retired junction spellings old
+  `.hip`s still store); the cached scan's `_scene_dth_imports` uses
+  `os.path.normpath` (a stored verdict must not bake one machine's mount
+  layout in) and the TS `sceneDthPath` resolves nothing physical at all. Two
+  spellings the RUN happily folds together therefore compare unequal in the
+  DTH Export dialog. The rule that reads them (`hipsForSelectedScenes`) only
+  drops a project on a POSITIVE match against a deselected scene; "matches
+  nothing" keeps whatever is ticked. The general shape: when a comparison
+  crosses a normalization boundary, only a match carries information — a
+  mismatch is indistinguishable from a vocabulary difference, and acting on it
+  is ignorance wearing knowledge's clothes.
+- **One global side-channel file needs clearing by every writer of the thing it
+  describes, not just the one that fills it.** `export-progress.log` is a
+  single app-data file and the poll serves it to whatever batch is live — but
+  only the export handoff truncated it, so a project scan or a scene ROM build
+  (both `bulk-export` job files, both adopted for display by every character
+  editor) rendered the FINISHED export's percent, scene and log tail as their
+  own progress. `resetExportProgressLog` runs at all four handoffs now; only
+  one of them also arms `progressLogPath`.
 - **A plan that also GATES a button has to count everything the action fixes.**
   `planRepath` decides both what the Utils repath would do and whether the button
   is clickable (empty `targets` = disabled). It counted absolute-collapsible and

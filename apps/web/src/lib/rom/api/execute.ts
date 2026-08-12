@@ -639,6 +639,30 @@ export type ExportRunProgress =
  * nothing (their runs predate the parameter and stay first-poll-consumed —
  * within one window only one editor is mounted at a time).
  */
+/**
+ * Truncate the verbose progress log and return its path.
+ *
+ * EVERY job-file handoff calls this, not only the export one. The log is a
+ * single app-data file and {@link readExportProgressState} serves it to
+ * whichever batch is live — so a scan or a scene ROM build that left the
+ * PREVIOUS export's lines standing would render them as its own progress: the
+ * finished export's percent, its scene and its whole log tail, under the new
+ * batch's task cards. Measured by reading the code paths: three of the four
+ * handoffs (this file's scene ROM build, the project product scan and the
+ * morph scan) write a `bulk-export` job file, and every character editor
+ * adopts one for display.
+ *
+ * Truncating is all they do — only {@link executeCharacterJobs} also ARMS the
+ * log (`progressLogPath` in the job file). An empty file is exactly what "this
+ * batch has nothing to say" has to look like: the reader returns null and the
+ * display falls back to row counts.
+ */
+async function resetExportProgressLog(): Promise<string> {
+  const path = await storage.dataPath(EXPORT_PROGRESS_FILE)
+  await storage.writeTextFileAtomic(path, '')
+  return path
+}
+
 /** The verbose progress log's current view (Runner v1.2.0), read fresh per
  *  poll. Best-effort by construction: an unreadable/absent/empty file is null
  *  — an old Runner simply never writes one. */
@@ -1326,9 +1350,9 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
   }
   // The verbose progress log (Runner v1.2.0): one app-data file, truncated at
   // every handoff so a stale log never reads as this run's — the Runner
-  // truncates it again at pickup, and both writers append from there.
-  const progressLogPath = await storage.dataPath(EXPORT_PROGRESS_FILE)
-  await storage.writeTextFileAtomic(progressLogPath, '')
+  // truncates it again at pickup, and both writers append from there. This is
+  // the one handoff that also ARMS it (see resetExportProgressLog).
+  const progressLogPath = await resetExportProgressLog()
   await storage.writeTextFileAtomic(jobFile, jobFileJson(jobs, 'bulk-export', progressLogPath))
 
   // Arm the watch: the run's identity only — all live state (progress,
@@ -1508,6 +1532,10 @@ export async function generateRomAnimation({
     }
     await remove(paths.running).catch(() => {})
   }
+  // This batch arms no progress log — but it must not INHERIT the last
+  // export's (see resetExportProgressLog). Best effort: a log that could not
+  // be truncated is stale display data, never a reason to refuse the run.
+  await resetExportProgressLog().catch(() => {})
   const jobJson = jobFileJson([{ scenePath: scene, scriptPath }])
   await storage.writeTextFileAtomic(paths.pending, jobJson)
   // Both windows can pass the exists-checks above — the read-back decides who
@@ -1781,6 +1809,9 @@ export async function startProjectScan({ data }: { data: unknown }): Promise<Pro
   // the moment the job file appears, and a row that beat its own config would
   // fail with "not in the scan config" for no reason.
   await storage.writeTextFileAtomic(joinPath(scriptsRoot, SCAN_CONFIG_FILE), scanConfigJson(sceneWork))
+  // No progress log for a scan — but the last export's must not stand in for
+  // one (see resetExportProgressLog). Best effort, as above.
+  await resetExportProgressLog().catch(() => {})
   const jobJson = jobFileJson(jobs)
   await storage.writeTextFileAtomic(paths.pending, jobJson)
   // Both windows can pass the exists-checks above — the read-back decides who
@@ -2029,6 +2060,9 @@ export async function startSceneScan({ data }: { data: unknown }): Promise<Scene
 
   // Stamped BEFORE the handoff, so every file this run writes is newer than it.
   const startedAtMs = Date.now()
+  // No progress log for a morph scan either — and no inherited one (see
+  // resetExportProgressLog). Best effort, as above.
+  await resetExportProgressLog().catch(() => {})
   const jobJson = jobFileJson([{ scenePath, scriptPath }])
   await storage.writeTextFileAtomic(paths.pending, jobJson)
   await assertHandoffOwned(paths.pending, jobJson)

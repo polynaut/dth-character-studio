@@ -661,14 +661,24 @@ older runtimes as stale.
   `.dth` it imports (`import_character_dtu_file`) — the studio wrote that file
   at a path it computes (`sceneDthPath`), so it names the Daz scene exactly,
   unlike a node or network-box name the user renames freely. 456.py matches on
-  it at export time; the DTH Export dialog matches on the SAME key without
+  it at export time; the DTH Export dialog matches on the same FIELD without
   opening a `.hip` because the background scan records every project's imports
   (`materialScanProject.imports`, hython `_scene_dth_imports`, stored per
   character in `houdini-scan.json`). `hipsForSelectedScenes` (pure) turns
-  "these scenes" into "these projects", and refuses to guess in one specific
-  way: a project the scan has NOT reached keeps whatever is ticked — dropping
-  it on ignorance would silently skip the Houdini half of a run. An old store
-  entry parses with `imports: []`, which reads as unknown for the same reason.
+  "these scenes" into "these projects".
+  The two sides do NOT normalize identically, and the rule is built around
+  that: 456.py's `normalize()` compares through `os.path.realpath` (folding a
+  mapped drive to its UNC target and the retired junction spellings old `.hip`s
+  still store), while `_scene_dth_imports` uses `os.path.normpath` and
+  `sceneDthPath` resolves nothing physical at all — so two spellings the RUN
+  folds together can compare unequal in the dialog. Hence a project only ever
+  LEAVES the run on a positive match against a DESELECTED scene. Three cases
+  keep whatever is ticked instead: a project the scan has not reached, an old
+  store entry (`imports: []`), and one whose imports match neither the selected
+  nor the deselected scenes — that last is the spelling case, and dropping on
+  it would be ignorance wearing knowledge's clothes. A wrongly-kept project
+  no-ops in Houdini; a wrongly-dropped one silently skips the Houdini half of a
+  run the user asked for.
 - **The Houdini export handoff — "Export too" (COMPLETE).** After a Daz bulk
   export, the DazToHue export nodes in a Houdini project run for the scenes the
   user ticked. The toggle sits beside the dialog's Houdini project select,
@@ -774,7 +784,12 @@ older runtimes as stale.
   run, never accreting — IS the retention the housekeeping rule asks for.
   The first headless run proved the point by deleting the answer. Liveness is the
   TRACKED child (`try_wait` in houdini.rs — immune to the Utils drawer's own
-  hython scans), with the GUI process list as fallback. The GUI path itself
+  hython scans) and, once this process has tracked a launch, its answer is
+  FINAL: an exited child means dead, never "ask the process list". Falling
+  through there would answer "alive" for the user's own open Houdini — this
+  audience keeps one open — and a hython that died mid-run would leave the
+  result file at "running" and the poll spinning forever. The GUI list is the
+  fallback only when no launch was ever tracked (an app restart). The GUI path itself
   still works (456.py's scene-load mechanism + window-wait machinery remain);
   "Open only" still opens the visible GUI via `openScene`. Without
   `DTH_HOUDINI_JOB`, 456.py does nothing at all.

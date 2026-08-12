@@ -452,45 +452,68 @@ export interface HoudiniProjectImports {
   imports: ReadonlyArray<string>
 }
 
+/** One spelling for comparing `.dth` paths across the TS/scan boundary. */
+function dthKey(path: string): string {
+  return path.trim().replace(/\\/g, '/').toLowerCase()
+}
+
 /**
  * THE "which projects does this scene selection involve" rule.
  *
- * A project belongs in the run when at least one of its networks imports the
- * `.dth` of a SELECTED scene — the exact key 456.py matches nodes on at export
- * time, so the dialog and the run can never disagree about which network
- * belongs to which scene. Names are deliberately not consulted: users rename
- * networks and copy projects between characters.
+ * A project JOINS the run when at least one of its networks imports the `.dth`
+ * of a SELECTED scene, and LEAVES it when its imports demonstrably name only
+ * DESELECTED ones. Names are deliberately not consulted: users rename networks
+ * and copy projects between characters.
  *
- * Two honest fallbacks, both erring toward keeping a project rather than
- * silently dropping it:
+ * Three fallbacks, all erring toward keeping a project rather than silently
+ * dropping it — a wrongly-kept project no-ops in Houdini (456.py exports only
+ * the networks matching the job), a wrongly-dropped one silently skips the
+ * Houdini half of a run the user asked for:
  *
- * - a project with NO recorded imports (never scanned, or scanned before this
- *   field existed) keeps whatever the user currently has — the studio cannot
- *   know, and un-ticking on ignorance would quietly skip Houdini work;
- * - with nothing selected there is nothing to match, so nothing is implied.
+ * - a project with NO recorded imports (never scanned, or scanned before that
+ *   field existed) keeps whatever the user currently has;
+ * - a project whose imports match NEITHER the selected nor the deselected
+ *   scenes keeps it too. That is not "imports nothing of this character" — it
+ *   is the studio and the project failing to speak the same path. 456.py
+ *   compares through `os.path.realpath` (folding mapped drives to UNC and the
+ *   retired junction spellings old `.hip`s still store); the scan's
+ *   `_scene_dth_imports` normalizes with `os.path.normpath` and `sceneDthPath`
+ *   resolves nothing at all, so two spellings 456.py would happily fold
+ *   together compare unequal HERE. Dropping on that is ignorance wearing
+ *   knowledge's clothes — the one guess this rule exists to refuse;
+ * - with nothing selected there is nothing to join, so nothing is implied.
  *
- * `scenesDth` are the selected scenes' `.dth` paths (see `sceneDthPath`), in
- * any spelling — compared normalized.
+ * Paths come in any spelling — compared normalized ({@link dthKey}).
  */
 export function hipsForSelectedScenes(
   hips: ReadonlyArray<HoudiniProjectImports>,
+  /** The selected scenes' `.dth` paths (see `sceneDthPath`). */
   scenesDth: ReadonlyArray<string>,
-  /** What is ticked right now — the answer for the unscanned ones. */
+  /** What is ticked right now — the answer whenever the studio cannot tell. */
   current: ReadonlySet<string>,
+  /** The character's OTHER linked scenes' `.dth` paths — the ones NOT selected.
+   *  Only an import naming one of these earns a drop; see the doc above. */
+  deselectedDth: ReadonlyArray<string> = [],
 ): Set<string> {
-  const wanted = new Set(
-    scenesDth.map((path) => path.trim().replace(/\\/g, '/').toLowerCase()).filter(Boolean),
-  )
+  const wanted = new Set(scenesDth.map(dthKey).filter(Boolean))
+  const dropped = new Set(deselectedDth.map(dthKey).filter(Boolean))
   const next = new Set<string>()
   for (const hip of hips) {
-    if (hip.imports.length === 0) {
+    const keep = (): void => {
       if (current.has(hip.hipPath)) next.add(hip.hipPath)
+    }
+    if (hip.imports.length === 0) {
+      keep()
       continue
     }
-    const uses = hip.imports.some((dth) =>
-      wanted.has(dth.trim().replace(/\\/g, '/').toLowerCase()),
-    )
-    if (uses) next.add(hip.hipPath)
+    const keys = hip.imports.map(dthKey)
+    if (keys.some((dth) => wanted.has(dth))) {
+      next.add(hip.hipPath)
+      continue
+    }
+    // Its imports name a scene the user unticked → a real "this project is
+    // about that scene, which is out". Anything else is not knowledge.
+    if (!keys.some((dth) => dropped.has(dth))) keep()
   }
   return next
 }
@@ -935,7 +958,22 @@ export function parseJobFileJson(text: string): ExporterJobFile | null {
       typeof raw.jobsDone === 'number'
         ? Math.max(0, Math.min(jobs.length, Math.floor(raw.jobsDone)))
         : undefined
-    return { version: 1, type, progress, ...(jobsDone !== undefined ? { jobsDone } : {}), jobs }
+    // Carried through rather than dropped: the field is part of the shape this
+    // module WRITES, so a reader that trusts {@link ExporterJobFile} must not
+    // get `undefined` for a file that plainly has it. Absent on every handoff
+    // that arms no log, and on the rewrite of a pre-v1.2.0 Runner.
+    const progressLogPath =
+      typeof raw.progressLogPath === 'string' && raw.progressLogPath !== ''
+        ? raw.progressLogPath
+        : undefined
+    return {
+      version: 1,
+      type,
+      progress,
+      ...(jobsDone !== undefined ? { jobsDone } : {}),
+      ...(progressLogPath !== undefined ? { progressLogPath } : {}),
+      jobs,
+    }
   } catch {
     return null
   }

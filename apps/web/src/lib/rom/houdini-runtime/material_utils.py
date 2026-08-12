@@ -1413,8 +1413,17 @@ def _scene_dth_imports():
     network-box name, which the user renames freely. Read in the scan pass and
     stored with the project, so the DTH Export dialog can tell which projects
     a scene selection actually involves WITHOUT opening a `.hip` (tens of
-    seconds each). The same key 456.py matches on at export time — the run and
-    the dialog must never disagree about which network belongs to which scene.
+    seconds each). The same FIELD 456.py matches on at export time.
+
+    Not the same normalization, though, and the reader is built for that:
+    456.py's `normalize()` goes through `os.path.realpath` (mapped drive → UNC,
+    junction spellings), which needs the file to be reachable from THIS
+    process; the scan stays on `os.path.normpath` like its sibling
+    `_wired_scene_dth`, because a scan entry is cached for months and a
+    physical resolution would bake one machine's mount layout into it. So a
+    spelling here can differ from the one the run compares — which is exactly
+    why `hipsForSelectedScenes` only DROPS a project on a positive match
+    against a deselected scene, never on a failure to match anything.
     """
     found = []
     seen = set()

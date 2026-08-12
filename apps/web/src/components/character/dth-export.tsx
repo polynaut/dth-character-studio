@@ -1767,16 +1767,25 @@ function DthExportDialog({
 
   // The scene selection DECIDES which Houdini projects belong in the run: a
   // project joins when one of its networks imports a selected scene's `.dth`
-  // — the same key 456.py matches on at export time — so ticking a scene off
-  // takes its project with it. Runs on every change of the scene selection
-  // (whatever changed it: a toggle, Solo, All, a mode re-seed), and again when
-  // the stored scans land. Projects the scan hasn't reached keep whatever they
-  // have (`hipsForSelectedScenes` never drops one on ignorance), and missing
-  // `.hip`s stay out. Not under rom-only — that list is a manual OPEN pick.
+  // — the key 456.py matches on at export time — so ticking a scene off takes
+  // its project with it. Runs on every change of the scene selection (whatever
+  // changed it: a toggle, Solo, All, a mode re-seed), and again when the stored
+  // scans land. A project is only DROPPED on a positive match against a
+  // deselected scene, which is why the unticked scenes' `.dth` paths are handed
+  // over too (see `hipsForSelectedScenes` — nothing is ever dropped on
+  // ignorance). Missing `.hip`s stay out. Not under rom-only — that list is a
+  // manual OPEN pick.
   useEffect(() => {
     if (mode === 'rom-only' || hipImports.length === 0) return
-    const scenesDth = [...checked]
-      .map((scene) => sceneDth[normalizeSceneKey(scene)] ?? '')
+    const dthFor = (scene: string): string => sceneDth[normalizeSceneKey(scene)] ?? ''
+    const scenesDth = [...checked].map(dthFor).filter((dth) => dth !== '')
+    // The other side of the same coin: every LINKED scene that is not ticked.
+    // Read off the scene list rather than "everything in sceneDth minus the
+    // selection", so a scene the resolver could not place is simply absent from
+    // both sets — unknown, not deselected.
+    const deselectedDth = [character.scenePath, ...character.extraScenes]
+      .filter((scene) => scene && !checked.has(scene))
+      .map(dthFor)
       .filter((dth) => dth !== '')
     // EVERY linked project is judged — a project the scan never reached is
     // absent from the store, and leaving it out of the list here would drop it
@@ -1787,7 +1796,7 @@ function DthExportDialog({
       imports: byPath.get(hipPath) ?? [],
     }))
     setCheckedHips((prev) => {
-      const next = hipsForSelectedScenes(judged, scenesDth, prev)
+      const next = hipsForSelectedScenes(judged, scenesDth, prev, deselectedDth)
       for (const hip of hipMissing) next.delete(hip)
       // Same members → same object, so the Houdini list doesn't re-render (and
       // `houdiniModeForSelection` isn't re-run) on every unrelated poll.

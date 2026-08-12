@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
 use serde::Deserialize;
@@ -56,30 +57,52 @@ pub struct LaunchHoudiniJobRequest {
 /// the whole story. Dropping a previous handle never kills its process.
 static JOB_CHILD: Mutex<Option<std::process::Child>> = Mutex::new(None);
 
+/// Whether a headless launch has been tracked in THIS process and has since
+/// exited. Set when `try_wait` first reports the child gone, cleared by the
+/// next launch — see `houdini_running` for why the flag has to outlive the
+/// handle it came from.
+static JOB_CHILD_EXITED: AtomicBool = AtomicBool::new(false);
+
 /// Whether the export job is still alive — the liveness half of the export
 /// poll, exactly like `daz_studio_running` is for the Daz batch. A result file
 /// stuck at "running" with nothing left to write it means the run died and the
 /// poll must stop instead of spinning forever.
 ///
-/// Two answers, in order: the TRACKED child of the last headless launch
-/// (`try_wait` — precise, and immune to unrelated hython processes like the
-/// Utils drawer's background scans), then the GUI process list
-/// (`houdini.exe`/`houdinifx.exe`/`houdinicore.exe` — the licence tier decides
-/// the binary name). The GUI fallback still matters: a job can also be picked
-/// up by a visible Houdini through the scene-load mechanism (the original
-/// shape), and an app restart loses the tracked handle while such a session
-/// keeps working.
+/// Two answers, in order, and the FIRST one wins outright when it exists:
+///
+/// 1. the TRACKED child of the last headless launch (`try_wait` — precise, and
+///    immune to unrelated hython processes like the Utils drawer's background
+///    scans). Alive = true; exited = **false**, full stop.
+/// 2. the GUI process list (`houdini.exe`/`houdinifx.exe`/`houdinicore.exe` —
+///    the licence tier decides the binary name), consulted ONLY when this
+///    process has never tracked a launch: an app restart loses the handle, and
+///    a job can also be picked up by a visible Houdini through the scene-load
+///    mechanism (the original shape).
+///
+/// The precedence is the whole point. Falling through to the process list
+/// after the tracked child exited would answer "alive" for the user's OWN open
+/// Houdini — and this audience keeps one open. A hython that died mid-run
+/// would then leave the result file stuck at "running" with liveness stuck at
+/// true, and the poll would spin forever: exactly the failure this command
+/// exists to prevent. Headless is what made it reachable — before, the run WAS
+/// the window, so closing it answered the question.
 #[tauri::command(async)]
 pub fn houdini_running() -> bool {
     if let Ok(mut slot) = JOB_CHILD.lock() {
         if let Some(child) = slot.as_mut() {
             match child.try_wait() {
                 Ok(None) => return true,
-                // Exited (or unprobeable) — drop the handle; the GUI fallback
-                // below still gets its say.
-                _ => *slot = None,
+                // Exited (or unprobeable) — drop the handle, but REMEMBER that
+                // there was one: the answer stays "dead" until the next launch.
+                _ => {
+                    *slot = None;
+                    JOB_CHILD_EXITED.store(true, Ordering::SeqCst);
+                }
             }
         }
+    }
+    if JOB_CHILD_EXITED.load(Ordering::SeqCst) {
+        return false;
     }
     #[cfg(windows)]
     {
@@ -145,6 +168,9 @@ pub fn launch_houdini_job(request: LaunchHoudiniJobRequest) -> Result<(), String
         .map_err(|e| format!("Could not start hython: {e}"))?;
     if let Ok(mut slot) = JOB_CHILD.lock() {
         *slot = Some(child);
+        // A fresh run answers for itself — clear the previous one's verdict, or
+        // `houdini_running` would report this launch dead before it started.
+        JOB_CHILD_EXITED.store(false, Ordering::SeqCst);
     }
     Ok(())
 }

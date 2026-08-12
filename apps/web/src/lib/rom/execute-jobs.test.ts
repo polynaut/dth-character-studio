@@ -106,6 +106,14 @@ describe('the JSON job file (contract v2)', () => {
     expect((raw.jobs as Array<{ steps: number }>)[0].steps).toBe(5)
     // Without a path the field stays absent — an old-style file byte-for-byte.
     expect(JSON.parse(jobFileJson([])).progressLogPath).toBeUndefined()
+    // …and it survives the round trip: a reader trusting ExporterJobFile must
+    // not be told `undefined` about a file that plainly carries it.
+    expect(parseJobFileJson(text)?.progressLogPath).toBe(
+      'C:\\Users\\x\\AppData\\Local\\dth\\export-progress.log',
+    )
+    // A handoff that arms no log (a scan, a scene ROM build) reads as absent
+    // rather than empty-string — "this batch has nothing to say".
+    expect(parseJobFileJson(jobFileJson([]))?.progressLogPath).toBeUndefined()
   })
 
   it('jobStepsForMode: the per-scene step scale both writers share', () => {
@@ -617,19 +625,20 @@ describe('hipsForSelectedScenes — which projects a scene selection involves', 
   const unscanned = { hipPath: 'D:/chars/Kira/houdini/new.hip', imports: [] }
 
   it('selects exactly the projects importing a selected scene', () => {
-    expect([...hipsForSelectedScenes([slimHip, bothHip], [SLIM], new Set())]).toEqual([
+    expect([...hipsForSelectedScenes([slimHip, bothHip], [SLIM], new Set(), [THICK])]).toEqual([
       slimHip.hipPath,
       bothHip.hipPath,
     ])
-    // Only THICK selected: the slim-only project drops out.
-    expect([...hipsForSelectedScenes([slimHip, bothHip], [THICK], new Set())]).toEqual([
+    // Only THICK selected: the slim-only project drops out — its import names
+    // SLIM, which the user just unticked. That is a positive match, not a guess.
+    expect([...hipsForSelectedScenes([slimHip, bothHip], [THICK], new Set(), [SLIM])]).toEqual([
       bothHip.hipPath,
     ])
   })
 
   it('matches by PATH, spelling-insensitively — not by any name', () => {
     const windowsSpelling = 'd:\\chars\\Kira\\houdini\\daz-export\\KiraSlim\\Kira.dth'
-    expect([...hipsForSelectedScenes([slimHip], [windowsSpelling], new Set())]).toEqual([
+    expect([...hipsForSelectedScenes([slimHip], [windowsSpelling], new Set(), [])]).toEqual([
       slimHip.hipPath,
     ])
   })
@@ -637,15 +646,43 @@ describe('hipsForSelectedScenes — which projects a scene selection involves', 
   it('NEVER drops an unscanned project — the studio cannot know', () => {
     // Ticked and unknown → stays ticked (un-ticking on ignorance would
     // silently skip the Houdini half of the run).
-    expect(hipsForSelectedScenes([unscanned], [SLIM], new Set([unscanned.hipPath]))).toEqual(
+    expect(hipsForSelectedScenes([unscanned], [SLIM], new Set([unscanned.hipPath]), [])).toEqual(
       new Set([unscanned.hipPath]),
     )
     // Un-ticked and unknown → stays un-ticked: a guess in the other direction.
-    expect(hipsForSelectedScenes([unscanned], [SLIM], new Set())).toEqual(new Set())
+    expect(hipsForSelectedScenes([unscanned], [SLIM], new Set(), [])).toEqual(new Set())
+  })
+
+  it('does not drop a SCANNED project whose imports match no scene either way', () => {
+    // The failure this guards: 456.py compares through os.path.realpath (mapped
+    // drive → UNC, the retired junction spellings old .hip files still store),
+    // while the scan normalizes and sceneDthPath resolves nothing — so two
+    // spellings the RUN would fold together compare unequal here. Dropping on
+    // that is ignorance wearing knowledge's clothes: the project stays.
+    const junctionSpelling = {
+      hipPath: 'D:/chars/Kira/houdini/junction.hip',
+      imports: ['//nas/chars/kira/houdini/daz-export/kiraslim/kira.dth'],
+    }
+    expect(
+      hipsForSelectedScenes(
+        [junctionSpelling],
+        [THICK],
+        new Set([junctionSpelling.hipPath]),
+        [SLIM],
+      ),
+    ).toEqual(new Set([junctionSpelling.hipPath]))
+    // A project importing another character's scenes entirely: same answer,
+    // same reason — the studio was told nothing about THIS selection.
+    const foreign = { hipPath: 'D:/chars/Nyx/nyx.hip', imports: ['d:/chars/nyx/x/nyx.dth'] }
+    expect(hipsForSelectedScenes([foreign], [THICK], new Set([foreign.hipPath]), [SLIM])).toEqual(
+      new Set([foreign.hipPath]),
+    )
   })
 
   it('implies nothing when no scene is selected', () => {
-    expect(hipsForSelectedScenes([slimHip, bothHip], [], new Set())).toEqual(new Set())
+    expect(hipsForSelectedScenes([slimHip, bothHip], [], new Set(), [SLIM, THICK])).toEqual(
+      new Set(),
+    )
   })
 })
 
