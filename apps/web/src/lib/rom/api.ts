@@ -204,6 +204,7 @@ export type {
 export {
   dismissHoudiniRun,
   fetchHoudiniRunProgress,
+  fetchSceneDthPaths,
   copyHoudiniProject,
   generatedHoudiniScenePath,
   generateHoudiniProject,

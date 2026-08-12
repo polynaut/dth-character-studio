@@ -22,7 +22,9 @@ import {
   houdiniRunFilesToClear,
   houdiniRunStateFrom,
   parseHoudiniResult,
+  sceneDthPath,
 } from '../houdini-jobs'
+import { normalizeSceneKey } from '../execute-jobs'
 import type { HoudiniResult, HoudiniRunState } from '../houdini-jobs'
 import type { Character } from '@dth/rom'
 // Houdini's half of the handoff, bundled as source and written into app-data
@@ -697,4 +699,46 @@ export async function fetchHoudiniRunProgress(): Promise<
  *  an observer only, and the export it started keeps going. */
 export function dismissHoudiniRun(): void {
   activeHoudiniRun = null
+}
+
+/**
+ * Each linked scene's expected `.dth` path, keyed by {@link normalizeSceneKey}
+ * — the identity a DazToHue network carries, and what the DTH Export dialog
+ * matches a project's recorded `imports` against.
+ *
+ * Lives HERE, not in the dialog, for one measured reason: the export folder of
+ * a scene inside a subfolder (`daz3d/primary/…`) is that subfolder, and
+ * deriving it needs the character's scenes ROOT — which needs the project's
+ * `dazSubdir`, i.e. the resolution this layer does and a component cannot.
+ * Computed in the dialog without it, every scene fell back to its file STEM
+ * (`.../daz-export/LaraCroft_G8_1_SLIM/…`) and matched no real import
+ * (`.../daz-export/primary/…`), so the auto-selection quietly never fired.
+ * The SAME `buildHoudiniJob` uses, so the dialog and the run agree by
+ * construction.
+ */
+export async function fetchSceneDthPaths({
+  data,
+}: {
+  data: unknown
+}): Promise<Record<string, string>> {
+  const { projectId, id } = charScopeInput.parse(data)
+  if (!isTauri()) return {}
+  try {
+    const project = await resolveProject(projectId)
+    const lib = charsRoot(project)
+    const location = await locateCharacter(lib, id)
+    const character = location ? await storage.getCharacter(lib, id, location.definitionAbs) : null
+    if (!location || !character) return {}
+    const scenesRootAbs = characterScenesRoot(character, location, project.dazSubdir ?? 'daz3d')
+    const paths: Record<string, string> = {}
+    for (const scene of [character.scenePath, ...character.extraScenes]) {
+      if (!scene) continue
+      const dth = sceneDthPath(character, scene, scenesRootAbs)
+      if (dth) paths[normalizeSceneKey(scene)] = dth
+    }
+    return paths
+  } catch {
+    // Read-only convenience: without it the dialog simply doesn't auto-adjust.
+    return {}
+  }
 }

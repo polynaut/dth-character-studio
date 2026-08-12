@@ -46,6 +46,18 @@ describe('sceneDthPath — the match key handed to Houdini', () => {
     )
   })
 
+  it('WITHOUT the scenes root a subfoldered scene falls back to its file stem', () => {
+    // Not a nicety — measured 2026-08-12. A scene inside `daz3d/primary/`
+    // exports to `daz-export/primary/`, and deriving that "primary" needs the
+    // scenes ROOT (which needs the project's dazSubdir, i.e. resolution only
+    // the api layer can do). Called without it, the folder falls back to the
+    // scene's file stem, so the path names a folder no export ever wrote —
+    // which is exactly how the DTH Export dialog's scene→project matching
+    // silently matched nothing until `fetchSceneDthPaths` resolved it there.
+    expect(sceneDthPath(kira(), PRIMARY)).toBe('X:/p/Kira/houdini/daz-export/Kira/Kira.dth')
+    expect(sceneDthPath(kira(), PRIMARY)).not.toBe(sceneDthPath(kira(), PRIMARY, ROOT))
+  })
+
   it('resolves a RAW stored scene path, not only a normalized key', () => {
     // The regression that made "Export too" fail on every real run: the folder
     // map is keyed lowercase, but the export dialog passes the character's

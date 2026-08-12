@@ -36,6 +36,7 @@ import {
   fetchCachedHoudiniScans,
   fetchExportRunnerGate,
   fetchHoudiniRunProgress,
+  fetchSceneDthPaths,
   fileExists,
   launchDazForPendingJobs,
   openScene,
@@ -54,8 +55,6 @@ import {
   scenesMissingExport,
   scenesMissingRomAnimation,
 } from '#/lib/rom/execute-jobs.ts'
-
-import { sceneDthPath } from '#/lib/rom/houdini-jobs.ts'
 
 import type { ExecuteSceneStatus, ExportRunProgress, RunnerGate } from '#/lib/rom/api.ts'
 import type { HoudiniProjectImports } from '#/lib/rom/execute-jobs.ts'
@@ -1554,6 +1553,10 @@ function DthExportDialog({
   // scene→project auto-selection; a project the sweep hasn't reached yet
   // simply isn't in this list and is never un-ticked on that ignorance.
   const [hipImports, setHipImports] = useState<Array<HoudiniProjectImports>>([])
+  // Each linked scene's expected `.dth`, resolved in the api layer (it needs
+  // the project's scenes root — see fetchSceneDthPaths). Keyed by
+  // normalizeSceneKey, the same spelling the scene checkboxes carry.
+  const [sceneDth, setSceneDth] = useState<Record<string, string>>({})
   // null = still checking (Start stays off for the moment the probe takes).
   const [runner, setRunner] = useState<RunnerGate | null>(null)
 
@@ -1586,9 +1589,13 @@ function DthExportDialog({
 
   useEffect(() => {
     let active = true
-    void fetchCachedHoudiniScans({ data: { projectId, id: character.id } })
-      .then((scans) => {
+    void Promise.all([
+      fetchCachedHoudiniScans({ data: { projectId, id: character.id } }),
+      fetchSceneDthPaths({ data: { projectId, id: character.id } }),
+    ])
+      .then(([scans, dthPaths]) => {
         if (!active) return
+        setSceneDth(dthPaths)
         setHipImports(scans.map((scan) => ({ hipPath: scan.hipPath, imports: scan.imports })))
       })
       .catch(() => {
@@ -1728,7 +1735,7 @@ function DthExportDialog({
   useEffect(() => {
     if (mode === 'rom-only' || hipImports.length === 0) return
     const scenesDth = [...checked]
-      .map((scene) => sceneDthPath(character, scene))
+      .map((scene) => sceneDth[normalizeSceneKey(scene)] ?? '')
       .filter((dth) => dth !== '')
     // EVERY linked project is judged — a project the scan never reached is
     // absent from the store, and leaving it out of the list here would drop it
@@ -1746,7 +1753,7 @@ function DthExportDialog({
       if (next.size === prev.size && [...next].every((hip) => prev.has(hip))) return prev
       return next
     })
-  }, [checked, hipImports, hipMissing, mode, character])
+  }, [checked, hipImports, hipMissing, mode, character, sceneDth])
 
   function toggle(scene: string) {
     setChecked((prev) => {
