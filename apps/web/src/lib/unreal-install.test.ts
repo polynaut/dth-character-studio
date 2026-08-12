@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { z } from 'zod'
 
+import { unrealEngineInstallSchema } from '#/lib/rom/api/native-types.ts'
 import {
   allPluginBuilds,
   buildUnrealScan,
@@ -50,6 +52,23 @@ describe('buildUnrealScan', () => {
     )
     expect(defaultUnrealEngine(scan.installs)?.version).toBe('5.6')
     expect(defaultUnrealEngine([])).toBeNull()
+  })
+
+  it('carries the native fields THROUGH to the UI — buildId included', () => {
+    // The gap that made the BuildId check inert: this function used to rebuild
+    // each install field by field, so `buildId` never reached the dialog and
+    // every mismatch check answered "cannot tell". The dialog tests mock
+    // `detectUnrealEngines`, so nothing between the schema and the UI was
+    // covered. Asserted end-to-end here — parse the wire shape, run the real
+    // scan, and ask the real matcher.
+    const parsed = z.array(unrealEngineInstallSchema).parse([
+      { version: '5.8', path: 'D:/UE_5.8', buildId: '55116800' },
+    ])
+    const scan = buildUnrealScan(parsed, new Set(['D:/UE_5.8']))
+    expect(scan.installs[0]?.buildId).toBe('55116800')
+    // …and the verdict the checklist actually asks for, off that same object.
+    expect(pluginBuildMismatch({ buildId: '47537391' }, scan.installs[0])).toBe(true)
+    expect(pluginBuildMismatch({ buildId: '55116800' }, scan.installs[0])).toBe(false)
   })
 })
 

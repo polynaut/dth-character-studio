@@ -139,6 +139,23 @@ fn engine_build_id(engine_dir: &Path) -> String {
 /// listed all three. Reading both and merging is the only way to see what is
 /// really there.
 fn launcher_engine_installs() -> Vec<UnrealEngineInstall> {
+    // %PROGRAMDATA%, not a hardcoded `C:\ProgramData`: the folder is
+    // relocatable and a machine whose system drive is not C: is not exotic.
+    // The literal stays as the fallback — it is the default everywhere.
+    let program_data =
+        std::env::var("ProgramData").unwrap_or_else(|_| r"C:\ProgramData".to_string());
+    let path =
+        Path::new(&program_data).join(r"Epic\UnrealEngineLauncher\LauncherInstalled.dat");
+    let Ok(raw) = std::fs::read_to_string(&path) else {
+        return Vec::new();
+    };
+    launcher_installs_from_manifest(&raw)
+}
+
+/// The parse half of {@link launcher_engine_installs}, split out so the entry
+/// filter — the part with an actual rule in it — is testable without a machine
+/// that has the launcher installed.
+fn launcher_installs_from_manifest(raw: &str) -> Vec<UnrealEngineInstall> {
     #[derive(Deserialize)]
     struct Entry {
         #[serde(rename = "AppName", default)]
@@ -152,11 +169,7 @@ fn launcher_engine_installs() -> Vec<UnrealEngineInstall> {
         installation_list: Vec<Entry>,
     }
 
-    let path = Path::new(r"C:\ProgramData\Epic\UnrealEngineLauncher\LauncherInstalled.dat");
-    let Ok(raw) = std::fs::read_to_string(path) else {
-        return Vec::new();
-    };
-    let Ok(manifest) = serde_json::from_str::<Manifest>(&raw) else {
+    let Ok(manifest) = serde_json::from_str::<Manifest>(raw) else {
         return Vec::new();
     };
     manifest
@@ -184,15 +197,44 @@ fn launcher_engine_installs() -> Vec<UnrealEngineInstall> {
         .collect()
 }
 
-/// Registry + launcher manifest, deduped by VERSION (the registry first, since
-/// an entry there is what `UnrealVersionSelector` itself resolves against).
-fn all_engine_installs() -> Vec<UnrealEngineInstall> {
-    let mut out = read_engine_installs();
-    for candidate in launcher_engine_installs() {
-        if !out.iter().any(|e| e.version == candidate.version) {
-            out.push(candidate);
+/// Merge the two sources, one entry per VERSION.
+///
+/// The registry leads — an entry there is what `UnrealVersionSelector` itself
+/// resolves against — with ONE exception: a registry entry whose folder is gone
+/// yields to a launcher entry whose folder is there. The registry going stale is
+/// measured behaviour on this project's own dev machine (an uninstalled 4.0 kept
+/// its key), and the same premise that makes this merge necessary at all — the
+/// registry can be wrong about what is installed — makes "present but pointing
+/// nowhere" just as wrong as "absent". Without this, a reinstall to a new folder
+/// would show the dead path and hide the live one.
+///
+/// `is_dir` is injected so the rule is testable without laying down engine trees.
+fn merge_engine_installs(
+    registry: Vec<UnrealEngineInstall>,
+    launcher: Vec<UnrealEngineInstall>,
+    is_dir: impl Fn(&str) -> bool,
+) -> Vec<UnrealEngineInstall> {
+    let mut out = registry;
+    for candidate in launcher {
+        // `position` (not `iter_mut().find`) so the borrow ends before the push.
+        match out.iter().position(|e| e.version == candidate.version) {
+            Some(i) => {
+                if !is_dir(&out[i].path) && is_dir(&candidate.path) {
+                    out[i].path = candidate.path;
+                }
+            }
+            None => out.push(candidate),
         }
     }
+    out
+}
+
+/// Registry + launcher manifest, deduped by VERSION — see
+/// {@link merge_engine_installs} — with each engine's own `BuildId` filled in.
+fn all_engine_installs() -> Vec<UnrealEngineInstall> {
+    let mut out = merge_engine_installs(read_engine_installs(), launcher_engine_installs(), |p| {
+        Path::new(p).is_dir()
+    });
     for engine in &mut out {
         engine.build_id = engine_build_id(Path::new(&engine.path));
     }
@@ -441,10 +483,17 @@ fn zipped_plugin(zip_path: &Path) -> Option<ZippedPlugin> {
 
 /// Index of an archive entry by name, compared case-insensitively (zips written
 /// on Windows are not consistent about case).
+///
+/// One unreadable entry SKIPS, it does not abort the search: giving up on the
+/// whole archive would answer "no BuildId", and "no BuildId" is how this feature
+/// says "everything is fine". A check that fails open on the first odd entry in
+/// a big zip is worse than no check, because it looks like one.
 fn zip_entry_index(archive: &mut zip::ZipArchive<std::fs::File>, wanted: &str) -> Option<usize> {
     let wanted = wanted.to_lowercase();
     for idx in 0..archive.len() {
-        let entry = archive.by_index_raw(idx).ok()?;
+        let Ok(entry) = archive.by_index_raw(idx) else {
+            continue;
+        };
         if entry.name().replace('\\', "/").to_lowercase() == wanted {
             return Some(idx);
         }
@@ -875,6 +924,71 @@ mod tests {
     }
 
     #[test]
+    fn the_launcher_manifest_yields_engines_and_not_the_plugins_beside_them() {
+        // The measured shape: the launcher lists what it installed INTO an
+        // engine at the same InstallLocation, so an unfiltered read offers the
+        // same engine three times. Only `UE_<major.minor>` is an engine.
+        let installs = launcher_installs_from_manifest(
+            r#"{"InstallationList":[
+                {"AppName":"UE_5.8","InstallLocation":"D:\\Epic\\UE_5.8\\"},
+                {"AppName":"QuixelBridge_5.8","InstallLocation":"D:\\Epic\\UE_5.8"},
+                {"AppName":"FabPlugin_5.8","InstallLocation":"D:\\Epic\\UE_5.8"},
+                {"AppName":"UE_5.6","InstallLocation":"C:\\Epic\\UE_5.6"},
+                {"AppName":"UE_5.9.1","InstallLocation":"C:\\Epic\\UE_5.9.1"},
+                {"AppName":"UE_5.7","InstallLocation":""}
+            ]}"#,
+        );
+        let seen: Vec<(String, String)> =
+            installs.iter().map(|e| (e.version.clone(), e.path.clone())).collect();
+        assert_eq!(
+            seen,
+            vec![
+                ("5.8".to_string(), r"D:\Epic\UE_5.8".to_string()),
+                ("5.6".to_string(), r"C:\Epic\UE_5.6".to_string()),
+            ],
+            "engines only, trailing separator trimmed, a pathless entry dropped, \
+             and a three-part version left alone rather than guessed at"
+        );
+        // Nothing readable at all is empty, never a panic.
+        assert!(launcher_installs_from_manifest("not json").is_empty());
+        assert!(launcher_installs_from_manifest("{}").is_empty());
+    }
+
+    #[test]
+    fn the_merge_adds_what_the_registry_missed_and_replaces_what_it_got_wrong() {
+        let reg = |v: &str, p: &str| UnrealEngineInstall {
+            version: v.to_string(),
+            path: p.to_string(),
+            build_id: String::new(),
+        };
+        let merged = merge_engine_installs(
+            vec![reg("5.7", r"D:\live\UE_5.7"), reg("5.6", r"D:\gone\UE_5.6")],
+            vec![
+                // Same version, and the registry's folder is really there — the
+                // registry wins, because that is what UnrealVersionSelector uses.
+                reg("5.7", r"D:\other\UE_5.7"),
+                // Same version, but the registry points at a folder that is gone
+                // (a reinstall elsewhere) — the live path must win, or the studio
+                // offers a dead engine and hides the real one.
+                reg("5.6", r"D:\moved\UE_5.6"),
+                // The measured case this merge exists for: installed, no key.
+                reg("5.8", r"D:\live\UE_5.8"),
+            ],
+            |p| p.starts_with(r"D:\live") || p.starts_with(r"D:\moved"),
+        );
+        let seen: Vec<(&str, &str)> =
+            merged.iter().map(|e| (e.version.as_str(), e.path.as_str())).collect();
+        assert_eq!(
+            seen,
+            vec![
+                ("5.7", r"D:\live\UE_5.7"),
+                ("5.6", r"D:\moved\UE_5.6"),
+                ("5.8", r"D:\live\UE_5.8"),
+            ]
+        );
+    }
+
+    #[test]
     fn a_plugin_folder_reports_the_build_its_binaries_were_made_for() {
         let tmp = unique_temp_dir("uebuild");
         let plugin = tmp.join("MyPlugin");
@@ -900,6 +1014,9 @@ mod tests {
         fs::create_dir_all(&plugin).unwrap();
         fs::write(plugin.join("ContentOnly.uplugin"), "{}").unwrap();
         let found = scan_unreal_plugins(vec![plugin.to_string_lossy().into_owned()]);
+        // Asserted before indexing: an empty scan would otherwise fail this as
+        // an index panic, which reads as a broken test rather than a broken scan.
+        assert_eq!(found.len(), 1);
         assert_eq!(found[0].build_id, "");
         fs::remove_dir_all(&tmp).ok();
     }

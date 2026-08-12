@@ -105,8 +105,18 @@ function compareVersion(a: string, b: string): number {
   return 0
 }
 
-/** Sort + annotate the raw registry list. Newest first, so the first present
- *  install is also the one to preselect. */
+/**
+ * Sort + annotate the raw registry list. Newest first, so the first present
+ * install is also the one to preselect.
+ *
+ * SPREADS the install rather than naming its fields. Listing them meant a field
+ * added to {@link UnrealEngineInstall} was silently dropped on the way to the
+ * UI — which is exactly what happened to `buildId`: the native side read it,
+ * the schema parsed it, and this function threw it away, so every plugin build
+ * check quietly answered "cannot tell". Nothing caught it, because the dialog
+ * tests mock `detectUnrealEngines` and never run this. A spread makes the next
+ * field arrive on its own.
+ */
 export function buildUnrealScan(
   installs: ReadonlyArray<UnrealEngineInstall>,
   /** Which engine folders are actually on disk (the caller stats them). */
@@ -114,8 +124,7 @@ export function buildUnrealScan(
 ): UnrealEngineScan {
   const found = installs.map(
     (install): UnrealEngineFound => ({
-      version: install.version,
-      path: install.path,
+      ...install,
       name: `Unreal Engine ${install.version}`,
       exists: existing.has(install.path),
     }),

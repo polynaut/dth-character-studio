@@ -12,7 +12,10 @@ missing or built with a different engine version"*.
 registry.** Measured: a machine with 5.6, 5.7 and 5.8 installed had **no
 registry key for 5.8** — so the studio never offered it, the project was
 generated for 5.7, and Unreal 5.8 opened it and rebound it. Both sources are
-merged, the registry first.
+merged, the registry first — except where the registry names a folder that is
+no longer there and the launcher names one that is, which is the same staleness
+seen from the other side (an engine reinstalled elsewhere would otherwise be
+listed at its dead path while the live one stayed hidden).
 
 **A plugin build is now judged by its `BuildId`, not by its folder name.** Every
 built plugin carries one in `Binaries/Win64/UnrealEditor.modules`, and Unreal
