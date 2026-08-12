@@ -175,11 +175,10 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
   await expect(page.locator(`[data-task="daz:${P.scene}"]`)).toBeVisible()
   await expect(page.locator(`[data-task="hou:${P.houdini}"]`)).toBeVisible()
   // …and the log window ALREADY says what is being waited for. Daz was not
-  // running here, so the handoff started it: the opening line says so, and a
-  // meter at 0 carries the same words (an empty box + no bar read as "nothing
-  // is happening" while Daz takes its tens of seconds to come up).
+  // running here, so the handoff started it: the opening line says so (an
+  // empty box read as "nothing is happening" while Daz takes its tens of
+  // seconds to come up).
   await expect(page.locator('[data-export-log]')).toContainText('Opening Daz Studio')
-  await expect(page.locator('[data-status-headline]')).toContainText('Opening Daz Studio')
 
   // The Runner claims the batch and works the scene: the running job file +
   // the verbose progress log. The scene card goes ACTIVE, the log window
@@ -225,9 +224,8 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
   // The meter row above: a single-scene run shows ONE bar, riding the same
   // per-scene percent the log lines carry — no overall bar for a one-unit leg.
   await expect(page.locator('[data-progressbar="current"]')).toHaveAttribute('data-percent', '40')
-  await expect(page.locator('[data-status-headline]')).toContainText('ROM generated')
-  // The per-step clock: silent stretches inside a step visibly tick.
-  await expect(page.locator('[data-status-headline]')).toContainText(/\d+:\d{2}/)
+  // The newest line IS the status — the log window carries it, stamped.
+  await expect(page.locator('[data-export-log]')).toContainText(/\d+:\d{2}\] ROM generated/)
   await expect(page.locator('[data-progressbar="overall"]')).toHaveCount(0)
   // …and picked up + finished by the Runner. NO toast on the baton pass (a
   // mid-run toast reads as an outcome) and NO finish toast yet — the batch
@@ -312,9 +310,7 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
   // one done → 50%. One network = one bar, no overall; its label is the
   // latest captured line.
   await expect(page.locator('[data-progressbar="current"]')).toHaveAttribute('data-percent', '50')
-  await expect(page.locator('[data-status-headline]')).toContainText(
-    'Houdini; Baking textures 3/12…',
-  )
+  await expect(page.locator('[data-export-log]')).toContainText('Houdini; Baking textures 3/12…')
   await expect(page.locator('[data-progressbar="overall"]')).toHaveCount(0)
 
   // 456.py works through it and reports — and NOW the one summary toast fires,

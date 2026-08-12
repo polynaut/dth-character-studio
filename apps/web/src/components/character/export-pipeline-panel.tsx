@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { ChevronRight } from 'lucide-react'
 
 import { cn } from '@dth/ui'
-import { formatClock } from '#/lib/rom/execute-jobs.ts'
 
 /**
  * The header's live DTH-Export pipeline display: a narrow task-card column
@@ -33,9 +32,9 @@ export interface ExportProgressBar {
   /** Which leg the bar measures — the fill wears that kind's color, the same
    *  identity the task cards carry. */
   kind: 'daz' | 'houdini'
-  /** When the CURRENT step began (first seen) — the label then carries a
-   *  self-ticking `· 02:10`, so the minutes-long silent stretches inside a
-   *  synchronous exporter call visibly tick instead of reading as stuck. */
+  /** When the CURRENT step began (first seen). The button's own clock shows
+   *  the run's total; this is per STEP, kept on the view for whoever wants to
+   *  surface a minutes-long silent stretch. */
   sinceMs?: number
 }
 
@@ -183,38 +182,6 @@ export function ExportTaskCards({ tasks }: { tasks: Array<ExportTask> }) {
   )
 }
 
-/**
- * The run's current status, as the panel's headline — the one line worth
- * reading at a glance, with the per-step clock beside it so a minutes-long
- * silent step is visibly ticking rather than frozen.
- */
-function StatusHeadline({ headline }: { headline: { text: string; sinceMs?: number } }) {
-  // Ticks on its own: the poll only moves at step boundaries, and the whole
-  // point is showing life BETWEEN them.
-  const [, tick] = useState(0)
-  useEffect(() => {
-    if (headline.sinceMs === undefined) return
-    const id = window.setInterval(() => tick((n) => n + 1), 1000)
-    return () => window.clearInterval(id)
-  }, [headline.sinceMs])
-  const text = headline.text.charAt(0).toUpperCase() + headline.text.slice(1)
-  return (
-    <p data-status-headline className="mb-1.5 flex items-baseline gap-2 text-sm">
-      <span className="truncate font-semibold text-foreground">{text}</span>
-      {headline.sinceMs !== undefined && (
-        <>
-          <span aria-hidden className="text-border">
-            |
-          </span>
-          <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-            {formatClock(Date.now() - headline.sinceMs)}
-          </span>
-        </>
-      )}
-    </p>
-  )
-}
-
 /** Lead the MESSAGE with a capital, leaving the `[HH:MM:SS] ` stamp alone —
  *  the raw log speaks lowercase ("opening scene"), the window is a caption. */
 function capitalizeLine(line: string): string {
@@ -223,15 +190,7 @@ function capitalizeLine(line: string): string {
   })
 }
 
-export function ExportActivityLog({
-  log,
-  headline,
-}: {
-  log: { lines: Array<string> }
-  /** The run's current status, shown as the panel's own headline (the meter
-   *  under it then carries the percent alone) — plus its per-step clock. */
-  headline?: { text: string; sinceMs?: number }
-}) {
+export function ExportActivityLog({ log }: { log: { lines: Array<string> } }) {
   const boxRef = useRef<HTMLDivElement>(null)
   // Tail mode: whenever lines arrive, keep the newest one in view.
   useEffect(() => {
@@ -240,9 +199,11 @@ export function ExportActivityLog({
   }, [log.lines])
   return (
     // The grid places this in the buttons' shared column, so its width IS
-    // theirs. Headline + captioned log box; the meters sit below.
-    <div className="col-start-2 row-start-1 flex min-h-0 min-w-0 flex-col text-left">
-      {headline && <StatusHeadline headline={headline} />}
+    // theirs. The box alone: the newest line IS the status, so a headline
+    // repeating it was the same words twice.
+    // justify-end: the box sits at the BOTTOM of its cell, right above the
+    // meter — the run's most recent word as close to the buttons as possible.
+    <div className="col-start-2 row-start-1 flex min-h-0 min-w-0 flex-col justify-end text-left">
       <div
         data-export-log
         ref={boxRef}
@@ -251,13 +212,18 @@ export function ExportActivityLog({
         // lines arrived (and jumped per line). Fixed box + tail scroll — the
         // newest lines stay in view, the layout never moves.
         // 5 lines exactly: h-20 = 80px at leading-4 (16px per line).
-        className="h-20 overflow-y-auto rounded-md border border-border/70 bg-muted/40 px-2.5 py-1.5 font-mono text-[11px] leading-4 whitespace-pre-wrap break-all text-muted-foreground"
+        className="flex h-20 flex-col overflow-y-auto rounded-md border border-border/70 bg-muted/40 px-2.5 py-1.5 font-mono text-[11px] leading-4 whitespace-pre-wrap break-all text-muted-foreground"
       >
-        {log.lines.map((line, index) => (
-          // Index keys are sound here: the list is an append-only rolling tail.
-          // eslint-disable-next-line react/no-array-index-key
-          <div key={index}>{capitalizeLine(line)}</div>
-        ))}
+        {/* mt-auto, not justify-end: a flex scroll container with justify-end
+            clips its first lines once the content overflows. This pins a SHORT
+            log to the bottom (terminal-style) and scrolls normally when full. */}
+        <div className="mt-auto">
+          {log.lines.map((line, index) => (
+            // Index keys are sound here: the list is an append-only rolling tail.
+            // eslint-disable-next-line react/no-array-index-key
+            <div key={index}>{capitalizeLine(line)}</div>
+          ))}
+        </div>
       </div>
     </div>
   )
@@ -320,14 +286,7 @@ export function ExportPipelinePanel({ view }: { view: ExportPipelineView }) {
           lines arrive. States without a feed used to drop it (the pending
           stretch before the Runner claims, the Daz→Houdini baton moment),
           and a working pipeline with no log window reads as broken. */}
-      <ExportActivityLog
-        log={view.log ?? { lines: [] }}
-        headline={
-          view.bars
-            ? { text: view.bars.current.label, sinceMs: view.bars.current.sinceMs }
-            : undefined
-        }
-      />
+      <ExportActivityLog log={view.log ?? { lines: [] }} />
       {view.bars && (
         <div className="col-start-2 row-start-2 flex min-w-0 flex-col gap-1.5">
           {view.bars.overall && <ProgressBar bar={view.bars.overall} emphasis />}
