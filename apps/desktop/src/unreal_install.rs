@@ -228,6 +228,16 @@ fn scan_dir(dir: &Path, depth: u32, source_folder: &str, out: &mut Vec<UnrealPlu
         push_plugin(dir, &uplugin, source_folder, out);
         return;
     }
+    // A plugin can also arrive ZIPPED — several vendors ship exactly one
+    // `<Plugin>.zip` in a versioned folder and nothing else (measured:
+    // `…/UnrealEnginePlugin/Unreal Engine 5.7 Plugin/DazToHue.zip`). The folder
+    // holds no `.uplugin`, so the walk used to pass straight over it and report
+    // "no Unreal plugin found here" about a folder that plainly has one.
+    for zip in sorted_zips(dir) {
+        if let Some(found) = zipped_plugin(&zip) {
+            push_zipped_plugin(&zip, &found, source_folder, out);
+        }
+    }
     if depth == 0 {
         return;
     }
@@ -252,6 +262,98 @@ fn push_plugin(dir: &Path, uplugin: &Path, source_folder: &str, out: &mut Vec<Un
         engine_version,
         source_folder: source_folder.to_string(),
     });
+}
+
+/// A plugin found INSIDE a zip: the `.uplugin` entry's name, the archive-
+/// relative folder it sits in ('' when it is at the archive root), and the
+/// `EngineVersion` its JSON declares.
+struct ZippedPlugin {
+    name: String,
+    /// Everything under this prefix is the plugin; the install strips it so the
+    /// `.uplugin` lands directly in `Plugins/<name>/`.
+    prefix: String,
+    engine_version: Option<String>,
+}
+
+/// Read a zip's directory and, if it holds a `.uplugin`, describe the plugin.
+///
+/// Only the ONE `.uplugin` entry is inflated (a few hundred bytes) — the rest
+/// of the archive is never touched, so scanning a folder of large plugin zips
+/// stays a central-directory read. The SHALLOWEST `.uplugin` wins: a plugin
+/// that vendors a second plugin under its own `Content` is still one install.
+fn zipped_plugin(zip_path: &Path) -> Option<ZippedPlugin> {
+    let file = std::fs::File::open(zip_path).ok()?;
+    let mut archive = zip::ZipArchive::new(file).ok()?;
+    let mut best: Option<(usize, usize, String)> = None; // (depth, index, name)
+    for idx in 0..archive.len() {
+        let entry = archive.by_index_raw(idx).ok()?;
+        if entry.is_dir() {
+            continue;
+        }
+        let name = entry.name().replace('\\', "/");
+        if !name.to_lowercase().ends_with(".uplugin") {
+            continue;
+        }
+        let depth = name.matches('/').count();
+        // Ties broken by name so a two-`.uplugin` archive scans the same way
+        // every time.
+        let better = match &best {
+            None => true,
+            Some((d, _, n)) => depth < *d || (depth == *d && &name < n),
+        };
+        if better {
+            best = Some((depth, idx, name));
+        }
+    }
+    let (_, idx, entry_name) = best?;
+    let prefix = match entry_name.rfind('/') {
+        Some(cut) => entry_name[..=cut].to_string(),
+        None => String::new(),
+    };
+    let name = Path::new(&entry_name).file_stem()?.to_string_lossy().into_owned();
+    // Tolerant like the loose-file read: an unreadable manifest costs the
+    // version fallback, never the plugin.
+    let engine_version = crate::archive::read_zip_entry_string(&mut archive, idx, ".uplugin")
+        .ok()
+        .as_deref()
+        .and_then(engine_version_from_uplugin_json);
+    Some(ZippedPlugin { name, prefix, engine_version })
+}
+
+fn push_zipped_plugin(
+    zip_path: &Path,
+    found: &ZippedPlugin,
+    source_folder: &str,
+    out: &mut Vec<UnrealPluginSource>,
+) {
+    // Same precedence as a loose plugin: the path the user can see and fix
+    // outranks the manifest. The zip's own folder carries the version here
+    // ("Unreal Engine 5.7 Plugin"), which is exactly the visible signal.
+    let engine_version = version_from_components(zip_path)
+        .or_else(|| found.engine_version.clone())
+        .unwrap_or_default();
+    out.push(UnrealPluginSource {
+        name: found.name.clone(),
+        path: zip_path.to_string_lossy().into_owned(),
+        engine_version,
+        source_folder: source_folder.to_string(),
+    });
+}
+
+/// `.zip` files directly in `dir`, sorted by name.
+fn sorted_zips(dir: &Path) -> Vec<PathBuf> {
+    let mut zips: Vec<PathBuf> = std::fs::read_dir(dir)
+        .map(|entries| {
+            entries
+                .flatten()
+                .filter(|e| e.file_type().map(|t| t.is_file()).unwrap_or(false))
+                .map(|e| e.path())
+                .filter(|p| p.extension().map(|e| e.eq_ignore_ascii_case("zip")).unwrap_or(false))
+                .collect()
+        })
+        .unwrap_or_default();
+    zips.sort();
+    zips
 }
 
 /// The first `.uplugin` file directly in `dir` (sorted, so a stray second one
@@ -455,8 +557,14 @@ pub(crate) struct UnrealPluginInstallRequest {
 #[tauri::command(async)]
 pub fn install_unreal_plugin(request: UnrealPluginInstallRequest) -> Result<u64, String> {
     let project_dir = uproject_dir(&request.uproject_path)?;
-    let plugin_dir = Path::new(&request.plugin_path);
-    let uplugin = uplugin_in(plugin_dir)
+    let source = Path::new(&request.plugin_path);
+    // A zipped plugin installs by EXTRACTING, not copying: what the scan
+    // offered is the archive, and what Unreal needs is its contents under
+    // `Plugins/<name>/`.
+    if source.extension().map(|e| e.eq_ignore_ascii_case("zip")).unwrap_or(false) {
+        return install_plugin_from_zip(source, &project_dir, request.overwrite);
+    }
+    let uplugin = uplugin_in(source)
         .ok_or_else(|| "Not an Unreal plugin folder (no .uplugin inside).".to_string())?;
     let name = uplugin
         .file_stem()
@@ -466,7 +574,85 @@ pub fn install_unreal_plugin(request: UnrealPluginInstallRequest) -> Result<u64,
     if dest.exists() && !request.overwrite {
         return Err(format!("Plugins/{name} already exists in this project."));
     }
-    copy_dir(plugin_dir, &dest).map(|stats| stats.files).map_err(|e| e.to_string())
+    copy_dir(source, &dest).map(|stats| stats.files).map_err(|e| e.to_string())
+}
+
+/// Extract a zipped plugin into `<project>/Plugins/<name>/`.
+///
+/// Everything under the `.uplugin`'s own folder inside the archive is written,
+/// with that prefix STRIPPED — a zip wrapping its plugin in `DazToHue/` and one
+/// holding the files at its root both land as `Plugins/DazToHue/DazToHue.uplugin`.
+/// Entries outside that prefix (a README beside the plugin folder, a
+/// `__MACOSX` sidecar) are not the plugin and are skipped.
+///
+/// Like every other install here it is copy-OVER, never delete-first: an
+/// existing folder keeps whatever the archive does not replace.
+fn install_plugin_from_zip(
+    zip_path: &Path,
+    project_dir: &Path,
+    overwrite: bool,
+) -> Result<u64, String> {
+    let found = zipped_plugin(zip_path)
+        .ok_or_else(|| "That zip holds no Unreal plugin (no .uplugin inside).".to_string())?;
+    let dest = project_dir.join("Plugins").join(&found.name);
+    if dest.exists() && !overwrite {
+        return Err(format!("Plugins/{} already exists in this project.", found.name));
+    }
+    let file = std::fs::File::open(zip_path).map_err(|e| format!("Could not open the zip: {e}"))?;
+    let mut archive =
+        zip::ZipArchive::new(file).map_err(|e| format!("Could not read the zip: {e}"))?;
+    let mut budget = crate::archive::InflateBudget::new(
+        zip_path.file_name().unwrap_or_default().to_string_lossy().into_owned(),
+        std::fs::metadata(zip_path).map(|m| m.len()).unwrap_or(0),
+    );
+    budget.check_entry_count(archive.len()).map_err(|e| e.to_string())?;
+
+    let mut written = 0u64;
+    for idx in 0..archive.len() {
+        let (name, is_dir) = {
+            let entry = archive
+                .by_index_raw(idx)
+                .map_err(|e| format!("Could not read a zip entry: {e}"))?;
+            (entry.name().replace('\\', "/"), entry.is_dir())
+        };
+        if is_dir {
+            continue;
+        }
+        let Some(rel) = name.strip_prefix(&found.prefix) else { continue };
+        let Some(safe) = safe_relative(rel) else {
+            // Zip-slip: an entry naming `..` or an absolute path would write
+            // outside the project. Skipped, never resolved.
+            continue;
+        };
+        crate::archive::extract_zip_entry(&mut archive, idx, &dest.join(safe), &mut budget)
+            .map_err(|e| format!("Could not extract {rel}: {e}"))?;
+        written += 1;
+    }
+    if written == 0 {
+        return Err("That zip holds no plugin files to install.".into());
+    }
+    Ok(written)
+}
+
+/// An archive entry name as a relative path that cannot escape its destination.
+/// Rejects absolute paths, drive letters and any `..` component outright rather
+/// than normalizing them away — a refusal is auditable, a rewrite is not.
+fn safe_relative(rel: &str) -> Option<PathBuf> {
+    let rel = rel.trim_start_matches('/');
+    if rel.is_empty() || rel.contains(':') {
+        return None;
+    }
+    let mut out = PathBuf::new();
+    for part in rel.split('/') {
+        if part.is_empty() || part == "." {
+            continue;
+        }
+        if part == ".." {
+            return None;
+        }
+        out.push(part);
+    }
+    if out.as_os_str().is_empty() { None } else { Some(out) }
 }
 
 #[cfg(test)]
@@ -474,6 +660,171 @@ mod tests {
     use super::*;
     use crate::testutil::unique_temp_dir;
     use std::fs;
+
+    /// Write a zip at `path` from `(entry name, contents)` pairs.
+    fn write_zip(path: &Path, entries: &[(&str, &str)]) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        let file = fs::File::create(path).unwrap();
+        let mut zipw = zip::ZipWriter::new(file);
+        for (name, body) in entries {
+            zipw.start_file(*name, zip::write::SimpleFileOptions::default()).unwrap();
+            std::io::Write::write_all(&mut zipw, body.as_bytes()).unwrap();
+        }
+        zipw.finish().unwrap();
+    }
+
+    const UPLUGIN: &str = r#"{"FriendlyName":"DazToHue","EngineVersion":"5.6.0"}"#;
+
+    /// Point this at a real configured plugin folder to see what the scan makes
+    /// of it — the same shape as `unreal_engine_installs_here`, and the fastest
+    /// way to check a vendor's packaging without building the app:
+    ///
+    /// ```text
+    /// DTH_PLUGIN_SCAN_DIR="X:\…\UnrealEnginePlugin" cargo test unreal_plugins_here -- --ignored --nocapture
+    /// ```
+    #[test]
+    #[ignore = "machine-dependent: scans the folder in DTH_PLUGIN_SCAN_DIR"]
+    fn unreal_plugins_here() {
+        let Ok(dir) = std::env::var("DTH_PLUGIN_SCAN_DIR") else {
+            println!("set DTH_PLUGIN_SCAN_DIR to a plugin folder");
+            return;
+        };
+        for p in scan_unreal_plugins(vec![dir]) {
+            println!("{} [{}] {}", p.name, if p.engine_version.is_empty() { "any" } else { &p.engine_version }, p.path);
+        }
+    }
+
+    /// Install a REAL vendor zip into a scratch project, to check a shipped
+    /// archive's packaging end to end:
+    ///
+    /// ```text
+    /// DTH_PLUGIN_ZIP="…\DazToHue.zip" DTH_PLUGIN_PROJECT="…\Game" cargo test unreal_plugin_zip_installs_here -- --ignored --nocapture
+    /// ```
+    #[test]
+    #[ignore = "machine-dependent: installs DTH_PLUGIN_ZIP into DTH_PLUGIN_PROJECT"]
+    fn unreal_plugin_zip_installs_here() {
+        let (Ok(zip), Ok(project)) =
+            (std::env::var("DTH_PLUGIN_ZIP"), std::env::var("DTH_PLUGIN_PROJECT"))
+        else {
+            println!("set DTH_PLUGIN_ZIP and DTH_PLUGIN_PROJECT");
+            return;
+        };
+        match install_plugin_from_zip(Path::new(&zip), Path::new(&project), true) {
+            Ok(n) => println!("installed {n} files"),
+            Err(e) => println!("FAILED: {e}"),
+        }
+    }
+
+    #[test]
+    fn a_zipped_plugin_is_found_with_its_name_prefix_and_version() {
+        let tmp = unique_temp_dir("uezip");
+        let zip_path = tmp.join("DazToHue.zip");
+        write_zip(
+            &zip_path,
+            &[("DazToHue/DazToHue.uplugin", UPLUGIN), ("DazToHue/Content/x.uasset", "data")],
+        );
+        let found = zipped_plugin(&zip_path).expect("plugin in zip");
+        assert_eq!(found.name, "DazToHue");
+        // The wrapping folder is the prefix the install strips.
+        assert_eq!(found.prefix, "DazToHue/");
+        assert_eq!(found.engine_version.as_deref(), Some("5.6"));
+        fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn a_zip_with_the_plugin_at_its_root_has_no_prefix() {
+        let tmp = unique_temp_dir("uezip");
+        let zip_path = tmp.join("Flat.zip");
+        write_zip(&zip_path, &[("Flat.uplugin", UPLUGIN), ("Content/y.uasset", "data")]);
+        let found = zipped_plugin(&zip_path).expect("plugin in zip");
+        assert_eq!(found.name, "Flat");
+        assert_eq!(found.prefix, "");
+        fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn the_shallowest_uplugin_wins_over_one_vendored_inside_it() {
+        let tmp = unique_temp_dir("uezip");
+        let zip_path = tmp.join("Outer.zip");
+        write_zip(
+            &zip_path,
+            &[
+                ("Outer/Content/Vendored/Inner.uplugin", UPLUGIN),
+                ("Outer/Outer.uplugin", UPLUGIN),
+            ],
+        );
+        assert_eq!(zipped_plugin(&zip_path).unwrap().name, "Outer");
+        fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn a_zip_without_a_uplugin_is_not_a_plugin() {
+        let tmp = unique_temp_dir("uezip");
+        let zip_path = tmp.join("NotAPlugin.zip");
+        write_zip(&zip_path, &[("readme.txt", "hello")]);
+        assert!(zipped_plugin(&zip_path).is_none());
+        fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn the_scan_reports_a_zipped_plugin_with_the_version_from_its_folder() {
+        // The shape that prompted this: one zip in a versioned folder, no
+        // loose `.uplugin` anywhere. The FOLDER names the engine (5.7), which
+        // outranks the manifest's own 5.6 — same precedence as a loose plugin.
+        let tmp = unique_temp_dir("uescan");
+        let root = tmp.join("UnrealEnginePlugin");
+        write_zip(&root.join("Unreal Engine 5.7 Plugin").join("DazToHue.zip"), &[(
+            "DazToHue/DazToHue.uplugin",
+            UPLUGIN,
+        )]);
+        let found = scan_unreal_plugins(vec![root.to_string_lossy().into_owned()]);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].name, "DazToHue");
+        assert_eq!(found[0].engine_version, "5.7");
+        assert!(found[0].path.ends_with("DazToHue.zip"));
+        fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn installing_a_zipped_plugin_strips_the_wrapping_folder() {
+        let tmp = unique_temp_dir("ueinstall");
+        let zip_path = tmp.join("DazToHue.zip");
+        write_zip(
+            &zip_path,
+            &[
+                ("DazToHue/DazToHue.uplugin", UPLUGIN),
+                ("DazToHue/Content/x.uasset", "data"),
+                // Beside the plugin folder, so not part of the plugin.
+                ("readme.txt", "ignored"),
+            ],
+        );
+        let project = tmp.join("Game");
+        fs::create_dir_all(&project).unwrap();
+        let written = install_plugin_from_zip(&zip_path, &project, false).unwrap();
+        assert_eq!(written, 2);
+        assert!(project.join("Plugins/DazToHue/DazToHue.uplugin").is_file());
+        assert!(project.join("Plugins/DazToHue/Content/x.uasset").is_file());
+        assert!(!project.join("Plugins/DazToHue/readme.txt").exists());
+
+        // Second install without overwrite is refused, not silently merged.
+        assert!(install_plugin_from_zip(&zip_path, &project, false).is_err());
+        assert!(install_plugin_from_zip(&zip_path, &project, true).is_ok());
+        fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn a_zip_entry_cannot_escape_the_plugin_folder() {
+        assert_eq!(safe_relative("Content/x.uasset"), Some(PathBuf::from("Content/x.uasset")));
+        assert_eq!(safe_relative("./Content/x"), Some(PathBuf::from("Content/x")));
+        // Zip-slip shapes: refused outright rather than normalized away.
+        assert_eq!(safe_relative("../evil.txt"), None);
+        assert_eq!(safe_relative("Content/../../evil.txt"), None);
+        assert_eq!(safe_relative("C:/evil.txt"), None);
+        assert_eq!(safe_relative("/abs.txt"), Some(PathBuf::from("abs.txt")));
+        assert_eq!(safe_relative(""), None);
+    }
 
     #[test]
     fn engine_version_accepts_major_minor_and_nothing_else() {
