@@ -5,6 +5,7 @@ import { ArrowLeft, CircleX, Pencil, Save, Undo2 } from 'lucide-react'
 import { Avatar } from '#/components/avatar.tsx'
 import { DirPathChip } from '#/components/dir-path-chip.tsx'
 import { DthExportAction } from '#/components/character/dth-export.tsx'
+import { ExportPipelinePanel } from '#/components/character/export-pipeline-panel.tsx'
 import { FolderMoveChip } from '#/components/folder-move-chip.tsx'
 import { ImageDialog } from '#/components/image-dialog.tsx'
 import { Button, EditableTitle, useModifierHeld, useStickyHeaderInset } from '@dth/ui'
@@ -12,6 +13,7 @@ import { useConfirm } from '#/lib/use-confirm.tsx'
 import { characterSkinning, countPoses } from '@dth/rom'
 
 import type { RootedDir } from '#/lib/character-paths.ts'
+import type { ExportPipelineView } from '#/components/character/export-pipeline-panel.tsx'
 import type { CharacterDraft } from '#/lib/use-character-draft.ts'
 
 /**
@@ -99,6 +101,10 @@ export function EditorHeader({
   const { character } = draft
   const [imageDialogOpen, setImageDialogOpen] = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
+  // The live DTH-Export pipeline view, reported up by DthExportAction —
+  // rendered as the task cards + tail-log window above the whole button
+  // cluster (which spans more than that component's own buttons). Null = no run.
+  const [exportPipeline, setExportPipeline] = useState<ExportPipelineView | null>(null)
   const swallowNavRef = useRef(false)
   const headerRef = useRef<HTMLElement>(null)
 
@@ -288,16 +294,31 @@ export function EditorHeader({
         </div>
         {/* Bottom-right in the header, on the path-chip's baseline (mb-6 lifts the
             box so the scale below anchors on that line). They ride the sticky
-            header, so they stay reachable as the form scrolls. */}
-        <div className="actions-scroll ml-auto flex shrink-0 gap-2 mb-6">
-          <DthExportAction
-            projectId={projectId}
-            character={character}
-            saving={draft.saving}
-            dirty={draft.dirty}
-            dazLibraryConfigured={dazLibraryConfigured}
-          />
-          <HeaderActions draft={draft} />
+            header, so they stay reachable as the form scrolls. A GRID, not a
+            flex column: the button row and the pipeline panel's log window
+            share the second column track (subgrid), so the log is always
+            EXACTLY as wide as all the buttons together — the task cards sit in
+            their own first column left of it. The area SELF-STRETCHES to the
+            header's full height so the panel can fill everything above the
+            buttons. The panel does NOT dock: `pipeline-scroll` fades it out on
+            the header-collapse scroll timeline (styles.css), so the docked
+            sticky header shows only the buttons — the panel is a working view
+            for the top of the page. */}
+        {/* gap-y-5: the pipeline area needs room to breathe above the button
+            row — a tight gap read as one crowded block. */}
+        <div className="mb-6 ml-auto grid shrink-0 grid-cols-[auto_auto] grid-rows-[minmax(0,1fr)_auto] justify-end gap-x-2 gap-y-5 self-stretch">
+          {exportPipeline && <ExportPipelinePanel view={exportPipeline} />}
+          <div className="actions-scroll col-start-2 row-start-2 flex justify-end gap-2">
+            <DthExportAction
+              projectId={projectId}
+              character={character}
+              saving={draft.saving}
+              dirty={draft.dirty}
+              dazLibraryConfigured={dazLibraryConfigured}
+              onPipeline={setExportPipeline}
+            />
+            <HeaderActions draft={draft} />
+          </div>
         </div>
       </header>
 

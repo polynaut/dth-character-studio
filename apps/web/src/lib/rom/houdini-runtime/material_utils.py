@@ -1057,6 +1057,7 @@ def op_scan(request):
             "nodes": [],
             "job": "",
             "fps": 0.0,
+            "imports": [],
             "refs": {"collapsible": 0, "foreign": 0, "broken": []},
             "prefill": {"fillable": [], "missing": []},
         }
@@ -1067,6 +1068,7 @@ def op_scan(request):
             # of seconds, and the General tab must not pay it a second time.
             entry["job"] = _scene_job()
             entry["fps"] = _scene_fps()
+            entry["imports"] = _scene_dth_imports()
             entry["refs"] = _project_ref_info(export_dir)
             entry["prefill"] = _prefill_scan()
         except Exception as exc:
@@ -1403,6 +1405,128 @@ def _prefill_scan():
     return info
 
 
+class _AutoAnswer(object):
+    """Answer every HDA dialog with button 0 for the duration of one call.
+
+    The import node's `.dth` parm has a CALLBACK: picking a file asks "fill the
+    rest automatically?" and, on yes, fills the sibling paths AND does the real
+    load — which is what puts the Alembic on its rest frame. `parm.set()` never
+    runs a callback (Houdini's documented behaviour), so a studio-prefilled
+    project holds correct paths whose load never happened. Firing the callback
+    is the fix; standing in for `hou.ui` is what makes it possible headless,
+    where the dialog would raise, and unattended in a GUI, where it would wait
+    forever on a click. Same shape as 456.py's DialogAnswers.
+    """
+
+    def __init__(self):
+        self._saved = {}
+        self._made_module = False
+
+    def _yes(self, *args, **kwargs):
+        return 0
+
+    def __enter__(self):
+        ui = getattr(hou, "ui", None)
+        if ui is None:
+            import types
+
+            ui = types.ModuleType("ui")
+            hou.ui = ui
+            self._made_module = True
+        for name in ("displayMessage", "displayConfirmation", "setStatusMessage", "triggerUpdate"):
+            self._saved[name] = getattr(ui, name, None)
+        ui.displayMessage = self._yes
+        ui.displayConfirmation = lambda *a, **k: True
+        ui.setStatusMessage = lambda *a, **k: None
+        ui.triggerUpdate = lambda *a, **k: None
+        return self
+
+    def __exit__(self, *exc):
+        if self._made_module:
+            del hou.ui
+            return False
+        for name, original in self._saved.items():
+            if original is None:
+                try:
+                    delattr(hou.ui, name)
+                except AttributeError:
+                    pass
+            else:
+                setattr(hou.ui, name, original)
+        return False
+
+
+def fire_import_callback(node):
+    """Run the import node's `.dth` parm callback — the HDA's own "I was given
+    a character" routine (auto-fill + load).
+
+    Guarded on the file EXISTING: a project generated before the Daz export has
+    run holds paths to files that aren't there yet, and asking the HDA to load
+    them would fail or load nothing. Best-effort by construction — a callback
+    that raises leaves the paths exactly as the prefill wrote them, which is
+    the behaviour this replaces.
+    """
+    parm = node.parm("import_character_dtu_file")
+    if parm is None:
+        return False
+    try:
+        value = str(parm.evalAsString() or "").strip()
+    except Exception:
+        return False
+    if not value or not os.path.exists(value):
+        return False
+    try:
+        with _AutoAnswer():
+            parm.pressButton()
+        return True
+    except Exception:
+        return False
+
+
+def _scene_dth_imports():
+    """EVERY `.dth` this project's networks import, normalized + deduped.
+
+    The studio WROTE those files at paths it computes, so each one identifies
+    the Daz scene behind a network exactly — far steadier than a node or
+    network-box name, which the user renames freely. Read in the scan pass and
+    stored with the project, so the DTH Export dialog can tell which projects
+    a scene selection actually involves WITHOUT opening a `.hip` (tens of
+    seconds each). The same FIELD 456.py matches on at export time.
+
+    Not the same normalization, though, and the reader is built for that:
+    456.py's `normalize()` goes through `os.path.realpath` (mapped drive → UNC,
+    junction spellings), which needs the file to be reachable from THIS
+    process; the scan stays on `os.path.normpath` like its sibling
+    `_wired_scene_dth`, because a scan entry is cached for months and a
+    physical resolution would bake one machine's mount layout into it. So a
+    spelling here can differ from the one the run compares — which is exactly
+    why `hipsForSelectedScenes` only DROPS a project on a positive match
+    against a deselected scene, never on a failure to match anything.
+    """
+    found = []
+    seen = set()
+    for node in hou.node("/").allSubChildren():
+        name = node.type().name().lower()
+        if "daztohueimport" not in name or "groom" in name:
+            continue
+        parm = node.parm("import_character_dtu_file")
+        if parm is None:
+            continue
+        try:
+            value = str(parm.evalAsString() or "").strip()
+        except Exception:
+            continue
+        if not value:
+            continue
+        # Expansion of a `$HIP`/`$JOB`-relative parm leaves `..` hops — collapse
+        # them, or the path can never match the studio's absolute key.
+        key = _norm_path(os.path.normpath(value)).lower()
+        if key and key not in seen:
+            seen.add(key)
+            found.append(key)
+    return found
+
+
 def _wired_scene_dth():
     """The scene the open hip's network imports, as a normalized lowercase
     absolute `.dth` path — read (expanded) off the first DazToHueImport node
@@ -1467,6 +1591,30 @@ def op_prefill(request):
                 if picked:
                     values = picked
             changed = 0
+            # The `.dth` FIRST, through the HDA's own callback: it fills the
+            # sibling paths and does the load that puts the Alembic on its rest
+            # frame (see fire_import_callback). Everything it fills then reads
+            # as "already set" below and is left alone — the loop only writes
+            # blanks — so the studio fills the gaps rather than overruling the
+            # tool. A project whose exports don't exist yet skips this and gets
+            # the plain paths, exactly as before.
+            for node in hou.node("/").allSubChildren():
+                if "daztohueimport" not in node.type().name().lower():
+                    continue
+                parm = node.parm("import_character_dtu_file")
+                dth = str(values.get("dth") or "")
+                if parm is None or not dth:
+                    continue
+                if str(parm.unexpandedString() or "").strip():
+                    continue
+                if dry_run:
+                    continue
+                parm.set(dth)
+                if fire_import_callback(node):
+                    result["filled"].append(
+                        {"label": node.path() + " import_character_dtu_file (auto-filled)", "value": dth}
+                    )
+                    changed += 1
             for node in hou.node("/").allSubChildren():
                 for parm_name, key in _prefill_parms_for(node):
                     label = node.path() + " " + parm_name

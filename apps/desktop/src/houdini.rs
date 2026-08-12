@@ -1,52 +1,109 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
+
 use serde::Deserialize;
 
-/// Open a Houdini project in the GUI and let it run the studio's export job.
+/// Run the studio's export job HEADLESS: `hython <bootstrap>` loads the
+/// project and works the job — no Houdini window at all (flipped from the
+/// original GUI launch 2026-08-11; the live progress chip replaced "watching
+/// it happen", and headless removes the whole window/paint fragility class
+/// while exposing the FULL console).
 ///
-/// The handoff is entirely through the environment of THIS process: Houdini
-/// runs a `456.py` found on `HOUDINI_SCRIPT_PATH` once a scene has loaded, and
-/// that script does nothing at all unless `DTH_HOUDINI_JOB` names a job file.
-/// Both are set here and nowhere else, so an ordinary Houdini the user starts
-/// themselves is untouched.
+/// The handoff is entirely through the environment of THIS process:
+/// `DTH_HOUDINI_JOB` names the job file, `DTH_HOUDINI_HIP` the project, and
+/// `DTH_HEADLESS` tells `456.py` to run its batch inline. An ordinary
+/// Houdini/hython the user starts themselves sees none of it.
 ///
-/// GUI rather than headless hython, deliberately: the user wants to watch the
-/// exports happen, and the DazToHue HDA's pre-flight dialog exists only in a
-/// UI session (456.py answers it and records what it said).
+/// stdout+stderr are redirected to `log_path` — the whole point of headless:
+/// the C++-side cook chatter (node warnings, geometry I/O) never flows through
+/// Python's stdout, so the in-process tee can't see it; the process pipe can.
 ///
 /// Fire-and-forget — `spawn`, never `wait`. The export takes minutes and the
-/// studio's window must stay live to poll the result file; the process outlives
-/// the command. Whether Houdini stays open afterwards is the JOB's decision:
-/// with `closeWhenDone` set (the DTH Export flow always sets it), 456.py exits
-/// the instance from inside once the final result is written.
+/// studio's window must stay live to poll the result file. The child handle is
+/// KEPT (see `houdini_running`): headless liveness can't come from a window
+/// list, and matching `hython.exe` by name would read the Utils drawer's scans
+/// as this run being alive.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LaunchHoudiniJobRequest {
-    /// Absolute path of `houdini.exe` (from the Houdini install folder).
-    pub houdini_path: String,
-    /// The `.hip`/`.hiplc` project to open.
+    /// Absolute path of `hython.exe` (from the Houdini install folder).
+    pub hython_path: String,
+    /// The bootstrap script hython runs (`headless_export.py`, written into
+    /// the studio's scripts folder beside `456.py` before every launch).
+    pub runner_path: String,
+    /// The `.hip`/`.hiplc` project to load (`DTH_HOUDINI_HIP`).
     pub scene_path: String,
     /// The job file 456.py reads (`DTH_HOUDINI_JOB`).
+    ///
+    /// `HOUDINI_SCRIPT_PATH` is deliberately NOT set. Measured on the first
+    /// headless run (2026-08-11): Houdini runs a `456.py` found there on the
+    /// INITIAL EMPTY scene at startup too — the job was consumed against the
+    /// empty scene ("nothing to export" in 2 s) and `closeWhenDone` exited
+    /// hython before the bootstrap ever loaded the real project. The
+    /// bootstrap's explicit exec of `456.py` is the only trigger.
     pub job_path: String,
-    /// The value for `HOUDINI_SCRIPT_PATH` — the studio's script folder plus
-    /// `&`, composed in TS (`houdiniScriptPathValue`) so the `&` that preserves
-    /// Houdini's own default path is covered by a unit test.
-    pub script_path: String,
     /// The Houdini user-prefs folder, as HOUDINI_USER_PREF_DIR. Same reason as
     /// `create_houdini_project`: inherited env can resolve the prefs elsewhere,
     /// and then the user's otls — the DazToHue HDA itself — never load, so the
     /// export nodes this job drives would not exist. Empty = inherit.
     pub houdini_pref_dir: String,
+    /// The console log the process writes into (created/truncated here).
+    pub log_path: String,
 }
 
-/// Whether a Houdini GUI is up — the liveness half of the export poll, exactly
-/// like `daz_studio_running` is for the Daz batch. A result file stuck at
-/// "running" with no Houdini left means the user closed the window (or it
-/// crashed) and the poll must stop instead of spinning forever.
+/// The last export job's child process — the PRECISE liveness answer for the
+/// headless run. One at a time by design (the job/result files are
+/// per-character singletons and the queue is sequential), so a single slot is
+/// the whole story. Dropping a previous handle never kills its process.
+static JOB_CHILD: Mutex<Option<std::process::Child>> = Mutex::new(None);
+
+/// Whether a headless launch has been tracked in THIS process and has since
+/// exited. Set when `try_wait` first reports the child gone, cleared by the
+/// next launch — see `houdini_running` for why the flag has to outlive the
+/// handle it came from.
+static JOB_CHILD_EXITED: AtomicBool = AtomicBool::new(false);
+
+/// Whether the export job is still alive — the liveness half of the export
+/// poll, exactly like `daz_studio_running` is for the Daz batch. A result file
+/// stuck at "running" with nothing left to write it means the run died and the
+/// poll must stop instead of spinning forever.
 ///
-/// Matches `houdini.exe` and `houdinifx.exe`/`houdinicore.exe` — the licence
-/// tier decides the binary name, and the studio must not care which one the
-/// user runs.
+/// Two answers, in order, and the FIRST one wins outright when it exists:
+///
+/// 1. the TRACKED child of the last headless launch (`try_wait` — precise, and
+///    immune to unrelated hython processes like the Utils drawer's background
+///    scans). Alive = true; exited = **false**, full stop.
+/// 2. the GUI process list (`houdini.exe`/`houdinifx.exe`/`houdinicore.exe` —
+///    the licence tier decides the binary name), consulted ONLY when this
+///    process has never tracked a launch: an app restart loses the handle, and
+///    a job can also be picked up by a visible Houdini through the scene-load
+///    mechanism (the original shape).
+///
+/// The precedence is the whole point. Falling through to the process list
+/// after the tracked child exited would answer "alive" for the user's OWN open
+/// Houdini — and this audience keeps one open. A hython that died mid-run
+/// would then leave the result file stuck at "running" with liveness stuck at
+/// true, and the poll would spin forever: exactly the failure this command
+/// exists to prevent. Headless is what made it reachable — before, the run WAS
+/// the window, so closing it answered the question.
 #[tauri::command(async)]
 pub fn houdini_running() -> bool {
+    if let Ok(mut slot) = JOB_CHILD.lock() {
+        if let Some(child) = slot.as_mut() {
+            match child.try_wait() {
+                Ok(None) => return true,
+                // Exited (or unprobeable) — drop the handle, but REMEMBER that
+                // there was one: the answer stays "dead" until the next launch.
+                _ => {
+                    *slot = None;
+                    JOB_CHILD_EXITED.store(true, Ordering::SeqCst);
+                }
+            }
+        }
+    }
+    if JOB_CHILD_EXITED.load(Ordering::SeqCst) {
+        return false;
+    }
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -71,10 +128,23 @@ pub fn houdini_running() -> bool {
 
 #[tauri::command(async)]
 pub fn launch_houdini_job(request: LaunchHoudiniJobRequest) -> Result<(), String> {
-    let mut command = std::process::Command::new(&request.houdini_path);
-    command.arg(&request.scene_path);
+    // The console log — created fresh per run, one file per character
+    // (overwritten, never accreted: the housekeeping bound). Two handles, one
+    // per stream; both append to the same file.
+    let log = std::fs::File::create(&request.log_path)
+        .map_err(|e| format!("Could not create the console log {}: {e}", request.log_path))?;
+    let log_err = log
+        .try_clone()
+        .map_err(|e| format!("Could not open the console log twice: {e}"))?;
+    let mut command = std::process::Command::new(&request.hython_path);
+    command.arg(&request.runner_path);
     command.env("DTH_HOUDINI_JOB", &request.job_path);
-    command.env("HOUDINI_SCRIPT_PATH", &request.script_path);
+    command.env("DTH_HOUDINI_HIP", &request.scene_path);
+    command.env("DTH_HEADLESS", "1");
+    // See job_path's doc: HOUDINI_SCRIPT_PATH is NOT set here — putting the
+    // studio's folder on it made the startup empty scene run our 456.py and
+    // eat the job. An inherited value stays inherited: the user's own script
+    // path is their configuration, and their scripts don't know our job env.
     if !request.houdini_pref_dir.is_empty() {
         command.env(
             "HOUDINI_USER_PREF_DIR",
@@ -82,9 +152,27 @@ pub fn launch_houdini_job(request: LaunchHoudiniJobRequest) -> Result<(), String
         );
     }
     command
+        .stdin(std::process::Stdio::null())
+        .stdout(log)
+        .stderr(log_err);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        // No console window — hython would otherwise flash one up over the
+        // studio (the same suppression every other hython spawn here uses).
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    let child = command
         .spawn()
-        .map(|_| ())
-        .map_err(|e| format!("Could not start Houdini: {e}"))
+        .map_err(|e| format!("Could not start hython: {e}"))?;
+    if let Ok(mut slot) = JOB_CHILD.lock() {
+        *slot = Some(child);
+        // A fresh run answers for itself — clear the previous one's verdict, or
+        // `houdini_running` would report this launch dead before it started.
+        JOB_CHILD_EXITED.store(false, Ordering::SeqCst);
+    }
+    Ok(())
 }
 
 /// Create a ready-made Houdini project for a character: `hython` starts a
@@ -256,6 +344,47 @@ pub fn create_houdini_project(request: CreateHoudiniProjectRequest) -> Result<St
             "                prefilled.append(node.name() + '.' + name)\n",
             "            except Exception:\n",
             "                pass\n",
+            // The `.dth` parm has a CALLBACK — picking a file asks "fill the
+            // rest automatically?" and, answered yes, fills the siblings AND
+            // does the load that puts the Alembic on its rest frame. `p.set()`
+            // never runs a callback, so a prefilled project used to hold right
+            // paths whose load never happened. Fire it, with hou.ui stubbed
+            // (headless has none; a GUI would wait forever on the click), and
+            // ONLY when the file is really there — a project generated before
+            // the Daz export has run has nothing to load. Best effort: a
+            // callback that raises leaves the plain prefill behind.
+            "        def fire_dtu(node):\n",
+            "            p = node.parm('import_character_dtu_file')\n",
+            "            if p is None:\n",
+            "                return\n",
+            "            try:\n",
+            "                path = str(p.evalAsString() or '').strip()\n",
+            "            except Exception:\n",
+            "                return\n",
+            "            if not path or not os.path.exists(path):\n",
+            "                return\n",
+            "            import types\n",
+            "            made = getattr(hou, 'ui', None) is None\n",
+            "            if made:\n",
+            "                hou.ui = types.ModuleType('ui')\n",
+            "            names = ('displayMessage', 'displayConfirmation', 'setStatusMessage', 'triggerUpdate')\n",
+            "            saved = dict((n, getattr(hou.ui, n, None)) for n in names)\n",
+            "            hou.ui.displayMessage = lambda *a, **k: 0\n",
+            "            hou.ui.displayConfirmation = lambda *a, **k: True\n",
+            "            hou.ui.setStatusMessage = lambda *a, **k: None\n",
+            "            hou.ui.triggerUpdate = lambda *a, **k: None\n",
+            "            try:\n",
+            "                p.pressButton()\n",
+            "                prefilled.append(node.name() + '.dtu_callback')\n",
+            "            except Exception:\n",
+            "                pass\n",
+            "            finally:\n",
+            "                if made:\n",
+            "                    del hou.ui\n",
+            "                else:\n",
+            "                    for n in names:\n",
+            "                        if saved[n] is not None:\n",
+            "                            setattr(hou.ui, n, saved[n])\n",
             "        for top in new:\n",
             "            for node in [top] + list(top.allSubChildren()):\n",
             "                t = node.type().name().lower()\n",
@@ -270,6 +399,38 @@ pub fn create_houdini_project(request: CreateHoudiniProjectRequest) -> Result<St
             "                    set_parm(node, 'pose_asset_csv_file_path', pf.get('csv'))\n",
             "                elif 'daztohueexport' in t and 'groom' not in t:\n",
             "                    set_parm(node, 'export_directory', pf.get('exportDirectory'))\n",
+            "except Exception:\n",
+            "    pass\n",
+            // SAVE FIRST, then fire the import node's callback. Measured
+            // 2026-08-12: the prefilled paths are `$HIP/daz-export/…` and the
+            // scene has never been saved at this point, so `$HIP` is still
+            // Houdini's default — the paths expand to files that don't exist,
+            // and the callback (rightly) refuses to load them. After the save
+            // `$HIP` IS the project folder, the paths resolve, and the HDA's
+            // own routine fills the siblings and reads the files: that is what
+            // sets the Alembic's frame range and puts the scene on frame 0.
+            // The second save persists what the callback did to the scene.
+            "hou.hipFile.save('{scene}')\n",
+            "try:\n",
+            "    if pf and added:\n",
+            "        for top in new:\n",
+            "            for node in [top] + list(top.allSubChildren()):\n",
+            "                if 'daztohueimport' in node.type().name().lower():\n",
+            "                    fire_dtu(node)\n",
+            // The HDA's autoload writes the sibling paths ABSOLUTE (it resolves
+            // them out of the `.dth` JSON), which undoes the `$HIP/…` form this
+            // project was generated with — and that form is what lets the
+            // character folder move. Measured 2026-08-12. Put ours back, by
+            // plain `set()` so no callback re-runs: the files are loaded by
+            // now, and an equivalent path resolves to the same bytes.
+            "                    for pname, pkey in (('import_character_name', 'characterName'), ('import_character_dtu_file', 'dth'), ('import_character_fbx_file', 'fbx'), ('import_character_alembic_file', 'abc'), ('import_character_rom_fbx_file', 'romFbx')):\n",
+            "                        p = node.parm(pname)\n",
+            "                        v = pf.get(pkey)\n",
+            "                        if p is not None and v:\n",
+            "                            try:\n",
+            "                                p.set(v)\n",
+            "                            except Exception:\n",
+            "                                pass\n",
             "except Exception:\n",
             "    pass\n",
             "hou.hipFile.save('{scene}')\n",

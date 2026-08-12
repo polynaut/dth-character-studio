@@ -49,7 +49,9 @@ async function runnerFinishesBatch(page: Page) {
   await page.evaluate(
     ([pending, running]) => {
       const files = (window as any).__tauriMock.files as Map<string, string>
-      const job = JSON.parse(files.get(pending) ?? '{}')
+      // The batch may already sit CLAIMED (a spec that staged mid-run progress
+      // first) — finish whichever file holds it.
+      const job = JSON.parse(files.get(pending) ?? files.get(running) ?? '{}')
       files.delete(pending)
       files.set(running, JSON.stringify({
         ...job,
@@ -59,6 +61,33 @@ async function runnerFinishesBatch(page: Page) {
       }))
     },
     [PENDING_JOB, RUNNING_JOB],
+  )
+}
+
+/** Stand in for 456.py MID-node: the result file says "running" with the live
+ *  `activity` channel — the lines ActivityCapture caught from the HDA's own
+ *  output while its synchronous do_export works. */
+async function houdiniReportsExporting(page: Page) {
+  await page.evaluate(
+    ([result]) => {
+      const mock = (window as any).__tauriMock
+      ;(mock.files as Map<string, string>).set(result, JSON.stringify({
+        version: 1,
+        state: 'running',
+        total: 1,
+        done: 0,
+        nodes: [],
+        activity: {
+          node: '/obj/DazToHue1/export',
+          scene: 'KiraDefault_G9_GP',
+          dth: 'D:/DTH Projects/Demo/Kira/houdini/daz-export/KiraDefault_G9_GP/Kira.dth',
+          lines: ['Importing Alembic…', 'Baking textures 3/12…'],
+          startedAtMs: Date.now(),
+          updatedAtMs: Date.now(),
+        },
+      }))
+    },
+    [HOUDINI_RESULT],
   )
 }
 
@@ -110,7 +139,8 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
     houdiniInstallFolder: HOUDINI_INSTALL,
     houdiniDocsFolder: HOUDINI_DOCS,
   })
-  seed.files[`${HOUDINI_INSTALL}/bin/houdini.exe`] = 'houdini-exe-fixture'
+  // The headless launch probes hython.exe (the export leg never opens the GUI).
+  seed.files[`${HOUDINI_INSTALL}/bin/hython.exe`] = 'hython-exe-fixture'
   // The batch runs the HIDDEN bulk script, not the visible `ROM_…` one the
   // fixture seeds — a missing one is refused up front, before any job file.
   seed.files[`${SCRIPTS_ROOT}/Demo/Kira/.Bulk_ROM_Export.dsa`] = '// bulk-export fixture'
@@ -130,15 +160,89 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
 
   // The Daz batch is handed off…
   await expect.poll(() => fileContent(page, PENDING_JOB)).not.toBeNull()
-  // …and picked up + finished by the Runner. NO finish toast yet — the batch
-  // outcome is stashed for the one end-of-everything report, and only the
-  // transient hand-over info shows while Houdini takes over.
-  await runnerFinishesBatch(page)
-  await expect(page.getByText(/Opening the Houdini project to export/)).toBeVisible()
-  await expect(page.getByText(/DTH Export finished/)).toHaveCount(0)
+  // …carrying the verbose-progress contract (Runner v1.2.0): the log path and
+  // the per-scene step scale (5 = open/ROM/character/CSV/hair).
+  const pending = JSON.parse((await fileContent(page, PENDING_JOB))!) as {
+    progressLogPath: string
+    jobs: Array<{ steps: number }>
+  }
+  expect(pending.progressLogPath).toBe(`${P.appData}/export-progress.log`)
+  expect(pending.jobs[0].steps).toBe(5)
+  // The header grew the run's TASK CARDS: the scene, then the Houdini project —
+  // all still waiting (the Runner hasn't picked the batch up yet). The log
+  // window ALREADY stands (empty): while a run is live it must never vanish,
+  // not even in this pending stretch before any lines exist.
+  await expect(page.locator(`[data-task="daz:${P.scene}"]`)).toBeVisible()
+  await expect(page.locator(`[data-task="hou:${P.houdini}"]`)).toBeVisible()
+  // …and the log window ALREADY says what is being waited for. Daz was not
+  // running here, so the handoff started it: the opening line says so (an
+  // empty box read as "nothing is happening" while Daz takes its tens of
+  // seconds to come up).
+  await expect(page.locator('[data-export-log]')).toContainText('Opening Daz Studio')
 
-  // The hand-over: the job file lands in the character folder, 456.py is
-  // staged in app-data, and Houdini is launched pointed at both.
+  // The Runner claims the batch and works the scene: the running job file +
+  // the verbose progress log. The scene card goes ACTIVE, the log window
+  // tails the per-step lines with their percents.
+  await page.evaluate(
+    ([pendingPath, runningPath, progressPath]) => {
+      const mock = (window as any).__tauriMock
+      // A sub-100 running file with no Daz alive reads as a DEAD run (the
+      // liveness rule) — the mid-run stage needs the fake Daz up.
+      mock.dazRunning = true
+      const files = mock.files as Map<string, string>
+      const job = JSON.parse(files.get(pendingPath) ?? '{}')
+      files.delete(pendingPath)
+      files.set(runningPath, JSON.stringify({
+        ...job,
+        progress: 10,
+        jobsDone: 0,
+        jobs: job.jobs.map((row: Record<string, unknown>) => ({ ...row, status: 'running' })),
+      }))
+      files.set(progressPath, [
+        '[0] KiraDefault_G9_GP: opening scene',
+        '[20] KiraDefault_G9_GP: scene opened',
+        '[40] KiraDefault_G9_GP: ROM generated',
+        '',
+      ].join('\n'))
+    },
+    [PENDING_JOB, RUNNING_JOB, `${P.appData}/export-progress.log`],
+  )
+  // The log window shows display-clean lines (no percent bracket, no scene
+  // prefix — the card carries the scene, the meter the percent), and the
+  // meter's label is the LATEST status text.
+  await expect(page.locator('[data-export-log]')).toContainText('ROM generated', {
+    timeout: 15_000,
+  })
+  // Display-capitalized ("Scene opened") — the raw log line is lowercase.
+  await expect(page.locator('[data-export-log]')).toContainText('Scene opened')
+  await expect(page.locator(`[data-task="daz:${P.scene}"]`)).toHaveAttribute(
+    'data-task-status',
+    'active',
+  )
+  // The numbered card: chronological ordinal, stable for the whole run.
+  await expect(page.locator(`[data-task="daz:${P.scene}"]`)).toContainText('1.')
+  // The meter row above: a single-scene run shows ONE bar, riding the same
+  // per-scene percent the log lines carry — no overall bar for a one-unit leg.
+  await expect(page.locator('[data-progressbar="current"]')).toHaveAttribute('data-percent', '40')
+  // The newest line IS the status — the log window carries it, stamped.
+  await expect(page.locator('[data-export-log]')).toContainText(/\d+:\d{2}\] ROM generated/)
+  await expect(page.locator('[data-progressbar="overall"]')).toHaveCount(0)
+  // …and picked up + finished by the Runner. NO toast on the baton pass (a
+  // mid-run toast reads as an outcome) and NO finish toast yet — the batch
+  // outcome is stashed for the one end-of-everything report.
+  await runnerFinishesBatch(page)
+  await expect(page.getByText(/Starting the Houdini export/)).toHaveCount(0)
+  await expect(page.getByText(/DTH Export finished/)).toHaveCount(0)
+  // The baton passed: the Houdini project's card is the active one now (the
+  // finished scene card has tetris'd away).
+  await expect(page.locator(`[data-task="hou:${P.houdini}"]`)).toHaveAttribute(
+    'data-task-status',
+    'active',
+    { timeout: 15_000 },
+  )
+
+  // The hand-over: the job file lands in the character folder, both runner
+  // scripts are staged in app-data, and HEADLESS hython is launched at them.
   await expect.poll(() => fileContent(page, HOUDINI_JOB), { timeout: 15_000 }).not.toBeNull()
   const job = JSON.parse((await fileContent(page, HOUDINI_JOB))!) as {
     version: number
@@ -166,15 +270,48 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
   expect(job.closeWhenDone).toBe(true)
 
   const [launch] = await callsNamed(page, 'launch_houdini_job')
+  expect(launch.request.hythonPath).toBe(`${HOUDINI_INSTALL}/bin/hython.exe`)
   expect(launch.request.scenePath).toBe(P.houdini)
   expect(launch.request.jobPath).toBe(HOUDINI_JOB)
   expect(launch.request.houdiniPrefDir).toBe(HOUDINI_DOCS)
-  // The trailing `;&` is load-bearing: without it HOUDINI_SCRIPT_PATH REPLACES
-  // Houdini's default and the user's own startup scripts stop running.
-  expect(launch.request.scriptPath).toMatch(/;&$/)
-  expect(await fileKeys(page)).toContain(
-    `${launch.request.scriptPath.replace(/;&$/, '')}/456.py`,
-  )
+  // The full console (C++ cook chatter included) streams into a per-run log
+  // in the character folder — the reason the leg went headless.
+  expect(launch.request.logPath).toBe(`${P.charFolder}/.dth_houdini_console.log`)
+  // NO scriptPath: putting the studio's folder on HOUDINI_SCRIPT_PATH made the
+  // startup EMPTY scene run 456.py and eat the job (measured on the first
+  // headless run) — the bootstrap execs it, exactly once, after the load.
+  expect(launch.request.scriptPath).toBeUndefined()
+  expect(launch.request.runnerPath).toMatch(/\/headless_export\.py$/)
+  const scriptsDir = launch.request.runnerPath.replace(/\/headless_export\.py$/, '')
+  expect(await fileKeys(page)).toContain(`${scriptsDir}/456.py`)
+  expect(await fileKeys(page)).toContain(`${scriptsDir}/headless_export.py`)
+
+  // Mid-node, the result's `activity` channel carries what the HDA is saying —
+  // the log window tails the captured lines (no caption row) and the meter's
+  // label shows the newest one. The chip itself stays a constant "Working"
+  // (counts live in the panel's meters + the tooltip).
+  await houdiniReportsExporting(page)
+  // Prefixed with the app they came from — the HDA's own lines say only
+  // "DazToHue: …", while the studio's status lines name their app themselves.
+  await expect(page.locator('[data-export-log]')).toContainText('Houdini; Baking textures 3/12…', {
+    timeout: 15_000,
+  })
+  await expect(page.locator('[data-export-log]')).toContainText('Houdini; Importing Alembic…')
+  // …and the DAZ half is still there above it: the run is one story, so the
+  // finished leg's lines stay in the transcript instead of being replaced.
+  await expect(page.locator('[data-export-log]')).toContainText('ROM generated')
+  // Including each leg's own opening line — the HDA's first word used to
+  // REPLACE "Opening Houdini", which is the moment the run gets interesting.
+  await expect(page.locator('[data-export-log]')).toContainText('Opening Houdini (hython)')
+  await expect(page.locator('[data-export-log]')).toContainText('Opening Daz Studio')
+  await expect(page.getByRole('button', { name: /Working/ })).toBeVisible()
+  // The Houdini meter is STEPWISE — open-project + each network, all equal
+  // (hython's console has no percents to read): 1 network → 2 steps, the open
+  // one done → 50%. One network = one bar, no overall; its label is the
+  // latest captured line.
+  await expect(page.locator('[data-progressbar="current"]')).toHaveAttribute('data-percent', '50')
+  await expect(page.locator('[data-export-log]')).toContainText('Houdini; Baking textures 3/12…')
+  await expect(page.locator('[data-progressbar="overall"]')).toHaveCount(0)
 
   // 456.py works through it and reports — and NOW the one summary toast fires,
   // covering the whole process: the Daz leg and the Houdini leg, per line.
@@ -191,8 +328,196 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
   // in the character folder for good.
   await expect.poll(() => fileKeys(page)).not.toContain(HOUDINI_JOB)
   expect(await fileKeys(page)).not.toContain(HOUDINI_RESULT)
+  // The run is over — the task cards and the meters left with it.
+  await expect(page.locator('[data-task]')).toHaveCount(0)
+  await expect(page.locator('[data-progressbar]')).toHaveCount(0)
 
   expect(await unhandledCommands(page)).toEqual([])
+})
+
+test('a reloaded window ADOPTS the in-flight batch — cards from the rows, log from the file', async ({
+  page,
+}) => {
+  // The batch is already running when the window opens (a reload mid-run, or
+  // another window's run): no armed watch, no memory of the start — the whole
+  // display must be rebuilt from what is ON DISK. The card comes from the job
+  // file's own rows, the log window and meter from the global progress log;
+  // only the Houdini queue and the elapsed clock (memory-only) stay absent.
+  const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true })
+  seed.files[RUNNING_JOB] = JSON.stringify({
+    version: 1,
+    type: 'bulk-export',
+    progress: 40,
+    jobsDone: 0,
+    jobs: [
+      {
+        scenePath: P.scene,
+        scriptPath: `${SCRIPTS_ROOT}/Demo/Kira/.Bulk_ROM_Export.dsa`,
+        status: 'running',
+      },
+    ],
+  })
+  seed.files[`${P.appData}/export-progress.log`] = [
+    '[0] KiraDefault_G9_GP: opening scene',
+    '[20] KiraDefault_G9_GP: scene opened',
+    '[40] KiraDefault_G9_GP: ROM generated',
+    '',
+  ].join('\n')
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  // The fake Daz is alive and working the batch (set before the character
+  // page's first poll).
+  await page.evaluate(() => {
+    ;(window as any).__tauriMock.dazRunning = true
+  })
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+
+  await expect(page.locator(`[data-task="daz:${P.scene}"]`)).toHaveAttribute(
+    'data-task-status',
+    'active',
+    { timeout: 15_000 },
+  )
+  await expect(page.locator('[data-export-log]')).toContainText('ROM generated')
+  await expect(page.locator('[data-progressbar="current"]')).toHaveAttribute('data-percent', '40')
+  await expect(page.locator('[data-task^="hou:"]')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /Working/ })).toBeVisible()
+
+  // …and it LETS GO again. The batch's owner finishes it and deletes the job
+  // file; this window's poll then finds nothing — and since an adoption owns
+  // no outcome, that null is the only signal it ever gets. Without an explicit
+  // clear the cards, the log window and a still-ticking meter hung in the
+  // header for good (the poll interval stops with the watch, so nothing would
+  // ever come back to tidy them).
+  await page.evaluate(
+    ([running]) => {
+      ;((window as any).__tauriMock.files as Map<string, string>).delete(running)
+    },
+    [RUNNING_JOB],
+  )
+  await expect(page.locator('[data-task]')).toHaveCount(0, { timeout: 15_000 })
+  await expect(page.locator('[data-export-log]')).toHaveCount(0)
+  await expect(page.locator('[data-progressbar]')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /Working/ })).toHaveCount(0)
+})
+
+test('the run OWNER reloads mid-batch: the sidecar restores clock, Houdini card AND the continuation', async ({
+  page,
+}) => {
+  // Same in-flight batch as the adoption spec — but the handoff's sidecar
+  // names THIS character as the owner, so the editor restores the FULL watch
+  // instead of the display-only adoption: the clock ticks again (persisted
+  // start time), the chosen Houdini project's card is back, and — the part
+  // that used to be silently LOST on reload — the "Export too" continuation
+  // still fires when the batch finishes.
+  const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true })
+  seed.files[RUNNING_JOB] = JSON.stringify({
+    version: 1,
+    type: 'bulk-export',
+    progress: 40,
+    jobsDone: 0,
+    jobs: [
+      {
+        scenePath: P.scene,
+        scriptPath: `${SCRIPTS_ROOT}/Demo/Kira/.Bulk_ROM_Export.dsa`,
+        status: 'running',
+      },
+    ],
+  })
+  seed.files[`${P.appData}/export-run.json`] = JSON.stringify({
+    characterId: 'char-kira',
+    total: 1,
+    startedAtMs: Date.now() - 65_000,
+    houdiniProjects: [P.houdini],
+    houdiniMode: 'export-selected',
+    scenes: [P.scene],
+  })
+  seed.files[`${P.appData}/export-progress.log`] = '[40] KiraDefault_G9_GP: ROM generated\n'
+  // The continuation launches headless hython — same install/docs pairing the
+  // full round-trip spec seeds.
+  seed.houdiniRunning = true
+  const settingsPath = `${P.appData}/settings.json`
+  seed.files[settingsPath] = JSON.stringify({
+    ...JSON.parse(seed.files[settingsPath] ?? '{}'),
+    houdiniInstallFolder: HOUDINI_INSTALL,
+    houdiniDocsFolder: HOUDINI_DOCS,
+  })
+  seed.files[`${HOUDINI_INSTALL}/bin/hython.exe`] = 'hython-exe-fixture'
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await page.evaluate(() => {
+    ;(window as any).__tauriMock.dazRunning = true
+  })
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+
+  // Both legs' cards are back — and the clock (the run started ~a minute ago).
+  await expect(page.locator(`[data-task="daz:${P.scene}"]`)).toHaveAttribute(
+    'data-task-status',
+    'active',
+    { timeout: 15_000 },
+  )
+  await expect(page.locator(`[data-task="hou:${P.houdini}"]`)).toHaveAttribute(
+    'data-task-status',
+    'waiting',
+  )
+  await expect(page.getByRole('button', { name: /Working \d+:\d{2}/ })).toBeVisible()
+
+  // The batch finishes — the RESTORED watch owns the outcome: the Houdini
+  // handoff lands, written by this reloaded window.
+  await runnerFinishesBatch(page)
+  await expect.poll(() => fileContent(page, HOUDINI_JOB), { timeout: 15_000 }).not.toBeNull()
+  // …and the Houdini card is still there for the leg it hands over to. (The
+  // re-arm used to need a 'running' poll: a reload whose first poll found the
+  // batch already finished ran the whole Houdini leg with an empty column.)
+  await expect(page.locator(`[data-task="hou:${P.houdini}"]`)).toBeVisible()
+})
+
+test('a reload whose FIRST poll finds the batch finished still shows the Houdini card', async ({
+  page,
+}) => {
+  // The gap the spec above cannot catch: it reloads while the batch is still
+  // running. Here the window opens onto a batch that is ALREADY at 100 — the
+  // continuation path is the first thing that runs, and it used to arm no
+  // cards at all (the re-arm lived in the 'running' branch alone).
+  const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true })
+  seed.files[RUNNING_JOB] = JSON.stringify({
+    version: 1,
+    type: 'bulk-export',
+    progress: 100,
+    jobsDone: 1,
+    jobs: [
+      {
+        scenePath: P.scene,
+        scriptPath: `${SCRIPTS_ROOT}/Demo/Kira/.Bulk_ROM_Export.dsa`,
+        status: 'done',
+      },
+    ],
+  })
+  seed.files[`${P.appData}/export-run.json`] = JSON.stringify({
+    characterId: 'char-kira',
+    total: 1,
+    startedAtMs: Date.now() - 120_000,
+    houdiniProjects: [P.houdini],
+    houdiniMode: 'export-selected',
+    scenes: [P.scene],
+  })
+  seed.houdiniRunning = true
+  const settingsPath = `${P.appData}/settings.json`
+  seed.files[settingsPath] = JSON.stringify({
+    ...JSON.parse(seed.files[settingsPath] ?? '{}'),
+    houdiniInstallFolder: HOUDINI_INSTALL,
+    houdiniDocsFolder: HOUDINI_DOCS,
+  })
+  seed.files[`${HOUDINI_INSTALL}/bin/hython.exe`] = 'hython-exe-fixture'
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+
+  // The continuation runs (the sidecar carried the plan) AND wears its card.
+  await expect.poll(() => fileContent(page, HOUDINI_JOB), { timeout: 15_000 }).not.toBeNull()
+  await expect(page.locator(`[data-task="hou:${P.houdini}"]`)).toBeVisible()
 })
 
 test('rom only: the Houdini list can only OPEN — no auto-select, no export continuation', async ({

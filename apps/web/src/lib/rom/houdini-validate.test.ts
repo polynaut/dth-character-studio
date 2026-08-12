@@ -21,6 +21,7 @@ function scanned(over: Partial<MaterialScanProject> = {}): MaterialScanProject {
     nodes: [],
     job: CHAR,
     fps: 30,
+    imports: [],
     refs: { collapsible: 0, foreign: 0, broken: [], hipRelative: [] },
     prefill: { fillable: [], missing: [] },
     ...over,
@@ -149,6 +150,31 @@ describe('the scan store', () => {
     expect(freshScan(store, HIP, key)?.job).toBe(CHAR)
     // Saved in Houdini since — a new mtime, so the entry no longer applies.
     expect(freshScan(store, HIP, scanCacheKey(HIP, 2000))).toBeNull()
+  })
+
+  it('an entry written when the scan asked LESS is stale — the question is in the key', () => {
+    // Measured: `imports` (which `.dth` each network imports) shipped without
+    // a key bump, so every stored entry stayed "fresh" while answering the new
+    // question with an empty list — which the dialog correctly reads as "not
+    // known", forever, since nothing about the file or its surroundings had
+    // changed. A pre-v2 key (no version component) must not match today's.
+    const key = scanCacheKey(HIP, 1000)
+    const store = withScanResults(emptyScanStore(), [{ hipPath: HIP, key, project: scanned() }], 'now')
+    const preVersionKey = `${HIP.toLowerCase()}|1000||`
+    expect(key).not.toBe(preVersionKey)
+    expect(
+      freshScan(
+        withScanResults(
+          emptyScanStore(),
+          [{ hipPath: HIP, key: preVersionKey, project: scanned() }],
+          'now',
+        ),
+        HIP,
+        key,
+      ),
+    ).toBeNull()
+    // …while an entry written with today's question still serves.
+    expect(freshScan(store, HIP, key)).not.toBeNull()
   })
 
   it('a MOVED export root invalidates the entry, though the .hip never changed', () => {

@@ -7,18 +7,22 @@ import {
   EXECUTE_STAMPS_FILE,
   EXPORTER_JOB_FILE,
   EXPORT_MODES,
+  EXPORT_PROGRESS_FILE,
   HOUDINI_RUN_MODES,
   RUNNING_JOB_FILE,
   SCAN_CONFIG_FILE,
   executeSceneSignature,
+  exportProgressStateFrom,
   jobFileJson,
   isReclaimableBatch,
   jobFileMayBeLive,
   jobSceneForMode,
   jobScriptForMode,
+  jobStepsForMode,
   normalizeSceneKey,
   openSceneJobFileJson,
   parseExecuteStamps,
+  parseExportProgressLog,
   parseJobFileJson,
   romAnimationPath,
   scanConfigJson,
@@ -53,6 +57,7 @@ import type {
   ExecuteStamps,
   ExporterJob,
   ExporterJobType,
+  ExportProgressState,
   HoudiniRunMode,
   JobFileKind,
   ScanProductsConfig,
@@ -470,6 +475,86 @@ interface ActiveExportRun {
 }
 let activeRun: ActiveExportRun | null = null
 
+/**
+ * The run-plan sidecar (app-data): everything the export watch would lose on
+ * a window reload — the start time and the "Export too" continuation plan.
+ * Written at every character handoff, deleted when the run ends however it
+ * ends. A reloaded window whose EDITOR polls with the matching character id
+ * RESTORES the full watch from it (ownership included: the finish report and
+ * the Houdini continuation fire from the restored window), instead of the
+ * display-only adoption every other window gets. Scoped to the character on
+ * purpose: only one window can have a character open (single-instance routes
+ * a second open into the existing window), so the restore cannot create two
+ * owners.
+ */
+const EXPORT_RUN_FILE = 'export-run.json'
+
+const exportRunSidecarSchema = z.object({
+  characterId: z.string().min(1),
+  total: z.number().int().nonnegative(),
+  startedAtMs: z.number(),
+  houdiniProjects: z.array(z.string()),
+  houdiniMode: z.enum(HOUDINI_RUN_MODES),
+  scenes: z.array(z.string()),
+})
+
+/**
+ * Every sidecar write/delete queues on ONE chain, so they land in call order.
+ * {@link dismissExportRun} is synchronous for its UI callers, which ignore
+ * its promise — so without this chain a clear scheduled by an abort could
+ * still be in flight when the user immediately starts the next export, and
+ * would then delete the NEW run's sidecar (silently costing that run its
+ * reload survival). Serialising makes "last call wins" true. Reads join the
+ * same queue, so a poll can never see a sidecar a dismiss already retired.
+ */
+let sidecarChain: Promise<void> = Promise.resolve()
+function queueSidecar(op: () => Promise<void>): Promise<void> {
+  sidecarChain = sidecarChain.then(op, op)
+  return sidecarChain
+}
+
+/** Best-effort — a failed write only degrades a later reload to the
+ *  display-only adoption. */
+function writeExportRunSidecar(run: ActiveExportRun): Promise<void> {
+  return queueSidecar(async () => {
+    try {
+      await storage.writeTextFileAtomic(
+        await storage.dataPath(EXPORT_RUN_FILE),
+        JSON.stringify(run),
+      )
+    } catch {
+      // best effort
+    }
+  })
+}
+
+function clearExportRunSidecar(): Promise<void> {
+  return queueSidecar(async () => {
+    try {
+      await remove(await storage.dataPath(EXPORT_RUN_FILE))
+    } catch {
+      // best effort — overwritten by the next handoff either way
+    }
+  })
+}
+
+/** Reads through the same chain as the writes: a poll that lands right after
+ *  a dismiss must see the CLEARED sidecar, or it would restore the very watch
+ *  the user just dropped. */
+async function readExportRunSidecar(): Promise<ActiveExportRun | null> {
+  try {
+    // Inside the try on purpose: every queued op swallows its own errors, so
+    // the chain cannot reject — but a poll must not be able to throw over the
+    // sidecar either way, and this is where "can't tell" already means null.
+    await sidecarChain
+    const path = await storage.dataPath(EXPORT_RUN_FILE)
+    if (!(await exists(path))) return null
+    return exportRunSidecarSchema.parse(JSON.parse(await readTextFile(path)))
+  } catch {
+    return null
+  }
+}
+
 export type ExportRunProgress =
   /** Daz hasn't picked the file up yet (it can still be aborted) — or a
    *  closing Daz claimed it and died before running a row: the batch is then
@@ -488,9 +573,24 @@ export type ExportRunProgress =
       processed: number
       done: number
       failed: number
+      /** The verbose per-scene view from the progress log (Runner v1.2.0):
+       *  the newest line's percent/message/scene + the message tail for the
+       *  live log window. Null on an old Runner or before the first line. */
+      step?: ExportProgressState | null
       /** When the handoff was written — absent on a display-only adoption
        *  (another window's run; this one never saw the start). */
       startedAtMs?: number
+      /** The job rows as the file carries them — the pipeline panel rebuilds
+       *  its Daz task cards from these when its own armed selection is gone
+       *  (a display-only adoption, or a sidecar-restored watch after a
+       *  reload). */
+      rows?: Array<{ scenePath: string; status: 'pending' | 'running' | 'done' | 'failed' }>
+      /** The run's "Export too" plan (armed or sidecar-restored watches
+       *  only) — what the reloaded editor's Houdini task cards come from. */
+      houdiniProjects?: Array<string>
+      /** The batch's scenes (same watches) — the Houdini cards' network
+       *  tooltip. */
+      scenes?: Array<string>
     }
   /** progress hit 100 — the studio has DELETED the file; final snapshot. */
   | {
@@ -539,8 +639,53 @@ export type ExportRunProgress =
  * nothing (their runs predate the parameter and stay first-poll-consumed —
  * within one window only one editor is mounted at a time).
  */
+/**
+ * Truncate the verbose progress log and return its path.
+ *
+ * EVERY job-file handoff calls this, not only the export one. The log is a
+ * single app-data file and {@link readExportProgressState} serves it to
+ * whichever batch is live — so a scan or a scene ROM build that left the
+ * PREVIOUS export's lines standing would render them as its own progress: the
+ * finished export's percent, its scene and its whole log tail, under the new
+ * batch's task cards. Measured by reading the code paths: three of the four
+ * handoffs (this file's scene ROM build, the project product scan and the
+ * morph scan) write a `bulk-export` job file, and every character editor
+ * adopts one for display.
+ *
+ * Truncating is all they do — only {@link executeCharacterJobs} also ARMS the
+ * log (`progressLogPath` in the job file). An empty file is exactly what "this
+ * batch has nothing to say" has to look like: the reader returns null and the
+ * display falls back to row counts.
+ */
+async function resetExportProgressLog(): Promise<string> {
+  const path = await storage.dataPath(EXPORT_PROGRESS_FILE)
+  await storage.writeTextFileAtomic(path, '')
+  return path
+}
+
+/** The verbose progress log's current view (Runner v1.2.0), read fresh per
+ *  poll. Best-effort by construction: an unreadable/absent/empty file is null
+ *  — an old Runner simply never writes one. */
+async function readExportProgressState(
+  /** The batch's job rows — their scene paths resolve the scene-open lines'
+   *  real file names (the log carries only the stem). */
+  scenePaths: ReadonlyArray<string> = [],
+): Promise<ExportProgressState | null> {
+  try {
+    const path = await storage.dataPath(EXPORT_PROGRESS_FILE)
+    if (!(await exists(path))) return null
+    return exportProgressStateFrom(
+      parseExportProgressLog(await readTextFile(path)),
+      undefined,
+      scenePaths,
+    )
+  } catch {
+    return null
+  }
+}
+
 export async function fetchExportRunProgress(watcher?: string): Promise<ExportRunProgress | null> {
-  const run = activeRun
+  let run = activeRun
   const paths = await exporterJobFilePaths()
   if (!paths) return null
   // Sentinel runs belong to their own panel — see the doc comment above. Every
@@ -550,6 +695,22 @@ export async function fetchExportRunProgress(watcher?: string): Promise<ExportRu
   // passing that same sentinel, and a sentinel watcher never consumes a
   // character's run. Everything else is served the display-only adoption below.
   const isSentinel = (id: string | undefined): boolean => id !== undefined && id.startsWith('#')
+  // A reloaded window: no in-memory watch, but the handoff's sidecar names
+  // THIS caller's character as the run's owner and a job file is still live —
+  // restore the full watch (start time, Houdini continuation, ownership).
+  // Only the character's own editor restores; everything else keeps the
+  // display-only adoption.
+  if (!run && watcher && !isSentinel(watcher)) {
+    const sidecar = await readExportRunSidecar()
+    if (
+      sidecar &&
+      sidecar.characterId === watcher &&
+      ((await exists(paths.pending)) || (await exists(paths.running)))
+    ) {
+      activeRun = sidecar
+      run = sidecar
+    }
+  }
   const foreignToWatcher =
     run !== null &&
     (isSentinel(run.characterId) ? watcher !== run.characterId : isSentinel(watcher))
@@ -575,6 +736,13 @@ export async function fetchExportRunProgress(watcher?: string): Promise<ExportRu
         processed: parsed.jobsDone ?? done + failed,
         done,
         failed,
+        // The armed selection is gone (a reloaded window) — but the batch's
+        // identity survives in the file's own rows, and the progress log is
+        // the same global singleton the Runner appends to either way: the
+        // pipeline panel rebuilds its Daz cards and its log window from
+        // these, instead of showing an empty shell.
+        step: await readExportProgressState(parsed.jobs.map((j) => j.scenePath)),
+        rows: parsed.jobs.map((j) => ({ scenePath: j.scenePath, status: j.status })),
       }
     } catch {
       return null
@@ -609,6 +777,7 @@ export async function fetchExportRunProgress(watcher?: string): Promise<ExportRu
           // locked file — the next handoff's stale-cleanup retries
         }
         if (activeRun === run) activeRun = null
+        await clearExportRunSidecar()
         return {
           state: 'finished',
           characterId: run.characterId,
@@ -652,6 +821,7 @@ export async function fetchExportRunProgress(watcher?: string): Promise<ExportRu
           // best effort
         }
         if (activeRun === run) activeRun = null
+        await clearExportRunSidecar()
         return { state: 'dead', characterId: run.characterId, total: run.total }
       }
       return {
@@ -663,6 +833,16 @@ export async function fetchExportRunProgress(watcher?: string): Promise<ExportRu
         done,
         failed,
         startedAtMs: run.startedAtMs,
+        // The verbose per-scene view (Runner v1.2.0 + the generated script's
+        // own lines) — null on an old Runner / an empty log; the UI then
+        // shows the row counts alone, exactly as before.
+        step: await readExportProgressState(parsed.jobs.map((j) => j.scenePath)),
+        // The rows + the run's Houdini plan, so an editor whose component
+        // state was reloaded away (sidecar-restored watch) can re-arm its
+        // task cards without having seen the Start.
+        rows: parsed.jobs.map((j) => ({ scenePath: j.scenePath, status: j.status })),
+        houdiniProjects: run.houdiniProjects,
+        scenes: run.scenes,
       }
     }
   } catch {
@@ -677,14 +857,26 @@ export async function fetchExportRunProgress(watcher?: string): Promise<ExportRu
   // "run died" over a deliberate abort. That poll lost the race: say nothing.
   if (activeRun !== run) return null
   activeRun = null
+  await clearExportRunSidecar()
   return { state: 'dead', characterId: run.characterId, total: run.total }
 }
 
-/** Stop watching the active run (the run in Daz is unaffected — the watch is
- *  an observer only). The escape hatch for a batch that errored in Daz and
- *  will never deliver its remaining scenes. */
-export function dismissExportRun(): void {
+/**
+ * Stop watching the active run (the run in Daz is unaffected — the watch is
+ * an observer only). The escape hatch for a batch that errored in Daz and
+ * will never deliver its remaining scenes.
+ *
+ * The in-memory half is synchronous — every UI caller may ignore the return
+ * and does. The returned promise is the SIDECAR delete, for a caller that
+ * needs it to have landed before it looks at app-data again (tests do);
+ * ordering against a handoff that follows immediately is the chain's job
+ * either way — see {@link queueSidecar}.
+ */
+export function dismissExportRun(): Promise<void> {
   activeRun = null
+  // Without the clear, the next poll would restore the very watch that was
+  // just dismissed.
+  return clearExportRunSidecar()
 }
 
 /**
@@ -710,6 +902,7 @@ export async function abortExporterJobs({ data }: { data: unknown }): Promise<vo
   await remove(paths.pending)
   // The aborted handoff will never run — stop the export watch with it.
   activeRun = null
+  await clearExportRunSidecar()
   if (rows.length === 0) return
   try {
     const { project, location } = await loadCharacter(projectId, id)
@@ -859,7 +1052,10 @@ export async function clearExporterJobFiles(expect?: string): Promise<Array<stri
   // Whatever this window was watching is gone with the file — leaving the watch
   // armed would only produce a "run died" toast for a batch the user just
   // cleared on purpose (same reason abortExporterJobs drops it).
-  if (removed.length > 0) activeRun = null
+  if (removed.length > 0) {
+    activeRun = null
+    await clearExportRunSidecar()
+  }
   const failed = results.filter((r) => r.error)
   if (failed.length > 0) {
     throw new Error(failed.map((r) => `${r.name}: ${r.error}`).join('\n'))
@@ -1117,7 +1313,9 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
         `No saved ROM animation for this scene yet:\n${scene}\nRun a ROM build for it first (DTH Export → ROM + Export or ROM only), then export.`,
       )
     }
-    jobs.push({ scenePath: jobScene, scriptPath })
+    // `steps` = the row's per-scene percent scale in the verbose progress log
+    // (Runner v1.2.0 + the generated script's own dthProgressLog lines).
+    jobs.push({ scenePath: jobScene, scriptPath, steps: jobStepsForMode(mode) })
   }
   const scriptsRoot = storage.studioScriptsDir(settings.dazLibraryFolder)
   const jobFile = joinPath(scriptsRoot, EXPORTER_JOB_FILE)
@@ -1150,10 +1348,16 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
       // best effort — the Runner also clears a stale running file before renaming
     })
   }
-  await storage.writeTextFileAtomic(jobFile, jobFileJson(jobs))
+  // The verbose progress log (Runner v1.2.0): one app-data file, truncated at
+  // every handoff so a stale log never reads as this run's — the Runner
+  // truncates it again at pickup, and both writers append from there. This is
+  // the one handoff that also ARMS it (see resetExportProgressLog).
+  const progressLogPath = await resetExportProgressLog()
+  await storage.writeTextFileAtomic(jobFile, jobFileJson(jobs, 'bulk-export', progressLogPath))
 
   // Arm the watch: the run's identity only — all live state (progress,
-  // per-job statuses) is Runner-owned inside the renamed job file.
+  // per-job statuses) is Runner-owned inside the renamed job file. The
+  // sidecar mirrors it to disk so a reloaded window can restore the watch.
   activeRun = {
     characterId: character.id,
     total: jobs.length,
@@ -1162,6 +1366,7 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
     houdiniMode,
     scenes,
   }
+  await writeExportRunSidecar(activeRun)
 
   // Stamp the handoff (merge — untouched scenes keep their stamps), but ONLY
   // for the full run: a stamp claims "this definition, as it stands, has been
@@ -1327,6 +1532,10 @@ export async function generateRomAnimation({
     }
     await remove(paths.running).catch(() => {})
   }
+  // This batch arms no progress log — but it must not INHERIT the last
+  // export's (see resetExportProgressLog). Best effort: a log that could not
+  // be truncated is stale display data, never a reason to refuse the run.
+  await resetExportProgressLog().catch(() => {})
   const jobJson = jobFileJson([{ scenePath: scene, scriptPath }])
   await storage.writeTextFileAtomic(paths.pending, jobJson)
   // Both windows can pass the exists-checks above — the read-back decides who
@@ -1600,6 +1809,9 @@ export async function startProjectScan({ data }: { data: unknown }): Promise<Pro
   // the moment the job file appears, and a row that beat its own config would
   // fail with "not in the scan config" for no reason.
   await storage.writeTextFileAtomic(joinPath(scriptsRoot, SCAN_CONFIG_FILE), scanConfigJson(sceneWork))
+  // No progress log for a scan — but the last export's must not stand in for
+  // one (see resetExportProgressLog). Best effort, as above.
+  await resetExportProgressLog().catch(() => {})
   const jobJson = jobFileJson(jobs)
   await storage.writeTextFileAtomic(paths.pending, jobJson)
   // Both windows can pass the exists-checks above — the read-back decides who
@@ -1848,6 +2060,9 @@ export async function startSceneScan({ data }: { data: unknown }): Promise<Scene
 
   // Stamped BEFORE the handoff, so every file this run writes is newer than it.
   const startedAtMs = Date.now()
+  // No progress log for a morph scan either — and no inherited one (see
+  // resetExportProgressLog). Best effort, as above.
+  await resetExportProgressLog().catch(() => {})
   const jobJson = jobFileJson([{ scenePath, scriptPath }])
   await storage.writeTextFileAtomic(paths.pending, jobJson)
   await assertHandoffOwned(paths.pending, jobJson)

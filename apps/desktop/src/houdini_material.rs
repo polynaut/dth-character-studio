@@ -121,6 +121,14 @@ pub struct MaterialScanProject {
     /// per frame), and DazToHue's own import node sets it when it loads the
     /// files — so a wrong value means that has not happened here yet.
     pub fps: f64,
+    /// Every `.dth` this project's networks import (normalized, lowercased) —
+    /// the SAME key the export run matches nodes on, read in the same pass.
+    /// It tells the DTH Export dialog which projects a scene selection
+    /// involves without opening a `.hip`. `#[serde(default)]`: a scan stored
+    /// before this field existed is a legitimate old entry, and empty there
+    /// means "not known", never "imports nothing".
+    #[serde(default)]
+    pub imports: Vec<String>,
     /// What a repath would do to this project's stored file references.
     pub refs: ProjectRefInfo,
     /// Which DazToHue parms the studio could fill here, and which this

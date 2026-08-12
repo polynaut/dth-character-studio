@@ -425,6 +425,13 @@ export const materialScanProjectSchema = z.object({
    *  treats 0 as "unknown", never as "differs", so an old cache entry can never
    *  produce a badge or queue a repair. */
   fps: z.number().default(0),
+  /** Every `.dth` this project's networks import (normalized, lowercased) —
+   *  the same key the export run matches nodes on, read in the same pass. The
+   *  DTH Export dialog uses it to tell which projects a scene selection
+   *  involves without opening a `.hip` (tens of seconds each). Defaulted: an
+   *  entry stored before this field existed is legitimate, and empty means
+   *  "not known" there — never "imports nothing". */
+  imports: z.array(z.string()).default([]),
   /** What a repath would do to this project's stored file references. */
   refs: projectRefInfoSchema,
   /** Which DazToHue parms the studio could fill here, and which this DazToHue

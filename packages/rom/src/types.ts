@@ -1564,8 +1564,28 @@ export const CHARACTER_SCHEMA_VERSION = 31
  *       marks every existing character stale: saving a character in the editor
  *       re-stamps its schemaVersion WITHOUT regenerating, which would otherwise
  *       hide a pre-v70 script on disk from the staleness check for good.
+ * v71 — the generated scripts pause ~1 s at the automation seams: the BULK
+ *       (Runner) ROM script settles right after the scene load, before the
+ *       first scripted work; every export — bulk or manual — settles after
+ *       the ROM build, before the exporter starts. `dthSettle` sleeps in
+ *       50 ms slices WITH processEvents between them, so the pause drains
+ *       the event loop instead of blocking it (a plain sleep would hold the
+ *       very queue the pause exists to flush). Capability-gated: a Daz build
+ *       missing either global proceeds immediately.
+ * v72 — the generated carriers append their finished steps to the Runner
+ *       v1.2.0 verbose progress log (`dthProgressLog`, baked
+ *       `dthProgressLogPath` from app-data): "[<percent>] <scene>: <message>"
+ *       per step, on the job row's step scale — ROM 40 / character 60 /
+ *       CSV 80 / hair 100 in the 5-step bulk ROM+export, 50/75/100 in the
+ *       4-step export-only, ROM 100 in the 2-step rom-only. The Runner writes
+ *       the scene-open and terminal lines; the studio watches the file for
+ *       the live per-scene progress display. Steps also log a START marker
+ *       ("generating ROM", "exporting character", "delivering PoseAsset
+ *       CSV", "exporting hair items") at the percent already reached, so the
+ *       display can name what is running, not only what finished. A script
+ *       without a baked path (manual/legacy) logs nothing.
  */
-export const RUNTIME_VERSION = 70
+export const RUNTIME_VERSION = 72
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

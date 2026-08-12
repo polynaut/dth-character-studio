@@ -37,7 +37,7 @@ const STORE = `${P.project}/.dcsmeta/characters/Kira/houdini-scan.json`
  * out here rather than defaulting it away.
  */
 function storeKey(hipPath: string): string {
-  return `${hipPath.toLowerCase()}|__MTIME__|${P.exportDir.toLowerCase()}|`
+  return `${hipPath.toLowerCase()}|__MTIME__|${P.exportDir.toLowerCase()}||2`
 }
 
 /** A scan result in the shape `material_utils.py` reports. */

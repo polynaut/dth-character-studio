@@ -84,9 +84,11 @@ a plain browser with native features as no-ops):
 - **Two job-file handoffs, deliberately the same shape** — the studio writes a
   JSON job, the other side works through it and writes results back, the studio
   polls. Daz's is `execute.ts` + `execute-jobs.ts` (the Runner plugin). Houdini's
-  is `lib/rom/houdini-jobs.ts` + `lib/rom/houdini-runtime/456.py`, which Houdini
-  runs after a scene loads when the studio's folder is on `HOUDINI_SCRIPT_PATH`
-  and `DTH_HOUDINI_JOB` points at a job — driven by `api/houdini.ts`
+  is `lib/rom/houdini-jobs.ts` + `lib/rom/houdini-runtime/456.py`, run HEADLESS:
+  `hython headless_export.py` loads the `.hip` and execs 456.py once, with
+  `DTH_HOUDINI_JOB` pointing at a job (never via `HOUDINI_SCRIPT_PATH` — the
+  startup empty scene runs a 456.py found there and eats the job; measured
+  2026-08-11) — driven by `api/houdini.ts`
   (`startHoudiniExport` / `fetchHoudiniRunProgress`) and Rust
   `launch_houdini_job`/`houdini_running`. **Live since v0.59** — the DTH Export
   dialog's Houdini list continues a Daz batch straight into Houdini (sequential

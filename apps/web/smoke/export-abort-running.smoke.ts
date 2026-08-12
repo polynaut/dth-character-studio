@@ -5,15 +5,15 @@ import { installTauriMock } from './tauri-mock.ts'
 
 import type { Page } from '@playwright/test'
 
-// Ctrl on the live **Exporting n/m** button turns it into **Abort**.
+// Ctrl on the live **Working** button turns it into **Abort**.
 //
 // Once the Runner RENAMES the job file (the claim), aborting used to be over:
-// the button only offered "stop watching", and the claimed file stayed on disk
-// — so a batch that stalled inside a Daz that is still running left every later
-// export and scan refusing with "a batch is waiting for Daz Studio", with no way
-// out from the character page. Holding Ctrl deletes the file and resets the
-// button; a plain click still only stops the watch, and must not delete
-// anything.
+// the button offered nothing but "stop watching", and the claimed file stayed
+// on disk — so a batch that stalled inside a Daz that is still running left
+// every later export and scan refusing with "a batch is waiting for Daz
+// Studio", with no way out from the character page. Holding Ctrl deletes the
+// file and resets the button; a PLAIN click is ignored entirely — a stray
+// click mid-run used to reset the watch, which read as "the export vanished".
 
 const DAZ_INSTALL = 'C:/Program Files/DAZ 3D/DAZStudio4'
 const SCRIPTS_ROOT = `${P.dazLib}/Scripts/DTH-Character-Studio`
@@ -54,7 +54,7 @@ async function runnerClaimsBatch(page: Page) {
 }
 
 /** Hand the character's one scene off, then have the Runner claim it. Leaves the
- *  header button in its live "Exporting" state. */
+ *  header button in its live "Working" state. */
 async function startAndClaim(page: Page) {
   const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true, dazInstallFolder: DAZ_INSTALL })
   seed.files[`${SCRIPTS_ROOT}/Demo/Kira/.Bulk_ROM_Export.dsa`] = '// bulk-export fixture'
@@ -70,7 +70,7 @@ async function startAndClaim(page: Page) {
   // Daz was not running, so the handoff returns as soon as the file is written.
   await expect.poll(() => fileExists(page, PENDING_JOB)).toBe(true)
   await runnerClaimsBatch(page)
-  await expect(page.getByRole('button', { name: /Exporting 0\/1/ })).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByRole('button', { name: /Working/ })).toBeVisible({ timeout: 15_000 })
 }
 
 test('Ctrl turns the running export into Abort — and it deletes the claimed job file', async ({
@@ -98,16 +98,17 @@ test('releasing Ctrl puts the progress button back — the run is untouched', as
   await page.keyboard.down('Control')
   await expect(page.getByRole('button', { name: 'Abort' })).toBeVisible()
   await page.keyboard.up('Control')
-  await expect(page.getByRole('button', { name: /Exporting 0\/1/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Working/ })).toBeVisible()
   expect(await fileExists(page, RUNNING_JOB)).toBe(true)
 })
 
-test('a plain click still only stops watching — the job file stays', async ({ page }) => {
+test('a plain click is ignored — the watch and the job file are untouched', async ({ page }) => {
   await startAndClaim(page)
 
-  await page.getByRole('button', { name: /Exporting 0\/1/ }).click()
-  // The watch is dropped; the file on disk is deliberately NOT touched (the
-  // batch belongs to Daz, and the next handoff cleans a leftover up).
+  await page.getByRole('button', { name: /Working/ }).click()
+  // Nothing happens: the button still shows the live run (the watch was NOT
+  // reset — a stray click used to silently drop it) and the file stays.
+  await expect(page.getByRole('button', { name: /Working/ })).toBeVisible()
   expect(await fileExists(page, RUNNING_JOB)).toBe(true)
   await expect(page.getByText(/Export aborted/)).toHaveCount(0)
 })

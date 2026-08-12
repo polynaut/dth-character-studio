@@ -6,9 +6,12 @@ import {
   EXPORTER_JOB_FILE,
   RUNNING_JOB_FILE,
   executeSceneSignature,
+  exportProgressStateFrom,
   jobSceneForMode,
   jobScriptForMode,
+  jobStepsForMode,
   expectedSceneExportFolders,
+  parseExportProgressLog,
   formatAgo,
   isReclaimableBatch,
   jobFileMayBeLive,
@@ -21,8 +24,11 @@ import {
   parseJobFileJson,
   preCheckedScenes,
   scanConfigJson,
+  formatClock,
   formatElapsed,
   hipSelectionAfterToggle,
+  hipsForSelectedScenes,
+  stampLogLines,
   houdiniModeForSelection,
   scenesMissingExport,
   scenesMissingRomAnimation,
@@ -87,6 +93,81 @@ describe('the JSON job file (contract v2)', () => {
       progress: 0,
       jobs: [{ scenePath: 'X:\\a.duf', scriptPath: 'X:\\s.dsa', status: 'pending' }],
     })
+  })
+
+  it('carries the verbose-progress contract: progressLogPath + per-row steps', () => {
+    const text = jobFileJson(
+      [{ scenePath: 'X:\\a.duf', scriptPath: 'X:\\s.dsa', steps: 5 }],
+      'bulk-export',
+      'C:\\Users\\x\\AppData\\Local\\dth\\export-progress.log',
+    )
+    const raw = JSON.parse(text) as Record<string, unknown>
+    expect(raw.progressLogPath).toBe('C:\\Users\\x\\AppData\\Local\\dth\\export-progress.log')
+    expect((raw.jobs as Array<{ steps: number }>)[0].steps).toBe(5)
+    // Without a path the field stays absent — an old-style file byte-for-byte.
+    expect(JSON.parse(jobFileJson([])).progressLogPath).toBeUndefined()
+    // …and it survives the round trip: a reader trusting ExporterJobFile must
+    // not be told `undefined` about a file that plainly carries it.
+    expect(parseJobFileJson(text)?.progressLogPath).toBe(
+      'C:\\Users\\x\\AppData\\Local\\dth\\export-progress.log',
+    )
+    // A handoff that arms no log (a scan, a scene ROM build) reads as absent
+    // rather than empty-string — "this batch has nothing to say".
+    expect(parseJobFileJson(jobFileJson([]))?.progressLogPath).toBeUndefined()
+  })
+
+  it('jobStepsForMode: the per-scene step scale both writers share', () => {
+    expect(jobStepsForMode('rom-export')).toBe(5)
+    expect(jobStepsForMode('export-only')).toBe(4)
+    expect(jobStepsForMode('rom-only')).toBe(2)
+  })
+
+  it('parseExportProgressLog + exportProgressStateFrom: the live view', () => {
+    const parsed = parseExportProgressLog(
+      [
+        '[0] Kira: opening scene',
+        'noise the parser must ignore',
+        '[20] Kira: scene opened',
+        '[40] Kira: ROM generated',
+        '[999] clamped',
+        '',
+      ].join('\n'),
+    )
+    expect(parsed).toEqual([
+      { percent: 0, message: 'Kira: opening scene' },
+      { percent: 20, message: 'Kira: scene opened' },
+      { percent: 40, message: 'Kira: ROM generated' },
+      { percent: 100, message: 'clamped' },
+    ])
+    const state = exportProgressStateFrom(parsed.slice(0, 3))
+    // Display-clean: the scene prefix and the percent bracket are stripped —
+    // the scene shows on the task card, the percent on the meter.
+    expect(state).toEqual({
+      percent: 40,
+      message: 'ROM generated',
+      scene: 'Kira',
+      // With no job rows to resolve a file name, the scene-open lines fall
+      // back to the stem the log itself carries.
+      lines: ['opening scene Kira', 'scene opened Kira', 'ROM generated'],
+    })
+    // The scene-OPEN lines name the file they opened, resolved from the job
+    // rows' scene paths (the log carries only the stem — an extension would
+    // be a guess); everything else stays bare.
+    const named = exportProgressStateFrom(parsed.slice(0, 3), 40, ['X:/p/Kira/daz3d/Kira.duf'])
+    expect(named?.lines).toEqual([
+      'opening scene Kira.duf',
+      'scene opened Kira.duf',
+      'ROM generated',
+    ])
+    // A stem with no matching row falls back to the stem itself.
+    expect(exportProgressStateFrom(parsed.slice(0, 1), 40, [])?.lines).toEqual([
+      'opening scene Kira',
+    ])
+    // Batch-level lines carry no scene; an empty log has no view at all.
+    const batch = exportProgressStateFrom([{ percent: 100, message: 'batch finished' }])
+    expect(batch?.scene).toBe('')
+    expect(batch?.message).toBe('batch finished')
+    expect(exportProgressStateFrom([])).toBeNull()
   })
 
   it('parseJobFileJson reads Runner-updated progress + statuses + errors', () => {
@@ -530,6 +611,120 @@ describe('formatElapsed — the run clock/total, three widths', () => {
     // Zero-padded tail so the ticking clock doesn't jitter in width.
     expect(formatElapsed(60_000 + 5_000)).toBe('1m 05s')
     expect(formatElapsed(60 * 60_000 + 3 * 60_000)).toBe('1h 03m')
+  })
+})
+
+describe('hipsForSelectedScenes — which projects a scene selection involves', () => {
+  const SLIM = 'D:/chars/Kira/houdini/daz-export/KiraSlim/Kira.dth'
+  const THICK = 'D:/chars/Kira/houdini/daz-export/KiraThick/Kira.dth'
+  const slimHip = { hipPath: 'D:/chars/Kira/houdini/slim.hip', imports: [SLIM.toLowerCase()] }
+  const bothHip = {
+    hipPath: 'D:/chars/Kira/houdini/both.hip',
+    imports: [SLIM.toLowerCase(), THICK.toLowerCase()],
+  }
+  const unscanned = { hipPath: 'D:/chars/Kira/houdini/new.hip', imports: [] }
+
+  it('selects exactly the projects importing a selected scene', () => {
+    expect([...hipsForSelectedScenes([slimHip, bothHip], [SLIM], new Set(), [THICK])]).toEqual([
+      slimHip.hipPath,
+      bothHip.hipPath,
+    ])
+    // Only THICK selected: the slim-only project drops out — its import names
+    // SLIM, which the user just unticked. That is a positive match, not a guess.
+    expect([...hipsForSelectedScenes([slimHip, bothHip], [THICK], new Set(), [SLIM])]).toEqual([
+      bothHip.hipPath,
+    ])
+  })
+
+  it('matches by PATH, spelling-insensitively — not by any name', () => {
+    const windowsSpelling = 'd:\\chars\\Kira\\houdini\\daz-export\\KiraSlim\\Kira.dth'
+    expect([...hipsForSelectedScenes([slimHip], [windowsSpelling], new Set(), [])]).toEqual([
+      slimHip.hipPath,
+    ])
+  })
+
+  it('NEVER drops an unscanned project — the studio cannot know', () => {
+    // Ticked and unknown → stays ticked (un-ticking on ignorance would
+    // silently skip the Houdini half of the run).
+    expect(hipsForSelectedScenes([unscanned], [SLIM], new Set([unscanned.hipPath]), [])).toEqual(
+      new Set([unscanned.hipPath]),
+    )
+    // Un-ticked and unknown → stays un-ticked: a guess in the other direction.
+    expect(hipsForSelectedScenes([unscanned], [SLIM], new Set(), [])).toEqual(new Set())
+  })
+
+  it('does not drop a SCANNED project whose imports match no scene either way', () => {
+    // The failure this guards: 456.py compares through os.path.realpath (mapped
+    // drive → UNC, the retired junction spellings old .hip files still store),
+    // while the scan normalizes and sceneDthPath resolves nothing — so two
+    // spellings the RUN would fold together compare unequal here. Dropping on
+    // that is ignorance wearing knowledge's clothes: the project stays.
+    const junctionSpelling = {
+      hipPath: 'D:/chars/Kira/houdini/junction.hip',
+      imports: ['//nas/chars/kira/houdini/daz-export/kiraslim/kira.dth'],
+    }
+    expect(
+      hipsForSelectedScenes(
+        [junctionSpelling],
+        [THICK],
+        new Set([junctionSpelling.hipPath]),
+        [SLIM],
+      ),
+    ).toEqual(new Set([junctionSpelling.hipPath]))
+    // A project importing another character's scenes entirely: same answer,
+    // same reason — the studio was told nothing about THIS selection.
+    const foreign = { hipPath: 'D:/chars/Nyx/nyx.hip', imports: ['d:/chars/nyx/x/nyx.dth'] }
+    expect(hipsForSelectedScenes([foreign], [THICK], new Set([foreign.hipPath]), [SLIM])).toEqual(
+      new Set([foreign.hipPath]),
+    )
+  })
+
+  it('implies nothing when no scene is selected', () => {
+    expect(hipsForSelectedScenes([slimHip, bothHip], [], new Set(), [SLIM, THICK])).toEqual(
+      new Set(),
+    )
+  })
+})
+
+describe('stampLogLines — first-seen [HH:MM:SS] prefixes across polls', () => {
+  it('keeps earlier stamps when the tail extends, stamps only the new lines', () => {
+    const store = { lines: [], stamps: [] }
+    expect(stampLogLines(store, ['a', 'b'], '10:00:00')).toEqual(['[10:00:00] a', '[10:00:00] b'])
+    expect(stampLogLines(store, ['a', 'b', 'c'], '10:00:05')).toEqual([
+      '[10:00:00] a',
+      '[10:00:00] b',
+      '[10:00:05] c',
+    ])
+  })
+
+  it('re-anchors a ROLLING window by its last known line', () => {
+    const store = { lines: [], stamps: [] }
+    stampLogLines(store, ['a', 'b', 'c'], '10:00:00')
+    // The window rolled: 'a' fell off the front, 'd' arrived.
+    expect(stampLogLines(store, ['b', 'c', 'd'], '10:00:05')).toEqual([
+      '[10:00:00] b',
+      '[10:00:00] c',
+      '[10:00:05] d',
+    ])
+  })
+
+  it('an empty tail resets the store; unrecognized content restamps fresh', () => {
+    const store = { lines: [], stamps: [] }
+    stampLogLines(store, ['a'], '10:00:00')
+    expect(stampLogLines(store, [], '10:00:01')).toEqual([])
+    expect(stampLogLines(store, ['x'], '10:00:02')).toEqual(['[10:00:02] x'])
+  })
+})
+
+describe('formatClock — the live buttons’ digital clock', () => {
+  it('always renders all four digits, growing to hours only past 1h', () => {
+    expect(formatClock(0)).toBe('00:00')
+    expect(formatClock(1_000)).toBe('00:01')
+    expect(formatClock(999)).toBe('00:00')
+    expect(formatClock(12 * 60_000 + 34_000)).toBe('12:34')
+    expect(formatClock(60 * 60_000 + 2 * 60_000 + 3_000)).toBe('1:02:03')
+    // Negative clock skew clamps to zero rather than rendering nonsense.
+    expect(formatClock(-5_000)).toBe('00:00')
   })
 })
 

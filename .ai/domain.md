@@ -657,25 +657,108 @@ older runtimes as stale.
   junction feature in v0.63 — with nothing to decide up front, the dialog is
   just the scene name again; `houdiniPathStyle` is edited in Settings →
   Project, and the machine-local `houdini-intro.json` flag is retired.
+- **Which projects a scene selection involves.** A network's identity is the
+  `.dth` it imports (`import_character_dtu_file`) — the studio wrote that file
+  at a path it computes (`sceneDthPath`), so it names the Daz scene exactly,
+  unlike a node or network-box name the user renames freely. 456.py matches on
+  it at export time; the DTH Export dialog matches on the same FIELD without
+  opening a `.hip` because the background scan records every project's imports
+  (`materialScanProject.imports`, hython `_scene_dth_imports`, stored per
+  character in `houdini-scan.json`). `hipsForSelectedScenes` (pure) turns
+  "these scenes" into "these projects".
+  The two sides do NOT normalize identically, and the rule is built around
+  that: 456.py's `normalize()` compares through `os.path.realpath` (folding a
+  mapped drive to its UNC target and the retired junction spellings old `.hip`s
+  still store), while `_scene_dth_imports` uses `os.path.normpath` and
+  `sceneDthPath` resolves nothing physical at all — so two spellings the RUN
+  folds together can compare unequal in the dialog. Hence a project only ever
+  LEAVES the run on a positive match against a DESELECTED scene. Three cases
+  keep whatever is ticked instead: a project the scan has not reached, an old
+  store entry (`imports: []`), and one whose imports match neither the selected
+  nor the deselected scenes — that last is the spelling case, and dropping on
+  it would be ignorance wearing knowledge's clothes. A wrongly-kept project
+  no-ops in Houdini; a wrongly-dropped one silently skips the Houdini half of a
+  run the user asked for.
 - **The Houdini export handoff — "Export too" (COMPLETE).** After a Daz bulk
   export, the DazToHue export nodes in a Houdini project run for the scenes the
   user ticked. The toggle sits beside the dialog's Houdini project select,
   appears only once a project is picked, and is off by default (it drives the
   user's own Houdini). Pieces: `lib/rom/houdini-jobs.ts` (job/result contract,
-  `houdiniScriptPathValue`, `houdiniRunStateFrom`),
-  `lib/rom/houdini-runtime/456.py` (Houdini's half),
+  `houdiniRunStateFrom`),
+  `lib/rom/houdini-runtime/456.py` + `headless_export.py` (Houdini's half),
   `api/houdini.ts` (`startHoudiniExport`/`fetchHoudiniRunProgress`) and Rust
   `launch_houdini_job`/`houdini_running` (houdini.rs).
-  `456.py` is written into `<appLocalData>/houdini-scripts/` **before every
-  run** — not installed once — so it is self-repairing and always matches the
-  app version; `HOUDINI_SCRIPT_PATH` is set to `<that folder>;&`, and the `&`
-  is load-bearing (it stands for the path Houdini would have used, so omitting
-  it silently disables the user's own startup scripts for the session).
+  Both scripts are written into `<appLocalData>/houdini-scripts/` **before
+  every run** — not installed once — so they are self-repairing and always
+  match the app version. `HOUDINI_SCRIPT_PATH` is deliberately NOT touched
+  anymore: MEASURED 2026-08-11 (first headless run), Houdini runs a `456.py`
+  found there on the startup EMPTY scene too — the job was consumed against it
+  ("nothing to export" in 2 s) and `closeWhenDone` exited hython before the
+  project ever loaded. The bootstrap execs 456.py itself, exactly once, after
+  the load.
   The run's own watch outlives the Daz batch: the batch finishes and reports,
   THEN Houdini opens (`starting` — 456.py runs only after the scene has loaded,
   which is a long silence on a big project), works (`running done/total`) and
   finishes. Liveness comes from `houdini_running`, without which a result file
   stuck at "running" after the user closed Houdini would poll forever.
+  The DAZ leg has its own live channel since Runner v1.2.0: the job file
+  carries `progressLogPath` (app-data `export-progress.log`, truncated at
+  handoff AND at pickup) + per-row `steps`; the Runner writes the
+  `[<percent>] <message>` lines it owns and the generated scripts (runtime
+  v72, `dthProgressLog`) append the interior steps on the same per-scene
+  scale (`jobStepsForMode`: 5/4/2). `fetchExportRunProgress` parses the log
+  (`parseExportProgressLog`/`exportProgressStateFrom`, pure) into
+  `running.step`; the header's `ExportPipelinePanel` (meter row + task cards +
+  tail log) renders both legs. The meters: `current` = the unit under work
+  (Daz = the progress-log percent; Houdini = a stepwise scale, 1 open-project
+  step + 1 per network, because hython's console has phase lines but no
+  percents), plus an `overall` bar ONLY when the leg spans several units
+  (scenes / networks). The multi-network current bar estimates within the
+  active network from the HDA's phase-line count (measured: 9 on a full node
+  run), capped at 95% — an estimate, not a contract.
+  Display division of labor (deliberate, user-driven): the NUMBERED task
+  cards carry the scene/project identity, the meter carries percent + the
+  latest status text as its label, and the log window is a pure line tail
+  (exportProgressStateFrom strips the `[pct]` bracket and `<stem>: ` prefix
+  for display — the on-disk format is unchanged). The scripts log step START
+  markers too ("generating ROM", …) at the already-reached percent. No
+  mid-run toasts: the one report fires at the very end.
+  Both live buttons are INERT to a plain click (a stray one used to drop the
+  watch, reading as "the export vanished") and reveal their escape hatch on
+  **Ctrl**: Abort on the Daz leg, Stop watching on the Houdini one — which
+  also drops the projects still queued behind the running one, since the
+  studio, not Houdini, owns that queue. On the Houdini leg this is the ONLY
+  way out now: headless left no window to close, and the export inside
+  hython keeps running either way (the toast says so).
+  RELOAD SURVIVAL: every character handoff writes its plan to the app-data
+  sidecar `export-run.json` (characterId, startedAtMs, houdiniProjects/mode,
+  scenes; deleted on every run end). The owning character's editor passes its
+  id as `fetchExportRunProgress`'s watcher and RESTORES the full watch from
+  the sidecar after a reload — clock, cards (re-armed from the run's `rows` +
+  plan) and the Export-too continuation, which previously died silently with
+  the window's memory. Non-owners get display-only adoption, itself rebuilt
+  from disk (`rows` + the progress log). The Runner must never learn of the
+  sidecar — it rewrites the job file from its own model, so anything stored
+  IN the job file beyond the v1.2.0 contract would be dropped at pickup.
+  Contract: docs/exporter-plugin-job-file.md.
+  **The DAZ leg only.** The HOUDINI leg has no sidecar: `activeHoudiniRun`
+  lives in `api/houdini.ts` module memory and the editor's poll interval is
+  armed only while something is ALREADY being watched (`pending ||
+  progress || houdini` in `dth-export.tsx`), so a reload during that leg
+  drops the watch and never re-adopts — and since the leg went headless
+  there is no window either, making it invisible: hython finishes, writes
+  its result, and the job/result files sit in the character folder until the
+  next run overwrites them. Restoring it needs BOTH halves — a second
+  sidecar AND a mount-time probe that arms the poll without an existing
+  watch — which is why it is not the Daz sidecar's mirror image.
+  Mid-NODE the result also carries a live `activity` channel: 456.py's
+  `ActivityCapture` tees `sys.stdout`/`stderr` + `hou.ui.setStatusMessage` while
+  `do_export` runs and streams the lines (throttled 0.5 s, rolling 40) into the
+  polled file — the studio's only window into the minutes-long synchronous call;
+  each node's report entry keeps a capped `log` tail. WHAT the HDA actually
+  emits there is unmeasured until the first live run — the capture is
+  deliberately broad so that run is the probe; nothing emitted = the chip just
+  shows elapsed time.
   MEASURED on the first live run (2026-08-03): 456.py fires BEFORE the main
   window paints, and inline work there holds the window back — the whole batch
   ran against a blank screen and Houdini "opened" only after the last node.
@@ -684,10 +767,32 @@ older runtimes as stale.
   breather (`STARTUP_BREATHER_MS`) so the viewport finishes its first cook —
   textures included — before `do_export` hogs the main thread. Sessions
   without the module (hython) run inline — no window to wait for.
-  Chosen shape is **visible GUI + a startup script reading a job file**, not
-  headless hython and not `hrpyc` remote control, so it mirrors the Daz Runner
-  handoff. Houdini runs a `456.py` found on `HOUDINI_SCRIPT_PATH` after a scene
-  loads; without `DTH_HOUDINI_JOB` it does nothing at all.
+  Chosen shape was **visible GUI + a startup script reading a job file** (not
+  `hrpyc` remote control), mirroring the Daz Runner handoff — **flipped to
+  HEADLESS hython 2026-08-11** (Remo's call, reversing his earlier
+  watch-it-happen preference once the live progress chip covered it): the
+  studio now runs `hython headless_export.py`, which loads the `.hip`
+  (`DTH_HOUDINI_HIP`) and runs `456.py` inline (`DTH_HEADLESS` — explicit,
+  because an hdefereval import that succeeds without a UI event loop would
+  defer the batch into a callback that never fires). Wins: the whole
+  window/paint fragility class is gone, and the process's FULL console (C++
+  cook chatter the in-process tee can't see) streams into
+  `.dth_houdini_console.log` beside the job/result files — and deliberately
+  NOT cleared with them (`houdiniRunFilesToClear` lists only the result and
+  the job): it is the diagnosis channel a puzzling run is read from
+  afterwards, and one bounded file per character — overwritten by the next
+  run, never accreting — IS the retention the housekeeping rule asks for.
+  The first headless run proved the point by deleting the answer. Liveness is the
+  TRACKED child (`try_wait` in houdini.rs — immune to the Utils drawer's own
+  hython scans) and, once this process has tracked a launch, its answer is
+  FINAL: an exited child means dead, never "ask the process list". Falling
+  through there would answer "alive" for the user's own open Houdini — this
+  audience keeps one open — and a hython that died mid-run would leave the
+  result file at "running" and the poll spinning forever. The GUI list is the
+  fallback only when no launch was ever tracked (an app restart). The GUI path itself
+  still works (456.py's scene-load mechanism + window-wait machinery remain);
+  "Open only" still opens the visible GUI via `openScene`. Without
+  `DTH_HOUDINI_JOB`, 456.py does nothing at all.
   Networks match scenes by the **`.dth` path**: a `DazToHueImport` stores it in
   `import_character_dtu_file`, and the studio WROTE that file — an identity that
   survives a renamed network, which a name match would not. A project may hold

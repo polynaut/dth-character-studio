@@ -341,6 +341,15 @@ current code before relying on details, but assume the *lesson* still holds.
 - **Never create a webview window from a synchronous `#[tauri::command]`** — it
   deadlocks (white frozen window). Use `#[tauri::command(async)]` and
   `tauri::async_runtime::spawn` (the single-instance handler does this).
+- **Houdini runs a `456.py` on HOUDINI_SCRIPT_PATH for the startup EMPTY scene
+  too, not only for a loaded `.hip`** — measured 2026-08-11 on the first
+  headless "Export too" run: hython started, the empty initial scene triggered
+  the studio's 456.py, the job was consumed against zero nodes ("nothing to
+  export" in 2 s), the env popped, and `closeWhenDone` exited the process
+  before the bootstrap ever loaded the real project. The headless launch
+  therefore never touches HOUDINI_SCRIPT_PATH; `headless_export.py` loads the
+  scene and execs `456.py` itself, exactly once. Any future script that hooks
+  scene loads via that variable must expect the empty-scene call.
 - **Apps launched via the shell plugin's `open()` inherit the STUDIO's process
   environment** — not the user session's. Measured 2026-07-30: a `.hiplc`
   opened from the studio started Houdini WITHOUT the DazToHue shelf (Houdini
@@ -401,6 +410,38 @@ current code before relying on details, but assume the *lesson* still holds.
   until the user happened to re-save one in Houdini. The export root is in
   `scanKey` now. The general shape: when a cached verdict is about the RELATION
   between a file and its surroundings, the surroundings belong in the key.
+- **…and the QUESTION belongs in the key too.** Same store, measured
+  2026-08-12: adding `imports` (which `.dth` each network imports) taught the
+  scan to answer something new, but the key still described only the inputs —
+  so every existing entry stayed "fresh" while answering the new question with
+  an empty list. The reader treats empty as "not known" (correctly — an
+  unscanned project must never be dropped on ignorance), so the feature was
+  dead on every machine that had ever scanned, with no way out: no `.hip`,
+  export root or HDA had changed. `SCAN_ANSWER_VERSION` is a component of
+  `scanCacheKey` now — **bump it whenever the scan starts reporting a new
+  field.** A new field is a new question, and a cache that can't tell the
+  question changed will serve the old answer forever.
+- **Two sides comparing "the same" path can normalize differently — so a
+  no-match is not evidence.** 456.py folds `.dth` import paths through
+  `os.path.realpath` (mapped drive → UNC, the retired junction spellings old
+  `.hip`s still store); the cached scan's `_scene_dth_imports` uses
+  `os.path.normpath` (a stored verdict must not bake one machine's mount
+  layout in) and the TS `sceneDthPath` resolves nothing physical at all. Two
+  spellings the RUN happily folds together therefore compare unequal in the
+  DTH Export dialog. The rule that reads them (`hipsForSelectedScenes`) only
+  drops a project on a POSITIVE match against a deselected scene; "matches
+  nothing" keeps whatever is ticked. The general shape: when a comparison
+  crosses a normalization boundary, only a match carries information — a
+  mismatch is indistinguishable from a vocabulary difference, and acting on it
+  is ignorance wearing knowledge's clothes.
+- **One global side-channel file needs clearing by every writer of the thing it
+  describes, not just the one that fills it.** `export-progress.log` is a
+  single app-data file and the poll serves it to whatever batch is live — but
+  only the export handoff truncated it, so a project scan or a scene ROM build
+  (both `bulk-export` job files, both adopted for display by every character
+  editor) rendered the FINISHED export's percent, scene and log tail as their
+  own progress. `resetExportProgressLog` runs at all four handoffs now; only
+  one of them also arms `progressLogPath`.
 - **A plan that also GATES a button has to count everything the action fixes.**
   `planRepath` decides both what the Utils repath would do and whether the button
   is clickable (empty `targets` = disabled). It counted absolute-collapsible and
@@ -551,6 +592,46 @@ current code before relying on details, but assume the *lesson* still holds.
   string parms (`import_skinning_method` is a menu, where a default and a
   deliberate choice are indistinguishable — generation sets it, the repair
   doesn't).
+- **Writing a parm is not the same as CHOOSING it: `parm.set()` never runs the
+  parm's callback.** USER-REPORTED 2026-08-12: a generated project held every
+  import path correctly and still showed the Alembic on the wrong rest frame,
+  and clearing the fields + re-picking the `.dth` through the file browser
+  fixed it — because that browser fires the parm's callback, which offers to
+  auto-fill the siblings and then actually READS the files. The studio wrote
+  those paths with `parm.set()` in both places that prefill (the generation
+  snippet in `houdini.rs`, `op_prefill` in material_utils.py), so the load
+  never happened. Both now `pressButton()` the `.dth` parm — Houdini's way of
+  running a callback from code — with `hou.ui` stubbed to answer the prompt
+  (headless has no `hou.ui` at all; a GUI would wait forever on the click),
+  and only when the file EXISTS: a project generated before the Daz export ran
+  has nothing to load. The generic prefill then fills only what the HDA left
+  blank, so the tool's own answers win over the studio's guesses. General
+  shape: when an app offers a UI action for a value you are setting, ask what
+  that action does BESIDES setting it — the difference is what a scripted
+  write silently skips. **MEASURED in hython 2026-08-12** — a probe that read
+  the parm templates, fired the callback and inspected the saved scene:
+  - the `.dth` parm's callback is `do_autoload_files`: it asks the Yes/No
+    question, reads the JSON, fills name/fbx/abc, then calls `do_reload_files`
+    — which presses the fbx + alembic reload buttons, reads the Alembic's own
+    start/end out of its info tree, sets the playbar range and
+    `hou.setFrame(0)`. THAT is the "rest pose frame". The alembic parm carries
+    `do_reload_files` as well; fbx and ROM-fbx have no callback at all; the
+    panel's "Reload Files" button is `import_reload`.
+  - `pressButton()` runs a non-button parm's callback but does NOT propagate
+    its errors: a callback that throws prints a traceback and returns
+    normally, so an `except Exception` around it proves nothing about success.
+  - **the exists() guard has to run where `$HIP` is real.** Generation clears
+    the scene and saves only at the END, so during the prefill `$HIP` is still
+    Houdini's default and `$HIP/daz-export/…` expands to a path that isn't
+    there — the guard then refuses to fire, which is exactly how the first fix
+    shipped as a silent no-op. Save FIRST, fire, save again (the second save
+    persists the frame range and frame the callback set). Verified end to end:
+    the generated scene goes from `frame=1, range=[1,300]` to `frame=0,
+    range=[0,240]`.
+  - the autoload rewrites the sibling paths ABSOLUTE, undoing the `$HIP/…`
+    form that lets the character folder move. The studio re-applies its own
+    values afterwards with a plain `set()` — the files are loaded by then, and
+    an equivalent path resolves to the same bytes.
 - **`$JOB` is SCENE state saved inside the `.hip`, and a load OVERWRITES the
   process value — so it leaks between files in one hython run.** Measured
   2026-08-07: seeding a sentinel then loading a project replaced it with that

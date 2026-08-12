@@ -23,6 +23,20 @@ const launches: Array<string> = []
 const dazRunningAsked: Array<string> = []
 /** Lower-cased paths whose `remove` fails, as a file locked by Daz would. */
 const lockedForRemove = new Set<string>()
+/** Lower-cased paths whose `remove` STALLS until released — a slow delete
+ *  (a retried lock, a scanner holding the handle) made deterministic, so an
+ *  ordering bug can't hide behind "the fast path happened to win". */
+const stalledRemoves = new Map<string, Promise<void>>()
+function stallRemove(path: string): () => void {
+  let release = (): void => {}
+  stalledRemoves.set(
+    norm(path).toLowerCase(),
+    new Promise<void>((resolve) => {
+      release = () => resolve()
+    }),
+  )
+  return release
+}
 
 function norm(p: string): string {
   return p.replace(/\\/g, '/').replace(/\/+$/g, '')
@@ -69,6 +83,11 @@ vi.mock('@tauri-apps/plugin-fs', () => ({
   },
   async remove(p: string, opts?: { recursive?: boolean }) {
     const t = norm(p).toLowerCase()
+    const stall = stalledRemoves.get(t)
+    if (stall) {
+      stalledRemoves.delete(t)
+      await stall
+    }
     // A locked file (open in Daz) is the failure this action actually meets.
     if (lockedForRemove.has(t)) throw new Error(`EBUSY ${p}`)
     for (const k of [...files.keys()]) {
@@ -191,14 +210,18 @@ function seedClaimedWorked(): void {
   )
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   files.clear()
   dirs.clear()
   launches.length = 0
   dazRunningAsked.length = 0
   lockedForRemove.clear()
+  stalledRemoves.clear()
   dazRunning = false
-  dismissExportRun()
+  // Awaited: the dismiss also retires the run sidecar, and a test that seeds
+  // one by hand must not race that delete. (The app never has to — the chain
+  // orders a delete against a following handoff by itself.)
+  await dismissExportRun()
   files.set('/appdata/settings.json', JSON.stringify({ dazLibraryFolder: '/daz' }))
 })
 
@@ -348,6 +371,142 @@ describe('launchDazForPendingJobs — the reclaim owner', () => {
   it('nothing pending, nothing claimed → nothing to do', async () => {
     await expect(launchDazForPendingJobs()).resolves.toBe(false)
     expect(launches).toHaveLength(0)
+  })
+})
+
+describe('the run sidecar is written and retired in CALL order', () => {
+  it("a dismiss's in-flight delete cannot eat the next handoff's sidecar", async () => {
+    // The abort path: dismissExportRun() drops the watch and schedules the
+    // sidecar delete WITHOUT awaiting it (its UI callers are synchronous). If
+    // that delete were free to land whenever, a user starting the next export
+    // straight afterwards would silently lose the new run's reload survival —
+    // the sidecar would be gone and the reloaded window would fall back to the
+    // display-only adoption. Both operations queue on one chain, so the later
+    // write wins however the promises interleave.
+    //
+    // The delete is STALLED so this is a real ordering assertion and not a
+    // lucky race: unserialised, it resumes long after the handoff has written
+    // the new sidecar and deletes it.
+    const releaseDelete = stallRemove('/appdata/export-run.json')
+    const dismissed = dismissExportRun() // deliberately NOT awaited yet
+    // Released on a TIMER, not after the handoff: everything the handoff does
+    // is in-memory here, so unserialised it finishes and writes the new
+    // sidecar within a microtask or two — and the delete then resumes on top
+    // of it. Serialised, the handoff simply queues behind the delete and its
+    // write lands after, which is the whole point.
+    const timer = setTimeout(releaseDelete, 50)
+    await armClaimedRun()
+    await dismissed
+    clearTimeout(timer)
+
+    const sidecar = files.get('/appdata/export-run.json')
+    expect(sidecar).toBeDefined()
+    expect(JSON.parse(sidecar!)).toMatchObject({ characterId: 'c1', total: 1 })
+  })
+
+  it('the run ending retires it — a later poll must not restore a dead watch', async () => {
+    await armClaimedRun()
+    expect(files.has('/appdata/export-run.json')).toBe(true)
+    await dismissExportRun()
+    expect(files.has('/appdata/export-run.json')).toBe(false)
+    // A fresh window polling as the character's own editor finds nothing to
+    // restore, so it cannot resurrect the dismissed run.
+    dazRunning = true
+    const run = await fetchExportRunProgress('c1')
+    expect(run === null || run.characterId === '').toBe(true)
+  })
+})
+
+describe('sidecar restore — the run OWNER reloads mid-batch', () => {
+  it("the character's own editor restores the full watch: clock, plan, ownership", async () => {
+    dazRunning = true
+    files.set(
+      RUNNING,
+      JSON.stringify({
+        version: 1,
+        type: 'bulk-export',
+        progress: 40,
+        jobsDone: 0,
+        jobs: [{ scenePath: SCENE, scriptPath: SCRIPT, status: 'running' }],
+      }),
+    )
+    files.set(
+      '/appdata/export-run.json',
+      JSON.stringify({
+        characterId: 'c1',
+        total: 1,
+        startedAtMs: 1_754_000_000_000,
+        houdiniProjects: ['/games/P/Ita/houdini/Ita.hip'],
+        houdiniMode: 'export-selected',
+        scenes: [SCENE],
+      }),
+    )
+
+    // A sentinel/other watcher gets the display-only adoption…
+    const foreign = await fetchExportRunProgress()
+    expect(foreign).toMatchObject({ state: 'running', characterId: '' })
+
+    // …the owning character's editor gets its run BACK, whole: the persisted
+    // start time (the clock), the rows and the Houdini plan (the cards), and
+    // ownership — the finish report + continuation will fire here.
+    const run = await fetchExportRunProgress('c1')
+    expect(run).toMatchObject({
+      state: 'running',
+      characterId: 'c1',
+      startedAtMs: 1_754_000_000_000,
+      houdiniProjects: ['/games/P/Ita/houdini/Ita.hip'],
+      scenes: [SCENE],
+      rows: [{ scenePath: SCENE, status: 'running' }],
+    })
+  })
+})
+
+describe('display-only adoption — a window with no memory of starting the run', () => {
+  it('serves the job rows + the progress-log view, so the panel can rebuild itself', async () => {
+    // A live batch on disk, NO armed watch (a reloaded window mid-run).
+    dazRunning = true
+    const beach = `${PROJECT}/Ita/daz3d/Beach.duf`
+    files.set(
+      RUNNING,
+      JSON.stringify({
+        version: 1,
+        type: 'bulk-export',
+        progress: 40,
+        jobsDone: 0,
+        jobs: [
+          { scenePath: SCENE, scriptPath: SCRIPT, status: 'running' },
+          { scenePath: beach, scriptPath: SCRIPT, status: 'pending' },
+        ],
+      }),
+    )
+    files.set(
+      '/appdata/export-progress.log',
+      '[0] Ita: opening scene\n[20] Ita: scene opened\n[40] Ita: ROM generated\n',
+    )
+
+    const run = await fetchExportRunProgress()
+    // The batch's identity survives in the file's own rows (→ the task cards)
+    // and the progress log is the same global singleton (→ log window, meter).
+    expect(run).toMatchObject({
+      state: 'running',
+      characterId: '',
+      total: 2,
+      rows: [
+        { scenePath: SCENE, status: 'running' },
+        { scenePath: beach, status: 'pending' },
+      ],
+    })
+    expect(run?.state === 'running' && run.step?.percent).toBe(40)
+    // The scene-open lines carry the file name, resolved from the job rows'
+    // own scene paths (the log line carries only the stem).
+    expect(run?.state === 'running' && run.step?.lines).toEqual([
+      'opening scene Ita.duf',
+      'scene opened Ita.duf',
+      'ROM generated',
+    ])
+    // What honestly cannot come back: the start time only ever lived in the
+    // starting window's memory — the clock stays off.
+    expect(run?.state === 'running' ? run.startedAtMs : 'not-running').toBeUndefined()
   })
 })
 

@@ -127,6 +127,11 @@ export interface ExporterJob {
   /** Absolute path of the `.dsa` script to run in that scene. Empty only on an
    *  `open-scene` row, where nothing is executed. */
   scriptPath: string
+  /** How many equal steps this row's export comprises — the per-scene percent
+   *  scale of the verbose progress log (Runner v1.2.0; see
+   *  {@link jobStepsForMode}). Absent = the Runner writes 0/100 boundary
+   *  lines only. */
+  steps?: number
 }
 
 /** One job row in the JSON job file — the Runner updates `status`/`error` as
@@ -152,6 +157,11 @@ export interface ExporterJobFile {
    *  every rewrite; absent on the studio-written pending file and on older
    *  Runners (the reader then derives it from the row statuses). */
   jobsDone?: number
+  /** The verbose per-scene progress log (Runner v1.2.0): when present the
+   *  Runner truncates this file at batch start and appends
+   *  `[<percent>] <message>` lines; the generated export script appends the
+   *  interior steps to the same file. Older Runners ignore the field. */
+  progressLogPath?: string
   jobs: Array<ExporterJobEntry>
 }
 
@@ -184,14 +194,156 @@ export function normalizeSceneKey(scenePath: string): string {
 export function jobFileJson(
   jobs: Array<ExporterJob>,
   type: ExporterJobType = 'bulk-export',
+  /** Arms the Runner's verbose progress log (v1.2.0) — see {@link ExporterJobFile}. */
+  progressLogPath?: string,
 ): string {
   const file: ExporterJobFile = {
     version: 1,
     type,
     progress: 0,
+    ...(progressLogPath ? { progressLogPath } : {}),
     jobs: jobs.map((job) => ({ ...job, status: 'pending' as const })),
   }
   return `${JSON.stringify(file, null, 2)}\n`
+}
+
+// --- The verbose progress log (Runner v1.2.0) --------------------------------
+
+/** The progress log's app-data file name — ONE file, truncated by the Runner at
+ *  every batch start (and by the studio at every handoff), so it can never
+ *  accrete: the housekeeping bound is the file itself. */
+export const EXPORT_PROGRESS_FILE = 'export-progress.log'
+
+/**
+ * How many equal steps a mode's job row comprises — the per-scene percent
+ * scale both writers share: the Runner reports the scene OPEN (step 1) and the
+ * terminal done/failed, the generated script the interior steps.
+ *
+ *  - rom+export (5): open / generate ROM / export character / export hair /
+ *    deliver the PoseAsset CSV
+ *  - export-only (4): the same minus the ROM build
+ *  - rom-only (2): open / generate + save the ROM
+ */
+export function jobStepsForMode(mode: ExportMode): number {
+  if (mode === 'rom-only') return 2
+  if (mode === 'export-only') return 4
+  return 5
+}
+
+export interface ExportProgressLine {
+  /** 0–100, per scene (each `[0] <scene>: opening scene` starts a new scene). */
+  percent: number
+  message: string
+}
+
+/** Parse the progress log's text — `[<percent>] <message>` per line, anything
+ *  else ignored (tolerant: the file is read while it is being appended to). */
+export function parseExportProgressLog(text: string): Array<ExportProgressLine> {
+  const lines: Array<ExportProgressLine> = []
+  for (const raw of text.split(/\r?\n/)) {
+    const match = /^\[(\d{1,3})\]\s+(.*\S)\s*$/.exec(raw)
+    if (!match) continue
+    lines.push({ percent: Math.min(100, Number(match[1])), message: match[2] })
+  }
+  return lines
+}
+
+/** The live view the UI shows of a progress log: the newest line's percent +
+ *  message, WHICH scene it belongs to (the `<stem>: ` message prefix; '' for
+ *  batch-level lines), and the capped message tail for the log window.
+ *  `message` and `lines` are display-clean: no percent bracket, no scene
+ *  prefix — the scene shows on the active task card and the percent on the
+ *  meter, so repeating them per line was pure noise. */
+export interface ExportProgressState {
+  percent: number
+  message: string
+  scene: string
+  lines: Array<string>
+}
+
+/** `<stem>: message` → `message` (the display carries the scene elsewhere). */
+function stripSceneMessagePrefix(message: string): string {
+  return /^.+?:\s+(.*)$/.exec(message)?.[1] ?? message
+}
+
+/** The two SCENE-OPEN steps name the file they opened — the only lines where
+ *  the scene is the news (the rest all happen to the scene the card already
+ *  shows, and a per-scene run works several of them in a row). */
+const SCENE_OPEN_MESSAGES: ReadonlySet<string> = new Set(['opening scene', 'scene opened'])
+
+/** First-seen stamps for a rolling/appending line tail, carried across polls
+ *  by the caller. */
+export interface StampedLogStore {
+  lines: Array<string>
+  stamps: Array<string>
+}
+
+/**
+ * Prefix each log line with the `[HH:MM:SS]` at which the STUDIO first saw it
+ * (the on-disk log carries no timestamps — poll-first-seen is the honest
+ * approximation, so several lines landing in one poll share a stamp). `store`
+ * keeps the stamps across polls; both legs' tails only ever extend at the end
+ * (and roll off the front), so the previous tail is re-anchored by its LAST
+ * line and everything beyond it is new. An empty `next` resets the store.
+ */
+export function stampLogLines(
+  store: StampedLogStore,
+  next: Array<string>,
+  now: string,
+): Array<string> {
+  if (next.length === 0) {
+    store.lines = []
+    store.stamps = []
+    return []
+  }
+  let overlap = 0
+  if (store.lines.length > 0) {
+    const lastPrev = store.lines[store.lines.length - 1]
+    for (let i = next.length - 1; i >= 0; i--) {
+      if (next[i] === lastPrev) {
+        overlap = i + 1
+        break
+      }
+    }
+  }
+  const stamps: Array<string> = []
+  for (let i = 0; i < next.length; i++) {
+    stamps.push(i < overlap ? (store.stamps[store.lines.length - overlap + i] ?? now) : now)
+  }
+  store.lines = [...next]
+  store.stamps = stamps
+  return next.map((line, i) => `[${stamps[i]}] ${line}`)
+}
+
+export function exportProgressStateFrom(
+  parsed: Array<ExportProgressLine>,
+  keep = 40,
+  /** Scene paths of the batch's job rows — the scene-open lines are rendered
+   *  with the real FILE NAME resolved from these (the log itself carries only
+   *  the stem, and guessing an extension would be a lie). A stem with no row
+   *  falls back to the stem. */
+  scenePaths: ReadonlyArray<string> = [],
+): ExportProgressState | null {
+  if (parsed.length === 0) return null
+  const fileNameByStem = new Map<string, string>()
+  for (const path of scenePaths) {
+    const fileName = path.split(/[\\/]/).pop() ?? ''
+    if (fileName) fileNameByStem.set(fileName.replace(/\.[^./\\]+$/, ''), fileName)
+  }
+  const display = (message: string): string => {
+    const stem = /^(.+?):\s/.exec(message)?.[1] ?? ''
+    const text = stripSceneMessagePrefix(message)
+    if (!stem || !SCENE_OPEN_MESSAGES.has(text)) return text
+    return `${text} ${fileNameByStem.get(stem) ?? stem}`
+  }
+  const last = parsed[parsed.length - 1]
+  const scene = /^(.+?):\s/.exec(last.message)?.[1] ?? ''
+  return {
+    percent: last.percent,
+    message: display(last.message),
+    scene,
+    lines: parsed.slice(-keep).map((line) => display(line.message)),
+  }
 }
 
 /**
@@ -290,6 +442,82 @@ export function hipSelectionAfterToggle(
   return mode === 'rom-only' ? new Set([hip]) : new Set([...prev, hip])
 }
 
+/** What one linked Houdini project imports, as the scan recorded it. */
+export interface HoudiniProjectImports {
+  hipPath: string
+  /** Every `.dth` its networks import (normalized lowercase) — EMPTY means
+   *  "never scanned / not known", never "imports nothing": the scan only
+   *  reaches projects inside the character folder, and a `.hip` saved since
+   *  the last sweep reads as unscanned until it catches up. */
+  imports: ReadonlyArray<string>
+}
+
+/** One spelling for comparing `.dth` paths across the TS/scan boundary. */
+function dthKey(path: string): string {
+  return path.trim().replace(/\\/g, '/').toLowerCase()
+}
+
+/**
+ * THE "which projects does this scene selection involve" rule.
+ *
+ * A project JOINS the run when at least one of its networks imports the `.dth`
+ * of a SELECTED scene, and LEAVES it when its imports demonstrably name only
+ * DESELECTED ones. Names are deliberately not consulted: users rename networks
+ * and copy projects between characters.
+ *
+ * Three fallbacks, all erring toward keeping a project rather than silently
+ * dropping it — a wrongly-kept project no-ops in Houdini (456.py exports only
+ * the networks matching the job), a wrongly-dropped one silently skips the
+ * Houdini half of a run the user asked for:
+ *
+ * - a project with NO recorded imports (never scanned, or scanned before that
+ *   field existed) keeps whatever the user currently has;
+ * - a project whose imports match NEITHER the selected nor the deselected
+ *   scenes keeps it too. That is not "imports nothing of this character" — it
+ *   is the studio and the project failing to speak the same path. 456.py
+ *   compares through `os.path.realpath` (folding mapped drives to UNC and the
+ *   retired junction spellings old `.hip`s still store); the scan's
+ *   `_scene_dth_imports` normalizes with `os.path.normpath` and `sceneDthPath`
+ *   resolves nothing at all, so two spellings 456.py would happily fold
+ *   together compare unequal HERE. Dropping on that is ignorance wearing
+ *   knowledge's clothes — the one guess this rule exists to refuse;
+ * - with nothing selected there is nothing to join, so nothing is implied.
+ *
+ * Paths come in any spelling — compared normalized ({@link dthKey}).
+ */
+export function hipsForSelectedScenes(
+  hips: ReadonlyArray<HoudiniProjectImports>,
+  /** The selected scenes' `.dth` paths (see `sceneDthPath`). */
+  scenesDth: ReadonlyArray<string>,
+  /** What is ticked right now — the answer whenever the studio cannot tell. */
+  current: ReadonlySet<string>,
+  /** The character's OTHER linked scenes' `.dth` paths — the ones NOT selected.
+   *  Only an import naming one of these earns a drop; see the doc above. */
+  deselectedDth: ReadonlyArray<string> = [],
+): Set<string> {
+  const wanted = new Set(scenesDth.map(dthKey).filter(Boolean))
+  const dropped = new Set(deselectedDth.map(dthKey).filter(Boolean))
+  const next = new Set<string>()
+  for (const hip of hips) {
+    const keep = (): void => {
+      if (current.has(hip.hipPath)) next.add(hip.hipPath)
+    }
+    if (hip.imports.length === 0) {
+      keep()
+      continue
+    }
+    const keys = hip.imports.map(dthKey)
+    if (keys.some((dth) => wanted.has(dth))) {
+      next.add(hip.hipPath)
+      continue
+    }
+    // Its imports name a scene the user unticked → a real "this project is
+    // about that scene, which is out". Anything else is not knowledge.
+    if (!keys.some((dth) => dropped.has(dth))) keep()
+  }
+  return next
+}
+
 /**
  * The hidden generated script a mode's job rows run — each selects the open
  * scene's overrides itself, so one script serves every scene:
@@ -380,10 +608,21 @@ export function preCheckedScenes(
   )
 }
 
+/** Digital-clock elapsed time for the live buttons and the meter's per-step
+ *  tick — all four digits always rendered ("00:01", "12:34"), so the label
+ *  never resizes; an hour-plus run grows to "1:02:03". */
+export function formatClock(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000))
+  const seconds = String(totalSeconds % 60).padStart(2, '0')
+  const minutes = String(Math.floor(totalSeconds / 60) % 60).padStart(2, '0')
+  const hours = Math.floor(totalSeconds / 3600)
+  return hours > 0 ? `${hours}:${minutes}:${seconds}` : `${minutes}:${seconds}`
+}
+
 /**
- * A run duration for humans — the export button's live clock and the finish
- * toast's total: `"37s"`, `"4m 12s"`, `"1h 03m"`. Sub-second runs still read
- * `"0s"` rather than vanishing. Pure so the three widths are pinned by tests.
+ * A run duration for humans — the finish toast's total: `"37s"`, `"4m 12s"`,
+ * `"1h 03m"`. Sub-second runs still read `"0s"` rather than vanishing. Pure so
+ * the three widths are pinned by tests.
  */
 export function formatElapsed(ms: number): string {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000))
@@ -719,7 +958,22 @@ export function parseJobFileJson(text: string): ExporterJobFile | null {
       typeof raw.jobsDone === 'number'
         ? Math.max(0, Math.min(jobs.length, Math.floor(raw.jobsDone)))
         : undefined
-    return { version: 1, type, progress, ...(jobsDone !== undefined ? { jobsDone } : {}), jobs }
+    // Carried through rather than dropped: the field is part of the shape this
+    // module WRITES, so a reader that trusts {@link ExporterJobFile} must not
+    // get `undefined` for a file that plainly has it. Absent on every handoff
+    // that arms no log, and on the rewrite of a pre-v1.2.0 Runner.
+    const progressLogPath =
+      typeof raw.progressLogPath === 'string' && raw.progressLogPath !== ''
+        ? raw.progressLogPath
+        : undefined
+    return {
+      version: 1,
+      type,
+      progress,
+      ...(jobsDone !== undefined ? { jobsDone } : {}),
+      ...(progressLogPath !== undefined ? { progressLogPath } : {}),
+      jobs,
+    }
   } catch {
     return null
   }

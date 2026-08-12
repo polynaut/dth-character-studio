@@ -14,16 +14,33 @@ import type { Character } from '@dth/rom'
  * results back, the studio polls. Same shape, same failure story, so there is
  * one handoff pattern in this codebase rather than two.
  *
- * Houdini's half is `houdini-runtime/456.py`, which Houdini runs after a scene
- * loads when the studio's scripts folder is on HOUDINI_SCRIPT_PATH. The job path
- * travels in the `DTH_HOUDINI_JOB` environment variable, set only on the process
- * the studio spawns.
+ * Houdini's half is `houdini-runtime/456.py`, run HEADLESS: the studio spawns
+ * `hython headless_export.py`, which loads the `.hip` and execs 456.py exactly
+ * once. The job path travels in the `DTH_HOUDINI_JOB` environment variable,
+ * set only on the process the studio spawns. Deliberately NOT via
+ * HOUDINI_SCRIPT_PATH — Houdini runs a 456.py found there on the startup
+ * EMPTY scene too, which consumed the job before the project loaded (measured
+ * 2026-08-11, the first headless run).
  */
 
 /** Job + result file names, written into the character's folder beside the
  *  other dot-prefixed studio bookkeeping. */
 export const HOUDINI_JOB_FILE = '.dth_houdini_job.json'
 export const HOUDINI_RESULT_FILE = '.dth_houdini_result.json'
+
+/** The headless run's console log (hython's full stdout+stderr, redirected by
+ *  the Rust spawn — the C++ cook chatter the in-process tee can never see).
+ *  One file per character, OVERWRITTEN each run and deliberately NOT cleared
+ *  with the job/result: it is the diagnosis channel for a run that reports
+ *  something puzzling (the first headless run's bare "nothing to export"
+ *  proved that the hard way), and one bounded file per character is exactly
+ *  the retention the housekeeping rule asks for. */
+export const HOUDINI_CONSOLE_FILE = '.dth_houdini_console.log'
+
+/** The hython bootstrap (`headless_export.py`) written beside `456.py` into
+ *  the app-data scripts folder before every launch — loads the `.hip`, then
+ *  runs `456.py` exactly once (see its docstring). */
+export const HOUDINI_HEADLESS_RUNNER = 'headless_export.py'
 
 /** The env var 456.py reads the job path from ('' = do nothing at all). */
 export const HOUDINI_JOB_ENV = 'DTH_HOUDINI_JOB'
@@ -32,21 +49,6 @@ export const HOUDINI_JOB_ENV = 'DTH_HOUDINI_JOB'
  *  NOT installed once and forgotten: the file is rewritten every run, so a
  *  deleted or half-written copy repairs itself and an app update always wins. */
 export const HOUDINI_SCRIPTS_FOLDER = 'houdini-scripts'
-
-/**
- * What to set `HOUDINI_SCRIPT_PATH` to so Houdini runs OUR `456.py` after a
- * scene loads — `<our folder>;&`.
- *
- * The `&` is load-bearing and easy to miss: in a Houdini path variable it
- * stands for the path Houdini would have used by itself. Setting the variable
- * to our folder ALONE replaces the default, which would silently disable the
- * user's own startup scripts (and Houdini's) for the whole session. Windows
- * separates entries with `;`.
- */
-export function houdiniScriptPathValue(scriptsDir: string): string {
-  const dir = stripTrailingSeparators(scriptsDir.trim().replace(/\\/g, '/'))
-  return dir ? `${dir};&` : '&'
-}
 
 export interface HoudiniJobScene {
   /**
@@ -95,8 +97,28 @@ export const houdiniNodeResultSchema = z.object({
   problems: z.array(z.string()).default([]),
   error: z.string().default(''),
   seconds: z.number().default(0),
+  /** The tail of what the HDA emitted while THIS node exported (456.py's
+   *  ActivityCapture: stdout/stderr/status-bar, capped) — the per-node record
+   *  after the live `activity` window has moved on. */
+  log: z.array(z.string()).default([]),
 })
 export type HoudiniNodeResult = z.infer<typeof houdiniNodeResultSchema>
+
+/** The live mid-node channel: what the HDA is saying WHILE one export node's
+ *  synchronous `do_export` runs (456.py streams its captured stdout/status-bar
+ *  lines here, throttled + capped). Present only while a node is exporting. */
+export const houdiniActivitySchema = z.object({
+  node: z.string().default(''),
+  /** The scene label the node belongs to — what the studio shows. */
+  scene: z.string().default(''),
+  /** The `.dth` the node's network imports — which export set it works through. */
+  dth: z.string().default(''),
+  /** Rolling tail, oldest first. */
+  lines: z.array(z.string()).default([]),
+  startedAtMs: z.number().default(0),
+  updatedAtMs: z.number().default(0),
+})
+export type HoudiniActivity = z.infer<typeof houdiniActivitySchema>
 
 /** Tolerant: the file is read WHILE it's being written to, so every field
  *  carries a default and an unknown extra is ignored rather than fatal. */
@@ -107,6 +129,7 @@ export const houdiniResultSchema = z.object({
   done: z.number().default(0),
   nodes: z.array(houdiniNodeResultSchema).default([]),
   error: z.string().default(''),
+  activity: houdiniActivitySchema.optional(),
 })
 export type HoudiniResult = z.infer<typeof houdiniResultSchema>
 
@@ -326,7 +349,15 @@ export type HoudiniRunState =
    *  time lives on the in-memory watch, not in the result file) — the pure
    *  {@link houdiniRunStateFrom} never sets them. */
   | { state: 'starting'; startedAtMs?: number }
-  | { state: 'running'; done: number; total: number; startedAtMs?: number }
+  | {
+      state: 'running'
+      done: number
+      total: number
+      startedAtMs?: number
+      /** The live mid-node channel, when 456.py has streamed any — what the
+       *  currently exporting node is SAYING (see {@link houdiniActivitySchema}). */
+      activity?: HoudiniActivity
+    }
   | {
       state: 'finished'
       ok: number
@@ -351,7 +382,16 @@ export function houdiniRunStateFrom(
   if (!result) return houdiniRunning ? { state: 'starting' } : { state: 'dead' }
   if (result.state === 'running') {
     if (!houdiniRunning) return { state: 'dead' }
-    return { state: 'running', done: result.done, total: result.total }
+    return {
+      state: 'running',
+      done: result.done,
+      total: result.total,
+      // Only a channel with something to say rides along — an empty one would
+      // make the UI clear its "last activity" line between nodes for nothing.
+      ...(result.activity && result.activity.lines.length > 0
+        ? { activity: result.activity }
+        : {}),
+    }
   }
   const counts = { ok: 0, skipped: 0, failed: 0 }
   for (const node of result.nodes) counts[node.status] += 1
@@ -388,6 +428,8 @@ export function houdiniRunFilesToClear(options: {
 }): Array<string> {
   if (options.state !== 'finished' && options.state !== 'dead') return []
   if (!options.hasResult) return []
+  // The console log ({@link HOUDINI_CONSOLE_FILE}) is deliberately NOT in this
+  // list — see its doc: it survives as the last run's diagnosis channel.
   return [options.resultPath, options.jobPath].filter(Boolean)
 }
 

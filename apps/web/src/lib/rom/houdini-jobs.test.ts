@@ -8,7 +8,6 @@ import {
   houdiniResultSummary,
   houdiniRunFilesToClear,
   houdiniRunStateFrom,
-  houdiniScriptPathValue,
   parseHoudiniResult,
   sceneDthPath,
 } from './houdini-jobs.ts'
@@ -45,6 +44,18 @@ describe('sceneDthPath — the match key handed to Houdini', () => {
     expect(sceneDthPath(kira(), EXTRA, ROOT)).toBe(
       'X:/p/Kira/houdini/daz-export/summertide/Kira_Summertide.dth',
     )
+  })
+
+  it('WITHOUT the scenes root a subfoldered scene falls back to its file stem', () => {
+    // Not a nicety — measured 2026-08-12. A scene inside `daz3d/primary/`
+    // exports to `daz-export/primary/`, and deriving that "primary" needs the
+    // scenes ROOT (which needs the project's dazSubdir, i.e. resolution only
+    // the api layer can do). Called without it, the folder falls back to the
+    // scene's file stem, so the path names a folder no export ever wrote —
+    // which is exactly how the DTH Export dialog's scene→project matching
+    // silently matched nothing until `fetchSceneDthPaths` resolved it there.
+    expect(sceneDthPath(kira(), PRIMARY)).toBe('X:/p/Kira/houdini/daz-export/Kira/Kira.dth')
+    expect(sceneDthPath(kira(), PRIMARY)).not.toBe(sceneDthPath(kira(), PRIMARY, ROOT))
   })
 
   it('resolves a RAW stored scene path, not only a normalized key', () => {
@@ -264,27 +275,6 @@ describe('houdiniResultSummary', () => {
   })
 })
 
-describe('HOUDINI_SCRIPT_PATH composition', () => {
-  it('keeps Houdini’s own default path with a trailing &', () => {
-    // Without the `&` the variable REPLACES Houdini's default script path, and
-    // the user's own startup scripts silently stop running for the session.
-    expect(houdiniScriptPathValue('C:/Users/x/AppData/Local/dth/houdini-scripts')).toBe(
-      'C:/Users/x/AppData/Local/dth/houdini-scripts;&',
-    )
-  })
-
-  it('normalises separators and a trailing slash', () => {
-    expect(houdiniScriptPathValue('C:\\Users\\x\\dth\\houdini-scripts\\')).toBe(
-      'C:/Users/x/dth/houdini-scripts;&',
-    )
-  })
-
-  it('degrades to the default path alone rather than emitting an empty entry', () => {
-    expect(houdiniScriptPathValue('')).toBe('&')
-    expect(houdiniScriptPathValue('   ')).toBe('&')
-  })
-})
-
 describe('houdiniRunStateFrom', () => {
   const result = (over: Record<string, unknown>) =>
     parseHoudiniResult(JSON.stringify({ state: 'running', total: 3, done: 1, ...over }))!
@@ -301,6 +291,51 @@ describe('houdiniRunStateFrom', () => {
 
   it('reports node progress while the run works', () => {
     expect(houdiniRunStateFrom(result({}), true)).toEqual({ state: 'running', done: 1, total: 3 })
+  })
+
+  it('carries the live mid-node activity — only when it has something to say', () => {
+    // 456.py streams the HDA's own output (stdout/status bar) into the result
+    // while a node's synchronous do_export runs — the studio's only window
+    // into the minutes-long call.
+    const withActivity = result({
+      activity: {
+        node: '/obj/DazToHue1/export',
+        scene: 'KiraDefault',
+        dth: 'X:/p/Kira/houdini/daz-export/primary/Kira.dth',
+        lines: ['Baking textures…', 'Exporting FBX…'],
+        startedAtMs: 100,
+        updatedAtMs: 123,
+      },
+    })
+    expect(houdiniRunStateFrom(withActivity, true)).toEqual({
+      state: 'running',
+      done: 1,
+      total: 3,
+      activity: {
+        node: '/obj/DazToHue1/export',
+        scene: 'KiraDefault',
+        dth: 'X:/p/Kira/houdini/daz-export/primary/Kira.dth',
+        lines: ['Baking textures…', 'Exporting FBX…'],
+        startedAtMs: 100,
+        updatedAtMs: 123,
+      },
+    })
+    // An EMPTY channel is dropped — the UI must not clear its last-activity
+    // line between nodes for nothing.
+    const emptyActivity = result({ activity: { node: '/obj/x', scene: '', lines: [] } })
+    expect(houdiniRunStateFrom(emptyActivity, true)).toEqual({ state: 'running', done: 1, total: 3 })
+  })
+
+  it('keeps a node’s captured log tail on its report entry', () => {
+    const done = parseHoudiniResult(
+      JSON.stringify({
+        state: 'done',
+        total: 1,
+        done: 1,
+        nodes: [{ node: '/obj/a', status: 'ok', log: ['line one', 'line two'] }],
+      }),
+    )!
+    expect(done.nodes[0].log).toEqual(['line one', 'line two'])
   })
 
   it('calls a half-finished run dead once Houdini exits — the poll must not spin', () => {

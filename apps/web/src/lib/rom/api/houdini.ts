@@ -12,6 +12,8 @@ import {
   hipRefPrefixFor,
 } from '#/lib/scene-subfolder.ts'
 import {
+  HOUDINI_CONSOLE_FILE,
+  HOUDINI_HEADLESS_RUNNER,
   HOUDINI_JOB_FILE,
   HOUDINI_RESULT_FILE,
   HOUDINI_SCRIPTS_FOLDER,
@@ -19,14 +21,18 @@ import {
   buildHoudiniPrefill,
   houdiniRunFilesToClear,
   houdiniRunStateFrom,
-  houdiniScriptPathValue,
   parseHoudiniResult,
+  sceneDthPath,
 } from '../houdini-jobs'
+import { normalizeSceneKey } from '../execute-jobs'
 import type { HoudiniResult, HoudiniRunState } from '../houdini-jobs'
 import type { Character } from '@dth/rom'
 // Houdini's half of the handoff, bundled as source and written into app-data
 // before each launch (see startHoudiniExport).
 import houdiniRunnerScript from '../houdini-runtime/456.py?raw'
+// The hython bootstrap the HEADLESS launch runs: loads the .hip, then runs
+// 456.py exactly once (its docstring carries the double-run story).
+import houdiniHeadlessRunner from '../houdini-runtime/headless_export.py?raw'
 import { characterScenesRoot } from './execute'
 import { normalizeRelFolder } from '../library'
 import { DTH_FPS } from '../houdini-defaults.ts'
@@ -494,12 +500,18 @@ export interface HoudiniExportStarted {
 }
 
 /**
- * Write the job, drop `456.py` where Houdini will find it, and open the project.
+ * Write the job, drop the runner scripts where hython will find them, and
+ * start the export HEADLESS — `hython headless_export.py` loads the project
+ * and works the job; no Houdini window (flipped from the GUI launch
+ * 2026-08-11: the live progress chip replaced "watching it happen", headless
+ * kills the window/paint fragility class, and the full console — C++ cook
+ * chatter included — lands in a per-run log the in-process tee could never
+ * see). "Open only" still opens the visible GUI, through `openScene`.
  *
- * The script is rewritten on EVERY run rather than installed once: it is small,
- * it must track the app version, and a self-repairing copy needs no marker file
- * and no "reinstall the runtime" ritual (unlike the Daz runtime, which the user
- * also runs by hand from the Content Library).
+ * The scripts are rewritten on EVERY run rather than installed once: they are
+ * small, must track the app version, and a self-repairing copy needs no marker
+ * file and no "reinstall the runtime" ritual (unlike the Daz runtime, which
+ * the user also runs by hand from the Content Library).
  *
  * Throws with a user-facing message when a precondition fails: not the desktop
  * app, no Houdini install or matching prefs folder configured, the project not
@@ -517,11 +529,11 @@ export async function startHoudiniExport({
   const settings = await storage.getSettings()
   const installDir = settings.houdiniInstallFolder.trim()
   if (!installDir) {
-    throw new Error('Set the Houdini installation folder in Settings first — Export too launches Houdini.')
+    throw new Error('Set the Houdini installation folder in Settings first — Export too runs Houdini in the background.')
   }
-  const houdiniPath = joinPath(installDir.replace(/\\/g, '/'), 'bin/houdini.exe')
-  if (!(await exists(houdiniPath))) {
-    throw new Error(`Houdini was not found:\n${houdiniPath}\nCheck the Houdini installation folder in Settings.`)
+  const hythonPath = joinPath(installDir.replace(/\\/g, '/'), 'bin/hython.exe')
+  if (!(await exists(hythonPath))) {
+    throw new Error(`hython was not found:\n${hythonPath}\nCheck the Houdini installation folder in Settings.`)
   }
   // The same version-matched prefs Generate project needs: without them Houdini
   // can resolve another version's (or no) otls, and the DazToHue export nodes
@@ -587,19 +599,29 @@ export async function startHoudiniExport({
     // locked — houdiniRunStateFrom tolerates the stale read until it is rewritten
   }
 
-  // 456.py into app-data, and HOUDINI_SCRIPT_PATH pointed at that folder.
+  // Both runner scripts into app-data. Deliberately NOT on HOUDINI_SCRIPT_PATH:
+  // Houdini runs a 456.py found there on the startup EMPTY scene too (measured
+  // 2026-08-11, the first headless run — the job was consumed against the empty
+  // scene and hython exited before the project ever loaded). The bootstrap
+  // execs 456.py itself, exactly once, after the load.
   const scriptsDir = await storage.dataPath(HOUDINI_SCRIPTS_FOLDER)
   await mkdir(scriptsDir, { recursive: true })
   await storage.writeTextFileAtomic(joinPath(scriptsDir, '456.py'), houdiniRunnerScript)
+  await storage.writeTextFileAtomic(
+    joinPath(scriptsDir, HOUDINI_HEADLESS_RUNNER),
+    houdiniHeadlessRunner,
+  )
   await storage.writeTextFileAtomic(jobFile, JSON.stringify(job, null, 2))
 
+  const consolePath = joinPath(location.folderAbs, HOUDINI_CONSOLE_FILE)
   await invoke('launch_houdini_job', {
     request: {
-      houdiniPath,
+      hythonPath,
+      runnerPath: joinPath(scriptsDir, HOUDINI_HEADLESS_RUNNER),
       scenePath: linkedHip,
       jobPath: jobFile,
-      scriptPath: houdiniScriptPathValue(scriptsDir),
       houdiniPrefDir,
+      logPath: consolePath,
     },
   })
 
@@ -677,4 +699,46 @@ export async function fetchHoudiniRunProgress(): Promise<
  *  an observer only, and the export it started keeps going. */
 export function dismissHoudiniRun(): void {
   activeHoudiniRun = null
+}
+
+/**
+ * Each linked scene's expected `.dth` path, keyed by {@link normalizeSceneKey}
+ * — the identity a DazToHue network carries, and what the DTH Export dialog
+ * matches a project's recorded `imports` against.
+ *
+ * Lives HERE, not in the dialog, for one measured reason: the export folder of
+ * a scene inside a subfolder (`daz3d/primary/…`) is that subfolder, and
+ * deriving it needs the character's scenes ROOT — which needs the project's
+ * `dazSubdir`, i.e. the resolution this layer does and a component cannot.
+ * Computed in the dialog without it, every scene fell back to its file STEM
+ * (`.../daz-export/LaraCroft_G8_1_SLIM/…`) and matched no real import
+ * (`.../daz-export/primary/…`), so the auto-selection quietly never fired.
+ * The SAME `buildHoudiniJob` uses, so the dialog and the run agree by
+ * construction.
+ */
+export async function fetchSceneDthPaths({
+  data,
+}: {
+  data: unknown
+}): Promise<Record<string, string>> {
+  const { projectId, id } = charScopeInput.parse(data)
+  if (!isTauri()) return {}
+  try {
+    const project = await resolveProject(projectId)
+    const lib = charsRoot(project)
+    const location = await locateCharacter(lib, id)
+    const character = location ? await storage.getCharacter(lib, id, location.definitionAbs) : null
+    if (!location || !character) return {}
+    const scenesRootAbs = characterScenesRoot(character, location, project.dazSubdir ?? 'daz3d')
+    const paths: Record<string, string> = {}
+    for (const scene of [character.scenePath, ...character.extraScenes]) {
+      if (!scene) continue
+      const dth = sceneDthPath(character, scene, scenesRootAbs)
+      if (dth) paths[normalizeSceneKey(scene)] = dth
+    }
+    return paths
+  } catch {
+    // Read-only convenience: without it the dialog simply doesn't auto-adjust.
+    return {}
+  }
 }

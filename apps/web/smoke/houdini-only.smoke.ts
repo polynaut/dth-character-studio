@@ -51,7 +51,8 @@ function houdiniSeed(withExport: boolean) {
     houdiniInstallFolder: HOUDINI_INSTALL,
     houdiniDocsFolder: HOUDINI_DOCS,
   })
-  seed.files[`${HOUDINI_INSTALL}/bin/houdini.exe`] = 'houdini-exe-fixture'
+  // The headless launch probes hython.exe (the export leg never opens the GUI).
+  seed.files[`${HOUDINI_INSTALL}/bin/hython.exe`] = 'hython-exe-fixture'
   if (withExport) seed.files[DELIVERED_DTH] = 'dth-fixture'
   return seed
 }
@@ -103,8 +104,10 @@ test('houdini only: hands the scenes straight to Houdini — no Daz job at all',
   await page.getByRole('button', { name: 'Start' }).click()
 
   // Straight to Houdini: the job file lands with the scene's `.dth`, Houdini is
-  // launched at the linked project — and NO Daz job file was ever written.
-  await expect(page.getByText(/Houdini is opening Kira — 1 scene handed over/)).toBeVisible()
+  // launched at the linked project — and NO Daz job file was ever written. No
+  // hand-over toast (mid-run toasts read as outcomes) — the live "Working"
+  // button is the run's signal until the one end report.
+  await expect(page.getByRole('button', { name: /Working/ })).toBeVisible()
   await expect.poll(() => fileContent(page, HOUDINI_JOB), { timeout: 15_000 }).not.toBeNull()
   const job = JSON.parse((await fileContent(page, HOUDINI_JOB))!) as {
     scenes: Array<{ dth: string; label: string }>
@@ -121,6 +124,52 @@ test('houdini only: hands the scenes straight to Houdini — no Daz job at all',
   await expect(page.getByText(/Kira: 1 exported/)).toBeVisible()
   await expect.poll(() => fileKeys(page)).not.toContain(HOUDINI_JOB)
   expect(await fileKeys(page)).not.toContain(HOUDINI_RESULT)
+
+  expect(await unhandledCommands(page)).toEqual([])
+})
+
+test('the live Houdini button is inert — Ctrl is the way out of its watch', async ({ page }) => {
+  // The leg runs HEADLESS: there is no Houdini window the user could close to
+  // end a run that will not end by itself, and a plain click on the working
+  // button is deliberately ignored (a stray click used to silently drop the
+  // watch AND every project queued behind it). Ctrl is what is left, so it has
+  // to actually be there — the Daz leg's Abort has the same shape.
+  await page.addInitScript(installTauriMock, houdiniSeed(true))
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+
+  await page.getByRole('button', { name: 'DTH Export' }).click()
+  await page.locator('#daz-mode').click()
+  await page.getByRole('option', { name: /Skip Daz/ }).click()
+  await page.getByRole('button', { name: 'Start' }).click()
+  await expect(page.getByRole('button', { name: /Working/ })).toBeVisible({ timeout: 15_000 })
+
+  // A plain click changes nothing.
+  await page.getByRole('button', { name: /Working/ }).click()
+  await expect(page.getByRole('button', { name: /Working/ })).toBeVisible()
+
+  // Ctrl reveals the escape hatch…
+  await page.keyboard.down('Control')
+  await expect(page.getByRole('button', { name: 'Stop watching' })).toBeVisible()
+  // …and releasing it puts the live button back, run untouched.
+  await page.keyboard.up('Control')
+  await expect(page.getByRole('button', { name: /Working/ })).toBeVisible()
+
+  await page.keyboard.down('Control')
+  await page.getByRole('button', { name: 'Stop watching' }).click()
+  await page.keyboard.up('Control')
+
+  // The watch is gone with the whole pipeline display, and the toast is honest
+  // about what did NOT stop: the export itself, which hython owns.
+  await expect(page.getByText(/keeps running in the background/)).toBeVisible()
+  await expect(page.getByRole('button', { name: 'DTH Export' })).toBeVisible()
+  await expect(page.locator('[data-task]')).toHaveCount(0)
+  await expect(page.locator('[data-export-log]')).toHaveCount(0)
+
+  // Nothing was deleted under Houdini — its job file is still there for the
+  // run that is still working through it.
+  expect(await fileKeys(page)).toContain(HOUDINI_JOB)
 
   expect(await unhandledCommands(page)).toEqual([])
 })
