@@ -484,7 +484,10 @@ test('houdini-generate-dialog', async ({ page }) => {
   // available; the dialog opens prefilled with the same default name.
   await page.getByRole('button', { name: 'Generate project' }).click()
   const dialog = page.getByRole('dialog')
-  await expect(dialog.getByLabel('Project name')).toHaveValue('Demo_Kira')
+  // The CHARACTER's name, not `<Project>_<Character>`: a generated scene already
+  // lives inside its project's folder, so repeating the project there only made
+  // the filename longer.
+  await expect(dialog.getByLabel('Project name')).toHaveValue('Kira')
   await expect(dialog.getByLabel('Daz scene to import')).toBeVisible()
   await shoot(page, join(OUT, 'houdini-generate-dialog.png'), dialog)
 })
