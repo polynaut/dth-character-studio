@@ -1,5 +1,74 @@
 # @dth/desktop
 
+## 0.75.0
+
+### Minor Changes
+
+- [#799](https://github.com/polynaut/dth-character-studio/pull/799) [`61399b4`](https://github.com/polynaut/dth-character-studio/commit/61399b4121ab17c314d610fcc0e0038871272278) Thanks [@polynaut](https://github.com/polynaut)! - Daz Studio now starts minimized for work nobody is watching.
+
+  Every unattended run the studio hands to the Runner — a **DTH Export** batch, a
+  **project scan**, an **Import from Daz scene** scan, and the restart of a batch
+  that was still waiting when Daz closed — used to open Daz Studio full size, in
+  front of whatever you were doing, for a job that takes minutes and needs no
+  input. Those launches now bring Daz up **minimized**: it sits in the taskbar and
+  works, and the studio's own progress button is where you watch the run.
+
+  What did not change:
+
+  - **Opening a scene from its card** still opens Daz normally and pulls it to the
+    front — you asked to see the scene.
+  - **Open and Generate ROM Animation** still comes up visible too. It opens a
+    scene you picked and leaves the built ROM on its timeline to look at.
+  - **A Daz you already have open** is never touched. The studio only minimizes an
+    instance it started itself; an instance of your own keeps whatever position and
+    size you left it at, and simply picks the batch up.
+
+  Windows only, and best-effort by design: if the window never appears the launch
+  still stands on its own, and nothing waits on the minimize.
+
+- [#795](https://github.com/polynaut/dth-character-studio/pull/795) [`3a2fdc2`](https://github.com/polynaut/dth-character-studio/commit/3a2fdc2d49b9f26ee512d76f31132d532ea2d0e0) Thanks [@polynaut](https://github.com/polynaut)! - The DTH Export dialog's Houdini list now follows the scene selection. Tick a Daz scene off and the projects that only import that scene leave the run with it; tick it back on and they return. The match is the same one Houdini itself makes at export time — a project belongs in the run when one of its networks imports a selected scene's `.dth` file — so what the dialog shows and what the run exports can't disagree. Network and project NAMES are deliberately not consulted: they get renamed and copied around, the import path doesn't.
+
+  That knowledge comes from the background project scan, which now records each project's imported `.dth` files alongside its nodes, `$JOB` and fps (no extra Houdini launch — it reads them in the same pass). A project only ever leaves the run when its imports actually name a scene you unticked. Everything short of that keeps whatever you have: a project the scan hasn't reached yet — outside the character folder, or saved in Houdini since the last sweep — and one whose imports match none of this character's scenes either way, which is what a path spelled differently on the two sides (a mapped drive, an old junction path) looks like from here. The studio can't know in those cases, and quietly dropping a project would skip the Houdini half of a run you asked for.
+
+- [#795](https://github.com/polynaut/dth-character-studio/pull/795) [`3a2fdc2`](https://github.com/polynaut/dth-character-studio/commit/3a2fdc2d49b9f26ee512d76f31132d532ea2d0e0) Thanks [@polynaut](https://github.com/polynaut)! - The DTH Export header now shows the whole pipeline live. A task-card column (each selected Daz scene, then each Houdini project, in run order) sits beside a monospace tail-mode log window above the header buttons: the active task wears its kind's solid color, waiting ones sit grayish, and a finished task drops away bottom-right while the rest slide up. The log window streams both legs — the new per-scene Daz progress and the Houdini HDA's captured output. A full-width progress-bar row sits on top: one bar for the unit under work (the Daz scene's percent straight from the progress log; a stepwise open-project-then-each-network scale on the Houdini leg), and a second overall bar above it whenever the leg spans several units (multiple scenes, multiple DazToHue networks). Every element says its own thing exactly once: the numbered task cards carry the scene/project names, the meter carries the percent plus the latest status text as its label, and the log window is a pure line tail (no caption row, no repeated percent/scene per line). The scripts also log step START markers ("generating ROM", "exporting character", …), so the display names what is running, not only what finished — and the mid-run hand-over toasts are gone: one report at the very end. And reloading the app during the **Daz** leg no longer loses the run: every handoff writes its run plan to a sidecar (`export-run.json` in app-data, deleted when the run ends), so the character's own editor **restores the full watch** on its next poll — the elapsed clock, the chosen Houdini projects' task cards, and, most importantly, the "Export too" continuation itself, which previously died silently with the reloaded window's memory. Any _other_ window still gets the display-only adoption, now rebuilt from disk too: Daz task cards from the job file's own rows, log window and meters from the progress log. (A reload during the **Houdini** leg still loses its watch, as before — the export finishes in the background either way, but the studio stops showing it and reports nothing.) And the log window itself never disappears while a run is live — nor does it linger after one: an adopted display clears when the batch it mirrored is gone.
+
+  Daz-side progress comes from the new Runner v1.2.0 contract: the job file carries a `progressLogPath` + per-row `steps`, the Runner logs `[<percent>] <message>` lines for the steps it owns (scene open, terminal done/failed) and the generated scripts (runtime v72) append the interior steps — ROM generated / character exported / CSV delivered / hair exported — on the same per-scene percent scale (5 steps with a ROM build, 4 export-only, 2 rom-only). Old Runners keep working (they ignore the new fields; the display then shows row counts as before).
+
+  The "Export too" Houdini leg now runs **completely headless**: hython loads the project and works the batch in the background — no Houdini window, no startup/viewport wait, and the full console (C++ cook chatter included) streams into `.dth_houdini_console.log` beside the job/result files (one file per character, overwritten each run and kept afterwards as the diagnosis channel — a run that matches no export nodes now logs exactly what it wanted vs. found). The job is handed over by running the studio's script directly, never via `HOUDINI_SCRIPT_PATH` — Houdini runs scripts found there against the startup empty scene too, which consumed the job before the project had loaded. "Open only" still opens the visible GUI. Liveness comes from the launched process itself, so an unrelated hython (background scans) can't masquerade as the run. Both live buttons now ignore a plain click — a stray click used to silently drop the watch, which read as "the export vanished" — and hold **Ctrl** for the way out: Abort on the Daz leg, Stop watching on the Houdini one, which also cancels the projects still queued behind it. That matters more now than it did: with no Houdini window left to close, it is the only way to end a wedged run or change your mind about a queue.
+
+  It also shows what Houdini is doing **during** an export node's minutes-long run, not just node counts: 456.py now captures the HDA's own output (stdout/stderr and status-bar messages) while `do_export` works and streams it into the polled result file — the header's log window names the scene and shows the lines live (verified on a real run: the HDA emits a 9-phase progress vocabulary), and each node's report keeps a capped log. Nothing captured degrades to the elapsed-time display as before.
+
+  Also restored: the ~1 s settle pauses at the Daz automation seams (runtime v71 — the Runner-driven bulk script waits after the scene load before the first scripted work, and every export waits after the ROM build before the exporter starts), which had been orphaned by an earlier squash-merge.
+
+- [#794](https://github.com/polynaut/dth-character-studio/pull/794) [`be0edaf`](https://github.com/polynaut/dth-character-studio/commit/be0edafed05b0d9693658cb57dae3a87f3bc80f5) Thanks [@polynaut](https://github.com/polynaut)! - Unreal Engine plugins, an install dialog, and Generate Unreal project.
+
+  **Settings → General** gains two panels: **Unreal Engine** lists every engine
+  the Epic launcher has installed (informational — a `.uproject` names its own
+  engine, so there is nothing to activate), and **Unreal Engine Plugins** holds
+  the folders the studio scans for UE plugins — a plugin folder, a folder of
+  plugins, or a multi-build root like `DazToUnrealBridge\UE_5.7\Plugins`, with a
+  per-folder preview of every recognized build and the engine version it was
+  matched to (from the path, deepest segment first, else the `.uplugin`'s
+  `EngineVersion`; none = offered for every engine).
+
+  **The Unreal card's install button now opens a dialog**: DTH content plus every
+  plugin build matching the project's engine version — read from its `.uproject`
+  when the dialog opens — all pre-checked, uncheck what you don't want, one
+  primary **Install**. Checked items overwrite what is there (copy-over, never
+  delete-first); the old Ctrl+click-to-overwrite is retired with the dialog
+  carrying that intent explicitly. A source-build GUID association lists every
+  build unchecked instead — only the user knows what fits it.
+
+  **Generate Unreal project** (the bar's ✨) creates a fresh Blueprint-only
+  project bound to a detected engine version, installs the checked DTH content +
+  plugins into it in the same run, and links it — a DTH-ready Unreal project
+  without opening Unreal first. Opening the generated project in Unreal itself
+  has not been verified on a real engine install yet.
+
+### Patch Changes
+
+- [#795](https://github.com/polynaut/dth-character-studio/pull/795) [`3a2fdc2`](https://github.com/polynaut/dth-character-studio/commit/3a2fdc2d49b9f26ee512d76f31132d532ea2d0e0) Thanks [@polynaut](https://github.com/polynaut)! - A generated Houdini project now opens with its character already loaded, on the rest pose. Setting the import paths from a script never ran the import node's own "a character was chosen" routine — the one that offers to fill the sibling paths and then actually reads the files, which is what sets the Alembic's frame range and puts the scene on frame 0. So a freshly generated project could hold every path correctly and still sit on the wrong frame, and the fix was to clear the fields and re-pick them by hand. Generate project and Tools → Fill network now run that routine themselves (answering its prompt the way you would), and the studio puts its own `$HIP/…` paths back afterwards, so the project stays movable. It runs only when the files are really on disk: a project generated before the Daz export has produced them has nothing to load, and comes out exactly as before.
+
 ## 0.74.0
 
 ### Minor Changes

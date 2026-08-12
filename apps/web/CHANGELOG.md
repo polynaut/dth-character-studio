@@ -1,7 +1,63 @@
 # @dth/web
 
-## 0.74.0
+## 0.75.0
 
+### Minor Changes
+
+- [#798](https://github.com/polynaut/dth-character-studio/pull/798) [`cbbe84a`](https://github.com/polynaut/dth-character-studio/commit/cbbe84a33130d7853d5c93252617984452ecae45) Thanks [@polynaut](https://github.com/polynaut)! - Auto base is on by default for morphs.
+
+  A ROM morph is keyed to its value on its own frame and pulled back down on the
+  frames around it. Until now it was pulled back to zero unless you said
+  otherwise — which is right for a morph the character doesn't otherwise use, and
+  wrong for one it does. Reusing a few of the ROM's FBM morphs to build a "shaped"
+  variant of a character is a perfectly ordinary thing to do, and it left the ROM
+  flattening part of the base shape on every frame next to those poses.
+
+  **Auto** on a morph row fixes exactly that: instead of a fixed **Base**, the
+  script reads the morph's own value out of the open scene and returns it there.
+  It is now on for every new morph, however the morph is added — typed in, picked
+  from the autocomplete, added to a multi-morph row, or imported from a DAZ morph
+  CSV — and it is turned on for the morphs of every character you already have.
+
+  For the morphs a scene doesn't dial, this changes nothing: they read zero at
+  frame 0 and behave exactly as before. Turn **Auto** off on a row to go back to a
+  fixed **Base** (or a hard reset to zero) whatever the scene is doing; the
+  **Base** field is only read when Auto is off.
+
+  Existing characters pick the new default up when they are read, and **Tools →
+  Refresh assets** writes it into their definitions and regenerates their Daz
+  scripts and PoseAsset CSVs. Run it once after updating; Refresh from the Home
+  window covers every project in the recents list, and a project window covers the
+  project it is open on.
+
+- [#800](https://github.com/polynaut/dth-character-studio/pull/800) [`30ee108`](https://github.com/polynaut/dth-character-studio/commit/30ee108ed9728dcc041d6b5ba7f8aab629483608) Thanks [@polynaut](https://github.com/polynaut)! - Reloading the app while Houdini is exporting no longer loses the run. The Daz half already survived a reload; the Houdini half didn't — and because that leg runs headless there was no window to notice: hython finished the export, the studio never reported it, and any project queued behind it silently never started at all. Each Houdini run now records its plan beside its own job file — the project being exported, the ones still waiting, the scene scope and the report so far — and the character's editor picks the run back up when it opens. You get the live log and progress back, the remaining projects still run, and the one end-of-everything report still names the legs that finished while the window was away.
+
+### Patch Changes
+
+- [#801](https://github.com/polynaut/dth-character-studio/pull/801) [`253d89f`](https://github.com/polynaut/dth-character-studio/commit/253d89fb081b6b78a6d1ede2b160ea90acdc2e5e) Thanks [@polynaut](https://github.com/polynaut)! - Generate project now says which Daz scene it is generating for. A generated Houdini project is defined by the scene whose export set it imports, but the dialog only ever named it when it asked — and it deliberately doesn't ask for a single-scene character, or for a character's first project. Both cases now state the scene (and mark the primary), the line updates as you pick on the ones that do ask, and the confirmation names it too, so the answer survives the dialog closing.
+
+- [#797](https://github.com/polynaut/dth-character-studio/pull/797) [`56c2f8e`](https://github.com/polynaut/dth-character-studio/commit/56c2f8ec80fbc4a9d26b57bbd55bde32926952f8) Thanks [@polynaut](https://github.com/polynaut)! - A project window opens on its project, instead of flashing the Home screen first.
+
+  Opening a project window painted the Home "recent projects" list for a moment
+  and then jumped to the project's character overview. That was the boot order,
+  not a hiccup: every window loads the same document, so the URL it starts on says
+  nothing about which project it is for — the studio had to ask the desktop side,
+  and it mounted the UI before the answer came back. Home's screen needs one small
+  read while a project's needs a manifest read plus a character scan, so Home
+  always drew first, and the correction landed later the more characters the
+  project had.
+
+  The window now works out where it belongs — and loads it — before anything is
+  drawn, so it goes from its own dark background straight to the character
+  overview. The lookups it needs run together rather than one after the other, so
+  the window is ready sooner as well. A project window also no longer leaves a
+  Home entry behind it in history.
+
+- Updated dependencies [[`cbbe84a`](https://github.com/polynaut/dth-character-studio/commit/cbbe84a33130d7853d5c93252617984452ecae45), [`3a2fdc2`](https://github.com/polynaut/dth-character-studio/commit/3a2fdc2d49b9f26ee512d76f31132d532ea2d0e0)]:
+  - @dth/rom@0.75.0
+  - @dth/ui@0.75.0
+
+## 0.74.0
 
 ### Patch Changes
 
