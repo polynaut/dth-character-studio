@@ -143,7 +143,12 @@ export function ExportTaskCards({ tasks }: { tasks: Array<ExportTask> }) {
 
   return (
     // A tiny separator line marks the queue off from the log window.
-    <div className="col-start-1 row-start-1 row-span-2 flex min-h-0 w-44 shrink-0 flex-col gap-1 border-r border-border/70 pr-3">
+    // flex-col-REVERSE: the queue falls to the bottom, tetris-style — the card
+    // being worked sits at the very bottom (where the eye already is, beside
+    // the buttons) and everything still to come stacks above it. DOM order
+    // stays chronological, so the numbering and the exit animation are
+    // unchanged; only the visual stacking flips.
+    <div className="col-start-1 row-start-1 row-span-2 flex min-h-0 w-44 shrink-0 flex-col-reverse justify-start gap-1 border-r border-border/70 pr-3">
       {tasks.map((task) => {
         const isFlying = flying.has(task.id)
         const isCollapsed = collapsed.has(task.id)
@@ -162,9 +167,11 @@ export function ExportTaskCards({ tasks }: { tasks: Array<ExportTask> }) {
               // window. A LIVE slot must not, or the fly-out would be cut off
               // mid-flight.
               hidden ? 'overflow-hidden' : 'overflow-visible',
+              // The 5th live card is the TOPMOST one now (the column is
+              // reversed), so it fades upward, away from the active card.
               position === 4 &&
                 !isCollapsed &&
-                '[mask-image:linear-gradient(to_bottom,#000_0%,transparent_90%)]',
+                '[mask-image:linear-gradient(to_top,#000_0%,transparent_90%)]',
             )}
             style={{ transitionDuration: `${COLLAPSE_MS}ms` }}
           >
@@ -236,9 +243,6 @@ export function ExportActivityLog({
     // theirs. Headline + captioned log box; the meters sit below.
     <div className="col-start-2 row-start-1 flex min-h-0 min-w-0 flex-col text-left">
       {headline && <StatusHeadline headline={headline} />}
-      <p className="mb-1 text-[10px] tracking-wide text-muted-foreground/70 uppercase">
-        Activity log
-      </p>
       <div
         data-export-log
         ref={boxRef}

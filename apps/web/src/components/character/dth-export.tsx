@@ -417,10 +417,12 @@ export function DthExportAction({
       // stays in the transcript once it goes quiet, so the Houdini half reads
       // as the continuation of the Daz half instead of replacing it.
       if (progressNow && progressNow.state !== 'finished' && progressNow.state !== 'dead') {
-        const lines =
-          progressNow.state === 'running' && progressNow.step?.lines.length
-            ? progressNow.step.lines
-            : [dazOpeningLine]
+        const own = progressNow.state === 'running' ? (progressNow.step?.lines ?? []) : []
+        if (own.length === 0 && !dazOpenedLineRef.current) dazOpenedLineRef.current = dazOpeningLine
+        const lines = [
+          ...(dazOpenedLineRef.current ? [dazOpenedLineRef.current] : []),
+          ...own,
+        ]
         dazRenderedRef.current = stampLogLines(dazStampsRef.current, lines, stamp)
       }
       if (houdiniNow) {
@@ -430,10 +432,14 @@ export function DthExportAction({
           // the same way. (Our status lines already do; they keep theirs.)
           lastHoudiniLinesRef.current = houdiniNow.activity.lines.map((line) => `Houdini; ${line}`)
         }
-        const lines =
-          lastHoudiniLinesRef.current.length > 0
-            ? lastHoudiniLinesRef.current
-            : [houdiniOpeningLine]
+        const own = lastHoudiniLinesRef.current
+        if (own.length === 0 && !houdiniOpenedLineRef.current) {
+          houdiniOpenedLineRef.current = houdiniOpeningLine
+        }
+        const lines = [
+          ...(houdiniOpenedLineRef.current ? [houdiniOpenedLineRef.current] : []),
+          ...own,
+        ]
         houdiniRenderedRef.current = stampLogLines(houdiniStampsRef.current, lines, stamp)
       }
       const all = [
@@ -616,6 +622,13 @@ export function DthExportAction({
   const sealedLogRef = useRef<Array<string>>([])
   const dazRenderedRef = useRef<Array<string>>([])
   const houdiniRenderedRef = useRef<Array<string>>([])
+  // The opening line each leg SHOWED ('' = none). Kept at the head of that
+  // leg's lines once its real ones start, so "Opening Houdini (hython)" stays
+  // above the HDA's first word instead of being replaced by it. Only what was
+  // actually displayed is kept — an adopted run never showed one, and
+  // inventing it would state something this window never knew.
+  const dazOpenedLineRef = useRef('')
+  const houdiniOpenedLineRef = useRef('')
   /** How much of a run's transcript is kept (the window shows 5 and scrolls). */
   const LOG_TAIL_MAX = 200
   // When the CURRENT step began — feeds the meter's per-step clock. Keyed on
@@ -634,6 +647,8 @@ export function DthExportAction({
     sealedLogRef.current = []
     dazRenderedRef.current = []
     houdiniRenderedRef.current = []
+    dazOpenedLineRef.current = ''
+    houdiniOpenedLineRef.current = ''
     stepStartRef.current = null
     dazLaunchedRef.current = false
     setPipeline(null)
@@ -711,6 +726,7 @@ export function DthExportAction({
     sealedLogRef.current = [...sealedLogRef.current, ...houdiniRenderedRef.current]
     houdiniRenderedRef.current = []
     houdiniStampsRef.current = { lines: [], stamps: [] }
+    houdiniOpenedLineRef.current = ''
     lastHoudiniLinesRef.current = []
     try {
       await startHoudiniExport({

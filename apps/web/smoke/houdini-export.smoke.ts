@@ -302,6 +302,10 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
   // …and the DAZ half is still there above it: the run is one story, so the
   // finished leg's lines stay in the transcript instead of being replaced.
   await expect(page.locator('[data-export-log]')).toContainText('ROM generated')
+  // Including each leg's own opening line — the HDA's first word used to
+  // REPLACE "Opening Houdini", which is the moment the run gets interesting.
+  await expect(page.locator('[data-export-log]')).toContainText('Opening Houdini (hython)')
+  await expect(page.locator('[data-export-log]')).toContainText('Opening Daz Studio')
   await expect(page.getByRole('button', { name: /Working/ })).toBeVisible()
   // The Houdini meter is STEPWISE — open-project + each network, all equal
   // (hython's console has no percents to read): 1 network → 2 steps, the open
