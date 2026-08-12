@@ -7,6 +7,7 @@ import {
   buildHoudiniPrefill,
   houdiniResultSummary,
   houdiniRunFilesToClear,
+  houdiniDeathReason,
   houdiniRunStateFrom,
   parseHoudiniResult,
   sceneDthPath,
@@ -289,6 +290,32 @@ describe('houdiniRunStateFrom', () => {
     expect(houdiniRunStateFrom(null, false)).toEqual({ state: 'dead' })
   })
 
+  it('carries WHY it died when the console log says so', () => {
+    // The exact log a real failed run left behind (2026-08-12): the studio had
+    // written the answer to disk and still reported only "no longer running".
+    expect(
+      houdiniRunStateFrom(
+        null,
+        false,
+        'No licenses could be found to run this application.\n\tPlease check for a valid license server host\n',
+      ),
+    ).toEqual({ state: 'dead', reason: 'Houdini could not get a license' })
+  })
+
+  it('carries the reason for a run that died MID-node too', () => {
+    // The other dead path: a result file stuck at "running" with no Houdini
+    // behind it. Same console log, same answer owed.
+    expect(houdiniRunStateFrom(result({}), false, 'No licenses could be found.')).toEqual({
+      state: 'dead',
+      reason: 'Houdini could not get a license',
+    })
+  })
+
+  it('stays a bare dead when the log is empty or unreadable', () => {
+    expect(houdiniRunStateFrom(null, false, '')).toEqual({ state: 'dead' })
+    expect(houdiniRunStateFrom(null, false, '   \n\n')).toEqual({ state: 'dead' })
+  })
+
   it('reports node progress while the run works', () => {
     expect(houdiniRunStateFrom(result({}), true)).toEqual({ state: 'running', done: 1, total: 3 })
   })
@@ -423,6 +450,37 @@ describe('houdiniRunStateFrom', () => {
       state: 'finished',
       error: 'the run failed in Houdini',
     })
+  })
+})
+
+describe('houdiniDeathReason — the console log is the only witness', () => {
+  it('recognises the licensing failure in any of its spellings', () => {
+    expect(houdiniDeathReason('No licenses could be found to run this application.')).toBe(
+      'Houdini could not get a license',
+    )
+    expect(houdiniDeathReason('Error: no license available for hython')).toBe(
+      'Houdini could not get a license',
+    )
+    expect(houdiniDeathReason('Please check for a valid license server host')).toBe(
+      'Houdini could not get a license',
+    )
+  })
+
+  it("falls back to the log's last line — a raw line beats a wrong summary", () => {
+    expect(houdiniDeathReason('loading scene\ncooking\nSegmentation fault')).toBe(
+      'Segmentation fault',
+    )
+  })
+
+  it('truncates a runaway line instead of pasting it into a toast', () => {
+    const reason = houdiniDeathReason('x'.repeat(500))
+    expect(reason).toHaveLength(160)
+    expect(reason.endsWith('…')).toBe(true)
+  })
+
+  it('says nothing when the log says nothing', () => {
+    expect(houdiniDeathReason('')).toBe('')
+    expect(houdiniDeathReason('\n \r\n')).toBe('')
   })
 })
 

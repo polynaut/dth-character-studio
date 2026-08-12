@@ -853,7 +853,19 @@ export async function fetchHoudiniRunProgress(): Promise<
   const houdiniUp = await invoke('houdini_running')
     .then((up) => z.boolean().parse(up))
     .catch(() => true)
-  const state = houdiniRunStateFrom(result, houdiniUp)
+  // Only when the run looks DEAD is the console log worth a read: it is the
+  // one case where the studio has an answer on disk and nothing else does.
+  // (Reading it on every poll would re-read a growing file every 2.5 s.)
+  let consoleText = ''
+  if (!houdiniUp && (!result || result.state === 'running')) {
+    const consolePath = joinPath(runFolderOf(run), HOUDINI_CONSOLE_FILE)
+    try {
+      if (await exists(consolePath)) consoleText = await readTextFile(consolePath)
+    } catch {
+      // unreadable — the caller falls back to the plain "no longer running"
+    }
+  }
+  const state = houdiniRunStateFrom(result, houdiniUp, consoleText)
   if (state.state === 'finished' || state.state === 'dead') {
     if (activeHoudiniRun === run) activeHoudiniRun = null
     // The plan dies with the run it describes. A queue that continues writes a

@@ -380,15 +380,56 @@ export type HoudiniRunState =
       /** Handoff → finish, for the toast's "in 12m 34s". */
       elapsedMs?: number
     }
-  | { state: 'dead' }
+  | {
+      state: 'dead'
+      /** What the console log says killed it, when it says anything — see
+       *  {@link houdiniDeathReason}. '' when there is nothing to go on. */
+      reason?: string
+    }
+
+/**
+ * The headline for a run that died without a result, read out of the console
+ * log the launch streams into `.dth_houdini_console.log`.
+ *
+ * The studio ALREADY writes this file (it is why it survives the run's own
+ * cleanup) and used to report "Houdini is no longer running" regardless —
+ * true, useless, and actively misleading when the log said something specific.
+ * MEASURED 2026-08-12 on a real failed run: a machine that could not reach its
+ * license server produced two lines of "No licenses could be found to run this
+ * application", and the user was told Houdini had stopped.
+ *
+ * Licensing is special-cased because headless hython needs a license of its
+ * own and this is the one failure that says nothing about the project, the
+ * scene or the studio. Anything else falls back to the log's last line, which
+ * is where a fatal error prints — better a raw line than a wrong summary.
+ */
+export function houdiniDeathReason(consoleText: string): string {
+  const lines = consoleText
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+  if (lines.length === 0) return ''
+  if (/no licen[sc]es? could be found|license server|no licen[sc]e available/i.test(lines.join(' '))) {
+    return 'Houdini could not get a license'
+  }
+  const last = lines[lines.length - 1] ?? ''
+  return last.length > 160 ? `${last.slice(0, 159)}…` : last
+}
 
 export function houdiniRunStateFrom(
   result: HoudiniResult | null,
   houdiniRunning: boolean,
+  /** The console log's contents, when the caller could read them. Only ever
+   *  consulted for a DEAD run — a live or finished one explains itself. */
+  consoleText = '',
 ): HoudiniRunState {
-  if (!result) return houdiniRunning ? { state: 'starting' } : { state: 'dead' }
+  const dead = (): HoudiniRunState => {
+    const reason = houdiniDeathReason(consoleText)
+    return reason ? { state: 'dead', reason } : { state: 'dead' }
+  }
+  if (!result) return houdiniRunning ? { state: 'starting' } : dead()
   if (result.state === 'running') {
-    if (!houdiniRunning) return { state: 'dead' }
+    if (!houdiniRunning) return dead()
     return {
       state: 'running',
       done: result.done,
