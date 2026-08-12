@@ -133,9 +133,16 @@ describe('generate-project helpers', () => {
     expect(unrealProjectNameFrom('3d-workflow')).toBe('_3d_workflow')
     expect(unrealProjectNameFrom('PlaygroundAssets')).toBe('PlaygroundAssets')
     expect(unrealProjectNameFrom('My Game (2026)')).toBe('My_Game_2026')
-    // Whatever it produces must satisfy the validator — that is the contract.
-    for (const raw of ['3d-workflow', 'My Game (2026)', '  spaced  ', 'a.b.c']) {
-      expect(unrealProjectNameError(unrealProjectNameFrom(raw))).toBeNull()
+    // A leading `_` is LEGAL Unreal, so it survives: renaming `_Sandbox` to
+    // `Sandbox` would be the suggestion quietly disagreeing with the project.
+    expect(unrealProjectNameFrom('_Sandbox')).toBe('_Sandbox')
+    // The contract, stated exactly: anything it returns NON-empty is a name the
+    // validator accepts. (Empty is the "no prefill" answer — its own test below;
+    // the validator rejects '' by design, so it can't be folded in here.)
+    for (const raw of ['3d-workflow', 'My Game (2026)', '  spaced  ', 'a.b.c', '_Sandbox', '99']) {
+      const derived = unrealProjectNameFrom(raw)
+      expect(derived).not.toBe('')
+      expect(unrealProjectNameError(derived)).toBeNull()
     }
   })
 

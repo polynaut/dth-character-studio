@@ -1245,6 +1245,13 @@ current code before relying on details, but assume the *lesson* still holds.
   on a PR, so the old occurrences sat unflagged for a long time; the local gate
   (`lint`/`typecheck`/`test`/`smoke`) does not run CodeQL, so an alert like this
   first shows up on the PR.
+  **The shape is `+` (or `*`) immediately before `$`, whatever the character
+  class** — it is not a *path* problem, and reaching for `path-trim.ts` only
+  when the string is a path misses it. Caught a third time in review on
+  `/^_+|_+$/` trimming an Unreal project NAME (`unrealProjectNameFrom`,
+  `lib/unreal-install.ts`); that one is a `while (s.endsWith('_'))` loop now.
+  A *global, unanchored* replace (`/_+/g`, `/[^A-Za-z0-9_]+/g`) is fine — every
+  match consumes, so there is nothing to backtrack.
 - **An NTFS junction stores an ABSOLUTE target — anything that moves the
   target leaves the junction pointing at the old path**, silently (Windows
   happily keeps a dangling reparse point, and re-creating the old folder makes

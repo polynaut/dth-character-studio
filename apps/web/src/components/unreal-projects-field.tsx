@@ -15,14 +15,13 @@ import { openScene, revealPath, setUnrealProjects, unrealDthContentPresent } fro
 import { pickUprojectPath } from '#/lib/desktop.ts'
 import { PathCode } from '#/components/path-code.tsx'
 import { browseStart, displayPath, middleTruncatePath, normalizePath, parentDir } from '#/lib/path.ts'
-import { stripTrailingSeparators } from '#/lib/path-trim.ts'
 import { unrealProjectNameFrom } from '#/lib/unreal-install.ts'
+
+import type { ProjectInfo } from '#/lib/rom/api.ts'
 
 /** Where a generated Unreal project goes by default: a subfolder of the DTH
  *  project folder, beside `daz3d/` and the characters. Editable in the dialog. */
 const UNREAL_SUBFOLDER = 'unreal'
-
-import type { ProjectInfo } from '#/lib/rom/api.ts'
 
 /**
  * A linked Unreal project card in the footer bar: the U mark, name + a REAL
@@ -402,7 +401,7 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
           // DTH project, so it defaults to living inside it — beside daz3d/ and
           // the characters — and the whole path stays editable (and Browse
           // still puts it anywhere, e.g. an existing Unreal Projects folder).
-          suggestedDir={`${stripTrailingSeparators(normalizePath(project.path))}/${UNREAL_SUBFOLDER}`}
+          suggestedDir={`${normalizePath(project.path)}/${UNREAL_SUBFOLDER}`}
           suggestedName={unrealProjectNameFrom(project.name)}
           onClose={() => setGenerateOpen(false)}
           onGenerated={(uprojectPath) => add([uprojectPath])}

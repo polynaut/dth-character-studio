@@ -182,7 +182,10 @@ describe('UnrealGenerateDialog', () => {
       />,
     )
     await waitFor(() =>
-      expect((screen.getByLabelText('Project name') as HTMLInputElement).value).toBe('_3d_workflow'),
+      // `toHaveProperty`, like the disabled check below — there is no jest-dom
+      // in this suite, and a cast to HTMLInputElement is what the lint gate
+      // rejects as an unnecessary assertion.
+      expect(screen.getByLabelText('Project name')).toHaveProperty('value', '_3d_workflow'),
     )
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /Create$/ })).toHaveProperty('disabled', false),

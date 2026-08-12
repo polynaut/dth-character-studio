@@ -185,20 +185,27 @@ export function unrealProjectNameError(name: string): string | null {
  * {@link unrealProjectNameError}). Prefilling the raw name would open the
  * dialog on its own validation error for something the user didn't type —
  * "3d-workflow" is a real project here and fails on both counts. So: every
- * illegal character becomes `_`, runs collapse, trailing `_` go, and a leading
+ * illegal character becomes `_`, runs collapse, TRAILING `_` go, and a leading
  * digit gets one `_` in front (legal, and keeps the name recognisable rather
- * than inventing a word). Returns '' when nothing usable is left, which the
- * dialog treats as "no prefill" — an empty field the user fills in beats a
- * suggestion that means nothing.
+ * than inventing a word). A leading `_` is kept — it is legal Unreal, and
+ * dropping it would rename a project the user deliberately called `_Sandbox`.
+ * Returns '' when nothing usable is left, which the dialog treats as "no
+ * prefill" — an empty field the user fills in beats a suggestion that means
+ * nothing.
  */
 export function unrealProjectNameFrom(projectName: string): string {
   const cleaned = projectName
     .trim()
+    // Both of these are GLOBAL replaces with no anchor, so each match consumes
+    // — linear. The trailing trim below is a loop and not `/_+$/`: a `+` right
+    // before `$` is the polynomial-ReDoS shape CodeQL flags (js/polynomial-redos,
+    // high), which is why `lib/path-trim.ts` exists at all. See `.ai/gotchas.md`.
     .replace(/[^A-Za-z0-9_]+/g, '_')
     .replace(/_+/g, '_')
-    .replace(/^_+|_+$/g, '')
-  if (cleaned === '') return ''
-  return /^[0-9]/.test(cleaned) ? `_${cleaned}` : cleaned
+  let trimmed = cleaned
+  while (trimmed.endsWith('_')) trimmed = trimmed.slice(0, -1)
+  if (trimmed === '') return ''
+  return /^[0-9]/.test(trimmed) ? `_${trimmed}` : trimmed
 }
 
 /**
