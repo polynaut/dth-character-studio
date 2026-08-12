@@ -70,8 +70,15 @@ test('a single-scene character is not asked which scene — there is only one', 
   const dialog = await openGenerateDialog(page)
 
   await expect(dialog.getByLabel('Daz scene to import')).toHaveCount(0)
+  // …but it SAYS which scene it is for. Without the picker there was nothing
+  // naming the scene at all, and a generated project's whole identity is which
+  // export set it imports.
+  await expect(dialog).toContainText('KiraDefault_G9_GP')
+  await expect(dialog).toContainText('(primary)')
   await dialog.getByRole('button', { name: 'Generate', exact: true }).click()
   await expect(page.getByRole('dialog')).toHaveCount(0)
+  // And so does the confirmation, after the dialog is gone.
+  await expect(page.getByText(/Houdini project generated for KiraDefault_G9_GP/)).toBeVisible()
 
   const prefill = await lastPrefill(page)
   // The fixture's scenes sit directly in `daz3d/`, so each export subfolder is
@@ -86,6 +93,11 @@ test('the first project is not asked either — it is the primary scene\'s', asy
   // TWO scenes are linked, but no Houdini project is yet: the character's
   // first project is its main one, wired to the primary without a question.
   await expect(dialog.getByLabel('Daz scene to import')).toHaveCount(0)
+  // The one that MATTERS: two scenes linked, no picker — so the line naming
+  // the primary is the only thing telling the user which of them this project
+  // will be wired to.
+  await expect(dialog).toContainText('KiraDefault_G9_GP')
+  await expect(dialog).not.toContainText('KiraSummertide')
   await dialog.getByRole('button', { name: 'Generate', exact: true }).click()
   await expect(page.getByRole('dialog')).toHaveCount(0)
 
@@ -102,10 +114,26 @@ test('the chosen scene decides the import paths', async ({ page }) => {
   // primary.
   const picker = dialog.getByLabel('Daz scene to import')
   await expect(picker).toBeVisible()
+  // Before the pick, the summary line names the DEFAULT — the primary.
+  await expect(dialog.getByText(/wired to/)).toContainText('KiraDefault_G9_GP')
+  await expect(dialog.getByText(/wired to/)).toContainText('(primary)')
   await picker.click()
   await page.getByRole('option', { name: /KiraSummertide/ }).click()
+  // …and it FOLLOWS the pick. This is the only path where the line can be
+  // wrong: the two no-picker specs have nothing to choose, so they pass just
+  // as happily against a line hardcoded to `character.scenePath` (measured —
+  // that mutation left the whole file green).
+  await expect(dialog.getByText(/wired to/)).toContainText('KiraSummertide')
+  await expect(dialog.getByText(/wired to/)).not.toContainText('(primary)')
   await dialog.getByRole('button', { name: 'Generate', exact: true }).click()
   await expect(page.getByRole('dialog')).toHaveCount(0)
+
+  // THE claim this feature is for: "which one did I just make?" is a question
+  // only a multi-scene character can ask, and the confirmation outlives the
+  // dialog that could have answered it. Asserting it in the single-scene spec
+  // proves nothing — there, the chosen scene IS the primary.
+  await expect(page.getByText(/Houdini project generated for KiraSummertide/)).toBeVisible()
+  await expect(page.getByText(/Houdini project generated for KiraDefault/)).toHaveCount(0)
 
   // Every import path is the OUTFIT scene's export set — before the picker
   // existed these all came out as the primary's, and re-aiming them was five
