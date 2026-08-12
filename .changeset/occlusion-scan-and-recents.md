@@ -2,7 +2,7 @@
 '@dth/web': patch
 ---
 
-**Fixes the occlusion tabs' first real outing, and makes Recently used removable.**
+**Fixes from the occlusion tabs' first real outing.**
 
 **"No DazToHue occlusion nodes in this project" about a project full of them.**
 The Utils drawer reads a cached scan, and the cache key records *what the scan
@@ -32,11 +32,6 @@ wholesale), above a line about material slots merging by surface. And the
 success toast reported a folder run's outcome in material terms, which came out
 as *"Copied 0 slots, 0 channels, 0 bakers"* after a transfer that worked. Both
 now say what the run actually did.
-
-**Recently used sources can be removed.** The row fills itself from every source
-ever picked, including the one-off look, so it needed a way out: each chip has a
-✕ that drops it. Removing a shortcut is not removing a file — the `.hip` is
-untouched, and picking it again puts it straight back at the top.
 
 **The drawer's outcome toasts stay until you dismiss them.** Every one of these
 reports a run that took hython tens of seconds and wrote to your projects —
