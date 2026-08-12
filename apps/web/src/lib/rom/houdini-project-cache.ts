@@ -113,8 +113,24 @@ export function scanCacheKey(
   tooling = '',
 ): string {
   if (mtimeMs === undefined || !Number.isFinite(mtimeMs)) return ''
-  return `${scanStoreKey(hipPath)}|${mtimeMs}|${scanStoreKey(exportRoot)}|${tooling}`
+  return `${scanStoreKey(hipPath)}|${mtimeMs}|${scanStoreKey(exportRoot)}|${tooling}|${SCAN_ANSWER_VERSION}`
 }
+
+/**
+ * **The third thing a verdict depends on: WHAT the scan was asked.** Bump this
+ * whenever the scan starts reporting something it did not report before —
+ * every stored entry then stops matching and the sweep re-earns it. Measured
+ * the hard way: `imports` (which `.dth` each network imports, v2) shipped
+ * without a bump, so every existing entry stayed "fresh" while answering the
+ * new question with an empty list, and the dialog that reads it correctly
+ * concluded "not known" — for good, since nothing about the `.hip`, the export
+ * root or the HDAs had changed. A field is not free: it is a new question, and
+ * the key has to know the question changed.
+ *
+ * 1 — nodes / $JOB / fps / refs / prefill.
+ * 2 — + `imports`.
+ */
+const SCAN_ANSWER_VERSION = 2
 
 /**
  * Fold the installed operator libraries into one comparable string — name, mtime

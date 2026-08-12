@@ -27,7 +27,7 @@ const DTH_EXTRA = `${P.exportDir}/KiraSummertide_G9_GP/Kira_KiraSummertide_G9_GP
 
 /** A stored scan entry's freshness key — see houdini-project-health.smoke.ts. */
 function storeKey(hipPath: string): string {
-  return `${hipPath.toLowerCase()}|__MTIME__|${P.exportDir.toLowerCase()}|`
+  return `${hipPath.toLowerCase()}|__MTIME__|${P.exportDir.toLowerCase()}||2`
 }
 
 function scan(hipPath: string, imports: Array<string>) {

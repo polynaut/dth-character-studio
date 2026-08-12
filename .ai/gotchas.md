@@ -410,6 +410,17 @@ current code before relying on details, but assume the *lesson* still holds.
   until the user happened to re-save one in Houdini. The export root is in
   `scanKey` now. The general shape: when a cached verdict is about the RELATION
   between a file and its surroundings, the surroundings belong in the key.
+- **…and the QUESTION belongs in the key too.** Same store, measured
+  2026-08-12: adding `imports` (which `.dth` each network imports) taught the
+  scan to answer something new, but the key still described only the inputs —
+  so every existing entry stayed "fresh" while answering the new question with
+  an empty list. The reader treats empty as "not known" (correctly — an
+  unscanned project must never be dropped on ignorance), so the feature was
+  dead on every machine that had ever scanned, with no way out: no `.hip`,
+  export root or HDA had changed. `SCAN_ANSWER_VERSION` is a component of
+  `scanCacheKey` now — **bump it whenever the scan starts reporting a new
+  field.** A new field is a new question, and a cache that can't tell the
+  question changed will serve the old answer forever.
 - **A plan that also GATES a button has to count everything the action fixes.**
   `planRepath` decides both what the Utils repath would do and whether the button
   is clickable (empty `targets` = disabled). It counted absolute-collapsible and
