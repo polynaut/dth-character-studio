@@ -21,6 +21,7 @@ import {
   buildHoudiniJob,
   buildHoudiniPrefill,
   houdiniRunFilesToClear,
+  houdiniRunLooksDead,
   houdiniRunStateFrom,
   parseHoudiniResult,
   sceneDthPath,
@@ -855,9 +856,10 @@ export async function fetchHoudiniRunProgress(): Promise<
     .catch(() => true)
   // Only when the run looks DEAD is the console log worth a read: it is the
   // one case where the studio has an answer on disk and nothing else does.
-  // (Reading it on every poll would re-read a growing file every 2.5 s.)
+  // (Reading it on every poll would re-read a growing file every 2.5 s.) The
+  // condition is the pure module's own, not a second copy of it.
   let consoleText = ''
-  if (!houdiniUp && (!result || result.state === 'running')) {
+  if (houdiniRunLooksDead(result, houdiniUp)) {
     const consolePath = joinPath(runFolderOf(run), HOUDINI_CONSOLE_FILE)
     try {
       if (await exists(consolePath)) consoleText = await readTextFile(consolePath)

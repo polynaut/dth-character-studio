@@ -8,6 +8,7 @@ import {
   houdiniResultSummary,
   houdiniRunFilesToClear,
   houdiniDeathReason,
+  houdiniRunLooksDead,
   houdiniRunStateFrom,
   parseHoudiniResult,
   sceneDthPath,
@@ -466,9 +467,41 @@ describe('houdiniDeathReason — the console log is the only witness', () => {
     )
   })
 
-  it("falls back to the log's last line — a raw line beats a wrong summary", () => {
+  it('reads licensing out of the TAIL, not the whole file', () => {
+    // The log is the FULL console, cook chatter included. A run that mentioned
+    // a license server on its way UP and then crashed an hour later did not
+    // die of licensing — relabelling it as such is the confident wrong summary
+    // this whole function exists to avoid.
+    const long = [
+      'Using license server host dazrig-lic',
+      ...Array.from({ length: 60 }, (_, i) => `[${i}] cooking /obj/DazToHue/export${i}`),
+      'Error: the geometry could not be written',
+    ].join('\n')
+    expect(houdiniDeathReason(long)).toBe('Error: the geometry could not be written')
+  })
+
+  it("falls back to the log's last ERROR line — a raw line beats a wrong summary", () => {
     expect(houdiniDeathReason('loading scene\ncooking\nSegmentation fault')).toBe(
       'Segmentation fault',
+    )
+    // Newest wins: an early error the run survived is not what killed it.
+    expect(
+      houdiniDeathReason('Error: first complaint\ncooking\nFatal: out of memory\ncleaning up'),
+    ).toBe('Fatal: out of memory')
+  })
+
+  it('says NOTHING rather than quote a progress line as the cause of death', () => {
+    // A long run that ended on cook chatter: the studio genuinely cannot tell,
+    // and "did not finish — [42] cooking /obj/…" would read as a diagnosis.
+    const chatter = Array.from({ length: 40 }, (_, i) => `[${i}] cooking /obj/x${i}`).join('\n')
+    expect(houdiniDeathReason(chatter)).toBe('')
+  })
+
+  it('quotes the last line of a log too short to say anything else', () => {
+    // hython that died on startup: the whole file IS the failure, even when no
+    // keyword matches. This is the shape the measured licensing log had.
+    expect(houdiniDeathReason('mantra: unknown option --batch')).toBe(
+      'mantra: unknown option --batch',
     )
   })
 
@@ -481,6 +514,28 @@ describe('houdiniDeathReason — the console log is the only witness', () => {
   it('says nothing when the log says nothing', () => {
     expect(houdiniDeathReason('')).toBe('')
     expect(houdiniDeathReason('\n \r\n')).toBe('')
+  })
+})
+
+describe('houdiniRunLooksDead — the guard that decides the log is worth a read', () => {
+  const res = (over: Record<string, unknown>) =>
+    parseHoudiniResult(JSON.stringify({ state: 'running', total: 3, done: 1, ...over }))
+
+  it('agrees with houdiniRunStateFrom on every combination', () => {
+    // The point of exporting it: two copies of this rule would drift, and the
+    // symptom — a dead run that never gets its reason — is silent. So the
+    // predicate is checked against the state machine it guards, not on its own.
+    const cases = [
+      [null, true],
+      [null, false],
+      [res({}), true],
+      [res({}), false],
+      [res({ state: 'done', done: 3 }), true],
+      [res({ state: 'done', done: 3 }), false],
+    ] as const
+    for (const [result, up] of cases) {
+      expect(houdiniRunLooksDead(result, up)).toBe(houdiniRunStateFrom(result, up).state === 'dead')
+    }
   })
 })
 

@@ -809,7 +809,16 @@ older runtimes as stale.
   contradicted by the file it had just written. `houdiniDeathReason` (pure,
   houdini-jobs.ts) now reads that log on the DEAD path only and puts its
   headline in the toast; licensing is special-cased because it is the one
-  failure that says nothing about the project, the scene or the studio. Liveness is the
+  failure that says nothing about the project, the scene or the studio.
+  The read is deliberately NARROW, because this file is the whole console: the
+  licensing match and the fallback both look at the last 40 lines only (an
+  informational "license server" line at startup must not relabel a crash an
+  hour later), the fallback quotes only a line that looks like an error, and a
+  log longer than 8 lines that ends in cook chatter yields NO reason at all —
+  the bare "no longer running" is the honest answer there. Which condition
+  counts as dead lives in ONE place, `houdiniRunLooksDead`, because the api
+  layer must know it before calling `houdiniRunStateFrom` (it decides whether
+  to spend the file read) and a second copy would drift silently. Liveness is the
   TRACKED child (`try_wait` in houdini.rs — immune to the Utils drawer's own
   hython scans) and, once this process has tracked a launch, its answer is
   FINAL: an exited child means dead, never "ask the process list". Falling

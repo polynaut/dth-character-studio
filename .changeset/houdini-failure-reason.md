@@ -19,6 +19,9 @@ the toast said Houdini had stopped.
 The failure toast now leads with what the log says — *"…did not finish — Houdini
 could not get a license."* — and points at the file for the full output.
 Licensing is recognised by name because it is the one failure that says nothing
-about your project, your scene or the studio; anything else shows the log's last
-line, on the grounds that a raw line beats a confident wrong summary. A run that
-died with nothing in its log reads exactly as before.
+about your project, your scene or the studio. Anything else is quoted straight
+out of the log, on the grounds that a raw error line beats a confident wrong
+summary — but only the *end* of it, and only a line that actually looks like an
+error: the file is the whole console, cook chatter included, so a run that ended
+on a progress message still reads exactly as before. Better no reason than the
+wrong one.

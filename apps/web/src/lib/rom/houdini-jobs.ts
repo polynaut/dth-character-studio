@@ -400,20 +400,66 @@ export type HoudiniRunState =
  *
  * Licensing is special-cased because headless hython needs a license of its
  * own and this is the one failure that says nothing about the project, the
- * scene or the studio. Anything else falls back to the log's last line, which
- * is where a fatal error prints — better a raw line than a wrong summary.
+ * scene or the studio.
+ *
+ * Everything else is read out of the log's TAIL only, and only when the line
+ * looks like an error. The file is the FULL console — the DazToHue HDA's cook
+ * chatter included — so both of the obvious shortcuts are wrong on a long run:
+ * scanning the whole text for "license server" lets one informational line at
+ * startup relabel a crash forty minutes later, and taking the last line
+ * whatever it is hands a progress message to the user as the cause of death.
+ * A run that printed real work and then died with nothing error-shaped to say
+ * gets NO reason — the plain "Houdini is no longer running" is the honest
+ * answer there, and the log is one click away. The one exception is a log short
+ * enough to BE the failure (hython died on startup): there the last line is the
+ * whole story, which is exactly the measured licensing case.
  */
+/** How many trailing lines count as "how it ended". */
+const DEATH_TAIL_LINES = 40
+/** A log no longer than this never got going — all of it is the failure. */
+const DEATH_SHORT_LOG = 8
+/** What a line that is worth quoting looks like. Deliberately broad: a raw
+ *  error line beats a confident wrong summary, but it has to be an error. */
+const DEATH_ERROR_LINE =
+  /\b(error|fatal|traceback|exception|segmentation fault|aborted|cannot|could not|unable to|not found|denied|refused|failed)\b/i
+
 export function houdiniDeathReason(consoleText: string): string {
   const lines = consoleText
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
   if (lines.length === 0) return ''
-  if (/no licen[sc]es? could be found|license server|no licen[sc]e available/i.test(lines.join(' '))) {
+  const tail = lines.slice(-DEATH_TAIL_LINES)
+  if (
+    /no licen[sc]es? could be found|license server|no licen[sc]e available/i.test(tail.join(' '))
+  ) {
     return 'Houdini could not get a license'
   }
-  const last = lines[lines.length - 1] ?? ''
-  return last.length > 160 ? `${last.slice(0, 159)}…` : last
+  // The newest error-shaped line in the tail; failing that, the last line of a
+  // log too short to have said anything else.
+  const spoken =
+    [...tail].reverse().find((line) => DEATH_ERROR_LINE.test(line)) ??
+    (lines.length <= DEATH_SHORT_LOG ? (lines[lines.length - 1] ?? '') : '')
+  return spoken.length > 160 ? `${spoken.slice(0, 159)}…` : spoken
+}
+
+/**
+ * Whether this snapshot is the DEAD one — no Houdini behind a run that has not
+ * reported a finish.
+ *
+ * Exported because the caller has to know BEFORE calling
+ * {@link houdiniRunStateFrom}: reading the console log costs a file read, and
+ * doing it on every 2.5 s poll would re-read a growing file for nothing. Two
+ * copies of this condition (one here, one in the api layer's read guard) would
+ * drift the moment either changes — and the failure would be silent, a dead run
+ * that never gets its reason.
+ */
+export function houdiniRunLooksDead(
+  result: HoudiniResult | null,
+  houdiniRunning: boolean,
+): boolean {
+  if (houdiniRunning) return false
+  return !result || result.state === 'running'
 }
 
 export function houdiniRunStateFrom(
