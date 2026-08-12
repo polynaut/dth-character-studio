@@ -177,6 +177,19 @@ export function unrealProjectNameError(name: string): string | null {
 }
 
 /**
+ * Whether a scanned plugin build is an ARCHIVE rather than a folder.
+ *
+ * Some vendors ship the plugin as a single `<Plugin>.zip` in a versioned
+ * folder. The scan reads the `.uplugin` out of the archive and offers it like
+ * any other build; the install extracts instead of copying. Worth SAYING in the
+ * UI, because "this is a zip" explains both why the folder looked empty before
+ * and what the install is about to do.
+ */
+export function isZippedPlugin(path: string): boolean {
+  return path.trim().toLowerCase().endsWith('.zip')
+}
+
+/**
  * A DTH project's name as a LEGAL Unreal project name, for prefilling the
  * Generate dialog.
  *

@@ -232,6 +232,7 @@ export {
   fetchCachedHoudiniScans,
   fetchHoudiniProjectStatus,
   fetchHoudiniSourceRecents,
+  forgetHoudiniSource,
   rememberHoudiniSource,
   scanCharacterHoudiniProjects,
   scanHoudiniMaterials,

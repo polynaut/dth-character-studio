@@ -78,6 +78,24 @@ export function withHoudiniSource(
   ].slice(0, HOUDINI_SOURCE_RECENTS_MAX)
 }
 
+/**
+ * Drop `path` from the row. Pure, same path fold as {@link withHoudiniSource}.
+ *
+ * The row is a shortcut list the user never opted into — it fills itself from
+ * every source ever picked, including the one-off "let me just look at this
+ * file" — so it needs a way OUT as much as a way in. Removing is not
+ * destructive: the entry is a path, the file is untouched, and picking it again
+ * puts it straight back at the top.
+ */
+export function withoutHoudiniSource(
+  recents: ReadonlyArray<HoudiniSourceRecent>,
+  path: string,
+): Array<HoudiniSourceRecent> {
+  const folded = key(path)
+  if (!folded) return [...recents]
+  return recents.filter((entry) => key(entry.path) !== folded)
+}
+
 async function readStore(): Promise<Array<HoudiniSourceRecent>> {
   try {
     return parseHoudiniSources(await readTextFile(await dataPath(FILE)))
@@ -106,10 +124,19 @@ export async function listHoudiniSources(): Promise<Array<HoudiniSourceRecent>> 
 /** Record a source as just used (moves it to the top). */
 export async function rememberHoudiniSource(path: string, usedAt: string): Promise<void> {
   if (!isTauri() || !path.trim()) return
-  const next = withHoudiniSource(await readStore(), path, usedAt)
+  await writeStore(withHoudiniSource(await readStore(), path, usedAt))
+}
+
+/** Drop a source from the shortcut row. The `.hip` itself is never touched. */
+export async function forgetHoudiniSource(path: string): Promise<void> {
+  if (!isTauri() || !path.trim()) return
+  await writeStore(withoutHoudiniSource(await readStore(), path))
+}
+
+async function writeStore(files: ReadonlyArray<HoudiniSourceRecent>): Promise<void> {
   await ensureAppDir()
   await writeTextFileAtomic(
     await dataPath(FILE),
-    `${JSON.stringify({ version: 1, files: next }, null, 2)}\n`,
+    `${JSON.stringify({ version: 1, files }, null, 2)}\n`,
   )
 }

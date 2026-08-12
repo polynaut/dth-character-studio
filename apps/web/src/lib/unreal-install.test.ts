@@ -5,6 +5,7 @@ import {
   buildUnrealScan,
   defaultUnrealEngine,
   engineVersionFromAssociation,
+  isZippedPlugin,
   matchPluginsToEngine,
   pluginMatchesEngine,
   pluginVersionLabel,
@@ -108,6 +109,14 @@ describe('plugin matching', () => {
       plugin({ engineVersion: '5.7', path: 'D:\\x\\UE_5.7\\DazToUnreal' }),
     ])
     expect(all.map((p) => p.engineVersion)).toEqual(['5.6', '5.7'])
+  })
+
+  it('recognises a zipped build by its path', () => {
+    expect(isZippedPlugin('X:/plugins/UE 5.7 Plugin/DazToHue.zip')).toBe(true)
+    expect(isZippedPlugin('X:\\plugins\\DazToHue.ZIP')).toBe(true)
+    expect(isZippedPlugin('X:/plugins/DazToUnreal')).toBe(false)
+    // A FOLDER that merely has zip in its name is not an archive.
+    expect(isZippedPlugin('X:/plugins/zipped/DazToUnreal')).toBe(false)
   })
 
   it('labels versions for the checklist', () => {
