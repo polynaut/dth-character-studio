@@ -359,6 +359,13 @@ Two things make it safe to run on a project you set up by hand:
   re-generate: install the newer DazToHue and the same action simply starts
   filling it.
 
+Once the paths are in, Fill network runs the import node's own *"a character was
+chosen"* routine — so the project comes back with the character **loaded, on the
+rest pose**, instead of holding correct paths whose load never happened (the
+same step [Generate project](./06-into-houdini.md#generate-the-houdini-project-automatically)
+takes). It is skipped when the export files aren't on disk yet: there is nothing
+to load.
+
 **Repair project settings** is enabled only when at least one project actually
 differs, and it touches only those — a project already on the right folder *and*
 the right timeline is listed and left alone, so running it twice rewrites nothing

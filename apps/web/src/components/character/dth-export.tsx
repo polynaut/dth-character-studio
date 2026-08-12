@@ -481,11 +481,9 @@ export function DthExportAction({
           const network =
             activity?.scene || `network ${Math.min(houdiniNow.done + 1, total)}/${total}`
           return {
-            overall: {
-              percent: stepwisePct,
-              label: `Networks ${houdiniNow.done}/${total}`,
-              kind: 'houdini',
-            },
+            // No label: the overall bar renders none and keys no clock — the
+            // card column is what says which network of how many.
+            overall: { percent: stepwisePct, kind: 'houdini' },
             current: {
               percent: phasePct,
               label: activity ? `${network}: ${status}` : network,
@@ -512,9 +510,9 @@ export function DthExportAction({
         if (progressNow.total > 1) {
           const done = Math.min(progressNow.processed, progressNow.total)
           return {
+            // No label — see the Houdini leg's overall bar above.
             overall: {
               percent: ((done + currentPct / 100) / progressNow.total) * 100,
-              label: `Scenes ${done}/${progressNow.total}`,
               kind: 'daz',
             },
             current,

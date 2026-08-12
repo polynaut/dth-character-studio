@@ -717,10 +717,14 @@ older runtimes as stale.
   active network from the HDA's phase-line count (measured: 9 on a full node
   run), capped at 95% — an estimate, not a contract.
   Display division of labor (deliberate, user-driven): the NUMBERED task
-  cards carry the scene/project identity, the meter carries percent + the
-  latest status text as its label, and the log window is a pure line tail
+  cards carry the scene/project identity, the meters carry percent and NOTHING
+  else, and the log window is a pure line tail whose newest line IS the status
   (exportProgressStateFrom strips the `[pct]` bracket and `<stem>: ` prefix
-  for display — the on-disk format is unchanged). The scripts log step START
+  for display — the on-disk format is unchanged). `ExportProgressBar.label`
+  survives as data, not display: it keys the per-step `sinceMs` clock. The
+  overall bar's old "Scenes 0/2" caption was REMOVED (Remo, 2026-08-12) — the
+  card column already is that queue, and the caption indented its track out of
+  line with the current bar's. The scripts log step START
   markers too ("generating ROM", …) at the already-reached percent. No
   mid-run toasts: the one report fires at the very end.
   Both live buttons are INERT to a plain click (a stray one used to drop the

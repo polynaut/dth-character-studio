@@ -28,7 +28,12 @@ export interface ExportTask {
 export interface ExportProgressBar {
   /** 0–100. */
   percent: number
-  label: string
+  /** What the CURRENT bar is measuring right now. Nothing renders it — see
+   *  `ProgressBar` — it survives as the step's identity, and a change in it is
+   *  what restarts `sinceMs`. Optional, and deliberately absent on the OVERALL
+   *  bar: that one keys no clock, so a "Scenes 0/2" nobody reads would just be
+   *  the removed caption still being computed. */
+  label?: string
   /** Which leg the bar measures — the fill wears that kind's color, the same
    *  identity the task cards carry. */
   kind: 'daz' | 'houdini'
@@ -42,9 +47,9 @@ export interface ExportPipelineView {
   /** Task cards, chronological. Empty for an adopted run (no identity). */
   tasks: Array<ExportTask>
   /** The live log-window content — whichever leg is talking right now. Lines
-   *  only: the scene lives on the active task card, the percent on the meter
-   *  and the latest status text on the meter's label, so the window carries
-   *  no caption row. */
+   *  only: the scene lives on the active task card and the percent on the
+   *  meter, so the window carries no caption row — and the newest line in it
+   *  IS the status, which is why the meters carry no text of their own. */
   log: { lines: Array<string> } | null
   /** The full-width bar row above tasks+log: `current` = the unit being
    *  worked right now (the per-scene progress-log percent on the Daz leg, the
@@ -234,19 +239,27 @@ export function ExportActivityLog({ log }: { log: { lines: Array<string> } }) {
  *  of a two-level display, slightly taller. */
 function ProgressBar({ bar, emphasis = false }: { bar: ExportProgressBar; emphasis?: boolean }) {
   const percent = Math.min(100, Math.max(0, bar.percent))
-  // The CURRENT bar's status is the headline above the log, so this row is the
-  // track and its number. The OVERALL bar keeps a label — it counts a
-  // different thing (scenes / networks) and nothing else says so.
-  const label = bar.label.charAt(0).toUpperCase() + bar.label.slice(1)
+  // NEITHER bar carries text: the row is the track and its number. The current
+  // bar's status is the newest line in the log window, and the overall bar's
+  // "Scenes 0/2" was the numbered task-card column said a second time — the
+  // cards ARE the queue, and dropping the label lets both tracks start at the
+  // same left edge instead of one being indented by its own caption.
+  //
+  // It moves to ARIA rather than vanishing: the visible caption was the only
+  // thing naming these meters, so dropping it outright would leave a screen
+  // reader two anonymous percentages. `progressbar` + a name + the value is
+  // what the sighted reader gets from the track, said out loud.
   return (
     <div
+      role="progressbar"
+      aria-label={emphasis ? 'Overall progress' : 'Current step progress'}
+      aria-valuenow={Math.round(percent)}
+      aria-valuemin={0}
+      aria-valuemax={100}
       data-progressbar={emphasis ? 'overall' : 'current'}
       data-percent={Math.round(percent)}
       className="flex items-center gap-2"
     >
-      {emphasis && (
-        <span className="shrink-0 truncate text-[11px] text-muted-foreground">{label}</span>
-      )}
       <div
         className={cn(
           'min-w-0 flex-1 overflow-hidden rounded-full bg-muted',
