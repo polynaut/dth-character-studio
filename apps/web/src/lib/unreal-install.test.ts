@@ -9,6 +9,7 @@ import {
   pluginMatchesEngine,
   pluginVersionLabel,
   unrealProjectNameError,
+  unrealProjectNameFrom,
   uprojectFileContent,
   type UnrealPluginSource,
 } from './unreal-install.ts'
@@ -123,6 +124,33 @@ describe('generate-project helpers', () => {
     expect(unrealProjectNameError('2Fast')).toMatch(/digit/)
     expect(unrealProjectNameError('My Game')).toMatch(/letters/)
     expect(unrealProjectNameError('Game-One')).toMatch(/letters/)
+  })
+
+  it('derives a LEGAL prefill from a DTH project name', () => {
+    // The two namespaces disagree: a .dcsp may be called anything, Unreal may
+    // not. "3d-workflow" is a real project here and breaks both rules, so a
+    // raw prefill would open the dialog on its own validation error.
+    expect(unrealProjectNameFrom('3d-workflow')).toBe('_3d_workflow')
+    expect(unrealProjectNameFrom('PlaygroundAssets')).toBe('PlaygroundAssets')
+    expect(unrealProjectNameFrom('My Game (2026)')).toBe('My_Game_2026')
+    // A leading `_` is LEGAL Unreal, so it survives: renaming `_Sandbox` to
+    // `Sandbox` would be the suggestion quietly disagreeing with the project.
+    expect(unrealProjectNameFrom('_Sandbox')).toBe('_Sandbox')
+    // The contract, stated exactly: anything it returns NON-empty is a name the
+    // validator accepts. (Empty is the "no prefill" answer — its own test below;
+    // the validator rejects '' by design, so it can't be folded in here.)
+    for (const raw of ['3d-workflow', 'My Game (2026)', '  spaced  ', 'a.b.c', '_Sandbox', '99']) {
+      const derived = unrealProjectNameFrom(raw)
+      expect(derived).not.toBe('')
+      expect(unrealProjectNameError(derived)).toBeNull()
+    }
+  })
+
+  it('prefills nothing rather than something meaningless', () => {
+    // No usable characters left — an empty field the user fills in beats a
+    // suggestion like "_" that only looks like a name.
+    expect(unrealProjectNameFrom('---')).toBe('')
+    expect(unrealProjectNameFrom('   ')).toBe('')
   })
 
   it('writes a Blueprint-only .uproject bound to the engine version', () => {
