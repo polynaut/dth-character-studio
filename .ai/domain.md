@@ -683,7 +683,7 @@ older runtimes as stale.
   carries `progressLogPath` (app-data `export-progress.log`, truncated at
   handoff AND at pickup) + per-row `steps`; the Runner writes the
   `[<percent>] <message>` lines it owns and the generated scripts (runtime
-  v71, `dthProgressLog`) append the interior steps on the same per-scene
+  v72, `dthProgressLog`) append the interior steps on the same per-scene
   scale (`jobStepsForMode`: 5/4/2). `fetchExportRunProgress` parses the log
   (`parseExportProgressLog`/`exportProgressStateFrom`, pure) into
   `running.step`; the header's `ExportPipelinePanel` (meter row + task cards +

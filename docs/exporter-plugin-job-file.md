@@ -102,7 +102,7 @@ content directory** for that relative path and process the first file it finds.
   `[100] <scene>: done|failed — <reason>`, `[100] batch cancelled — <reason>`
   / `batch finished` — while the studio-GENERATED export script appends the
   interior steps to the same file on the same scale as `DzScript::execute()`
-  runs (runtime v71's `dthProgressLog`: ROM 40 / character 60 / CSV 80 /
+  runs (runtime v72's `dthProgressLog`: ROM 40 / character 60 / CSV 80 /
   hair 100 on the 5-step scale; 50/75/100 on the 4-step export-only scale;
   ROM 100 on the 2-step rom-only scale). The studio watches the file for its
   live per-scene progress display. The whole-batch `progress` field keeps
