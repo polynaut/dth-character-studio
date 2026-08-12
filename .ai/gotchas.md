@@ -592,6 +592,24 @@ current code before relying on details, but assume the *lesson* still holds.
   string parms (`import_skinning_method` is a menu, where a default and a
   deliberate choice are indistinguishable — generation sets it, the repair
   doesn't).
+- **Writing a parm is not the same as CHOOSING it: `parm.set()` never runs the
+  parm's callback.** USER-REPORTED 2026-08-12: a generated project held every
+  import path correctly and still showed the Alembic on the wrong rest frame,
+  and clearing the fields + re-picking the `.dth` through the file browser
+  fixed it — because that browser fires the parm's callback, which offers to
+  auto-fill the siblings and then actually READS the files. The studio wrote
+  those paths with `parm.set()` in both places that prefill (the generation
+  snippet in `houdini.rs`, `op_prefill` in material_utils.py), so the load
+  never happened. Both now `pressButton()` the `.dth` parm — Houdini's way of
+  running a callback from code — with `hou.ui` stubbed to answer the prompt
+  (headless has no `hou.ui` at all; a GUI would wait forever on the click),
+  and only when the file EXISTS: a project generated before the Daz export ran
+  has nothing to load. The generic prefill then fills only what the HDA left
+  blank, so the tool's own answers win over the studio's guesses. General
+  shape: when an app offers a UI action for a value you are setting, ask what
+  that action does BESIDES setting it — the difference is what a scripted
+  write silently skips. NOT verified in a live Houdini by the agent that wrote
+  it; the callback's own behaviour is the user's observation.
 - **`$JOB` is SCENE state saved inside the `.hip`, and a load OVERWRITES the
   process value — so it leaks between files in one hython run.** Measured
   2026-08-07: seeding a sentinel then loading a project replaced it with that
