@@ -179,7 +179,7 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
   // meter at 0 carries the same words (an empty box + no bar read as "nothing
   // is happening" while Daz takes its tens of seconds to come up).
   await expect(page.locator('[data-export-log]')).toContainText('Opening Daz Studio')
-  await expect(page.locator('[data-progressbar="current"]')).toContainText('Opening Daz Studio')
+  await expect(page.locator('[data-status-headline]')).toContainText('Opening Daz Studio')
 
   // The Runner claims the batch and works the scene: the running job file +
   // the verbose progress log. The scene card goes ACTIVE, the log window
@@ -225,9 +225,9 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
   // The meter row above: a single-scene run shows ONE bar, riding the same
   // per-scene percent the log lines carry — no overall bar for a one-unit leg.
   await expect(page.locator('[data-progressbar="current"]')).toHaveAttribute('data-percent', '40')
-  await expect(page.locator('[data-progressbar="current"]')).toContainText('ROM generated')
+  await expect(page.locator('[data-status-headline]')).toContainText('ROM generated')
   // The per-step clock: silent stretches inside a step visibly tick.
-  await expect(page.locator('[data-progressbar="current"]')).toContainText(/· \d+:\d{2}/)
+  await expect(page.locator('[data-status-headline]')).toContainText(/\d+:\d{2}/)
   await expect(page.locator('[data-progressbar="overall"]')).toHaveCount(0)
   // …and picked up + finished by the Runner. NO toast on the baton pass (a
   // mid-run toast reads as an outcome) and NO finish toast yet — the batch
@@ -299,13 +299,16 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
     timeout: 15_000,
   })
   await expect(page.locator('[data-export-log]')).toContainText('Houdini; Importing Alembic…')
+  // …and the DAZ half is still there above it: the run is one story, so the
+  // finished leg's lines stay in the transcript instead of being replaced.
+  await expect(page.locator('[data-export-log]')).toContainText('ROM generated')
   await expect(page.getByRole('button', { name: /Working/ })).toBeVisible()
   // The Houdini meter is STEPWISE — open-project + each network, all equal
   // (hython's console has no percents to read): 1 network → 2 steps, the open
   // one done → 50%. One network = one bar, no overall; its label is the
   // latest captured line.
   await expect(page.locator('[data-progressbar="current"]')).toHaveAttribute('data-percent', '50')
-  await expect(page.locator('[data-progressbar="current"]')).toContainText(
+  await expect(page.locator('[data-status-headline]')).toContainText(
     'Houdini; Baking textures 3/12…',
   )
   await expect(page.locator('[data-progressbar="overall"]')).toHaveCount(0)

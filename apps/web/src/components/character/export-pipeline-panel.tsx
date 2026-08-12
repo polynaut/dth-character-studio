@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { ChevronRight } from 'lucide-react'
 
 import { cn } from '@dth/ui'
 import { formatClock } from '#/lib/rom/execute-jobs.ts'
@@ -72,26 +73,40 @@ function ExportTaskCard({
   ordinal: number
   departing: boolean
 }) {
-  const solid =
-    task.kind === 'daz'
-      ? 'border-emerald-600 bg-emerald-600 text-white'
-      : 'border-orange-600 bg-orange-600 text-white'
-  const accent = task.kind === 'daz' ? 'border-l-emerald-600' : 'border-l-orange-600'
+  const active = task.status === 'active' || departing
+  // The kind's color rides a left BAR and a status dot — the card itself stays
+  // a surface, so a queue of them reads as a list instead of a row of paint.
+  const bar = task.kind === 'daz' ? 'bg-emerald-500' : 'bg-orange-500'
   return (
     <div
       data-task={task.id}
       data-task-status={departing ? 'done' : task.status}
       className={cn(
-        'truncate rounded-md border border-l-4 px-2 py-1 text-xs font-bold transition-all',
-        task.status === 'active' || departing
-          ? solid
-          : cn('border-border bg-muted/60 text-muted-foreground', accent),
+        'relative flex items-center gap-2 overflow-hidden rounded-md pr-1.5 pl-3 text-xs transition-all',
+        active
+          ? 'bg-accent font-semibold text-foreground'
+          : 'bg-card/60 font-medium text-muted-foreground',
         departing && 'translate-x-28 translate-y-12 rotate-6 opacity-0',
       )}
       style={{ transitionDuration: `${FLY_MS}ms` }}
       title={task.detail ? `${task.label}\n${task.detail}` : task.label}
     >
-      <span className="opacity-60 tabular-nums">{ordinal}.</span> {task.label}
+      {/* The accent bar: full-height on the active card, a hairline behind. */}
+      <span
+        aria-hidden
+        className={cn(
+          'absolute inset-y-0 left-0 w-[3px] rounded-full transition-opacity',
+          bar,
+          active ? 'opacity-100' : 'opacity-40',
+        )}
+      />
+      <span
+        aria-hidden
+        className={cn('size-1.5 shrink-0 rounded-full', bar, !active && 'opacity-50')}
+      />
+      <span className="shrink-0 tabular-nums opacity-60">{ordinal}.</span>
+      <span className="truncate py-1.5">{task.label}</span>
+      <ChevronRight className="ml-auto size-3.5 shrink-0 opacity-30" />
     </div>
   )
 }
@@ -128,7 +143,7 @@ export function ExportTaskCards({ tasks }: { tasks: Array<ExportTask> }) {
 
   return (
     // A tiny separator line marks the queue off from the log window.
-    <div className="col-start-1 row-start-1 row-span-2 flex min-h-0 w-40 shrink-0 flex-col border-r border-border pr-2">
+    <div className="col-start-1 row-start-1 row-span-2 flex min-h-0 w-44 shrink-0 flex-col gap-1 border-r border-border/70 pr-3">
       {tasks.map((task) => {
         const isFlying = flying.has(task.id)
         const isCollapsed = collapsed.has(task.id)
@@ -142,7 +157,7 @@ export function ExportTaskCards({ tasks }: { tasks: Array<ExportTask> }) {
             key={task.id}
             className={cn(
               'transition-all',
-              hidden ? 'max-h-0 pb-0 opacity-0' : 'max-h-10 pb-1.5',
+              hidden ? 'max-h-0 opacity-0' : 'max-h-10',
               // A hidden slot may clip — its card is gone or beyond the list's
               // window. A LIVE slot must not, or the fly-out would be cut off
               // mid-flight.
@@ -161,6 +176,38 @@ export function ExportTaskCards({ tasks }: { tasks: Array<ExportTask> }) {
   )
 }
 
+/**
+ * The run's current status, as the panel's headline — the one line worth
+ * reading at a glance, with the per-step clock beside it so a minutes-long
+ * silent step is visibly ticking rather than frozen.
+ */
+function StatusHeadline({ headline }: { headline: { text: string; sinceMs?: number } }) {
+  // Ticks on its own: the poll only moves at step boundaries, and the whole
+  // point is showing life BETWEEN them.
+  const [, tick] = useState(0)
+  useEffect(() => {
+    if (headline.sinceMs === undefined) return
+    const id = window.setInterval(() => tick((n) => n + 1), 1000)
+    return () => window.clearInterval(id)
+  }, [headline.sinceMs])
+  const text = headline.text.charAt(0).toUpperCase() + headline.text.slice(1)
+  return (
+    <p data-status-headline className="mb-1.5 flex items-baseline gap-2 text-sm">
+      <span className="truncate font-semibold text-foreground">{text}</span>
+      {headline.sinceMs !== undefined && (
+        <>
+          <span aria-hidden className="text-border">
+            |
+          </span>
+          <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+            {formatClock(Date.now() - headline.sinceMs)}
+          </span>
+        </>
+      )}
+    </p>
+  )
+}
+
 /** Lead the MESSAGE with a capital, leaving the `[HH:MM:SS] ` stamp alone —
  *  the raw log speaks lowercase ("opening scene"), the window is a caption. */
 function capitalizeLine(line: string): string {
@@ -169,7 +216,15 @@ function capitalizeLine(line: string): string {
   })
 }
 
-export function ExportActivityLog({ log }: { log: { lines: Array<string> } }) {
+export function ExportActivityLog({
+  log,
+  headline,
+}: {
+  log: { lines: Array<string> }
+  /** The run's current status, shown as the panel's own headline (the meter
+   *  under it then carries the percent alone) — plus its per-step clock. */
+  headline?: { text: string; sinceMs?: number }
+}) {
   const boxRef = useRef<HTMLDivElement>(null)
   // Tail mode: whenever lines arrive, keep the newest one in view.
   useEffect(() => {
@@ -177,21 +232,22 @@ export function ExportActivityLog({ log }: { log: { lines: Array<string> } }) {
     if (box) box.scrollTop = box.scrollHeight
   }, [log.lines])
   return (
-    // Fills whatever height the panel row gives it (full header at rest, less
-    // when the sticky header docks) — the grid places it in the buttons'
-    // shared column, so its width IS theirs. Lines only, no caption row.
-    <div
-      data-export-log
-      className="col-start-2 row-start-1 flex min-h-0 min-w-0 flex-col rounded-md border bg-card/80 px-2.5 py-1.5 text-left"
-    >
+    // The grid places this in the buttons' shared column, so its width IS
+    // theirs. Headline + captioned log box; the meters sit below.
+    <div className="col-start-2 row-start-1 flex min-h-0 min-w-0 flex-col text-left">
+      {headline && <StatusHeadline headline={headline} />}
+      <p className="mb-1 text-[10px] tracking-wide text-muted-foreground/70 uppercase">
+        Activity log
+      </p>
       <div
+        data-export-log
         ref={boxRef}
         // A CONSTANT height, deliberately: the header's own height is
         // content-driven, so a content-sized log inflated the whole header as
         // lines arrived (and jumped per line). Fixed box + tail scroll — the
         // newest lines stay in view, the layout never moves.
         // 5 lines exactly: h-20 = 80px at leading-4 (16px per line).
-        className="h-20 overflow-y-auto font-mono text-[11px] leading-4 whitespace-pre-wrap break-all text-muted-foreground"
+        className="h-20 overflow-y-auto rounded-md border border-border/70 bg-muted/40 px-2.5 py-1.5 font-mono text-[11px] leading-4 whitespace-pre-wrap break-all text-muted-foreground"
       >
         {log.lines.map((line, index) => (
           // Index keys are sound here: the list is an append-only rolling tail.
@@ -208,35 +264,36 @@ export function ExportActivityLog({ log }: { log: { lines: Array<string> } }) {
  *  of a two-level display, slightly taller. */
 function ProgressBar({ bar, emphasis = false }: { bar: ExportProgressBar; emphasis?: boolean }) {
   const percent = Math.min(100, Math.max(0, bar.percent))
-  // Status texts arrive lowercase from the logs ("opening scene") — the label
-  // is a caption, so it leads with a capital.
+  // The CURRENT bar's status is the headline above the log, so this row is the
+  // track and its number. The OVERALL bar keeps a label — it counts a
+  // different thing (scenes / networks) and nothing else says so.
   const label = bar.label.charAt(0).toUpperCase() + bar.label.slice(1)
-  // The per-step clock ticks on its own — the poll only moves at step
-  // boundaries, and the whole point is showing life BETWEEN them.
-  const [, tick] = useState(0)
-  useEffect(() => {
-    if (bar.sinceMs === undefined) return
-    const id = window.setInterval(() => tick((n) => n + 1), 1000)
-    return () => window.clearInterval(id)
-  }, [bar.sinceMs])
   return (
-    <div data-progressbar={emphasis ? 'overall' : 'current'} data-percent={Math.round(percent)}>
-      <div className="mb-0.5 flex items-baseline gap-2 text-[11px] text-muted-foreground">
-        <span className="truncate">{label}</span>
-        {bar.sinceMs !== undefined && (
-          <span className="shrink-0 tabular-nums">· {formatClock(Date.now() - bar.sinceMs)}</span>
+    <div
+      data-progressbar={emphasis ? 'overall' : 'current'}
+      data-percent={Math.round(percent)}
+      className="flex items-center gap-2"
+    >
+      {emphasis && (
+        <span className="shrink-0 truncate text-[11px] text-muted-foreground">{label}</span>
+      )}
+      <div
+        className={cn(
+          'min-w-0 flex-1 overflow-hidden rounded-full bg-muted',
+          emphasis ? 'h-1.5' : 'h-1',
         )}
-        <span className="ml-auto shrink-0 tabular-nums">{Math.round(percent)}%</span>
-      </div>
-      <div className={cn('overflow-hidden rounded-full bg-muted', emphasis ? 'h-2' : 'h-1.5')}>
+      >
         <div
           className={cn(
             'h-full rounded-full transition-[width] duration-500',
-            bar.kind === 'daz' ? 'bg-emerald-600' : 'bg-orange-600',
+            bar.kind === 'daz' ? 'bg-emerald-500' : 'bg-orange-500',
           )}
           style={{ width: `${percent}%` }}
         />
       </div>
+      <span className="w-9 shrink-0 text-right text-[11px] tabular-nums text-muted-foreground">
+        {Math.round(percent)}%
+      </span>
     </div>
   )
 }
@@ -259,7 +316,14 @@ export function ExportPipelinePanel({ view }: { view: ExportPipelineView }) {
           lines arrive. States without a feed used to drop it (the pending
           stretch before the Runner claims, the Daz→Houdini baton moment),
           and a working pipeline with no log window reads as broken. */}
-      <ExportActivityLog log={view.log ?? { lines: [] }} />
+      <ExportActivityLog
+        log={view.log ?? { lines: [] }}
+        headline={
+          view.bars
+            ? { text: view.bars.current.label, sinceMs: view.bars.current.sinceMs }
+            : undefined
+        }
+      />
       {view.bars && (
         <div className="col-start-2 row-start-2 flex min-w-0 flex-col gap-1.5">
           {view.bars.overall && <ProgressBar bar={view.bars.overall} emphasis />}

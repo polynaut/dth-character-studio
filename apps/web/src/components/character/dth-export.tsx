@@ -413,6 +413,16 @@ export function DthExportAction({
       : 'waiting for Daz Studio to pick the batch up'
     const houdiniOpeningLine = 'opening Houdini (hython)'
     const log = (() => {
+      // Each leg re-renders only while IT is talking; what it last rendered
+      // stays in the transcript once it goes quiet, so the Houdini half reads
+      // as the continuation of the Daz half instead of replacing it.
+      if (progressNow && progressNow.state !== 'finished' && progressNow.state !== 'dead') {
+        const lines =
+          progressNow.state === 'running' && progressNow.step?.lines.length
+            ? progressNow.step.lines
+            : [dazOpeningLine]
+        dazRenderedRef.current = stampLogLines(dazStampsRef.current, lines, stamp)
+      }
       if (houdiniNow) {
         if (houdiniNow.state === 'running' && houdiniNow.activity) {
           // The HDA's own lines say "DazToHue: …" and nothing about WHERE —
@@ -424,16 +434,14 @@ export function DthExportAction({
           lastHoudiniLinesRef.current.length > 0
             ? lastHoudiniLinesRef.current
             : [houdiniOpeningLine]
-        return { lines: stampLogLines(houdiniStampsRef.current, lines, stamp) }
+        houdiniRenderedRef.current = stampLogLines(houdiniStampsRef.current, lines, stamp)
       }
-      if (progressNow && progressNow.state !== 'finished' && progressNow.state !== 'dead') {
-        const lines =
-          progressNow.state === 'running' && progressNow.step?.lines.length
-            ? progressNow.step.lines
-            : [dazOpeningLine]
-        return { lines: stampLogLines(dazStampsRef.current, lines, stamp) }
-      }
-      return null
+      const all = [
+        ...sealedLogRef.current,
+        ...dazRenderedRef.current,
+        ...houdiniRenderedRef.current,
+      ]
+      return all.length > 0 ? { lines: all.slice(-LOG_TAIL_MAX) } : null
     })()
     // The full-width meter row above tasks+log. `current` = the unit under
     // work; `overall` joins in only when the leg spans several units (scenes /
@@ -600,6 +608,16 @@ export function DthExportAction({
   // logs carry no timestamps — see stampLogLines).
   const dazStampsRef = useRef<StampedLogStore>({ lines: [], stamps: [] })
   const houdiniStampsRef = useRef<StampedLogStore>({ lines: [], stamps: [] })
+  // ONE transcript per run: what each leg last rendered, kept after that leg
+  // goes quiet. The Daz lines used to vanish the moment Houdini took over —
+  // the run is one story, and the window scrolls, so the earlier chapters
+  // stay. `sealed` holds the legs that are DONE talking (the Daz batch, and
+  // each finished project of a multi-project queue).
+  const sealedLogRef = useRef<Array<string>>([])
+  const dazRenderedRef = useRef<Array<string>>([])
+  const houdiniRenderedRef = useRef<Array<string>>([])
+  /** How much of a run's transcript is kept (the window shows 5 and scrolls). */
+  const LOG_TAIL_MAX = 200
   // When the CURRENT step began — feeds the meter's per-step clock. Keyed on
   // the log tail + the bar's label: any new line (or state flip) resets it.
   const stepStartRef = useRef<{ key: string; atMs: number } | null>(null)
@@ -613,6 +631,9 @@ export function DthExportAction({
     lastHoudiniLinesRef.current = []
     dazStampsRef.current = { lines: [], stamps: [] }
     houdiniStampsRef.current = { lines: [], stamps: [] }
+    sealedLogRef.current = []
+    dazRenderedRef.current = []
+    houdiniRenderedRef.current = []
     stepStartRef.current = null
     dazLaunchedRef.current = false
     setPipeline(null)
@@ -685,7 +706,11 @@ export function DthExportAction({
     houdiniQueueRef.current = rest.length > 0 ? { projects: rest, scenes } : null
     const stem = (first.split(/[\\/]/).pop() ?? first).replace(/\.[^./\\]+$/, '')
     currentHipRef.current = stem
-    // A fresh project must not open showing the previous project's lines.
+    // A fresh project starts its own lines — the previous project's are SEALED
+    // into the transcript first (the run is one story; the window scrolls).
+    sealedLogRef.current = [...sealedLogRef.current, ...houdiniRenderedRef.current]
+    houdiniRenderedRef.current = []
+    houdiniStampsRef.current = { lines: [], stamps: [] }
     lastHoudiniLinesRef.current = []
     try {
       await startHoudiniExport({
