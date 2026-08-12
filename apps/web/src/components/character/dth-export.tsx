@@ -24,6 +24,7 @@ import { PrimaryBadge } from '#/components/primary-badge.tsx'
 import { RunnerGateNotice } from '#/components/runner-gate-notice.tsx'
 import {
   abortExporterJobs,
+  adoptHoudiniRun,
   clearExporterJobFiles,
   dismissExportRun,
   dismissHoudiniRun,
@@ -671,6 +672,19 @@ export function DthExportAction({
   const runReportRef = useRef<{
     daz?: { total: number; failed: number; errors: Array<string>; elapsedMs?: number }
     houdini: Array<{ line: string; failed: boolean; elapsedMs?: number }>
+    /**
+     * Pre-formatted lines INHERITED from a window that watched earlier legs and
+     * is gone (a reload — see the adopt effect). Emitted verbatim ahead of this
+     * window's own, and deliberately NOT folded into `houdini`: that array's
+     * LENGTH is "how many Houdini projects have finished", which drives the
+     * task cards. Folding the carried lines in there marked the RUNNING
+     * project's card done the moment a restore landed — one inherited line per
+     * finished leg PLUS the Daz leg's line and every Daz error.
+     */
+    carried?: Array<string>
+    /** Whether any inherited leg failed — the report's tone, which the lines
+     *  themselves can't carry. */
+    carriedFailed?: boolean
   } | null>(null)
   /** The project the LIVE Houdini run belongs to — attribution for its line. */
   const currentHipRef = useRef('')
@@ -686,6 +700,14 @@ export function DthExportAction({
     let anyFailed = false
     let totalMs = 0
     let totalKnown = true
+    // Legs an earlier window watched, restored from the run plan — they lead,
+    // because they happened first. Their timings died with that window, so a
+    // restored run reports no total.
+    if (report.carried?.length) {
+      lines.push(...report.carried)
+      anyFailed ||= report.carriedFailed === true
+      totalKnown = false
+    }
     if (report.daz) {
       const d = report.daz
       anyFailed ||= d.failed > 0
@@ -729,8 +751,36 @@ export function DthExportAction({
     houdiniOpenedLineRef.current = ''
     lastHoudiniLinesRef.current = []
     try {
+      // The queue and the report ride along into the run's own sidecar, so a
+      // window that reloads mid-leg can finish the WHOLE process: the projects
+      // behind this one still start, and the end report still names the legs
+      // this window never saw.
+      const report = runReportRef.current
       await startHoudiniExport({
-        data: { projectId, id: character.id, hipPath: first, scenes },
+        data: {
+          projectId,
+          id: character.id,
+          hipPath: first,
+          scenes,
+          remaining: rest,
+          // Everything the end report will need that this project's own leg
+          // won't produce — INCLUDING lines already inherited from a window
+          // before this one, or a second reload would drop the first's legs.
+          reportLines: [
+            ...(report?.carried ?? []),
+            ...(report?.daz
+              ? [
+                  `Daz: ${report.daz.total - report.daz.failed}/${report.daz.total} scene${report.daz.total === 1 ? '' : 's'} exported`,
+                  ...report.daz.errors,
+                ]
+              : []),
+            ...(report?.houdini.map((leg) => leg.line) ?? []),
+          ],
+          anyFailed:
+            report?.carriedFailed === true ||
+            (report?.daz?.failed ?? 0) > 0 ||
+            (report?.houdini.some((leg) => leg.failed) ?? false),
+        },
       })
       setHoudini({ state: 'starting', startedAtMs: Date.now() })
       publishPipeline(progressRef.current, { state: 'starting', startedAtMs: Date.now() })
@@ -964,6 +1014,9 @@ export function DthExportAction({
       runReportRef.current = null
       const done = report
         ? [
+            // Inherited legs first — a reloaded window's run can die too, and
+            // what already finished must not be lost with it.
+            ...(report.carried ?? []),
             ...(report.daz
               ? [`Daz: ${report.daz.total - report.daz.failed}/${report.daz.total} exported`]
               : []),
@@ -980,6 +1033,56 @@ export function DthExportAction({
     setHoudini(run)
     publishPipeline(progressRef.current, run)
   }
+  // A Houdini leg still running when this window reloaded: the watch is memory
+  // (and the leg is HEADLESS, so nothing on screen would say so), and with it
+  // went the queue of projects behind it and the accumulated report. The run's
+  // own sidecar carries all three — adopt it, re-arm the queue and the report,
+  // and rebuild the cards. Mount-only: the character can't change under a
+  // mounted editor, and a second adopt would fight the live watch.
+  useEffect(() => {
+    let active = true
+    void adoptHoudiniRun({ data: { projectId, id: character.id } })
+      .then((plan) => {
+        if (!active || !plan) return
+        currentHipRef.current = stemOf(plan.hipPath)
+        houdiniQueueRef.current =
+          plan.remaining.length > 0
+            ? { projects: plan.remaining, scenes: plan.sceneScope }
+            : null
+        // The report is REBUILT from the lines the plan carries — this window
+        // never saw those legs, and the one end-of-everything report has to
+        // name them anyway. They ride as pre-formatted lines (their per-leg
+        // timings are gone with the window that measured them) in `carried`,
+        // NOT in `houdini`: that array's length is the count of finished
+        // Houdini projects and drives the task cards, so folding these in
+        // would mark the running project's card done on arrival.
+        runReportRef.current = {
+          carried: plan.reportLines,
+          carriedFailed: plan.anyFailed,
+          houdini: [],
+        }
+        pipelineRef.current = {
+          daz: [],
+          houdini: [plan.hipPath, ...plan.remaining].map((path) => ({
+            path,
+            label: stemOf(path),
+            networks: plan.sceneScope.map(stemOf),
+          })),
+        }
+        // Arm the watch's own poll: `houdini` state drives the interval.
+        setHoudini({ state: 'starting', startedAtMs: plan.startedAtMs })
+        publishPipeline(progressRef.current, { state: 'starting', startedAtMs: plan.startedAtMs })
+      })
+      .catch(() => {
+        // Read-only convenience — without it the leg simply stays invisible,
+        // which is the behaviour this replaces.
+      })
+    return () => {
+      active = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   useRefetchOnFocus(
     () => {
       void refreshStatus()
@@ -1100,7 +1203,7 @@ export function DthExportAction({
           // anymore — but the studio stops watching and drops the projects
           // still queued behind this one, which is the part the user is
           // actually asking to cancel.
-          dismissHoudiniRun()
+          void dismissHoudiniRun()
           const dropped = houdiniQueueRef.current?.projects.length ?? 0
           houdiniQueueRef.current = null
           // The accumulated report belongs to a process that no longer ends

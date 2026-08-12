@@ -4,7 +4,12 @@ import { fillSectionsFrom } from '#/lib/fill-sections.ts'
 import { EXPORTS_FOLDER, LEGACY_EXPORTS_FOLDER } from '#/lib/scene-subfolder.ts'
 import { avatarFileName, avatarSourceMaster, avatarSourceName, parseAvatarName } from './avatar-names'
 import { normalizeSceneKey } from './execute-jobs.ts'
-import { HOUDINI_JOB_FILE, HOUDINI_RESULT_FILE } from './houdini-jobs.ts'
+import {
+  HOUDINI_CONSOLE_FILE,
+  HOUDINI_JOB_FILE,
+  HOUDINI_RESULT_FILE,
+  HOUDINI_RUN_FILE,
+} from './houdini-jobs.ts'
 import { characterFolderName } from './library'
 import { dirname, join, relativeInside } from './storage/fs'
 
@@ -89,7 +94,12 @@ export function characterZipExclusions(opts: {
   includeDazExports: boolean
   includeHoudiniExports: boolean
 }): { excludeRel: Array<string>; excludeDirNames: Array<string> } {
-  const excludeRel = [HOUDINI_JOB_FILE, HOUDINI_RESULT_FILE]
+  // EVERY Houdini run file, not just the handoff pair: all four are
+  // machine-local state about a run on THIS machine — absolute job/result/hip
+  // paths, a console log, a queue of projects — and a zip is what gets handed
+  // to someone else. The console log and the run plan were missed when each
+  // landed; the set lives in `houdini-jobs.ts` now so the next one can't be.
+  const excludeRel = [HOUDINI_JOB_FILE, HOUDINI_RESULT_FILE, HOUDINI_CONSOLE_FILE, HOUDINI_RUN_FILE]
   const excludeDirNames: Array<string> = []
   if (!opts.includeDazExports) excludeDirNames.push(EXPORTS_FOLDER, LEGACY_EXPORTS_FOLDER)
   if (!opts.includeHoudiniExports && opts.exportSubdir.trim()) {
