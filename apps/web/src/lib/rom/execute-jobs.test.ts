@@ -27,6 +27,7 @@ import {
   formatClock,
   formatElapsed,
   hipSelectionAfterToggle,
+  hipsForSelectedScenes,
   stampLogLines,
   houdiniModeForSelection,
   scenesMissingExport,
@@ -602,6 +603,49 @@ describe('formatElapsed — the run clock/total, three widths', () => {
     // Zero-padded tail so the ticking clock doesn't jitter in width.
     expect(formatElapsed(60_000 + 5_000)).toBe('1m 05s')
     expect(formatElapsed(60 * 60_000 + 3 * 60_000)).toBe('1h 03m')
+  })
+})
+
+describe('hipsForSelectedScenes — which projects a scene selection involves', () => {
+  const SLIM = 'D:/chars/Kira/houdini/daz-export/KiraSlim/Kira.dth'
+  const THICK = 'D:/chars/Kira/houdini/daz-export/KiraThick/Kira.dth'
+  const slimHip = { hipPath: 'D:/chars/Kira/houdini/slim.hip', imports: [SLIM.toLowerCase()] }
+  const bothHip = {
+    hipPath: 'D:/chars/Kira/houdini/both.hip',
+    imports: [SLIM.toLowerCase(), THICK.toLowerCase()],
+  }
+  const unscanned = { hipPath: 'D:/chars/Kira/houdini/new.hip', imports: [] }
+
+  it('selects exactly the projects importing a selected scene', () => {
+    expect([...hipsForSelectedScenes([slimHip, bothHip], [SLIM], new Set())]).toEqual([
+      slimHip.hipPath,
+      bothHip.hipPath,
+    ])
+    // Only THICK selected: the slim-only project drops out.
+    expect([...hipsForSelectedScenes([slimHip, bothHip], [THICK], new Set())]).toEqual([
+      bothHip.hipPath,
+    ])
+  })
+
+  it('matches by PATH, spelling-insensitively — not by any name', () => {
+    const windowsSpelling = 'd:\\chars\\Kira\\houdini\\daz-export\\KiraSlim\\Kira.dth'
+    expect([...hipsForSelectedScenes([slimHip], [windowsSpelling], new Set())]).toEqual([
+      slimHip.hipPath,
+    ])
+  })
+
+  it('NEVER drops an unscanned project — the studio cannot know', () => {
+    // Ticked and unknown → stays ticked (un-ticking on ignorance would
+    // silently skip the Houdini half of the run).
+    expect(hipsForSelectedScenes([unscanned], [SLIM], new Set([unscanned.hipPath]))).toEqual(
+      new Set([unscanned.hipPath]),
+    )
+    // Un-ticked and unknown → stays un-ticked: a guess in the other direction.
+    expect(hipsForSelectedScenes([unscanned], [SLIM], new Set())).toEqual(new Set())
+  })
+
+  it('implies nothing when no scene is selected', () => {
+    expect(hipsForSelectedScenes([slimHip, bothHip], [], new Set())).toEqual(new Set())
   })
 })
 

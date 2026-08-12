@@ -32,6 +32,7 @@ import {
   exporterJobsWorking,
   fetchExecuteScenes,
   fetchExportRunProgress,
+  fetchCachedHoudiniScans,
   fetchExportRunnerGate,
   fetchHoudiniRunProgress,
   fileExists,
@@ -44,6 +45,7 @@ import {
   formatClock,
   formatElapsed,
   hipSelectionAfterToggle,
+  hipsForSelectedScenes,
   stampLogLines,
   houdiniModeForSelection,
   normalizeSceneKey,
@@ -52,7 +54,10 @@ import {
   scenesMissingRomAnimation,
 } from '#/lib/rom/execute-jobs.ts'
 
+import { sceneDthPath } from '#/lib/rom/houdini-jobs.ts'
+
 import type { ExecuteSceneStatus, ExportRunProgress, RunnerGate } from '#/lib/rom/api.ts'
+import type { HoudiniProjectImports } from '#/lib/rom/execute-jobs.ts'
 import type {
   ExportPipelineView,
   ExportProgressBar,
@@ -1465,6 +1470,11 @@ function DthExportDialog({
   // before OR after this probe lands.
   const [hipMissing, setHipMissing] = useState<ReadonlySet<string>>(new Set())
   const hipMissingRef = useRef<ReadonlySet<string>>(new Set())
+  // What each linked project's networks IMPORT, from the stored scan (no
+  // hython here — a `.hip` costs tens of seconds to open). Drives the
+  // scene→project auto-selection; a project the sweep hasn't reached yet
+  // simply isn't in this list and is never un-ticked on that ignorance.
+  const [hipImports, setHipImports] = useState<Array<HoudiniProjectImports>>([])
   // null = still checking (Start stays off for the moment the probe takes).
   const [runner, setRunner] = useState<RunnerGate | null>(null)
 
@@ -1492,6 +1502,24 @@ function DthExportDialog({
       active = false
     }
     // Mount-only, like the scene probe — the list can't change while modal.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    void fetchCachedHoudiniScans({ data: { projectId, id: character.id } })
+      .then((scans) => {
+        if (!active) return
+        setHipImports(scans.map((scan) => ({ hipPath: scan.hipPath, imports: scan.imports })))
+      })
+      .catch(() => {
+        // Read-only convenience: no scan, no auto-adjust — the list simply
+        // keeps whatever the user picked.
+      })
+    return () => {
+      active = false
+    }
+    // Mount-only, like the probes above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -1563,13 +1591,13 @@ function DthExportDialog({
         const pre = preCheckedScenes(modeRef.current, scenes)
         setChecked(pre)
         // Scenes with outstanding work → their Houdini projects join the run
-        // too, so a plain Start does the WHOLE round trip. The studio has no
-        // scene↔project map (that lives inside the `.hip`), so "the involved
-        // projects" is approximated as ALL linked ones — 456.py only exports
-        // the networks importing the selected scenes, so an uninvolved project
-        // simply no-ops. Only seeds an untouched selection: a user pick wins.
-        // Never under rom-only: that run writes no export, so there is no
-        // continuation to arm (see hipSelectionAfterToggle for the full why).
+        // too, so a plain Start does the WHOLE round trip. WHICH projects is
+        // settled by the effect below (it also re-runs on every later change
+        // of the scene selection); this only seeds the untouched case with
+        // every linked project, which the effect then narrows the moment the
+        // stored scans say what each one imports. Never under rom-only: that
+        // run writes no export, so there is no continuation to arm (see
+        // hipSelectionAfterToggle for the full why).
         if (pre.size > 0 && modeRef.current !== 'rom-only' && character.houdiniProjects.length > 0) {
           setCheckedHips((prev) =>
             prev.size > 0
@@ -1609,6 +1637,37 @@ function DthExportDialog({
     // and wipe the user's checkbox choices mid-pick.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, character.id])
+
+  // The scene selection DECIDES which Houdini projects belong in the run: a
+  // project joins when one of its networks imports a selected scene's `.dth`
+  // — the same key 456.py matches on at export time — so ticking a scene off
+  // takes its project with it. Runs on every change of the scene selection
+  // (whatever changed it: a toggle, Solo, All, a mode re-seed), and again when
+  // the stored scans land. Projects the scan hasn't reached keep whatever they
+  // have (`hipsForSelectedScenes` never drops one on ignorance), and missing
+  // `.hip`s stay out. Not under rom-only — that list is a manual OPEN pick.
+  useEffect(() => {
+    if (mode === 'rom-only' || hipImports.length === 0) return
+    const scenesDth = [...checked]
+      .map((scene) => sceneDthPath(character, scene))
+      .filter((dth) => dth !== '')
+    // EVERY linked project is judged — a project the scan never reached is
+    // absent from the store, and leaving it out of the list here would drop it
+    // by omission, which is the very guess the rule refuses to make.
+    const byPath = new Map(hipImports.map((entry) => [entry.hipPath, entry.imports]))
+    const judged = character.houdiniProjects.map((hipPath) => ({
+      hipPath,
+      imports: byPath.get(hipPath) ?? [],
+    }))
+    setCheckedHips((prev) => {
+      const next = hipsForSelectedScenes(judged, scenesDth, prev)
+      for (const hip of hipMissing) next.delete(hip)
+      // Same members → same object, so the Houdini list doesn't re-render (and
+      // `houdiniModeForSelection` isn't re-run) on every unrelated poll.
+      if (next.size === prev.size && [...next].every((hip) => prev.has(hip))) return prev
+      return next
+    })
+  }, [checked, hipImports, hipMissing, mode, character])
 
   function toggle(scene: string) {
     setChecked((prev) => {

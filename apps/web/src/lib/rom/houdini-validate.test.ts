@@ -21,6 +21,7 @@ function scanned(over: Partial<MaterialScanProject> = {}): MaterialScanProject {
     nodes: [],
     job: CHAR,
     fps: 30,
+    imports: [],
     refs: { collapsible: 0, foreign: 0, broken: [], hipRelative: [] },
     prefill: { fillable: [], missing: [] },
     ...over,

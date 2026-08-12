@@ -1057,6 +1057,7 @@ def op_scan(request):
             "nodes": [],
             "job": "",
             "fps": 0.0,
+            "imports": [],
             "refs": {"collapsible": 0, "foreign": 0, "broken": []},
             "prefill": {"fillable": [], "missing": []},
         }
@@ -1067,6 +1068,7 @@ def op_scan(request):
             # of seconds, and the General tab must not pay it a second time.
             entry["job"] = _scene_job()
             entry["fps"] = _scene_fps()
+            entry["imports"] = _scene_dth_imports()
             entry["refs"] = _project_ref_info(export_dir)
             entry["prefill"] = _prefill_scan()
         except Exception as exc:
@@ -1401,6 +1403,41 @@ def _prefill_scan():
             elif not str(parm.unexpandedString() or "").strip():
                 info["fillable"].append(label)
     return info
+
+
+def _scene_dth_imports():
+    """EVERY `.dth` this project's networks import, normalized + deduped.
+
+    The studio WROTE those files at paths it computes, so each one identifies
+    the Daz scene behind a network exactly — far steadier than a node or
+    network-box name, which the user renames freely. Read in the scan pass and
+    stored with the project, so the DTH Export dialog can tell which projects
+    a scene selection actually involves WITHOUT opening a `.hip` (tens of
+    seconds each). The same key 456.py matches on at export time — the run and
+    the dialog must never disagree about which network belongs to which scene.
+    """
+    found = []
+    seen = set()
+    for node in hou.node("/").allSubChildren():
+        name = node.type().name().lower()
+        if "daztohueimport" not in name or "groom" in name:
+            continue
+        parm = node.parm("import_character_dtu_file")
+        if parm is None:
+            continue
+        try:
+            value = str(parm.evalAsString() or "").strip()
+        except Exception:
+            continue
+        if not value:
+            continue
+        # Expansion of a `$HIP`/`$JOB`-relative parm leaves `..` hops — collapse
+        # them, or the path can never match the studio's absolute key.
+        key = _norm_path(os.path.normpath(value)).lower()
+        if key and key not in seen:
+            seen.add(key)
+            found.append(key)
+    return found
 
 
 def _wired_scene_dth():

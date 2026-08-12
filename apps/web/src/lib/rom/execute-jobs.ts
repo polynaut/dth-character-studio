@@ -442,6 +442,59 @@ export function hipSelectionAfterToggle(
   return mode === 'rom-only' ? new Set([hip]) : new Set([...prev, hip])
 }
 
+/** What one linked Houdini project imports, as the scan recorded it. */
+export interface HoudiniProjectImports {
+  hipPath: string
+  /** Every `.dth` its networks import (normalized lowercase) — EMPTY means
+   *  "never scanned / not known", never "imports nothing": the scan only
+   *  reaches projects inside the character folder, and a `.hip` saved since
+   *  the last sweep reads as unscanned until it catches up. */
+  imports: ReadonlyArray<string>
+}
+
+/**
+ * THE "which projects does this scene selection involve" rule.
+ *
+ * A project belongs in the run when at least one of its networks imports the
+ * `.dth` of a SELECTED scene — the exact key 456.py matches nodes on at export
+ * time, so the dialog and the run can never disagree about which network
+ * belongs to which scene. Names are deliberately not consulted: users rename
+ * networks and copy projects between characters.
+ *
+ * Two honest fallbacks, both erring toward keeping a project rather than
+ * silently dropping it:
+ *
+ * - a project with NO recorded imports (never scanned, or scanned before this
+ *   field existed) keeps whatever the user currently has — the studio cannot
+ *   know, and un-ticking on ignorance would quietly skip Houdini work;
+ * - with nothing selected there is nothing to match, so nothing is implied.
+ *
+ * `scenesDth` are the selected scenes' `.dth` paths (see `sceneDthPath`), in
+ * any spelling — compared normalized.
+ */
+export function hipsForSelectedScenes(
+  hips: ReadonlyArray<HoudiniProjectImports>,
+  scenesDth: ReadonlyArray<string>,
+  /** What is ticked right now — the answer for the unscanned ones. */
+  current: ReadonlySet<string>,
+): Set<string> {
+  const wanted = new Set(
+    scenesDth.map((path) => path.trim().replace(/\\/g, '/').toLowerCase()).filter(Boolean),
+  )
+  const next = new Set<string>()
+  for (const hip of hips) {
+    if (hip.imports.length === 0) {
+      if (current.has(hip.hipPath)) next.add(hip.hipPath)
+      continue
+    }
+    const uses = hip.imports.some((dth) =>
+      wanted.has(dth.trim().replace(/\\/g, '/').toLowerCase()),
+    )
+    if (uses) next.add(hip.hipPath)
+  }
+  return next
+}
+
 /**
  * The hidden generated script a mode's job rows run — each selects the open
  * scene's overrides itself, so one script serves every scene:

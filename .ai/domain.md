@@ -657,6 +657,18 @@ older runtimes as stale.
   junction feature in v0.63 — with nothing to decide up front, the dialog is
   just the scene name again; `houdiniPathStyle` is edited in Settings →
   Project, and the machine-local `houdini-intro.json` flag is retired.
+- **Which projects a scene selection involves.** A network's identity is the
+  `.dth` it imports (`import_character_dtu_file`) — the studio wrote that file
+  at a path it computes (`sceneDthPath`), so it names the Daz scene exactly,
+  unlike a node or network-box name the user renames freely. 456.py matches on
+  it at export time; the DTH Export dialog matches on the SAME key without
+  opening a `.hip` because the background scan records every project's imports
+  (`materialScanProject.imports`, hython `_scene_dth_imports`, stored per
+  character in `houdini-scan.json`). `hipsForSelectedScenes` (pure) turns
+  "these scenes" into "these projects", and refuses to guess in one specific
+  way: a project the scan has NOT reached keeps whatever is ticked — dropping
+  it on ignorance would silently skip the Houdini half of a run. An old store
+  entry parses with `imports: []`, which reads as unknown for the same reason.
 - **The Houdini export handoff — "Export too" (COMPLETE).** After a Daz bulk
   export, the DazToHue export nodes in a Houdini project run for the scenes the
   user ticked. The toggle sits beside the dialog's Houdini project select,
