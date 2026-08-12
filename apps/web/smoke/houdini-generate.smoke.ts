@@ -70,8 +70,15 @@ test('a single-scene character is not asked which scene — there is only one', 
   const dialog = await openGenerateDialog(page)
 
   await expect(dialog.getByLabel('Daz scene to import')).toHaveCount(0)
+  // …but it SAYS which scene it is for. Without the picker there was nothing
+  // naming the scene at all, and a generated project's whole identity is which
+  // export set it imports.
+  await expect(dialog).toContainText('KiraDefault_G9_GP')
+  await expect(dialog).toContainText('(primary)')
   await dialog.getByRole('button', { name: 'Generate', exact: true }).click()
   await expect(page.getByRole('dialog')).toHaveCount(0)
+  // And so does the confirmation, after the dialog is gone.
+  await expect(page.getByText(/Houdini project generated for KiraDefault_G9_GP/)).toBeVisible()
 
   const prefill = await lastPrefill(page)
   // The fixture's scenes sit directly in `daz3d/`, so each export subfolder is
@@ -86,6 +93,11 @@ test('the first project is not asked either — it is the primary scene\'s', asy
   // TWO scenes are linked, but no Houdini project is yet: the character's
   // first project is its main one, wired to the primary without a question.
   await expect(dialog.getByLabel('Daz scene to import')).toHaveCount(0)
+  // The one that MATTERS: two scenes linked, no picker — so the line naming
+  // the primary is the only thing telling the user which of them this project
+  // will be wired to.
+  await expect(dialog).toContainText('KiraDefault_G9_GP')
+  await expect(dialog).not.toContainText('KiraSummertide')
   await dialog.getByRole('button', { name: 'Generate', exact: true }).click()
   await expect(page.getByRole('dialog')).toHaveCount(0)
 

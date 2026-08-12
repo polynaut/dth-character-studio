@@ -587,20 +587,24 @@ export function HoudiniProjectsField({
           houdiniDir={houdiniDir}
           houdiniSubdir={houdiniSubdir}
           onClose={() => setGenerateOpen(false)}
-          onGenerated={async (scenePath, networkAdded, visibleTypes, prefilled, fps) => {
+          onGenerated={async (scenePath, networkAdded, visibleTypes, prefilled, fps, dazScenePath) => {
             // The timeline is only ever CLAIMED when hython read it back at 30
             // — the generation reports the scene's own `hou.fps()`, not the
             // value it asked for, so a Houdini that refused the call never
             // shows up as a success (it gets the warning below instead).
             const timeline = sameFps(fps) ? `, timeline at ${DTH_FPS} fps` : ''
+            // The scene is IN the confirmation: a character with several
+            // scenes gets one project each, and "which one did I just make?"
+            // is otherwise only answerable by opening the project.
+            const forScene = ` for ${sceneLabel(dazScenePath)}`
             await addProjects(
               [scenePath],
               { copy: false },
               networkAdded
                 ? prefilled.length > 0
-                  ? `Houdini project generated — DazToHue network, Set Project and the import/export paths are baked in${timeline}`
-                  : `Houdini project generated — DazToHue network and Set Project are baked in${timeline}`
-                : `Houdini project generated (Set Project baked in${timeline}) — add the DazToHue network from the shelf`,
+                  ? `Houdini project generated${forScene} — DazToHue network, Set Project and the import/export paths are baked in${timeline}`
+                  : `Houdini project generated${forScene} — DazToHue network and Set Project are baked in${timeline}`
+                : `Houdini project generated${forScene} (Set Project baked in${timeline}) — add the DazToHue network from the shelf`,
             )
             // A scene that came back on some other FPS is worth saying out loud:
             // the ROM is one pose per frame at 30, and DazToHue's import node —
@@ -719,6 +723,10 @@ function GenerateProjectDialog({
     prefilled: Array<string>,
     /** The FPS the saved scene reports (0 = hython could not answer). */
     fps: number,
+    /** The Daz scene the new network imports — named in the confirmation, so
+     *  "which scene is this project for?" is answered after the fact too, not
+     *  only in the dialog that has since closed. */
+    dazScenePath: string,
   ) => Promise<void>
 }) {
   const [name, setName] = useState(defaultProjectName(projectName, character.name))
@@ -784,6 +792,7 @@ function GenerateProjectDialog({
         result.visibleTypes,
         result.prefilled,
         result.fps,
+        dazScenePath,
       )
       onClose()
     } catch (error) {
@@ -825,7 +834,9 @@ function GenerateProjectDialog({
     >
       <p className="text-xs text-muted-foreground">
         Creates <code>{(name.trim() || '<name>') + '.hiplc'}</code> into{' '}
-        <code>{`.\\${houdiniDirName}`}</code>.
+        <code>{`.\\${houdiniDirName}`}</code>, wired to{' '}
+        <code>{sceneLabel(dazScenePath)}</code>
+        {dazScenePath === character.scenePath ? ' (primary)' : ''}.
       </p>
       <div>
         <Label htmlFor="generate-houdini-name" className="mb-1">
