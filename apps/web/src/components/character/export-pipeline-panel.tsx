@@ -65,8 +65,10 @@ function ExportTaskCard({
   departing,
 }: {
   task: ExportTask
-  /** 1-based chronological number, stable for the whole run (finished tasks
-   *  keep their slot in the data, so later cards never renumber). */
+  /** 1-based position in the REMAINING queue: a finished card's slot collapses
+   *  and everything behind it moves up a number, so the top card is always
+   *  "1." and the column reads as what is still to do. (The alternative —
+   *  fixed run-order numbers — leaves a lone "2." standing at the end.) */
   ordinal: number
   departing: boolean
 }) {
@@ -127,9 +129,12 @@ export function ExportTaskCards({ tasks }: { tasks: Array<ExportTask> }) {
   return (
     // A tiny separator line marks the queue off from the log window.
     <div className="col-start-1 row-start-1 row-span-2 flex min-h-0 w-40 shrink-0 flex-col border-r border-border pr-2">
-      {tasks.map((task, index) => {
+      {tasks.map((task) => {
         const isFlying = flying.has(task.id)
         const isCollapsed = collapsed.has(task.id)
+        // Position among the LIVE slots — so the number and the slide happen
+        // in the same frame (a card mid-flight still holds its slot, and its
+        // number with it).
         const position = visibleIds.indexOf(task.id)
         const hidden = isCollapsed || position >= 5
         return (
@@ -148,7 +153,7 @@ export function ExportTaskCards({ tasks }: { tasks: Array<ExportTask> }) {
             )}
             style={{ transitionDuration: `${COLLAPSE_MS}ms` }}
           >
-            <ExportTaskCard task={task} ordinal={index + 1} departing={isFlying} />
+            <ExportTaskCard task={task} ordinal={Math.max(position, 0) + 1} departing={isFlying} />
           </div>
         )
       })}

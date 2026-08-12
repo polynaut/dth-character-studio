@@ -293,17 +293,21 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
   // label shows the newest one. The chip itself stays a constant "Working"
   // (counts live in the panel's meters + the tooltip).
   await houdiniReportsExporting(page)
-  await expect(page.locator('[data-export-log]')).toContainText('Baking textures 3/12…', {
+  // Prefixed with the app they came from — the HDA's own lines say only
+  // "DazToHue: …", while the studio's status lines name their app themselves.
+  await expect(page.locator('[data-export-log]')).toContainText('Houdini; Baking textures 3/12…', {
     timeout: 15_000,
   })
-  await expect(page.locator('[data-export-log]')).toContainText('Importing Alembic…')
+  await expect(page.locator('[data-export-log]')).toContainText('Houdini; Importing Alembic…')
   await expect(page.getByRole('button', { name: /Working/ })).toBeVisible()
   // The Houdini meter is STEPWISE — open-project + each network, all equal
   // (hython's console has no percents to read): 1 network → 2 steps, the open
   // one done → 50%. One network = one bar, no overall; its label is the
   // latest captured line.
   await expect(page.locator('[data-progressbar="current"]')).toHaveAttribute('data-percent', '50')
-  await expect(page.locator('[data-progressbar="current"]')).toContainText('Baking textures 3/12…')
+  await expect(page.locator('[data-progressbar="current"]')).toContainText(
+    'Houdini; Baking textures 3/12…',
+  )
   await expect(page.locator('[data-progressbar="overall"]')).toHaveCount(0)
 
   // 456.py works through it and reports — and NOW the one summary toast fires,

@@ -328,7 +328,10 @@ export function DthExportAction({
     const log = (() => {
       if (houdiniNow) {
         if (houdiniNow.state === 'running' && houdiniNow.activity) {
-          lastHoudiniLinesRef.current = houdiniNow.activity.lines
+          // The HDA's own lines say "DazToHue: …" and nothing about WHERE —
+          // the studio's own lines name their app, so these get told apart
+          // the same way. (Our status lines already do; they keep theirs.)
+          lastHoudiniLinesRef.current = houdiniNow.activity.lines.map((line) => `Houdini; ${line}`)
         }
         const lines =
           lastHoudiniLinesRef.current.length > 0
@@ -357,7 +360,9 @@ export function DthExportAction({
         const activity = houdiniNow.activity
         // The latest status text: the newest captured HDA line, else the
         // leg's own state.
-        const status = activity?.lines.at(-1) || 'exporting…'
+        // The same prefixed spelling the log window shows.
+        const newest = activity?.lines.at(-1)
+        const status = newest ? `Houdini; ${newest}` : 'exporting…'
         // The stepwise scale the run can actually measure: opening the
         // project is one step, each DazToHue network another — hython's
         // console speaks in phase lines, never percents. `running` means the
