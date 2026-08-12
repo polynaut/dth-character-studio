@@ -168,6 +168,33 @@ describe('UnrealGenerateDialog', () => {
     expect(onClose).toHaveBeenCalled()
   })
 
+  it('opens prefilled with the suggested name and folder — Create is live at once', async () => {
+    // The DTH project's own name and its `unreal` subfolder: the common case is
+    // one project, one Unreal project, so the dialog should already say what
+    // the user was going to type. Both fields stay editable.
+    const onGenerated = vi.fn()
+    render(
+      <UnrealGenerateDialog
+        suggestedDir="D:/Perforce/3d-workflow/unreal"
+        suggestedName="_3d_workflow"
+        onClose={() => {}}
+        onGenerated={onGenerated}
+      />,
+    )
+    await waitFor(() =>
+      expect((screen.getByLabelText('Project name') as HTMLInputElement).value).toBe('_3d_workflow'),
+    )
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /Create$/ })).toHaveProperty('disabled', false),
+    )
+    fireEvent.click(screen.getByRole('button', { name: /Create$/ }))
+    await waitFor(() => expect(createUnrealProject).toHaveBeenCalled())
+    expect(createUnrealProject.mock.calls[0][0].data).toMatchObject({
+      parentDir: 'D:/Perforce/3d-workflow/unreal',
+      name: '_3d_workflow',
+    })
+  })
+
   it('says so when no engine is detected instead of offering a dead Create', async () => {
     detectUnrealEngines.mockResolvedValueOnce({ installs: [] })
     render(<UnrealGenerateDialog suggestedDir="" onClose={() => {}} onGenerated={() => {}} />)

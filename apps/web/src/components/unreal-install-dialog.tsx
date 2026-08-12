@@ -360,16 +360,22 @@ export function UnrealInstallDialog({
  */
 export function UnrealGenerateDialog({
   suggestedDir,
+  suggestedName = '',
   onClose,
   onGenerated,
 }: {
-  /** Starting parent folder — where the project's other .uprojects live. */
+  /** Starting parent folder — the DTH project's own `unreal` subfolder, so a
+   *  generated project lands with the rest of the project by default. Editable,
+   *  and Browse still takes it anywhere. */
   suggestedDir: string
+  /** Prefilled project name — the DTH project's, made legal for Unreal (see
+   *  `unrealProjectNameFrom`). '' leaves the field empty. */
+  suggestedName?: string
   onClose: () => void
   /** Links the created `.uproject` (the caller owns the persist + toast). */
   onGenerated: (uprojectPath: string) => void
 }) {
-  const [name, setName] = useState('')
+  const [name, setName] = useState(suggestedName)
   const [dir, setDir] = useState(suggestedDir)
   const [engines, setEngines] = useState<Array<UnrealEngineFound> | null>(null)
   const [engineVersion, setEngineVersion] = useState('')

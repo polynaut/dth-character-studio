@@ -177,6 +177,31 @@ export function unrealProjectNameError(name: string): string | null {
 }
 
 /**
+ * A DTH project's name as a LEGAL Unreal project name, for prefilling the
+ * Generate dialog.
+ *
+ * The two namespaces don't agree: a `.dcsp` may be called anything the
+ * filesystem allows, while Unreal takes `[A-Za-z_][A-Za-z0-9_]*` only (see
+ * {@link unrealProjectNameError}). Prefilling the raw name would open the
+ * dialog on its own validation error for something the user didn't type —
+ * "3d-workflow" is a real project here and fails on both counts. So: every
+ * illegal character becomes `_`, runs collapse, trailing `_` go, and a leading
+ * digit gets one `_` in front (legal, and keeps the name recognisable rather
+ * than inventing a word). Returns '' when nothing usable is left, which the
+ * dialog treats as "no prefill" — an empty field the user fills in beats a
+ * suggestion that means nothing.
+ */
+export function unrealProjectNameFrom(projectName: string): string {
+  const cleaned = projectName
+    .trim()
+    .replace(/[^A-Za-z0-9_]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '')
+  if (cleaned === '') return ''
+  return /^[0-9]/.test(cleaned) ? `_${cleaned}` : cleaned
+}
+
+/**
  * The `.uproject` a generated project starts from: a Blueprint-only project
  * (no C++ modules), which Unreal opens without a compile step. The engine
  * association is the launcher's major.minor, so the editor binds it without
