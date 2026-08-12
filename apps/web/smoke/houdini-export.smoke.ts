@@ -174,7 +174,12 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
   // not even in this pending stretch before any lines exist.
   await expect(page.locator(`[data-task="daz:${P.scene}"]`)).toBeVisible()
   await expect(page.locator(`[data-task="hou:${P.houdini}"]`)).toBeVisible()
-  await expect(page.locator('[data-export-log]')).toBeVisible()
+  // …and the log window ALREADY says what is being waited for. Daz was not
+  // running here, so the handoff started it: the opening line says so, and a
+  // meter at 0 carries the same words (an empty box + no bar read as "nothing
+  // is happening" while Daz takes its tens of seconds to come up).
+  await expect(page.locator('[data-export-log]')).toContainText('Opening Daz Studio')
+  await expect(page.locator('[data-progressbar="current"]')).toContainText('Opening Daz Studio')
 
   // The Runner claims the batch and works the scene: the running job file +
   // the verbose progress log. The scene card goes ACTIVE, the log window

@@ -316,15 +316,32 @@ export function DthExportAction({
     const stamp = [now.getHours(), now.getMinutes(), now.getSeconds()]
       .map((n) => String(n).padStart(2, '0'))
       .join(':')
+    // The opening lines: the legs are silent while the app they drive comes
+    // up (Daz takes tens of seconds, hython opens the project before 456.py
+    // says anything), and an empty log window there reads as "nothing is
+    // happening". Each leg names what it is waiting for until its own first
+    // line lands — stamped like any other, so the wait is visibly timed.
+    const dazOpeningLine = dazLaunchedRef.current
+      ? 'opening Daz Studio'
+      : 'waiting for Daz Studio to pick the batch up'
+    const houdiniOpeningLine = 'opening Houdini (hython)'
     const log = (() => {
       if (houdiniNow) {
         if (houdiniNow.state === 'running' && houdiniNow.activity) {
           lastHoudiniLinesRef.current = houdiniNow.activity.lines
         }
-        return { lines: stampLogLines(houdiniStampsRef.current, lastHoudiniLinesRef.current, stamp) }
+        const lines =
+          lastHoudiniLinesRef.current.length > 0
+            ? lastHoudiniLinesRef.current
+            : [houdiniOpeningLine]
+        return { lines: stampLogLines(houdiniStampsRef.current, lines, stamp) }
       }
-      if (progressNow?.state === 'running') {
-        return { lines: stampLogLines(dazStampsRef.current, progressNow.step?.lines ?? [], stamp) }
+      if (progressNow && progressNow.state !== 'finished' && progressNow.state !== 'dead') {
+        const lines =
+          progressNow.state === 'running' && progressNow.step?.lines.length
+            ? progressNow.step.lines
+            : [dazOpeningLine]
+        return { lines: stampLogLines(dazStampsRef.current, lines, stamp) }
       }
       return null
     })()
@@ -371,7 +388,7 @@ export function DthExportAction({
         return { current: { percent: stepwisePct, label: status, kind: 'houdini' } }
       }
       if (houdiniNow?.state === 'starting') {
-        return { current: { percent: 0, label: 'opening project…', kind: 'houdini' } }
+        return { current: { percent: 0, label: houdiniOpeningLine, kind: 'houdini' } }
       }
       if (progressNow?.state === 'running') {
         const step = progressNow.step
@@ -381,7 +398,7 @@ export function DthExportAction({
         const currentPct = step?.percent ?? 0
         const current: ExportProgressBar = {
           percent: currentPct,
-          label: step?.message || 'working…',
+          label: step?.message || dazOpeningLine,
           kind: 'daz',
         }
         if (progressNow.total > 1) {
@@ -396,6 +413,11 @@ export function DthExportAction({
           }
         }
         return { current }
+      }
+      // Handed off, not yet claimed: a meter at 0 that NAMES the wait beats a
+      // bare log line with no bar under it.
+      if (progressNow?.state === 'pending') {
+        return { current: { percent: 0, label: dazOpeningLine, kind: 'daz' } }
       }
       return null
     })()
@@ -489,6 +511,9 @@ export function DthExportAction({
   // When the CURRENT step began — feeds the meter's per-step clock. Keyed on
   // the log tail + the bar's label: any new line (or state flip) resets it.
   const stepStartRef = useRef<{ key: string; atMs: number } | null>(null)
+  // Did THIS run start Daz itself? Only then is "opening Daz Studio" the truth
+  // — a handoff to a running Daz is waiting for its Runner to claim the batch.
+  const dazLaunchedRef = useRef(false)
 
   /** The run is over (reported, dead or aborted) — drop the panel. */
   function clearPipeline() {
@@ -497,6 +522,7 @@ export function DthExportAction({
     dazStampsRef.current = { lines: [], stamps: [] }
     houdiniStampsRef.current = { lines: [], stamps: [] }
     stepStartRef.current = null
+    dazLaunchedRef.current = false
     setPipeline(null)
   }
   // A handoff written against a SHUTTING-DOWN Daz (running process, batch
@@ -1003,6 +1029,7 @@ export function DthExportAction({
             // The header's task cards: the run's selection in run order —
             // the Daz scenes, then the Houdini projects (rom-only continues
             // into nothing, so its houdini list is already empty here).
+            dazLaunchedRef.current = run.dazLaunched
             pipelineRef.current = {
               daz: run.scenes.map((path) => ({ path, label: stemOf(path) })),
               houdini: run.houdiniProjects.map((path) => ({
@@ -1403,6 +1430,8 @@ function DthExportDialog({
     scenes: Array<string>
     houdiniProjects: Array<string>
     houdiniScenes: Array<string>
+    /** The handoff started Daz itself (vs. handing to a running one). */
+    dazLaunched: boolean
   }) => void
   /** A skip-Daz run handed its selection straight to Houdini (no Daz batch) —
    *  the caller starts the sequential project queue on these scenes. */
@@ -1687,6 +1716,9 @@ function DthExportDialog({
         // The scene scope the Houdini leg will export (→ the networks its
         // task cards name) — the continuation recomputes the same set.
         houdiniScenes: houdiniMode === 'export-all' ? linked : chosenScenes,
+        // Whether the handoff STARTED Daz — the log window's opening line
+        // says "opening Daz Studio" only when that is what is happening.
+        dazLaunched: result.dazLaunched,
       })
       onClose()
       if (result.dazClosing) {
