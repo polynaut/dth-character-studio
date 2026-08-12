@@ -152,6 +152,22 @@ describe('the scan store', () => {
     expect(freshScan(store, HIP, scanCacheKey(HIP, 2000))).toBeNull()
   })
 
+  it('refuses an entry written before the scan learned a new question', () => {
+    // The trap this has now sprung twice: a scan that starts REPORTING or
+    // SEEING something new (v2 `imports`, v3 the occlusion node kinds) leaves
+    // every stored entry answering the old question while still looking fresh.
+    // Measured: a v2 entry lists a project's material and skeleton nodes and
+    // omits its occlusion ones, so the drawer said "No DazToHue occlusion
+    // nodes in this project" about a project full of them.
+    const stale = `${HIP.toLowerCase()}|1000|||2`
+    const store = withScanResults(
+      emptyScanStore(),
+      [{ hipPath: HIP, key: stale, project: scanned() }],
+      'now',
+    )
+    expect(freshScan(store, HIP, scanCacheKey(HIP, 1000))).toBeNull()
+  })
+
   it('an entry written when the scan asked LESS is stale — the question is in the key', () => {
     // Measured: `imports` (which `.dth` each network imports) shipped without
     // a key bump, so every stored entry stayed "fresh" while answering the new

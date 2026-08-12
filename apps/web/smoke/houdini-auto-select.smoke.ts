@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-import { P, buildSeed } from './fixtures.ts'
+import { P, buildSeed, scanStoreEntryKey } from './fixtures.ts'
 import { installTauriMock } from './tauri-mock.ts'
 
 // The DTH Export dialog's Houdini list FOLLOWS the scene selection.
@@ -25,10 +25,8 @@ const HOUDINI_2 = 'D:/DTH Projects/Demo/Kira/houdini/KiraSummertide.hip'
 const DTH_PRIMARY = `${P.exportDir}/KiraDefault_G9_GP/Kira.dth`.toLowerCase()
 const DTH_EXTRA = `${P.exportDir}/KiraSummertide_G9_GP/Kira_KiraSummertide_G9_GP.dth`.toLowerCase()
 
-/** A stored scan entry's freshness key — see houdini-project-health.smoke.ts. */
-function storeKey(hipPath: string): string {
-  return `${hipPath.toLowerCase()}|__MTIME__|${P.exportDir.toLowerCase()}||2`
-}
+/** A stored scan entry's freshness key — see `scanStoreEntryKey` in fixtures.ts. */
+const storeKey = (hipPath: string) => scanStoreEntryKey(hipPath, P.exportDir)
 
 function scan(hipPath: string, imports: Array<string>) {
   return {

@@ -11,6 +11,7 @@ import {
   Undo2,
   Wand2,
   Wrench,
+  X,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -44,6 +45,7 @@ import {
   restoreHoudiniBackup,
   fetchCachedHoudiniScans,
   fetchHoudiniSourceRecents,
+  forgetHoudiniSource,
   rememberHoudiniSource,
   scanCharacterHoudiniProjects,
   scanHoudiniMaterials,
@@ -170,27 +172,38 @@ const FOLDER_KIND_UI: Record<
     tab: string
     sections: ReadonlyArray<string>
     labels: Record<string, { label: string; hint: string }>
-    /** What a section IS on this node — shown under the checkbox list. */
-    noun: string
+    /** Sentence subject for the wholesale note, ARTICLE INCLUDED — English
+     *  needs "An occlusion" and "A skeleton", which no template gets right. */
+    sectionPhrase: string
+    /** The tab's own one-paragraph "what this does". The material node's blurb
+     *  used to be printed on every transfer tab. */
+    blurb: string
   }
 > = {
   skeleton: {
     tab: 'Skeleton',
     sections: SKELETON_SECTIONS,
     labels: SKELETON_LABELS,
-    noun: 'skeleton section',
+    // The article rides along: "A occlusion section" was the alternative.
+    sectionPhrase: 'A skeleton section',
+    blurb:
+      "Copy a skeleton node's setup — bone renames, reparents, physics bones and skin weights — onto this character's skeleton nodes. Daz bone names are fixed per generation, so the block transfers between characters of that generation.",
   },
   occlusion: {
     tab: 'Occlusion',
     sections: OCCLUSION_SECTIONS,
     labels: OCCLUSION_LABELS,
-    noun: 'occlusion section',
+    sectionPhrase: 'An occlusion section',
+    blurb:
+      "Copy an occlusion node's setup onto this character's occlusion nodes — the manual occlusion attributes and the Auto-Occlusion operation list. The dry run lists exactly what would change before anything is written.",
   },
   groomOcclusion: {
     tab: 'Groom occlusion',
     sections: GROOM_OCCLUSION_SECTIONS,
     labels: GROOM_OCCLUSION_LABELS,
-    noun: 'groom-occlusion section',
+    sectionPhrase: 'A groom-occlusion section',
+    blurb:
+      "Copy a groom-occlusion node's setup onto this character's groom-occlusion nodes — its options, skin, occlusion mask and texture stamp. The dry run lists exactly what would change before anything is written.",
   },
 }
 
@@ -211,6 +224,27 @@ function sectionLabel(key: string): string {
     if (labels[key]) return labels[key].label
   }
   return key
+}
+
+/**
+ * Every outcome this drawer reports STAYS until it is dismissed.
+ *
+ * These are not "saved ✓" confirmations: each one is the result of a run that
+ * took hython tens of seconds and wrote to the user's projects — which is
+ * exactly the stretch during which nobody is watching this window. A toast that
+ * times out while the user is in Houdini, or making coffee, loses the only
+ * summary of what a transfer/repair/repath actually did. (The panel keeps a
+ * fuller report behind it, but only for the action just run, and only while the
+ * drawer stays open.)
+ *
+ * Same treatment for errors: a failure that scrolls past unseen is worse than a
+ * success that does.
+ */
+const utilsToast = {
+  success: (message: string, options?: Parameters<typeof toast.success>[1]) =>
+    toast.success(message, { duration: Infinity, ...options }),
+  error: (message: string, options?: Parameters<typeof toast.error>[1]) =>
+    toast.error(message, { duration: Infinity, ...options }),
 }
 
 /** A material node identified across files — the selection key everywhere here. */
@@ -501,7 +535,7 @@ export function HoudiniUtilsPanel({
       // force at all: the cache answered in ten milliseconds and the spinner
       // never became visible. Say it ran.
       if (force) {
-        toast.success(
+        utilsToast.success(
           projects.length === 1
             ? 'Rescanned the Houdini project'
             : `Rescanned ${projects.length} Houdini projects`,
@@ -511,7 +545,7 @@ export function HoudiniUtilsPanel({
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       set({ loading: false, error: message, projects: [] })
-      if (force) toast.error(message)
+      if (force) utilsToast.error(message)
       return []
     }
   }
@@ -678,6 +712,20 @@ export function HoudiniUtilsPanel({
     [loadSourceRecents],
   )
 
+  /** Drop a shortcut the user is done with. Unlike remembering, this one is
+   *  ASKED for, so a failure is reported rather than swallowed. */
+  const forgetSource = useCallback(
+    async (hipPath: string) => {
+      try {
+        await forgetHoudiniSource({ data: { hipPath } })
+        await loadSourceRecents()
+      } catch (e) {
+        utilsToast.error(e instanceof Error ? e.message : String(e))
+      }
+    },
+    [loadSourceRecents],
+  )
+
   useEffect(() => {
     setSelectedSource('')
     if (!open || !activeSourceHip) {
@@ -723,10 +771,20 @@ export function HoudiniUtilsPanel({
   }, [sourceScan, selectedSource])
 
   // Target refs for the transfer, minus the source node itself.
+  //
+  // Filtered to the ACTIVE KIND. The selection is preseeded with every node of
+  // the card the drawer was opened from — all kinds at once — and a project
+  // typically holds a material, a skeleton and an occlusion node, so an
+  // occlusion run was being pointed at all three ("3 target nodes selected"
+  // under a single ticked box). The Python refuses a node of the wrong type per
+  // target, so nothing was ever written to one; the count and the report were
+  // the lie. The node LIST is filtered by kind already — this makes the run
+  // agree with what the user can actually see and tick.
   const targetRefs = useMemo(() => {
     const refs: Array<{ hipPath: string; nodePath: string }> = []
     for (const project of targetScan.projects) {
       for (const node of project.nodes) {
+        if (node.nodeType !== kind) continue
         const key = nodeKey(project.hipPath, node.path)
         if (!selectedTargets.has(key)) continue
         if (key === selectedSource) continue
@@ -734,7 +792,7 @@ export function HoudiniUtilsPanel({
       }
     }
     return refs
-  }, [targetScan, selectedTargets, selectedSource])
+  }, [kind, targetScan, selectedTargets, selectedSource])
 
   // Friendly name for any node the panel has scanned — the confirm dialog and
   // the report both name nodes, and a bare `/obj/DazToHue/DazToHueMaterial1`
@@ -858,8 +916,8 @@ export function HoudiniUtilsPanel({
           source: { hipPath: sourceNode.project.hipPath, nodePath: sourceNode.node.path },
           targets: targetRefs,
           sections: activeSections,
-          // Material-only knobs; the skeleton transfer copies wholesale and has
-          // no texture paths of its own to make portable.
+          // Material-only knobs; every FOLDER kind copies wholesale (hence the
+          // fixed `true`) and has no texture paths of its own to make portable.
           materials: kind === 'material' ? [...pickedMaterials] : [],
           useLibVar: kind === 'material' ? useLibVar : false,
           replace: kind === 'material' ? replace : true,
@@ -871,23 +929,28 @@ export function HoudiniUtilsPanel({
         noteBackups(result)
         const failed = result.targets.filter((t) => !t.ok)
         if (failed.length > 0) {
-          toast.error(
+          utilsToast.error(
             `${failed.length} of ${result.targets.length} target${result.targets.length === 1 ? '' : 's'} failed — see the report.`,
           )
         } else {
           // Report what actually travelled, not just the bakers — the run may
           // have carried material slots and UV channels too, and a toast that
           // names one part reads as "only that part was copied".
-          const moved = sourceNode
-            ? MATERIAL_SECTIONS.filter((key) => sections.has(key))
-                .map((key) => sectionCountOf(sourceNode.node, key, pickedMaterials))
-                .join(', ')
-            : ''
+          // A folder kind has no slot/channel/baker counts to report — asking
+          // for them yields "0 slots, 0 channels, 0 bakers" after a run that
+          // copied an occlusion setup perfectly well. It names its sections.
+          const moved = !sourceNode
+            ? ''
+            : isFolderKind(kind)
+              ? activeSections.map((key) => FOLDER_KIND_UI[kind].labels[key]?.label ?? key).join(', ')
+              : MATERIAL_SECTIONS.filter((key) => sections.has(key))
+                  .map((key) => sectionCountOf(sourceNode.node, key, pickedMaterials))
+                  .join(', ')
           const warnings = result.targets.reduce(
             (n, t) => n + t.missingMaterials.length + t.missingUvSources.length,
             0,
           )
-          toast.success(
+          utilsToast.success(
             `Copied ${moved} to ${result.targets.length} node${result.targets.length === 1 ? '' : 's'}.` +
               // The modal closes below, so anything the user still has to act on
               // must be said here — the report stays in the panel, but a toast
@@ -904,7 +967,7 @@ export function HoudiniUtilsPanel({
         void scanTargets()
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error))
+      utilsToast.error(error instanceof Error ? error.message : String(error))
     } finally {
       setRunning('')
     }
@@ -1040,10 +1103,10 @@ export function HoudiniUtilsPanel({
         next.delete(hipPath)
         return next
       })
-      toast.success(`${fileName(hipPath)} is back to the state it was in before the run.`)
+      utilsToast.success(`${fileName(hipPath)} is back to the state it was in before the run.`)
       void scanTargets()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error))
+      utilsToast.error(error instanceof Error ? error.message : String(error))
     } finally {
       setRestoring('')
     }
@@ -1079,13 +1142,13 @@ export function HoudiniUtilsPanel({
       const removed = await discardHoudiniBackups({ data: { paths } })
       // Counted, not assumed: Houdini holding a file open is the ordinary way
       // one survives, and "removed" would be a lie about the disk.
-      toast.success(
+      utilsToast.success(
         removed === paths.length
           ? `${removed} backup${removed === 1 ? '' : 's'} removed.`
           : `${removed} of ${paths.length} backups removed — the rest are in use and stay.`,
       )
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error))
+      utilsToast.error(error instanceof Error ? error.message : String(error))
     } finally {
       setDiscarding(false)
       setCleanupOpen(false)
@@ -1106,10 +1169,10 @@ export function HoudiniUtilsPanel({
         noteBackups(result)
         const failed = result.prefill.filter((r) => !r.ok)
         if (failed.length > 0) {
-          toast.error(`${failed.length} of ${result.prefill.length} projects failed — see below.`)
+          utilsToast.error(`${failed.length} of ${result.prefill.length} projects failed — see below.`)
         } else {
           const filled = result.prefill.reduce((n, r) => n + r.filled.length, 0)
-          toast.success(
+          utilsToast.success(
             `Filled ${filled} parameter${filled === 1 ? '' : 's'} the studio already knew.`,
           )
           setPrefillOpen(false)
@@ -1117,7 +1180,7 @@ export function HoudiniUtilsPanel({
         void scanTargets()
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error))
+      utilsToast.error(error instanceof Error ? error.message : String(error))
     } finally {
       setRunning('')
     }
@@ -1145,10 +1208,10 @@ export function HoudiniUtilsPanel({
         noteBackups(result)
         const failed = result.refresh.filter((r) => !r.ok)
         if (failed.length > 0) {
-          toast.error(`${failed.length} of ${result.refresh.length} projects failed — see below.`)
+          utilsToast.error(`${failed.length} of ${result.refresh.length} projects failed — see below.`)
         } else {
           const changed = result.refresh.filter((r) => r.changed).length
-          toast.success(
+          utilsToast.success(
             changed === 0
               ? 'Refreshed — no project reported a change, so nothing was re-saved.'
               : `${changed} project${changed === 1 ? '' : 's'} refreshed and saved.`,
@@ -1158,7 +1221,7 @@ export function HoudiniUtilsPanel({
         void scanTargets()
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error))
+      utilsToast.error(error instanceof Error ? error.message : String(error))
     } finally {
       setRunning('')
     }
@@ -1185,11 +1248,11 @@ export function HoudiniUtilsPanel({
         noteBackups(result)
         const failed = result.repath.filter((r) => !r.ok)
         if (failed.length > 0) {
-          toast.error(`${failed.length} of ${result.repath.length} projects failed — see below.`)
+          utilsToast.error(`${failed.length} of ${result.repath.length} projects failed — see below.`)
         } else {
           const collapsed = result.repath.reduce((n, r) => n + r.collapsed, 0)
           const repaired = result.repath.reduce((n, r) => n + r.repaired.length, 0)
-          toast.success(
+          utilsToast.success(
             `${collapsed} reference${collapsed === 1 ? '' : 's'} made portable` +
               (repaired > 0 ? `, ${repaired} broken one${repaired === 1 ? '' : 's'} repaired` : '') +
               '.',
@@ -1199,7 +1262,7 @@ export function HoudiniUtilsPanel({
         void scanTargets()
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error))
+      utilsToast.error(error instanceof Error ? error.message : String(error))
     } finally {
       setRunning('')
     }
@@ -1222,7 +1285,7 @@ export function HoudiniUtilsPanel({
         const failed = result.defaults.filter((d) => !d.ok)
         const changed = result.defaults.filter((d) => d.ok && d.changed).length
         if (failed.length > 0) {
-          toast.error(`${failed.length} of ${result.defaults.length} projects failed — see below.`)
+          utilsToast.error(`${failed.length} of ${result.defaults.length} projects failed — see below.`)
         } else {
           // Named by what the run actually rewrote: a project can need only the
           // timeline, and "$JOB repaired" on that one would be a claim about
@@ -1235,7 +1298,7 @@ export function HoudiniUtilsPanel({
               ? `the timeline on ${fpsFixed} project${fpsFixed === 1 ? '' : 's'}`
               : '',
           ].filter(Boolean)
-          toast.success(
+          utilsToast.success(
             parts.length > 0
               ? `Repaired ${parts.join(' and ')}.`
               : `Nothing needed changing on ${changed === 1 ? 'the project' : 'these projects'}.`,
@@ -1246,7 +1309,7 @@ export function HoudiniUtilsPanel({
         void scanTargets()
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error))
+      utilsToast.error(error instanceof Error ? error.message : String(error))
     } finally {
       setRunning('')
     }
@@ -1313,11 +1376,20 @@ export function HoudiniUtilsPanel({
               section list and the material picker differ, so `value={kind}`
               keeps the single content mounted for whichever is active. */}
           <TabsContent value={kind} className="space-y-6">
+            {/* Per KIND: the material node's baker/UV story was being printed
+                on the Skeleton tab, and then on both occlusion tabs — a
+                paragraph about texture bakers above a list of bone rules. */}
             <p className="text-xs text-muted-foreground">
-              Copy the texture-baker setup of one material node onto this character&apos;s
-              material nodes. Bakers name their material and geometry groups as text, so a
-              target that doesn&apos;t define those names takes the bakers and bakes nothing —
-              the dry run lists exactly that before anything is written.
+              {isFolderKind(kind) ? (
+                FOLDER_KIND_UI[kind].blurb
+              ) : (
+                <>
+                  Copy the texture-baker setup of one material node onto this character&apos;s
+                  material nodes. Bakers name their material and geometry groups as text, so a
+                  target that doesn&apos;t define those names takes the bakers and bakes nothing —
+                  the dry run lists exactly that before anything is written.
+                </>
+              )}
             </p>
 
             {/* ---------------------------------------------------------- target */}
@@ -1478,34 +1550,55 @@ export function HoudiniUtilsPanel({
                         normalizePath(activeSourceHip).toLowerCase() ===
                         normalizePath(recent.path).toLowerCase()
                       return (
-                        <button
+                        // The chip is a two-control group, not one button: a
+                        // ✕ nested inside a <button> is invalid HTML and the
+                        // click would belong to the outer one either way.
+                        <span
                           key={recent.path}
-                          type="button"
-                          // The full path, because the chip shows only the file
-                          // name and two templates called `Base.hiplc` in
-                          // different folders are otherwise indistinguishable.
-                          title={displayPath(recent.path)}
-                          onClick={() => {
-                            setSourceMode('browse')
-                            setBrowsedHip(recent.path)
-                            // Re-picking floats it back to the top — the file
-                            // you keep coming back to stays where you look.
-                            rememberSource(recent.path)
-                          }}
-                          className={`flex max-w-full items-center gap-2 rounded-md border px-2.5 py-1.5 text-sm ${
+                          className={`group flex max-w-full items-center rounded-md border text-sm ${
                             active
                               ? 'border-houdini-orange bg-houdini-orange/15 font-medium'
-                              : 'text-muted-foreground hover:bg-accent/50'
+                              : 'text-muted-foreground'
                           }`}
                         >
-                          <img
-                            src={houdiniLogo}
-                            alt=""
-                            aria-hidden
-                            className="size-4 shrink-0 object-contain"
-                          />
-                          <span className="truncate">{fileName(recent.path)}</span>
-                        </button>
+                          <button
+                            type="button"
+                            // The full path, because the chip shows only the
+                            // file name and two templates called `Base.hiplc`
+                            // in different folders are otherwise
+                            // indistinguishable.
+                            title={displayPath(recent.path)}
+                            onClick={() => {
+                              setSourceMode('browse')
+                              setBrowsedHip(recent.path)
+                              // Re-picking floats it back to the top — the file
+                              // you keep coming back to stays where you look.
+                              rememberSource(recent.path)
+                            }}
+                            className="flex min-w-0 items-center gap-2 rounded-l-md py-1.5 pr-1.5 pl-2.5 hover:bg-accent/50"
+                          >
+                            <img
+                              src={houdiniLogo}
+                              alt=""
+                              aria-hidden
+                              className="size-4 shrink-0 object-contain"
+                            />
+                            <span className="truncate">{fileName(recent.path)}</span>
+                          </button>
+                          {/* Removing a shortcut is not removing a file, so it
+                              needs no confirmation — but it stays quiet until
+                              the chip is hovered/focused so the row still reads
+                              as a list of files rather than a row of ✕. */}
+                          <button
+                            type="button"
+                            aria-label={`Remove ${fileName(recent.path)} from recently used`}
+                            title="Remove from Recently used (the .hip is not touched)"
+                            onClick={() => void forgetSource(recent.path)}
+                            className="shrink-0 rounded-r-md py-1.5 pr-1.5 pl-0.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 hover:text-destructive focus-visible:opacity-100"
+                          >
+                            <X className="size-3.5" />
+                          </button>
+                        </span>
                       )
                     })}
                   </div>
@@ -1677,9 +1770,9 @@ export function HoudiniUtilsPanel({
               </div>
               {isFolderKind(kind) && (
                 <p className="mt-2 text-xs text-muted-foreground">
-                  A {FOLDER_KIND_UI[kind].noun} is copied <strong>wholesale</strong> — its settings
-                  and its lists replace the target&apos;s. Appending one list onto another (22 bone
-                  renames onto 22 existing ones) would make 44 rules, not a merged setup.
+                  {FOLDER_KIND_UI[kind].sectionPhrase} is copied <strong>wholesale</strong> — its
+                  settings and its lists replace the target&apos;s. Appending one list onto another
+                  (22 bone renames onto 22 existing ones) would make 44 rules, not a merged setup.
                 </p>
               )}
               {/* The blocking reason, stated where the checkbox that causes it
@@ -2218,7 +2311,13 @@ export function HoudiniUtilsPanel({
 
           {kind === 'material' && <MergePreview entries={mergePreview} labelFor={labelFor} />}
 
-          {kind === 'skeleton' ? (
+          {/* EVERY folder kind, not just the skeleton one: the replace switch
+              governs material UV channels and bakers, and `op_transfer_folders`
+              does not read `replace` at all — a folder section is always
+              copied wholesale. Left on `=== 'skeleton'`, both occlusion tabs
+              offered a switch that could not do anything, above a line about
+              material slots merging by surface that no occlusion run has. */}
+          {isFolderKind(kind) ? (
             <p className="rounded-md border p-3 text-xs text-muted-foreground">
               Each selected section replaces the target&apos;s — a configuration block is copied
               wholesale, so there is no append mode here.
