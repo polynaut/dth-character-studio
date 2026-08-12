@@ -1,5 +1,180 @@
 # @dth/web
 
+## 0.76.0
+
+### Minor Changes
+
+- [#807](https://github.com/polynaut/dth-character-studio/pull/807) [`c51481b`](https://github.com/polynaut/dth-character-studio/commit/c51481bf6d33fd1da3eb719676e03d4db39f80d3) Thanks [@polynaut](https://github.com/polynaut)! - **A Recently used source can be taken back out.**
+
+  The Utils drawer's shortcut row remembers every source you pick — including the
+  one-off "let me just look at this file" — so it needed a way out as much as a
+  way in. Each chip now carries a **✕**.
+
+  Removing a shortcut is not removing a file: the entry is a remembered path, the
+  `.hip` is untouched, and picking it again puts it straight back at the top of
+  the row.
+
+- [#803](https://github.com/polynaut/dth-character-studio/pull/803) [`6f20744`](https://github.com/polynaut/dth-character-studio/commit/6f2074494531ab2571eb37adfadda867b0ee3f1e) Thanks [@polynaut](https://github.com/polynaut)! - **The Utils drawer can copy an occlusion setup now — two new tabs, one per node.**
+
+  **Occlusion** carries the `DazToHueOcclusion` node: **Occlusion Culling** (the
+  manual occlusion attributes and the Auto-Occlusion operation list) and
+  **Visualise**. **Groom occlusion** carries `DazToHueGroomOcclusion` with its own
+  **Options**, **Skin**, **Occlusion Mask**, **Texture Stamp** and **Visualise**.
+  They are separate tabs because they are separate nodes with different setups —
+  one tab whose section list changed under you would be worse than two.
+
+  They work exactly like the Skeleton tab: pick a source node (a project of your
+  own, a Houdini template, or the **Recently used** row), tick the targets, tick
+  the sections, **Dry run** to see what would change, **Run** to do it. Each
+  section is a folder copied **wholesale** — its settings and any lists inside it
+  replace the target's — so there is no _Replace at target_ toggle, and the count
+  beside a section is how much is actually set there. The same silent backup as
+  every other transfer is taken before anything is saved.
+
+  The node's own **Linking** folder is deliberately not offered: it holds
+  parameter references, and DTH node names are identical in every project, so a
+  copied reference would rebind to the target project's own node and read the
+  wrong values without erroring — the same rule the material transfer has always
+  followed for a linked parameter.
+
+  A folder transfer that cannot find one of its folders now **says so and copies
+  nothing**, instead of quietly skipping that section and reporting _Transfer
+  complete_ — if a DazToHue release renames a folder, the run fails with the name
+  it looked for rather than leaving you to notice the setup never arrived. This
+  applies to the Skeleton tab too.
+
+  Also fixes a stale tooltip: the **What to copy** info popup explained the
+  material node's baker/UV interdependency on _every_ transfer tab, including
+  Skeleton, where none of it applied.
+
+- [#808](https://github.com/polynaut/dth-character-studio/pull/808) [`0af7dd7`](https://github.com/polynaut/dth-character-studio/commit/0af7dd741005d7857e81b8f1dea73f5804d2f5a1) Thanks [@polynaut](https://github.com/polynaut)! - **Unreal plugins that ship as a zip are found and installed.**
+
+  Some vendors don't ship a plugin folder — they ship `<Plugin>.zip` in a
+  versioned folder and nothing else. The scan only ever looked for a loose
+  `.uplugin`, so such a folder came back _"No Unreal plugin found here"_ about a
+  folder that plainly has one.
+
+  The plugin-folder scan now reads inside `.zip` files too. A zipped build is
+  listed like any other, with a **zip** marker beside its engine version, and the
+  engine it targets is worked out exactly as before: the folder path wins
+  (`…/Unreal Engine 5.7 Plugin/DazToHue.zip` → 5.7), falling back to the
+  `EngineVersion` inside the archived `.uplugin`.
+
+  Installing one **extracts** rather than copies, and lands it where Unreal
+  expects: everything under the archived `.uplugin`'s own folder is written to
+  `Plugins/<Plugin>/` with that wrapping folder stripped — a zip that wraps its
+  plugin in `DazToHue/` and one that holds the files at its root both come out as
+  `Plugins/DazToHue/DazToHue.uplugin`. Anything sitting _beside_ the plugin folder
+  in the archive (a README, a `__MACOSX` sidecar) is not the plugin and is not
+  installed. Same copy-over rule as every other install: nothing is deleted first.
+
+  Reading the archive is bounded the same way the Daz asset installs are — entry
+  count and inflated size — and an entry whose name would escape the plugin folder
+  is refused rather than resolved.
+
+### Patch Changes
+
+- [#802](https://github.com/polynaut/dth-character-studio/pull/802) [`8d1f976`](https://github.com/polynaut/dth-character-studio/commit/8d1f976a04ec2729af4f9eb5a67b4baea8db4739) Thanks [@polynaut](https://github.com/polynaut)! - The DTH Export progress meters carry no caption anymore. The overall bar used to
+  label itself _"Scenes 0/2"_, which the numbered task-card column beside it
+  already says — and the caption indented that track, leaving the two bars starting
+  at different left edges. Both are now a track and a percent: the cards say what
+  is running, the log window's newest line says how it is going, and the meters say
+  how far. The caption was also the only thing NAMING these meters, so it moves to
+  ARIA rather than disappearing — a screen reader still gets "Overall progress" and
+  the value, instead of two anonymous bars.
+
+  Also documents this release's Houdini work in the guide, which had gone out of
+  step with it: the export leg is headless now (the guide still said Houdini
+  "opens visibly so you can watch it work" and quoted button labels that no longer
+  exist), the header shows the run live, **Ctrl** is what gets you out of one, a
+  reload no longer loses either leg, and Generate project names the Daz scene it is
+  generating for.
+
+- [#804](https://github.com/polynaut/dth-character-studio/pull/804) [`bedd716`](https://github.com/polynaut/dth-character-studio/commit/bedd71611ffec9c5f03c541f7bfeeb88142c8641) Thanks [@polynaut](https://github.com/polynaut)! - **A Houdini export that dies now says why.**
+
+  The headless export leg streams Houdini's whole console into
+  `.dth_houdini_console.log` beside the character's job files, and that file is
+  deliberately kept after a run — it is the diagnosis channel. But when the run
+  died, the studio reported only _"The Houdini export did not finish — Houdini is
+  no longer running"_: true, useless, and contradicted by the file it had just
+  written itself.
+
+  Measured on a real failed run: hython exited immediately because it could not
+  get a Houdini license (headless hython needs one of its own, and the machine
+  could not reach its license server), the log said exactly that in two lines, and
+  the toast said Houdini had stopped.
+
+  The failure toast now leads with what the log says — _"…did not finish — Houdini
+  could not get a license."_ — and points at the file for the full output.
+  Licensing is recognised by name because it is the one failure that says nothing
+  about your project, your scene or the studio. Anything else is quoted straight
+  out of the log, on the grounds that a raw error line beats a confident wrong
+  summary — but only the _end_ of it, and only a line that actually looks like an
+  error: the file is the whole console, cook chatter included, so a run that ended
+  on a progress message still reads exactly as before. Better no reason than the
+  wrong one.
+
+- [#807](https://github.com/polynaut/dth-character-studio/pull/807) [`c51481b`](https://github.com/polynaut/dth-character-studio/commit/c51481bf6d33fd1da3eb719676e03d4db39f80d3) Thanks [@polynaut](https://github.com/polynaut)! - **Fixes from the occlusion tabs' first real outing.**
+
+  **"No DazToHue occlusion nodes in this project" about a project full of them.**
+  The Utils drawer reads a cached scan, and the cache key records _what the scan
+  was asked_. Teaching the scan to see the occlusion node types changed the
+  question without bumping that version, so every project scanned before the
+  feature shipped kept serving its old answer — a node list with the material and
+  skeleton nodes and no occlusion ones — and looked perfectly fresh doing it. The
+  version is bumped, so the next look re-earns the answer. (Nothing to do by
+  hand: the entries invalidate themselves.)
+
+  **"3 target nodes selected" under one ticked box.** The drawer preselects every
+  node of the card it was opened from — all kinds at once — and the run counted
+  them all, so an occlusion transfer was pointed at the project's material and
+  skeleton nodes too. The Python refuses a wrong-typed node per target, so nothing
+  was ever written to one; the count and the report were the lie. Targets are now
+  filtered to the tab's own kind, matching the list you can actually see and tick.
+
+  **Each transfer tab explains itself.** The material node's texture-baker
+  paragraph was printed at the top of every tab, including both occlusion ones —
+  a note about bakers and UV names above a list of occlusion settings. And _"A
+  occlusion section is copied wholesale"_ now reads _"An occlusion section"_.
+
+  **No material knobs on a folder-kind run.** The confirm dialog offered
+  **Replace UV channels and bakers** on both occlusion tabs — a material control
+  the occlusion transfer never reads (a folder section is always copied
+  wholesale), above a line about material slots merging by surface. And the
+  success toast reported a folder run's outcome in material terms, which came out
+  as _"Copied 0 slots, 0 channels, 0 bakers"_ after a transfer that worked. Both
+  now say what the run actually did.
+
+  **The drawer's outcome toasts stay until you dismiss them.** Every one of these
+  reports a run that took hython tens of seconds and wrote to your projects —
+  exactly the stretch during which nobody is watching this window. A toast that
+  timed out while you were in Houdini took the only summary of what a
+  transfer/repair/repath did with it. Errors too: a failure that scrolls past
+  unseen is worse than a success that does.
+
+- [#805](https://github.com/polynaut/dth-character-studio/pull/805) [`e2ac529`](https://github.com/polynaut/dth-character-studio/commit/e2ac52961353492b2e85ce5d80b631d4eead25ef) Thanks [@polynaut](https://github.com/polynaut)! - **Generate Unreal project opens prefilled.**
+
+  **Create in** now defaults to an **`unreal` subfolder of the project folder** —
+  beside `daz3d/` and the characters — instead of wherever the first already-linked
+  Unreal project happened to sit. A generated project belongs to the DTH project
+  that generated it, so that is where it lands unless you say otherwise: the path
+  is an ordinary editable field, and **Browse** still puts it anywhere (an existing
+  `D:\Unreal Projects`, another drive).
+
+  **Project name** is prefilled with the DTH project's own name. The two
+  namespaces don't agree — a `.dcsp` may be called anything, while Unreal accepts
+  letters, digits and `_` and won't start with a digit — so the suggestion is
+  made legal first: illegal characters become `_`, runs collapse, and a leading
+  digit gets one `_` in front (`3d-workflow` → `_3d_workflow`). A name with
+  nothing usable left prefills empty rather than suggesting something meaningless.
+
+  With both filled, the common case — one DTH project, one Unreal project — is now
+  open-dialog-and-press-Create.
+
+- Updated dependencies []:
+  - @dth/rom@0.76.0
+  - @dth/ui@0.76.0
+
 ## 0.75.0
 
 ### Minor Changes
