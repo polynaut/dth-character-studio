@@ -37,6 +37,13 @@ export const HOUDINI_RESULT_FILE = '.dth_houdini_result.json'
  *  the retention the housekeeping rule asks for. */
 export const HOUDINI_CONSOLE_FILE = '.dth_houdini_console.log'
 
+/** The Houdini leg's run-plan sidecar (`api/houdini.ts`'s `saveHoudiniRunPlan`)
+ *  — the current project, the queue behind it, the scene scope and the report
+ *  so far, so a reloaded window can pick the whole process back up. Named here
+ *  beside its siblings because it is a RUN FILE of the character folder, and
+ *  every consumer of that set (the zip exclusions) must see all of them. */
+export const HOUDINI_RUN_FILE = '.dth_houdini_run.json'
+
 /** The hython bootstrap (`headless_export.py`) written beside `456.py` into
  *  the app-data scripts folder before every launch — loads the `.hip`, then
  *  runs `456.py` exactly once (see its docstring). */

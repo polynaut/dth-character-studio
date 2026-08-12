@@ -55,13 +55,23 @@ describe('characterZipManifestSchema', () => {
 })
 
 describe('characterZipExclusions', () => {
-  it('always prunes the transient Houdini job transport', () => {
+  it('always prunes EVERY Houdini run file, not just the job transport', () => {
     const { excludeRel } = characterZipExclusions({
       exportSubdir: 'export',
       includeDazExports: true,
       includeHoudiniExports: true,
     })
-    expect(excludeRel).toEqual(['.dth_houdini_job.json', '.dth_houdini_result.json'])
+    // All four, deliberately pinned by literal name: each one is machine-local
+    // state about a run on THIS machine (absolute job/result/hip paths, the
+    // console log, a queue of projects) and a zip is what gets handed to
+    // someone else. The console log and the run plan were each missed when
+    // they landed — this assertion is what notices the next one.
+    expect(excludeRel).toEqual([
+      '.dth_houdini_job.json',
+      '.dth_houdini_result.json',
+      '.dth_houdini_console.log',
+      '.dth_houdini_run.json',
+    ])
   })
 
   it('prunes the export trees only when their toggle is off', () => {

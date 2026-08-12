@@ -16,6 +16,7 @@ import {
   HOUDINI_HEADLESS_RUNNER,
   HOUDINI_JOB_FILE,
   HOUDINI_RESULT_FILE,
+  HOUDINI_RUN_FILE,
   HOUDINI_SCRIPTS_FOLDER,
   buildHoudiniJob,
   buildHoudiniPrefill,
@@ -468,6 +469,14 @@ const houdiniExportInput = charScopeInput.extend({
   /** The scenes whose networks should export — the same list the Daz batch just
    *  ran, so a project holding other characters' networks is left alone. */
   scenes: z.array(z.string().min(1)).min(1),
+  /** What the CALLER is carrying that this layer can't know: the projects
+   *  still queued behind this one, and the report accumulated so far. Recorded
+   *  in the run sidecar so a reloaded window can finish the whole process —
+   *  see {@link adoptHoudiniRun}. Absent = nothing queued, nothing to report
+   *  yet (a Houdini-only run's first project). */
+  remaining: z.array(z.string()).default([]),
+  reportLines: z.array(z.string()).default([]),
+  anyFailed: z.boolean().default(false),
 })
 
 /**
@@ -490,6 +499,169 @@ interface ActiveHoudiniRun {
   startedAtMs: number
 }
 let activeHoudiniRun: ActiveHoudiniRun | null = null
+
+/**
+ * The Houdini leg's run-plan sidecar — the twin of the Daz leg's
+ * `export-run.json`, and for the same reason: this watch is MEMORY. A window
+ * that reloads while hython works loses the watch, the queue of projects still
+ * to come and the accumulated report, and the leg is headless now, so nothing
+ * on screen says so — the export finishes inside Houdini and the studio never
+ * reports it, while every project behind it silently never starts.
+ *
+ * Unlike the Daz twin it lives in the CHARACTER folder, not app-data (see
+ * {@link runPlanPath}). Written when a project's run is armed and whenever the
+ * queue advances, deleted when the whole process ends. Restored by
+ * {@link adoptHoudiniRun}, which re-arms the watch from the paths recorded here.
+ *
+ * Being a character-folder file, it is machine-local run state sitting in a
+ * folder the user backs up and can zip — so it joins the job/result files in
+ * `characterZipExclusions`. The NAME lives in `houdini-jobs.ts` with its
+ * siblings, so that exclusion list can never fall behind this one.
+ */
+
+const houdiniRunPlanSchema = z.object({
+  characterId: z.string().min(1),
+  /** The project being exported right now (its `.hip`). */
+  hipPath: z.string().min(1),
+  jobPath: z.string().min(1),
+  resultPath: z.string().min(1),
+  scenes: z.number().int().nonnegative(),
+  startedAtMs: z.number(),
+  /** Projects still waiting their turn, in order. */
+  remaining: z.array(z.string()).default([]),
+  /** The scene scope every project of this run exports. */
+  sceneScope: z.array(z.string()).default([]),
+  /** The report so far — the Daz leg's line and each finished project's, so a
+   *  restored window can still deliver ONE end-of-everything report. */
+  reportLines: z.array(z.string()).default([]),
+  /** Whether any leg so far failed — the report's tone. */
+  anyFailed: z.boolean().default(false),
+})
+
+export type HoudiniRunPlan = z.infer<typeof houdiniRunPlanSchema>
+
+/** The plan lives BESIDE the job/result files, in the character's own folder:
+ *  those are per character, and so is a run — an app-data singleton would let
+ *  a second character's Houdini leg overwrite the first's plan. */
+function runPlanPath(charFolderAbs: string): string {
+  return joinPath(charFolderAbs, HOUDINI_RUN_FILE)
+}
+
+/**
+ * Every plan write/delete queues on ONE chain, so they land in call order —
+ * the same guard the Daz sidecar's `queueSidecar` earned. {@link
+ * dismissHoudiniRun} schedules its delete from a synchronous UI handler, so
+ * without this a Ctrl-stop's clear could still be in flight when the user
+ * starts the next Houdini run, and would then delete the NEW run's plan —
+ * silently costing that run the reload survival this whole feature is.
+ * Serialising makes "last call wins" true.
+ */
+let planChain: Promise<void> = Promise.resolve()
+function queuePlan(op: () => Promise<void>): Promise<void> {
+  planChain = planChain.then(op, op)
+  return planChain
+}
+
+/** Best-effort — a failed write only costs a later reload its restore. */
+export function saveHoudiniRunPlan(charFolderAbs: string, plan: HoudiniRunPlan): Promise<void> {
+  return queuePlan(async () => {
+    if (!charFolderAbs) return
+    try {
+      await storage.writeTextFileAtomic(runPlanPath(charFolderAbs), JSON.stringify(plan))
+    } catch {
+      // best effort
+    }
+  })
+}
+
+function clearHoudiniRunPlan(charFolderAbs: string): Promise<void> {
+  return queuePlan(async () => {
+    // An empty folder would resolve the plan path relative to the process —
+    // never write or delete on a guess.
+    if (!charFolderAbs) return
+    try {
+      const path = runPlanPath(charFolderAbs)
+      if (await exists(path)) await remove(path)
+    } catch {
+      // best effort — the next run overwrites it either way
+    }
+  })
+}
+
+async function readHoudiniRunPlan(charFolderAbs: string): Promise<HoudiniRunPlan | null> {
+  try {
+    // Reads join the same queue as the writes: an adopt that lands right after
+    // a Ctrl-stop must see the CLEARED plan, or it would restore the very run
+    // the user just stopped watching — queue and all.
+    await planChain
+    const path = runPlanPath(charFolderAbs)
+    if (!(await exists(path))) return null
+    return houdiniRunPlanSchema.parse(JSON.parse(await readTextFile(path)))
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Re-arm the Houdini watch from the sidecar after a reload — the character's
+ * OWN editor only (`characterId` must match), so a foreign window can never
+ * adopt ownership of a report or of the project queue.
+ *
+ * Returns the plan when a run was restored, null when there is nothing to
+ * restore. Deliberately does NOT check whether Houdini is alive: the watch's
+ * own poll does that one poll later and reports a dead run properly (with the
+ * queue dropped and a sticky toast), which is a better answer than silence.
+ * A stale sidecar whose result file is gone is cleared instead of adopted.
+ *
+ * An ALREADY-ARMED module watch for this same character does not block the
+ * restore, it just isn't re-armed. Only the caller's component state decides
+ * whether anything is on screen, and this function is called from a fresh
+ * mount — so "the module is watching" there means the COMPONENT lost its state
+ * while the module kept the watch. Two ways in: a reload, and an adopt whose
+ * window navigated away between the arm and the `.then` (which discards the
+ * plan but not the watch). Bailing on that combination left the leg invisible
+ * with no way back short of restarting the app — the exact failure this
+ * function exists to prevent, made permanent. A watch belonging to ANOTHER
+ * character is not ours to touch.
+ */
+export async function adoptHoudiniRun({ data }: { data: unknown }): Promise<HoudiniRunPlan | null> {
+  const { projectId, id } = charScopeInput.parse(data)
+  if (!isTauri()) return null
+  if (activeHoudiniRun && activeHoudiniRun.characterId !== id) return null
+  let charFolderAbs = ''
+  try {
+    const project = await resolveProject(projectId)
+    const location = await locateCharacter(charsRoot(project), id)
+    if (!location) return null
+    charFolderAbs = location.folderAbs
+  } catch {
+    return null
+  }
+  const plan = await readHoudiniRunPlan(charFolderAbs)
+  if (!plan || plan.characterId !== id) return null
+  try {
+    if (!(await exists(plan.resultPath)) && !(await exists(plan.jobPath))) {
+      // Neither file left: the run ended while nobody watched (its owner
+      // cleaned up, or a later run swept them). Nothing to adopt.
+      await clearHoudiniRunPlan(charFolderAbs)
+      return null
+    }
+  } catch {
+    return null
+  }
+  // A live watch for this character stays as it is — it is the authority on
+  // WHICH project is running (the queue may have advanced since this plan was
+  // written). The plan is still returned, so the fresh component rebuilds its
+  // cards, queue and report from it.
+  activeHoudiniRun ??= {
+    characterId: plan.characterId,
+    jobPath: plan.jobPath,
+    resultPath: plan.resultPath,
+    scenes: plan.scenes,
+    startedAtMs: plan.startedAtMs,
+  }
+  return plan
+}
 
 /** What arming a run reports back to the dialog. */
 export interface HoudiniExportStarted {
@@ -523,7 +695,8 @@ export async function startHoudiniExport({
 }: {
   data: unknown
 }): Promise<HoudiniExportStarted> {
-  const { projectId, id, hipPath, scenes } = houdiniExportInput.parse(data)
+  const { projectId, id, hipPath, scenes, remaining, reportLines, anyFailed } =
+    houdiniExportInput.parse(data)
   if (!isTauri()) throw new Error('Export too needs the desktop app (it launches Houdini).')
 
   const settings = await storage.getSettings()
@@ -632,7 +805,29 @@ export async function startHoudiniExport({
     scenes: job.scenes.length,
     startedAtMs: Date.now(),
   }
+  // Mirror the run to disk so a reload can pick the watch back up. The queue
+  // and the report ride along from the caller (it owns them); this call
+  // records what only THIS layer knows — the paths and the start.
+  await saveHoudiniRunPlan(location.folderAbs, {
+    characterId: character.id,
+    hipPath: linkedHip,
+    jobPath: jobFile,
+    resultPath,
+    scenes: job.scenes.length,
+    startedAtMs: activeHoudiniRun.startedAtMs,
+    remaining,
+    sceneScope: scenes,
+    reportLines,
+    anyFailed,
+  })
   return { jobFile, scenes: job.scenes.length }
+}
+
+/** The character folder a run's files live in — the job file's own directory,
+ *  which is where the studio wrote all three (job, result, plan). */
+function runFolderOf(run: ActiveHoudiniRun): string {
+  const slash = run.jobPath.replace(/\\/g, '/').lastIndexOf('/')
+  return slash > 0 ? run.jobPath.replace(/\\/g, '/').slice(0, slash) : ''
 }
 
 /** The active Houdini run's state (null when none is armed) — mirrors
@@ -661,6 +856,10 @@ export async function fetchHoudiniRunProgress(): Promise<
   const state = houdiniRunStateFrom(result, houdiniUp)
   if (state.state === 'finished' || state.state === 'dead') {
     if (activeHoudiniRun === run) activeHoudiniRun = null
+    // The plan dies with the run it describes. A queue that continues writes a
+    // fresh one when its next project arms — and that happens strictly AFTER
+    // this await returns, so the clear can never eat the successor's plan.
+    await clearHoudiniRunPlan(runFolderOf(run))
     // The run is over and this snapshot carries everything the caller reports
     // (counts, summary, the HDA's problems) — so the handoff's own files go
     // now instead of sitting in the character folder until some later run
@@ -695,10 +894,21 @@ export async function fetchHoudiniRunProgress(): Promise<
   return { ...state, characterId: run.characterId, scenes: run.scenes }
 }
 
-/** Stop watching the Houdini run. Houdini itself is unaffected — the watch is
- *  an observer only, and the export it started keeps going. */
-export function dismissHoudiniRun(): void {
+/**
+ * Stop watching the Houdini run. Houdini itself is unaffected — the watch is
+ * an observer only, and the export it started keeps going.
+ *
+ * The in-memory half is synchronous; the returned promise is the PLAN delete,
+ * for a caller that needs it to have landed (tests do). UI callers ignore it —
+ * ordering against a run started straight afterwards is the chain's job either
+ * way (see {@link queuePlan}).
+ */
+export function dismissHoudiniRun(): Promise<void> {
+  const run = activeHoudiniRun
   activeHoudiniRun = null
+  // The plan goes with the watch: leaving it would let the next reload adopt a
+  // run the user deliberately stopped watching (queue and all).
+  return run ? clearHoudiniRunPlan(runFolderOf(run)) : Promise.resolve()
 }
 
 /**

@@ -202,6 +202,7 @@ export type {
 // --- houdini: Generate project (hython, DazToHue network from the HDA), and
 // --- "Export too" (job file → Houdini GUI → polled result) ------------------
 export {
+  adoptHoudiniRun,
   dismissHoudiniRun,
   fetchHoudiniRunProgress,
   fetchSceneDthPaths,
@@ -211,7 +212,7 @@ export {
   removeGeneratedHoudiniProject,
   startHoudiniExport,
 } from './api/houdini'
-export type { GeneratedHoudiniProject, HoudiniExportStarted } from './api/houdini'
+export type { GeneratedHoudiniProject, HoudiniExportStarted, HoudiniRunPlan } from './api/houdini'
 
 // --- houdini material utilities: scan DazToHueMaterial nodes, transfer a
 // --- node's texture-baker setup onto others, repair per-project $JOB (hython)
