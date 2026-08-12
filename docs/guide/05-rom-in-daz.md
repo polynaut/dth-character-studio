@@ -283,8 +283,11 @@ The character header becomes the run's own display for as long as it lasts:
 </p>
 
 - **Task cards**, numbered in run order — every selected Daz scene, then every
-  Houdini project. The card being worked on is the lit one; a finished card
-  drops away and the rest move up, so the column always reads as what is left.
+  Houdini project. The column stacks from the **bottom**: the card being worked
+  on is the lit one at the very bottom, beside the buttons, and everything still
+  to come waits above it (so the numbers read downwards, 3 · 2 · 1). A finished
+  card sails off and the queue drops into its place, leaving the column always
+  reading as what is left.
 - **A log window** tailing whichever leg is talking. The Daz scripts report each
   step as they start it *and* as it lands (*generating ROM* → *ROM generated*),
   so the window names what is running and not only what finished; the Houdini

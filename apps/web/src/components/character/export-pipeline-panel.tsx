@@ -28,9 +28,12 @@ export interface ExportTask {
 export interface ExportProgressBar {
   /** 0–100. */
   percent: number
-  /** What this bar is measuring right now. NOT rendered — see `ProgressBar`;
-   *  it identifies the step, so a change in it is what restarts `sinceMs`. */
-  label: string
+  /** What the CURRENT bar is measuring right now. Nothing renders it — see
+   *  `ProgressBar` — it survives as the step's identity, and a change in it is
+   *  what restarts `sinceMs`. Optional, and deliberately absent on the OVERALL
+   *  bar: that one keys no clock, so a "Scenes 0/2" nobody reads would just be
+   *  the removed caption still being computed. */
+  label?: string
   /** Which leg the bar measures — the fill wears that kind's color, the same
    *  identity the task cards carry. */
   kind: 'daz' | 'houdini'
@@ -241,8 +244,18 @@ function ProgressBar({ bar, emphasis = false }: { bar: ExportProgressBar; emphas
   // "Scenes 0/2" was the numbered task-card column said a second time — the
   // cards ARE the queue, and dropping the label lets both tracks start at the
   // same left edge instead of one being indented by its own caption.
+  //
+  // It moves to ARIA rather than vanishing: the visible caption was the only
+  // thing naming these meters, so dropping it outright would leave a screen
+  // reader two anonymous percentages. `progressbar` + a name + the value is
+  // what the sighted reader gets from the track, said out loud.
   return (
     <div
+      role="progressbar"
+      aria-label={emphasis ? 'Overall progress' : 'Current step progress'}
+      aria-valuenow={Math.round(percent)}
+      aria-valuemin={0}
+      aria-valuemax={100}
       data-progressbar={emphasis ? 'overall' : 'current'}
       data-percent={Math.round(percent)}
       className="flex items-center gap-2"

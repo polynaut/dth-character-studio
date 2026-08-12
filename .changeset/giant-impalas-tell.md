@@ -7,7 +7,9 @@ label itself *"Scenes 0/2"*, which the numbered task-card column beside it
 already says — and the caption indented that track, leaving the two bars starting
 at different left edges. Both are now a track and a percent: the cards say what
 is running, the log window's newest line says how it is going, and the meters say
-how far.
+how far. The caption was also the only thing NAMING these meters, so it moves to
+ARIA rather than disappearing — a screen reader still gets "Overall progress" and
+the value, instead of two anonymous bars.
 
 Also documents this release's Houdini work in the guide, which had gone out of
 step with it: the export leg is headless now (the guide still said Houdini
