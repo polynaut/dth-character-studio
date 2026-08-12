@@ -608,8 +608,30 @@ current code before relying on details, but assume the *lesson* still holds.
   blank, so the tool's own answers win over the studio's guesses. General
   shape: when an app offers a UI action for a value you are setting, ask what
   that action does BESIDES setting it — the difference is what a scripted
-  write silently skips. NOT verified in a live Houdini by the agent that wrote
-  it; the callback's own behaviour is the user's observation.
+  write silently skips. **MEASURED in hython 2026-08-12** — a probe that read
+  the parm templates, fired the callback and inspected the saved scene:
+  - the `.dth` parm's callback is `do_autoload_files`: it asks the Yes/No
+    question, reads the JSON, fills name/fbx/abc, then calls `do_reload_files`
+    — which presses the fbx + alembic reload buttons, reads the Alembic's own
+    start/end out of its info tree, sets the playbar range and
+    `hou.setFrame(0)`. THAT is the "rest pose frame". The alembic parm carries
+    `do_reload_files` as well; fbx and ROM-fbx have no callback at all; the
+    panel's "Reload Files" button is `import_reload`.
+  - `pressButton()` runs a non-button parm's callback but does NOT propagate
+    its errors: a callback that throws prints a traceback and returns
+    normally, so an `except Exception` around it proves nothing about success.
+  - **the exists() guard has to run where `$HIP` is real.** Generation clears
+    the scene and saves only at the END, so during the prefill `$HIP` is still
+    Houdini's default and `$HIP/daz-export/…` expands to a path that isn't
+    there — the guard then refuses to fire, which is exactly how the first fix
+    shipped as a silent no-op. Save FIRST, fire, save again (the second save
+    persists the frame range and frame the callback set). Verified end to end:
+    the generated scene goes from `frame=1, range=[1,300]` to `frame=0,
+    range=[0,240]`.
+  - the autoload rewrites the sibling paths ABSOLUTE, undoing the `$HIP/…`
+    form that lets the character folder move. The studio re-applies its own
+    values afterwards with a plain `set()` — the files are loaded by then, and
+    an equivalent path resolves to the same bytes.
 - **`$JOB` is SCENE state saved inside the `.hip`, and a load OVERWRITES the
   process value — so it leaks between files in one hython run.** Measured
   2026-08-07: seeding a sentinel then loading a project replaced it with that

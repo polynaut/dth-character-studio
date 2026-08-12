@@ -391,7 +391,6 @@ pub fn create_houdini_project(request: CreateHoudiniProjectRequest) -> Result<St
             "                if 'daztohueimport' in t:\n",
             "                    set_parm(node, 'import_character_name', pf.get('characterName'))\n",
             "                    set_parm(node, 'import_character_dtu_file', pf.get('dth'))\n",
-            "                    fire_dtu(node)\n",
             "                    set_parm(node, 'import_character_fbx_file', pf.get('fbx'))\n",
             "                    set_parm(node, 'import_character_alembic_file', pf.get('abc'))\n",
             "                    set_parm(node, 'import_character_rom_fbx_file', pf.get('romFbx'))\n",
@@ -400,6 +399,38 @@ pub fn create_houdini_project(request: CreateHoudiniProjectRequest) -> Result<St
             "                    set_parm(node, 'pose_asset_csv_file_path', pf.get('csv'))\n",
             "                elif 'daztohueexport' in t and 'groom' not in t:\n",
             "                    set_parm(node, 'export_directory', pf.get('exportDirectory'))\n",
+            "except Exception:\n",
+            "    pass\n",
+            // SAVE FIRST, then fire the import node's callback. Measured
+            // 2026-08-12: the prefilled paths are `$HIP/daz-export/…` and the
+            // scene has never been saved at this point, so `$HIP` is still
+            // Houdini's default — the paths expand to files that don't exist,
+            // and the callback (rightly) refuses to load them. After the save
+            // `$HIP` IS the project folder, the paths resolve, and the HDA's
+            // own routine fills the siblings and reads the files: that is what
+            // sets the Alembic's frame range and puts the scene on frame 0.
+            // The second save persists what the callback did to the scene.
+            "hou.hipFile.save('{scene}')\n",
+            "try:\n",
+            "    if pf and added:\n",
+            "        for top in new:\n",
+            "            for node in [top] + list(top.allSubChildren()):\n",
+            "                if 'daztohueimport' in node.type().name().lower():\n",
+            "                    fire_dtu(node)\n",
+            // The HDA's autoload writes the sibling paths ABSOLUTE (it resolves
+            // them out of the `.dth` JSON), which undoes the `$HIP/…` form this
+            // project was generated with — and that form is what lets the
+            // character folder move. Measured 2026-08-12. Put ours back, by
+            // plain `set()` so no callback re-runs: the files are loaded by
+            // now, and an equivalent path resolves to the same bytes.
+            "                    for pname, pkey in (('import_character_name', 'characterName'), ('import_character_dtu_file', 'dth'), ('import_character_fbx_file', 'fbx'), ('import_character_alembic_file', 'abc'), ('import_character_rom_fbx_file', 'romFbx')):\n",
+            "                        p = node.parm(pname)\n",
+            "                        v = pf.get(pkey)\n",
+            "                        if p is not None and v:\n",
+            "                            try:\n",
+            "                                p.set(v)\n",
+            "                            except Exception:\n",
+            "                                pass\n",
             "except Exception:\n",
             "    pass\n",
             "hou.hipFile.save('{scene}')\n",
