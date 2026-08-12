@@ -32,7 +32,9 @@ import {
   TabsTrigger,
 } from '@dth/ui'
 import {
+  GROOM_OCCLUSION_SECTIONS,
   MATERIAL_SECTIONS,
+  OCCLUSION_SECTIONS,
   SKELETON_SECTIONS,
   prefillHoudiniNetwork,
   refreshHoudiniAssets,
@@ -57,12 +59,14 @@ import {
 } from '#/lib/rom/houdini-defaults.ts'
 import type {
   CharacterWithProject,
+  GroomOcclusionSection,
   MaterialNodeInfo,
   MaterialScanProject,
   MaterialSection,
   MaterialSlotInfo,
   MaterialUtilReport,
   NodeKind,
+  OcclusionSection,
   ProjectPrefillInfo,
   SkeletonSection,
 } from '#/lib/rom/api.ts'
@@ -124,6 +128,89 @@ const SECTION_LABELS: Record<MaterialSection, { label: string; hint: string }> =
     hint: 'The channels baker layers read (uv_original, uv_geoshell) and their operations.',
   },
   bakers: { label: 'Texture bakers', hint: 'The bakers themselves and all their layers.' },
+}
+
+const OCCLUSION_LABELS: Record<OcclusionSection, { label: string; hint: string }> = {
+  visualise: {
+    label: 'Visualise',
+    hint: "The node's own viewport display — what it draws while you work, not what it exports.",
+  },
+  culling: {
+    label: 'Occlusion Culling',
+    hint: 'The substance: the manual occlusion attributes and the Auto-Occlusion operation list.',
+  },
+}
+
+const GROOM_OCCLUSION_LABELS: Record<GroomOcclusionSection, { label: string; hint: string }> = {
+  visualise: {
+    label: 'Visualise',
+    hint: "The node's own viewport display — what it draws while you work, not what it exports.",
+  },
+  options: { label: 'Options', hint: 'The groom-occlusion options block.' },
+  skin: { label: 'Skin', hint: 'Which skin the groom is occluded against.' },
+  occlusionMask: { label: 'Occlusion Mask', hint: 'The mask that decides what the groom hides.' },
+  textureStamp: { label: 'Texture Stamp', hint: 'The texture-stamp settings.' },
+}
+
+/**
+ * The kinds whose sections are whole FOLDERS, copied as subtrees — everything
+ * except `material`, whose sections are lists that merge by name and which
+ * carries its own picker, replace mode and interdependency warnings.
+ *
+ * One registry so the tab, the checkbox list, the confirm summary and the
+ * report all read the same place: adding the next DTH node of this shape is an
+ * entry here plus its twin in material_utils.py's FOLDER_KINDS.
+ */
+type FolderKind = Exclude<NodeKind, 'material'>
+
+const FOLDER_KIND_UI: Record<
+  FolderKind,
+  {
+    /** Tab label. */
+    tab: string
+    sections: ReadonlyArray<string>
+    labels: Record<string, { label: string; hint: string }>
+    /** What a section IS on this node — shown under the checkbox list. */
+    noun: string
+  }
+> = {
+  skeleton: {
+    tab: 'Skeleton',
+    sections: SKELETON_SECTIONS,
+    labels: SKELETON_LABELS,
+    noun: 'skeleton section',
+  },
+  occlusion: {
+    tab: 'Occlusion',
+    sections: OCCLUSION_SECTIONS,
+    labels: OCCLUSION_LABELS,
+    noun: 'occlusion section',
+  },
+  groomOcclusion: {
+    tab: 'Groom occlusion',
+    sections: GROOM_OCCLUSION_SECTIONS,
+    labels: GROOM_OCCLUSION_LABELS,
+    noun: 'groom-occlusion section',
+  },
+}
+
+const FOLDER_KINDS = Object.keys(FOLDER_KIND_UI) as ReadonlyArray<FolderKind>
+
+function isFolderKind(kind: NodeKind): kind is FolderKind {
+  return kind !== 'material'
+}
+
+/** A section's label wherever it comes from — the report mixes kinds. */
+function sectionLabel(key: string): string {
+  for (const labels of [
+    SECTION_LABELS as Record<string, { label: string }>,
+    SKELETON_LABELS as Record<string, { label: string }>,
+    OCCLUSION_LABELS as Record<string, { label: string }>,
+    GROOM_OCCLUSION_LABELS as Record<string, { label: string }>,
+  ]) {
+    if (labels[key]) return labels[key].label
+  }
+  return key
 }
 
 /** A material node identified across files — the selection key everywhere here. */
@@ -312,12 +399,28 @@ export function HoudiniUtilsPanel({
     new Set(MATERIAL_SECTIONS),
   )
   /** Which drawer tab is open. `general` acts on the project FILES themselves
-   *  and has no node list; the other two pick a NODE KIND to transfer. */
+   *  and has no node list; every other tab picks a NODE KIND to transfer. */
   const [tab, setTab] = useState<DrawerTab>('general')
-  const kind: NodeKind = tab === 'skeleton' ? 'skeleton' : 'material'
-  const [skelSections, setSkelSections] = useState<ReadonlySet<SkeletonSection>>(
-    new Set(SKELETON_SECTIONS),
-  )
+  const kind: NodeKind = tab === 'general' ? 'material' : tab
+  /** The folder kinds' selections, per kind — they are structurally identical
+   *  (whole subtrees, no picker, no append), so one map beats one state each.
+   *  Everything starts fully ticked, like the material tab. */
+  const [folderSections, setFolderSections] = useState<
+    Record<FolderKind, ReadonlySet<string>>
+  >(() => ({
+    skeleton: new Set<string>(SKELETON_SECTIONS),
+    occlusion: new Set<string>(OCCLUSION_SECTIONS),
+    groomOcclusion: new Set<string>(GROOM_OCCLUSION_SECTIONS),
+  }))
+  /** Toggle one section of one folder kind. */
+  function toggleFolderSection(folderKind: FolderKind, key: string) {
+    setFolderSections((prev) => {
+      const next = new Set(prev[folderKind])
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return { ...prev, [folderKind]: next }
+    })
+  }
   // Which of the source's material slots to copy. Empty = all; reset whenever
   // the source node changes, since slot names belong to that node.
   const [pickedMaterials, setPickedMaterials] = useState<ReadonlySet<string>>(new Set())
@@ -652,10 +755,9 @@ export function HoudiniUtilsPanel({
   }, [targetScan, sourceScan])
 
   /** The sections the active tab will actually send. */
-  const activeSections: Array<string> =
-    kind === 'skeleton'
-      ? SKELETON_SECTIONS.filter((key) => skelSections.has(key))
-      : MATERIAL_SECTIONS.filter((key) => sections.has(key))
+  const activeSections: Array<string> = isFolderKind(kind)
+    ? FOLDER_KIND_UI[kind].sections.filter((key) => folderSections[kind].has(key))
+    : MATERIAL_SECTIONS.filter((key) => sections.has(key))
 
   /**
    * Materials whose bakers read a UV that only a UV CHANNEL produces
@@ -1189,7 +1291,11 @@ export function HoudiniUtilsPanel({
           <TabsList>
             <TabsTrigger value="general">General</TabsTrigger>
             <TabsTrigger value="material">Material</TabsTrigger>
-            <TabsTrigger value="skeleton">Skeleton</TabsTrigger>
+            {FOLDER_KINDS.map((folderKind) => (
+              <TabsTrigger key={folderKind} value={folderKind}>
+                {FOLDER_KIND_UI[folderKind].tab}
+              </TabsTrigger>
+            ))}
           </TabsList>
 
           <TabsContent value="general" className="space-y-6">
@@ -1493,43 +1599,48 @@ export function HoudiniUtilsPanel({
               <Label className="mb-1 flex w-fit items-center gap-1 text-base font-semibold">
                 What to copy
                 <InfoPopup label="What to copy — more information">
-                  These are one setup, not three: a texture baker names its material
-                  (<code>MI_Skin</code>) and its layers name UV channels
-                  (<code>uv_original</code>, <code>uv_geoshell</code>) as plain text. Copying
-                  the bakers alone leaves those names pointing at nothing, and they bake
-                  nothing — which is why all three are on by default.
+                  {isFolderKind(kind) ? (
+                    <>
+                      Each of these is one of the node&apos;s own folders, copied as a whole:
+                      its settings and any lists inside it replace the target&apos;s. They are
+                      independent of each other — tick only what you want to reuse. The
+                      node&apos;s <strong>Linking</strong> folder is deliberately not offered:
+                      it holds parameter references, and DTH node names are identical in every
+                      project, so a copied reference would rebind to the target&apos;s own node.
+                    </>
+                  ) : (
+                    <>
+                      These are one setup, not three: a texture baker names its material
+                      (<code>MI_Skin</code>) and its layers name UV channels
+                      (<code>uv_original</code>, <code>uv_geoshell</code>) as plain text. Copying
+                      the bakers alone leaves those names pointing at nothing, and they bake
+                      nothing — which is why all three are on by default.
+                    </>
+                  )}
                 </InfoPopup>
               </Label>
               <div className="space-y-1">
-                {kind === 'skeleton'
-                  ? SKELETON_SECTIONS.map((key) => {
+                {isFolderKind(kind)
+                  ? FOLDER_KIND_UI[kind].sections.map((key) => {
                       const count = sourceNode?.node.sectionCounts.find((s) => s.key === key)?.count
+                      const meta = FOLDER_KIND_UI[kind].labels[key]
                       return (
                         <label key={key} className="flex cursor-pointer items-start gap-2 text-sm">
                           <input
                             type="checkbox"
                             className="mt-1"
-                            checked={skelSections.has(key)}
-                            onChange={() =>
-                              setSkelSections((prev) => {
-                                const next = new Set(prev)
-                                if (next.has(key)) next.delete(key)
-                                else next.add(key)
-                                return next
-                              })
-                            }
+                            checked={folderSections[kind].has(key)}
+                            onChange={() => toggleFolderSection(kind, key)}
                           />
                           <span>
-                            <span className="font-medium">{SKELETON_LABELS[key].label}</span>
+                            <span className="font-medium">{meta.label}</span>
                             {count !== undefined && (
                               <span className="ml-1 text-muted-foreground">
                                 ({count} setting{count === 1 ? '' : 's'})
                               </span>
                             )}
                             <br />
-                            <span className="text-xs text-muted-foreground">
-                              {SKELETON_LABELS[key].hint}
-                            </span>
+                            <span className="text-xs text-muted-foreground">{meta.hint}</span>
                           </span>
                         </label>
                       )
@@ -1564,11 +1675,11 @@ export function HoudiniUtilsPanel({
                       </label>
                     ))}
               </div>
-              {kind === 'skeleton' && (
+              {isFolderKind(kind) && (
                 <p className="mt-2 text-xs text-muted-foreground">
-                  A skeleton section is copied <strong>wholesale</strong> — its settings and its
-                  lists replace the target&apos;s. Appending 22 bone renames onto 22 existing ones
-                  would make 44 rules, not a merged setup.
+                  A {FOLDER_KIND_UI[kind].noun} is copied <strong>wholesale</strong> — its settings
+                  and its lists replace the target&apos;s. Appending one list onto another (22 bone
+                  renames onto 22 existing ones) would make 44 rules, not a merged setup.
                 </p>
               )}
               {/* The blocking reason, stated where the checkbox that causes it
@@ -2072,15 +2183,20 @@ export function HoudiniUtilsPanel({
           // Not "Copy texture bakers?": the run also carries material slots and
           // UV channels, and a title narrower than what the dialog's own report
           // lists is a title the user has to distrust.
-          title={kind === 'skeleton' ? 'Copy skeleton setup?' : 'Copy material setup?'}
+          title={
+            isFolderKind(kind)
+              ? `Copy ${FOLDER_KIND_UI[kind].tab.toLowerCase()} setup?`
+              : 'Copy material setup?'
+          }
         >
           <div className="space-y-2 text-sm">
             <p>
               Copy{' '}
               <strong>
-                {kind === 'skeleton'
-                  ? SKELETON_SECTIONS.filter((key) => skelSections.has(key))
-                      .map((key) => SKELETON_LABELS[key].label)
+                {isFolderKind(kind)
+                  ? FOLDER_KIND_UI[kind].sections
+                      .filter((key) => folderSections[kind].has(key))
+                      .map((key) => FOLDER_KIND_UI[kind].labels[key].label)
                       .join(', ')
                   : MATERIAL_SECTIONS.filter((key) => sections.has(key))
                       .map((key) => sectionCountOf(sourceNode.node, key, pickedMaterials))
@@ -2088,7 +2204,7 @@ export function HoudiniUtilsPanel({
               </strong>{' '}
               from <strong>{labelFor(sourceNode.project.hipPath, sourceNode.node.path)}</strong> in{' '}
               <code>{fileName(sourceNode.project.hipPath)}</code> to{' '}
-              <strong>{targetRefs.length}</strong> material node
+              <strong>{targetRefs.length}</strong> {isFolderKind(kind) ? 'target' : 'material'} node
               {targetRefs.length === 1 ? '' : 's'}.
             </p>
             <ul className="max-h-32 list-inside list-disc overflow-y-auto text-xs text-muted-foreground">
@@ -2981,7 +3097,9 @@ function MaterialNodeRow({
           )}
         </span>
         <span className="mt-0.5 block truncate text-xs text-muted-foreground" title={node.path}>
-          {node.nodeType === 'skeleton'
+          {/* Every folder kind reports itself the same way — section counts
+              straight off the scan; only the material node has a bespoke line. */}
+          {node.nodeType !== 'material'
             ? node.sectionCounts.map((s) => `${s.label} ${s.count}`).join(' · ')
             : `${node.materials} material${node.materials === 1 ? '' : 's'} · ${node.uvChannels} UV channel${
                 node.uvChannels === 1 ? '' : 's'
@@ -3050,10 +3168,7 @@ function TransferReport({
               <>
                 <p className="text-muted-foreground">
                   {target.sections
-                    .map(
-                      (s) =>
-                        `${SECTION_LABELS[s.key as MaterialSection]?.label ?? s.key} ${s.before} → ${s.after}`,
-                    )
+                    .map((s) => `${sectionLabel(s.key)} ${s.before} → ${s.after}`)
                     .join(' · ')}
                 </p>
                 {/* Named, not just counted: a slot that vanished without being

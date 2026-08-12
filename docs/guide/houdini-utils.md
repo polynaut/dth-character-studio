@@ -1,13 +1,16 @@
 # The Utils drawer
 
 Every Houdini project card on the character page carries a **Utils** button (the
-🔧 that appears on hover). It opens a drawer with three tabs:
+🔧 that appears on hover). It opens a drawer with a tab per job:
 
 - **General** — the health check of the projects themselves, and the repairs for
   what it finds. The tab it opens on, and the only one useful without a second
   project picked.
-- **Material** and **Skeleton** — copy a node's **complete setup** from one
-  project into another: material slots, UV channels and texture bakers.
+- **Material**, **Skeleton**, **Occlusion** and **Groom occlusion** — copy a
+  node's **complete setup** from one project into another. One tab per DazToHue
+  node kind, because a setup belongs to its node: the material tab carries
+  material slots, UV channels and texture bakers, the other three carry their
+  node's own option folders.
 
 For what the studio hands Houdini in the first place — the CSV, the exports and
 the generated project — see [Into Houdini](./06-into-houdini.md).
@@ -221,6 +224,31 @@ each section are how much is actually set there, not how many parameters exist.
 It carries the same **Recently used** row as the Material tab, and the same list
 behind it: sources are remembered per machine, not per tab and not per project,
 because the template you copy from usually lives outside any project.
+
+## The Occlusion tabs
+
+Same transfer again, for the two occlusion nodes — and they are two, so they get
+a tab each rather than one tab that changes shape under you:
+
+- **Occlusion** — the **DazToHueOcclusion** node. Its sections are **Occlusion
+  Culling** (the substance: the manual occlusion attributes and the
+  Auto-Occlusion operation list) and **Visualise** (what the node draws in the
+  viewport while you work).
+- **Groom occlusion** — the **DazToHueGroomOcclusion** node, with its own
+  **Options**, **Skin**, **Occlusion Mask**, **Texture Stamp** and **Visualise**.
+
+Like the Skeleton tab, each section is a folder copied **wholesale** — its
+settings and any lists inside it replace the target's — so there is no *Replace
+at target* toggle, and the count beside a section is how much is actually set
+there. Tick only the sections you want; unlike a material setup, these do not
+depend on each other.
+
+> **The node's own `Linking` folder is deliberately not offered.** It holds
+> parameter *references*, and DTH node names are identical in every project — a
+> copied reference would quietly rebind to the target project's own node and
+> read the wrong values without erroring. It is the same rule the material
+> transfer follows, where a linked parameter travels as
+> [its value](#what-gets-copied).
 
 ## The General tab
 

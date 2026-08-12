@@ -465,7 +465,32 @@ current code before relying on details, but assume the *lesson* still holds.
   REBINDS to that project's own node — wrong values, no error.
   `material_utils.py` therefore flattens any node-referencing expression to its
   evaluated value at export (`_portable_expr`) and carries only expressions with
-  no node reference.
+  no node reference. The same reasoning is why the transfer never offers a
+  node's **`node_linking_folder`** as a copyable section: that folder IS the
+  linking block.
+- **A black-boxed HDA still yields its parm names without Houdini.**
+  `DazToHue.hda` refuses `hotl -t` ("the library is black boxed"), but the
+  per-type **DialogScript sections are plain text inside the file** — reading
+  the bytes as latin-1 and searching for
+  `# Dialog script for <Type> automatically generated` gives the whole parm
+  tree: `group`/`groupsimple`/`groupcollapsible`/`multiparm` blocks with their
+  `name` and `label`. Measured 2026-08-12, and it is the ONLY way to get these
+  names on a machine where hython won't start (`hython` exits 3, *"No licenses
+  could be found"*, when the GUI holds the only Indie seat). Use it to source
+  folder names for a new `FOLDER_KINDS` entry — but note it proves the parm
+  tree, NOT that a transfer works: that still needs a real run.
+- **The occlusion nodes' folder names, measured off the installed HDA
+  (2026-08-12).** `DazToHueOcclusion`: `node_linking_folder` (Linking, not
+  transferable — see above), `visualise_folder` (Visualise),
+  `occludion_culling_folder` (Occlusion Culling) wrapping
+  `occludion_manual_attributes_folder` and `folder0` (Auto-Occlusion, holding
+  the `occlusion_group` multiparm). `DazToHueGroomOcclusion`:
+  `visualise_folder`, `groom_occlusion_options_folder`,
+  `groom_occlusion_skin_folder`, `groom_occlusion_occlusion_folder`,
+  `groom_occlusion_texture_folder`. **`occludion_` is how the asset spells it** —
+  the name is the contract `_folder_template` looks up, so it is reproduced
+  verbatim; "correcting" it to `occlusion_` silently finds nothing, and a
+  section whose folder is missing is skipped rather than reported.
 - **A Houdini network box's visible title is its `comment()`, not its
   `name()`.** Measured 2026-08-06: `name()` is an internal id (`__netbox1`,
   `__netbox3`, …) that no user ever sees or sets; the text drawn in the box
