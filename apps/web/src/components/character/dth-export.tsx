@@ -672,6 +672,19 @@ export function DthExportAction({
   const runReportRef = useRef<{
     daz?: { total: number; failed: number; errors: Array<string>; elapsedMs?: number }
     houdini: Array<{ line: string; failed: boolean; elapsedMs?: number }>
+    /**
+     * Pre-formatted lines INHERITED from a window that watched earlier legs and
+     * is gone (a reload — see the adopt effect). Emitted verbatim ahead of this
+     * window's own, and deliberately NOT folded into `houdini`: that array's
+     * LENGTH is "how many Houdini projects have finished", which drives the
+     * task cards. Folding the carried lines in there marked the RUNNING
+     * project's card done the moment a restore landed — one inherited line per
+     * finished leg PLUS the Daz leg's line and every Daz error.
+     */
+    carried?: Array<string>
+    /** Whether any inherited leg failed — the report's tone, which the lines
+     *  themselves can't carry. */
+    carriedFailed?: boolean
   } | null>(null)
   /** The project the LIVE Houdini run belongs to — attribution for its line. */
   const currentHipRef = useRef('')
@@ -687,6 +700,14 @@ export function DthExportAction({
     let anyFailed = false
     let totalMs = 0
     let totalKnown = true
+    // Legs an earlier window watched, restored from the run plan — they lead,
+    // because they happened first. Their timings died with that window, so a
+    // restored run reports no total.
+    if (report.carried?.length) {
+      lines.push(...report.carried)
+      anyFailed ||= report.carriedFailed === true
+      totalKnown = false
+    }
     if (report.daz) {
       const d = report.daz
       anyFailed ||= d.failed > 0
@@ -742,7 +763,11 @@ export function DthExportAction({
           hipPath: first,
           scenes,
           remaining: rest,
+          // Everything the end report will need that this project's own leg
+          // won't produce — INCLUDING lines already inherited from a window
+          // before this one, or a second reload would drop the first's legs.
           reportLines: [
+            ...(report?.carried ?? []),
             ...(report?.daz
               ? [
                   `Daz: ${report.daz.total - report.daz.failed}/${report.daz.total} scene${report.daz.total === 1 ? '' : 's'} exported`,
@@ -752,7 +777,9 @@ export function DthExportAction({
             ...(report?.houdini.map((leg) => leg.line) ?? []),
           ],
           anyFailed:
-            (report?.daz?.failed ?? 0) > 0 || (report?.houdini.some((leg) => leg.failed) ?? false),
+            report?.carriedFailed === true ||
+            (report?.daz?.failed ?? 0) > 0 ||
+            (report?.houdini.some((leg) => leg.failed) ?? false),
         },
       })
       setHoudini({ state: 'starting', startedAtMs: Date.now() })
@@ -987,6 +1014,9 @@ export function DthExportAction({
       runReportRef.current = null
       const done = report
         ? [
+            // Inherited legs first — a reloaded window's run can die too, and
+            // what already finished must not be lost with it.
+            ...(report.carried ?? []),
             ...(report.daz
               ? [`Daz: ${report.daz.total - report.daz.failed}/${report.daz.total} exported`]
               : []),
@@ -1022,9 +1052,14 @@ export function DthExportAction({
         // The report is REBUILT from the lines the plan carries — this window
         // never saw those legs, and the one end-of-everything report has to
         // name them anyway. They ride as pre-formatted lines (their per-leg
-        // timings are gone with the window that measured them).
+        // timings are gone with the window that measured them) in `carried`,
+        // NOT in `houdini`: that array's length is the count of finished
+        // Houdini projects and drives the task cards, so folding these in
+        // would mark the running project's card done on arrival.
         runReportRef.current = {
-          houdini: plan.reportLines.map((line) => ({ line, failed: plan.anyFailed })),
+          carried: plan.reportLines,
+          carriedFailed: plan.anyFailed,
+          houdini: [],
         }
         pipelineRef.current = {
           daz: [],
@@ -1168,7 +1203,7 @@ export function DthExportAction({
           // anymore — but the studio stops watching and drops the projects
           // still queued behind this one, which is the part the user is
           // actually asking to cancel.
-          dismissHoudiniRun()
+          void dismissHoudiniRun()
           const dropped = houdiniQueueRef.current?.projects.length ?? 0
           houdiniQueueRef.current = null
           // The accumulated report belongs to a process that no longer ends

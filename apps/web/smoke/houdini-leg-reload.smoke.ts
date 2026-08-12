@@ -112,6 +112,20 @@ test('a reload mid-Houdini-leg keeps watching, and the QUEUED project still runs
   await expect(page.getByRole('button', { name: /Working/ })).toBeVisible({ timeout: 15_000 })
   await expect(page.locator(`[data-task="hou:${P.houdini}"]`)).toBeVisible()
   await expect(page.locator(`[data-task="hou:${HOUDINI_2}"]`)).toBeVisible()
+  // …and in the RIGHT states. `toBeVisible` alone can't tell: a card marked
+  // done is visible for the ~450 ms of its fly-out, which is longer than the
+  // first check takes, so it passed while the running project's card was
+  // quietly sailing off screen. The status attribute is the honest assertion.
+  // (It was: the inherited report lines were counted as finished PROJECTS,
+  // and one Daz line was enough to mark card #1 done on arrival.)
+  await expect(page.locator(`[data-task="hou:${P.houdini}"]`)).toHaveAttribute(
+    'data-task-status',
+    'active',
+  )
+  await expect(page.locator(`[data-task="hou:${HOUDINI_2}"]`)).toHaveAttribute(
+    'data-task-status',
+    'waiting',
+  )
   await expect(page.locator('[data-export-log]')).toContainText('Baking textures 7/12…')
 
   // THE POINT: when this project finishes, the queued one starts — that is

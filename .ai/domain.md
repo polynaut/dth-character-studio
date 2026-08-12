@@ -755,7 +755,19 @@ older runtimes as stale.
   hython finished, the studio never reported it, and every queued project
   silently never started. The plan dies with the run (finish, dead, or a
   Ctrl-stop), and a continuing queue writes a fresh one when its next project
-  arms — strictly after the clear, so the clear can't eat its successor.
+  arms. Ordering is the CHAIN's job, not the call site's (`queuePlan`, the twin
+  of the Daz sidecar's `queueSidecar`): the finish path awaits its clear before
+  the queue advances, but a Ctrl-stop's clear is fired from a synchronous UI
+  handler and would otherwise still be in flight when the user starts the next
+  run — deleting that run's plan. Reads join the queue too, so an adopt can
+  never restore a run the user just stopped watching.
+  What a restored window inherits is PRE-FORMATTED lines (`carried` on the run
+  report), never entries in the `houdini` array: that array's LENGTH is "how
+  many Houdini projects have finished" and drives the task cards, so folding
+  the inherited Daz line into it marked the RUNNING project's card done the
+  moment a restore landed. `toBeVisible` could not see that — a done card is
+  visible throughout its fly-out — which is why the smoke asserts
+  `data-task-status` instead.
   Mid-NODE the result also carries a live `activity` channel: 456.py's
   `ActivityCapture` tees `sys.stdout`/`stderr` + `hou.ui.setStatusMessage` while
   `do_export` runs and streams the lines (throttled 0.5 s, rolling 40) into the
