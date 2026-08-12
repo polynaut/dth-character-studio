@@ -23,6 +23,20 @@ const launches: Array<string> = []
 const dazRunningAsked: Array<string> = []
 /** Lower-cased paths whose `remove` fails, as a file locked by Daz would. */
 const lockedForRemove = new Set<string>()
+/** Lower-cased paths whose `remove` STALLS until released — a slow delete
+ *  (a retried lock, a scanner holding the handle) made deterministic, so an
+ *  ordering bug can't hide behind "the fast path happened to win". */
+const stalledRemoves = new Map<string, Promise<void>>()
+function stallRemove(path: string): () => void {
+  let release = (): void => {}
+  stalledRemoves.set(
+    norm(path).toLowerCase(),
+    new Promise<void>((resolve) => {
+      release = () => resolve()
+    }),
+  )
+  return release
+}
 
 function norm(p: string): string {
   return p.replace(/\\/g, '/').replace(/\/+$/g, '')
@@ -69,6 +83,11 @@ vi.mock('@tauri-apps/plugin-fs', () => ({
   },
   async remove(p: string, opts?: { recursive?: boolean }) {
     const t = norm(p).toLowerCase()
+    const stall = stalledRemoves.get(t)
+    if (stall) {
+      stalledRemoves.delete(t)
+      await stall
+    }
     // A locked file (open in Daz) is the failure this action actually meets.
     if (lockedForRemove.has(t)) throw new Error(`EBUSY ${p}`)
     for (const k of [...files.keys()]) {
@@ -191,14 +210,18 @@ function seedClaimedWorked(): void {
   )
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   files.clear()
   dirs.clear()
   launches.length = 0
   dazRunningAsked.length = 0
   lockedForRemove.clear()
+  stalledRemoves.clear()
   dazRunning = false
-  dismissExportRun()
+  // Awaited: the dismiss also retires the run sidecar, and a test that seeds
+  // one by hand must not race that delete. (The app never has to — the chain
+  // orders a delete against a following handoff by itself.)
+  await dismissExportRun()
   files.set('/appdata/settings.json', JSON.stringify({ dazLibraryFolder: '/daz' }))
 })
 
@@ -351,11 +374,51 @@ describe('launchDazForPendingJobs — the reclaim owner', () => {
   })
 })
 
+describe('the run sidecar is written and retired in CALL order', () => {
+  it("a dismiss's in-flight delete cannot eat the next handoff's sidecar", async () => {
+    // The abort path: dismissExportRun() drops the watch and schedules the
+    // sidecar delete WITHOUT awaiting it (its UI callers are synchronous). If
+    // that delete were free to land whenever, a user starting the next export
+    // straight afterwards would silently lose the new run's reload survival —
+    // the sidecar would be gone and the reloaded window would fall back to the
+    // display-only adoption. Both operations queue on one chain, so the later
+    // write wins however the promises interleave.
+    //
+    // The delete is STALLED so this is a real ordering assertion and not a
+    // lucky race: unserialised, it resumes long after the handoff has written
+    // the new sidecar and deletes it.
+    const releaseDelete = stallRemove('/appdata/export-run.json')
+    const dismissed = dismissExportRun() // deliberately NOT awaited yet
+    // Released on a TIMER, not after the handoff: everything the handoff does
+    // is in-memory here, so unserialised it finishes and writes the new
+    // sidecar within a microtask or two — and the delete then resumes on top
+    // of it. Serialised, the handoff simply queues behind the delete and its
+    // write lands after, which is the whole point.
+    const timer = setTimeout(releaseDelete, 50)
+    await armClaimedRun()
+    await dismissed
+    clearTimeout(timer)
+
+    const sidecar = files.get('/appdata/export-run.json')
+    expect(sidecar).toBeDefined()
+    expect(JSON.parse(sidecar!)).toMatchObject({ characterId: 'c1', total: 1 })
+  })
+
+  it('the run ending retires it — a later poll must not restore a dead watch', async () => {
+    await armClaimedRun()
+    expect(files.has('/appdata/export-run.json')).toBe(true)
+    await dismissExportRun()
+    expect(files.has('/appdata/export-run.json')).toBe(false)
+    // A fresh window polling as the character's own editor finds nothing to
+    // restore, so it cannot resurrect the dismissed run.
+    dazRunning = true
+    const run = await fetchExportRunProgress('c1')
+    expect(run === null || run.characterId === '').toBe(true)
+  })
+})
+
 describe('sidecar restore — the run OWNER reloads mid-batch', () => {
   it("the character's own editor restores the full watch: clock, plan, ownership", async () => {
-    // beforeEach's dismissExportRun schedules a deferred sidecar delete —
-    // flush it before seeding, or it would eat this test's sidecar.
-    await new Promise((resolve) => setTimeout(resolve, 0))
     dazRunning = true
     files.set(
       RUNNING,

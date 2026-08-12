@@ -379,6 +379,23 @@ test('a reloaded window ADOPTS the in-flight batch — cards from the rows, log 
   await expect(page.locator('[data-progressbar="current"]')).toHaveAttribute('data-percent', '40')
   await expect(page.locator('[data-task^="hou:"]')).toHaveCount(0)
   await expect(page.getByRole('button', { name: /Working/ })).toBeVisible()
+
+  // …and it LETS GO again. The batch's owner finishes it and deletes the job
+  // file; this window's poll then finds nothing — and since an adoption owns
+  // no outcome, that null is the only signal it ever gets. Without an explicit
+  // clear the cards, the log window and a still-ticking meter hung in the
+  // header for good (the poll interval stops with the watch, so nothing would
+  // ever come back to tidy them).
+  await page.evaluate(
+    ([running]) => {
+      ;((window as any).__tauriMock.files as Map<string, string>).delete(running)
+    },
+    [RUNNING_JOB],
+  )
+  await expect(page.locator('[data-task]')).toHaveCount(0, { timeout: 15_000 })
+  await expect(page.locator('[data-export-log]')).toHaveCount(0)
+  await expect(page.locator('[data-progressbar]')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /Working/ })).toHaveCount(0)
 })
 
 test('the run OWNER reloads mid-batch: the sidecar restores clock, Houdini card AND the continuation', async ({

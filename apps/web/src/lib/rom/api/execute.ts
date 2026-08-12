@@ -498,29 +498,55 @@ const exportRunSidecarSchema = z.object({
   scenes: z.array(z.string()),
 })
 
+/**
+ * Every sidecar write/delete queues on ONE chain, so they land in call order.
+ * {@link dismissExportRun} is synchronous for its UI callers, which ignore
+ * its promise — so without this chain a clear scheduled by an abort could
+ * still be in flight when the user immediately starts the next export, and
+ * would then delete the NEW run's sidecar (silently costing that run its
+ * reload survival). Serialising makes "last call wins" true. Reads join the
+ * same queue, so a poll can never see a sidecar a dismiss already retired.
+ */
+let sidecarChain: Promise<void> = Promise.resolve()
+function queueSidecar(op: () => Promise<void>): Promise<void> {
+  sidecarChain = sidecarChain.then(op, op)
+  return sidecarChain
+}
+
 /** Best-effort — a failed write only degrades a later reload to the
  *  display-only adoption. */
-async function writeExportRunSidecar(run: ActiveExportRun): Promise<void> {
-  try {
-    await storage.writeTextFileAtomic(
-      await storage.dataPath(EXPORT_RUN_FILE),
-      JSON.stringify(run),
-    )
-  } catch {
-    // best effort
-  }
+function writeExportRunSidecar(run: ActiveExportRun): Promise<void> {
+  return queueSidecar(async () => {
+    try {
+      await storage.writeTextFileAtomic(
+        await storage.dataPath(EXPORT_RUN_FILE),
+        JSON.stringify(run),
+      )
+    } catch {
+      // best effort
+    }
+  })
 }
 
-async function clearExportRunSidecar(): Promise<void> {
-  try {
-    await remove(await storage.dataPath(EXPORT_RUN_FILE))
-  } catch {
-    // best effort — overwritten by the next handoff either way
-  }
+function clearExportRunSidecar(): Promise<void> {
+  return queueSidecar(async () => {
+    try {
+      await remove(await storage.dataPath(EXPORT_RUN_FILE))
+    } catch {
+      // best effort — overwritten by the next handoff either way
+    }
+  })
 }
 
+/** Reads through the same chain as the writes: a poll that lands right after
+ *  a dismiss must see the CLEARED sidecar, or it would restore the very watch
+ *  the user just dropped. */
 async function readExportRunSidecar(): Promise<ActiveExportRun | null> {
   try {
+    // Inside the try on purpose: every queued op swallows its own errors, so
+    // the chain cannot reject — but a poll must not be able to throw over the
+    // sidecar either way, and this is where "can't tell" already means null.
+    await sidecarChain
     const path = await storage.dataPath(EXPORT_RUN_FILE)
     if (!(await exists(path))) return null
     return exportRunSidecarSchema.parse(JSON.parse(await readTextFile(path)))
@@ -811,14 +837,22 @@ export async function fetchExportRunProgress(watcher?: string): Promise<ExportRu
   return { state: 'dead', characterId: run.characterId, total: run.total }
 }
 
-/** Stop watching the active run (the run in Daz is unaffected — the watch is
- *  an observer only). The escape hatch for a batch that errored in Daz and
- *  will never deliver its remaining scenes. */
-export function dismissExportRun(): void {
+/**
+ * Stop watching the active run (the run in Daz is unaffected — the watch is
+ * an observer only). The escape hatch for a batch that errored in Daz and
+ * will never deliver its remaining scenes.
+ *
+ * The in-memory half is synchronous — every UI caller may ignore the return
+ * and does. The returned promise is the SIDECAR delete, for a caller that
+ * needs it to have landed before it looks at app-data again (tests do);
+ * ordering against a handoff that follows immediately is the chain's job
+ * either way — see {@link queueSidecar}.
+ */
+export function dismissExportRun(): Promise<void> {
   activeRun = null
-  // Fire-and-forget (this stays sync for its callers): without the clear, the
-  // next poll would restore the very watch that was just dismissed.
-  void clearExportRunSidecar()
+  // Without the clear, the next poll would restore the very watch that was
+  // just dismissed.
+  return clearExportRunSidecar()
 }
 
 /**

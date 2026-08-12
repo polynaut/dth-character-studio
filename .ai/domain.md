@@ -713,6 +713,13 @@ older runtimes as stale.
   for display — the on-disk format is unchanged). The scripts log step START
   markers too ("generating ROM", …) at the already-reached percent. No
   mid-run toasts: the one report fires at the very end.
+  Both live buttons are INERT to a plain click (a stray one used to drop the
+  watch, reading as "the export vanished") and reveal their escape hatch on
+  **Ctrl**: Abort on the Daz leg, Stop watching on the Houdini one — which
+  also drops the projects still queued behind the running one, since the
+  studio, not Houdini, owns that queue. On the Houdini leg this is the ONLY
+  way out now: headless left no window to close, and the export inside
+  hython keeps running either way (the toast says so).
   RELOAD SURVIVAL: every character handoff writes its plan to the app-data
   sidecar `export-run.json` (characterId, startedAtMs, houdiniProjects/mode,
   scenes; deleted on every run end). The owning character's editor passes its
@@ -724,6 +731,16 @@ older runtimes as stale.
   sidecar — it rewrites the job file from its own model, so anything stored
   IN the job file beyond the v1.2.0 contract would be dropped at pickup.
   Contract: docs/exporter-plugin-job-file.md.
+  **The DAZ leg only.** The HOUDINI leg has no sidecar: `activeHoudiniRun`
+  lives in `api/houdini.ts` module memory and the editor's poll interval is
+  armed only while something is ALREADY being watched (`pending ||
+  progress || houdini` in `dth-export.tsx`), so a reload during that leg
+  drops the watch and never re-adopts — and since the leg went headless
+  there is no window either, making it invisible: hython finishes, writes
+  its result, and the job/result files sit in the character folder until the
+  next run overwrites them. Restoring it needs BOTH halves — a second
+  sidecar AND a mount-time probe that arms the poll without an existing
+  watch — which is why it is not the Daz sidecar's mirror image.
   Mid-NODE the result also carries a live `activity` channel: 456.py's
   `ActivityCapture` tees `sys.stdout`/`stderr` + `hou.ui.setStatusMessage` while
   `do_export` runs and streams the lines (throttled 0.5 s, rolling 40) into the
@@ -750,8 +767,12 @@ older runtimes as stale.
   defer the batch into a callback that never fires). Wins: the whole
   window/paint fragility class is gone, and the process's FULL console (C++
   cook chatter the in-process tee can't see) streams into
-  `.dth_houdini_console.log` beside the job/result files (cleared with them; a
-  dead run without a result keeps it as the only evidence). Liveness is the
+  `.dth_houdini_console.log` beside the job/result files — and deliberately
+  NOT cleared with them (`houdiniRunFilesToClear` lists only the result and
+  the job): it is the diagnosis channel a puzzling run is read from
+  afterwards, and one bounded file per character — overwritten by the next
+  run, never accreting — IS the retention the housekeeping rule asks for.
+  The first headless run proved the point by deleting the answer. Liveness is the
   TRACKED child (`try_wait` in houdini.rs — immune to the Utils drawer's own
   hython scans), with the GUI process list as fallback. The GUI path itself
   still works (456.py's scene-load mechanism + window-wait machinery remain);

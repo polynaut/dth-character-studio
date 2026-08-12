@@ -26,6 +26,7 @@ import {
   abortExporterJobs,
   clearExporterJobFiles,
   dismissExportRun,
+  dismissHoudiniRun,
   executeCharacterJobs,
   exportDazStudioRunning,
   exporterJobsPending,
@@ -97,8 +98,11 @@ import type { Character } from '@dth/rom'
  * (a stray click must not reset the run's watch) — holding **Ctrl** turns it
  * into **Abort** (see {@link ExportProgressButton}): the claimed job file is
  * deleted and the button reset, which is the only way out of a batch that
- * stalled inside a Daz that is still running. Status refreshes on window
- * focus and polls lightly while pending/running.
+ * stalled inside a Daz that is still running. The Houdini leg's button works
+ * the same way (see {@link HoudiniProgressButton}) — Ctrl reveals **Stop
+ * watching**, which drops the project queue with it; since that leg runs
+ * headless there is no window left to close instead. Status refreshes on
+ * window focus and polls lightly while pending/running.
  */
 /** The DazToHue brand mark as a button icon. The button's automatic icon
  *  sizing only targets SVGs, so the img sizes itself — `size-6`, larger than
@@ -231,6 +235,85 @@ function ExportProgressButton({
       <img src={dazLogo} alt="Daz Studio" className="size-5 shrink-0 object-contain" />
       Working
       <ElapsedSince since={progress.startedAtMs} />
+    </Button>
+  )
+}
+
+/**
+ * The Houdini leg's twin of {@link ExportProgressButton}: a live **Working**
+ * button, inert to plain clicks, with **Ctrl** revealing the way out.
+ *
+ * The Ctrl affordance is not decoration. The studio drives the project QUEUE,
+ * so this watch is also the orchestration of every project still waiting —
+ * and since the leg went headless there is no Houdini window left to close
+ * either. Without it a wedged run, or a queue the user changed their mind
+ * about, could only be ended by quitting the studio.
+ *
+ * What it can honestly promise is what the plain click always promised: the
+ * studio stops watching and the queue is dropped. The export already running
+ * inside hython keeps going — nothing here can reach into it.
+ */
+function HoudiniProgressButton({
+  houdini,
+  queued,
+  onStopWatching,
+}: {
+  houdini: HoudiniRunState
+  /** Projects still waiting their turn — they die with the watch, so the
+   *  tooltip has to say so before the user commits. */
+  queued: number
+  onStopWatching: () => void
+}) {
+  const ctrlHeld = useModifierHeld('Control')
+  if (ctrlHeld) {
+    return (
+      <Button
+        variant="outline-destructive"
+        className="px-3"
+        onClick={onStopWatching}
+        title={`Stop watching (Ctrl): the export keeps running in Houdini — this ends the studio's watch${queued > 0 ? ` and the ${queued} queued project${queued === 1 ? '' : 's'} will not start` : ''}.`}
+      >
+        <Ban /> Stop watching
+      </Button>
+    )
+  }
+  // The Daz batch is done and reported; Houdini is working (or opening the
+  // project). Like the Daz leg's button, a plain click is IGNORED — a stray
+  // click didn't just stop the watch, it silently stopped the orchestration of
+  // every queued project. A watch whose Houdini actually dies ends itself
+  // (liveness detection). The mini bar mirrors the panel's stepwise Houdini
+  // scale (1 open-project step + 1 per network).
+  const percent =
+    houdini.state === 'running' && houdini.total > 0
+      ? Math.round(((1 + houdini.done) / (1 + houdini.total)) * 100)
+      : 0
+  return (
+    <Button
+      variant="outline"
+      className="export-button-progress cursor-wait px-3"
+      style={
+        {
+          '--export-progress': `${percent}%`,
+          '--export-progress-color': 'var(--color-orange-600)',
+        } as CSSProperties
+      }
+      // Just the latest status, like the Daz leg's button.
+      title={capitalizeStatus(
+        (houdini.state === 'running' && houdini.activity?.lines.at(-1)) ||
+          (houdini.state === 'running' ? 'exporting…' : 'opening project…'),
+      )}
+    >
+      {/* Same constant "Working" as the Daz leg — the node counts live in
+          the pipeline panel's meters and this tooltip; the Houdini mark is
+          what tells the legs apart. */}
+      <Loader2 className="animate-spin" />
+      <img src={houdiniLogo} alt="Houdini" className="size-5 shrink-0 object-contain" />
+      Working
+      <ElapsedSince
+        since={
+          houdini.state === 'starting' || houdini.state === 'running' ? houdini.startedAtMs : undefined
+        }
+      />
     </Button>
   )
 }
@@ -649,6 +732,14 @@ export function DthExportAction({
     // every editor's button shows the live progress — outcomes stay owner-only.
     if (!run || (run.characterId !== '' && run.characterId !== character.id)) {
       setProgress(null)
+      // An ADOPTED display has nothing left once the batch it mirrored is gone
+      // (its owner finished it and deleted the file): the poll then returns
+      // null, the interval stops with it, and without this the cards, log
+      // window and ticking meter would hang in the header until the user
+      // navigated away. Only an adoption is dropped here — a run of OURS keeps
+      // its panel, because the Houdini leg lives on long after the Daz job
+      // files are deleted (pipelineRef/houdini are how that leg is armed).
+      if (!pipelineRef.current && !houdiniRef.current) clearPipeline()
       return
     }
     if (run.state === 'finished') {
@@ -915,7 +1006,7 @@ export function DthExportAction({
       // The watch dies with the file either way — clearExporterJobFiles drops
       // the api-side run, these two drop this button's own state, and the busy
       // cursor is released by the `running` effect on the same render.
-      dismissExportRun()
+      void dismissExportRun()
       setProgress(null)
       setPending(false)
       clearPipeline()
@@ -959,43 +1050,31 @@ export function DthExportAction({
   }
 
   if (houdini) {
-    // The Daz batch is done and reported; Houdini is working (or opening the
-    // project). Like the Daz leg's button, a plain click is IGNORED — the
-    // STUDIO drives the project queue, so a stray click didn't just stop the
-    // watch, it silently stopped the orchestration of every queued project.
-    // A watch whose Houdini actually dies ends itself (liveness detection).
-    // The mini bar mirrors the panel's stepwise Houdini scale (1 open-project
-    // step + 1 per network).
-    const houdiniPercent =
-      houdini.state === 'running' && houdini.total > 0
-        ? Math.round(((1 + houdini.done) / (1 + houdini.total)) * 100)
-        : 0
     return (
-      <Button
-        variant="outline"
-        className="export-button-progress cursor-wait px-3"
-        style={
-          {
-            '--export-progress': `${houdiniPercent}%`,
-            '--export-progress-color': 'var(--color-orange-600)',
-          } as CSSProperties
-        }
-        // Just the latest status, like the Daz leg's button.
-        title={capitalizeStatus(
-          (houdini.state === 'running' && houdini.activity?.lines.at(-1)) ||
-            (houdini.state === 'running' ? 'exporting…' : 'opening project…'),
-        )}
-      >
-        {/* Same constant "Working" as the Daz leg — the node counts live in
-            the pipeline panel's meters and this tooltip; the Houdini mark is
-            what tells the legs apart. */}
-        <Loader2 className="animate-spin" />
-        <img src={houdiniLogo} alt="Houdini" className="size-5 shrink-0 object-contain" />
-        Working
-        <ElapsedSince
-          since={houdini.state === 'starting' || houdini.state === 'running' ? houdini.startedAtMs : undefined}
-        />
-      </Button>
+      <HoudiniProgressButton
+        houdini={houdini}
+        queued={houdiniQueueRef.current?.projects.length ?? 0}
+        onStopWatching={() => {
+          // The one way out, mirroring the Daz leg's Ctrl+abort. The export
+          // itself is NOT stopped — hython owns it and has no window to close
+          // anymore — but the studio stops watching and drops the projects
+          // still queued behind this one, which is the part the user is
+          // actually asking to cancel.
+          dismissHoudiniRun()
+          const dropped = houdiniQueueRef.current?.projects.length ?? 0
+          houdiniQueueRef.current = null
+          // The accumulated report belongs to a process that no longer ends
+          // here — dropping it stops a later, unrelated run from firing it.
+          runReportRef.current = null
+          setHoudini(null)
+          clearPipeline()
+          toast.info(
+            dropped > 0
+              ? `Stopped watching the Houdini export — it keeps running in the background, and the ${dropped} queued project${dropped === 1 ? '' : 's'} will not start.`
+              : 'Stopped watching the Houdini export — it keeps running in the background.',
+          )
+        }}
+      />
     )
   }
 

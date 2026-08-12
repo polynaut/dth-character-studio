@@ -585,13 +585,9 @@ export function preCheckedScenes(
   )
 }
 
-/**
- * A run duration for humans — the export button's live clock and the finish
- * toast's total: `"37s"`, `"4m 12s"`, `"1h 03m"`. Sub-second runs still read
- * `"0s"` rather than vanishing. Pure so the three widths are pinned by tests.
- */
-/** Digital-clock elapsed time for the live buttons — all four digits always
- *  rendered ("00:01", "12:34"); an hour-plus run grows to "1:02:03". */
+/** Digital-clock elapsed time for the live buttons and the meter's per-step
+ *  tick — all four digits always rendered ("00:01", "12:34"), so the label
+ *  never resizes; an hour-plus run grows to "1:02:03". */
 export function formatClock(ms: number): string {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000))
   const seconds = String(totalSeconds % 60).padStart(2, '0')
@@ -600,6 +596,11 @@ export function formatClock(ms: number): string {
   return hours > 0 ? `${hours}:${minutes}:${seconds}` : `${minutes}:${seconds}`
 }
 
+/**
+ * A run duration for humans — the finish toast's total: `"37s"`, `"4m 12s"`,
+ * `"1h 03m"`. Sub-second runs still read `"0s"` rather than vanishing. Pure so
+ * the three widths are pinned by tests.
+ */
 export function formatElapsed(ms: number): string {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000))
   const seconds = totalSeconds % 60
