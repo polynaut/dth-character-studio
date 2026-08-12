@@ -30,7 +30,8 @@ Export** uses, so it needs the **Runner plugin** installed
 ([Installation](./01-installation.md)). Daz opens the scene, scans it with no
 dialogs and the studio takes you straight to the frame-range picker. It looks
 like nothing is happening in Daz: that is the point — the run opens no windows,
-and it clears the scene again when it finishes. **Cancel scan** takes the job
+and it clears the scene again when it finishes. If Daz wasn't already running it
+is started **minimized**, so the scan never takes over your screen. **Cancel scan** takes the job
 back if you change your mind.
 
 Scans you already made stay listed in the same dialog, newest first. That is

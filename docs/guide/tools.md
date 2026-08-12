@@ -82,9 +82,11 @@ never enqueued.
 </p>
 
 Because each scene has to be opened in Daz, a project with many scenes takes a
-while — that's the point of it being one unattended run. While the batch is
-still waiting for Daz to pick it up you can **Abort** it; once Daz has claimed
-it, the run belongs to Daz.
+while — that's the point of it being one unattended run. A Daz the studio has to
+start for the scan starts **minimized** and stays out of your way; one you
+already had open is left where it is. While the batch is still waiting for Daz
+to pick it up you can **Abort** it; once Daz has claimed it, the run belongs to
+Daz.
 
 Reached from the **Home** window (no project open), the two scene passes are
 disabled and **Base morphs** runs on its own — that pass belongs to no project.

@@ -180,10 +180,18 @@ scans (`list_daz_assets`, `scan_duf_files`, `pose_asset_frames`,
 `release_project_window` — the last unpins a window after its project is deleted
 so it continues as a Home window; the home window opens via the native menu's
 Rust-side `open_home_window_impl`, no command), Daz bridge
-(`daz_studio_running`/`run_daz_script`/`launch_daz_studio`/`focus_app_window` —
+(`daz_studio_running`/`run_daz_script`/`launch_daz_studio`/`focus_app_window`/
+`minimize_app_window` —
 `launch_daz_studio` starts a scene-less Daz for the Execute job-file handoff,
 see `docs/exporter-plugin-job-file.md`, and **which Daz it starts** is its own
-rule — below; `daz_studio_running` takes that same install folder, `''` = any),
+rule — below; `daz_studio_running` takes that same install folder, `''` = any;
+`minimize_app_window` is `focus_app_window`'s opposite number and **whether a
+launch gets it is a per-call-site decision** — `DazLaunchVisibility` in
+`api/execute.ts`, unattended work minimized, the scene the user asked for not.
+It matches by **full exe path** — the very path `launch_daz_studio` returned —
+never by image name: DS4 and DS6 are both `DAZStudio.exe`, and the launch
+decision is export-install-scoped, so a name match could find the OTHER
+install's open window, the user's, and yank it down),
 drives
 (`unc_for_path`/`ensure_network_drives`), avatars
 (`upscale_avatar_file`/`downscale_avatar_png`), `shell_open_file`,
