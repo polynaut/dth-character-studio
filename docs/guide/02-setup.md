@@ -243,6 +243,13 @@ installing into a linked Unreal project. A folder can be:
   picks the build matching each project's engine version at install time, so a
   new build dropped in later is found on the next install.
 
+**A plugin shipped as a `.zip` counts too.** Some vendors hand you
+`…\Unreal Engine 5.7 Plugin\DazToHue.zip` and nothing else. The studio reads
+inside the archive, lists the plugin like any other (with a **zip** marker), and
+**extracts** it at install time into `Plugins\<Plugin>\` — a wrapping folder
+inside the zip is stripped, so the `.uplugin` lands where Unreal expects it
+either way. Leave it zipped; there is nothing to unpack by hand.
+
 Under each folder the panel previews exactly what was recognized, with the
 engine version each build was matched to (from a version in its path — deepest
 wins — falling back to the `.uplugin`'s own `EngineVersion`; no version

@@ -88,6 +88,26 @@ fn copy_bounded(
     }
 }
 
+/// Read one SMALL text entry into memory, bounded by its own inflate budget.
+///
+/// For manifests read during a scan (a `.uplugin` inside a plugin zip): the
+/// caller wants the text, not a file on disk, and must not be able to be talked
+/// into inflating a gigabyte by a crafted archive. The budget is derived from
+/// the entry's own compressed size like everywhere else.
+pub(crate) fn read_zip_entry_string(
+    archive: &mut zip::ZipArchive<fs::File>,
+    idx: usize,
+    label: &str,
+) -> std::io::Result<String> {
+    let mut entry = archive
+        .by_index(idx)
+        .map_err(|e| std::io::Error::other(e.to_string()))?;
+    let mut budget = InflateBudget::new(label, entry.compressed_size());
+    let mut buf = Vec::new();
+    copy_bounded(&mut entry, &mut buf, &mut budget)?;
+    String::from_utf8(buf).map_err(std::io::Error::other)
+}
+
 /// Inflate one archive entry to `dest_path` (creating parent dirs as needed),
 /// bounded by the archive's inflate budget. A mid-entry failure (including a
 /// budget breach) removes the partial file rather than leaving it half-written.

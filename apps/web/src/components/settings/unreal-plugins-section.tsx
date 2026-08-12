@@ -3,7 +3,7 @@ import { AlertTriangle, FolderOpen, Plus, X } from 'lucide-react'
 
 import { Button, InfoPopup, Input, useRefetchOnFocus } from '@dth/ui'
 import { scanUnrealPlugins } from '#/lib/rom/api.ts'
-import { pluginVersionLabel } from '#/lib/unreal-install.ts'
+import { isZippedPlugin, pluginVersionLabel } from '#/lib/unreal-install.ts'
 import { pickFolder } from '#/lib/desktop.ts'
 import { browseStart, displayPath, normalizePath } from '#/lib/path.ts'
 
@@ -167,6 +167,16 @@ export function UnrealPluginsSection({
                     <span className="rounded bg-muted px-1 py-0.5 font-medium">
                       {pluginVersionLabel(plugin.engineVersion)}
                     </span>
+                    {/* Said out loud: it explains both why this folder holds no
+                        visible plugin and what the install will do with it. */}
+                    {isZippedPlugin(plugin.path) && (
+                      <span
+                        className="rounded bg-muted px-1 py-0.5 font-medium"
+                        title={`Zipped — installing extracts ${plugin.path}`}
+                      >
+                        zip
+                      </span>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -176,7 +186,8 @@ export function UnrealPluginsSection({
                 <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
                 <span>
                   No Unreal plugin found here — expected a <span className="font-mono">.uplugin</span>{' '}
-                  in this folder or up to three levels below it.
+                  (or a <span className="font-mono">.zip</span> holding one) in this folder or up to
+                  three levels below it.
                 </span>
               </p>
             )}
