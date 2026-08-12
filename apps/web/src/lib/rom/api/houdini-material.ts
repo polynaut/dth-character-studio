@@ -199,9 +199,46 @@ export type MaterialSection = (typeof MATERIAL_SECTIONS)[number]
 export const SKELETON_SECTIONS = ['general', 'skeleton', 'skinWeights'] as const
 export type SkeletonSection = (typeof SKELETON_SECTIONS)[number]
 
+/**
+ * The occlusion node's transferable folders (`DazToHueOcclusion`).
+ *
+ * Same wholesale-subtree shape as the skeleton node's tabs. `Occlusion Culling`
+ * is the substance — the manual attributes plus the Auto-Occlusion operation
+ * list; `Visualise` is the node's viewport display state, offered because it is
+ * part of "how this occlusion is set up" even though it renders nothing.
+ *
+ * The HDA's `Linking` folder is deliberately NOT transferable: it holds
+ * parameter REFERENCES, and DTH node names are identical in every project, so a
+ * copied reference would silently rebind to the target's own node.
+ */
+export const OCCLUSION_SECTIONS = ['visualise', 'culling'] as const
+export type OcclusionSection = (typeof OCCLUSION_SECTIONS)[number]
+
+/** The groom-occlusion node's folders (`DazToHueGroomOcclusion`) — a different
+ *  setup from the character one, hence its own tab rather than a shared list. */
+export const GROOM_OCCLUSION_SECTIONS = [
+  'visualise',
+  'options',
+  'skin',
+  'occlusionMask',
+  'textureStamp',
+] as const
+export type GroomOcclusionSection = (typeof GROOM_OCCLUSION_SECTIONS)[number]
+
 /** Which node kind a transfer targets — one panel tab each. */
-export const NODE_KINDS = ['material', 'skeleton'] as const
+export const NODE_KINDS = ['material', 'skeleton', 'occlusion', 'groomOcclusion'] as const
 export type NodeKind = (typeof NODE_KINDS)[number]
+
+/** Every kind's own section list, so a caller never has to branch on the kind.
+ *  Mirrors `NODE_KINDS` in material_utils.py — the two must agree, and the
+ *  boundary check in `transferMaterialSetup` is what proves a mismatch loudly
+ *  instead of copying nothing. */
+export const SECTIONS_BY_KIND: Record<NodeKind, ReadonlyArray<string>> = {
+  material: MATERIAL_SECTIONS,
+  skeleton: SKELETON_SECTIONS,
+  occlusion: OCCLUSION_SECTIONS,
+  groomOcclusion: GROOM_OCCLUSION_SECTIONS,
+}
 
 const transferInput = z.object({
   /** Which node kind this transfer is for — decides the valid `sections`. */
@@ -210,8 +247,17 @@ const transferInput = z.object({
   /** One or more target nodes; several may live in the same project. */
   targets: z.array(nodeRef).min(1),
   /** Which parts of the setup to copy — at least one. Validated against the
-   *  node kind below, so a skeleton section can never reach a material run. */
-  sections: z.array(z.enum([...MATERIAL_SECTIONS, ...SKELETON_SECTIONS])).min(1),
+   *  node kind below, so one kind's section can never reach another's run. */
+  sections: z
+    .array(
+      z.enum([
+        ...MATERIAL_SECTIONS,
+        ...SKELETON_SECTIONS,
+        ...OCCLUSION_SECTIONS,
+        ...GROOM_OCCLUSION_SECTIONS,
+      ]),
+    )
+    .min(1),
   /** Restrict the material slots (and the bakers naming them) to these slot
    *  names. Empty = every material. This is the selection that matters in
    *  practice: a user reuses "the same skin" or "that one dress", not a whole
@@ -1161,11 +1207,12 @@ export async function transferHoudiniMaterials({
   // A section belonging to the other node kind would be silently dropped by the
   // Python (it filters to the ones it knows), so a run could report success
   // having copied nothing. Refuse at the boundary instead.
-  const valid: ReadonlyArray<string> =
-    input.nodeType === 'skeleton' ? SKELETON_SECTIONS : MATERIAL_SECTIONS
+  const valid = SECTIONS_BY_KIND[input.nodeType]
   const stray = input.sections.filter((s) => !valid.includes(s))
   if (stray.length > 0) {
-    throw new Error(`Not a ${input.nodeType} section: ${stray.join(', ')}`)
+    // "a occlusion" / "a groomOcclusion" — `valid` sidesteps the article
+    // entirely rather than carrying an a/an table for four words.
+    throw new Error(`Not a valid ${input.nodeType} section: ${stray.join(', ')}`)
   }
   if (!isTauri()) {
     throw new Error('Transferring material setups needs the desktop app (it runs hython).')

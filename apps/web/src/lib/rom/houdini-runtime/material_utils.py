@@ -102,11 +102,70 @@ SKELETON_SECTIONS = (
 )
 SKELETON_SECTION_BY_KEY = {s["key"]: s for s in SKELETON_SECTIONS}
 
-# What the panel can transfer, keyed by the `nodeType` a request names.
-NODE_KINDS = {
-    "material": {"type": MATERIAL_TYPE, "sections": [s["key"] for s in SECTIONS]},
-    "skeleton": {"type": SKELETON_TYPE, "sections": [s["key"] for s in SKELETON_SECTIONS]},
+OCCLUSION_TYPE = "DazToHueOcclusion"
+GROOM_OCCLUSION_TYPE = "DazToHueGroomOcclusion"
+
+# The two occlusion nodes, same folder-subtree shape as the skeleton node.
+# Folder names MEASURED off the installed HDA's dialog script (DazToHue.hda,
+# 2026-08-12) — including `occludion_…`, which is how the asset spells it; the
+# name is the contract, so it is reproduced verbatim rather than corrected.
+# `node_linking_folder` is deliberately absent: it is the HDA's own parameter
+# LINKING block, and a reference copied into another file would rebind to that
+# file's identically-named node (see `_portable_expr`, which is why every other
+# linked parm travels as its value).
+OCCLUSION_SECTIONS = (
+    {"key": "visualise", "folder": "visualise_folder", "label": "Visualise"},
+    {"key": "culling", "folder": "occludion_culling_folder", "label": "Occlusion Culling"},
+)
+OCCLUSION_SECTION_BY_KEY = {s["key"]: s for s in OCCLUSION_SECTIONS}
+
+GROOM_OCCLUSION_SECTIONS = (
+    {"key": "visualise", "folder": "visualise_folder", "label": "Visualise"},
+    {"key": "options", "folder": "groom_occlusion_options_folder", "label": "Options"},
+    {"key": "skin", "folder": "groom_occlusion_skin_folder", "label": "Skin"},
+    {
+        "key": "occlusionMask",
+        "folder": "groom_occlusion_occlusion_folder",
+        "label": "Occlusion Mask",
+    },
+    {"key": "textureStamp", "folder": "groom_occlusion_texture_folder", "label": "Texture Stamp"},
+)
+GROOM_OCCLUSION_SECTION_BY_KEY = {s["key"]: s for s in GROOM_OCCLUSION_SECTIONS}
+
+# The kinds whose sections are plain FOLDERS copied as whole subtrees (as
+# opposed to the material node, whose sections are multiparm lists that merge).
+# One registry so `_node_info` and the folder transfer stay kind-agnostic: a
+# future DTH node with the same shape is an entry here and nothing else.
+FOLDER_KINDS = {
+    "skeleton": {
+        "type": SKELETON_TYPE,
+        "sections": SKELETON_SECTIONS,
+        "by_key": SKELETON_SECTION_BY_KEY,
+        "noun": "Skeleton",
+    },
+    "occlusion": {
+        "type": OCCLUSION_TYPE,
+        "sections": OCCLUSION_SECTIONS,
+        "by_key": OCCLUSION_SECTION_BY_KEY,
+        "noun": "Occlusion",
+    },
+    "groomOcclusion": {
+        "type": GROOM_OCCLUSION_TYPE,
+        "sections": GROOM_OCCLUSION_SECTIONS,
+        "by_key": GROOM_OCCLUSION_SECTION_BY_KEY,
+        "noun": "Groom occlusion",
+    },
 }
+FOLDER_KIND_BY_TYPE = {kind["type"]: key for key, kind in FOLDER_KINDS.items()}
+
+# What the panel can transfer, keyed by the `nodeType` a request names.
+NODE_KINDS = {"material": {"type": MATERIAL_TYPE, "sections": [s["key"] for s in SECTIONS]}}
+NODE_KINDS.update(
+    {
+        key: {"type": kind["type"], "sections": [s["key"] for s in kind["sections"]]}
+        for key, kind in FOLDER_KINDS.items()
+    }
+)
 
 MULTI_KINDS = (
     hou.folderType.MultiparmBlock,
@@ -1005,8 +1064,9 @@ def _blank_info(node, kind):
 
 def _node_info(node):
     type_name = node.type().name()
-    if type_name == SKELETON_TYPE:
-        info = _blank_info(node, "skeleton")
+    folder_kind = FOLDER_KIND_BY_TYPE.get(type_name)
+    if folder_kind is not None:
+        info = _blank_info(node, folder_kind)
         info["sectionCounts"] = [
             {
                 "key": section["key"],
@@ -1017,7 +1077,7 @@ def _node_info(node):
                     else 0
                 ),
             }
-            for section in SKELETON_SECTIONS
+            for section in FOLDER_KINDS[folder_kind]["sections"]
         ]
         return info
 
@@ -2055,8 +2115,9 @@ def _backup(path):
 
 
 def op_transfer(request):
-    if request.get("nodeType") == "skeleton":
-        return op_transfer_skeleton(request)
+    kind = FOLDER_KINDS.get(request.get("nodeType"))
+    if kind is not None:
+        return op_transfer_folders(request, kind)
 
     source = request["source"]
     dry_run = bool(request.get("dryRun"))
@@ -2287,33 +2348,60 @@ def op_transfer(request):
     }
 
 
-def op_transfer_skeleton(request):
-    """Copy whole skeleton-tab subtrees from one node onto others.
+def op_transfer_folders(request, kind):
+    """Copy whole folder subtrees from one node onto others.
 
-    Simpler than the material transfer by nature: the sections are folders, not
-    lists to merge, so there is no per-material filter and no append mode — see
-    `_import_folder` on why a configuration block is copied wholesale.
+    Serves every FOLDER_KINDS entry — the skeleton node's tabs, and both
+    occlusion nodes' — because they are one shape: plain folders mixing flat
+    settings with nested multiparm lists. Simpler than the material transfer by
+    nature: the sections are folders, not lists to merge, so there is no
+    per-material filter and no append mode — see `_import_folder` on why a
+    configuration block is copied wholesale.
     """
+    by_key = kind["by_key"]
+    node_type = kind["type"]
+    noun = kind["noun"]
     source = request["source"]
     dry_run = bool(request.get("dryRun"))
-    keys = [k for k in request.get("sections", []) if k in SKELETON_SECTION_BY_KEY]
+    keys = [k for k in request.get("sections", []) if k in by_key]
     if not keys:
         raise ValueError("no sections selected")
 
     _load(source["hipPath"])
     node = hou.node(source["nodePath"])
-    if node is None or node.type().name() != SKELETON_TYPE:
-        raise hou.Error("The source skeleton node was not found: %s" % source["nodePath"])
+    if node is None or node.type().name() != node_type:
+        raise hou.Error(
+            "The source %s node was not found: %s" % (noun.lower(), source["nodePath"])
+        )
 
     payloads = {}
     # Counted NOW, while the source scene is still the open one: loading a
     # target replaces the whole scene, and every node reference from the source
     # goes stale with it (measured — the dry run read a dead node and threw).
     source_counts = {}
+    missing = []
     for key in keys:
-        folder = _folder_template(node, SKELETON_SECTION_BY_KEY[key]["folder"])
-        payloads[key] = _export_folder(node, folder) if folder is not None else None
-        source_counts[key] = _folder_settings_count(node, folder) if folder is not None else 0
+        folder = _folder_template(node, by_key[key]["folder"])
+        if folder is None:
+            missing.append(by_key[key])
+            continue
+        payloads[key] = _export_folder(node, folder)
+        source_counts[key] = _folder_settings_count(node, folder)
+    # LOUD, not skipped. The folder names are the contract with the installed
+    # HDA and they are the thing most likely to be wrong (they were read off a
+    # black-boxed asset's dialog script — see `.ai/gotchas.md`), so a DTH
+    # release that renames one must fail this run rather than let it report a
+    # cheerful "Transfer complete" over a copy that never happened.
+    if missing:
+        raise hou.Error(
+            "The source %s node has no %s folder (looked for %s). This DazToHue "
+            "version may name it differently — nothing was copied."
+            % (
+                noun.lower(),
+                ", ".join(s["label"] for s in missing),
+                ", ".join(s["folder"] for s in missing),
+            )
+        )
 
     by_file = []
     for target in request.get("targets", []):
@@ -2366,17 +2454,29 @@ def op_transfer_skeleton(request):
                 "unclaimedSurfaces": [],
                 "backupPath": "",
             }
-            if target_node is None or target_node.type().name() != SKELETON_TYPE:
+            if target_node is None or target_node.type().name() != node_type:
                 result["ok"] = False
-                result["error"] = "Skeleton node not found: %s" % node_path
+                result["error"] = "%s node not found: %s" % (noun, node_path)
+                results.append(result)
+                continue
+
+            # Every folder resolved BEFORE anything is written: a target missing
+            # one is reported as a failure for that target and left completely
+            # alone, rather than half-copied. (The source is checked up front and
+            # is the same node type, so this is the anomalous case — a target
+            # built on a different DazToHue version.)
+            folders = {key: _folder_template(target_node, by_key[key]["folder"]) for key in keys}
+            absent = [by_key[key]["label"] for key in keys if folders[key] is None]
+            if absent:
+                result["ok"] = False
+                result["error"] = "No %s folder on this node — nothing was copied to it." % (
+                    ", ".join(absent)
+                )
                 results.append(result)
                 continue
 
             for key in keys:
-                section = SKELETON_SECTION_BY_KEY[key]
-                folder = _folder_template(target_node, section["folder"])
-                if folder is None or payloads.get(key) is None:
-                    continue
+                folder = folders[key]
                 before = _folder_settings_count(target_node, folder)
                 if dry_run:
                     # Wholesale copy: what the source holds is what the target

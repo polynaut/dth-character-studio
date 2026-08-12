@@ -131,7 +131,7 @@ describe('transferHoudiniMaterials', () => {
           dryRun: true,
         },
       }),
-    ).rejects.toThrow(/not a material section/i)
+    ).rejects.toThrow(/not a valid material section/i)
   })
 
   it('refuses a material section on a skeleton run', async () => {
@@ -146,7 +146,62 @@ describe('transferHoudiniMaterials', () => {
           dryRun: true,
         },
       }),
-    ).rejects.toThrow(/not a skeleton section/i)
+    ).rejects.toThrow(/not a valid skeleton section/i)
+  })
+
+  it('refuses a skeleton section on an occlusion run', async () => {
+    await expect(
+      transferHoudiniMaterials({
+        data: {
+          nodeType: 'occlusion',
+          source,
+          targets: [{ hipPath: 'D:/chars/Ita/houdini/Ita.hiplc', nodePath: '/obj/x' }],
+          sections: ['skinWeights'],
+          replace: false,
+          dryRun: true,
+        },
+      }),
+    ).rejects.toThrow(/not a valid occlusion section/i)
+  })
+
+  it("refuses the groom node's own sections on the character occlusion run", async () => {
+    // The two occlusion nodes SHARE a section key (`visualise`) and differ in
+    // every other one — exactly the case where a stray key would otherwise be
+    // dropped in the Python and report a successful no-op.
+    await expect(
+      transferHoudiniMaterials({
+        data: {
+          nodeType: 'occlusion',
+          source,
+          targets: [{ hipPath: 'D:/chars/Ita/houdini/Ita.hiplc', nodePath: '/obj/x' }],
+          sections: ['textureStamp'],
+          replace: false,
+          dryRun: true,
+        },
+      }),
+    ).rejects.toThrow(/not a valid occlusion section/i)
+  })
+
+  it('accepts the section both occlusion kinds share, on either kind', async () => {
+    // `visualise` is valid on BOTH — the per-kind check must not reject a key
+    // just because another kind also has it. These get past validation and
+    // fail on the host check instead (no Tauri in a vitest run).
+    await Promise.all(
+      (['occlusion', 'groomOcclusion'] as const).map((nodeType) =>
+        expect(
+          transferHoudiniMaterials({
+            data: {
+              nodeType,
+              source,
+              targets: [{ hipPath: 'D:/chars/Ita/houdini/Ita.hiplc', nodePath: '/obj/x' }],
+              sections: ['visualise'],
+              replace: false,
+              dryRun: true,
+            },
+          }),
+        ).rejects.toThrow(/desktop app/i),
+      ),
+    )
   })
 
   it('rejects an unknown section name', async () => {

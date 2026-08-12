@@ -217,8 +217,11 @@ export type { GeneratedHoudiniProject, HoudiniExportStarted, HoudiniRunPlan } fr
 // --- houdini material utilities: scan DazToHueMaterial nodes, transfer a
 // --- node's texture-baker setup onto others, repair per-project $JOB (hython)
 export {
+  GROOM_OCCLUSION_SECTIONS,
   MATERIAL_SECTIONS,
   NODE_KINDS,
+  OCCLUSION_SECTIONS,
+  SECTIONS_BY_KIND,
   SKELETON_SECTIONS,
   discardHoudiniBackups,
   prefillHoudiniNetwork,
@@ -235,9 +238,11 @@ export {
   transferHoudiniMaterials,
 } from './api/houdini-material'
 export type {
+  GroomOcclusionSection,
   HoudiniProjectStatus,
   MaterialSection,
   NodeKind,
+  OcclusionSection,
   SkeletonSection,
 } from './api/houdini-material'
 export type {
