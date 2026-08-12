@@ -446,14 +446,25 @@ export function UnrealGenerateDialog({
     }
   }, [])
 
-  // The checklist follows the chosen engine; switching resets to all-checked
-  // (the match list itself changes, so per-item choices don't carry over).
+  // The checklist follows the chosen engine; switching resets it (the match
+  // list itself changes, so per-item choices don't carry over). The engine
+  // object — not just its version — because a build's BINARIES are checked
+  // against that engine's BuildId, and a generated project is exactly where an
+  // unloadable plugin is most expensive: nothing has been opened yet, so the
+  // first sign of trouble is Unreal's missing-modules dialog.
+  const selectedEngine = useMemo(
+    () => (engines ?? []).find((e) => e.version === engineVersion) ?? null,
+    [engines, engineVersion],
+  )
   const items = useMemo(
-    () => (engineVersion === '' ? [] : buildItems(plugins, engineVersion)),
-    [plugins, engineVersion],
+    () =>
+      engineVersion === '' ? [] : buildItems(plugins, engineVersion, undefined, selectedEngine),
+    [plugins, engineVersion, selectedEngine],
   )
   useEffect(() => {
-    setChecked(new Set(items.map((item) => item.key)))
+    // Same rule as the install dialog: a build whose binaries cannot load in
+    // this engine is listed, marked, and left for the user to tick knowingly.
+    setChecked(new Set(items.filter((item) => !item.buildMismatch).map((item) => item.key)))
   }, [items])
 
   const nameError = name.trim() === '' ? null : unrealProjectNameError(name)

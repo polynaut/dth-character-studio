@@ -28,6 +28,15 @@ const scanUnrealPlugins = vi.fn(async () => [
   },
   { name: 'AnyTool', path: 'D:/any/AnyTool', engineVersion: '', sourceFolder: 'D:/any' },
 ])
+/** The reported shape: an `any engine` build (its folder writes the version
+ *  with underscores, so nothing reads as a version) whose BINARIES are 5.7. */
+const KAWAII = {
+  name: 'KawaiiPhysics',
+  path: 'X:/plugins/KawaiiPhysics_5_7_1_v1.19.1__recompiled/Plugins/KawaiiPhysics',
+  engineVersion: '',
+  sourceFolder: 'X:/plugins',
+  buildId: '47537391',
+}
 const installUnrealDthContent = vi.fn(
   async (_: { data: { uprojectPath: string; overwrite: boolean } }) => 12,
 )
@@ -42,8 +51,8 @@ const createUnrealProject = vi.fn(
 )
 const detectUnrealEngines = vi.fn(async () => ({
   installs: [
-    { version: '5.7', path: 'D:/UE_5.7', name: 'Unreal Engine 5.7', exists: true },
-    { version: '5.6', path: 'D:/UE_5.6', name: 'Unreal Engine 5.6', exists: true },
+    { version: '5.7', path: 'D:/UE_5.7', name: 'Unreal Engine 5.7', exists: true, buildId: '47537391' },
+    { version: '5.6', path: 'D:/UE_5.6', name: 'Unreal Engine 5.6', exists: true, buildId: '43139311' },
   ],
 }))
 vi.mock('#/lib/rom/api.ts', () => ({
@@ -196,6 +205,30 @@ describe('UnrealGenerateDialog', () => {
       parentDir: 'D:/Perforce/3d-workflow/unreal',
       name: '_3d_workflow',
     })
+  })
+
+  it('does NOT pre-check a build whose binaries are for another engine', async () => {
+    // Exactly the reported failure: a fresh project generated for 5.8, and a
+    // KawaiiPhysics build that matches every project (no version signal) but
+    // carries 5.7 binaries. Installing it produces Unreal's missing-modules
+    // dialog on first open — so the checklist offers it unticked, with the
+    // reason on the row.
+    detectUnrealEngines.mockResolvedValueOnce({
+      installs: [
+        { version: '5.8', path: 'D:/UE_5.8', name: 'Unreal Engine 5.8', exists: true, buildId: '55116800' },
+      ],
+    })
+    scanUnrealPlugins.mockResolvedValueOnce([KAWAII])
+    render(<UnrealGenerateDialog suggestedDir="D:/UE" onClose={() => {}} onGenerated={() => {}} />)
+    await waitFor(() => expect(screen.getByText('KawaiiPhysics')).toBeTruthy())
+
+    expect(screen.getByText(/built for another engine build/)).toBeTruthy()
+    const boxes = screen.getAllByRole('checkbox') as Array<HTMLInputElement>
+    const kawaii = screen.getByText('KawaiiPhysics').closest('label')!.querySelector('input')!
+    expect(kawaii.checked).toBe(false)
+    // …while the engine-independent DTH content is still ticked: the warning is
+    // about ONE build, not a reason to install nothing.
+    expect(boxes.filter((box) => box.checked)).toHaveLength(1)
   })
 
   it('says so when no engine is detected instead of offering a dead Create', async () => {
