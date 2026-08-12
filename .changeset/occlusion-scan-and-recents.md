@@ -25,7 +25,22 @@ paragraph was printed at the top of every tab, including both occlusion ones —
 a note about bakers and UV names above a list of occlusion settings. And *"A
 occlusion section is copied wholesale"* now reads *"An occlusion section"*.
 
+**No material knobs on a folder-kind run.** The confirm dialog offered
+**Replace UV channels and bakers** on both occlusion tabs — a material control
+the occlusion transfer never reads (a folder section is always copied
+wholesale), above a line about material slots merging by surface. And the
+success toast reported a folder run's outcome in material terms, which came out
+as *"Copied 0 slots, 0 channels, 0 bakers"* after a transfer that worked. Both
+now say what the run actually did.
+
 **Recently used sources can be removed.** The row fills itself from every source
 ever picked, including the one-off look, so it needed a way out: each chip has a
 ✕ that drops it. Removing a shortcut is not removing a file — the `.hip` is
 untouched, and picking it again puts it straight back at the top.
+
+**The drawer's outcome toasts stay until you dismiss them.** Every one of these
+reports a run that took hython tens of seconds and wrote to your projects —
+exactly the stretch during which nobody is watching this window. A toast that
+timed out while you were in Houdini took the only summary of what a
+transfer/repair/repath did with it. Errors too: a failure that scrolls past
+unseen is worse than a success that does.

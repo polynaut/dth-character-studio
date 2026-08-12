@@ -59,8 +59,38 @@ const GROOM = node('groomOcclusion', 'DazToHueGroomOcclusion', [
   { key: 'textureStamp', label: 'Texture Stamp', count: 3 },
 ])
 
-async function openDrawer(page: Page) {
+/** A template project OUTSIDE the character, holding one occlusion node — the
+ *  only way to have a source the run will accept (a target that IS the source
+ *  is refused). Reached through Browse…, which the fake answers with
+ *  `dialogPath`. */
+const TEMPLATE = 'D:/Templates/Occlusion_Base.hiplc'
+const HOUDINI_INSTALL = 'C:/Program Files/Side Effects Software/Houdini 22.0.368'
+
+async function openDrawer(page: Page, opts: { withSourceTemplate?: boolean } = {}) {
   const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true, houdiniProject: true })
+  if (opts.withSourceTemplate) {
+    // hython configured, so the drawer can scan the browsed file itself.
+    const settingsPath = `${P.appData}/settings.json`
+    seed.files[settingsPath] = JSON.stringify({
+      ...JSON.parse(seed.files[settingsPath] ?? '{}'),
+      houdiniInstallFolder: HOUDINI_INSTALL,
+      houdiniDocsFolder: 'C:/Users/dev/Documents/houdini22.0',
+    })
+    seed.files[`${HOUDINI_INSTALL}/bin/hython.exe`] = 'hython-exe-fixture'
+    seed.files[TEMPLATE] = 'hip-fixture'
+    seed.dialogPath = TEMPLATE
+    seed.materialScan = {
+      [TEMPLATE]: [
+        {
+          ...node('occlusion', 'DazToHueOcclusion', [
+            { key: 'visualise', label: 'Visualise', count: 3 },
+            { key: 'culling', label: 'Occlusion Culling', count: 9 },
+          ]),
+          networkBox: 'TemplateOcclusion',
+        },
+      ],
+    }
+  }
   seed.files[STORE] = JSON.stringify({
     version: 1,
     projects: {
@@ -133,6 +163,32 @@ test('the Groom occlusion tab is its own node, sections and selection', async ({
   await drawer.getByRole('checkbox', { name: /Visualise/ }).uncheck()
   await drawer.getByRole('tab', { name: 'Occlusion', exact: true }).click()
   await expect(drawer.getByRole('checkbox', { name: /Visualise/ })).toBeChecked()
+})
+
+test('the confirm dialog offers no material knobs on an occlusion run', async ({ page }) => {
+  // "Replace UV channels and bakers" is a MATERIAL control, and
+  // `op_transfer_folders` never reads `replace` — a folder section is always
+  // copied wholesale. Shown here it was a switch that could not do anything,
+  // above a line about material slots merging by surface.
+  const drawer = await openDrawer(page, { withSourceTemplate: true })
+  await drawer.getByRole('tab', { name: 'Occlusion', exact: true }).click()
+  await drawer.getByRole('checkbox', { name: /DazToHueOcclusion/ }).first().check()
+  // A source from OUTSIDE the character — the transfer refuses a run whose
+  // target list contains the source node.
+  await drawer.getByRole('button', { name: 'Browse…' }).click()
+  await drawer.getByRole('radio', { name: /TemplateOcclusion/ }).check()
+  await drawer.getByRole('button', { name: /^Transfer/ }).click()
+
+  const confirm = page.getByRole('dialog').filter({ hasText: 'Copy occlusion setup?' })
+  await expect(confirm).toBeVisible()
+  await expect(confirm.getByText(/Replace UV channels and bakers/)).toHaveCount(0)
+  await expect(confirm.getByText(/copied wholesale, so there is no append mode/)).toBeVisible()
+
+  // The dry run's outcome names the SECTIONS that travelled. Asking a folder
+  // kind for slot/channel/baker counts yielded "0 slots, 0 channels, 0 bakers"
+  // after a run that copied an occlusion setup perfectly well.
+  await confirm.getByRole('button', { name: 'Dry run' }).click()
+  await expect(confirm.getByText(/Occlusion Culling/).first()).toBeVisible()
 })
 
 test('the target count is the ACTIVE kind only, not every node of the project', async ({ page }) => {

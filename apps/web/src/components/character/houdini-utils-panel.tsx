@@ -226,6 +226,27 @@ function sectionLabel(key: string): string {
   return key
 }
 
+/**
+ * Every outcome this drawer reports STAYS until it is dismissed.
+ *
+ * These are not "saved ✓" confirmations: each one is the result of a run that
+ * took hython tens of seconds and wrote to the user's projects — which is
+ * exactly the stretch during which nobody is watching this window. A toast that
+ * times out while the user is in Houdini, or making coffee, loses the only
+ * summary of what a transfer/repair/repath actually did. (The panel keeps a
+ * fuller report behind it, but only for the action just run, and only while the
+ * drawer stays open.)
+ *
+ * Same treatment for errors: a failure that scrolls past unseen is worse than a
+ * success that does.
+ */
+const utilsToast = {
+  success: (message: string, options?: Parameters<typeof toast.success>[1]) =>
+    toast.success(message, { duration: Infinity, ...options }),
+  error: (message: string, options?: Parameters<typeof toast.error>[1]) =>
+    toast.error(message, { duration: Infinity, ...options }),
+}
+
 /** A material node identified across files — the selection key everywhere here. */
 function nodeKey(hipPath: string, nodePath: string): string {
   return `${normalizePath(hipPath).toLowerCase()}|${nodePath}`
@@ -514,7 +535,7 @@ export function HoudiniUtilsPanel({
       // force at all: the cache answered in ten milliseconds and the spinner
       // never became visible. Say it ran.
       if (force) {
-        toast.success(
+        utilsToast.success(
           projects.length === 1
             ? 'Rescanned the Houdini project'
             : `Rescanned ${projects.length} Houdini projects`,
@@ -524,7 +545,7 @@ export function HoudiniUtilsPanel({
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       set({ loading: false, error: message, projects: [] })
-      if (force) toast.error(message)
+      if (force) utilsToast.error(message)
       return []
     }
   }
@@ -699,7 +720,7 @@ export function HoudiniUtilsPanel({
         await forgetHoudiniSource({ data: { hipPath } })
         await loadSourceRecents()
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : String(e))
+        utilsToast.error(e instanceof Error ? e.message : String(e))
       }
     },
     [loadSourceRecents],
@@ -895,8 +916,8 @@ export function HoudiniUtilsPanel({
           source: { hipPath: sourceNode.project.hipPath, nodePath: sourceNode.node.path },
           targets: targetRefs,
           sections: activeSections,
-          // Material-only knobs; the skeleton transfer copies wholesale and has
-          // no texture paths of its own to make portable.
+          // Material-only knobs; every FOLDER kind copies wholesale (hence the
+          // fixed `true`) and has no texture paths of its own to make portable.
           materials: kind === 'material' ? [...pickedMaterials] : [],
           useLibVar: kind === 'material' ? useLibVar : false,
           replace: kind === 'material' ? replace : true,
@@ -908,23 +929,28 @@ export function HoudiniUtilsPanel({
         noteBackups(result)
         const failed = result.targets.filter((t) => !t.ok)
         if (failed.length > 0) {
-          toast.error(
+          utilsToast.error(
             `${failed.length} of ${result.targets.length} target${result.targets.length === 1 ? '' : 's'} failed — see the report.`,
           )
         } else {
           // Report what actually travelled, not just the bakers — the run may
           // have carried material slots and UV channels too, and a toast that
           // names one part reads as "only that part was copied".
-          const moved = sourceNode
-            ? MATERIAL_SECTIONS.filter((key) => sections.has(key))
-                .map((key) => sectionCountOf(sourceNode.node, key, pickedMaterials))
-                .join(', ')
-            : ''
+          // A folder kind has no slot/channel/baker counts to report — asking
+          // for them yields "0 slots, 0 channels, 0 bakers" after a run that
+          // copied an occlusion setup perfectly well. It names its sections.
+          const moved = !sourceNode
+            ? ''
+            : isFolderKind(kind)
+              ? activeSections.map((key) => FOLDER_KIND_UI[kind].labels[key]?.label ?? key).join(', ')
+              : MATERIAL_SECTIONS.filter((key) => sections.has(key))
+                  .map((key) => sectionCountOf(sourceNode.node, key, pickedMaterials))
+                  .join(', ')
           const warnings = result.targets.reduce(
             (n, t) => n + t.missingMaterials.length + t.missingUvSources.length,
             0,
           )
-          toast.success(
+          utilsToast.success(
             `Copied ${moved} to ${result.targets.length} node${result.targets.length === 1 ? '' : 's'}.` +
               // The modal closes below, so anything the user still has to act on
               // must be said here — the report stays in the panel, but a toast
@@ -941,7 +967,7 @@ export function HoudiniUtilsPanel({
         void scanTargets()
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error))
+      utilsToast.error(error instanceof Error ? error.message : String(error))
     } finally {
       setRunning('')
     }
@@ -1077,10 +1103,10 @@ export function HoudiniUtilsPanel({
         next.delete(hipPath)
         return next
       })
-      toast.success(`${fileName(hipPath)} is back to the state it was in before the run.`)
+      utilsToast.success(`${fileName(hipPath)} is back to the state it was in before the run.`)
       void scanTargets()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error))
+      utilsToast.error(error instanceof Error ? error.message : String(error))
     } finally {
       setRestoring('')
     }
@@ -1116,13 +1142,13 @@ export function HoudiniUtilsPanel({
       const removed = await discardHoudiniBackups({ data: { paths } })
       // Counted, not assumed: Houdini holding a file open is the ordinary way
       // one survives, and "removed" would be a lie about the disk.
-      toast.success(
+      utilsToast.success(
         removed === paths.length
           ? `${removed} backup${removed === 1 ? '' : 's'} removed.`
           : `${removed} of ${paths.length} backups removed — the rest are in use and stay.`,
       )
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error))
+      utilsToast.error(error instanceof Error ? error.message : String(error))
     } finally {
       setDiscarding(false)
       setCleanupOpen(false)
@@ -1143,10 +1169,10 @@ export function HoudiniUtilsPanel({
         noteBackups(result)
         const failed = result.prefill.filter((r) => !r.ok)
         if (failed.length > 0) {
-          toast.error(`${failed.length} of ${result.prefill.length} projects failed — see below.`)
+          utilsToast.error(`${failed.length} of ${result.prefill.length} projects failed — see below.`)
         } else {
           const filled = result.prefill.reduce((n, r) => n + r.filled.length, 0)
-          toast.success(
+          utilsToast.success(
             `Filled ${filled} parameter${filled === 1 ? '' : 's'} the studio already knew.`,
           )
           setPrefillOpen(false)
@@ -1154,7 +1180,7 @@ export function HoudiniUtilsPanel({
         void scanTargets()
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error))
+      utilsToast.error(error instanceof Error ? error.message : String(error))
     } finally {
       setRunning('')
     }
@@ -1182,10 +1208,10 @@ export function HoudiniUtilsPanel({
         noteBackups(result)
         const failed = result.refresh.filter((r) => !r.ok)
         if (failed.length > 0) {
-          toast.error(`${failed.length} of ${result.refresh.length} projects failed — see below.`)
+          utilsToast.error(`${failed.length} of ${result.refresh.length} projects failed — see below.`)
         } else {
           const changed = result.refresh.filter((r) => r.changed).length
-          toast.success(
+          utilsToast.success(
             changed === 0
               ? 'Refreshed — no project reported a change, so nothing was re-saved.'
               : `${changed} project${changed === 1 ? '' : 's'} refreshed and saved.`,
@@ -1195,7 +1221,7 @@ export function HoudiniUtilsPanel({
         void scanTargets()
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error))
+      utilsToast.error(error instanceof Error ? error.message : String(error))
     } finally {
       setRunning('')
     }
@@ -1222,11 +1248,11 @@ export function HoudiniUtilsPanel({
         noteBackups(result)
         const failed = result.repath.filter((r) => !r.ok)
         if (failed.length > 0) {
-          toast.error(`${failed.length} of ${result.repath.length} projects failed — see below.`)
+          utilsToast.error(`${failed.length} of ${result.repath.length} projects failed — see below.`)
         } else {
           const collapsed = result.repath.reduce((n, r) => n + r.collapsed, 0)
           const repaired = result.repath.reduce((n, r) => n + r.repaired.length, 0)
-          toast.success(
+          utilsToast.success(
             `${collapsed} reference${collapsed === 1 ? '' : 's'} made portable` +
               (repaired > 0 ? `, ${repaired} broken one${repaired === 1 ? '' : 's'} repaired` : '') +
               '.',
@@ -1236,7 +1262,7 @@ export function HoudiniUtilsPanel({
         void scanTargets()
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error))
+      utilsToast.error(error instanceof Error ? error.message : String(error))
     } finally {
       setRunning('')
     }
@@ -1259,7 +1285,7 @@ export function HoudiniUtilsPanel({
         const failed = result.defaults.filter((d) => !d.ok)
         const changed = result.defaults.filter((d) => d.ok && d.changed).length
         if (failed.length > 0) {
-          toast.error(`${failed.length} of ${result.defaults.length} projects failed — see below.`)
+          utilsToast.error(`${failed.length} of ${result.defaults.length} projects failed — see below.`)
         } else {
           // Named by what the run actually rewrote: a project can need only the
           // timeline, and "$JOB repaired" on that one would be a claim about
@@ -1272,7 +1298,7 @@ export function HoudiniUtilsPanel({
               ? `the timeline on ${fpsFixed} project${fpsFixed === 1 ? '' : 's'}`
               : '',
           ].filter(Boolean)
-          toast.success(
+          utilsToast.success(
             parts.length > 0
               ? `Repaired ${parts.join(' and ')}.`
               : `Nothing needed changing on ${changed === 1 ? 'the project' : 'these projects'}.`,
@@ -1283,7 +1309,7 @@ export function HoudiniUtilsPanel({
         void scanTargets()
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error))
+      utilsToast.error(error instanceof Error ? error.message : String(error))
     } finally {
       setRunning('')
     }
@@ -2285,7 +2311,13 @@ export function HoudiniUtilsPanel({
 
           {kind === 'material' && <MergePreview entries={mergePreview} labelFor={labelFor} />}
 
-          {kind === 'skeleton' ? (
+          {/* EVERY folder kind, not just the skeleton one: the replace switch
+              governs material UV channels and bakers, and `op_transfer_folders`
+              does not read `replace` at all — a folder section is always
+              copied wholesale. Left on `=== 'skeleton'`, both occlusion tabs
+              offered a switch that could not do anything, above a line about
+              material slots merging by surface that no occlusion run has. */}
+          {isFolderKind(kind) ? (
             <p className="rounded-md border p-3 text-xs text-muted-foreground">
               Each selected section replaces the target&apos;s — a configuration block is copied
               wholesale, so there is no append mode here.
