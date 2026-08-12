@@ -36,6 +36,7 @@ import { CharacterOperationsSection } from '#/components/character/operations-se
 import { RomRunLogReport } from '#/components/character/rom-run-log-report.tsx'
 import { SceneFooter, type SceneDockActions } from '#/components/character/scene-footer.tsx'
 import { ScriptsSection } from '#/components/character/scripts-section.tsx'
+import { UnrealImportField } from '#/components/character/unreal-import-field.tsx'
 import { NotesEditor } from '#/components/notes-editor.tsx'
 import { DazSceneField } from '#/components/daz-scene-field.tsx'
 import { HoudiniProjectsField } from '#/components/houdini-projects-field.tsx'
@@ -587,6 +588,14 @@ function CharacterPage({ onImportRemount }: { onImportRemount: () => void }) {
                     houdiniSubdir={project?.houdiniSubdir ?? 'houdini'}
                     projectId={projectId}
                     projectName={project?.name ?? ''}
+                  />
+                  {/* Directly under the Houdini projects, because what it sends
+                      is what they export — and it renders nothing at all until
+                      the project has a linked .uproject. */}
+                  <UnrealImportField
+                    projectId={projectId}
+                    characterId={character.id}
+                    unrealProjects={project?.unrealProjects ?? []}
                   />
                 </SceneLock>
               </>

@@ -209,8 +209,38 @@ pick up changes.
 
 &nbsp;
 
-From here, continue with the [DazToHue](https://docs.google.com/document/d/1LYXl90FCXPX5KVpru4_T_hCY_XLr9vinR_9zYENPHUw/edit?tab=t.0)
-documentation for the Houdini → Unreal leg.
+## Send to Unreal
+
+Once Houdini has exported, the character page's **Send to Unreal** panel (under
+the Houdini projects) hands that export to a linked Unreal project. It appears
+only when the studio project has a linked `.uproject` — see
+[Linking Unreal projects](./03-first-project.md#linking-unreal-projects).
+
+What it sends is the `.dth` Houdini wrote into the character's **`export/`**
+folder — the end of the pipeline, not the `daz-export` intermediate the Houdini
+imports read. What imports it is **mrpdean's DazToHue importer plugin**, whose
+own pipeline does the work: meshes, textures, materials, animation curves and
+the post-process animation blueprint.
+
+**The studio does not start Unreal.** An editor takes minutes to come up and
+holds its project open, so the job is *queued* instead: the studio installs a
+small bridge plugin into the project (`Plugins\DTHStudioBridge`, pure Python)
+which watches for the job and runs the import within about a second. An editor
+you open later claims the job on startup — the same way a closed Daz picks up a
+batch that was queued while it wasn't running.
+
+> [!NOTE]
+> The panel says *"Waiting for the editor to pick it up…"* until something
+> claims the job. That is the normal state while Unreal starts. If the project
+> is already open and it never moves, the bridge was installed after that editor
+> session began — restart the editor once and it will be there.
+
+The bridge is rewritten on every send, so a project can never hold a version
+older than the studio talking to it, and it lives in its own plugin: the
+DazToHue plugin is never edited.
+
+For the Unreal side itself, continue with the [DazToHue](https://docs.google.com/document/d/1LYXl90FCXPX5KVpru4_T_hCY_XLr9vinR_9zYENPHUw/edit?tab=t.0)
+documentation.
 
 ---
 
