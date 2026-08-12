@@ -380,15 +380,102 @@ export type HoudiniRunState =
       /** Handoff → finish, for the toast's "in 12m 34s". */
       elapsedMs?: number
     }
-  | { state: 'dead' }
+  | {
+      state: 'dead'
+      /** What the console log says killed it, when it says anything — see
+       *  {@link houdiniDeathReason}. '' when there is nothing to go on. */
+      reason?: string
+    }
+
+/**
+ * The headline for a run that died without a result, read out of the console
+ * log the launch streams into `.dth_houdini_console.log`.
+ *
+ * The studio ALREADY writes this file (it is why it survives the run's own
+ * cleanup) and used to report "Houdini is no longer running" regardless —
+ * true, useless, and actively misleading when the log said something specific.
+ * MEASURED 2026-08-12 on a real failed run: a machine that could not reach its
+ * license server produced two lines of "No licenses could be found to run this
+ * application", and the user was told Houdini had stopped.
+ *
+ * Licensing is special-cased because headless hython needs a license of its
+ * own and this is the one failure that says nothing about the project, the
+ * scene or the studio.
+ *
+ * Everything else is read out of the log's TAIL only, and only when the line
+ * looks like an error. The file is the FULL console — the DazToHue HDA's cook
+ * chatter included — so both of the obvious shortcuts are wrong on a long run:
+ * scanning the whole text for "license server" lets one informational line at
+ * startup relabel a crash forty minutes later, and taking the last line
+ * whatever it is hands a progress message to the user as the cause of death.
+ * A run that printed real work and then died with nothing error-shaped to say
+ * gets NO reason — the plain "Houdini is no longer running" is the honest
+ * answer there, and the log is one click away. The one exception is a log short
+ * enough to BE the failure (hython died on startup): there the last line is the
+ * whole story, which is exactly the measured licensing case.
+ */
+/** How many trailing lines count as "how it ended". */
+const DEATH_TAIL_LINES = 40
+/** A log no longer than this never got going — all of it is the failure. */
+const DEATH_SHORT_LOG = 8
+/** What a line that is worth quoting looks like. Deliberately broad: a raw
+ *  error line beats a confident wrong summary, but it has to be an error. */
+const DEATH_ERROR_LINE =
+  /\b(error|fatal|traceback|exception|segmentation fault|aborted|cannot|could not|unable to|not found|denied|refused|failed)\b/i
+
+export function houdiniDeathReason(consoleText: string): string {
+  const lines = consoleText
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+  if (lines.length === 0) return ''
+  const tail = lines.slice(-DEATH_TAIL_LINES)
+  if (
+    /no licen[sc]es? could be found|license server|no licen[sc]e available/i.test(tail.join(' '))
+  ) {
+    return 'Houdini could not get a license'
+  }
+  // The newest error-shaped line in the tail; failing that, the last line of a
+  // log too short to have said anything else.
+  const spoken =
+    [...tail].reverse().find((line) => DEATH_ERROR_LINE.test(line)) ??
+    (lines.length <= DEATH_SHORT_LOG ? (lines[lines.length - 1] ?? '') : '')
+  return spoken.length > 160 ? `${spoken.slice(0, 159)}…` : spoken
+}
+
+/**
+ * Whether this snapshot is the DEAD one — no Houdini behind a run that has not
+ * reported a finish.
+ *
+ * Exported because the caller has to know BEFORE calling
+ * {@link houdiniRunStateFrom}: reading the console log costs a file read, and
+ * doing it on every 2.5 s poll would re-read a growing file for nothing. Two
+ * copies of this condition (one here, one in the api layer's read guard) would
+ * drift the moment either changes — and the failure would be silent, a dead run
+ * that never gets its reason.
+ */
+export function houdiniRunLooksDead(
+  result: HoudiniResult | null,
+  houdiniRunning: boolean,
+): boolean {
+  if (houdiniRunning) return false
+  return !result || result.state === 'running'
+}
 
 export function houdiniRunStateFrom(
   result: HoudiniResult | null,
   houdiniRunning: boolean,
+  /** The console log's contents, when the caller could read them. Only ever
+   *  consulted for a DEAD run — a live or finished one explains itself. */
+  consoleText = '',
 ): HoudiniRunState {
-  if (!result) return houdiniRunning ? { state: 'starting' } : { state: 'dead' }
+  const dead = (): HoudiniRunState => {
+    const reason = houdiniDeathReason(consoleText)
+    return reason ? { state: 'dead', reason } : { state: 'dead' }
+  }
+  if (!result) return houdiniRunning ? { state: 'starting' } : dead()
   if (result.state === 'running') {
-    if (!houdiniRunning) return { state: 'dead' }
+    if (!houdiniRunning) return dead()
     return {
       state: 'running',
       done: result.done,

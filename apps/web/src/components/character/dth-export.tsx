@@ -63,6 +63,7 @@ import type {
   ExportPipelineView,
   ExportProgressBar,
 } from '#/components/character/export-pipeline-panel.tsx'
+import { HOUDINI_CONSOLE_FILE } from '#/lib/rom/houdini-jobs.ts'
 import type { HoudiniRunState } from '#/lib/rom/houdini-jobs.ts'
 import type { HoudiniRunMode, RunChoice, StampedLogStore } from '#/lib/rom/execute-jobs.ts'
 import type { Character } from '@dth/rom'
@@ -1023,10 +1024,24 @@ export function DthExportAction({
             ...report.houdini.map((leg) => leg.line),
           ].join('\n')
         : ''
-      toast.error('The Houdini export did not finish — Houdini is no longer running.', {
+      // Say WHY when the console log says why. "Houdini is no longer running"
+      // is what the studio can see from outside; the log is what actually
+      // happened, and it is one file away (see houdiniDeathReason).
+      // The reason can be a RAW log line, which may already end in `.` (or the
+      // `…` of a truncated one) — so the sentence only adds its full stop when
+      // the line didn't bring one.
+      const reason = run.reason ?? ''
+      const tail = /[.!?…:]$/.test(reason) ? reason : `${reason}.`
+      const why = reason
+        ? `The Houdini export did not finish — ${tail}`
+        : 'The Houdini export did not finish — Houdini is no longer running.'
+      toast.error(why, {
         id: HOUDINI_TOAST_ID,
         duration: Infinity,
-        description: done || undefined,
+        description:
+          [done, reason ? `Full output: ${HOUDINI_CONSOLE_FILE} in the character folder.` : '']
+            .filter(Boolean)
+            .join('\n') || undefined,
       })
       return
     }

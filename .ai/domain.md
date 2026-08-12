@@ -799,7 +799,26 @@ older runtimes as stale.
   the job): it is the diagnosis channel a puzzling run is read from
   afterwards, and one bounded file per character — overwritten by the next
   run, never accreting — IS the retention the housekeeping rule asks for.
-  The first headless run proved the point by deleting the answer. Liveness is the
+  The first headless run proved the point by deleting the answer.
+  MEASURED 2026-08-12: the log's first real job was a **licensing** failure —
+  headless hython needs a license of its own, and on a machine that cannot
+  reach its license server (`hserver -l` shows the SideFX CLOUD server;
+  `sesictrl print-license` times out) it dies instantly with *"No licenses
+  could be found to run this application"*. The studio saw only "the process
+  is gone" and reported "Houdini is no longer running" — true, useless, and
+  contradicted by the file it had just written. `houdiniDeathReason` (pure,
+  houdini-jobs.ts) now reads that log on the DEAD path only and puts its
+  headline in the toast; licensing is special-cased because it is the one
+  failure that says nothing about the project, the scene or the studio.
+  The read is deliberately NARROW, because this file is the whole console: the
+  licensing match and the fallback both look at the last 40 lines only (an
+  informational "license server" line at startup must not relabel a crash an
+  hour later), the fallback quotes only a line that looks like an error, and a
+  log longer than 8 lines that ends in cook chatter yields NO reason at all —
+  the bare "no longer running" is the honest answer there. Which condition
+  counts as dead lives in ONE place, `houdiniRunLooksDead`, because the api
+  layer must know it before calling `houdiniRunStateFrom` (it decides whether
+  to spend the file read) and a second copy would drift silently. Liveness is the
   TRACKED child (`try_wait` in houdini.rs — immune to the Utils drawer's own
   hython scans) and, once this process has tracked a launch, its answer is
   FINAL: an exited child means dead, never "ask the process list". Falling
