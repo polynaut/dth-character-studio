@@ -24,10 +24,12 @@ import {
   unrealProjectState,
 } from '#/lib/rom/api.ts'
 import {
+  EMPTY_UNREAL_SCAN,
   allPluginBuilds,
   defaultUnrealEngine,
   engineVersionFromAssociation,
   matchPluginsToEngine,
+  pluginBuildMismatch,
   pluginVersionLabel,
   unrealProjectNameError,
 } from '#/lib/unreal-install.ts'
@@ -55,6 +57,10 @@ interface ChecklistItem {
   installed: boolean
   /** Absent for the DTH content entry. */
   plugin?: UnrealPluginSource
+  /** Its binaries were built against a DIFFERENT engine build than the one this
+   *  project uses — Unreal will refuse to load it. Such an item is listed but
+   *  never pre-checked (same rule as an unknown engine association). */
+  buildMismatch?: boolean
 }
 
 /** The checklist items for one plugin scan + engine verdict. `null` engine
@@ -64,6 +70,9 @@ function buildItems(
   scan: ReadonlyArray<UnrealPluginSource>,
   engineVersion: string | null,
   state?: { dthPresent: boolean; installedPlugins: ReadonlyArray<string> },
+  /** The engine this project actually uses, when the studio found it — its
+   *  `buildId` is what a plugin's binaries are checked against. */
+  engine?: UnrealEngineFound | null,
 ): Array<ChecklistItem> {
   const builds = engineVersion === null ? allPluginBuilds(scan) : matchPluginsToEngine(scan, engineVersion)
   const installed = new Set((state?.installedPlugins ?? []).map((name) => name.toLowerCase()))
@@ -80,6 +89,7 @@ function buildItems(
       detail: pluginVersionLabel(plugin.engineVersion),
       installed: installed.has(plugin.name.toLowerCase()),
       plugin,
+      buildMismatch: pluginBuildMismatch(plugin, engine),
     })),
   ]
 }
@@ -167,6 +177,19 @@ function InstallChecklist({
                   installed — a check overwrites it
                 </span>
               )}
+              {/* The one thing the version label CANNOT tell you: what the
+                  binaries were actually compiled against. Left unchecked
+                  rather than refused — the user may know something the
+                  BuildId doesn't. */}
+              {item.buildMismatch && (
+                <span
+                  className="flex items-center gap-1 text-xs text-amber-500"
+                  title={`This build's binaries carry BuildId ${item.plugin?.buildId} — this project's engine expects a different one. Unreal would report it as "missing or built with a different engine version" and offer to rebuild.`}
+                >
+                  <AlertTriangle className="size-3.5 shrink-0" />
+                  built for another engine build
+                </span>
+              )}
             </span>
           </label>
         </li>
@@ -218,18 +241,30 @@ export function UnrealInstallDialog({
   const load = useCallback(async (): Promise<Array<ChecklistItem> | null> => {
     setLoadState('loading')
     try {
-      const [state, scan] = await Promise.all([
+      const [state, scan, engines] = await Promise.all([
         unrealProjectState({ data: { uprojectPath } }),
         scanUnrealPlugins(),
+        // The engine's own BuildId is what a plugin's binaries are judged
+        // against; a failed detection just means no build check.
+        detectUnrealEngines().catch(() => EMPTY_UNREAL_SCAN),
       ])
       const version = engineVersionFromAssociation(state.engineAssociation)
-      const list = buildItems(scan, version, state)
+      const engine = engines.installs.find((e) => e.version === version) ?? null
+      const list = buildItems(scan, version, state, engine)
       setAssociation(state.engineAssociation)
       setEngineVersion(version)
       setItems(list)
-      // Everything pre-checked — the user unchecks. Except with an UNKNOWN
-      // engine: only the engine-independent DTH content starts checked.
-      setChecked(new Set(version === null ? [DTH_CONTENT_KEY] : list.map((item) => item.key)))
+      // Everything pre-checked — the user unchecks. Two exceptions, same
+      // reasoning both times (never pre-check what cannot be known to work):
+      // an UNKNOWN engine leaves only the engine-independent DTH content, and
+      // a build whose binaries are for another engine build is left off.
+      setChecked(
+        new Set(
+          version === null
+            ? [DTH_CONTENT_KEY]
+            : list.filter((item) => !item.buildMismatch).map((item) => item.key),
+        ),
+      )
       setLoadState('ready')
       return list
     } catch (e) {

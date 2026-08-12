@@ -20,6 +20,8 @@ export interface UnrealEngineInstall {
   /** Epic's major.minor (`5.7`) — the identity a `.uproject` associates with. */
   version: string
   path: string
+  /** The engine's own `BuildId` — see {@link pluginBuildMismatch}. */
+  buildId?: string
 }
 
 /** An install plus what the studio worked out about it. */
@@ -54,6 +56,38 @@ export interface UnrealPluginSource {
   engineVersion: string
   /** The configured settings folder it was found under. */
   sourceFolder: string
+  /** The `BuildId` its binaries were compiled against — see
+   *  {@link pluginBuildMismatch}. Absent/'' for a plugin with no binaries. */
+  buildId?: string
+}
+
+/**
+ * Whether a plugin build's binaries CANNOT load in a given engine.
+ *
+ * The version match above compares labels — a folder called `UE_5.7`, or a
+ * `.uplugin` field. Unreal itself compares `BuildId`s: the engine's, out of
+ * `Engine/Binaries/Win64/UnrealEditor.modules`, against each plugin's. They
+ * must be equal or the editor reports *"missing or built with a different
+ * engine version"* and offers to rebuild — which a Blueprint-only project
+ * cannot do.
+ *
+ * MEASURED 2026-08-12, and why this exists: a plugin folder named
+ * `Unreal Engine 5.7 Plugin` held binaries built for 5.8. Every label agreed;
+ * only the BuildId disagreed, and it was the one that mattered.
+ *
+ * Returns false whenever either side is unknown (`''`): a plugin with no
+ * binaries has nothing to mismatch, and an engine whose id the studio could not
+ * read is not evidence of anything. Never guess a mismatch — the cost of a
+ * false alarm here is the user unchecking a plugin that would have worked.
+ */
+export function pluginBuildMismatch(
+  plugin: Pick<UnrealPluginSource, 'buildId'>,
+  engine: Pick<UnrealEngineInstall, 'buildId'> | null | undefined,
+): boolean {
+  const pluginId = (plugin.buildId ?? '').trim()
+  const engineId = (engine?.buildId ?? '').trim()
+  if (!pluginId || !engineId) return false
+  return pluginId !== engineId
 }
 
 /** Numeric dotted compare — `5.7` < `5.10` (which a string compare gets

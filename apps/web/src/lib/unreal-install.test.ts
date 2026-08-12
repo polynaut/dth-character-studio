@@ -7,6 +7,7 @@ import {
   engineVersionFromAssociation,
   isZippedPlugin,
   matchPluginsToEngine,
+  pluginBuildMismatch,
   pluginMatchesEngine,
   pluginVersionLabel,
   unrealProjectNameError,
@@ -117,6 +118,26 @@ describe('plugin matching', () => {
     expect(isZippedPlugin('X:/plugins/DazToUnreal')).toBe(false)
     // A FOLDER that merely has zip in its name is not an archive.
     expect(isZippedPlugin('X:/plugins/zipped/DazToUnreal')).toBe(false)
+  })
+
+  it('catches a build whose BINARIES are for another engine, whatever the label says', () => {
+    // The real case, measured: a folder called "Unreal Engine 5.7 Plugin" whose
+    // binaries were built for 5.8. Every label agreed; only the BuildId did not.
+    const engine57 = { buildId: '47537391' }
+    expect(pluginBuildMismatch({ buildId: '55116800' }, engine57)).toBe(true)
+    expect(pluginBuildMismatch({ buildId: '47537391' }, engine57)).toBe(false)
+    // Whitespace in a hand-edited .modules must not read as a different build.
+    expect(pluginBuildMismatch({ buildId: ' 47537391 ' }, engine57)).toBe(false)
+  })
+
+  it('never claims a mismatch it cannot prove', () => {
+    // A plugin with no binaries has nothing to mismatch; an engine whose id
+    // could not be read is not evidence. A false alarm costs the user a plugin
+    // that would have worked.
+    expect(pluginBuildMismatch({ buildId: '' }, { buildId: '47537391' })).toBe(false)
+    expect(pluginBuildMismatch({ buildId: '55116800' }, { buildId: '' })).toBe(false)
+    expect(pluginBuildMismatch({ buildId: '55116800' }, null)).toBe(false)
+    expect(pluginBuildMismatch({}, undefined)).toBe(false)
   })
 
   it('labels versions for the checklist', () => {
