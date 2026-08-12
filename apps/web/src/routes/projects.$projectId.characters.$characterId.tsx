@@ -586,7 +586,6 @@ function CharacterPage({ onImportRemount }: { onImportRemount: () => void }) {
                     persistPatch={draft.persistPatch}
                     houdiniSubdir={project?.houdiniSubdir ?? 'houdini'}
                     projectId={projectId}
-                    projectName={project?.name ?? ''}
                   />
                 </SceneLock>
               </>

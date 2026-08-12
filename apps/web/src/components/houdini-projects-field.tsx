@@ -40,17 +40,24 @@ import { pickHipPath } from '#/lib/desktop.ts'
 import { browseStart, displayPath, normalizePath, parentDir } from '#/lib/path.ts'
 import { characterHoudiniDir } from '#/lib/scene-subfolder.ts'
 
-/** Folder/file-name-safe `<Project>_<Character>` — the Generate dialog's
- *  prefilled scene name (Windows-illegal characters collapse to one space,
- *  the same rule the api layer's cleanFileName applies to what's typed). */
-function defaultProjectName(projectName: string, characterName: string): string {
-  const clean = (s: string) =>
-    s
-      .trim()
-      .replace(/[\r\n<>:"/\\|?*]+/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-  return [clean(projectName), clean(characterName)].filter(Boolean).join('_')
+/**
+ * Folder/file-name-safe CHARACTER name — the Generate dialog's prefilled scene
+ * name (Windows-illegal characters collapse to one space, the same rule the api
+ * layer's cleanFileName applies to what's typed).
+ *
+ * The DTH project's name is deliberately NOT in here. A generated scene already
+ * lives inside that project — under `<project>/…/<character>/houdini/` — so
+ * repeating it in the filename only made every scene longer
+ * (`3d-workflow_LaraCroft_G81.hiplc`) without telling the reader anything the
+ * path doesn't. What distinguishes one `.hiplc` from another in the folder it
+ * sits in is the character, and after that whatever the user types.
+ */
+function defaultProjectName(characterName: string): string {
+  return characterName
+    .trim()
+    .replace(/[\r\n<>:"/\\|?*]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 import type { CharacterLocation } from '#/lib/rom/api.ts'
@@ -163,7 +170,6 @@ export function HoudiniProjectsField({
   persistPatch,
   houdiniSubdir = '',
   projectId,
-  projectName,
 }: {
   character: Character
   location: CharacterLocation
@@ -174,8 +180,6 @@ export function HoudiniProjectsField({
    *  folder chip while no project is linked yet. */
   houdiniSubdir?: string
   projectId: string
-  /** The studio project's name — seeds the Generate dialog's project name. */
-  projectName: string
 }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -583,7 +587,6 @@ export function HoudiniProjectsField({
         <GenerateProjectDialog
           projectId={projectId}
           character={character}
-          projectName={projectName}
           houdiniDir={houdiniDir}
           houdiniSubdir={houdiniSubdir}
           onClose={() => setGenerateOpen(false)}
@@ -698,7 +701,6 @@ function sceneLabel(scenePath: string): string {
 function GenerateProjectDialog({
   projectId,
   character,
-  projectName,
   houdiniDir,
   houdiniSubdir,
   onClose,
@@ -706,7 +708,6 @@ function GenerateProjectDialog({
 }: {
   projectId: string
   character: Character
-  projectName: string
   /** The character's Houdini folder — where the `.hiplc` lands. */
   houdiniDir: string
   /** The PROJECT's Houdini subfolder name from the `.dcsp` manifest ('houdini'
@@ -729,7 +730,7 @@ function GenerateProjectDialog({
     dazScenePath: string,
   ) => Promise<void>
 }) {
-  const [name, setName] = useState(defaultProjectName(projectName, character.name))
+  const [name, setName] = useState(defaultProjectName(character.name))
   const [busy, setBusy] = useState(false)
   // Which scene's export set the new network imports. Every linked scene exports
   // into its OWN `daz-export/<subfolder>/`, so on a multi-scene character this
