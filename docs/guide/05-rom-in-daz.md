@@ -77,23 +77,13 @@ the ROM'd scene** as `<scene>_ROM.duf` into a `rom-animations/` subfolder next
 to the scene file. Open it any time later to get the fully built ROM animation
 back without the (slow) rebuild; each run overwrites the previous copy.
 
-&nbsp;
-
-> [!NOTE]
-> This folder used to be hidden and called `.ROM_Animations`. It holds scenes
-> you're meant to open, so it's a normal visible folder now — any existing one
-> is renamed for you the next time the character is saved.
-
 Every scene exports into its **own subfolder** of the export directory, named
-after the subfolder the scene lives in inside the character folder (the
-primary scene's is `primary`; extra scenes get theirs when they're added) — so
-outfit/scene variants of one character always export side by side. The
-exporter output **and** the PoseAsset CSV land in that subfolder, and the
-export files carry the scene in their name too — `Kira_Summertide.abc` for the
-`summertide` scene (capitalized), not another `Kira.abc` — so files from
-different scenes stay distinguishable after they leave their subfolder
-(Houdini file pickers, recent lists). The **primary scene** is the one
-exception: it exports into its subfolder like every scene, but its files keep
+after the subfolder the scene lives in inside the character folder (the primary
+scene's is `primary`), so outfit variants of one character export side by side.
+The exporter output **and** the PoseAsset CSV land there, and the files carry
+the scene in their name too — `Kira_Summertide.abc`, not another `Kira.abc` —
+so they stay distinguishable once they leave the subfolder (Houdini file
+pickers, recent lists). The **primary scene** is the exception: its files keep
 the plain name (`Kira.abc`, never `Kira_Primary.abc`) — the primary is the
 character.
 
@@ -118,44 +108,49 @@ on the Daz side, one `..` away from your `.hip`:
   export/                 ← the FINAL files, for Unreal
 ```
 
-**`$JOB` is the character folder.** Houdini only collapses a path you pick into
-a variable when it sits under `$HIP` or `$JOB` — so `$JOB` has to be the folder
+**`$JOB` is the character folder** — Houdini only collapses a path you pick into
+a variable when it sits under `$HIP` or `$JOB`, so `$JOB` has to be the folder
 *above* `houdini/`, or picking an export writes an absolute path and the project
-stops being movable.
+stops being movable. **`houdini/` is the shared project folder**: every scene of
+a character lives in it and shares one `$HIP`, so Houdini's own output (renders,
+caches, backups) collects there instead of scattering per scene. **`export/`**
+is the end of the pipeline — what Houdini generates for Unreal, yours to
+organise, and not to be confused with the `daz-export` intermediate the DTH
+Exporter writes inside the Houdini folder. All three are created with every new
+character and can be renamed per project in **Settings → Project**.
 
-**The `houdini/` folder is the shared project folder.** Every one of a
-character's scenes lives in it, so they all share one `$HIP` — and Houdini
-writes its own output (renders, caches, backups) relative to `$HIP`, so all of
-it collects there instead of scattering per scene.
-
-Those three folders are created with every new character. The last one,
-**`export/`**, is the end of the pipeline — what Houdini generates for Unreal
-goes there, and it's yours to organise. Don't confuse it with `daz-export`
-inside the Houdini folder, which holds the Daz→Houdini intermediate the DTH
-Exporter writes. All three names can be changed per project in
-**Settings → Project**.
-
-There is no plumbing between the two sides: from a `.hip` in the houdini
-folder, the exports are a subfolder away (`daz-export/…`), and ticking Houdini's
-**Make path relative to current directory** in the file picker gives you the
-portable `$HIP/daz-export/…` form — the same spelling the studio generates, so a
-path you pick by hand and one it wrote read identically inside the same node.
-Everything the studio writes is an ordinary file or folder — nothing needs
-special treatment from Perforce, Git or backup tools.
-
-**Generate project** bakes `$JOB` in for you, so a generated scene needs no
-Set Project at all. `$HIP` never needs setting up either way — Houdini derives
-it from wherever the `.hip` sits.
+There is no plumbing between the two sides: from a `.hip` in the houdini folder
+the exports are a subfolder away, and ticking Houdini's **Make path relative to
+current directory** in the file picker gives you the portable `$HIP/daz-export/…`
+form — the same spelling the studio generates, so a path you pick by hand and
+one it wrote read identically inside the same node. **Generate project** bakes
+`$JOB` in for you, so a generated scene needs no Set Project at all; `$HIP`
+never needs setting up either way, since Houdini derives it from wherever the
+`.hip` sits.
 
 > [!NOTE]
-> **Upgrading?** Versions before v0.68 also made a `houdini-project` subfolder,
-> meant to be the Set Project target. It could never do that job: Houdini writes
-> its own output relative to `$HIP`, and `$HIP` is always the folder the `.hip`
-> sits in — Set Project sets `$JOB`, not `$HIP` — so the folder stayed empty
-> while the output landed beside the scenes. **The next save removes it, but
-> only when it is empty**; one holding files from an older project is left alone
-> and named in **Tools → Refresh assets**, for you to look at and clear
-> yourself.
+> **Upgrading from an older version?** Every layout change below carries itself
+> out on the next save, and **Tools → Refresh assets** does every character in
+> one go.
+>
+> - **The export directory has moved twice.** A character's exports follow to
+>   the current location and the emptied old folder goes; only folders the
+>   studio wrote are moved, anything else you kept there stays put. A Houdini
+>   project generated before a move still names the old one, so its imports
+>   report as broken on the character page — **Utils → Make paths portable**
+>   rebuilds them from the current export root, and only ever writes a path
+>   whose file it can actually see.
+> - **The `houdini-project` subfolder is gone.** Before v0.68 it was meant to be
+>   the Set Project target, a job it could never do (Set Project sets `$JOB`,
+>   not `$HIP`), so it stayed empty while the output landed beside the scenes.
+>   It is removed **only when empty**; one holding files is left alone and named
+>   in Refresh assets, for you to clear yourself.
+> - **`dth-exports` shortcut links** (NTFS junctions) beside Houdini projects
+>   are removed, reported as *removed N leftover dth-exports junction(s)*. Real
+>   export folders are never touched.
+> - **The saved-ROM folder** was hidden and called `.ROM_Animations`; it holds
+>   scenes you're meant to open, so it is the plain visible `rom-animations` now
+>   and an existing one is renamed for you.
 
 ### Reference-skeleton paths — `$HIP` by default
 
@@ -190,26 +185,6 @@ in the character's houdini folder — and save again to switch it over.
 **Old folders clean themselves up**: the studio remembers which export folders
 the current layout uses, and when a scene's subfolder is renamed or moved, the
 previous run's folders are removed from the export directory on the next save.
-
-&nbsp;
-
-> [!NOTE]
-> **Upgrading from an older version?** The export directory has moved twice, and
-> both moves carry your files with them: a character's exports follow to the
-> current location the next time it's saved, and the emptied old folder is
-> removed (**Tools → Refresh assets** migrates every character in one go). Only
-> the folders the studio wrote are moved; anything else you kept in that
-> directory stays put.
->
-> A Houdini project **generated before the move** still names the old folder, so
-> its imports report as broken on the character page. **Utils → Make paths
-> portable** rebuilds them from the character's current export root — it only
-> ever writes a path whose file it can actually see.
->
-> Older versions also kept `dth-exports` **shortcut links** (NTFS junctions)
-> beside Houdini projects; any leftovers are removed automatically on the next
-> save — Refresh assets reports them as *removed N leftover dth-exports
-> junction(s)*. Real export folders are never touched.
 
 Two switches (in the **Daz scripts generated** box on the character page)
 tune this:
@@ -266,7 +241,19 @@ trip; untick them and the run ends with Daz. Their own **Mode**:
   exports for the checked Daz scenes.
 - **Export all** — run them for every linked scene, whatever is checked.
 
-Several selected projects run **one after another**: each opens and exports,
+**The project list follows the scene selection.** Untick a Daz scene and the
+projects that only import *that* scene leave the run with it; tick it back on
+and they return. The match is the one Houdini itself makes at export time — a
+project belongs in the run when one of its networks imports a selected scene's
+`.dth` file — so what the dialog shows and what the run exports can't disagree.
+Names are deliberately not consulted: networks and projects get renamed and
+copied around, the import path doesn't. A project only ever *leaves* the run
+when its imports actually name a scene you unticked; one the background scan
+hasn't reached yet, or whose imports match none of this character's scenes
+either way, keeps whatever you have — the studio can't know there, and quietly
+dropping a project would skip the Houdini half of a run you asked for.
+
+Several selected projects run **one after another**: each loads and exports,
 then the next starts — the outcome waits for the single report at the end.
 
 **ROM only** is the exception: it builds no fresh export, so there is nothing
@@ -278,26 +265,60 @@ Press **Start**: the batch is handed to Daz Studio, where the bundled
 [**Runner plugin**](./02-setup.md#daz-studio-plugins)
 works through it unattended — every scene gets its full ROM build, export and
 delivered CSV, exactly as if you had run the scripts by hand. A closed Daz is
-started **minimized**, since nobody needs to watch it work: it appears in the
-taskbar and you carry on with what you were doing, while the studio's own
-progress button tells you how far along the batch is. A running Daz picks the
-batch up by itself and is left exactly as you had it. While the batch is still
-waiting the button reads **Abort**; once Daz starts working it shows live
-progress with the elapsed time, and the studio reports the outcome — including
-any per-scene failures and the total time — when the batch finishes. The
-finish report stays on screen until you close it (or start a new run).
-
-Clicking the progress button stops *watching* the run (Daz keeps going). If a
-batch is stuck — Daz is sitting on a dialog, the Runner never finished, and the
-button spins forever — hold **Ctrl**: it turns into **Abort**, which deletes the
-job file and resets the button, so the next export isn't refused with *"a batch
-is waiting for Daz Studio"*. Anything Daz has already started keeps running
-there; what you get back is the studio. (The same file can also be cleared from
-[Settings → App Data](./02-setup.md#the-app-data-tab).)
+started **minimized**, since nobody needs to watch it work; a running Daz picks
+the batch up by itself and is left exactly as you had it.
 
 The dialog refuses to start while the Runner plugin is missing or older than
 the one bundled with the app — the notice links straight to Settings to update
 it first. (A skip-Daz run doesn't need the Runner at all.)
+
+### Watching the run
+
+The character header becomes the run's own display for as long as it lasts:
+
+<p align="center">
+  <img width="900" alt="the character header mid-run — task cards, the log window and the progress meters" src="screenshots/dth-export-running.png" />
+  <br>
+  <sub><em>The live pipeline: what is left to do, what is being said, and how far along it is.</em></sub>
+</p>
+
+- **Task cards**, numbered in run order — every selected Daz scene, then every
+  Houdini project. The card being worked on is the lit one; a finished card
+  drops away and the rest move up, so the column always reads as what is left.
+- **A log window** tailing whichever leg is talking. The Daz scripts report each
+  step as they start it *and* as it lands (*generating ROM* → *ROM generated*),
+  so the window names what is running and not only what finished; the Houdini
+  leg streams the DazToHue HDA's own output.
+- **A progress bar** for the unit being worked on, carrying the latest status as
+  its label — plus a second bar above it whenever the leg spans several units
+  (several scenes, or several DazToHue networks in one project).
+
+The button beside it simply reads **Working** with the elapsed time; the numbers
+live in the display. Nothing is announced mid-run: **one report** at the very
+end covers both legs, with any per-scene failures and the total time, and stays
+on screen until you close it (or start a new run).
+
+**Getting out of a live run takes Ctrl.** A plain click on the working button
+does nothing — a stray one used to drop the watch, which reads as *"the export
+vanished"*:
+
+- **Ctrl on the Daz leg** turns the button into **Abort** — the way out of a
+  batch that is stuck (Daz sitting on a dialog, the Runner never finishing). It
+  deletes the job file and resets the button, so the next export isn't refused
+  with *"a batch is waiting for Daz Studio"*. Anything Daz already started keeps
+  running there; what you get back is the studio. (The same file can also be
+  cleared from [Settings → App Data](./02-setup.md#the-app-data-tab).)
+- **Ctrl on the Houdini leg** offers **Stop watching**: the export itself keeps
+  running to its end, but the studio lets go — and the projects still queued
+  behind it will not start.
+
+Before Daz has picked the batch up at all the button reads **Abort** without any
+modifier: nothing has started yet.
+
+**Reloading the app doesn't lose the run.** Every handoff writes its plan down
+beside its own files, so the character's editor picks the run back up when it
+opens: the elapsed clock, the task cards, the Houdini projects still to come and
+the report so far. Any *other* window shows the same run read-only.
 
 ### Carry on into Houdini
 
@@ -308,19 +329,19 @@ scenes in scope, right after the Daz batch delivers (or immediately, with
 
 What happens:
 
-1. Daz finishes the batch — a short notice hands over to Houdini; the full
-   report waits until the *whole* round trip is done.
-2. Houdini opens the project — visibly, so you can watch it work. The button
-   reads **Houdini opening…** while the scene loads (a big project takes a
-   while; nothing is wrong), then **Houdini 1/3** as nodes finish.
+1. Daz finishes the batch and the Houdini leg starts straight away — the report
+   waits until the *whole* round trip is done.
+2. Houdini runs the project **headless**: `hython` loads it in the background,
+   works the batch and exits again. No window opens, so there is nothing to wait
+   for while a big project loads and nothing of yours to close — the log window
+   in the header is where you watch it. Want a project left open to work in?
+   That's the **Open only** mode, which still opens Houdini normally.
 3. Only the networks importing **the scenes you ticked** export. A project
    holding networks for other scenes — or other characters — is left alone.
 4. After the last project, **one report** names every leg — *"Daz: 2/2 scenes
    exported in 3m 10s"*, then a line per Houdini project (*"Kira_Look: 2
    exported, 1 skipped"*) — under a single *DTH Export finished in …* headline
-   with the total time. Each project's Houdini **closes itself again** once its
-   exports are done — the instance existed to carry the batch. Want a project
-   left open to work in? That's the **Open only** mode.
+   with the total time.
 
 Two things it deliberately won't do:
 
@@ -332,9 +353,13 @@ Two things it deliberately won't do:
 If the DazToHue pre-flight check reports problems, the studio answers its
 *"Continue anyway?"* prompt for you and **keeps the message**, so those
 problems reach the report instead of vanishing behind an unattended dialog.
-Closing Houdini mid-run ends the watch with a notice, and any projects still
-waiting their turn are dropped — the notice lists the legs that did finish,
-and those exports are on disk.
+
+Everything Houdini printed on its way through — the HDA's own output and
+Houdini's console chatter with it — lands in **`.dth_houdini_console.log`** in
+the character folder. It is deliberately *not* cleaned up with the run's other
+files: it's the file to open when a run did something puzzling (a run that
+matched no export nodes records exactly what it looked for and what it found),
+and it is one file per character, overwritten by that character's next run.
 
 &nbsp;
 

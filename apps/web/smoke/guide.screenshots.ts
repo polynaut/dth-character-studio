@@ -124,6 +124,15 @@ async function frame(page: Page, feature: Locator, label: string, scroll: boolea
   return box
 }
 
+/** For a shot whose state contains a RUNNING animation (a spinner on a live
+ *  run): Playwright fast-forwards finite transitions to their end state and
+ *  cancels infinite ones back to their start, so the frame is the same every
+ *  time. Opt-in per shot rather than global — a still page needs it and the
+ *  option shifts settled transitions, which would rewrite every other PNG for
+ *  nothing. If a NEW shot ever fails the "second run = empty diff" contract,
+ *  this is the fix. */
+const STILL = { animations: 'disabled' } as const
+
 async function shoot(page: Page, path: string, feature?: Locator) {
   await page.mouse.move(0, 0) // park the cursor off any control so no hover state is caught
   await settle(page)
@@ -415,7 +424,7 @@ test('project-open-window', async ({ page }) => {
 /** Exception to the 16:9 cap: shoot from the top of the page DOWN THROUGH
  *  `endFeature`, so a feature below the fold (e.g. the linked Daz scene card)
  *  isn't cut off. Grows the viewport first so everything renders in one frame. */
-async function shootTopThrough(page: Page, path: string, endFeature: Locator) {
+async function shootTopThrough(page: Page, path: string, endFeature: Locator, still = false) {
   await page.mouse.move(0, 0) // park the cursor off any control so no hover state is caught
   await page.setViewportSize({ width: VW, height: 1500 })
   await settle(page)
@@ -426,6 +435,7 @@ async function shootTopThrough(page: Page, path: string, endFeature: Locator) {
   await page.screenshot({
     path,
     clip: { x: 0, y: 0, width: VW, height: bottom + 24 },
+    ...(still ? STILL : {}),
   })
 }
 
@@ -631,6 +641,101 @@ test('dth-export-dialog', async ({ page }) => {
   // the Houdini projects).
   await dialog.getByText('Changed since the last export').waitFor()
   await shoot(page, join(OUT, 'dth-export-dialog.png'), dialog)
+})
+
+test('dth-export-running', async ({ page }) => {
+  // The header's LIVE pipeline display (guide: "Watching the run"). Neither the
+  // Runner plugin nor Houdini exists in the fake, so the run is staged the way
+  // houdini-export.smoke.ts stages it — by writing exactly the files they
+  // write. TWO scenes deliberately: a multi-unit leg is what puts the second
+  // (overall) meter on screen, and it gives the card column something to be.
+  const SCRIPTS_ROOT = `${P.dazLib}/Scripts/DTH-Character-Studio`
+  const seed = buildSeed({
+    demo: true,
+    extraScene: true,
+    activeProjectFile: P.dcsp,
+    dazInstallFolder: 'C:/Program Files/DAZ 3D/DAZStudio6',
+  })
+  // The batch runs the HIDDEN bulk script — a missing one is refused up front,
+  // before any job file is written.
+  seed.files[`${SCRIPTS_ROOT}/Demo/Kira/.Bulk_ROM_Export.dsa`] = '// bulk-export fixture'
+  await prime(page, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+
+  await page.getByRole('button', { name: 'DTH Export' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.getByText('Changed since the last export').first().waitFor()
+  // Both scenes and the linked Houdini project: three cards, in run order.
+  await dialog.getByRole('checkbox', { name: /Export KiraDefault/ }).check()
+  await dialog.getByRole('checkbox', { name: /Export KiraSummertide/ }).check()
+  await dialog.getByRole('checkbox', { name: /Run in Kira/ }).check()
+  await page.getByRole('button', { name: 'Start' }).click()
+
+  const pendingJob = `${SCRIPTS_ROOT}/dth_exporter_jobs.json`
+  const runningJob = `${SCRIPTS_ROOT}/running_dth_exporter_jobs.json`
+  await expect
+    .poll(() =>
+      page.evaluate((p) => (window as any).__tauriMock.files.has(p) as boolean, pendingJob),
+    )
+    .toBe(true)
+
+  // Stand in for the Runner mid-batch: it claims the job file (the `running_`
+  // prefix IS the claim) and appends the per-step lines to the progress log.
+  // The last line is a step it just STARTED — which is what the display is for.
+  await page.evaluate(
+    ([pending, running, progressPath]) => {
+      const mock = (window as any).__tauriMock
+      // A sub-100 running file with no Daz alive reads as a DEAD run.
+      mock.dazRunning = true
+      const files = mock.files as Map<string, string>
+      const job = JSON.parse(files.get(pending) ?? '{}')
+      files.delete(pending)
+      files.set(
+        running,
+        JSON.stringify({
+          ...job,
+          progress: 20,
+          jobsDone: 0,
+          jobs: job.jobs.map((row: Record<string, unknown>, index: number) =>
+            Object.assign({}, row, { status: index === 0 ? 'running' : 'pending' }),
+          ),
+        }),
+      )
+      files.set(
+        progressPath,
+        [
+          '[0] KiraDefault_G9_GP: opening scene',
+          '[20] KiraDefault_G9_GP: scene opened',
+          '[20] KiraDefault_G9_GP: generating ROM',
+          '[40] KiraDefault_G9_GP: ROM generated',
+          '[40] KiraDefault_G9_GP: exporting character',
+          '',
+        ].join('\n'),
+      )
+    },
+    [pendingJob, runningJob, `${P.appData}/export-progress.log`],
+  )
+  // Wait for the poll to have digested all of it: the newest line in the window
+  // and the per-scene meter on its percent (0 → 40 is the shot's whole point).
+  await expect(page.locator('[data-export-log]')).toContainText('Exporting character', {
+    timeout: 15_000,
+  })
+  await expect(page.locator('[data-progressbar="current"]')).toHaveAttribute('data-percent', '40')
+  // Close the "Started Daz Studio" toast the way a user would — it sits over
+  // the log window, which is the whole subject of this shot.
+  const toast = page.locator('[data-sonner-toast]')
+  await toast.first().locator('[data-close-button]').click()
+  await expect(toast).toHaveCount(0)
+  // `still`: the Working button spins, and a running animation would land on a
+  // different frame every regeneration.
+  await shootTopThrough(
+    page,
+    join(OUT, 'dth-export-running.png'),
+    page.getByRole('tab', { name: 'Character' }),
+    true,
+  )
 })
 
 test('character-advanced-options', async ({ page }) => {

@@ -26,9 +26,8 @@ In your DazToHue network, point the **PoseAsset** import at the character's
 
 Wire the network once — from then on the studio can run it for you: pick the
 project in [**DTH Export**](./05-rom-in-daz.md#batch-export--dth-export) and it
-opens Houdini, runs the DazToHue exports for the scenes in scope, and closes
-Houdini again when they're done — with **Skip Daz — use last exports** for a
-Houdini-only pass.
+runs the DazToHue exports for the scenes in scope, headless in the background —
+with **Skip Daz — use last exports** for a Houdini-only pass.
 
 > [!TIP]
 > The exports sit **under** the `.hip` that reads them, so the portable form
@@ -76,6 +75,22 @@ exports into its own folder, so the pick decides which export set the imports
 point at — generate one project per scene to cover them all. The **first**
 project isn't asked (nor is a single-scene character): it is the character's
 main project, wired to the primary scene.
+
+Either way the dialog **says which scene it is generating for** — *"wired to
+`KiraSummertide_G9_GP`"*, marking the primary as such — and the line follows the
+picker as you change it. The confirmation names the scene too, so the answer
+survives the dialog closing: a character with one project per outfit makes
+*"which one did I just make?"* a real question.
+
+The generated project **opens with its character already loaded**, on the rest
+pose. Setting the import paths from a script doesn't run the import node's own
+"a character was chosen" routine — the one that offers to fill the sibling paths
+and then actually reads the files, which is what sets the Alembic's frame range
+and puts the scene on frame 0 — so the studio runs it itself and answers its
+prompt the way you would, then puts its own `$HIP/…` paths back so the project
+stays movable. It only runs when the files are really on disk: generate before
+the Daz export has produced them and the project comes out wired but unloaded,
+exactly as it used to.
 
 The **export directory** is a different folder from the imports, on purpose:
 they read the Daz→Houdini intermediates under `daz-export`, while Houdini
