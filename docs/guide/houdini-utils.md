@@ -223,7 +223,9 @@ each section are how much is actually set there, not how many parameters exist.
 
 It carries the same **Recently used** row as the Material tab, and the same list
 behind it: sources are remembered per machine, not per tab and not per project,
-because the template you copy from usually lives outside any project.
+because the template you copy from usually lives outside any project. The row
+remembers *every* source you pick, including the one-off look, so each chip has
+a **✕** to drop it again — that removes the shortcut only, never the `.hip`.
 
 ## The Occlusion tabs
 

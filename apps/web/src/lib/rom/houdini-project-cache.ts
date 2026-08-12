@@ -129,8 +129,16 @@ export function scanCacheKey(
  *
  * 1 — nodes / $JOB / fps / refs / prefill.
  * 2 — + `imports`.
+ * 3 — + the OCCLUSION node kinds (`DazToHueOcclusion`,
+ *     `DazToHueGroomOcclusion`). `_dth_nodes` matches more types now, so every
+ *     v2 entry lists a project's material and skeleton nodes and silently
+ *     omits its occlusion ones — and the drawer, reading that, says "No
+ *     DazToHue occlusion nodes in this project" about a project full of them.
+ *     Reported on the first real use, which is the second time this exact
+ *     trap has been paid for: a scan that learns to SEE something new is a
+ *     changed question, just like one that learns to report a new field.
  */
-const SCAN_ANSWER_VERSION = 2
+export const SCAN_ANSWER_VERSION = 3
 
 /**
  * Fold the installed operator libraries into one comparable string — name, mtime

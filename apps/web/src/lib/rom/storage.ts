@@ -154,6 +154,7 @@ export type { KnownDrive } from './storage/network-drives'
 // --- Utils drawer: recently used transfer sources (houdini-sources.json) -----
 export {
   HOUDINI_SOURCE_RECENTS_MAX,
+  forgetHoudiniSource,
   listHoudiniSources,
   rememberHoudiniSource,
 } from './storage/houdini-sources'

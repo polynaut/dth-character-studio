@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-import { P, buildSeed } from './fixtures.ts'
+import { P, buildSeed, scanStoreEntryKey } from './fixtures.ts'
 import { installTauriMock } from './tauri-mock.ts'
 
 import type { Page } from '@playwright/test'
@@ -15,30 +15,9 @@ import type { Page } from '@playwright/test'
 /** The character's scan store, in its `.dcsmeta` folder. */
 const STORE = `${P.project}/.dcsmeta/characters/Kira/houdini-scan.json`
 
-/**
- * A stored entry's freshness key, in the shape `scanCacheKey` builds it:
- * `<path>|<mtime>|<export root>|<installed-HDA fingerprint>`, all normalised.
- * `__MTIME__` is filled in inside the page, because the fake stamps its world
- * when it is installed.
- *
- * The EXPORT ROOT is in the key because part of a scan's verdict is about files
- * that are NOT the `.hip` (`refs.broken`), and the export-root move relocated
- * every one of them without touching a single scene file. A seeded entry naming
- * a different root reads as stale here — which is exactly what should happen to
- * a real pre-move entry.
- *
- * The HDA FINGERPRINT is there for the same reason, one step further out: a
- * scan's verdict is phrased in the vocabulary of the DazToHue hython loaded
- * (`prefill.missing` says "your version has no …"), so installing a new library
- * has to invalidate it. It is EMPTY here, hence the bare trailing separator:
- * the fake world has no Houdini install to pair a prefs folder with, so
- * `installedHdaKey()` takes its documented "cannot read it" path and answers
- * ''. That is a key component like any other — which is the point of writing it
- * out here rather than defaulting it away.
- */
-function storeKey(hipPath: string): string {
-  return `${hipPath.toLowerCase()}|__MTIME__|${P.exportDir.toLowerCase()}||2`
-}
+/** A stored entry's freshness key — see `scanStoreEntryKey` in fixtures.ts for
+ *  what each component is and why it is in there. */
+const storeKey = (hipPath: string) => scanStoreEntryKey(hipPath, P.exportDir)
 
 /** A scan result in the shape `material_utils.py` reports. */
 function scan(over: Record<string, unknown> = {}) {
@@ -411,7 +390,11 @@ test('a chosen source joins "Recently used", and one click picks it again', asyn
   await expect(drawer.getByText('SourceBox')).toBeVisible()
   // The pick was recorded, and the row names it by file.
   await expect(drawer.getByText('Recently used')).toBeVisible()
-  await expect(drawer.getByRole('button', { name: /G9_Skin_Base/ })).toBeVisible()
+  // `exact`: the chip is a two-control group now (pick + remove), and both
+  // buttons name the file.
+  await expect(
+    drawer.getByRole('button', { name: 'G9_Skin_Base.hiplc', exact: true }),
+  ).toBeVisible()
 
   // Close the drawer and come back: the whole point is that it OUTLIVES this.
   await drawer.getByRole('button', { name: /^Close/ }).click()
@@ -421,6 +404,23 @@ test('a chosen source joins "Recently used", and one click picks it again', asyn
   await reopened.getByRole('tab', { name: 'Material' }).click()
 
   // One click re-selects it — no picker, no typing.
-  await reopened.getByRole('button', { name: /G9_Skin_Base/ }).click()
+  await reopened.getByRole('button', { name: 'G9_Skin_Base.hiplc', exact: true }).click()
   await expect(reopened.getByText('SourceBox')).toBeVisible()
+
+  // …and it can be taken back out. The row fills itself from every source ever
+  // picked, including the one-off look, so it needs a way out as much as a way
+  // in — and the removal has to OUTLIVE the drawer too, or it is component
+  // state pretending to be a preference.
+  await reopened.getByRole('button', { name: /^Remove G9_Skin_Base/ }).click()
+  await expect(reopened.getByText('Recently used')).toHaveCount(0)
+  await reopened.getByRole('button', { name: /^Close/ }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await page.getByRole('button', { name: /^Utils/ }).first().click()
+  const again = page.getByRole('dialog')
+  await again.getByRole('tab', { name: 'Material' }).click()
+  await expect(again.getByText('Recently used')).toHaveCount(0)
+  // The `.hip` itself is untouched — a shortcut was removed, not a file.
+  expect(
+    await page.evaluate((p) => (window as any).__tauriMock.files.has(p) as boolean, TEMPLATE),
+  ).toBe(true)
 })

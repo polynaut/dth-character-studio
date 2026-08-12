@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-import { P, buildSeed } from './fixtures.ts'
+import { P, buildSeed, scanStoreEntryKey } from './fixtures.ts'
 import { installTauriMock } from './tauri-mock.ts'
 
 import type { Page } from '@playwright/test'
@@ -17,10 +17,7 @@ import type { Page } from '@playwright/test'
 
 const STORE = `${P.project}/.dcsmeta/characters/Kira/houdini-scan.json`
 
-/** Same freshness key `scanCacheKey` builds — see houdini-project-health.smoke.ts. */
-function storeKey(hipPath: string): string {
-  return `${hipPath.toLowerCase()}|__MTIME__|${P.exportDir.toLowerCase()}||2`
-}
+const storeKey = (hipPath: string) => scanStoreEntryKey(hipPath, P.exportDir)
 
 /** A scanned node in the shape `material_utils.py` reports one. The occlusion
  *  kinds carry their counts in `sectionCounts` (the folder kinds' shape), which
@@ -46,6 +43,10 @@ function node(
   }
 }
 
+/** A material node in the SAME project — the drawer preselects every node of
+ *  the card it was opened from, all kinds at once, so this is what used to be
+ *  counted into an occlusion run. */
+const MATERIAL = node('material', 'DazToHueMaterial', [])
 const OCCLUSION = node('occlusion', 'DazToHueOcclusion', [
   { key: 'visualise', label: 'Visualise', count: 2 },
   { key: 'culling', label: 'Occlusion Culling', count: 7 },
@@ -70,7 +71,7 @@ async function openDrawer(page: Page) {
           hipPath: P.houdini,
           ok: true,
           error: '',
-          nodes: [OCCLUSION, GROOM],
+          nodes: [MATERIAL, OCCLUSION, GROOM],
           job: P.charFolder,
           fps: 30,
           refs: { collapsible: 0, foreign: 0, broken: [], hipRelative: [] },
@@ -132,4 +133,16 @@ test('the Groom occlusion tab is its own node, sections and selection', async ({
   await drawer.getByRole('checkbox', { name: /Visualise/ }).uncheck()
   await drawer.getByRole('tab', { name: 'Occlusion', exact: true }).click()
   await expect(drawer.getByRole('checkbox', { name: /Visualise/ })).toBeChecked()
+})
+
+test('the target count is the ACTIVE kind only, not every node of the project', async ({ page }) => {
+  // The drawer preselects every node of the card it was opened from — all kinds
+  // at once — so an occlusion run counted the material node too: "3 target
+  // nodes selected" under one visible ticked box. The Python refuses a
+  // wrong-typed node per target, so nothing was ever written to one; the count
+  // and the report were the lie.
+  const drawer = await openDrawer(page)
+  await drawer.getByRole('tab', { name: 'Occlusion', exact: true }).click()
+  await drawer.getByRole('checkbox', { name: /DazToHueOcclusion/ }).first().check()
+  await expect(drawer.getByText(/target node/)).toHaveText('1 target node selected')
 })

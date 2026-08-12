@@ -11,6 +11,7 @@ import {
   Undo2,
   Wand2,
   Wrench,
+  X,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -44,6 +45,7 @@ import {
   restoreHoudiniBackup,
   fetchCachedHoudiniScans,
   fetchHoudiniSourceRecents,
+  forgetHoudiniSource,
   rememberHoudiniSource,
   scanCharacterHoudiniProjects,
   scanHoudiniMaterials,
@@ -170,27 +172,38 @@ const FOLDER_KIND_UI: Record<
     tab: string
     sections: ReadonlyArray<string>
     labels: Record<string, { label: string; hint: string }>
-    /** What a section IS on this node — shown under the checkbox list. */
-    noun: string
+    /** Sentence subject for the wholesale note, ARTICLE INCLUDED — English
+     *  needs "An occlusion" and "A skeleton", which no template gets right. */
+    sectionPhrase: string
+    /** The tab's own one-paragraph "what this does". The material node's blurb
+     *  used to be printed on every transfer tab. */
+    blurb: string
   }
 > = {
   skeleton: {
     tab: 'Skeleton',
     sections: SKELETON_SECTIONS,
     labels: SKELETON_LABELS,
-    noun: 'skeleton section',
+    // The article rides along: "A occlusion section" was the alternative.
+    sectionPhrase: 'A skeleton section',
+    blurb:
+      "Copy a skeleton node's setup — bone renames, reparents, physics bones and skin weights — onto this character's skeleton nodes. Daz bone names are fixed per generation, so the block transfers between characters of that generation.",
   },
   occlusion: {
     tab: 'Occlusion',
     sections: OCCLUSION_SECTIONS,
     labels: OCCLUSION_LABELS,
-    noun: 'occlusion section',
+    sectionPhrase: 'An occlusion section',
+    blurb:
+      "Copy an occlusion node's setup onto this character's occlusion nodes — the manual occlusion attributes and the Auto-Occlusion operation list. The dry run lists exactly what would change before anything is written.",
   },
   groomOcclusion: {
     tab: 'Groom occlusion',
     sections: GROOM_OCCLUSION_SECTIONS,
     labels: GROOM_OCCLUSION_LABELS,
-    noun: 'groom-occlusion section',
+    sectionPhrase: 'A groom-occlusion section',
+    blurb:
+      "Copy a groom-occlusion node's setup onto this character's groom-occlusion nodes — its options, skin, occlusion mask and texture stamp. The dry run lists exactly what would change before anything is written.",
   },
 }
 
@@ -678,6 +691,20 @@ export function HoudiniUtilsPanel({
     [loadSourceRecents],
   )
 
+  /** Drop a shortcut the user is done with. Unlike remembering, this one is
+   *  ASKED for, so a failure is reported rather than swallowed. */
+  const forgetSource = useCallback(
+    async (hipPath: string) => {
+      try {
+        await forgetHoudiniSource({ data: { hipPath } })
+        await loadSourceRecents()
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : String(e))
+      }
+    },
+    [loadSourceRecents],
+  )
+
   useEffect(() => {
     setSelectedSource('')
     if (!open || !activeSourceHip) {
@@ -723,10 +750,20 @@ export function HoudiniUtilsPanel({
   }, [sourceScan, selectedSource])
 
   // Target refs for the transfer, minus the source node itself.
+  //
+  // Filtered to the ACTIVE KIND. The selection is preseeded with every node of
+  // the card the drawer was opened from — all kinds at once — and a project
+  // typically holds a material, a skeleton and an occlusion node, so an
+  // occlusion run was being pointed at all three ("3 target nodes selected"
+  // under a single ticked box). The Python refuses a node of the wrong type per
+  // target, so nothing was ever written to one; the count and the report were
+  // the lie. The node LIST is filtered by kind already — this makes the run
+  // agree with what the user can actually see and tick.
   const targetRefs = useMemo(() => {
     const refs: Array<{ hipPath: string; nodePath: string }> = []
     for (const project of targetScan.projects) {
       for (const node of project.nodes) {
+        if (node.nodeType !== kind) continue
         const key = nodeKey(project.hipPath, node.path)
         if (!selectedTargets.has(key)) continue
         if (key === selectedSource) continue
@@ -734,7 +771,7 @@ export function HoudiniUtilsPanel({
       }
     }
     return refs
-  }, [targetScan, selectedTargets, selectedSource])
+  }, [kind, targetScan, selectedTargets, selectedSource])
 
   // Friendly name for any node the panel has scanned — the confirm dialog and
   // the report both name nodes, and a bare `/obj/DazToHue/DazToHueMaterial1`
@@ -1313,11 +1350,20 @@ export function HoudiniUtilsPanel({
               section list and the material picker differ, so `value={kind}`
               keeps the single content mounted for whichever is active. */}
           <TabsContent value={kind} className="space-y-6">
+            {/* Per KIND: the material node's baker/UV story was being printed
+                on the Skeleton tab, and then on both occlusion tabs — a
+                paragraph about texture bakers above a list of bone rules. */}
             <p className="text-xs text-muted-foreground">
-              Copy the texture-baker setup of one material node onto this character&apos;s
-              material nodes. Bakers name their material and geometry groups as text, so a
-              target that doesn&apos;t define those names takes the bakers and bakes nothing —
-              the dry run lists exactly that before anything is written.
+              {isFolderKind(kind) ? (
+                FOLDER_KIND_UI[kind].blurb
+              ) : (
+                <>
+                  Copy the texture-baker setup of one material node onto this character&apos;s
+                  material nodes. Bakers name their material and geometry groups as text, so a
+                  target that doesn&apos;t define those names takes the bakers and bakes nothing —
+                  the dry run lists exactly that before anything is written.
+                </>
+              )}
             </p>
 
             {/* ---------------------------------------------------------- target */}
@@ -1478,34 +1524,55 @@ export function HoudiniUtilsPanel({
                         normalizePath(activeSourceHip).toLowerCase() ===
                         normalizePath(recent.path).toLowerCase()
                       return (
-                        <button
+                        // The chip is a two-control group, not one button: a
+                        // ✕ nested inside a <button> is invalid HTML and the
+                        // click would belong to the outer one either way.
+                        <span
                           key={recent.path}
-                          type="button"
-                          // The full path, because the chip shows only the file
-                          // name and two templates called `Base.hiplc` in
-                          // different folders are otherwise indistinguishable.
-                          title={displayPath(recent.path)}
-                          onClick={() => {
-                            setSourceMode('browse')
-                            setBrowsedHip(recent.path)
-                            // Re-picking floats it back to the top — the file
-                            // you keep coming back to stays where you look.
-                            rememberSource(recent.path)
-                          }}
-                          className={`flex max-w-full items-center gap-2 rounded-md border px-2.5 py-1.5 text-sm ${
+                          className={`group flex max-w-full items-center rounded-md border text-sm ${
                             active
                               ? 'border-houdini-orange bg-houdini-orange/15 font-medium'
-                              : 'text-muted-foreground hover:bg-accent/50'
+                              : 'text-muted-foreground'
                           }`}
                         >
-                          <img
-                            src={houdiniLogo}
-                            alt=""
-                            aria-hidden
-                            className="size-4 shrink-0 object-contain"
-                          />
-                          <span className="truncate">{fileName(recent.path)}</span>
-                        </button>
+                          <button
+                            type="button"
+                            // The full path, because the chip shows only the
+                            // file name and two templates called `Base.hiplc`
+                            // in different folders are otherwise
+                            // indistinguishable.
+                            title={displayPath(recent.path)}
+                            onClick={() => {
+                              setSourceMode('browse')
+                              setBrowsedHip(recent.path)
+                              // Re-picking floats it back to the top — the file
+                              // you keep coming back to stays where you look.
+                              rememberSource(recent.path)
+                            }}
+                            className="flex min-w-0 items-center gap-2 rounded-l-md py-1.5 pr-1.5 pl-2.5 hover:bg-accent/50"
+                          >
+                            <img
+                              src={houdiniLogo}
+                              alt=""
+                              aria-hidden
+                              className="size-4 shrink-0 object-contain"
+                            />
+                            <span className="truncate">{fileName(recent.path)}</span>
+                          </button>
+                          {/* Removing a shortcut is not removing a file, so it
+                              needs no confirmation — but it stays quiet until
+                              the chip is hovered/focused so the row still reads
+                              as a list of files rather than a row of ✕. */}
+                          <button
+                            type="button"
+                            aria-label={`Remove ${fileName(recent.path)} from recently used`}
+                            title="Remove from Recently used (the .hip is not touched)"
+                            onClick={() => void forgetSource(recent.path)}
+                            className="shrink-0 rounded-r-md py-1.5 pr-1.5 pl-0.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 hover:text-destructive focus-visible:opacity-100"
+                          >
+                            <X className="size-3.5" />
+                          </button>
+                        </span>
                       )
                     })}
                   </div>
@@ -1677,9 +1744,9 @@ export function HoudiniUtilsPanel({
               </div>
               {isFolderKind(kind) && (
                 <p className="mt-2 text-xs text-muted-foreground">
-                  A {FOLDER_KIND_UI[kind].noun} is copied <strong>wholesale</strong> — its settings
-                  and its lists replace the target&apos;s. Appending one list onto another (22 bone
-                  renames onto 22 existing ones) would make 44 rules, not a merged setup.
+                  {FOLDER_KIND_UI[kind].sectionPhrase} is copied <strong>wholesale</strong> — its
+                  settings and its lists replace the target&apos;s. Appending one list onto another
+                  (22 bone renames onto 22 existing ones) would make 44 rules, not a merged setup.
                 </p>
               )}
               {/* The blocking reason, stated where the checkbox that causes it
