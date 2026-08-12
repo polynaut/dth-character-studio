@@ -289,9 +289,11 @@ The character header becomes the run's own display for as long as it lasts:
   step as they start it *and* as it lands (*generating ROM* → *ROM generated*),
   so the window names what is running and not only what finished; the Houdini
   leg streams the DazToHue HDA's own output.
-- **A progress bar** for the unit being worked on, carrying the latest status as
-  its label — plus a second bar above it whenever the leg spans several units
-  (several scenes, or several DazToHue networks in one project).
+- **A progress bar** for the unit being worked on — plus a second one above it
+  whenever the leg spans several units (several scenes, or several DazToHue
+  networks in one project). Both are a track and a percent, nothing else: the
+  cards say what is running and the log window's newest line says how it's
+  going.
 
 The button beside it simply reads **Working** with the elapsed time; the numbers
 live in the display. Nothing is announced mid-run: **one report** at the very
