@@ -489,8 +489,14 @@ current code before relying on details, but assume the *lesson* still holds.
   `groom_occlusion_skin_folder`, `groom_occlusion_occlusion_folder`,
   `groom_occlusion_texture_folder`. **`occludion_` is how the asset spells it** —
   the name is the contract `_folder_template` looks up, so it is reproduced
-  verbatim; "correcting" it to `occlusion_` silently finds nothing, and a
-  section whose folder is missing is skipped rather than reported.
+  verbatim; "correcting" it to `occlusion_` finds nothing at all. A folder name
+  that does not resolve is now the ONE thing `op_transfer_folders` refuses to be
+  quiet about — missing on the source raises before any file is opened, missing
+  on a target fails that target with the label in the message and copies nothing
+  to it. It used to `continue` past both, which turned "these names are wrong
+  for your DTH version" into a cheerful *Transfer complete* over a copy that
+  never happened. Since the names come from reading a black-boxed asset rather
+  than from a run, that silence was the likeliest way this feature could lie.
 - **A Houdini network box's visible title is its `comment()`, not its
   `name()`.** Measured 2026-08-06: `name()` is an internal id (`__netbox1`,
   `__netbox3`, …) that no user ever sees or sets; the text drawn in the box

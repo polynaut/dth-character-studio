@@ -2379,10 +2379,29 @@ def op_transfer_folders(request, kind):
     # target replaces the whole scene, and every node reference from the source
     # goes stale with it (measured — the dry run read a dead node and threw).
     source_counts = {}
+    missing = []
     for key in keys:
         folder = _folder_template(node, by_key[key]["folder"])
-        payloads[key] = _export_folder(node, folder) if folder is not None else None
-        source_counts[key] = _folder_settings_count(node, folder) if folder is not None else 0
+        if folder is None:
+            missing.append(by_key[key])
+            continue
+        payloads[key] = _export_folder(node, folder)
+        source_counts[key] = _folder_settings_count(node, folder)
+    # LOUD, not skipped. The folder names are the contract with the installed
+    # HDA and they are the thing most likely to be wrong (they were read off a
+    # black-boxed asset's dialog script — see `.ai/gotchas.md`), so a DTH
+    # release that renames one must fail this run rather than let it report a
+    # cheerful "Transfer complete" over a copy that never happened.
+    if missing:
+        raise hou.Error(
+            "The source %s node has no %s folder (looked for %s). This DazToHue "
+            "version may name it differently — nothing was copied."
+            % (
+                noun.lower(),
+                ", ".join(s["label"] for s in missing),
+                ", ".join(s["folder"] for s in missing),
+            )
+        )
 
     by_file = []
     for target in request.get("targets", []):
@@ -2441,11 +2460,23 @@ def op_transfer_folders(request, kind):
                 results.append(result)
                 continue
 
+            # Every folder resolved BEFORE anything is written: a target missing
+            # one is reported as a failure for that target and left completely
+            # alone, rather than half-copied. (The source is checked up front and
+            # is the same node type, so this is the anomalous case — a target
+            # built on a different DazToHue version.)
+            folders = {key: _folder_template(target_node, by_key[key]["folder"]) for key in keys}
+            absent = [by_key[key]["label"] for key in keys if folders[key] is None]
+            if absent:
+                result["ok"] = False
+                result["error"] = "No %s folder on this node — nothing was copied to it." % (
+                    ", ".join(absent)
+                )
+                results.append(result)
+                continue
+
             for key in keys:
-                section = by_key[key]
-                folder = _folder_template(target_node, section["folder"])
-                if folder is None or payloads.get(key) is None:
-                    continue
+                folder = folders[key]
                 before = _folder_settings_count(target_node, folder)
                 if dry_run:
                     # Wholesale copy: what the source holds is what the target

@@ -25,6 +25,12 @@ copied reference would rebind to the target project's own node and read the
 wrong values without erroring — the same rule the material transfer has always
 followed for a linked parameter.
 
+A folder transfer that cannot find one of its folders now **says so and copies
+nothing**, instead of quietly skipping that section and reporting *Transfer
+complete* — if a DazToHue release renames a folder, the run fails with the name
+it looked for rather than leaving you to notice the setup never arrived. This
+applies to the Skeleton tab too.
+
 Also fixes a stale tooltip: the **What to copy** info popup explained the
 material node's baker/UV interdependency on *every* transfer tab, including
 Skeleton, where none of it applied.
