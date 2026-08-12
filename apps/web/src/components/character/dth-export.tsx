@@ -24,6 +24,7 @@ import { PrimaryBadge } from '#/components/primary-badge.tsx'
 import { RunnerGateNotice } from '#/components/runner-gate-notice.tsx'
 import {
   abortExporterJobs,
+  adoptHoudiniRun,
   clearExporterJobFiles,
   dismissExportRun,
   dismissHoudiniRun,
@@ -729,8 +730,30 @@ export function DthExportAction({
     houdiniOpenedLineRef.current = ''
     lastHoudiniLinesRef.current = []
     try {
+      // The queue and the report ride along into the run's own sidecar, so a
+      // window that reloads mid-leg can finish the WHOLE process: the projects
+      // behind this one still start, and the end report still names the legs
+      // this window never saw.
+      const report = runReportRef.current
       await startHoudiniExport({
-        data: { projectId, id: character.id, hipPath: first, scenes },
+        data: {
+          projectId,
+          id: character.id,
+          hipPath: first,
+          scenes,
+          remaining: rest,
+          reportLines: [
+            ...(report?.daz
+              ? [
+                  `Daz: ${report.daz.total - report.daz.failed}/${report.daz.total} scene${report.daz.total === 1 ? '' : 's'} exported`,
+                  ...report.daz.errors,
+                ]
+              : []),
+            ...(report?.houdini.map((leg) => leg.line) ?? []),
+          ],
+          anyFailed:
+            (report?.daz?.failed ?? 0) > 0 || (report?.houdini.some((leg) => leg.failed) ?? false),
+        },
       })
       setHoudini({ state: 'starting', startedAtMs: Date.now() })
       publishPipeline(progressRef.current, { state: 'starting', startedAtMs: Date.now() })
@@ -980,6 +1003,51 @@ export function DthExportAction({
     setHoudini(run)
     publishPipeline(progressRef.current, run)
   }
+  // A Houdini leg still running when this window reloaded: the watch is memory
+  // (and the leg is HEADLESS, so nothing on screen would say so), and with it
+  // went the queue of projects behind it and the accumulated report. The run's
+  // own sidecar carries all three — adopt it, re-arm the queue and the report,
+  // and rebuild the cards. Mount-only: the character can't change under a
+  // mounted editor, and a second adopt would fight the live watch.
+  useEffect(() => {
+    let active = true
+    void adoptHoudiniRun({ data: { projectId, id: character.id } })
+      .then((plan) => {
+        if (!active || !plan) return
+        currentHipRef.current = stemOf(plan.hipPath)
+        houdiniQueueRef.current =
+          plan.remaining.length > 0
+            ? { projects: plan.remaining, scenes: plan.sceneScope }
+            : null
+        // The report is REBUILT from the lines the plan carries — this window
+        // never saw those legs, and the one end-of-everything report has to
+        // name them anyway. They ride as pre-formatted lines (their per-leg
+        // timings are gone with the window that measured them).
+        runReportRef.current = {
+          houdini: plan.reportLines.map((line) => ({ line, failed: plan.anyFailed })),
+        }
+        pipelineRef.current = {
+          daz: [],
+          houdini: [plan.hipPath, ...plan.remaining].map((path) => ({
+            path,
+            label: stemOf(path),
+            networks: plan.sceneScope.map(stemOf),
+          })),
+        }
+        // Arm the watch's own poll: `houdini` state drives the interval.
+        setHoudini({ state: 'starting', startedAtMs: plan.startedAtMs })
+        publishPipeline(progressRef.current, { state: 'starting', startedAtMs: plan.startedAtMs })
+      })
+      .catch(() => {
+        // Read-only convenience — without it the leg simply stays invisible,
+        // which is the behaviour this replaces.
+      })
+    return () => {
+      active = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   useRefetchOnFocus(
     () => {
       void refreshStatus()

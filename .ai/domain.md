@@ -741,16 +741,21 @@ older runtimes as stale.
   sidecar — it rewrites the job file from its own model, so anything stored
   IN the job file beyond the v1.2.0 contract would be dropped at pickup.
   Contract: docs/exporter-plugin-job-file.md.
-  **The DAZ leg only.** The HOUDINI leg has no sidecar: `activeHoudiniRun`
-  lives in `api/houdini.ts` module memory and the editor's poll interval is
-  armed only while something is ALREADY being watched (`pending ||
-  progress || houdini` in `dth-export.tsx`), so a reload during that leg
-  drops the watch and never re-adopts — and since the leg went headless
-  there is no window either, making it invisible: hython finishes, writes
-  its result, and the job/result files sit in the character folder until the
-  next run overwrites them. Restoring it needs BOTH halves — a second
-  sidecar AND a mount-time probe that arms the poll without an existing
-  watch — which is why it is not the Daz sidecar's mirror image.
+  **The HOUDINI leg has its own sidecar**, and needed both halves the Daz one
+  didn't: `.dth_houdini_run.json` BESIDE the job/result files it describes (per
+  character — an app-data singleton would let a second character's leg
+  overwrite the first's) carrying the current project, the queue behind it, the
+  scene scope, the start time and the report so far; plus a MOUNT-TIME probe,
+  because that watch's poll is armed only while something is already being
+  watched (`pending || progress || houdini`), so nothing would ever ask.
+  `adoptHoudiniRun` re-arms `activeHoudiniRun` from the recorded paths (owning
+  character only, and only while a job or result file still exists) and the
+  editor rebuilds the queue, the report and the cards from the plan. Without
+  it a reload during that leg was INVISIBLE — headless, so no window either:
+  hython finished, the studio never reported it, and every queued project
+  silently never started. The plan dies with the run (finish, dead, or a
+  Ctrl-stop), and a continuing queue writes a fresh one when its next project
+  arms — strictly after the clear, so the clear can't eat its successor.
   Mid-NODE the result also carries a live `activity` channel: 456.py's
   `ActivityCapture` tees `sys.stdout`/`stderr` + `hou.ui.setStatusMessage` while
   `do_export` runs and streams the lines (throttled 0.5 s, rolling 40) into the
