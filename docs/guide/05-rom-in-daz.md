@@ -235,11 +235,12 @@ ones that carry on with the results once the Daz side is done. They come
 pre-selected whenever scenes are, so a plain **Start** does the whole round
 trip; untick them and the run ends with Daz. Their own **Mode**:
 
-- **Open only** — just open the project, run nothing (needs exactly one
-  project selected — picking a second flips to the export run).
 - **Export selected scenes** — the default: run the projects' DazToHue
   exports for the checked Daz scenes.
-- **Export all** — run them for every linked scene, whatever is checked.
+- **Skip Houdini — use last exports** — run no Houdini at all and hand the
+  exports already on disk to the Unreal projects below. Offered only when the
+  studio project has a linked `.uproject`, since without one it would mean
+  "do nothing".
 
 **The project list follows the scene selection.** Untick a Daz scene and the
 projects that only import *that* scene leave the run with it; tick it back on
@@ -257,9 +258,41 @@ Several selected projects run **one after another**: each loads and exports,
 then the next starts — the outcome waits for the single report at the end.
 
 **ROM only** is the exception: it builds no fresh export, so there is nothing
-for a Houdini export to pick up — the projects don't pre-select there, and a
-project you tick by hand can only be **opened** (the export modes are
-disabled, and one project at a time).
+for a Houdini export to pick up — the projects don't pre-select there, and the
+export mode is disabled.
+
+> To just **open** a Houdini project, use the open button on its card — the
+> dialog runs the pipeline, and a mode that ran nothing sat oddly in it. And
+> "export every scene" is what checking every scene in the list above means, so
+> that mode is gone too.
+
+**Unreal projects** is the third leg, and appears once the studio project has
+[linked `.uproject` files](./03-first-project.md#linking-unreal-projects). Tick
+one and the finished export is **queued for import** when the whole run ends —
+every export set the character has, in one job. Nothing waits on Unreal: the
+job is a file, and the project's
+[DTH Character Studio Runner](./06-into-houdini.md#send-to-unreal) picks it up whenever
+that editor is next open.
+
+Under the projects it lists the character's **export sets**, ticked the same
+way: a set the chosen project already holds names the folder it will refresh, a
+set it doesn't is marked *not in this project* and stays unticked — no variant
+lands in Unreal without you asking. Untick everything and the run simply doesn't
+send.
+
+Like the other two lists, it **pre-selects what the run is for** — and "what the
+run is for" means the sets the checked Houdini projects actually write (each
+project's export nodes name them, read when the project is scanned). Export a
+variant this Unreal project has never seen and nothing pre-ticks; export one it
+already holds and both the project and that set do. A project the scan hasn't
+reached yet says nothing about what it writes, so the pre-selection falls back
+to "does this project hold this character at all".
+
+A project that already holds this character starts ticked, a project that
+doesn't stays for you to decide — putting a character into an
+Unreal project for the first time is a choice, not a continuation. The section
+needs somewhere to send from: tick a Houdini project to export first, or pick
+**Skip Houdini — use last exports** to send the exports already on disk.
 
 Press **Start**: the batch is handed to Daz Studio, where the bundled
 [**Runner plugin**](./02-setup.md#daz-studio-plugins)
@@ -277,26 +310,35 @@ it first. (A skip-Daz run doesn't need the Runner at all.)
 The character header becomes the run's own display for as long as it lasts:
 
 <p align="center">
-  <img width="900" alt="the character header mid-run — task cards, the log window and the progress meters" src="screenshots/dth-export-running.png" />
+  <img width="900" alt="the character header mid-run — the run's task list and its progress bar" src="screenshots/dth-export-running.png" />
   <br>
-  <sub><em>The live pipeline: what is left to do, what is being said, and how far along it is.</em></sub>
+  <sub><em>The live pipeline: one list of what the run does, and how far through it is.</em></sub>
 </p>
 
-- **Task cards**, numbered in run order — every selected Daz scene, then every
-  Houdini project. The column stacks from the **bottom**: the card being worked
-  on is the lit one at the very bottom, beside the buttons, and everything still
-  to come waits above it (so the numbers read downwards, 3 · 2 · 1). A finished
-  card sails off and the queue drops into its place, leaving the column always
-  reading as what is left.
-- **A log window** tailing whichever leg is talking. The Daz scripts report each
-  step as they start it *and* as it lands (*generating ROM* → *ROM generated*),
-  so the window names what is running and not only what finished; the Houdini
-  leg streams the DazToHue HDA's own output.
-- **A progress bar** for the unit being worked on — plus a second one above it
-  whenever the leg spans several units (several scenes, or several DazToHue
-  networks in one project). Both are a track and a percent, nothing else: the
-  cards say what is running and the log window's newest line says how it's
-  going.
+- **One task list**, numbered in run order — **one row per job**, which is what
+  makes it worth reading:
+  - every selected **Daz scene**, saying what the run does to it (*ROM +
+    Export*, *Export only*, …);
+  - every **DazToHue network**, not merely every `.hip` — a project holding two
+    networks is two rows, each named as the network is, with its project beside
+    it;
+  - every **export set going into an Unreal project** — two characters
+    re-imported into the same project are two imports, so they are two rows,
+    each saying *Re-import* or *First import* and which project it lands in.
+
+  The row being worked spins; a finished one is ticked off and stays, so the
+  list reads as the whole run rather than only what is left. The mark on the
+  right is the application doing it.
+- **One progress bar** underneath, across the whole run, with the **newest thing
+  the run said** printed on it as a single line. The Daz scripts report each step
+  as they start it *and* as it lands (*generating ROM* → *ROM generated*); the
+  Houdini leg passes on the DazToHue HDA's own output; the Unreal leg says when
+  the job was queued and how the import ended.
+
+Only the newest line is shown. The full output of each leg stays on disk, which
+is where a post-mortem is read from anyway: the Runner's progress log, the
+Houdini console log (`.dth_houdini_console.log` in the character folder) and the
+Unreal editor's own log.
 
 The button beside it simply reads **Working** with the elapsed time; the numbers
 live in the display. Nothing is announced mid-run: **one report** at the very
@@ -322,7 +364,7 @@ modifier: nothing has started yet.
 
 **Reloading the app doesn't lose the run.** Every handoff writes its plan down
 beside its own files, so the character's editor picks the run back up when it
-opens: the elapsed clock, the task cards, the Houdini projects still to come and
+opens: the elapsed clock, the task list, the Houdini projects still to come and
 the report so far. Any *other* window shows the same run read-only.
 
 ### Carry on into Houdini
@@ -338,9 +380,9 @@ What happens:
    waits until the *whole* round trip is done.
 2. Houdini runs the project **headless**: `hython` loads it in the background,
    works the batch and exits again. No window opens, so there is nothing to wait
-   for while a big project loads and nothing of yours to close — the log window
-   in the header is where you watch it. Want a project left open to work in?
-   That's the **Open only** mode, which still opens Houdini normally.
+   for while a big project loads and nothing of yours to close — the task list
+   in the header is where you watch it. Want a project open to work in instead?
+   Open it from its card on the character page; this dialog runs the pipeline.
 3. Only the networks importing **the scenes you ticked** export. A project
    holding networks for other scenes — or other characters — is left alone.
 4. After the last project, **one report** names every leg — *"Daz: 2/2 scenes

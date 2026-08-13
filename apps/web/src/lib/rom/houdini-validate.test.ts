@@ -5,6 +5,8 @@ import {
   emptyScanStore,
   freshScan,
   hdaLibraryKey,
+  renameScanEntry,
+  SCAN_ANSWER_VERSION,
   scanCacheKey,
   withScanResults,
 } from './houdini-project-cache.ts'
@@ -22,6 +24,7 @@ function scanned(over: Partial<MaterialScanProject> = {}): MaterialScanProject {
     job: CHAR,
     fps: 30,
     imports: [],
+    exportSets: [],
     refs: { collapsible: 0, foreign: 0, broken: [], hipRelative: [], missingTextures: [] },
     prefill: { fillable: [], missing: [] },
     ...over,
@@ -366,5 +369,45 @@ describe('the scan store', () => {
     // The SOURCE store doesn't: a template stays cached across the characters
     // it is copied into, which is the whole reason it is a separate store.
     expect(Object.keys(withScanResults(store, [], 'now').projects)).toHaveLength(2)
+  })
+})
+
+
+describe('renameScanEntry — a renamed project keeps its scan', () => {
+  const FROM = `${CHAR}/houdini/Kira.hiplc`
+  const TO = `${CHAR}/houdini/KiraClassic.hiplc`
+  const KEY = scanCacheKey(FROM, 1000, `${CHAR}/houdini/daz-export`, 'hda:1:2')
+  const store = () =>
+    withScanResults(
+      emptyScanStore(),
+      [{ hipPath: FROM, key: KEY, project: scanned({ hipPath: FROM }) }],
+      'now',
+    )
+
+  it('follows the file: map key, freshness key and hipPath all move', () => {
+    // A rename touches neither the file's mtime nor its contents, so every
+    // OTHER part of the verdict is still true — which is what makes re-keying
+    // honest here. Without it the entry is orphaned and every reader answers
+    // "never scanned", which is how a rename silently un-scanned a project.
+    const moved = renameScanEntry(store(), FROM, TO)
+    expect(Object.keys(moved.projects)).toEqual([TO.toLowerCase()])
+    const entry = moved.projects[TO.toLowerCase()]
+    expect(entry.project.hipPath).toBe(TO)
+    // …and it reads as FRESH under the new path, which is the whole point.
+    expect(
+      freshScan(moved, TO, scanCacheKey(TO, 1000, `${CHAR}/houdini/daz-export`, 'hda:1:2')),
+    ).not.toBeNull()
+    // Only the name changed — the rest of the key is carried verbatim.
+    expect(entry.key.split('|').slice(1)).toEqual([
+      '1000',
+      `${CHAR}/houdini/daz-export`.toLowerCase(),
+      'hda:1:2',
+      String(SCAN_ANSWER_VERSION),
+    ])
+  })
+
+  it('leaves a store that never knew the project alone', () => {
+    const untouched = renameScanEntry(store(), `${CHAR}/houdini/Someone.hiplc`, TO)
+    expect(Object.keys(untouched.projects)).toEqual([FROM.toLowerCase()])
   })
 })

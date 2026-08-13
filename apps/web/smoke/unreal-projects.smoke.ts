@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test'
 
 import { P, UPROJECT, buildSeed } from './fixtures.ts'
 import { installTauriMock } from './tauri-mock.ts'
+import { UNREAL_BRIDGE_VERSION } from '../src/lib/rom/unreal-jobs.ts'
 
 // The project window's Unreal-projects footer bar: unlinking a project pauses
 // on a confirm dialog (the same recipe as removing a Daz scene / Houdini
@@ -61,18 +62,22 @@ test('the install dialog offers DTH content + the engine-matched plugin builds',
   await page.getByRole('button', { name: 'Install DTH content and plugins into DemoGame' }).click()
   const dialog = page.getByRole('dialog', { name: /Install into DemoGame/ })
   await expect(dialog).toBeVisible()
-  // The engine is read from the .uproject; both offered items are pre-checked,
+  // The engine is read from the .uproject; every offered item is pre-checked,
   // and only the 5.7 build of the bridge plugin is offered (one row, not two).
+  // Three rows: DTH content, the studio's own DTHCharacterStudioRunner, that one build.
   await expect(dialog.getByText('Unreal Engine 5.7')).toBeVisible()
   const boxes = dialog.getByRole('checkbox')
-  await expect(boxes).toHaveCount(2)
+  await expect(boxes).toHaveCount(3)
   for (const box of await boxes.all()) await expect(box).toBeChecked()
 
   await dialog.getByRole('button', { name: 'Install', exact: true }).click()
-  // Success toast names both installs; the dialog closes.
+  // Success toast names every install; the dialog closes.
   await expect(page.getByText(/Installed into DemoGame/)).toBeVisible()
   await expect(page.getByText(/DTH content \(7 files\)/)).toBeVisible()
   await expect(page.getByText(/DazToUnreal \(3 files\)/)).toBeVisible()
+  // The bridge is written by the FS layer, not by a native install command —
+  // the one item whose whole install path runs above the mocked boundary.
+  await expect(page.getByText(/DTH Character Studio Runner \(3 files\)/)).toBeVisible()
   await expect(dialog).toHaveCount(0)
 })
 
@@ -141,4 +146,36 @@ test('the install dialog judges plugin builds by BuildId, not by their folder na
   await expect(bridge).toHaveCount(1)
   await expect(bridge.getByText('built for another engine build')).toHaveCount(0)
   await expect(bridge.getByRole('checkbox')).toBeChecked()
+})
+
+test('a project holding an OLD bridge is flagged on its card', async ({ page }) => {
+  // The studio ships that plugin, so a project keeps whatever was installed the
+  // day it was installed — and an out-of-date bridge imports with older rules
+  // or refuses the job outright. The card says so; Install is the fix, and the
+  // warning sits next to it.
+  const seed = buildSeed({ activeProjectFile: P.dcsp, unrealProjects: [UPROJECT] })
+  const dir = UPROJECT.replace(/\/[^/]*$/, '')
+  seed.files[`${dir}/Plugins/DTHCharacterStudioRunner/DTHCharacterStudioRunner.uplugin`] = JSON.stringify({
+    Version: 0.5,
+  })
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await expect(page.getByText('DemoGame', { exact: true })).toBeVisible()
+  await expect(page.getByLabel('Bridge plugin out of date')).toBeVisible()
+})
+
+test('a project with the CURRENT bridge — and one with none — are not flagged', async ({
+  page,
+}) => {
+  // 0 is "no bridge", which is not "out of date": different message, different
+  // fix, and crying wolf on a project nobody has installed into is noise.
+  const seed = buildSeed({ activeProjectFile: P.dcsp, unrealProjects: [UPROJECT] })
+  const dir = UPROJECT.replace(/\/[^/]*$/, '')
+  seed.files[`${dir}/Plugins/DTHCharacterStudioRunner/DTHCharacterStudioRunner.uplugin`] = JSON.stringify({
+    Version: UNREAL_BRIDGE_VERSION,
+  })
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await expect(page.getByText('DemoGame', { exact: true })).toBeVisible()
+  await expect(page.getByLabel('Bridge plugin out of date')).toHaveCount(0)
 })

@@ -1,5 +1,10 @@
 {
   "engineAssociation": "5.7",
   "dthPresent": true,
-  "installedPlugins": ["DazToUnreal", "MyHelper"]
+  "installedPlugins": [
+    "DTHCharacterStudioRunner",
+    "DazToUnreal",
+    "MyHelper"
+  ],
+  "bridgeVersion": 1
 }

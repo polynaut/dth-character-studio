@@ -3,6 +3,27 @@
 The non-obvious "how we do things here". CLAUDE.md has the short version; this is
 the reference.
 
+## Shipped-plugin versions
+
+The studio ships two plugins into other people's applications — the Daz
+**Runner** and Unreal's **DTH Character Studio Runner** — and a plugin folder keeps
+whatever was installed the day it was installed. So each carries a version the
+studio can read back, and **any change to the shipped files bumps it**:
+
+- `UNREAL_BRIDGE_VERSION` (`lib/rom/unreal-jobs.ts`) → written into the
+  bridge's `.uplugin` as `Version`, read back by `unreal_project_state`
+  (`bridgeVersion`), compared by `bridgeOutdated`. An out-of-date bridge puts an
+  amber warning on the Unreal project card and refuses a send with the two
+  numbers named.
+- Do NOT reuse `UNREAL_JOB_VERSION` for this. That one is the job/result
+  CONTRACT — what the two sides must agree on — and only changes when the file
+  shape does. A bug fix in `dth_runner.py` changes no contract and still has to
+  reach every project holding the old copy.
+
+`0` means "no plugin", never "old plugin": different message, different fix.
+Fixtures that seed an installed bridge import the constant rather than hard-coding
+a number, so a bump cannot strand them.
+
 ## Working rules (every task, before anything else)
 
 This project has ONE maintainer, working on it in his spare time. Every round

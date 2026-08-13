@@ -972,6 +972,20 @@ current code before relying on details, but assume the *lesson* still holds.
 
 ## Web app
 
+- **A default set in an effect can be cancelled by a handler somewhere else in
+  the same component — and nothing fails when it is.** The Utils drawer ticked
+  the opened card's nodes on open (#690). #691 made every tab switch clear the
+  target selection (it is per node KIND), and #706 made the drawer land on
+  General, which shows no node list — so from #706 on, the only way to reach a
+  tickable list was through a switch that wiped the ticks first. The preselect
+  ran, wrote state nothing displayed, and was then thrown away, for four
+  releases, while its own comment AND the guide kept promising it. No test
+  caught it because every spec that needed a target ticked one itself. What
+  caught it was a REGENERATED SCREENSHOT: the guide shot showed the box empty
+  under a caption saying it starts selected. Two rules out of it — when a
+  feature's default lives in one place and its reset in another, one of them is
+  dead and only the rendered UI says which; and a screenshot suite is a
+  behaviour assertion, so read what comes out of it, don't just commit it.
 - **Every window loads the SAME document, so the start URL never says which
   project it is for.** The config window starts on `/` — which the Home route
   matches — and a runtime window (`WebviewUrl::App("index.html")`) on
@@ -1368,6 +1382,17 @@ current code before relying on details, but assume the *lesson* still holds.
   thin the label evidence is throughout — the BuildIds of these two zips
   (47537391 / 55116800) matched 5.7 and 5.8 exactly, so the binaries knew all
   along what the name got wrong.
+- **A path-keyed cache is orphaned by a RENAME, and every reader then answers
+  "never scanned".** Measured 2026-08-13, right after editable project names
+  shipped: renaming a `.hip` left its scan entry under the old path, so the DTH
+  Export dialog stopped pre-selecting Unreal projects — it no longer knew which
+  export sets those projects write — and the only cure was a Rescan the user had
+  no reason to suspect. `renameScanEntry` (houdini-project-cache.ts) moves the
+  entry: map key, the freshness key's first segment, and the project's own
+  `hipPath`. Re-keying is honest ONLY because a rename touches neither mtime nor
+  contents, so every other part of the verdict is still true — re-dating an
+  entry would not be. The lesson generalises past this cache: anything keyed by
+  path needs a hand-off wherever the studio itself moves a file.
 - **`HKLM\SOFTWARE\EpicGames\Unreal Engine` can be MISSING an installed
   engine.** Measured 2026-08-12: a machine with 5.6, 5.7 and 5.8 installed had
   no 5.8 key, so the studio never offered it, a project was generated for 5.7,

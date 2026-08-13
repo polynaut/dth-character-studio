@@ -395,8 +395,11 @@ export function HoudiniUtilsPanel({
   open,
   onClose,
   character,
-  /** The card the panel was opened from — its nodes start selected. */
-  initialHipPath,
+  /** The ONE project this drawer acts on — the card its Utils button was
+   *  pressed on. Required, because that is the whole scope of the drawer: every
+   *  check, every repair and every transfer target below belongs to this `.hip`
+   *  and no other. */
+  targetHip,
   /** The owning project — used to offer its Houdini template attachments. */
   projectId,
   /** The character's own folder — what `$JOB` should be (v0.64). */
@@ -405,12 +408,30 @@ export function HoudiniUtilsPanel({
   open: boolean
   onClose: () => void
   character: Character
-  initialHipPath?: string
+  targetHip: string
   projectId?: string
   charFolder?: string
 }) {
-  // --- target side: this character's own projects ---------------------------
-  const targets = character.houdiniProjects
+  // --- target side: the ONE project this drawer was opened for ---------------
+  //
+  // Not `character.houdiniProjects`. Houdini project utils are PER PROJECT —
+  // that is why the button lives on the project card and not on the section
+  // header — so listing the character's other projects here offered repairs and
+  // transfer targets the user never asked about, three clicks away from the
+  // card they actually pressed. Everything downstream reads `targetScan`, so
+  // narrowing the input scopes the whole drawer: one project's checks, one
+  // project's nodes, one project's repairs.
+  //
+  // The SOURCE side is deliberately still cross-project — copying a setup means
+  // copying it FROM somewhere else, which is the one thing here that legitimately
+  // names another project.
+  //
+  // Kept as an ARRAY because everything below it — the scan call, the cache
+  // filter, the coverage check — speaks in file lists, and because a `''` path
+  // must resolve to "nothing to scan" rather than to a scan of the empty
+  // string: the caller only mounts this with a real card path, and the guards
+  // that read `targets.length` are what keep that from being an assumption.
+  const targets = targetHip ? [targetHip] : []
   const [targetScan, setTargetScan] = useState<ScanState>(EMPTY_SCAN)
   const [selectedTargets, setSelectedTargets] = useState<ReadonlySet<string>>(new Set())
 
@@ -534,13 +555,7 @@ export function HoudiniUtilsPanel({
       // button that did nothing. Which is exactly how this read before it could
       // force at all: the cache answered in ten milliseconds and the spinner
       // never became visible. Say it ran.
-      if (force) {
-        utilsToast.success(
-          projects.length === 1
-            ? 'Rescanned the Houdini project'
-            : `Rescanned ${projects.length} Houdini projects`,
-        )
-      }
+      if (force) utilsToast.success('Rescanned the Houdini project')
       return projects
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -580,7 +595,13 @@ export function HoudiniUtilsPanel({
     // Nudge the sweep in case this drawer was reached without the page mounting
     // one (it coalesces, so an already-running sweep is joined, not doubled).
     void scanCharacterHoudiniProjects({ data: { projectId, id: character.id } })
-    const cached = await fetchCachedHoudiniScans({ data: { projectId, id: character.id } })
+    const allCached = await fetchCachedHoudiniScans({ data: { projectId, id: character.id } })
+    // The store answers for every project of the character, so it has to be
+    // narrowed to THIS one before anything is shown — otherwise scoping the scan
+    // would still leave the character's other projects on screen, served from
+    // the cache, which is the exact thing this drawer stopped doing.
+    const wanted = new Set(targets.map((t) => normalizePath(t).toLowerCase()))
+    const cached = allCached.filter((p) => wanted.has(normalizePath(p.hipPath).toLowerCase()))
     const covered = new Set(cached.map((p) => normalizePath(p.hipPath).toLowerCase()))
     const uncovered = targets.filter((t) => !covered.has(normalizePath(t).toLowerCase()))
     if (uncovered.length === 0) {
@@ -609,25 +630,24 @@ export function HoudiniUtilsPanel({
     }
   }
 
-  // Read the character's projects when the drawer opens. Opening a `.hip` costs
-  // real seconds, so this deliberately does NOT re-run on every render — only on
-  // open, on an explicit rescan, and when the linked set changes.
+  // Read the project when the drawer opens. Opening a `.hip` costs real seconds,
+  // so this deliberately does NOT re-run on every render — only on open, on an
+  // explicit rescan, and if the target changes.
+  //
+  // It does NOT preselect the target's nodes, and the drawer is careful to
+  // promise that nowhere. It used to: opening from a card ticked that project's
+  // nodes, back when the drawer opened straight onto Material (#690). Two
+  // changes since then made that unobservable — every tab switch clears the
+  // selection, because it is per node KIND (#691), and the drawer now lands on
+  // General, which shows no node list at all (#706). So the only tick a
+  // transfer tab can ever show is one the USER made, which is also the right
+  // default for something that writes to a `.hip`: the run's targets are chosen,
+  // not inherited.
   useEffect(() => {
     if (!open) return
-    void (async () => {
-      const projects = await loadCachedTargets()
-      // Preselect the card's own nodes — the panel was opened FROM that project.
-      const from = initialHipPath
-      if (!from) return
-      const match = projects.find(
-        (p) => normalizePath(p.hipPath).toLowerCase() === normalizePath(from).toLowerCase(),
-      )
-      if (match) {
-        setSelectedTargets(new Set(match.nodes.map((n) => nodeKey(match.hipPath, n.path))))
-      }
-    })()
+    void loadCachedTargets()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, targetsKey, initialHipPath])
+  }, [open, targetsKey])
 
   // Candidate source characters: everything the studio can reach that actually
   // HAS a Houdini project, minus this character (copying onto itself is refused
@@ -772,14 +792,17 @@ export function HoudiniUtilsPanel({
 
   // Target refs for the transfer, minus the source node itself.
   //
-  // Filtered to the ACTIVE KIND. The selection is preseeded with every node of
-  // the card the drawer was opened from — all kinds at once — and a project
-  // typically holds a material, a skeleton and an occlusion node, so an
+  // Filtered to the ACTIVE KIND. The selection USED to be preseeded with every
+  // node of the card the drawer was opened from — all kinds at once — and a
+  // project typically holds a material, a skeleton and an occlusion node, so an
   // occlusion run was being pointed at all three ("3 target nodes selected"
   // under a single ticked box). The Python refuses a node of the wrong type per
   // target, so nothing was ever written to one; the count and the report were
   // the lie. The node LIST is filtered by kind already — this makes the run
-  // agree with what the user can actually see and tick.
+  // agree with what the user can actually see and tick. The preseed is gone now
+  // (see the open effect), so the filter is a belt to that brace rather than the
+  // only thing holding the count honest: keep it, because it is what guarantees
+  // the count can never outgrow the visible list again.
   const targetRefs = useMemo(() => {
     const refs: Array<{ hipPath: string; nodePath: string }> = []
     for (const project of targetScan.projects) {
@@ -1330,9 +1353,12 @@ export function HoudiniUtilsPanel({
             <img src={houdiniLogo} alt="" aria-hidden className="size-5 shrink-0 object-contain" />
             <span className="truncate">
               Houdini project utils
+              {/* The PROJECT is the subject, not the character — the drawer acts
+                  on this one `.hip` and nothing else, so its name belongs in the
+                  title rather than as an "opened from" aside next to a character
+                  who may own several. */}
               <span className="ml-2 text-sm font-normal text-muted-foreground">
-                {character.name}
-                {initialHipPath ? ` · opened from ${fileName(initialHipPath)}` : ''}
+                {fileName(targetHip)} · {character.name}
               </span>
             </span>
           </span>
@@ -1394,19 +1420,22 @@ export function HoudiniUtilsPanel({
 
             {/* ---------------------------------------------------------- target */}
             <section>
-              <Label className="mb-1 flex w-fit items-center gap-1 text-base font-semibold">
-                Target
-                <InfoPopup label="Target — more information">
-                  This character&apos;s linked Houdini projects and the DazToHue material nodes
-                  found in each. Select every node that should receive the copied bakers.
-                </InfoPopup>
-              </Label>
-              <div className="mb-2 flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">
-                  {targets.length === 0
-                    ? 'No Houdini projects linked to this character.'
-                    : `${targets.length} linked project${targets.length === 1 ? '' : 's'}`}
-                </span>
+              {/* Title + Rescan on one line, the shape the General tab's own
+                  heading has. The file name is deliberately NOT printed here:
+                  the drawer title carries it, and the project card immediately
+                  below prints it again as its heading — three copies of one
+                  name inside 200px, where the line used to carry a COUNT of
+                  the character's projects and so said something the cards
+                  didn't. */}
+              <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+                <Label className="flex w-fit items-center gap-1 text-base font-semibold">
+                  Target
+                  <InfoPopup label="Target — more information">
+                    The DazToHue material nodes in <strong>this</strong> project. Select every node
+                    that should receive the copied bakers. Utils act on the one project you opened
+                    them from — to work on another, open its own card&apos;s Utils.
+                  </InfoPopup>
+                </Label>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -1423,6 +1452,10 @@ export function HoudiniUtilsPanel({
                 selected={selectedTargets}
                 disabledKey={selectedSource}
                 onToggle={toggleTarget}
+                // Not "no projects linked": this one IS linked — it is the card
+                // the drawer was opened on. An empty list here means the scan
+                // came back without it.
+                empty="The scan returned nothing for this project — try Rescan."
               />
             </section>
 
@@ -1838,7 +1871,7 @@ export function HoudiniUtilsPanel({
                 — and each button still carries its own reason in its tooltip. */}
             <span className="mr-auto text-xs text-muted-foreground">
               {targetScan.loading
-                ? 'Reading the projects…'
+                ? 'Reading the project…'
                 : fixesAvailable === 0
                   ? 'Nothing to fix — every check already passes.'
                   : `${fixesAvailable} of 3 checks need fixing`}
@@ -1853,8 +1886,8 @@ export function HoudiniUtilsPanel({
               disabled={busy || refreshTargets.length === 0}
               title={
                 refreshTargets.length === 0
-                  ? 'No project could be read'
-                  : 'Run the DazToHue shelf’s own Refresh Assets on every project the scan could open'
+                  ? 'The project could not be read'
+                  : 'Run the DazToHue shelf’s own Refresh Assets on this project'
               }
               onClick={() => {
                 setActionReport(null)
@@ -1872,7 +1905,7 @@ export function HoudiniUtilsPanel({
                 !charFolder
                   ? 'The character folder could not be resolved'
                   : staleSettingProjects.length === 0
-                    ? 'Nothing differs — every project already points $JOB at the character folder and runs at 30 fps'
+                    ? 'Nothing differs — this project already points $JOB at the character folder and runs at 30 fps'
                     : undefined
               }
               onClick={() => {
@@ -1902,7 +1935,7 @@ export function HoudiniUtilsPanel({
               disabled={busy || prefillTargets.length === 0 || !projectId}
               title={
                 prefillBlockedByJob > 0
-                  ? `Repair the project settings first — the values are anchored on $JOB, so ${prefillBlockedByJob} project(s) would get paths anchored on the wrong folder, or on none.`
+                  ? 'Repair the project settings first — the values are anchored on $JOB, so this project would get paths anchored on the wrong folder, or on none.'
                   : prefillTargets.length === 0
                     ? 'Nothing blank the studio has an answer for'
                     : undefined
@@ -2435,9 +2468,10 @@ function GeneralTab({
 }) {
   return (
     <div className="space-y-4">
-      {/* Title + Rescan on one line, the count beneath — one block, so the
-          section's `space-y-4` keeps its distance from the cards below while
-          the count stays tight under its own heading. */}
+      {/* Title + Rescan on one line. There used to be a "N projects read" count
+          under it, from when this tab listed the character's whole set; with one
+          project it only ever said "1 project read" — and the card below already
+          names it. */}
       <div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <Label className="flex w-fit items-center gap-1 text-base font-semibold">
@@ -2478,9 +2512,6 @@ function GeneralTab({
             <RefreshCw className={scan.loading ? 'animate-spin' : ''} /> Rescan
           </Button>
         </div>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {scan.projects.length} project{scan.projects.length === 1 ? '' : 's'} read
-        </p>
       </div>
 
       {scan.loading ? (
@@ -2493,8 +2524,11 @@ function GeneralTab({
           {scan.error}
         </p>
       ) : scan.projects.length === 0 ? (
+        // The drawer always HAS a project — it is the card its button was
+        // pressed on — so "none linked" would be a false explanation. Nothing
+        // here means the scan came back without it.
         <p className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
-          No Houdini projects linked to this character.
+          The scan returned nothing for this project — try Rescan.
         </p>
       ) : (
         <div className="space-y-3">

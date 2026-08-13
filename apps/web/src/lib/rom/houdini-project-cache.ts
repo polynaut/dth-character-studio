@@ -141,8 +141,23 @@ export function scanCacheKey(
  *     entry answers it with an empty list, which reads as "this project's
  *     textures are all present" — the exact false all-clear the field exists to
  *     stop, and unfixable from the UI since Rescan reads through this cache.
+ * 5 — + `exportSets` — each export node's character name, which is the folder
+ *     the HDA writes under the character's `export/`. THIRD time this trap was
+ *     paid for, and this one bit within the hour: an older entry has no such
+ *     field, zod defaults it to `[]`, and `[]` is indistinguishable from "this
+ *     project has no export nodes" — so the DTH Export dialog read every
+ *     already-scanned project as writing nothing at all. Bumping is what makes
+ *     an old entry say "ask me again" instead of answering a question it was
+ *     never asked.
+ * 6 — fixes what 5 READ. v5 looked for a `character_name` parm on the export
+ *     node; the HDA has no such parm (measured off DazToHue 2.5's own dialog
+ *     script) — it appends a GEOMETRY attribute, sourced from the import node's
+ *     `import_character_name`. So every v5 entry answered `[]` from a real
+ *     scan, which is a legitimate value ("no export nodes") and therefore would
+ *     have been served forever. A version is owed for a scan that starts
+ *     answering CORRECTLY, not only for one that starts answering at all.
  */
-export const SCAN_ANSWER_VERSION = 4
+export const SCAN_ANSWER_VERSION = 6
 
 /**
  * Fold the installed operator libraries into one comparable string — name, mtime
@@ -175,6 +190,44 @@ export function freshScan(
   if (!key) return null
   const entry = store.projects[scanStoreKey(hipPath)]
   return entry && entry.key === key ? entry.project : null
+}
+
+/**
+ * Follow a RENAMED project: the same scan, under the new path.
+ *
+ * A store entry is keyed by path — map key, the freshness `key`'s first
+ * segment, and the project's own `hipPath` — so renaming a `.hip` orphans its
+ * scan and every reader answers "never scanned". Measured on a real rename: the
+ * DTH Export dialog stopped pre-selecting Unreal projects, because it no longer
+ * knew which export sets those projects write, and the fix was a Rescan the
+ * user had no reason to suspect they needed.
+ *
+ * Nothing else about the verdict changes: a rename touches neither the file's
+ * mtime nor its contents, so the rest of the key (mtime, export root, installed
+ * HDAs, answer version) is still true — which is why re-keying is honest here
+ * where re-dating an entry would not be.
+ *
+ * A store with no entry for `fromHip` comes back untouched: nothing to follow.
+ */
+export function renameScanEntry(
+  store: HoudiniScanStore,
+  fromHip: string,
+  toHip: string,
+): HoudiniScanStore {
+  const fromKey = scanStoreKey(fromHip)
+  const entry = store.projects[fromKey]
+  if (!entry) return store
+  const projects = { ...store.projects }
+  delete projects[fromKey]
+  // The freshness key is `<path>|<mtime>|<exportRoot>|<tooling>|<version>` —
+  // only the first segment is about the name.
+  const [, ...rest] = entry.key.split('|')
+  projects[scanStoreKey(toHip)] = {
+    ...entry,
+    key: [scanStoreKey(toHip), ...rest].join('|'),
+    project: { ...entry.project, hipPath: toHip },
+  }
+  return { ...store, projects }
 }
 
 /**
