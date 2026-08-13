@@ -71,6 +71,25 @@ test('the card title renames the file on disk and repoints the link', async ({ p
   await expect(page.getByRole('button', { name: 'Rename Houdini project — Lara' })).toBeVisible()
 })
 
+test('fixing only the CAPITALISATION still repoints the card', async ({ page }) => {
+  // The narrow case that slips through two different "nothing changed" guards:
+  // the api's (on Windows the destination IS the source, so the collision check
+  // must be skipped) and the field's (a case-folding comparison would treat the
+  // repoint as unnecessary and leave the card showing the old spelling). Only
+  // an end-to-end run exercises both at once.
+  const LOWER = `${P.charFolder}/houdini/lara.hiplc`
+  await open(page, [LOWER])
+
+  await page.getByRole('button', { name: 'Rename Houdini project — lara' }).click()
+  const input = page.getByRole('textbox', { name: 'Houdini project name' })
+  await input.fill('Lara')
+  await input.press('Enter')
+
+  await expect.poll(() => linked(page), { timeout: 20_000 }).toEqual([RENAMED])
+  expect(await has(page, RENAMED)).toBe(true)
+  await expect(page.getByRole('button', { name: 'Rename Houdini project — Lara' })).toBeVisible()
+})
+
 test('a project linked from the user’s own tree has no editable title', async ({ page }) => {
   // The studio renames files it put there; a project linked in place is the
   // user's own, sitting in a tree the studio cannot see the rest of. Same rule

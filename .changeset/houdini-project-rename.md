@@ -9,7 +9,13 @@ edit the character title and the Daz scene cards already had.
 
 The extension is carried over rather than assumed: `.hip`, `.hiplc` and `.hipnc`
 encode the licence tier, and rewriting a commercial `.hip` to `.hiplc` would
-tell Houdini the file is licence-limited.
+tell Houdini the file is licence-limited. Typing the extension back yourself is
+fine — `Lara.hiplc` renames to `Lara.hiplc`, not `Lara.hiplc.hiplc` — and
+trailing dots or spaces are dropped, because Windows drops them too and the
+project would otherwise be saved under a name you cannot type back.
+
+Changing only the **capitalisation** is a real rename: `lara` → `Lara` renames
+the file and updates the card, instead of quietly doing nothing.
 
 Renaming is offered where *moving* a project still isn't, and that is not an
 inconsistency: everything the studio bakes into a project is anchored on `$JOB`

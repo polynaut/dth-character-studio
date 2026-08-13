@@ -458,7 +458,10 @@ export function HoudiniProjectsField({
     try {
       const moved = await renameHoudiniProject({ data: { hipPath: hip, newName: clean } })
       // Unchanged (same name, or the browser build's no-op) — nothing to persist.
-      if (normalizePath(moved).toLowerCase() === normalizePath(hip).toLowerCase()) return
+      // Compared EXACTLY, never case-insensitively: `lara` → `Lara` is a real
+      // rename that already happened on disk, and folding case here would skip
+      // the repoint and leave the card showing the name the file no longer has.
+      if (normalizePath(moved) === normalizePath(hip)) return
       // Repoint IN PLACE: the cards render in array order, so a rename must not
       // reshuffle the row the user is looking at.
       await persistPatch(

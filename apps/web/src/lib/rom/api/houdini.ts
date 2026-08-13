@@ -244,9 +244,34 @@ const renameProjectInput = z.object({
   /** Absolute path of the linked project file to rename. It stays in its
    *  folder — only the file NAME changes. */
   hipPath: z.string().min(1),
-  /** The new file name WITHOUT extension. */
+  /** The new file name WITHOUT extension (one typed WITH it is accepted too —
+   *  see {@link renameStem}). */
   newName: z.string().min(1),
 })
+
+/**
+ * The stem to rename to, out of what the user typed. Two corrections, both of
+ * things the card's own display invites:
+ *
+ * - **A repeated extension is dropped.** The card shows the name WITHOUT its
+ *   suffix, so a user who types it back (`Lara.hiplc`) means one file — not
+ *   `Lara.hiplc.hiplc`, which is what they used to get (measured).
+ * - **Trailing dots and spaces go.** Windows silently drops them from a file
+ *   name, so keeping them would save the project under a name the user cannot
+ *   type back and the studio would then report as missing.
+ *
+ * A `while` loop, not `/[. ]+$/` — a `+` immediately before `$` is the
+ * polynomial-ReDoS shape CodeQL flags (js/polynomial-redos). See
+ * `.ai/gotchas.md`.
+ */
+function renameStem(typed: string, ext: string): string {
+  let stem = typed.trim()
+  if (ext && stem.toLowerCase().endsWith(ext.toLowerCase())) {
+    stem = stem.slice(0, -ext.length)
+  }
+  while (stem.endsWith('.') || stem.endsWith(' ')) stem = stem.slice(0, -1)
+  return stem
+}
 
 /**
  * Rename a linked Houdini project IN PLACE, keeping its extension. Returns the
@@ -268,27 +293,41 @@ const renameProjectInput = z.object({
  */
 export async function renameHoudiniProject({ data }: { data: unknown }): Promise<string> {
   const { hipPath, newName } = renameProjectInput.parse(data)
-  const clean = newName.trim()
-  // REJECT rather than silently clean (which is what the Generate dialog's
-  // `cleanFileName` does to a value being typed for the first time): this name
-  // replaces one the user already has, and quietly turning it into something
-  // else is a worse answer than saying it cannot be used.
-  if (!clean || /[\\/:*?"<>|]/.test(clean) || clean === '.' || clean === '..') {
-    throw new Error('Enter a plain file name (no slashes or special characters).')
-  }
-  // Browser build: no filesystem to rename on — report the path unchanged, so
-  // the caller repoints nothing (the same "nothing happened" the pickers no-op to).
-  if (!isTauri()) return hipPath
   const norm = hipPath.replace(/\\/g, '/')
   const cut = norm.lastIndexOf('/')
+  // A path with no folder in it cannot be renamed in place, and must REFUSE
+  // rather than improvise: `lastIndexOf` answering -1 made `slice(0, cut)` eat
+  // the name's last character and invent a directory out of it (measured:
+  // `Kira.hiplc` → `Kira.hipl/Lara.hiplc`). Every caller passes an absolute
+  // linked path, so reaching this is a programming error, not a user one.
+  if (cut < 0) throw new Error('Renaming a Houdini project needs its full path.')
   const dir = norm.slice(0, cut)
   const file = norm.slice(cut + 1)
   // `> 0`, not `>= 0`: a leading dot is a name, not an extension separator.
   const dot = file.lastIndexOf('.')
   const ext = dot > 0 ? file.slice(dot) : ''
+  const clean = renameStem(newName, ext)
+  // REJECT rather than silently clean (which is what the Generate dialog's
+  // `cleanFileName` does to a value being typed for the first time): this name
+  // replaces one the user already has, and quietly turning it into something
+  // else is a worse answer than saying it cannot be used. `.` and `..` need no
+  // case of their own — `renameStem` strips them to '' and they land here.
+  if (!clean || /[\\/:*?"<>|]/.test(clean)) {
+    throw new Error('Enter a plain file name (no slashes or special characters).')
+  }
+  // Browser build: no filesystem to rename on — report the path unchanged, so
+  // the caller repoints nothing (the same "nothing happened" the pickers no-op to).
+  if (!isTauri()) return hipPath
   const dest = `${dir}/${clean}${ext}`
-  if (dest.toLowerCase() === norm.toLowerCase()) return hipPath
-  if (await exists(dest)) throw new Error(`“${clean}${ext}” already exists in that folder.`)
+  if (dest === norm) return hipPath
+  // A CASE-only change is a real rename, not a no-op: fixing `lara` to `Lara`
+  // is the whole point of an editable name. It skips the collision check
+  // because on Windows the destination IS the source — `exists` answers true
+  // and would refuse the user their own file.
+  const caseOnly = dest.toLowerCase() === norm.toLowerCase()
+  if (!caseOnly && (await exists(dest))) {
+    throw new Error(`“${clean}${ext}” already exists in that folder.`)
+  }
   await rename(hipPath, dest)
   return dest
 }
