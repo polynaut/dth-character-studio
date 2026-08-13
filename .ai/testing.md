@@ -190,6 +190,47 @@ The **real SPA in a real browser** against an in-memory fake of the native layer
   Playwright reports `flaky` separately from `passed`, so the rate stays
   VISIBLE — that number is the health signal now. If it climbs, the box is the
   problem again and sharding is the next lever.
+- **The starvation explanation did NOT survive its first direct test — don't
+  treat it as settled.** Attempted 2026-08-13 on a 16-core Windows box under
+  CI's own settings (`CI=1` → 2 workers, 60 s budget, prebuilt bundle;
+  `SMOKE_PORT` set), with the CPU deliberately oversubscribed by spinner
+  processes:
+
+  | Condition | Result |
+  |---|---|
+  | idle | 155/155, 1.6m |
+  | 12 spinners / 16 cores | 155/155, 1.7m |
+  | ~36 spinners / 16 cores (2.2x oversubscribed) | 155/155, **2.8m** |
+  | the overlay-heavy victims, `--repeat-each=6`, under load | 48/48 |
+
+  Contention worse than CI's own ratio made the suite **75% slower across the
+  board and broke nothing**. That is the shape starvation actually has: every
+  test gets proportionally slower. The CI failure is not that shape — a
+  `locator.click` dying at 60 s is a ~45x outlier against a 1.3s average, i.e.
+  a STALL, something waiting forever until the budget expires. Uniform slowdown
+  does not produce one.
+  **What the test did NOT replicate, and why a local repro may be impossible:**
+  CI is `ubuntu-latest` with 4 slow vCPUs; this was Windows with 16 fast cores
+  oversubscribed. Oversubscription is not SCARCITY — 2 Chromium workers on 4
+  cores have no headroom at all, where 16 cores always have some — and it is a
+  different Chromium build, kernel scheduler and filesystem. So this weakens the
+  theory without refuting it.
+  **The consequence for whoever picks this up: stop reasoning and read the
+  trace.** Playwright's actionability log records what it was waiting for and
+  what was on top of the target at each retry, which separates "the box was
+  busy" from "an overlay covered the button" in one look. The traces exist on
+  every failure (`trace: 'retain-on-failure'`) and were being deleted with the
+  runner until the upload step in `validate-pull-request.yml`. The next CI
+  failure is the first one that will be diagnosable rather than inferable.
+  One pattern to check first when it lands: the victim list is almost entirely
+  OVERLAY-driven specs (`unlink-dialogs`, `houdini-occlusion-tabs`,
+  `houdini-utils-backups` x2, `houdini-refresh-assets`, `scan-scene-import`,
+  `jcm-bone-autocomplete`), and this app has a documented way for a floating
+  layer to sit above a dialog — tooltips at `z-[100]` and InfoPopups at
+  `z-[60]` outrank the overlays, swept only by `closeFloatingLayers()` in a
+  `useLayoutEffect` (see `.ai/gotchas.md`). A lost race there yields precisely a
+  click that never becomes actionable, gets likelier on a slower box, and would
+  explain why the prebuilt bundle bought 28% without curing anything.
 - **Do NOT run the whole smoke suite for every edit — CI is its gate.** Locally,
   run the specs covering what you changed (`pnpm --filter @dth/web smoke
   houdini-export` filters by filename substring). The full run is for CI, for a
