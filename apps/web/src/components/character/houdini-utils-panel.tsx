@@ -2610,7 +2610,12 @@ function RefRows({
   refs,
   reason,
 }: {
-  refs: { collapsible: number; foreign: number; broken: ReadonlyArray<string> }
+  refs: {
+    collapsible: number
+    foreign: number
+    broken: ReadonlyArray<string>
+    missingTextures: ReadonlyArray<string>
+  }
   reason: string
 }) {
   const clean = refs.collapsible === 0 && refs.broken.length === 0
@@ -2649,6 +2654,33 @@ function RefRows({
           <p className="truncate" title={refs.broken.join(', ')}>
             {refs.broken.join(', ')} — rebuilt from the same node&apos;s other export files.
           </p>
+        )}
+      </CheckRow>
+      {/* Full paths here, basenames on the card badge: this is the view where
+          "which product is gone" is answerable. No repair button, deliberately —
+          the fix is a reinstall, outside the studio. */}
+      <CheckRow
+        label="Baker textures"
+        warn={refs.missingTextures.length > 0}
+        verdict={
+          refs.missingTextures.length === 0
+            ? 'all resolve'
+            : `${refs.missingTextures.length} missing`
+        }
+      >
+        {refs.missingTextures.length > 0 && (
+          <>
+            <p className="truncate" title={refs.missingTextures.join(', ')}>
+              {refs.missingTextures.slice(0, 3).join(', ')}
+              {refs.missingTextures.length > 3
+                ? ` (+${refs.missingTextures.length - 3} more)`
+                : ''}
+            </p>
+            <p>
+              DazToHue bakes without them and still reports success, so nothing else in the
+              pipeline will tell you. Reinstall the product or restore the library.
+            </p>
+          </>
         )}
       </CheckRow>
       {/* The gate's reason belongs beside the rows it blocks, not only on the

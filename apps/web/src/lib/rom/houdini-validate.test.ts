@@ -22,7 +22,7 @@ function scanned(over: Partial<MaterialScanProject> = {}): MaterialScanProject {
     job: CHAR,
     fps: 30,
     imports: [],
-    refs: { collapsible: 0, foreign: 0, broken: [], hipRelative: [] },
+    refs: { collapsible: 0, foreign: 0, broken: [], hipRelative: [], missingTextures: [] },
     prefill: { fillable: [], missing: [] },
     ...over,
   }
@@ -93,6 +93,7 @@ describe('validateHoudiniProject', () => {
           foreign: 2,
           broken: ['/obj/import import_character_dtu_file'],
           hipRelative: [],
+          missingTextures: [],
         },
         prefill: { fillable: ['export_directory'], missing: ['pose_asset_csv_file_path'] },
       }),
@@ -117,6 +118,7 @@ describe('validateHoudiniProject', () => {
           foreign: 0,
           broken: [],
           hipRelative: ['/obj/dth import_character_dtu_file', '/obj/dth import_character_fbx_file'],
+          missingTextures: [],
         },
       }),
       CHAR,
@@ -133,10 +135,69 @@ describe('validateHoudiniProject', () => {
     // by the repath flow, but it does not stop the project working.
     expect(
       validateHoudiniProject(
-        scanned({ refs: { collapsible: 3, foreign: 5, broken: [], hipRelative: [] } }),
+        scanned({
+          refs: { collapsible: 3, foreign: 5, broken: [], hipRelative: [], missingTextures: [] },
+        }),
         CHAR,
       ).ok,
     ).toBe(true)
+  })
+
+  it('flags baker textures whose file is gone, and says the bake will not', () => {
+    // The one problem here with no repair button. It earns the badge because it
+    // is the one failure the rest of the pipeline calls SUCCESS: measured on
+    // DazToHue 2.5 / Houdini 22.0, baking with a layer texture pointed at a
+    // file that does not exist prints `export finished in 0:00:02` and raises
+    // nothing — no dialog, no node error.
+    const health = validateHoudiniProject(
+      scanned({
+        refs: {
+          collapsible: 0,
+          foreign: 0,
+          broken: [],
+          hipRelative: [],
+          missingTextures: ['d:/daz 3d/my daz 3d library/runtime/textures/raiya/rypi5_torso1.jpg'],
+        },
+      }),
+      CHAR,
+    )
+    expect(health.ok).toBe(false)
+    expect(health.problems.map((p) => p.code)).toEqual(['missing-textures'])
+    // The basename, not the whole path — this lands in a tooltip.
+    expect(health.summary).toContain('rypi5_torso1.jpg')
+    expect(health.summary).not.toContain('my daz 3d library')
+    // Naming the silent-success behaviour is the point of the wording: without
+    // it the user reads "missing" as something Houdini would have told them.
+    expect(health.summary).toContain('reports success')
+  })
+
+  it('caps the texture list so one uninstalled product cannot flood the tooltip', () => {
+    const many = Array.from({ length: 12 }, (_, i) => `d:/lib/textures/skin_${i}.jpg`)
+    const health = validateHoudiniProject(scanned({ refs: {
+      collapsible: 0, foreign: 0, broken: [], hipRelative: [], missingTextures: many,
+    } }), CHAR)
+    expect(health.summary).toContain('12 baker textures are missing')
+    expect(health.summary).toContain('skin_0.jpg, skin_1.jpg, skin_2.jpg +9 more')
+    expect(health.summary).not.toContain('skin_5.jpg')
+  })
+
+  it('reports missing textures alongside the repairable problems, never instead', () => {
+    // Two different stages fail here — the import round trip and the bake. The
+    // badge has to carry both, or fixing the loud one hides the quiet one.
+    const health = validateHoudiniProject(
+      scanned({
+        job: 'D:/proj/Ita',
+        refs: {
+          collapsible: 0,
+          foreign: 0,
+          broken: [],
+          hipRelative: [],
+          missingTextures: ['d:/lib/gone.jpg'],
+        },
+      }),
+      CHAR,
+    )
+    expect(health.problems.map((p) => p.code)).toEqual(['job-differs', 'missing-textures'])
   })
 })
 

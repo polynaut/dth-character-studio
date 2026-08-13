@@ -137,8 +137,12 @@ export function scanCacheKey(
  *     Reported on the first real use, which is the second time this exact
  *     trap has been paid for: a scan that learns to SEE something new is a
  *     changed question, just like one that learns to report a new field.
+ * 4 — + `refs.missingTextures` (baker layer textures whose file is gone). A v3
+ *     entry answers it with an empty list, which reads as "this project's
+ *     textures are all present" — the exact false all-clear the field exists to
+ *     stop, and unfixable from the UI since Rescan reads through this cache.
  */
-export const SCAN_ANSWER_VERSION = 3
+export const SCAN_ANSWER_VERSION = 4
 
 /**
  * Fold the installed operator libraries into one comparable string — name, mtime

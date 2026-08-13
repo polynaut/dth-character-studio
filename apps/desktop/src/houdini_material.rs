@@ -208,6 +208,21 @@ pub struct ProjectRefInfo {
     /// stays inside the houdini folder is what v66 EMITS (and what Houdini's
     /// own picker writes), so it is never flagged.
     pub hip_relative: Vec<String>,
+    /// Baker LAYER textures whose file is not there — unique absolute paths,
+    /// NOT `<node> <parm>` labels like `broken`: one uninstalled product takes
+    /// the same file out of many layers, and the useful count is how many
+    /// textures are gone. Scoped to the material node's
+    /// `material_texture_baker_layer_texture*` parms, which measured 51/51
+    /// resolving on a real project — zero false positives, unlike a whole-scene
+    /// sweep.
+    ///
+    /// Reported although the studio cannot repair it (the fix is a reinstall)
+    /// because nothing else in the pipeline reports it at all: measured on
+    /// DazToHue 2.5 / Houdini 22.0, baking with one of these pointed at a file
+    /// that does not exist prints `export finished in 0:00:02` and raises
+    /// nothing.
+    #[serde(default)]
+    pub missing_textures: Vec<String>,
 }
 
 /// One import reference a repath rebuilt.
