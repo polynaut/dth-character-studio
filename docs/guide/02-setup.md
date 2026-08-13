@@ -260,7 +260,10 @@ engine version each build was matched to (from a version in its path — deepest
 wins — falling back to the `.uplugin`'s own `EngineVersion`; no version
 anywhere means the build is offered for every engine). A number that could not
 be an engine version is skipped rather than believed: `KawaiiPhysics_5.7_1.21.0`
-names the engine *and* the plugin's own version, and only `5.7` is one. Nothing installs from
+names the engine *and* the plugin's own version, and only `5.7` is one — so is
+a year like `2024.1`. When nothing in a name is a possible engine version the
+build is offered everywhere, which is the safe answer: a version no engine has
+would quietly hide it from every project instead. Nothing installs from
 here: the install dialog on a project's Unreal card does that, per project —
 see [Linking Unreal projects](./03-first-project.md#linking-unreal-projects).
 

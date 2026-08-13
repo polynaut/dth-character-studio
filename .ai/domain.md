@@ -574,13 +574,19 @@ older runtimes as stale.
   Unreal. Plugin sources are the `unrealPluginFolders` setting, scanned by
   Rust `scan_unreal_plugins` (a bounded 3-deep walk covering three shapes: a
   plugin folder, a folder of plugins, a multi-build root
-  `…/UE_5.7/Plugins/…`). Which engine a build is FOR: the deepest
-  version-looking PATH segment wins, falling back to the `.uplugin`'s own
-  `EngineVersion` — the path is the signal the user can see and fix, a stale
-  manifest field is neither; no version anywhere = offered for every engine.
+  `…/UE_5.7/Plugins/…`). Which engine a build is FOR: the deepest PATH segment
+  holding a POSSIBLE engine version wins (major `4..=9` — `plausible_engine_major`;
+  a `KawaiiPhysics_5.7_1.21.0.zip` names the plugin's version too and a
+  `MyPlugin_2024.1` names a year, and believing either hides the build from
+  every project, since matching is by equality), falling back to the
+  `.uplugin`'s own `EngineVersion` under the same rule — the path is the signal
+  the user can see and fix, a stale manifest field is neither; no version
+  anywhere = offered for every engine, which is the deliberately safe answer.
   Matching is TS (`lib/unreal-install.ts`): one build per plugin NAME (the
   install target is `Plugins/<uplugin stem>` — two builds of one name would be
-  two writes to one folder), exact version beats any-engine. **Generate
+  two writes to one folder), ranked by `buildRank` — a build whose `BuildId`
+  equals the engine's beats an exact version LABEL, which beats any-engine,
+  which beats a build whose BuildId proves it cannot load. **Generate
   Unreal project** (the bar's ✨) creates a Blueprint-only project — plain TS
   file writes (`.uproject` + `Config`/`Content` skeleton), no Rust, no engine
   run, since a module-less project needs no compile — bound to a DETECTED
