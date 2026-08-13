@@ -441,13 +441,13 @@ a {
   }
 }
 
-/* A miniature copy of the pipeline's CURRENT progress bar riding the export
-   button's bottom edge (::after — width + color come from custom properties
-   the button sets inline). Hidden at the top of the page, where the full
-   meter row is visible; fades in on the SAME scroll timeline that shrinks
-   the header buttons, so the docked header keeps showing live progress after
-   the panel has faded away. Base opacity 0 also covers browsers without
-   scroll timelines (their header never collapses — the full panel stays). */
+/* A miniature copy of the run's progress bar riding the export button's bottom
+   edge (::after — width + color come from custom properties the button sets
+   inline). Hidden at the top of the page, where the panel's own bar is
+   visible; fades in on the SAME scroll timeline that shrinks the header
+   buttons, so the docked header keeps showing live progress after the panel
+   has faded away. Base opacity 0 also covers browsers without scroll
+   timelines (their header never collapses — the full panel stays). */
 @keyframes dth-export-mini-appear {
   to {
     opacity: 1;
@@ -477,12 +477,12 @@ a {
   }
 }
 
-/* The live export-pipeline panel (meters + task cards + log window) is a
+/* The live export-pipeline panel (the run's task list + its one meter) is a
    WORKING view, not a docked control: it fades AND collapses away as the
    header shrinks into sticky mode, and comes back at the top. The height
-   collapse matters: the panel (fixed-height log) is taller than the resting
-   avatar, so it is what sizes the running header — a fade alone left a
-   docked header holding the invisible panel's full space. visibility flips
+   collapse matters: the panel (bounded-height list) is taller than the
+   resting avatar, so it is what sizes the running header — a fade alone left
+   a docked header holding the invisible panel's full space. visibility flips
    near the end so the hidden panel can't catch pointer events. */
 @keyframes dth-pipeline-hide {
   from {

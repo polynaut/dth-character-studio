@@ -271,50 +271,6 @@ function stripSceneMessagePrefix(message: string): string {
  *  shows, and a per-scene run works several of them in a row). */
 const SCENE_OPEN_MESSAGES: ReadonlySet<string> = new Set(['opening scene', 'scene opened'])
 
-/** First-seen stamps for a rolling/appending line tail, carried across polls
- *  by the caller. */
-export interface StampedLogStore {
-  lines: Array<string>
-  stamps: Array<string>
-}
-
-/**
- * Prefix each log line with the `[HH:MM:SS]` at which the STUDIO first saw it
- * (the on-disk log carries no timestamps — poll-first-seen is the honest
- * approximation, so several lines landing in one poll share a stamp). `store`
- * keeps the stamps across polls; both legs' tails only ever extend at the end
- * (and roll off the front), so the previous tail is re-anchored by its LAST
- * line and everything beyond it is new. An empty `next` resets the store.
- */
-export function stampLogLines(
-  store: StampedLogStore,
-  next: Array<string>,
-  now: string,
-): Array<string> {
-  if (next.length === 0) {
-    store.lines = []
-    store.stamps = []
-    return []
-  }
-  let overlap = 0
-  if (store.lines.length > 0) {
-    const lastPrev = store.lines[store.lines.length - 1]
-    for (let i = next.length - 1; i >= 0; i--) {
-      if (next[i] === lastPrev) {
-        overlap = i + 1
-        break
-      }
-    }
-  }
-  const stamps: Array<string> = []
-  for (let i = 0; i < next.length; i++) {
-    stamps.push(i < overlap ? (store.stamps[store.lines.length - overlap + i] ?? now) : now)
-  }
-  store.lines = [...next]
-  store.stamps = stamps
-  return next.map((line, i) => `[${stamps[i]}] ${line}`)
-}
-
 export function exportProgressStateFrom(
   parsed: Array<ExportProgressLine>,
   keep = 40,
@@ -380,6 +336,19 @@ export { romAnimationPath }
  */
 export const EXPORT_MODES = ['rom-export', 'rom-only', 'export-only'] as const
 export type ExportMode = (typeof EXPORT_MODES)[number]
+
+/**
+ * What each Daz mode is CALLED, in the user's words — one spelling for the
+ * dialog's Mode dropdown and for the run's Daz task cards, which say what the
+ * run is about to do to each scene. Two spellings of "ROM + Export" would be
+ * two things to keep in step, and the card is read while the dropdown that
+ * chose it is long closed.
+ */
+export const EXPORT_MODE_LABELS: Record<ExportMode, string> = {
+  'rom-export': 'ROM + Export',
+  'rom-only': 'ROM only',
+  'export-only': 'Export only',
+}
 
 /**
  * Everything the dialog's Daz **Mode** dropdown can pick: the three Daz-side

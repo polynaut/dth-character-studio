@@ -136,10 +136,12 @@ test('…and does NOT tick for a run whose variant that project has never seen',
   for (const box of await boxes.all()) await expect(box).not.toBeChecked()
 })
 
-test('the Unreal leg reports into the run’s own log window', async ({ page }) => {
-  // The third leg speaks where the other two do. It briefly had a status panel
-  // of its own on the character page — a second place to look for a third of
-  // one run — and the transcript is where a run says what it is doing.
+test('ONE task row per re-import — two sets into one project are two jobs', async ({ page }) => {
+  // The third leg speaks where the other two do: the run's own task list and
+  // its one status line. And it says so per JOB — two export sets going into
+  // one Unreal project are two imports, so they are two rows, both naming the
+  // project they land in. One row per PROJECT read as "one thing is happening"
+  // about work that is two.
   const seed = buildSeed({
     activeProjectFile: P.dcsp,
     demo: true,
@@ -147,6 +149,9 @@ test('the Unreal leg reports into the run’s own log window', async ({ page }) 
     unrealProjects: [UPROJECT],
   })
   seed.files[`${EXPORT_ROOT}/KiraDefault/DTH_KiraDefault.dth`] = '{}'
+  seed.files[`${EXPORT_ROOT}/KiraSummertide/DTH_KiraSummertide.dth`] = '{}'
+  // Only KiraDefault is already in that project — so its row is a RE-import
+  // and the other one's is a first import. The studio located them itself.
   seed.files[IMPORTED] = 'uasset-fixture'
   seed.files[`${UPROJECT_DIR}/Plugins/DTHStudioBridge/DTHStudioBridge.uplugin`] = JSON.stringify({
     // From the source of truth, so bumping the bridge can never strand this
@@ -167,13 +172,23 @@ test('the Unreal leg reports into the run’s own log window', async ({ page }) 
   await page.getByRole('option', { name: /Skip Houdini/ }).click()
   await dialog.getByRole('checkbox', { name: 'Send to DemoGame' }).check()
   await dialog.locator('li').filter({ hasText: 'KiraDefault' }).getByRole('checkbox').check()
+  await dialog.locator('li').filter({ hasText: 'KiraSummertide' }).getByRole('checkbox').check()
   await dialog.getByRole('button', { name: 'Start' }).click()
 
-  // In the log window, stamped like every other line of the run.
-  await expect(page.getByText(/Unreal; queued for DemoGame - KiraDefault/)).toBeVisible()
-  await expect(page.getByText(/Unreal; waiting for the editor to pick the job up/)).toBeVisible()
+  // TWO rows for the ONE project, each named by the export set it carries —
+  // the "final character" that lands in Unreal — and each saying which of the
+  // two things it is about to do.
+  const rows = page.locator('[data-task^="ue:"]')
+  await expect(rows).toHaveCount(2, { timeout: 15_000 })
+  await expect(rows.filter({ hasText: 'KiraDefault' })).toContainText('Re-import · DemoGame')
+  await expect(rows.filter({ hasText: 'KiraSummertide' })).toContainText('First import · DemoGame')
 
-  // …and when the editor finally answers, the outcome is a line too.
+  // The status line carries the leg's newest word — one line, not a transcript.
+  await expect(page.locator('[data-export-status]')).toContainText(
+    /Unreal; queued for DemoGame/,
+  )
+
+  // …and when the editor finally answers, the outcome becomes that line.
   await page.evaluate((dir: string) => {
     const mock = (window as any).__tauriMock
     mock.files.delete(`${dir}/Saved/DTHStudio/job.json`)
@@ -194,9 +209,10 @@ test('the Unreal leg reports into the run’s own log window', async ({ page }) 
       }),
     )
   }, UPROJECT_DIR)
-  await expect(
-    page.getByText(/Unreal; re-imported 1 asset in .Game.Characters.Kira/),
-  ).toBeVisible({ timeout: 15_000 })
+  await expect(page.locator('[data-export-status]')).toContainText(
+    /Unreal; re-imported 1 asset in .Game.Characters.Kira/,
+    { timeout: 15_000 },
+  )
 })
 
 test('nothing claims the job and no editor is running — the studio opens the project', async ({

@@ -165,7 +165,7 @@ test('the live Houdini button is inert — Ctrl is the way out of its watch', as
   await expect(page.getByText(/keeps running in the background/)).toBeVisible()
   await expect(page.getByRole('button', { name: 'DTH Export' })).toBeVisible()
   await expect(page.locator('[data-task]')).toHaveCount(0)
-  await expect(page.locator('[data-export-log]')).toHaveCount(0)
+  await expect(page.locator('[data-export-status]')).toHaveCount(0)
 
   // Nothing was deleted under Houdini — its job file is still there for the
   // run that is still working through it.

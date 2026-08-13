@@ -301,15 +301,14 @@ export function EditorHeader({
         {/* Bottom-right in the header, on the path-chip's baseline (mb-6 lifts the
             box so the scale below anchors on that line). They ride the sticky
             header, so they stay reachable as the form scrolls. A GRID, not a
-            flex column: the button row and the pipeline panel's log window
-            share the second column track (subgrid), so the log is always
-            EXACTLY as wide as all the buttons together — the task cards sit in
-            their own first column left of it. The area SELF-STRETCHES to the
-            header's full height so the panel can fill everything above the
-            buttons. The panel does NOT dock: `pipeline-scroll` fades it out on
-            the header-collapse scroll timeline (styles.css), so the docked
-            sticky header shows only the buttons — the panel is a working view
-            for the top of the page. */}
+            flex column: the buttons keep the second column of the bottom row,
+            and the run's task list spans the whole top row above them (it sets
+            its own width, so a run starting cannot resize the header). The area
+            SELF-STRETCHES to the header's full height so the list can fill
+            everything above the buttons. The panel does NOT dock:
+            `pipeline-scroll` fades it out on the header-collapse scroll
+            timeline (styles.css), so the docked sticky header shows only the
+            buttons — the panel is a working view for the top of the page. */}
         {/* gap-y-5: the pipeline area needs room to breathe above the button
             row — a tight gap read as one crowded block. */}
         <div className="mb-6 ml-auto grid shrink-0 grid-cols-[auto_auto] grid-rows-[minmax(0,1fr)_auto] justify-end gap-x-2 gap-y-5 self-stretch">

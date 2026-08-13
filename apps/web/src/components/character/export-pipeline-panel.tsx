@@ -1,317 +1,232 @@
-import { useEffect, useRef, useState } from 'react'
-import { ChevronRight } from 'lucide-react'
+import { useEffect, useRef } from 'react'
+import { Check, Loader2 } from 'lucide-react'
 
 import { cn } from '@dth/ui'
+import dazLogo from '#/assets/daz-logo.png'
+import houdiniLogo from '#/assets/houdini-logo.svg'
+import unrealLogo from '#/assets/unreal-logo.svg'
 
 /**
- * The header's live DTH-Export pipeline display: a narrow task-card column
- * (every Daz scene of the selection, then every Houdini project, then every
- * Unreal project the export is handed to — the chronological order the run
- * works through) beside the tail-mode log window.
- * The ACTIVE task wears its kind's solid color (the selected-card look),
- * waiting tasks sit grayish with the kind's accent edge — and a finished task
- * drops away toward the bottom right while the ones behind it slide up, a
- * little like Tetris.
+ * The header's live DTH-Export display: **one task list** for the whole run,
+ * with **one progress bar** under it carrying the run's latest status message.
+ *
+ * The list is every unit of work the run comprises, in the order it happens —
+ * each selected Daz scene, then every DazToHue network of every Houdini
+ * project, then every export set going into every Unreal project. One row per
+ * JOB, deliberately: two characters re-imported into one Unreal project are two
+ * rows, because they are two imports.
+ *
+ * It replaced three separate readouts (a narrow card column, a tail-mode log
+ * window and a two-level meter row) that between them said the same thing three
+ * ways. What the log window carried that the list cannot is the TRANSCRIPT —
+ * only the newest line survives, as the bar's status line. The full output is
+ * still on disk per leg (the Runner's progress log, `.dth_houdini_console.log`,
+ * the Unreal editor's own log), which is where a post-mortem was always read.
  *
  * Pure presentation: `dth-export.tsx` computes the view each poll and the
- * EditorHeader places this above the whole button cluster.
+ * EditorHeader places it above the whole button cluster.
  */
+
+/** Which leg a task (or the bar) belongs to — decides its color and its mark. */
+export type ExportTaskKind = 'daz' | 'houdini' | 'unreal'
 
 export interface ExportTask {
   id: string
+  /** The unit of work's OWN name: the Daz scene, the DazToHue network, the
+   *  export set on its way into Unreal. */
   label: string
-  /** Extra tooltip context — e.g. the networks a Houdini project exports. */
+  /** What is going to happen to it — "ROM + Export", "Export only",
+   *  "Re-import". Absent when this window cannot honestly say. */
   detail?: string
-  kind: 'daz' | 'houdini' | 'unreal'
+  /** WHERE it happens: the Houdini project holding the network, the Unreal
+   *  project receiving the import. Absent on a Daz scene, which happens in the
+   *  file it names. */
+  context?: string
+  kind: ExportTaskKind
   status: 'waiting' | 'active' | 'done'
 }
 
-export interface ExportProgressBar {
-  /** 0–100. */
-  percent: number
-  /** What the CURRENT bar is measuring right now. Nothing renders it — see
-   *  `ProgressBar` — it survives as the step's identity, and a change in it is
-   *  what restarts `sinceMs`. Optional, and deliberately absent on the OVERALL
-   *  bar: that one keys no clock, so a "Scenes 0/2" nobody reads would just be
-   *  the removed caption still being computed. */
-  label?: string
-  /** Which leg the bar measures — the fill wears that kind's color, the same
-   *  identity the task cards carry. */
-  kind: 'daz' | 'houdini'
-  /** When the CURRENT step began (first seen). The button's own clock shows
-   *  the run's total; this is per STEP, kept on the view for whoever wants to
-   *  surface a minutes-long silent stretch. */
-  sinceMs?: number
-}
-
 export interface ExportPipelineView {
-  /** Task cards, chronological. Empty for an adopted run (no identity). */
+  /** Every job of the run, in run order. Empty only for a run adopted from
+   *  another window before its rows are readable. */
   tasks: Array<ExportTask>
-  /** The live log-window content — whichever leg is talking right now. Lines
-   *  only: the scene lives on the active task card and the percent on the
-   *  meter, so the window carries no caption row — and the newest line in it
-   *  IS the status, which is why the meters carry no text of their own. */
-  log: { lines: Array<string> } | null
-  /** The full-width bar row above tasks+log: `current` = the unit being
-   *  worked right now (the per-scene progress-log percent on the Daz leg, the
-   *  stepwise open-project-then-networks scale on the Houdini leg); `overall`
-   *  appears only when the leg spans more than one unit (several scenes /
-   *  several networks) — the two-level display. */
-  bars: { current: ExportProgressBar; overall?: ExportProgressBar } | null
+  /** The newest thing the run said — ONE line, printed with the bar. '' while
+   *  a leg has yet to speak. */
+  status: string
+  /** 0–100 across the WHOLE run (see `runPercent` in `lib/rom/export-cards.ts`
+   *  for how the active job's share is estimated). */
+  percent: number
+  /** Which leg is talking — the bar's fill color. */
+  kind: ExportTaskKind
 }
 
-/** How long the fly-out plays before the slot collapses, and how long the
- *  collapse takes — two phases so the card can escape UNclipped first. */
-const FLY_MS = 450
-const COLLAPSE_MS = 350
+const ACCENT: Record<ExportTaskKind, string> = {
+  daz: 'bg-emerald-500',
+  houdini: 'bg-orange-500',
+  unreal: 'bg-unreal-blue',
+}
 
-function ExportTaskCard({
-  task,
-  ordinal,
-  departing,
-}: {
-  task: ExportTask
-  /** 1-based position in the REMAINING queue: a finished card's slot collapses
-   *  and everything behind it moves up a number, so the top card is always
-   *  "1." and the column reads as what is still to do. (The alternative —
-   *  fixed run-order numbers — leaves a lone "2." standing at the end.) */
-  ordinal: number
-  departing: boolean
-}) {
-  const active = task.status === 'active' || departing
-  // The kind's color rides a left BAR and a status dot — the card itself stays
-  // a surface, so a queue of them reads as a list instead of a row of paint.
-  const bar =
-    task.kind === 'daz'
-      ? 'bg-emerald-500'
-      : task.kind === 'houdini'
-        ? 'bg-orange-500'
-        : 'bg-unreal-blue'
+const LOGO: Record<ExportTaskKind, string> = {
+  daz: dazLogo,
+  houdini: houdiniLogo,
+  unreal: unrealLogo,
+}
+
+const APP: Record<ExportTaskKind, string> = {
+  daz: 'Daz Studio',
+  houdini: 'Houdini',
+  unreal: 'Unreal Engine',
+}
+
+function ExportTaskCard({ task, ordinal }: { task: ExportTask; ordinal: number }) {
+  const active = task.status === 'active'
+  const done = task.status === 'done'
+  const accent = ACCENT[task.kind]
+  // The subtitle is "what · where" — either half can be absent (a Daz scene has
+  // no elsewhere; a run that cannot name the work leaves the detail off rather
+  // than inventing one).
+  const sub = [task.detail, task.context].filter(Boolean).join(' · ')
   return (
-    <div
+    <li
       data-task={task.id}
-      data-task-status={departing ? 'done' : task.status}
+      data-task-status={task.status}
       className={cn(
-        'relative flex items-center gap-2 overflow-hidden rounded-md pr-1.5 pl-3 text-xs transition-all',
+        'relative flex items-center gap-2.5 overflow-hidden rounded-md py-1.5 pr-2 pl-3 transition-colors',
         active
-          ? 'bg-accent font-semibold text-foreground'
-          : 'bg-card/60 font-medium text-muted-foreground',
-        departing && 'translate-x-28 translate-y-12 rotate-6 opacity-0',
+          ? 'bg-accent text-foreground'
+          : done
+            ? 'bg-card/40 text-muted-foreground'
+            : 'bg-card/60 text-muted-foreground',
       )}
-      style={{ transitionDuration: `${FLY_MS}ms` }}
-      title={task.detail ? `${task.label}\n${task.detail}` : task.label}
     >
-      {/* The accent bar: full-height on the active card, a hairline behind. */}
+      {/* The leg's color rides a left bar — full strength on the row being
+          worked, a hairline on the rest, so a queue reads as a list rather
+          than a row of paint. */}
       <span
         aria-hidden
         className={cn(
-          'absolute inset-y-0 left-0 w-[3px] rounded-full transition-opacity',
-          bar,
+          'absolute inset-y-0 left-0 w-[3px] rounded-full',
+          accent,
           active ? 'opacity-100' : 'opacity-40',
         )}
       />
-      <span
-        aria-hidden
-        className={cn('size-1.5 shrink-0 rounded-full', bar, !active && 'opacity-50')}
+      <span className="w-4 shrink-0 text-right text-[11px] tabular-nums opacity-50">{ordinal}.</span>
+      {/* One mark per state: the run's spinner on the active row, a tick on a
+          finished one, the leg's dot on everything still to come. */}
+      <span aria-hidden className="flex size-3.5 shrink-0 items-center justify-center">
+        {active ? (
+          <Loader2 className="size-3.5 animate-spin" />
+        ) : done ? (
+          <Check className="size-3.5 opacity-60" />
+        ) : (
+          <span className={cn('size-1.5 rounded-full opacity-50', accent)} />
+        )}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span
+          className={cn(
+            'block truncate text-xs',
+            active ? 'font-semibold' : 'font-medium',
+            done && 'line-through decoration-1 opacity-70',
+          )}
+        >
+          {task.label}
+        </span>
+        {sub && <span className="block truncate text-[11px] opacity-60">{sub}</span>}
+      </span>
+      <img
+        src={LOGO[task.kind]}
+        alt={APP[task.kind]}
+        title={APP[task.kind]}
+        className={cn('size-4 shrink-0 object-contain', !active && 'opacity-50')}
       />
-      <span className="shrink-0 tabular-nums opacity-60">{ordinal}.</span>
-      <span className="truncate py-1.5">{task.label}</span>
-      <ChevronRight className="ml-auto size-3.5 shrink-0 opacity-30" />
-    </div>
+    </li>
   )
 }
 
-export function ExportTaskCards({ tasks }: { tasks: Array<ExportTask> }) {
-  // The Tetris exit, in two phases per finished task: FLY (the slot keeps its
-  // height while the card sails off bottom-right, unclipped) then COLLAPSE
-  // (the empty slot's height animates away, sliding the rest up). Phase state
-  // lives here so the DATA can flip to done instantly while the cards catch up.
-  const [flying, setFlying] = useState<ReadonlySet<string>>(new Set())
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set())
-  const timers = useRef<Array<ReturnType<typeof setTimeout>>>([])
-
+export function ExportTaskList({ tasks }: { tasks: Array<ExportTask> }) {
+  const boxRef = useRef<HTMLOListElement>(null)
+  // Keep the row being worked in view: the list is chronological and a long run
+  // scrolls past the top of the box, so without this the interesting row walks
+  // off the bottom. `nearest` so a list that already fits never jumps.
   useEffect(() => {
-    for (const task of tasks) {
-      if (task.status !== 'done' || flying.has(task.id)) continue
-      setFlying((prev) => new Set(prev).add(task.id))
-      timers.current.push(
-        setTimeout(() => setCollapsed((prev) => new Set(prev).add(task.id)), FLY_MS),
-      )
-    }
-  }, [tasks, flying])
-  useEffect(() => {
-    const pending = timers.current
-    return () => pending.forEach(clearTimeout)
-  }, [])
-
-  // Only 4 cards show in full (the column spans the log AND meter rows); the
-  // 5th fades out through a gradient mask and everything past it sits in a
-  // collapsed slot (which ANIMATES open as the queue moves up — the same
-  // slide the tetris collapse uses). Position counts only live slots, so a
-  // flying card still occupies its place until its slot has collapsed.
-  const visibleIds = tasks.filter((task) => !collapsed.has(task.id)).map((task) => task.id)
-
+    const active = boxRef.current?.querySelector('[data-task-status="active"]')
+    active?.scrollIntoView({ block: 'nearest' })
+  }, [tasks])
   return (
-    // A tiny separator line marks the queue off from the log window.
-    // flex-col-REVERSE: the queue falls to the bottom, tetris-style — the card
-    // being worked sits at the very bottom (where the eye already is, beside
-    // the buttons) and everything still to come stacks above it. DOM order
-    // stays chronological, so the numbering and the exit animation are
-    // unchanged; only the visual stacking flips.
-    <div className="col-start-1 row-start-1 row-span-2 flex min-h-0 w-44 shrink-0 flex-col-reverse justify-start gap-1 border-r border-border/70 pr-3">
-      {tasks.map((task) => {
-        const isFlying = flying.has(task.id)
-        const isCollapsed = collapsed.has(task.id)
-        // Position among the LIVE slots — so the number and the slide happen
-        // in the same frame (a card mid-flight still holds its slot, and its
-        // number with it).
-        const position = visibleIds.indexOf(task.id)
-        const hidden = isCollapsed || position >= 5
-        return (
-          <div
-            key={task.id}
-            className={cn(
-              'transition-all',
-              hidden ? 'max-h-0 opacity-0' : 'max-h-10',
-              // A hidden slot may clip — its card is gone or beyond the list's
-              // window. A LIVE slot must not, or the fly-out would be cut off
-              // mid-flight.
-              hidden ? 'overflow-hidden' : 'overflow-visible',
-              // The 5th live card is the TOPMOST one now (the column is
-              // reversed), so it fades upward, away from the active card.
-              position === 4 &&
-                !isCollapsed &&
-                '[mask-image:linear-gradient(to_top,#000_0%,transparent_90%)]',
-            )}
-            style={{ transitionDuration: `${COLLAPSE_MS}ms` }}
-          >
-            <ExportTaskCard task={task} ordinal={Math.max(position, 0) + 1} departing={isFlying} />
-          </div>
-        )
-      })}
-    </div>
+    <ol
+      data-export-tasks
+      ref={boxRef}
+      // A BOUNDED height, deliberately: the header sizes itself to its content,
+      // so a list that grew with the run would inflate the whole page header
+      // (and jump per row). Four rows of two lines, then it scrolls.
+      className="flex max-h-[10.5rem] min-h-0 flex-col gap-1 overflow-y-auto text-left"
+    >
+      {tasks.map((task, index) => (
+        <ExportTaskCard key={task.id} task={task} ordinal={index + 1} />
+      ))}
+    </ol>
   )
 }
 
-/** Lead the MESSAGE with a capital, leaving the `[HH:MM:SS] ` stamp alone —
- *  the raw log speaks lowercase ("opening scene"), the window is a caption. */
-function capitalizeLine(line: string): string {
-  return line.replace(/^(\[[^\]]*\]\s*)?(.)/, (_, stamp: string | undefined, first: string) => {
-    return (stamp ?? '') + first.toUpperCase()
-  })
-}
-
-export function ExportActivityLog({ log }: { log: { lines: Array<string> } }) {
-  const boxRef = useRef<HTMLDivElement>(null)
-  // Tail mode: whenever lines arrive, keep the newest one in view.
-  useEffect(() => {
-    const box = boxRef.current
-    if (box) box.scrollTop = box.scrollHeight
-  }, [log.lines])
-  return (
-    // The grid places this in the buttons' shared column, so its width IS
-    // theirs. The box alone: the newest line IS the status, so a headline
-    // repeating it was the same words twice.
-    // justify-end: the box sits at the BOTTOM of its cell, right above the
-    // meter — the run's most recent word as close to the buttons as possible.
-    <div className="col-start-2 row-start-1 flex min-h-0 min-w-0 flex-col justify-end text-left">
-      <div
-        data-export-log
-        ref={boxRef}
-        // A CONSTANT height, deliberately: the header's own height is
-        // content-driven, so a content-sized log inflated the whole header as
-        // lines arrived (and jumped per line). Fixed box + tail scroll — the
-        // newest lines stay in view, the layout never moves.
-        // 5 lines exactly: h-20 = 80px at leading-4 (16px per line).
-        className="flex h-20 flex-col overflow-y-auto rounded-md border border-border/70 bg-muted/40 px-2.5 py-1.5 font-mono text-[11px] leading-4 whitespace-pre-wrap break-all text-muted-foreground"
-      >
-        {/* mt-auto, not justify-end: a flex scroll container with justify-end
-            clips its first lines once the content overflows. This pins a SHORT
-            log to the bottom (terminal-style) and scrolls normally when full. */}
-        <div className="mt-auto">
-          {log.lines.map((line, index) => (
-            // Index keys are sound here: the list is an append-only rolling tail.
-            // eslint-disable-next-line react/no-array-index-key
-            <div key={index}>{capitalizeLine(line)}</div>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/** One progress meter. The fill wears the LEG's color (the entity, like its
- *  cards); every text stays in muted ink. `emphasis` = the overall (top) bar
- *  of a two-level display, slightly taller. */
-function ProgressBar({ bar, emphasis = false }: { bar: ExportProgressBar; emphasis?: boolean }) {
-  const percent = Math.min(100, Math.max(0, bar.percent))
-  // NEITHER bar carries text: the row is the track and its number. The current
-  // bar's status is the newest line in the log window, and the overall bar's
-  // "Scenes 0/2" was the numbered task-card column said a second time — the
-  // cards ARE the queue, and dropping the label lets both tracks start at the
-  // same left edge instead of one being indented by its own caption.
-  //
-  // It moves to ARIA rather than vanishing: the visible caption was the only
-  // thing naming these meters, so dropping it outright would leave a screen
-  // reader two anonymous percentages. `progressbar` + a name + the value is
-  // what the sighted reader gets from the track, said out loud.
+/**
+ * The run's one meter: the status line printed above the track (the newest
+ * thing the run said, one line — it is truncated rather than wrapped, so the
+ * panel's height never moves), the percentage at the right, the track below.
+ */
+function RunProgressBar({
+  percent,
+  status,
+  kind,
+}: {
+  percent: number
+  status: string
+  kind: ExportTaskKind
+}) {
+  const clamped = Math.min(100, Math.max(0, percent))
   return (
     <div
       role="progressbar"
-      aria-label={emphasis ? 'Overall progress' : 'Current step progress'}
-      aria-valuenow={Math.round(percent)}
+      aria-label="Export progress"
+      aria-valuenow={Math.round(clamped)}
       aria-valuemin={0}
       aria-valuemax={100}
-      data-progressbar={emphasis ? 'overall' : 'current'}
-      data-percent={Math.round(percent)}
-      className="flex items-center gap-2"
+      aria-valuetext={status || undefined}
+      data-progressbar="run"
+      data-percent={Math.round(clamped)}
+      className="flex min-w-0 flex-col gap-1"
     >
-      <div
-        className={cn(
-          'min-w-0 flex-1 overflow-hidden rounded-full bg-muted',
-          emphasis ? 'h-1.5' : 'h-1',
-        )}
-      >
+      <div className="flex items-baseline gap-2 text-[11px] text-muted-foreground">
+        <span data-export-status className="min-w-0 flex-1 truncate">
+          {status}
+        </span>
+        <span className="shrink-0 tabular-nums">{Math.round(clamped)}%</span>
+      </div>
+      <div className="h-1.5 min-w-0 overflow-hidden rounded-full bg-muted">
         <div
-          className={cn(
-            'h-full rounded-full transition-[width] duration-500',
-            bar.kind === 'daz' ? 'bg-emerald-500' : 'bg-orange-500',
-          )}
-          style={{ width: `${percent}%` }}
+          className={cn('h-full rounded-full transition-[width] duration-500', ACCENT[kind])}
+          style={{ width: `${clamped}%` }}
         />
       </div>
-      <span className="w-9 shrink-0 text-right text-[11px] tabular-nums text-muted-foreground">
-        {Math.round(percent)}%
-      </span>
     </div>
   )
 }
 
 export function ExportPipelinePanel({ view }: { view: ExportPipelineView }) {
-  if (view.tasks.length === 0 && !view.log && !view.bars) return null
+  if (view.tasks.length === 0 && !view.status) return null
   return (
-    // Lives inside the header's 2-column grid and inherits its tracks
-    // (subgrid): the LOG WINDOW shares its column with the button row below,
-    // so the two are always exactly as wide as each other — and the meter row
-    // sits UNDER the log at the same width. The task cards fill the first
-    // column across BOTH rows (room for 4 full cards). min-h-0 rows so the
-    // panel fills whatever height the header has (the log is the flexible
-    // part; the meter row keeps its size). Width is content-stable mid-run:
-    // the buttons' "Working" label + reserved clock never resize.
-    <div className="pipeline-scroll col-span-2 row-start-1 grid min-h-0 grid-cols-subgrid grid-rows-[minmax(0,1fr)_auto] gap-y-2">
-      {view.tasks.length > 0 && <ExportTaskCards tasks={view.tasks} />}
-      {/* The log window is UNCONDITIONAL: while the panel exists (any live
-          run — pending, either leg, adopted) the window stands, empty until
-          lines arrive. States without a feed used to drop it (the pending
-          stretch before the Runner claims, the Daz→Houdini baton moment),
-          and a working pipeline with no log window reads as broken. */}
-      <ExportActivityLog log={view.log ?? { lines: [] }} />
-      {view.bars && (
-        <div className="col-start-2 row-start-2 flex min-w-0 flex-col gap-1.5">
-          {view.bars.overall && <ProgressBar bar={view.bars.overall} emphasis />}
-          <ProgressBar bar={view.bars.current} />
-        </div>
-      )}
+    // Spans the header's whole button-cluster grid (the buttons keep the second
+    // column below), so the list and the bar are EXACTLY as wide as the whole
+    // button row — a panel narrower than the buttons it sits on reads as a
+    // floating box. The min-width is what a short button row is widened to, so
+    // a run starting cannot make the header narrower than the list needs.
+    // `justify-end` pins the list to the bottom, right above the bar and the
+    // buttons. The panel does NOT dock: `pipeline-scroll` fades it out on the
+    // header-collapse scroll timeline (styles.css) — it is a working view for
+    // the top of the page.
+    <div className="pipeline-scroll col-span-2 row-start-1 flex min-h-0 w-full min-w-[26rem] flex-col justify-end gap-2">
+      {view.tasks.length > 0 && <ExportTaskList tasks={view.tasks} />}
+      <RunProgressBar percent={view.percent} status={view.status} kind={view.kind} />
     </div>
   )
 }

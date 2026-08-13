@@ -57,6 +57,7 @@ import type {
   ExecuteStamps,
   ExporterJob,
   ExporterJobType,
+  ExportMode,
   ExportProgressState,
   HoudiniRunMode,
   JobFileKind,
@@ -478,6 +479,11 @@ interface ActiveExportRun {
    *  the networks importing THESE scenes, so the list has to survive the batch
    *  to be available when it finishes. */
   scenes: Array<string>
+  /** What this batch DOES to each scene ({@link ExportMode}) — the Daz task
+   *  cards' subtitle. Carried on the run rather than derived from the job rows
+   *  because the rows only name a script path, and a window that reloaded
+   *  mid-batch has nothing else left to read the choice off. */
+  mode: ExportMode
 }
 let activeRun: ActiveExportRun | null = null
 
@@ -504,6 +510,9 @@ const exportRunSidecarSchema = z.object({
   scenes: z.array(z.string()),
   unrealProjects: z.array(z.string()).default([]),
   unrealSets: z.array(z.string()).default([]),
+  // Additive: a sidecar written before this field existed restores as the
+  // default run, which is what the overwhelming majority of them were.
+  mode: z.enum(EXPORT_MODES).default('rom-export'),
 })
 
 /**
@@ -599,6 +608,10 @@ export type ExportRunProgress =
       /** The batch's scenes (same watches) — the Houdini cards' network
        *  tooltip. */
       scenes?: Array<string>
+      /** What the batch does to each scene (same watches) — the Daz task
+       *  cards' subtitle. Absent on a display-only adoption: that window is
+       *  reading a job file, which never carried the dialog's choice. */
+      mode?: ExportMode
     }
   /** progress hit 100 — the studio has DELETED the file; final snapshot. */
   | {
@@ -857,6 +870,7 @@ export async function fetchExportRunProgress(watcher?: string): Promise<ExportRu
         rows: parsed.jobs.map((j) => ({ scenePath: j.scenePath, status: j.status })),
         houdiniProjects: run.houdiniProjects,
         scenes: run.scenes,
+        mode: run.mode,
       }
     }
   } catch {
@@ -1388,6 +1402,7 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
     scenes,
     unrealProjects,
     unrealSets,
+    mode,
   }
   await writeExportRunSidecar(activeRun)
 
@@ -1849,6 +1864,9 @@ export async function startProjectScan({ data }: { data: unknown }): Promise<Pro
     scenes: sceneWork.map((s) => s.scenePath),
     unrealProjects: [],
     unrealSets: [],
+    // A scan is not an export mode at all; the sentinel run has no character
+    // editor to draw task cards for, so the field's value never reaches a UI.
+    mode: 'rom-export',
   }
 
   const dazWasRunning = await dazStudioRunningNative(false, 'export')

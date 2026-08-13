@@ -310,26 +310,35 @@ it first. (A skip-Daz run doesn't need the Runner at all.)
 The character header becomes the run's own display for as long as it lasts:
 
 <p align="center">
-  <img width="900" alt="the character header mid-run — task cards, the log window and the progress meters" src="screenshots/dth-export-running.png" />
+  <img width="900" alt="the character header mid-run — the run's task list and its progress bar" src="screenshots/dth-export-running.png" />
   <br>
-  <sub><em>The live pipeline: what is left to do, what is being said, and how far along it is.</em></sub>
+  <sub><em>The live pipeline: one list of what the run does, and how far through it is.</em></sub>
 </p>
 
-- **Task cards**, numbered in run order — every selected Daz scene, then every
-  Houdini project. The column stacks from the **bottom**: the card being worked
-  on is the lit one at the very bottom, beside the buttons, and everything still
-  to come waits above it (so the numbers read downwards, 3 · 2 · 1). A finished
-  card sails off and the queue drops into its place, leaving the column always
-  reading as what is left.
-- **A log window** tailing whichever leg is talking. The Daz scripts report each
-  step as they start it *and* as it lands (*generating ROM* → *ROM generated*),
-  so the window names what is running and not only what finished; the Houdini
-  leg streams the DazToHue HDA's own output.
-- **A progress bar** for the unit being worked on — plus a second one above it
-  whenever the leg spans several units (several scenes, or several DazToHue
-  networks in one project). Both are a track and a percent, nothing else: the
-  cards say what is running and the log window's newest line says how it's
-  going.
+- **One task list**, numbered in run order — **one row per job**, which is what
+  makes it worth reading:
+  - every selected **Daz scene**, saying what the run does to it (*ROM +
+    Export*, *Export only*, …);
+  - every **DazToHue network**, not merely every `.hip` — a project holding two
+    networks is two rows, each named as the network is, with its project beside
+    it;
+  - every **export set going into an Unreal project** — two characters
+    re-imported into the same project are two imports, so they are two rows,
+    each saying *Re-import* or *First import* and which project it lands in.
+
+  The row being worked spins; a finished one is ticked off and stays, so the
+  list reads as the whole run rather than only what is left. The mark on the
+  right is the application doing it.
+- **One progress bar** underneath, across the whole run, with the **newest thing
+  the run said** printed on it as a single line. The Daz scripts report each step
+  as they start it *and* as it lands (*generating ROM* → *ROM generated*); the
+  Houdini leg passes on the DazToHue HDA's own output; the Unreal leg says when
+  the job was queued and how the import ended.
+
+Only the newest line is shown. The full output of each leg stays on disk, which
+is where a post-mortem is read from anyway: the Runner's progress log, the
+Houdini console log (`.dth_houdini_console.log` in the character folder) and the
+Unreal editor's own log.
 
 The button beside it simply reads **Working** with the elapsed time; the numbers
 live in the display. Nothing is announced mid-run: **one report** at the very
@@ -355,7 +364,7 @@ modifier: nothing has started yet.
 
 **Reloading the app doesn't lose the run.** Every handoff writes its plan down
 beside its own files, so the character's editor picks the run back up when it
-opens: the elapsed clock, the task cards, the Houdini projects still to come and
+opens: the elapsed clock, the task list, the Houdini projects still to come and
 the report so far. Any *other* window shows the same run read-only.
 
 ### Carry on into Houdini
@@ -371,7 +380,7 @@ What happens:
    waits until the *whole* round trip is done.
 2. Houdini runs the project **headless**: `hython` loads it in the background,
    works the batch and exits again. No window opens, so there is nothing to wait
-   for while a big project loads and nothing of yours to close — the log window
+   for while a big project loads and nothing of yours to close — the task list
    in the header is where you watch it. Want a project open to work in instead?
    Open it from its card on the character page; this dialog runs the pipeline.
 3. Only the networks importing **the scenes you ticked** export. A project

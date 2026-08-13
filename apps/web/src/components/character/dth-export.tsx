@@ -49,12 +49,17 @@ import {
   startUnrealImport,
 } from '#/lib/rom/api.ts'
 import { holdBusyCursor } from '#/lib/busy-cursor.ts'
-import { houdiniTaskCards } from '#/lib/rom/export-cards.ts'
 import {
+  dazTaskCards,
+  houdiniTaskCards,
+  runPercent,
+  unrealTaskCards,
+} from '#/lib/rom/export-cards.ts'
+import {
+  EXPORT_MODE_LABELS,
   formatClock,
   formatElapsed,
   hipsForSelectedScenes,
-  stampLogLines,
   normalizeSceneKey,
   preCheckedScenes,
   scenesMissingExport,
@@ -68,14 +73,16 @@ import type {
   UnrealSendPlan,
 } from '#/lib/rom/api.ts'
 import type { HoudiniProjectImports } from '#/lib/rom/execute-jobs.ts'
+import type { UnrealTarget } from '#/lib/rom/export-cards.ts'
 import type {
   ExportPipelineView,
-  ExportProgressBar,
+  ExportTask,
+  ExportTaskKind,
 } from '#/components/character/export-pipeline-panel.tsx'
 import { HOUDINI_CONSOLE_FILE } from '#/lib/rom/houdini-jobs.ts'
 import type { HoudiniRunState } from '#/lib/rom/houdini-jobs.ts'
 import type { UnrealImportState } from '#/lib/rom/unreal-jobs.ts'
-import type { HoudiniRunMode, RunChoice, StampedLogStore } from '#/lib/rom/execute-jobs.ts'
+import type { ExportMode, HoudiniRunMode, RunChoice } from '#/lib/rom/execute-jobs.ts'
 import type { Character } from '@dth/rom'
 
 /**
@@ -375,6 +382,10 @@ export function DthExportAction({
   // adopted foreign run still shows the log, just no cards).
   const pipelineRef = useRef<{
     daz: Array<{ path: string; label: string }>
+    /** What the Daz batch does to each scene — the scene rows' subtitle
+     *  ("ROM + Export", "Export only"). Undefined on a run this window only
+     *  adopted: the job file it reads never carried the dialog's choice. */
+    dazMode?: ExportMode
     /** `networks` = the scene stems the project will export (the DazToHue
      *  networks are matched per scene) — the card tooltip names them. */
     houdini: Array<{
@@ -386,9 +397,9 @@ export function DthExportAction({
       sets?: Array<string>
     }>
     /** The Unreal projects the export is handed to when the queue drains —
-     *  the run's third leg, and a card like any other: a leg the user picked
-     *  and cannot see must not be invisible just because it is quick. */
-    unreal: Array<{ path: string; label: string }>
+     *  the run's third leg, and ONE ROW PER EXPORT SET, because that is one
+     *  import job each: a project taking two characters is two rows. */
+    unreal: Array<UnrealTarget>
   } | null>(null)
   const [pipeline, setPipeline] = useState<ExportPipelineView | null>(null)
   // Ref mirrors of the two legs' states, for the OTHER leg's poller: the
@@ -416,197 +427,144 @@ export function DthExportAction({
   }
 
   /**
-   * Rebuild the header's pipeline view from the FRESH poll values (state
-   * lags a poll behind, the refs don't). Chronology: the Daz scenes in run
-   * order, then the Houdini projects in queue order. Daz statuses ride the
-   * Runner's processed count; Houdini statuses ride the queue's report
-   * entries + the currently watched project.
+   * The run's Unreal rows: every selected project, each carrying the export
+   * sets it is getting — one import job, and therefore one row, apiece.
+   *
+   * `located` is the dialog's probe (which project already holds which set),
+   * which is what turns a row into "Re-import" or "First import". It is absent
+   * for a run RESTORED after a reload — the plan carries the set names, not the
+   * probe — and those rows then say a plain "Import" rather than picking one of
+   * the two answers on no evidence. The send fills it in for real
+   * ({@link sendToUnreal}).
+   */
+  function unrealTargetsFrom(
+    paths: ReadonlyArray<string>,
+    sets: ReadonlyArray<string>,
+    located?: Record<string, Record<string, string>>,
+  ): Array<UnrealTarget> {
+    return paths.map((path) => ({
+      path,
+      label: stemOf(path),
+      sets: sets.map((name) => ({
+        name,
+        ...(located ? { existing: located[path]?.[name] !== undefined } : {}),
+      })),
+    }))
+  }
+
+  /**
+   * Rebuild the header's task list from the FRESH poll values (state lags a
+   * poll behind, the refs don't).
+   *
+   * ONE list, in the order the run works through it: every selected Daz scene,
+   * then every DazToHue network of every Houdini project, then every export set
+   * going into every Unreal project. Under it, ONE bar — how much of that list
+   * is behind us — carrying the newest thing the run said as its status line.
+   *
+   * Daz statuses ride the Runner's processed count; Houdini statuses ride the
+   * queue's report entries + the currently watched project; the Unreal rows
+   * ride the send and the bridge's own result file.
    */
   function publishPipeline(
     progressNow: ExportRunProgress | null,
     houdiniNow: HoudiniRunState | null,
   ) {
     const armed = pipelineRef.current
-    // The log window must NEVER disappear mid-run (it did, in the states
-    // between the legs — Houdini "starting", and between two nodes when the
-    // activity channel goes quiet): every live state returns SOME log, with
-    // the last captured Houdini lines carried across the quiet stretches.
-    // Lines only — the scene lives on the active task card, the percent on
-    // the meter, the latest status on the meter's label. Each line wears the
-    // [HH:MM:SS] at which this poll first saw it.
-    const now = new Date()
-    const stamp = [now.getHours(), now.getMinutes(), now.getSeconds()]
-      .map((n) => String(n).padStart(2, '0'))
-      .join(':')
     // The opening lines: the legs are silent while the app they drive comes
     // up (Daz takes tens of seconds, hython opens the project before 456.py
-    // says anything), and an empty log window there reads as "nothing is
+    // says anything), and a blank status line there reads as "nothing is
     // happening". Each leg names what it is waiting for until its own first
-    // line lands — stamped like any other, so the wait is visibly timed.
+    // word lands.
     const dazOpeningLine = dazLaunchedRef.current
-      ? 'opening Daz Studio'
-      : 'waiting for Daz Studio to pick the batch up'
-    const houdiniOpeningLine = 'opening Houdini (hython)'
-    const log = (() => {
-      // Each leg re-renders only while IT is talking; what it last rendered
-      // stays in the transcript once it goes quiet, so the Houdini half reads
-      // as the continuation of the Daz half instead of replacing it.
-      if (progressNow && progressNow.state !== 'finished' && progressNow.state !== 'dead') {
-        const own = progressNow.state === 'running' ? (progressNow.step?.lines ?? []) : []
-        if (own.length === 0 && !dazOpenedLineRef.current) dazOpenedLineRef.current = dazOpeningLine
-        const lines = [
-          ...(dazOpenedLineRef.current ? [dazOpenedLineRef.current] : []),
-          ...own,
-        ]
-        dazRenderedRef.current = stampLogLines(dazStampsRef.current, lines, stamp)
-      }
-      if (houdiniNow) {
-        if (houdiniNow.state === 'running' && houdiniNow.activity) {
-          // The HDA's own lines say "DazToHue: …" and nothing about WHERE —
-          // the studio's own lines name their app, so these get told apart
-          // the same way. (Our status lines already do; they keep theirs.)
-          lastHoudiniLinesRef.current = houdiniNow.activity.lines.map((line) => `Houdini; ${line}`)
-        }
-        const own = lastHoudiniLinesRef.current
-        if (own.length === 0 && !houdiniOpenedLineRef.current) {
-          houdiniOpenedLineRef.current = houdiniOpeningLine
-        }
-        const lines = [
-          ...(houdiniOpenedLineRef.current ? [houdiniOpenedLineRef.current] : []),
-          ...own,
-        ]
-        houdiniRenderedRef.current = stampLogLines(houdiniStampsRef.current, lines, stamp)
-      }
-      // The third leg speaks in the same window: what it queued, what it is
-      // waiting for, and how the import ended — arriving minutes after the
-      // other two have gone quiet.
-      if (unrealLinesRef.current.length > 0) {
-        unrealRenderedRef.current = stampLogLines(
-          unrealStampsRef.current,
-          unrealLinesRef.current,
-          stamp,
-        )
-      }
-      const all = [
-        ...sealedLogRef.current,
-        ...dazRenderedRef.current,
-        ...houdiniRenderedRef.current,
-        ...unrealRenderedRef.current,
-      ]
-      return all.length > 0 ? { lines: all.slice(-LOG_TAIL_MAX) } : null
-    })()
-    // The full-width meter row above tasks+log. `current` = the unit under
-    // work; `overall` joins in only when the leg spans several units (scenes /
-    // networks) — the two-level display. Labels carry the latest STATUS text,
-    // never the scene name — that's what the active task card is for.
-    const bars = ((): ExportPipelineView['bars'] => {
-      // Once the Houdini leg exists it owns the meters — the Daz batch is
-      // finished and reported by the time a project starts opening.
+      ? 'Opening Daz Studio'
+      : 'Waiting for Daz Studio to pick the batch up'
+    const houdiniOpeningLine = 'Opening Houdini (hython)'
+    // The ONE status line + how far into the ACTIVE row we are (0–1), from
+    // whichever leg is talking. Only one ever is: the Daz batch is finished and
+    // reported by the time a Houdini project starts opening, and the send waits
+    // for the whole Houdini queue.
+    const live = ((): { status: string; fraction: number; kind: ExportTaskKind } => {
       if (houdiniNow?.state === 'running') {
-        const total = houdiniNow.total
-        const activity = houdiniNow.activity
-        // The latest status text: the newest captured HDA line, else the
-        // leg's own state.
-        // The same prefixed spelling the log window shows.
-        const newest = activity?.lines.at(-1)
-        const status = newest ? `Houdini; ${newest}` : 'exporting…'
-        // The stepwise scale the run can actually measure: opening the
-        // project is one step, each DazToHue network another — hython's
-        // console speaks in phase lines, never percents. `running` means the
-        // project IS open, so that step already counts.
-        const stepwisePct = total > 0 ? ((1 + houdiniNow.done) / (1 + total)) * 100 : 100
-        if (total > 1) {
-          // Within the ACTIVE network the only signal is the HDA's phase
-          // lines (measured: 9 on a full node run) — a coarse estimate,
-          // capped so it never claims a network done. The current bar names
-          // the network's SCENE (it appears on no card — cards are per
-          // project) plus the status.
-          const phasePct = activity ? Math.min((activity.lines.length / 9) * 100, 95) : 0
-          const network =
-            activity?.scene || `network ${Math.min(houdiniNow.done + 1, total)}/${total}`
-          return {
-            // No label: the overall bar renders none and keys no clock — the
-            // card column is what says which network of how many.
-            overall: { percent: stepwisePct, kind: 'houdini' },
-            current: {
-              percent: phasePct,
-              label: activity ? `${network}: ${status}` : network,
-              kind: 'houdini',
-            },
-          }
+        // The HDA's own lines say "Baking textures 3/12…" and nothing about
+        // WHERE — the studio's own lines name their app, so these get told
+        // apart the same way.
+        const newest = houdiniNow.activity?.lines.at(-1)
+        // Within a network the only signal is the HDA's phase lines (measured:
+        // 9 on a full node run) — a coarse estimate, capped so it never claims
+        // a network finished before 456.py says so.
+        const phase = houdiniNow.activity
+          ? Math.min(houdiniNow.activity.lines.length / 9, 0.95)
+          : 0
+        return {
+          status: newest ? `Houdini; ${newest}` : 'Exporting…',
+          fraction: phase,
+          kind: 'houdini',
         }
-        return { current: { percent: stepwisePct, label: status, kind: 'houdini' } }
       }
       if (houdiniNow?.state === 'starting') {
-        return { current: { percent: 0, label: houdiniOpeningLine, kind: 'houdini' } }
+        return { status: houdiniOpeningLine, fraction: 0, kind: 'houdini' }
       }
       if (progressNow?.state === 'running') {
-        const step = progressNow.step
         // Per-scene percent straight from the Runner's progress log; an old
-        // Runner writes none — the bar then rests at 0 while the overall one
-        // (row counts) still moves.
-        const currentPct = step?.percent ?? 0
-        const current: ExportProgressBar = {
-          percent: currentPct,
-          label: step?.message || dazOpeningLine,
+        // Runner writes none, and the row then simply contributes nothing of
+        // its own until it flips to done.
+        const step = progressNow.step
+        return {
+          status: capitalizeStatus(step?.message || dazOpeningLine),
+          fraction: (step?.percent ?? 0) / 100,
           kind: 'daz',
         }
-        if (progressNow.total > 1) {
-          const done = Math.min(progressNow.processed, progressNow.total)
-          return {
-            // No label — see the Houdini leg's overall bar above.
-            overall: {
-              percent: ((done + currentPct / 100) / progressNow.total) * 100,
-              kind: 'daz',
-            },
-            current,
-          }
-        }
-        return { current }
       }
-      // Handed off, not yet claimed: a meter at 0 that NAMES the wait beats a
-      // bare log line with no bar under it.
       if (progressNow?.state === 'pending') {
-        return { current: { percent: 0, label: dazOpeningLine, kind: 'daz' } }
+        return { status: dazOpeningLine, fraction: 0, kind: 'daz' }
       }
-      return null
+      // The Unreal leg outlives both: its status is whatever it last said (the
+      // queue line, the wait for an editor, the outcome), and it has no
+      // progress of its own to report — an import is claimed or it is not.
+      if (unrealStatusRef.current) {
+        return {
+          status: unrealStatusRef.current,
+          fraction: unrealRunRef.current?.state === 'running' ? 0.5 : 0,
+          kind: 'unreal',
+        }
+      }
+      return { status: '', fraction: 0, kind: 'daz' }
     })()
-    // Arm the current bar's per-step clock: the silent minutes inside one
-    // synchronous exporter call tick visibly instead of reading as stuck.
-    // Any new log line or label flip is a new step; the ref survives polls.
-    if (bars) {
-      const stepKey = `${log?.lines.join('\n') ?? ''}|${bars.current.label}`
-      if (stepStartRef.current?.key !== stepKey) {
-        stepStartRef.current = { key: stepKey, atMs: Date.now() }
+
+    const publish = (tasks: Array<ExportTask>) => {
+      if (tasks.length === 0 && !live.status) {
+        setPipeline(null)
+        return
       }
-      bars.current.sinceMs = stepStartRef.current.atMs
-    } else {
-      stepStartRef.current = null
+      setPipeline({
+        tasks,
+        status: live.status,
+        percent: runPercent(tasks, live.fraction),
+        kind: live.kind,
+      })
     }
+
     if (!armed) {
-      // A run this window has no memory of starting (a reloaded window, a
-      // batch from elsewhere) — adopted for display. The Daz cards come from
-      // the job file's OWN rows; only what never left the starting window's
-      // memory stays absent (the Houdini queue's cards, the elapsed clock).
-      const tasks =
+      // A run this window has no memory of starting (a reloaded window, a batch
+      // from elsewhere) — adopted for display. The Daz rows come from the job
+      // file's OWN rows; only what never left the starting window's memory
+      // stays absent (the mode, the Houdini queue, the Unreal targets, the
+      // elapsed clock).
+      publish(
         progressNow?.state === 'running' && progressNow.rows
-          ? // A row without a scene (the contract's "new empty scene" row —
-            // e.g. the genesis-index build) has no card-worthy identity.
-            progressNow.rows
-              .filter((row) => row.scenePath)
-              .map((row) => ({
-              id: `daz:${row.scenePath}`,
-              label: stemOf(row.scenePath),
-              kind: 'daz' as const,
-              status:
-                row.status === 'done' || row.status === 'failed'
-                  ? ('done' as const)
-                  : row.status === 'running'
-                    ? ('active' as const)
-                    : ('waiting' as const),
-            }))
-          : []
-      setPipeline(tasks.length > 0 || log || bars ? { tasks, log, bars } : null)
+          ? dazTaskCards(
+              // A row without a scene (the contract's "new empty scene" row —
+              // e.g. the genesis-index build) has no row-worthy identity.
+              progressNow.rows
+                .filter((row) => row.scenePath)
+                .map((row) => ({ path: row.scenePath, label: stemOf(row.scenePath) })),
+              progressNow.mode,
+              progressNow.processed,
+              false,
+              true,
+            )
+          : [],
+      )
       return
     }
     const report = runReportRef.current
@@ -615,86 +573,49 @@ export function DthExportAction({
       progressNow?.state === 'running' ? progressNow.processed : dazFinished ? armed.daz.length : 0
     const houdiniDone = report?.houdini.length ?? 0
     const houdiniActive = houdiniNow !== null ? currentHipRef.current : ''
-    setPipeline({
-      tasks: [
-        ...armed.daz.map((scene, index) => ({
-          id: `daz:${scene.path}`,
-          label: scene.label,
-          kind: 'daz' as const,
-          status:
-            dazFinished || processed > index
-              ? ('done' as const)
-              : processed === index && progressNow?.state === 'running'
-                ? ('active' as const)
-                : ('waiting' as const),
-        })),
-        ...armed.houdini.flatMap((hip, index) =>
-          houdiniTaskCards(
-            hip,
-            index,
-            hip.label === houdiniActive && houdiniNow?.state === 'running' ? houdiniNow : null,
-            hip.label === houdiniActive && houdiniNow !== null,
-            houdiniDone,
-          ),
+    // Queued is not done: the Unreal leg is done when the editor has imported
+    // it (or said why it could not), which is minutes after the file write.
+    const unrealNow = unrealRunRef.current
+    const unrealStatus: ExportTask['status'] =
+      unrealNow?.state === 'finished'
+        ? 'done'
+        : unrealNow !== null || unrealSentRef.current
+          ? 'active'
+          : 'waiting'
+    publish([
+      ...dazTaskCards(
+        armed.daz,
+        armed.dazMode,
+        processed,
+        dazFinished,
+        progressNow?.state === 'running',
+      ),
+      ...armed.houdini.flatMap((hip, index) =>
+        houdiniTaskCards(
+          hip,
+          index,
+          hip.label === houdiniActive && houdiniNow?.state === 'running' ? houdiniNow : null,
+          hip.label === houdiniActive && houdiniNow !== null,
+          houdiniDone,
         ),
-        // Last, because it happens last: the send waits for every Houdini
-        // project to finish. It is a file write, so it is never `active` for
-        // longer than a poll — `waiting` until it has run, `done` after.
-        ...armed.unreal.map((target) => ({
-          id: `ue:${target.path}`,
-          label: target.label,
-          detail: 'Queued for import when the export finishes',
-          kind: 'unreal' as const,
-          // Queued is not done: the leg is done when the editor has imported
-          // it (or said why it could not).
-          status:
-            unrealRun?.state === 'finished'
-              ? ('done' as const)
-              : unrealRun?.state === 'running'
-                ? ('active' as const)
-                : unrealSentRef.current
-                  ? ('active' as const)
-                  : ('waiting' as const),
-        })),
-      ],
-      log,
-      bars,
-    })
+      ),
+      // Last, because it happens last: the send waits for every Houdini project
+      // to finish. One row per export set per project — two characters going
+      // into one project are two import jobs, and the list says so.
+      ...armed.unreal.flatMap((target) => unrealTaskCards(target, unrealStatus)),
+    ])
   }
 
-  // The last lines the Houdini activity channel showed — the log window keeps
-  // them up through the quiet stretches (between nodes, project opening)
-  // instead of blanking. Reset per project (startHoudiniQueue) and at run end.
-  const lastHoudiniLinesRef = useRef<Array<string>>([])
-  /** The Unreal leg's lines, and their first-seen stamps — the same shape the
-   *  other two legs use, so the transcript reads as one run. */
-  const unrealLinesRef = useRef<Array<string>>([])
-  const unrealRenderedRef = useRef<Array<string>>([])
-  const unrealStampsRef = useRef<StampedLogStore>({ lines: [], stamps: [] })
-  // First-seen `[HH:MM:SS]` stamps for the two legs' log tails (the on-disk
-  // logs carry no timestamps — see stampLogLines).
-  const dazStampsRef = useRef<StampedLogStore>({ lines: [], stamps: [] })
-  const houdiniStampsRef = useRef<StampedLogStore>({ lines: [], stamps: [] })
-  // ONE transcript per run: what each leg last rendered, kept after that leg
-  // goes quiet. The Daz lines used to vanish the moment Houdini took over —
-  // the run is one story, and the window scrolls, so the earlier chapters
-  // stay. `sealed` holds the legs that are DONE talking (the Daz batch, and
-  // each finished project of a multi-project queue).
-  const sealedLogRef = useRef<Array<string>>([])
-  const dazRenderedRef = useRef<Array<string>>([])
-  const houdiniRenderedRef = useRef<Array<string>>([])
-  // The opening line each leg SHOWED ('' = none). Kept at the head of that
-  // leg's lines once its real ones start, so "Opening Houdini (hython)" stays
-  // above the HDA's first word instead of being replaced by it. Only what was
-  // actually displayed is kept — an adopted run never showed one, and
-  // inventing it would state something this window never knew.
-  const dazOpenedLineRef = useRef('')
-  const houdiniOpenedLineRef = useRef('')
-  /** How much of a run's transcript is kept (the window shows 5 and scrolls). */
-  const LOG_TAIL_MAX = 200
-  // When the CURRENT step began — feeds the meter's per-step clock. Keyed on
-  // the log tail + the bar's label: any new line (or state flip) resets it.
-  const stepStartRef = useRef<{ key: string; atMs: number } | null>(null)
+  /**
+   * The Unreal leg's latest word — the status line's source once the other two
+   * have gone quiet ('' = it has not spoken).
+   *
+   * It gets a ref of its own because that leg reports LAST and outlives the
+   * panel's other inputs: the send happens after the Houdini queue drains, and
+   * the bridge's answer lands minutes later, from an editor the user may only
+   * then have opened.
+   */
+  const unrealStatusRef = useRef('')
   // Did THIS run start Daz itself? Only then is "opening Daz Studio" the truth
   // — a handoff to a running Daz is waiting for its Runner to claim the batch.
   const dazLaunchedRef = useRef(false)
@@ -702,17 +623,16 @@ export function DthExportAction({
   /** The run is over (reported, dead or aborted) — drop the panel. */
   function clearPipeline() {
     pipelineRef.current = null
-    lastHoudiniLinesRef.current = []
-    dazStampsRef.current = { lines: [], stamps: [] }
-    houdiniStampsRef.current = { lines: [], stamps: [] }
-    sealedLogRef.current = []
-    dazRenderedRef.current = []
-    houdiniRenderedRef.current = []
-    dazOpenedLineRef.current = ''
-    houdiniOpenedLineRef.current = ''
-    stepStartRef.current = null
+    unrealStatusRef.current = ''
     dazLaunchedRef.current = false
     setPipeline(null)
+  }
+  // A finished Unreal leg is the one state that never clears itself (its watch
+  // ends by design — see refreshUnreal), so the next run would inherit it and
+  // start with its rows already ticked. Every run start goes through here.
+  function resetUnrealLeg() {
+    unrealSentRef.current = false
+    setUnrealState(null)
   }
   // A handoff written against a SHUTTING-DOWN Daz (running process, batch
   // never claimed) — the modal below waits out the exit and relaunches.
@@ -799,6 +719,19 @@ export function DthExportAction({
    * character page, which was a second place to look for a third of one run.
    */
   const [unrealRun, setUnrealRun] = useState<UnrealImportState | null>(null)
+  /**
+   * The same value as a ref, for the same reason the other two legs keep one:
+   * the poll interval's closures are armed once, so a `publishPipeline` reading
+   * the STATE sees whatever it was when the interval was armed. The Unreal rows
+   * are the ones that suffered — the leg's last state change is `finished`, and
+   * it is also the last publish, so a stale read left every row spinning
+   * forever on an import that had landed.
+   */
+  const unrealRunRef = useRef<UnrealImportState | null>(null)
+  const setUnrealState = (state: UnrealImportState | null) => {
+    unrealRunRef.current = state
+    setUnrealRun(state)
+  }
   const unrealWatchRef = useRef('')
 
   /**
@@ -824,6 +757,15 @@ export function DthExportAction({
             data: { projectId, id: character.id, uprojectPath, sets: unrealSetsRef.current },
           })
           const sets = started.sets.map((set) => set.name).join(', ')
+          // The send is the moment the studio KNOWS which of these sets that
+          // project already holds — it located them itself to write the job's
+          // destinations. So the rows stop guessing and say re-import or first
+          // import for real, each against the project it is going into.
+          const armed = pipelineRef.current
+          const target = armed?.unreal.find((one) => one.path === uprojectPath)
+          if (target) {
+            target.sets = started.sets.map((set) => ({ name: set.name, existing: set.existing }))
+          }
           // Nothing claims a job when no editor is open — so open one. Five
           // seconds is the bridge's poll (1s) with room for a slow start; the
           // api refuses when anything is already running.
@@ -832,16 +774,12 @@ export function DthExportAction({
               // queued either way — a failed launch is not a failed send
             })
           }, 5000)
-          // The transcript gets the same news the report will, as it happens.
-          unrealLinesRef.current = [
-            ...unrealLinesRef.current,
-            `Unreal; queued for ${name} - ${sets}`,
-            'Unreal; waiting for the editor to pick the job up',
-          ]
+          // The status line gets the same news the report will, as it happens.
+          unrealStatusRef.current = `Unreal; queued for ${name} — waiting for the editor to pick the job up`
           // One project is watched — the handoff is one job at a time, and the
-          // cards name the rest.
+          // rows name the rest.
           if (!unrealWatchRef.current) unrealWatchRef.current = uprojectPath
-          setUnrealRun({ state: 'waiting' })
+          setUnrealState({ state: 'waiting' })
           return `Unreal: queued for ${name} — ${sets}`
         } catch (error) {
           // A refusal here (no bridge, no export) must not read as an export
@@ -910,13 +848,6 @@ export function DthExportAction({
     houdiniQueueRef.current = rest.length > 0 ? { projects: rest, scenes } : null
     const stem = (first.split(/[\\/]/).pop() ?? first).replace(/\.[^./\\]+$/, '')
     currentHipRef.current = stem
-    // A fresh project starts its own lines — the previous project's are SEALED
-    // into the transcript first (the run is one story; the window scrolls).
-    sealedLogRef.current = [...sealedLogRef.current, ...houdiniRenderedRef.current]
-    houdiniRenderedRef.current = []
-    houdiniStampsRef.current = { lines: [], stamps: [] }
-    houdiniOpenedLineRef.current = ''
-    lastHoudiniLinesRef.current = []
     try {
       // The queue and the report ride along into the run's own sidecar, so a
       // window that reloads mid-leg can finish the WHOLE process: the projects
@@ -980,20 +911,17 @@ export function DthExportAction({
     const uprojectPath = unrealWatchRef.current
     if (!uprojectPath) return
     const state = await fetchUnrealImportProgress({ data: { uprojectPath } }).catch(() => null)
-    setUnrealRun(state)
+    setUnrealState(state)
     if (state?.state !== 'finished') return
     unrealWatchRef.current = ''
-    // The outcome is a LINE, like every other leg's — the transcript is where
-    // the run says what happened, and this happens minutes after the toast.
+    // The outcome becomes the status line, like every other leg's — and it
+    // lands minutes after the run's toast, so this is where it is read.
     const what = state.reimported ? 're-imported' : 'imported'
-    unrealLinesRef.current = [
-      ...unrealLinesRef.current,
-      state.error
-        ? `Unreal; import failed - ${state.error}`
-        : `Unreal; ${what} ${state.assets} asset${state.assets === 1 ? '' : 's'}${
-            state.destination ? ` in ${state.destination}` : ''
-          }`,
-    ]
+    unrealStatusRef.current = state.error
+      ? `Unreal; import failed — ${state.error}`
+      : `Unreal; ${what} ${state.assets} asset${state.assets === 1 ? '' : 's'}${
+          state.destination ? ` in ${state.destination}` : ''
+        }`
     publishPipeline(progressRef.current, houdiniRef.current)
     void dismissUnrealImport({ data: { uprojectPath } })
   }
@@ -1064,7 +992,7 @@ export function DthExportAction({
               networks: run.scenes.map(stemOf),
               sets: hipSetsRef.current[path],
             })),
-            unreal: run.unrealProjects.map((path) => ({ path, label: stemOf(path) })),
+            unreal: unrealTargetsFrom(run.unrealProjects, run.unrealSets),
           }
         }
         // Every Daz card drops (the report's daz entry marks the leg done).
@@ -1139,13 +1067,17 @@ export function DthExportAction({
         daz: run.rows
           .filter((row) => row.scenePath)
           .map((row) => ({ path: row.scenePath, label: stemOf(row.scenePath) })),
+        // What the batch does to each of them — restored from the run record,
+        // because the job rows only name a script and this window never saw
+        // the dialog that chose it.
+        dazMode: run.mode,
         houdini: (run.houdiniProjects ?? []).map((path) => ({
           path,
           label: stemOf(path),
           networks: (run.scenes ?? []).map(stemOf),
         })),
         // A running batch's live progress carries no Unreal plan (only its
-        // FINISHED snapshot does) — this window shows the cards it can name.
+        // FINISHED snapshot does) — this window shows the rows it can name.
         unreal: [],
       }
     }
@@ -1298,7 +1230,7 @@ export function DthExportAction({
             networks: plan.sceneScope.map(stemOf),
             sets: hipSetsRef.current[path],
           })),
-          unreal: plan.unrealProjects.map((path) => ({ path, label: stemOf(path) })),
+          unreal: unrealTargetsFrom(plan.unrealProjects, plan.unrealSets),
         }
         // Arm the watch's own poll: `houdini` state drives the interval.
         setHoudini({ state: 'starting', startedAtMs: plan.startedAtMs })
@@ -1491,7 +1423,7 @@ export function DthExportAction({
             // A new run supersedes the previous outcome (see dismissFinishToasts).
             dismissFinishToasts()
             runReportRef.current = null
-            unrealSentRef.current = false
+            resetUnrealLeg()
             setPending(true)
             // The header's task cards: the run's selection in run order —
             // the Daz scenes, then the Houdini projects (rom-only continues
@@ -1503,13 +1435,14 @@ export function DthExportAction({
             unrealSetsRef.current = run.unrealSets
             pipelineRef.current = {
               daz: run.scenes.map((path) => ({ path, label: stemOf(path) })),
+              dazMode: run.mode,
               houdini: run.houdiniProjects.map((path) => ({
                 path,
                 label: stemOf(path),
                 networks: run.houdiniScenes.map(stemOf),
                 sets: hipSetsRef.current[path],
               })),
-              unreal: run.unrealProjects.map((path) => ({ path, label: stemOf(path) })),
+              unreal: unrealTargetsFrom(run.unrealProjects, run.unrealSets, run.unrealLocated),
             }
             publishPipeline(null, houdiniRef.current)
             // Arm the progress view right away (0/n until Daz delivers).
@@ -1517,10 +1450,10 @@ export function DthExportAction({
           }}
           // A skip-Daz run hands its selection straight to the Houdini queue —
           // the same machinery the after-batch continuation drives.
-          onHoudiniQueue={(projects, scenes, unrealTargets, unrealSets) => {
+          onHoudiniQueue={(projects, scenes, unrealTargets, unrealSets, located) => {
             dismissFinishToasts()
             runReportRef.current = null
-            unrealSentRef.current = false
+            resetUnrealLeg()
             pipelineRef.current = {
               daz: [],
               houdini: projects.map((path) => ({
@@ -1529,7 +1462,7 @@ export function DthExportAction({
                 networks: scenes.map(stemOf),
               sets: hipSetsRef.current[path],
               })),
-              unreal: unrealTargets.map((path) => ({ path, label: stemOf(path) })),
+              unreal: unrealTargetsFrom(unrealTargets, unrealSets, located),
             }
             unrealTargetsRef.current = unrealTargets
             unrealSetsRef.current = unrealSets
@@ -1538,18 +1471,18 @@ export function DthExportAction({
           // "Skip Houdini" with Daz skipped too: one file write, no watch —
           // the same thing the character page's Send panel does, reached from
           // the dialog the rest of the pipeline lives in.
-          onUnrealOnly={(targets, sets) => {
+          onUnrealOnly={(targets, sets, located) => {
             dismissFinishToasts()
-            unrealSentRef.current = false
+            resetUnrealLeg()
             unrealTargetsRef.current = targets
             unrealSetsRef.current = sets
-            // The run IS the send, so it gets the same card column as any other
+            // The run IS the send, so it gets the same task list as any other
             // leg: writing a file and showing nothing reads as "nothing
             // happened" — which is also exactly what a closed editor looks like.
             pipelineRef.current = {
               daz: [],
               houdini: [],
-              unreal: targets.map((path) => ({ path, label: stemOf(path) })),
+              unreal: unrealTargetsFrom(targets, sets, located),
             }
             publishPipeline(null, null)
             void sendToUnreal().then((lines) => {
@@ -1808,17 +1741,19 @@ function SceneRow({
 const DAZ_MODE_OPTIONS: ReadonlyArray<{ mode: RunChoice; title: string; blurb: string }> = [
   {
     mode: 'rom-export',
-    title: 'ROM + Export',
+    // The same spelling the run's Daz task rows carry — one source, so the
+    // card cannot end up calling the run something the dropdown didn't.
+    title: EXPORT_MODE_LABELS['rom-export'],
     blurb: 'Build a fresh ROM, save the ROM animation scene, then export everything.',
   },
   {
     mode: 'rom-only',
-    title: 'ROM only',
+    title: EXPORT_MODE_LABELS['rom-only'],
     blurb: 'Build the ROM and save the ROM animation scene, skipping the export.',
   },
   {
     mode: 'export-only',
-    title: 'Export only',
+    title: EXPORT_MODE_LABELS['export-only'],
     blurb: 'Export the saved ROM animations as they stand, without rebuilding.',
   },
   {
@@ -1991,6 +1926,11 @@ function DthExportDialog({
     unrealProjects: Array<string>
     /** The export sets to hand over — the user's own tick list. */
     unrealSets: Array<string>
+    /** Which of those sets each project ALREADY holds (the send plan's probe) —
+     *  what lets the run's Unreal rows say "Re-import" instead of guessing. */
+    unrealLocated: Record<string, Record<string, string>>
+    /** What the batch does to each scene — the Daz rows' subtitle. */
+    mode: ExportMode
     /** The handoff started Daz itself (vs. handing to a running one). */
     dazLaunched: boolean
   }) => void
@@ -2001,10 +1941,15 @@ function DthExportDialog({
     scenes: Array<string>,
     unrealProjects: Array<string>,
     unrealSets: Array<string>,
+    unrealLocated: Record<string, Record<string, string>>,
   ) => void
   /** Neither Daz nor Houdini runs — the whole run is the Unreal send, off the
    *  exports already on disk. */
-  onUnrealOnly: (unrealProjects: Array<string>, unrealSets: Array<string>) => void
+  onUnrealOnly: (
+    unrealProjects: Array<string>,
+    unrealSets: Array<string>,
+    unrealLocated: Record<string, Record<string, string>>,
+  ) => void
   /** The handoff went to a Daz that is still shutting down — the caller shows
    *  the wait-and-relaunch modal (see WaitForDazCloseModal). */
   onDazClosing: () => void
@@ -2445,13 +2390,16 @@ function DthExportDialog({
       // No set ticked = nothing to send, whatever is ticked above it.
       const chosenSets = [...checkedSets]
       const unrealTargets = chosenSets.length > 0 ? chosenUnreal : []
+      // The probe behind the pre-selection, handed up so the run's Unreal rows
+      // can say re-import vs first import per project ({@link UnrealSendPlan}).
+      const located = sendPlan?.located ?? {}
       // Skip Daz: the Houdini selection IS the run — the same machinery the
       // after-batch continuation drives, minus the batch.
       if (mode === 'houdini-only') {
         // Nothing to run in Daz OR Houdini: this IS the "just re-import in
         // Unreal" case, and it is one file write away.
         if (houdiniMode === 'skip') {
-          onUnrealOnly(unrealTargets, chosenSets)
+          onUnrealOnly(unrealTargets, chosenSets, located)
           onClose()
           return
         }
@@ -2474,7 +2422,7 @@ function DthExportDialog({
             return
           }
         }
-        onHoudiniQueue(chosenHips, chosenScenes, unrealTargets, chosenSets)
+        onHoudiniQueue(chosenHips, chosenScenes, unrealTargets, chosenSets, located)
         onClose()
         return
       }
@@ -2521,7 +2469,9 @@ function DthExportDialog({
         houdiniScenes: chosenScenes,
         unrealProjects: unrealTargets,
         unrealSets: chosenSets,
-        // Whether the handoff STARTED Daz — the log window's opening line
+        unrealLocated: located,
+        mode,
+        // Whether the handoff STARTED Daz — the status line's opening word
         // says "opening Daz Studio" only when that is what is happening.
         dazLaunched: result.dazLaunched,
       })

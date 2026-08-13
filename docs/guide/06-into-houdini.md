@@ -218,11 +218,16 @@ send an export you already have without running anything, pick **Skip Daz — us
 last exports** and **Skip Houdini — use last exports**: then the whole run is
 the send.
 
-The Unreal leg reports where the other two do: the run's **log window** in the
-character header, with a task card beside them. `Unreal; queued for
-workflow3d - LaraClassic`, then the wait, then the outcome — which arrives
-minutes later, from an editor that may not even have been open when the job was
-queued, so the run's display stays up until it does.
+The Unreal leg reports where the other two do: the run's **task list** in the
+character header, and its status line — `Unreal; queued for workflow3d`, then
+the wait, then the outcome, which arrives minutes later from an editor that may
+not even have been open when the job was queued, so the run's display stays up
+until it does.
+
+It gets **one row per import job**, not per project: sending two export sets to
+one Unreal project is two imports, so the list shows two rows, each naming the
+set (the character as Unreal will know it), whether it is a *Re-import* or a
+*First import*, and the project it lands in.
 
 What it sends is the **export sets you tick** in that section. Each is a folder
 in the character's `export/` folder named by the HDA's *character name* and
