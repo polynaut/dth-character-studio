@@ -1,6 +1,6 @@
 ---
-'@dth/web': patch
-'@dth/desktop': patch
+'@dth/web': minor
+'@dth/desktop': minor
 ---
 
 The ✨ **Generate project** button is gone from the Unreal projects bar.

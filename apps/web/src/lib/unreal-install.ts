@@ -146,13 +146,6 @@ export function buildUnrealScan(
   return { installs: found }
 }
 
-/** The engine to preselect: the newest one that is actually on disk. */
-export function defaultUnrealEngine(
-  installs: ReadonlyArray<UnrealEngineFound>,
-): UnrealEngineFound | null {
-  return installs.find((install) => install.exists) ?? null
-}
-
 /**
  * The `major.minor` a `.uproject`'s `EngineAssociation` names, or null when it
  * names no matchable version: a GUID (source build), an empty string (next to

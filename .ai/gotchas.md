@@ -1336,7 +1336,8 @@ current code before relying on details, but assume the *lesson* still holds.
   class** — it is not a *path* problem, and reaching for `path-trim.ts` only
   when the string is a path misses it. Caught a third time in review on
   `/^_+|_+$/` trimming an Unreal project NAME (`unrealProjectNameFrom`,
-  `lib/unreal-install.ts`); that one is a `while (s.endsWith('_'))` loop now.
+  `lib/unreal-install.ts` — removed with the Generate Unreal project feature);
+  that one became a `while (s.endsWith('_'))` loop.
   A *global, unanchored* replace (`/_+/g`, `/[^A-Za-z0-9_]+/g`) is fine — every
   match consumes, so there is nothing to backtrack.
 - **Unreal decides a plugin fits by `BuildId` EQUALITY, not by any version

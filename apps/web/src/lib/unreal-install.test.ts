@@ -5,7 +5,6 @@ import { unrealEngineInstallSchema } from '#/lib/rom/api/native-types.ts'
 import {
   allPluginBuilds,
   buildUnrealScan,
-  defaultUnrealEngine,
   engineVersionFromAssociation,
   isZippedPlugin,
   matchPluginsToEngine,
@@ -37,18 +36,6 @@ describe('buildUnrealScan', () => {
     expect(scan.installs[0]?.name).toBe('Unreal Engine 5.10')
     // The uninstalled-but-still-registered engine is flagged, not dropped.
     expect(scan.installs.map((i) => i.exists)).toEqual([true, true, false])
-  })
-
-  it('preselects the newest install that is actually on disk', () => {
-    const scan = buildUnrealScan(
-      [
-        { version: '5.7', path: 'D:/gone' },
-        { version: '5.6', path: 'D:/UE_5.6' },
-      ],
-      new Set(['D:/UE_5.6']),
-    )
-    expect(defaultUnrealEngine(scan.installs)?.version).toBe('5.6')
-    expect(defaultUnrealEngine([])).toBeNull()
   })
 
   it('carries the native fields THROUGH to the UI — buildId included', () => {

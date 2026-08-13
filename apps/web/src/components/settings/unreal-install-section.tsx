@@ -87,7 +87,7 @@ export function UnrealInstallSection() {
         <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
           {loading
             ? 'Looking for installed Unreal Engines…'
-            : 'No Unreal Engine detected — the Epic Games launcher registers each install. Linked Unreal projects can still take DTH content and plugins; only Generate project needs a detected engine.'}
+            : 'No Unreal Engine detected — the Epic Games launcher registers each install. Linked Unreal projects can still take DTH content and plugins; only checking a plugin build against the engine it was built for needs a detected engine.'}
         </p>
       )}
       {installs.length > 0 && (
