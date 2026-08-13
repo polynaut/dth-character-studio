@@ -31,7 +31,7 @@ If you reuse the same skin across characters, you were rebuilding all of it by
 hand.
 
 <p align="center">
-  <img width="900" alt="the Utils drawer: target projects, source project and what to copy" src="screenshots/houdini-utils-drawer.png" />
+  <img width="900" alt="the Utils drawer: this project's target nodes, the source project and what to copy" src="screenshots/houdini-utils-drawer.png" />
   <br>
   <sub><em>The Utils drawer: this project's nodes as targets, a browsed project as the source, and what travels.</em></sub>
 </p>
@@ -379,9 +379,9 @@ to load.
 one already on the right folder *and* the right timeline leaves the button dead,
 so running it twice rewrites nothing the second time. The two values are judged
 separately: a project whose `$JOB` is fine and whose timeline is 24 gets its
-timeline written and nothing else, and the report says which of them moved. It offers the same **Dry run** as the transfer,
-and the same backup before saving. A value the scan couldn't read is never
-repaired: it is *unknown*, not wrong.
+timeline written and nothing else, and the report says which of them moved. It
+offers the same **Dry run** as the transfer, and the same backup before saving.
+A value the scan couldn't read is never repaired: it is *unknown*, not wrong.
 
 **Refresh assets** is the odd one out, and deliberately so. A `.hip` stores the
 DazToHue asset definitions it was built with, so switching your installed
@@ -418,8 +418,9 @@ and its matching documents folder in Settings. The drawer scans the one project
 it was opened on — when it opens and again after a run — and only when something
 that project depends on changed, so coming back to one nobody touched costs
 nothing. Reading a `.hip` the first time takes a few seconds; a transfer
-rewrites it, so it is read once more afterwards. One scan serves all three tabs — the `$JOB` and `$HIP` values are read in the same pass as the
-nodes — so switching between General, Material and Skeleton is instant.
+rewrites it, so it is read once more afterwards. One scan serves all three
+tabs — the `$JOB` and `$HIP` values are read in the same pass as the nodes — so
+switching between General, Material and Skeleton is instant.
 
 **Installing a new DazToHue invalidates it.** What the scan remembers depends on
 the DazToHue libraries hython loads, not only on the `.hip` — so installing,
@@ -429,9 +430,9 @@ release's vocabulary outlives the install that replaced it: a freshly installed
 DazToHue would keep being reported as the one it replaced.
 
 **Rescan re-reads the project.** The button bypasses the cache and opens the
-`.hip` with hython again, then says so — so a verdict you believe is wrong has a
-way out. (It used to be served by that same cache, which
-on a project that looked fresh made it indistinguishable from a dead button.)
+`.hip` with hython again, then says so — so a verdict you believe is wrong has
+a way out. (It used to be served by that same cache, which on a project that
+looked fresh made it indistinguishable from a dead button.)
 
 &nbsp;
 
