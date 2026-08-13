@@ -214,12 +214,15 @@ test('a project served from the cache never spins — only the one being read do
   await expect(spinners(page)).toHaveCount(0, { timeout: 20_000 })
 })
 
-test('the drawer merges the store with a scan of what it does not cover', async ({ page }) => {
+test('the drawer scans the project it was opened from when the store cannot answer', async ({
+  page,
+}) => {
   // One linked project the store answers for (inside the character folder,
   // fresh entry) and one it cannot answer for yet (linked from outside — the
-  // sweep skips those by design). The drawer must show BOTH: the cache is only
-  // an answer for the projects it covers, and a partial cache silently hiding
-  // a linked project from the node lists and the repairs was a real bug.
+  // sweep skips those by design). Opening the drawer on the UNCOVERED one has
+  // to scan it there and then: a cache is only an answer for what it covers,
+  // and a partial cache silently hiding a project's nodes and repairs was a
+  // real bug.
   const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true, houdiniProject: true })
   // hython configured, so the drawer CAN scan the uncovered link itself.
   const settingsPath = `${P.appData}/settings.json`
@@ -254,15 +257,17 @@ test('the drawer merges the store with a scan of what it does not cover', async 
   await page.getByRole('link', { name: /Kira/ }).click()
   await expect(page.getByText(/custom ROM frames/)).toBeVisible()
 
-  // Two cards, two Utils buttons — either opens the same drawer.
-  await page.getByRole('button', { name: /^Utils/ }).first().click()
+  // Two cards, two Utils buttons — each opens the drawer ON ITS OWN PROJECT.
+  // The second card is the outside link, which the store cannot answer for.
+  await page.getByRole('button', { name: /^Utils/ }).nth(1).click()
   const drawer = page.getByRole('dialog')
   await drawer.getByRole('tab', { name: 'Material' }).click()
 
-  // The cached project, served from the store…
-  await expect(drawer.getByText('CachedBox')).toBeVisible()
-  // …and the outside link, scanned on the spot and merged in.
+  // Scanned on the spot, because the store has nothing for this one.
   await expect(drawer.getByText('ScannedBox')).toBeVisible()
+  // And the character's OTHER project is not here at all — utils are per
+  // project, so the cached one is none of this drawer's business.
+  await expect(drawer.getByText('CachedBox')).toHaveCount(0)
 
   // The drawer's own scan persisted under the CHARACTER's store — target scans
   // carry the character scope, so what the drawer earns is what the card badge
@@ -274,7 +279,7 @@ test('the drawer merges the store with a scan of what it does not cover', async 
     .toContain('g9_skin_base')
 })
 
-test('a store that covers every linked project serves the drawer without a scan', async ({
+test('a stored scan serves the drawer without hython — and only for THIS project', async ({
   page,
 }) => {
   // Both projects fresh in the store — the outside one earned by a previous
@@ -282,6 +287,11 @@ test('a store that covers every linked project serves the drawer without a scan'
   // throw drawer-earned scans away). No hython is configured here, so if the
   // drawer tried to scan ANYTHING the picker would show an error instead of
   // these nodes.
+  //
+  // It also pins the scoping the other way round from the spec above: the store
+  // HAS the other project's nodes and hands them over on request, so a drawer
+  // still listing them would be an easy accident. Utils are per project — the
+  // card you pressed is the whole subject.
   const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true, houdiniProject: true })
   linkOutside(seed)
   seed.files[STORE] = JSON.stringify({
@@ -314,7 +324,7 @@ test('a store that covers every linked project serves the drawer without a scan'
   await drawer.getByRole('tab', { name: 'Material' }).click()
 
   await expect(drawer.getByText('CachedBox')).toBeVisible()
-  await expect(drawer.getByText('OutsideBox')).toBeVisible()
+  await expect(drawer.getByText('OutsideBox')).toHaveCount(0)
 })
 
 test('unresolved imports and blank parms are both named', async ({ page }) => {

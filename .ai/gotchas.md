@@ -972,6 +972,20 @@ current code before relying on details, but assume the *lesson* still holds.
 
 ## Web app
 
+- **A default set in an effect can be cancelled by a handler somewhere else in
+  the same component — and nothing fails when it is.** The Utils drawer ticked
+  the opened card's nodes on open (#690). #691 made every tab switch clear the
+  target selection (it is per node KIND), and #706 made the drawer land on
+  General, which shows no node list — so from #706 on, the only way to reach a
+  tickable list was through a switch that wiped the ticks first. The preselect
+  ran, wrote state nothing displayed, and was then thrown away, for four
+  releases, while its own comment AND the guide kept promising it. No test
+  caught it because every spec that needed a target ticked one itself. What
+  caught it was a REGENERATED SCREENSHOT: the guide shot showed the box empty
+  under a caption saying it starts selected. Two rules out of it — when a
+  feature's default lives in one place and its reset in another, one of them is
+  dead and only the rendered UI says which; and a screenshot suite is a
+  behaviour assertion, so read what comes out of it, don't just commit it.
 - **Every window loads the SAME document, so the start URL never says which
   project it is for.** The config window starts on `/` — which the Home route
   matches — and a runtime window (`WebviewUrl::App("index.html")`) on

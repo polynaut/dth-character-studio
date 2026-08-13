@@ -43,9 +43,11 @@ function node(
   }
 }
 
-/** A material node in the SAME project — the drawer preselects every node of
- *  the card it was opened from, all kinds at once, so this is what used to be
- *  counted into an occlusion run. */
+/** A material node in the SAME project — the drawer used to preselect every
+ *  node of the card it was opened from, all kinds at once, so this is what used
+ *  to be counted into an occlusion run. The preseed is gone (#817), but the
+ *  node stays here: what this spec pins is that the count follows the ACTIVE
+ *  kind, and it can only pin that with a wrong-kind node present to be ignored. */
 const MATERIAL = node('material', 'DazToHueMaterial', [])
 const OCCLUSION = node('occlusion', 'DazToHueOcclusion', [
   { key: 'visualise', label: 'Visualise', count: 2 },
@@ -192,11 +194,13 @@ test('the confirm dialog offers no material knobs on an occlusion run', async ({
 })
 
 test('the target count is the ACTIVE kind only, not every node of the project', async ({ page }) => {
-  // The drawer preselects every node of the card it was opened from — all kinds
-  // at once — so an occlusion run counted the material node too: "3 target
-  // nodes selected" under one visible ticked box. The Python refuses a
+  // The drawer used to preselect every node of the card it was opened from —
+  // all kinds at once — so an occlusion run counted the material node too: "3
+  // target nodes selected" under one visible ticked box. The Python refuses a
   // wrong-typed node per target, so nothing was ever written to one; the count
-  // and the report were the lie.
+  // and the report were the lie. The preseed is gone (#817), so this now guards
+  // the remaining half: `targetRefs` filters by the ACTIVE kind, and the count
+  // it feeds may never name a node the tab isn't showing.
   const drawer = await openDrawer(page)
   await drawer.getByRole('tab', { name: 'Occlusion', exact: true }).click()
   await drawer.getByRole('checkbox', { name: /DazToHueOcclusion/ }).first().check()
