@@ -315,6 +315,11 @@ anything.
 > project is backed up first and a failed one can be put straight back from the
 > report.
 
+**PoseAsset CSV path** is a read-out rather than a repair of its own — *filled
+in*, *not filled in* (**Fill network** writes it), or *your DazToHue has no such
+parameter*, the release story spelled out under **Fill network** below. Three
+different answers, and only the middle one is work you can do.
+
 **Reference paths** and **Import references** are the other half. Repairing
 `$JOB` decides how *future* picks are written down; these two fix what is
 already written.
@@ -340,6 +345,15 @@ putting the file back is a reinstall.
   carrying the longer `$JOB/houdini/daz-export/…` form to today's
   `$HIP/daz-export/…`, and only on DazToHue nodes — a `$JOB` path on your own
   cache or render nodes is your choice of anchor and is left alone.
+- **Re-homes the pre-v0.69 `$HIP/../…` paths** the card
+  [warns about](./06-into-houdini.md#project-checks--what-the-card-warns-about).
+  Projects made before v0.69 reach the character folder by climbing *out* of the
+  houdini folder — `$HIP/../daz3d/Kira.duf` — which resolves today but encodes
+  the scene's **depth**, so the day that `.hip` sits one folder deeper every one
+  of them points somewhere else. They are rewritten to `$JOB/daz3d/Kira.duf`,
+  which names the character folder outright. Only `$HIP` paths that actually
+  leave the folder are touched: one that stays inside is where Houdini itself
+  puts renders and caches, and is not a leftover.
 - Rebuilds a **DazToHue import** path that points at a file which isn't there.
   Two cases, one pass. Projects made before v0.63 address their `.dth` through
   the retired `dth-exports` junction, so it dangles while the `.fbx` and `.abc`
