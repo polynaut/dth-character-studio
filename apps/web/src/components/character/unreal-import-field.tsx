@@ -2,11 +2,27 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { AlertTriangle, Loader2, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { Button, InfoPopup, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@dth/ui'
+import {
+  Button,
+  InfoPopup,
+  Label,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  useRefetchOnFocus,
+} from '@dth/ui'
 import unrealLogo from '#/assets/unreal-logo.svg'
-import { dismissUnrealImport, fetchUnrealImportProgress, startUnrealImport } from '#/lib/rom/api.ts'
+import {
+  dismissUnrealImport,
+  fetchUnrealImportProgress,
+  fetchUnrealSendPlan,
+  startUnrealImport,
+} from '#/lib/rom/api.ts'
 import { uprojectDisplayName } from '#/components/unreal-install-dialog.tsx'
 import type { UnrealImportState } from '#/lib/rom/unreal-jobs.ts'
+import type { UnrealSendPlan } from '#/lib/rom/api.ts'
 
 /**
  * Send a character's Houdini export to a linked Unreal project.
@@ -39,6 +55,10 @@ export function UnrealImportField({
   const [target, setTarget] = useState(unrealProjects[0] ?? '')
   const [busy, setBusy] = useState(false)
   const [run, setRun] = useState<UnrealImportState | null>(null)
+  // The character's export sets + which of them the chosen project already
+  // holds. null = the probe hasn't landed.
+  const [plan, setPlan] = useState<UnrealSendPlan | null>(null)
+  const [chosen, setChosen] = useState<ReadonlySet<string>>(new Set())
   // The project being watched — kept in a ref so the poll never chases a target
   // the user changed mid-run.
   const watching = useRef('')
@@ -47,6 +67,26 @@ export function UnrealImportField({
   useEffect(() => {
     if (!unrealProjects.includes(target)) setTarget(unrealProjects[0] ?? '')
   }, [unrealProjects, target])
+
+  // Re-read on focus: a Houdini export writes new sets outside this window.
+  useRefetchOnFocus(
+    () => {
+      void fetchUnrealSendPlan({ data: { projectId, id: characterId } })
+        .then(setPlan)
+        .catch(() => setPlan({ sets: [], located: {} }))
+    },
+    [projectId, characterId],
+    { immediate: true },
+  )
+
+  // The tick rule, and the whole point of the checklist: a set the project
+  // ALREADY holds is a re-import and comes ticked; one it doesn't is a FIRST
+  // import and waits to be asked for. Re-derived when the target changes,
+  // because "already there" is a question about that project.
+  useEffect(() => {
+    const has = plan?.located[target] ?? {}
+    setChosen(new Set((plan?.sets ?? []).filter((name) => has[name] !== undefined)))
+  }, [plan, target])
 
   const poll = useCallback(async () => {
     const uprojectPath = watching.current
@@ -87,7 +127,7 @@ export function UnrealImportField({
     setBusy(true)
     try {
       const started = await startUnrealImport({
-        data: { projectId, id: characterId, uprojectPath: target },
+        data: { projectId, id: characterId, uprojectPath: target, sets: [...chosen] },
       })
       watching.current = target
       setRun({ state: 'waiting' })
@@ -136,6 +176,13 @@ export function UnrealImportField({
               startup, so restart the editor once after installing it.
             </p>
             <p>
+              One character can have several <strong>export sets</strong> — one per character name
+              used in Houdini, e.g. outfit variants. Each is its own import, so each is its own
+              tick: a set the project already holds is shown with the folder it will refresh and
+              comes ticked; one it doesn&apos;t is marked <em>not in this project</em> and waits to
+              be asked for, so a variant never lands in Unreal by accident.
+            </p>
+            <p>
               The import itself is the DazToHue plugin&apos;s own pipeline, unmodified: meshes,
               textures, materials, animation curves and the post-process anim blueprint.
             </p>
@@ -158,8 +205,54 @@ export function UnrealImportField({
         </Select>
       )}
 
+      {/* WHAT to send. A character's export folder holds one set per HDA
+          character name, and they are separate imports — so they are separate
+          decisions, with the ones the project already has ticked for you. */}
+      {plan !== null && plan.sets.length > 0 && (
+        <ul className="mb-2 space-y-1">
+          {plan.sets.map((name) => {
+            const at = plan.located[target]?.[name]
+            return (
+              <li key={name}>
+                <label className="flex cursor-pointer items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="size-4 shrink-0 accent-unreal-blue"
+                    disabled={busy}
+                    checked={chosen.has(name)}
+                    onChange={(e) =>
+                      setChosen((current) => {
+                        const next = new Set(current)
+                        if (e.target.checked) next.add(name)
+                        else next.delete(name)
+                        return next
+                      })
+                    }
+                  />
+                  <span className="font-mono">{name}</span>
+                  {at !== undefined ? (
+                    <span className="text-xs text-muted-foreground" title={`Re-imports into ${at}`}>
+                      {at}
+                    </span>
+                  ) : (
+                    <span className="rounded bg-amber-500/15 px-1 py-0.5 text-xs font-medium text-amber-500">
+                      not in this project
+                    </span>
+                  )}
+                </label>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+      {plan !== null && plan.sets.length === 0 && (
+        <p className="mb-2 text-xs text-muted-foreground">
+          Nothing exported yet — run the Houdini export first.
+        </p>
+      )}
+
       <div className="flex items-center gap-2">
-        <Button onClick={() => void onSend()} disabled={busy || !target}>
+        <Button onClick={() => void onSend()} disabled={busy || !target || chosen.size === 0}>
           {busy ? <Loader2 className="animate-spin" /> : <Sparkles />} Send to Unreal
         </Button>
         {run?.state === 'waiting' && (

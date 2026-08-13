@@ -274,9 +274,15 @@ job is a file, and the project's
 [DTH Studio Bridge](./06-into-houdini.md#send-to-unreal) picks it up whenever
 that editor is next open.
 
+Under the projects it lists the character's **export sets**, ticked the same
+way: a set the chosen project already holds names the folder it will refresh, a
+set it doesn't is marked *not in this project* and stays unticked — no variant
+lands in Unreal without you asking. Untick everything and the run simply doesn't
+send.
+
 Like the other two lists, it **pre-selects what the run is for**: a project that
-already holds this character (its `Content/DazToHue/…` folder) starts ticked, a
-project that doesn't stays for you to decide — putting a character into an
+already holds this character starts ticked, a project that doesn't stays for you
+to decide — putting a character into an
 Unreal project for the first time is a choice, not a continuation. The section
 needs somewhere to send from: tick a Houdini project to export first, or pick
 **Skip Houdini — use last exports** to send the exports already on disk.

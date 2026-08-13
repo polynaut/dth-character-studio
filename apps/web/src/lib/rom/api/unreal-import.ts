@@ -322,40 +322,51 @@ async function locateSets(
   return found
 }
 
+/** What the send UI needs to offer a choice: the character's export sets, and
+ *  which of them each linked Unreal project already holds. */
+export interface UnrealSendPlan {
+  /** Every export set in the character's export folder, sorted. */
+  sets: Array<string>
+  /** Per linked `.uproject`: set name → the content path it sits at. A set
+   *  missing from the record is NOT in that project. */
+  located: Record<string, Record<string, string>>
+}
+
 /**
- * Which of a project's linked Unreal projects already hold this character —
- * the DTH Export dialog's pre-selection, the Unreal twin of "changed since the
- * last export" and "imports a selected scene".
+ * The send plan for one character: what could be sent, and what each linked
+ * project already has.
+ *
+ * Both send surfaces pre-tick from this, and they pre-tick the same way: a set
+ * the project ALREADY holds is a re-import (ticked), a set it doesn't is a
+ * first import (offered, unticked). Putting a character into a project the
+ * first time is a decision, not a continuation — the same rule the project rows
+ * themselves use, applied one level down, after a send imported an outfit
+ * variant nobody had asked for.
  *
  * Filesystem only — the studio cannot read an editor's asset registry from out
  * here — so this is {@link locateSets}'s filename search, with all the honesty
- * that implies: a project whose assets were renamed reads as absent,
- * which un-ticks a row the user can tick rather than ticking one they didn't
+ * that implies: a project whose assets were renamed reads as "not here", which
+ * offers an unticked row the user can tick rather than ticking one they didn't
  * mean.
  */
-export async function fetchUnrealCharacterPresence({
-  data,
-}: {
-  data: unknown
-}): Promise<Record<string, boolean>> {
+export async function fetchUnrealSendPlan({ data }: { data: unknown }): Promise<UnrealSendPlan> {
   const input = charScopeInput.parse(data)
-  const out: Record<string, boolean> = {}
-  if (!isTauri()) return out
+  const plan: UnrealSendPlan = { sets: [], located: {} }
+  if (!isTauri()) return plan
   const project = await resolveProject(input.projectId)
   const linked = project.unrealProjects ?? []
-  if (linked.length === 0) return out
   const location = await locateCharacter(charsRoot(project), input.id)
-  if (!location) return out
+  if (!location) return plan
   const exportRoot = joinPath(location.folderAbs, normalizeRelFolder(project.exportSubdir))
-  const sets = (await unrealExportSets(exportRoot)).map((set) => set.name)
+  plan.sets = (await unrealExportSets(exportRoot)).map((set) => set.name)
+  if (plan.sets.length === 0 || linked.length === 0) return plan
   await Promise.all(
     linked.map(async (uprojectPath) => {
       const { projectDir } = unrealJobPaths(uprojectPath)
-      const located: Record<string, string> = await locateSets(projectDir, sets).catch(() => ({}))
-      out[uprojectPath] = Object.keys(located).length > 0
+      plan.located[uprojectPath] = await locateSets(projectDir, plan.sets).catch(() => ({}))
     }),
   )
-  return out
+  return plan
 }
 
 /**

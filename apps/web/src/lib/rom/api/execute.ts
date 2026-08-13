@@ -472,6 +472,8 @@ interface ActiveExportRun {
    *  queue behind this batch has drained ([] = none). Rides the whole run for
    *  the same reason the Houdini plan does: the send is minutes away. */
   unrealProjects: Array<string>
+  /** The export sets to hand over — the dialog's tick list. */
+  unrealSets: Array<string>
   /** The scenes this batch ran, in job order — the Houdini run exports only
    *  the networks importing THESE scenes, so the list has to survive the batch
    *  to be available when it finishes. */
@@ -501,6 +503,7 @@ const exportRunSidecarSchema = z.object({
   houdiniMode: z.enum(HOUDINI_RUN_MODES),
   scenes: z.array(z.string()),
   unrealProjects: z.array(z.string()).default([]),
+  unrealSets: z.array(z.string()).default([]),
 })
 
 /**
@@ -613,6 +616,8 @@ export type ExportRunProgress =
       scenes: Array<string>
       /** Linked Unreal projects to send to once the Houdini queue drains. */
       unrealProjects: Array<string>
+      /** The export sets to hand them. */
+      unrealSets: Array<string>
       /** Handoff → finish, for the toast's "in 12m 34s". */
       elapsedMs?: number
     }
@@ -800,6 +805,7 @@ export async function fetchExportRunProgress(watcher?: string): Promise<ExportRu
           houdiniMode: run.houdiniMode,
           scenes: run.scenes,
           unrealProjects: run.unrealProjects,
+          unrealSets: run.unrealSets,
         }
       }
       // Below 100 with Daz gone = the run died (crash / user quit) — it will
@@ -1183,6 +1189,8 @@ const executeInput = charScopeInput.extend({
   /** Linked Unreal projects the finished export is sent to, after the Houdini
    *  queue. [] = none, which is every run that isn't asked for one. */
   unrealProjects: z.array(z.string().min(1)).default([]),
+  /** The export sets to send ([] = nothing, which is a real choice). */
+  unrealSets: z.array(z.string()).default([]),
 })
 
 export interface ExecuteJobsSummary {
@@ -1243,6 +1251,7 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
     houdiniProjects,
     houdiniMode,
     unrealProjects,
+    unrealSets,
   } = executeInput.parse(data)
   if (!isTauri()) throw new Error('DTH Export needs the desktop app (Daz Studio is launched natively).')
 
@@ -1378,6 +1387,7 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
     houdiniMode,
     scenes,
     unrealProjects,
+    unrealSets,
   }
   await writeExportRunSidecar(activeRun)
 
@@ -1838,6 +1848,7 @@ export async function startProjectScan({ data }: { data: unknown }): Promise<Pro
     houdiniMode: 'export-selected',
     scenes: sceneWork.map((s) => s.scenePath),
     unrealProjects: [],
+    unrealSets: [],
   }
 
   const dazWasRunning = await dazStudioRunningNative(false, 'export')

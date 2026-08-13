@@ -482,6 +482,8 @@ const houdiniExportInput = charScopeInput.extend({
    *  is done. Carried here for the same reason as the queue itself: the send
    *  happens minutes later, in a window that may have reloaded since. */
   unrealProjects: z.array(z.string()).default([]),
+  /** The export sets to hand over (the user's tick list). */
+  unrealSets: z.array(z.string()).default([]),
 })
 
 /**
@@ -543,6 +545,7 @@ const houdiniRunPlanSchema = z.object({
   anyFailed: z.boolean().default(false),
   /** The Unreal projects this run finishes into (see the input's own field). */
   unrealProjects: z.array(z.string()).default([]),
+  unrealSets: z.array(z.string()).default([]),
 })
 
 export type HoudiniRunPlan = z.infer<typeof houdiniRunPlanSchema>
@@ -702,7 +705,7 @@ export async function startHoudiniExport({
 }: {
   data: unknown
 }): Promise<HoudiniExportStarted> {
-  const { projectId, id, hipPath, scenes, remaining, reportLines, anyFailed, unrealProjects } =
+  const { projectId, id, hipPath, scenes, remaining, reportLines, anyFailed, unrealProjects, unrealSets } =
     houdiniExportInput.parse(data)
   if (!isTauri()) throw new Error('Export too needs the desktop app (it launches Houdini).')
 
@@ -827,6 +830,7 @@ export async function startHoudiniExport({
     reportLines,
     anyFailed,
     unrealProjects,
+    unrealSets,
   })
   return { jobFile, scenes: job.scenes.length }
 }

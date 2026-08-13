@@ -39,7 +39,7 @@ import {
   fetchExportRunnerGate,
   fetchHoudiniRunProgress,
   fetchSceneDthPaths,
-  fetchUnrealCharacterPresence,
+  fetchUnrealSendPlan,
   fileExists,
   launchDazForPendingJobs,
   startHoudiniExport,
@@ -57,7 +57,12 @@ import {
   scenesMissingRomAnimation,
 } from '#/lib/rom/execute-jobs.ts'
 
-import type { ExecuteSceneStatus, ExportRunProgress, RunnerGate } from '#/lib/rom/api.ts'
+import type {
+  ExecuteSceneStatus,
+  ExportRunProgress,
+  RunnerGate,
+  UnrealSendPlan,
+} from '#/lib/rom/api.ts'
 import type { HoudiniProjectImports } from '#/lib/rom/execute-jobs.ts'
 import type {
   ExportPipelineView,
@@ -724,6 +729,10 @@ export function DthExportAction({
    * mid-export still sends when the queue drains.
    */
   const unrealTargetsRef = useRef<Array<string>>([])
+  /** WHICH export sets the send hands over — the dialog's tick list. Empty is
+   *  meaningful ("send nothing"), so it travels beside the targets rather than
+   *  defaulting to "everything" anywhere down the line. */
+  const unrealSetsRef = useRef<Array<string>>([])
   /** Set once the send has run — the Unreal cards' `done`. (The targets ref is
    *  emptied by the send itself, so it cannot answer this.) */
   const unrealSentRef = useRef(false)
@@ -748,7 +757,7 @@ export function DthExportAction({
         const name = stemOf(uprojectPath)
         try {
           const started = await startUnrealImport({
-            data: { projectId, id: character.id, uprojectPath },
+            data: { projectId, id: character.id, uprojectPath, sets: unrealSetsRef.current },
           })
           const sets = started.sets.map((set) => set.name).join(', ')
           return `Unreal: queued for ${name} — ${sets}`
@@ -860,6 +869,7 @@ export function DthExportAction({
           // fires when the LAST project finishes, minutes from now, in a
           // window that may have reloaded since.
           unrealProjects: unrealTargetsRef.current,
+          unrealSets: unrealSetsRef.current,
         },
       })
       setHoudini({ state: 'starting', startedAtMs: Date.now() })
@@ -958,6 +968,7 @@ export function DthExportAction({
         // The Unreal targets came through the Daz run record, so a window that
         // reloaded during the batch still finishes into Unreal.
         unrealTargetsRef.current = run.unrealProjects
+        unrealSetsRef.current = run.unrealSets
         void startHoudiniQueue(
           run.houdiniProjects,
           run.scenes,
@@ -985,6 +996,7 @@ export function DthExportAction({
       clearPipeline()
       if (run.unrealProjects.length > 0 && run.failed < run.total) {
         unrealTargetsRef.current = run.unrealProjects
+        unrealSetsRef.current = run.unrealSets
         void sendToUnreal().then((lines) => {
           if (lines.length > 0) toast.info(lines.join('\n'), { duration: Infinity })
         })
@@ -1159,6 +1171,7 @@ export function DthExportAction({
         // The Unreal leg is part of the plan too — without this, a reload
         // between the export and its send silently drops the send.
         unrealTargetsRef.current = plan.unrealProjects
+        unrealSetsRef.current = plan.unrealSets
         // The report is REBUILT from the lines the plan carries — this window
         // never saw those legs, and the one end-of-everything report has to
         // name them anyway. They ride as pre-formatted lines (their per-leg
@@ -1378,6 +1391,7 @@ export function DthExportAction({
             // Held for the end of the WHOLE process; the Daz run record carries
             // a copy so a reload during the batch doesn't lose it.
             unrealTargetsRef.current = run.unrealProjects
+            unrealSetsRef.current = run.unrealSets
             pipelineRef.current = {
               daz: run.scenes.map((path) => ({ path, label: stemOf(path) })),
               houdini: run.houdiniProjects.map((path) => ({
@@ -1393,7 +1407,7 @@ export function DthExportAction({
           }}
           // A skip-Daz run hands its selection straight to the Houdini queue —
           // the same machinery the after-batch continuation drives.
-          onHoudiniQueue={(projects, scenes, unrealTargets) => {
+          onHoudiniQueue={(projects, scenes, unrealTargets, unrealSets) => {
             dismissFinishToasts()
             runReportRef.current = null
             unrealSentRef.current = false
@@ -1407,14 +1421,16 @@ export function DthExportAction({
               unreal: unrealTargets.map((path) => ({ path, label: stemOf(path) })),
             }
             unrealTargetsRef.current = unrealTargets
+            unrealSetsRef.current = unrealSets
             void startHoudiniQueue(projects, scenes)
           }}
           // "Skip Houdini" with Daz skipped too: one file write, no watch —
           // the same thing the character page's Send panel does, reached from
           // the dialog the rest of the pipeline lives in.
-          onUnrealOnly={(targets) => {
+          onUnrealOnly={(targets, sets) => {
             dismissFinishToasts()
             unrealTargetsRef.current = targets
+            unrealSetsRef.current = sets
             void sendToUnreal().then((lines) => {
               if (lines.length > 0) toast.info(lines.join('\n'), { duration: Infinity })
             })
@@ -1845,6 +1861,8 @@ function DthExportDialog({
     houdiniScenes: Array<string>
     /** The Unreal projects the run finishes into ([] = none picked). */
     unrealProjects: Array<string>
+    /** The export sets to hand over — the user's own tick list. */
+    unrealSets: Array<string>
     /** The handoff started Daz itself (vs. handing to a running one). */
     dazLaunched: boolean
   }) => void
@@ -1854,10 +1872,11 @@ function DthExportDialog({
     projects: Array<string>,
     scenes: Array<string>,
     unrealProjects: Array<string>,
+    unrealSets: Array<string>,
   ) => void
   /** Neither Daz nor Houdini runs — the whole run is the Unreal send, off the
    *  exports already on disk. */
-  onUnrealOnly: (unrealProjects: Array<string>) => void
+  onUnrealOnly: (unrealProjects: Array<string>, unrealSets: Array<string>) => void
   /** The handoff went to a Daz that is still shutting down — the caller shows
    *  the wait-and-relaunch modal (see WaitForDazCloseModal). */
   onDazClosing: () => void
@@ -1897,19 +1916,22 @@ function DthExportDialog({
   // character (the pre-selection, the Unreal twin of "changed since the last
   // export" and "imports a selected scene").
   const [checkedUnreal, setCheckedUnreal] = useState<ReadonlySet<string>>(new Set())
-  const [unrealHas, setUnrealHas] = useState<Record<string, boolean> | null>(null)
+  // The character's export sets + which of them each linked project holds.
+  // null = the probe hasn't landed.
+  const [sendPlan, setSendPlan] = useState<UnrealSendPlan | null>(null)
+  const [checkedSets, setCheckedSets] = useState<ReadonlySet<string>>(new Set())
 
   useEffect(() => {
     if (unrealProjects.length === 0) return
     let active = true
-    void fetchUnrealCharacterPresence({ data: { projectId, id: character.id } })
-      .then((presence) => {
-        if (active) setUnrealHas(presence)
+    void fetchUnrealSendPlan({ data: { projectId, id: character.id } })
+      .then((plan) => {
+        if (active) setSendPlan(plan)
       })
       .catch(() => {
         // Detection is a convenience: with none, the rows simply start
         // unchecked and the user picks.
-        if (active) setUnrealHas({})
+        if (active) setSendPlan({ sets: [], located: {} })
       })
     return () => {
       active = false
@@ -2043,14 +2065,36 @@ function DthExportDialog({
    * IS the answer to "which projects is this export for".
    */
   useEffect(() => {
-    if (!unrealSendable || unrealHas === null) {
+    if (!unrealSendable || sendPlan === null) {
       setCheckedUnreal(EMPTY_SELECTION)
       return
     }
-    setCheckedUnreal(new Set(unrealProjects.filter((path) => unrealHas[path])))
+    setCheckedUnreal(
+      new Set(unrealProjects.filter((path) => Object.keys(sendPlan.located[path] ?? {}).length > 0)),
+    )
     // `unrealProjects` is the prop array, stable per render of the parent.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [unrealSendable, unrealHas])
+  }, [unrealSendable, sendPlan])
+
+  /**
+   * WHICH export sets go. Ticked = the set is already in one of the ticked
+   * projects (a re-import); a set no ticked project has is a FIRST import and
+   * waits to be asked for — measured the hard way, when a send imported an
+   * outfit variant its owner had never put in that project.
+   */
+  useEffect(() => {
+    if (!unrealSendable || sendPlan === null) {
+      setCheckedSets(EMPTY_SELECTION)
+      return
+    }
+    setCheckedSets(
+      new Set(
+        sendPlan.sets.filter((name) =>
+          [...checkedUnreal].some((path) => sendPlan.located[path]?.[name] !== undefined),
+        ),
+      ),
+    )
+  }, [unrealSendable, sendPlan, checkedUnreal])
 
   useEffect(() => {
     let active = true
@@ -2196,13 +2240,16 @@ function DthExportDialog({
       const chosenUnreal = unrealSendable
         ? unrealProjects.filter((path) => checkedUnreal.has(path))
         : []
+      // No set ticked = nothing to send, whatever is ticked above it.
+      const chosenSets = [...checkedSets]
+      const unrealTargets = chosenSets.length > 0 ? chosenUnreal : []
       // Skip Daz: the Houdini selection IS the run — the same machinery the
       // after-batch continuation drives, minus the batch.
       if (mode === 'houdini-only') {
         // Nothing to run in Daz OR Houdini: this IS the "just re-import in
         // Unreal" case, and it is one file write away.
         if (houdiniMode === 'skip') {
-          onUnrealOnly(chosenUnreal)
+          onUnrealOnly(unrealTargets, chosenSets)
           onClose()
           return
         }
@@ -2225,7 +2272,7 @@ function DthExportDialog({
             return
           }
         }
-        onHoudiniQueue(chosenHips, chosenScenes, chosenUnreal)
+        onHoudiniQueue(chosenHips, chosenScenes, unrealTargets, chosenSets)
         onClose()
         return
       }
@@ -2260,7 +2307,8 @@ function DthExportDialog({
           // a reloaded window would restore a continuation nobody asked for.
           houdiniProjects: houdiniMode === 'skip' ? [] : chosenHips,
           houdiniMode,
-          unrealProjects: chosenUnreal,
+          unrealProjects: unrealTargets,
+          unrealSets: chosenSets,
         },
       })
       onExported({
@@ -2269,7 +2317,8 @@ function DthExportDialog({
         // The scene scope the Houdini leg will export (→ the networks its
         // task cards name) — the continuation recomputes the same set.
         houdiniScenes: chosenScenes,
-        unrealProjects: chosenUnreal,
+        unrealProjects: unrealTargets,
+        unrealSets: chosenSets,
         // Whether the handoff STARTED Daz — the log window's opening line
         // says "opening Daz Studio" only when that is what is happening.
         dazLaunched: result.dazLaunched,
@@ -2442,7 +2491,11 @@ function DthExportDialog({
                 key={uproject}
                 uproject={uproject}
                 checked={checkedUnreal.has(uproject)}
-                has={unrealHas === null ? null : (unrealHas[uproject] ?? false)}
+                has={
+                  sendPlan === null
+                    ? null
+                    : Object.keys(sendPlan.located[uproject] ?? {}).length > 0
+                }
                 disabled={!unrealSendable}
                 onToggle={() =>
                   setCheckedUnreal((current) => {
@@ -2455,10 +2508,50 @@ function DthExportDialog({
               />
             ))}
           </div>
+          {unrealSendable && sendPlan !== null && sendPlan.sets.length > 0 && (
+            <ul className="mt-2 space-y-1">
+              {sendPlan.sets.map((name) => {
+                // Where it would land in the FIRST ticked project that has it —
+                // enough to tell a refresh from a new import at a glance.
+                const at = [...checkedUnreal]
+                  .map((path) => sendPlan.located[path]?.[name])
+                  .find((found) => found !== undefined)
+                return (
+                  <li key={name}>
+                    <label className="flex cursor-pointer items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        className="size-4 shrink-0 accent-unreal-blue"
+                        checked={checkedSets.has(name)}
+                        onChange={(e) =>
+                          setCheckedSets((current) => {
+                            const next = new Set(current)
+                            if (e.target.checked) next.add(name)
+                            else next.delete(name)
+                            return next
+                          })
+                        }
+                      />
+                      <span className="font-mono">{name}</span>
+                      {at !== undefined ? (
+                        <span className="text-xs text-muted-foreground">{at}</span>
+                      ) : (
+                        <span className="rounded bg-amber-500/15 px-1 py-0.5 text-xs font-medium text-amber-500">
+                          not in this project
+                        </span>
+                      )}
+                    </label>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
           <p className="mt-1.5 text-xs text-muted-foreground">
-            {unrealSendable
-              ? 'Queued for import when the whole export finishes — the editor picks it up when it is next open.'
-              : 'Needs a Houdini export: pick a project above and an export mode.'}
+            {!unrealSendable
+              ? 'Needs somewhere to send from: tick a Houdini project, or pick “Skip Houdini”.'
+              : sendPlan !== null && sendPlan.sets.length === 0
+                ? 'Nothing exported yet — this run’s own export can be sent from the character page afterwards.'
+                : 'Queued for import when the whole export finishes — the editor picks it up when it is next open.'}
           </p>
         </div>
       )}

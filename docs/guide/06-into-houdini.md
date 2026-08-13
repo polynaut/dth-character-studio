@@ -221,10 +221,14 @@ only when the studio project has a linked `.uproject` — see
 > Start. This panel is for sending what is already exported — and for watching
 > an import while it runs.
 
-What it sends is every **export set** in the character's `export/` folder — each
-is a folder named by the HDA's *character name* holding a `DTH_<name>.dth`, so
-one character can have several (outfit variants, for instance). They travel in
-one job and import into one content folder each. This is the end of the
+What it sends is the **export sets you tick**. Each is a folder in the
+character's `export/` folder named by the HDA's *character name* and holding a
+`DTH_<name>.dth`, so one character can have several (outfit variants, for
+instance). The panel lists them: a set the project already holds shows the
+folder it will refresh and comes **ticked**; one it doesn't is marked *not in
+this project* and stays unticked, so a variant never lands in Unreal by
+accident. Ticking it is how you do that first import. They travel in one job and
+import into one content folder each. This is the end of the
 pipeline, not the `daz-export` intermediate the Houdini imports read. What imports it is **mrpdean's DazToHue importer plugin**, whose
 own pipeline does the work: meshes, textures, materials, animation curves and
 the post-process animation blueprint.

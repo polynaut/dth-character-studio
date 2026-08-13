@@ -50,7 +50,17 @@ runs no Houdini and hands what is already on disk to the Unreal projects. With
 Daz skipped as well, that is a one-click "re-import this character in Unreal"
 from the same dialog as everything else.
 
-**Every export set goes, not "the" export.** A character's `export/` folder holds
+**You pick which export sets go.** A character's `export/` folder holds one set
+per HDA character name — outfit variants, experiments — and a send used to take
+all of them, so a variant nobody had asked for could land in Unreal on its own.
+Both send surfaces now list the sets with checkboxes and pre-tick the same way:
+a set the project **already holds** shows the folder it will refresh and comes
+ticked; one it doesn't is marked *not in this project* and waits to be asked
+for. The first import of anything into an Unreal project is a decision, not a
+continuation — the same rule the project rows already used, applied one level
+down.
+
+**Every export set the studio finds is offered, not "the" export.** A character's `export/` folder holds
 one folder per HDA *character name* — measured, one character here has three
 (outfit variants) — and the studio cannot predict those names. It scans for them
 now; the first version guessed `DTH_<character name>.dth` and would have found
