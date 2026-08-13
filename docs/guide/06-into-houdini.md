@@ -218,11 +218,11 @@ send an export you already have without running anything, pick **Skip Daz — us
 last exports** and **Skip Houdini — use last exports**: then the whole run is
 the send.
 
-The character page shows a small status line under the Houdini projects while an
-import is in flight — and nothing at all otherwise. It exists because an import
-runs for minutes inside an editor that may not even have been open when the job
-was queued, so its outcome arrives long after the run that queued it has
-finished.
+The Unreal leg reports where the other two do: the run's **log window** in the
+character header, with a task card beside them. `Unreal; queued for
+workflow3d - LaraClassic`, then the wait, then the outcome — which arrives
+minutes later, from an editor that may not even have been open when the job was
+queued, so the run's display stays up until it does.
 
 What it sends is the **export sets you tick** in that section. Each is a folder
 in the character's `export/` folder named by the HDA's *character name* and

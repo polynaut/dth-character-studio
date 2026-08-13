@@ -35,7 +35,9 @@ import {
   exporterJobsWorking,
   fetchExecuteScenes,
   fetchExportRunProgress,
+  dismissUnrealImport,
   fetchCachedHoudiniScans,
+  fetchUnrealImportProgress,
   fetchExportRunnerGate,
   fetchHoudiniRunProgress,
   fetchSceneDthPaths,
@@ -72,6 +74,7 @@ import type {
 } from '#/components/character/export-pipeline-panel.tsx'
 import { HOUDINI_CONSOLE_FILE } from '#/lib/rom/houdini-jobs.ts'
 import type { HoudiniRunState } from '#/lib/rom/houdini-jobs.ts'
+import type { UnrealImportState } from '#/lib/rom/unreal-jobs.ts'
 import type { HoudiniRunMode, RunChoice, StampedLogStore } from '#/lib/rom/execute-jobs.ts'
 import type { Character } from '@dth/rom'
 
@@ -474,10 +477,21 @@ export function DthExportAction({
         ]
         houdiniRenderedRef.current = stampLogLines(houdiniStampsRef.current, lines, stamp)
       }
+      // The third leg speaks in the same window: what it queued, what it is
+      // waiting for, and how the import ended — arriving minutes after the
+      // other two have gone quiet.
+      if (unrealLinesRef.current.length > 0) {
+        unrealRenderedRef.current = stampLogLines(
+          unrealStampsRef.current,
+          unrealLinesRef.current,
+          stamp,
+        )
+      }
       const all = [
         ...sealedLogRef.current,
         ...dazRenderedRef.current,
         ...houdiniRenderedRef.current,
+        ...unrealRenderedRef.current,
       ]
       return all.length > 0 ? { lines: all.slice(-LOG_TAIL_MAX) } : null
     })()
@@ -631,7 +645,16 @@ export function DthExportAction({
           label: target.label,
           detail: 'Queued for import when the export finishes',
           kind: 'unreal' as const,
-          status: unrealSentRef.current ? ('done' as const) : ('waiting' as const),
+          // Queued is not done: the leg is done when the editor has imported
+          // it (or said why it could not).
+          status:
+            unrealRun?.state === 'finished'
+              ? ('done' as const)
+              : unrealRun?.state === 'running'
+                ? ('active' as const)
+                : unrealSentRef.current
+                  ? ('active' as const)
+                  : ('waiting' as const),
         })),
       ],
       log,
@@ -643,6 +666,11 @@ export function DthExportAction({
   // them up through the quiet stretches (between nodes, project opening)
   // instead of blanking. Reset per project (startHoudiniQueue) and at run end.
   const lastHoudiniLinesRef = useRef<Array<string>>([])
+  /** The Unreal leg's lines, and their first-seen stamps — the same shape the
+   *  other two legs use, so the transcript reads as one run. */
+  const unrealLinesRef = useRef<Array<string>>([])
+  const unrealRenderedRef = useRef<Array<string>>([])
+  const unrealStampsRef = useRef<StampedLogStore>({ lines: [], stamps: [] })
   // First-seen `[HH:MM:SS]` stamps for the two legs' log tails (the on-disk
   // logs carry no timestamps — see stampLogLines).
   const dazStampsRef = useRef<StampedLogStore>({ lines: [], stamps: [] })
@@ -763,6 +791,15 @@ export function DthExportAction({
   /** Set once the send has run — the Unreal cards' `done`. (The targets ref is
    *  emptied by the send itself, so it cannot answer this.) */
   const unrealSentRef = useRef(false)
+  /**
+   * The Unreal leg's own watch: which project is importing, and what it says.
+   *
+   * It reports into the SAME log window and task column as the other two legs
+   * — the run is one story. It briefly had a status panel of its own on the
+   * character page, which was a second place to look for a third of one run.
+   */
+  const [unrealRun, setUnrealRun] = useState<UnrealImportState | null>(null)
+  const unrealWatchRef = useRef('')
 
   /**
    * Hand what the run just exported to the selected Unreal projects, and say so
@@ -795,6 +832,16 @@ export function DthExportAction({
               // queued either way — a failed launch is not a failed send
             })
           }, 5000)
+          // The transcript gets the same news the report will, as it happens.
+          unrealLinesRef.current = [
+            ...unrealLinesRef.current,
+            `Unreal; queued for ${name} - ${sets}`,
+            'Unreal; waiting for the editor to pick the job up',
+          ]
+          // One project is watched — the handoff is one job at a time, and the
+          // cards name the rest.
+          if (!unrealWatchRef.current) unrealWatchRef.current = uprojectPath
+          setUnrealRun({ state: 'waiting' })
           return `Unreal: queued for ${name} — ${sets}`
         } catch (error) {
           // A refusal here (no bridge, no export) must not read as an export
@@ -926,6 +973,29 @@ export function DthExportAction({
         emitFinalReport()
       }
     }
+  }
+
+  /** Poll the Unreal leg — cheap when nothing is armed (no watch, no read). */
+  async function refreshUnreal() {
+    const uprojectPath = unrealWatchRef.current
+    if (!uprojectPath) return
+    const state = await fetchUnrealImportProgress({ data: { uprojectPath } }).catch(() => null)
+    setUnrealRun(state)
+    if (state?.state !== 'finished') return
+    unrealWatchRef.current = ''
+    // The outcome is a LINE, like every other leg's — the transcript is where
+    // the run says what happened, and this happens minutes after the toast.
+    const what = state.reimported ? 're-imported' : 'imported'
+    unrealLinesRef.current = [
+      ...unrealLinesRef.current,
+      state.error
+        ? `Unreal; import failed - ${state.error}`
+        : `Unreal; ${what} ${state.assets} asset${state.assets === 1 ? '' : 's'}${
+            state.destination ? ` in ${state.destination}` : ''
+          }`,
+    ]
+    publishPipeline(progressRef.current, houdiniRef.current)
+    void dismissUnrealImport({ data: { uprojectPath } })
   }
 
   // The one status refresh: is a job file still waiting (→ Abort), and how far
@@ -1251,7 +1321,8 @@ export function DthExportAction({
     [],
     { immediate: true },
   )
-  const watching = pending === true || progress !== null || houdini !== null
+  const watching =
+    pending === true || progress !== null || houdini !== null || unrealRun !== null
   useEffect(() => {
     if (!watching) return
     const id = window.setInterval(() => {
@@ -1259,6 +1330,7 @@ export function DthExportAction({
       // Cheap while nothing is armed: fetchHoudiniRunProgress returns null
       // immediately without touching the filesystem.
       void refreshHoudini()
+      void refreshUnreal()
     }, 2500)
     return () => window.clearInterval(id)
     // Re-arm on `watching` alone (ONE interval): refreshStatus only captures

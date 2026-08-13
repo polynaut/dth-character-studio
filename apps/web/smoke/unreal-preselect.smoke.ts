@@ -135,13 +135,10 @@ test('…and does NOT tick for a run whose variant that project has never seen',
   for (const box of await boxes.all()) await expect(box).not.toBeChecked()
 })
 
-test('a job queued elsewhere is watched here — "nothing happens" was the studio, not the job', async ({
-  page,
-}) => {
-  // The DTH Export dialog can queue a send with no Daz or Houdini leg at all.
-  // With the editor closed the job just sits on disk — correct, and invisible:
-  // the panel only ever watched its OWN sends, so the studio showed nothing and
-  // the run read as a failure. A pending job is a fact about the project.
+test('the Unreal leg reports into the run’s own log window', async ({ page }) => {
+  // The third leg speaks where the other two do. It briefly had a status panel
+  // of its own on the character page — a second place to look for a third of
+  // one run — and the transcript is where a run says what it is doing.
   const seed = buildSeed({
     activeProjectFile: P.dcsp,
     demo: true,
@@ -150,26 +147,52 @@ test('a job queued elsewhere is watched here — "nothing happens" was the studi
   })
   seed.files[`${EXPORT_ROOT}/KiraDefault/DTH_KiraDefault.dth`] = '{}'
   seed.files[IMPORTED] = 'uasset-fixture'
-  // Exactly what a send writes, and nothing else: unclaimed, no result.
-  seed.files[`${UPROJECT_DIR}/Saved/DTHStudio/job.json`] = JSON.stringify({
-    version: 4,
-    imports: [
-      {
-        dth: `${EXPORT_ROOT}/KiraDefault/DTH_KiraDefault.dth`,
-        destination: '/Game/Characters/Kira',
-        existing: true,
-        character: 'KiraDefault',
-        files: [],
-      },
-    ],
+  seed.files[`${UPROJECT_DIR}/Plugins/DTHStudioBridge/DTHStudioBridge.uplugin`] = JSON.stringify({
+    Version: 4,
   })
   await page.addInitScript(installTauriMock, seed)
   await page.goto('/')
   await page.getByRole('link', { name: /Kira/ }).click()
   await page.getByText(/custom ROM frames/).waitFor()
+  await page.getByRole('button', { name: 'DTH Export' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.waitFor()
+  await dialog.locator('#daz-mode').click()
+  await page.getByRole('option', { name: /Skip Daz/ }).click()
+  await dialog.locator('#houdini-mode').click()
+  await page.getByRole('option', { name: /Skip Houdini/ }).click()
+  await dialog.getByRole('checkbox', { name: 'Send to DemoGame' }).check()
+  await dialog.locator('li').filter({ hasText: 'KiraDefault' }).getByRole('checkbox').check()
+  await dialog.getByRole('button', { name: 'Start' }).click()
 
-  await expect(page.getByText('Waiting for the editor to pick it up…')).toBeVisible()
-  await expect(page.getByText(/the job waits on disk until the editor opens/)).toBeVisible()
+  // In the log window, stamped like every other line of the run.
+  await expect(page.getByText(/Unreal; queued for DemoGame - KiraDefault/)).toBeVisible()
+  await expect(page.getByText(/Unreal; waiting for the editor to pick the job up/)).toBeVisible()
+
+  // …and when the editor finally answers, the outcome is a line too.
+  await page.evaluate((dir: string) => {
+    const mock = (window as any).__tauriMock
+    mock.files.delete(`${dir}/Saved/DTHStudio/job.json`)
+    mock.files.set(
+      `${dir}/Saved/DTHStudio/result.json`,
+      JSON.stringify({
+        version: 4,
+        state: 'done',
+        error: '',
+        imports: [
+          {
+            character: 'KiraDefault',
+            destination: '/Game/Characters/Kira',
+            mode: 'reimport',
+            assets: ['/Game/Characters/Kira/SKM_KiraDefault'],
+          },
+        ],
+      }),
+    )
+  }, UPROJECT_DIR)
+  await expect(
+    page.getByText(/Unreal; re-imported 1 asset in .Game.Characters.Kira/),
+  ).toBeVisible({ timeout: 15_000 })
 })
 
 test('nothing claims the job and no editor is running — the studio opens the project', async ({

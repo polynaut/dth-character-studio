@@ -9,9 +9,10 @@ somebody dragged the result into the editor by hand. The **DTH Export** dialog
 hands that export over itself — one Start for the whole round trip, and with
 both **Skip Daz** and **Skip Houdini** it becomes a plain "re-import this
 character in Unreal" with nothing else running. That dialog is the ONLY way to
-send: the character page shows a status line while an import is in flight (its
-outcome arrives minutes later, long after the run that queued it has finished)
-and nothing at all otherwise.
+send, and the leg reports where the other two do — the run's own log window and
+task cards. Its outcome arrives minutes later, from an editor that may not have
+been open when the job was queued, so the run's display stays up until it
+answers.
 
 It is the same handoff the other two legs use: the studio writes a job file,
 the other side claims it by rename, the studio polls a result. On the Unreal
