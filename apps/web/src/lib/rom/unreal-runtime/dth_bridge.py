@@ -105,6 +105,62 @@ def _claim():
         return None
 
 
+def _reimport_existing(destination_path, files):
+    """Unreal's own **Reimport** on the assets that are already there, one per
+    exported FBX. Returns the assets it refreshed.
+
+    MEASURED 2026-08-13, first live run: importing the `.dth` on top of an
+    existing character crashes inside the DazToHue pipeline —
+    `get_master_material` DUPLICATES a master into
+    `<destination>/Materials/MI_<Character>EyeOcclusion`, and
+    `EditorAssetLibrary.duplicate_asset` returns None when that asset already
+    exists, which is then cast and raises. So the pipeline can create a
+    character but cannot re-create one, and "import over the existing set" has
+    no path through it.
+
+    Reimport does. It is the same operation as the Content Browser's
+    right-click → Reimport: Interchange re-reads the asset's own source file
+    with the asset's own stored settings (`ReimportAsset` on
+    `FImportAssetParameters` — verified in the UE 5.8 engine header, and
+    Blueprint-exposed, hence available here).
+
+    The trade-off is real and worth saying out loud: this refreshes the MESHES
+    (and the morph targets inside them) from the FBX the export just rewrote. It
+    does not re-run the DazToHue post-import pipeline, so materials, curves and
+    the anim blueprint stay as that character's first import built them.
+
+    Matching is by NAME, not by the asset registry: `SKM_Lara.fbx` →
+    `<destination>/SKM_Lara`. The registry route was tried first and came back
+    empty on a real project, and a name the export itself wrote is a stronger
+    handle than a tag whose shape is Unreal's business.
+    """
+    manager = unreal.InterchangeManager.get_interchange_manager_scripted()
+    touched = []
+    for source_file in files:
+        stem = os.path.splitext(os.path.basename(str(source_file).replace("\\", "/")))[0]
+        asset_path = "%s/%s" % (destination_path.rstrip("/"), stem)
+        try:
+            if not unreal.EditorAssetLibrary.does_asset_exist(asset_path):
+                continue
+            asset = unreal.EditorAssetLibrary.load_asset(asset_path)
+            if asset is None:
+                continue
+            params = unreal.ImportAssetParameters()
+            params.set_editor_property("is_automated", True)
+            params.set_editor_property("replace_existing", True)
+            # THE line this whole function exists for: "re-read THIS asset",
+            # rather than "import into this folder".
+            params.set_editor_property("reimport_asset", asset)
+            source_data = manager.create_source_data(os.path.normpath(str(source_file)))
+            manager.import_asset(destination_path, source_data, params)
+            touched.append(asset_path)
+        except Exception:
+            unreal.log_error(
+                "DTH bridge: could not reimport %s\n%s" % (asset_path, traceback.format_exc())
+            )
+    return touched
+
+
 def _import_dth(source_file, destination_path):
     """Import one `.dth` through Interchange, which is what triggers the
     DazToHue post-import pipeline (its own code imports the same way).
@@ -288,9 +344,28 @@ def _run_one(entry):
             destination = found
             mode = "reimport"
 
+    # A set the studio LOCATED is refreshed with Unreal's own Reimport (see
+    # `_reimport_existing`) — the `.dth` import cannot run twice over the same
+    # character. Nothing matched by name = nothing to reimport, so fall through
+    # to the normal import rather than reporting a no-op as success.
+    names = []
+    if mode == "reimport":
+        names = _reimport_existing(destination, entry.get("files") or [])
+        if names:
+            unreal.log("DTH bridge: reimported %d asset(s) in %s" % (len(names), destination))
+            return {
+                "character": entry.get("character", ""),
+                "destination": destination,
+                "mode": mode,
+                "assets": names,
+            }
+        unreal.log(
+            "DTH bridge: nothing to reimport in %s — importing the .dth instead" % destination
+        )
+        mode = "import"
+
     unreal.log("DTH bridge: %s %s into %s" % (mode, dth, destination))
     assets = _import_dth(dth, destination) or []
-    names = []
     for asset in assets:
         try:
             names.append(asset.get_path_name())

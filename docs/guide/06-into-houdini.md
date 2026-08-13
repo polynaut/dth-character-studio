@@ -245,6 +245,16 @@ lands. The finish toast says which happened and where: *Re-imported in Unreal �
 Renamed assets are the one thing it cannot follow: those read as "not here", and
 the send falls back to a fresh import at the default location.
 
+**What a re-import does, exactly.** It runs Unreal's own **Reimport** on the
+assets already there — the same action as right-click → *Reimport* in the
+Content Browser — so the meshes (and the morph targets inside them) come back
+from the FBX the export just wrote. It does **not** re-run the DazToHue import
+pipeline, so materials, curves and the anim blueprint stay as that character's
+first import built them. That is deliberate: DazToHue 2.5's pipeline cannot run
+twice over one character (it duplicates its master materials into names that
+already exist), so a second `.dth` import fails outright where a reimport
+updates the mesh.
+
 **The studio does not start Unreal.** An editor takes minutes to come up and
 holds its project open, so the job is *queued* instead: the **DTH Studio
 Bridge** plugin (`Plugins\DTHStudioBridge`, pure Python) watches for the job and

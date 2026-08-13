@@ -75,7 +75,15 @@ existing assets, instead of building a second set under
 fresh import at the default, exactly as before. The finish toast says which
 happened and where.
 
-It still imports the `.dth`, never the FBX files directly — the `.dth` is what
+**A re-import is Unreal's own Reimport.** Where the character is already in the
+project, the bridge reimports those assets from the FBX the export just wrote —
+the same action as right-click → *Reimport*. Meshes and their morph targets come
+back fresh; materials, curves and the anim blueprint stay as the first import
+built them. A second `.dth` import cannot do this at all: the DazToHue pipeline
+duplicates its master materials into names that already exist and fails, so
+"import over the existing set" has no path through it.
+
+A FIRST import still imports the `.dth`, never the FBX files directly — the `.dth` is what
 triggers the DazToHue pipeline, and importing the meshes on their own would lose
 the materials, curves and anim blueprint it builds. The file list is for finding
 assets, not for importing them.
