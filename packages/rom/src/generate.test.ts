@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildArtDirectionData,
   buildFbmData,
+  cancelFlagPath,
   facPresetSupport,
   generateAll,
   GENERATION_TEMPLATE_CSV,
@@ -1874,6 +1875,51 @@ describe('exporter integration', () => {
       '.Build_ROM_Animation.dsa',
       'Electra_pose_asset.csv',
     ])
+  })
+
+  it('every carrier can be INTERRUPTED — flag baked, probed at each stop point', () => {
+    const character = withReferencePose({
+      name: 'Electra',
+      exportPath: 'X:\\exports\\electra',
+    })
+    const files = generateAll(character, {}, FRAMES, 'D:\\lib\\Electra')
+    const flag = 'D:/lib/Electra/.dth_export_cancel'
+    // Runtime v73: the interrupt flag rides every carrier the Runner executes
+    // — the ROM/bulk one, the export-only one, and the visible scripts built
+    // by the same builders. `cancelFlagPath` is the ONE rule for where it is.
+    expect(cancelFlagPath('D:\\lib\\Electra')).toBe(flag)
+    for (const name of ['.Bulk_ROM_Export.dsa', '.Bulk_Export_Only.dsa', '.Build_ROM_Animation.dsa']) {
+      const carrier = files.find((f) => f.fileName === name)
+      expect(carrier, name).toBeDefined()
+      expect(carrier?.content, name).toContain(`var dthCancelPath = "${flag}";`)
+      expect(carrier?.content, name).toContain('function dthCancelRequested()')
+      // Stop point 1 — the scene never starts: a row the Runner reaches after
+      // the interrupt skips its whole scene, and SAYS so.
+      expect(carrier?.content, name).toContain('} else if (dthCancelRequested()) {')
+      expect(carrier?.content, name).toContain('skipped - the export was interrupted')
+    }
+    // Stop point 2 — the ROM built but the export must not follow it.
+    const bulk = files.find((f) => f.fileName === '.Bulk_ROM_Export.dsa')
+    expect(bulk?.content).toContain(
+      'var dthCancelledAfterRom = dthRomOk === true && dthCancelRequested();',
+    )
+    expect(bulk?.content).toContain('if (dthRomOk === true && !dthCancelledAfterRom) {')
+    // Stop point 3 lives in the RUNTIME (block boundaries + the frame loop),
+    // which reads the path from the config rather than the script text.
+    expect(bulk?.content).toContain(`"cancelPath": "${flag}"`)
+  })
+
+  it('a script generated without a meta folder is simply uninterruptible', () => {
+    // Pure/web contexts have no filesystem behind them: there is nowhere to
+    // put a flag, so nothing probes one and the emitted behaviour is exactly
+    // what it was before the feature.
+    const character = withReferencePose({ name: 'Electra', exportPath: 'X:\\exports\\electra' })
+    const bulk = generateAll(character, {}, FRAMES).find(
+      (f) => f.fileName === '.Bulk_ROM_Export.dsa',
+    )
+    expect(cancelFlagPath(undefined)).toBe('')
+    expect(bulk?.content).toContain('var dthCancelPath = "";')
+    expect(bulk?.content).not.toContain('"cancelPath"')
   })
 
   it('the hidden .Bulk_ROM_Export.dsa always builds AND exports everything', () => {

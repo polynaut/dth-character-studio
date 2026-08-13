@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
-import { AlertTriangle, Ban, Loader2, Play, Wand } from 'lucide-react'
+import { AlertTriangle, Ban, CircleStop, Loader2, Play, Wand } from 'lucide-react'
 import { toast } from 'sonner'
 
 import {
@@ -13,7 +13,6 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  useModifierHeld,
   useRefetchOnFocus,
 } from '@dth/ui'
 import dazLogo from '#/assets/daz-logo.png'
@@ -26,9 +25,6 @@ import { RunnerGateNotice } from '#/components/runner-gate-notice.tsx'
 import {
   abortExporterJobs,
   adoptHoudiniRun,
-  clearExporterJobFiles,
-  dismissExportRun,
-  dismissHoudiniRun,
   executeCharacterJobs,
   exportDazStudioRunning,
   exporterJobsPending,
@@ -43,6 +39,7 @@ import {
   fetchSceneDthPaths,
   fetchUnrealSendPlan,
   fileExists,
+  interruptExportRun,
   openUnrealForPendingJob,
   launchDazForPendingJobs,
   startHoudiniExport,
@@ -113,14 +110,19 @@ import type { Character } from '@dth/rom'
  * the file (api/execute.ts). At 100% the studio deletes the file and toasts
  * the outcome (including per-scene failures); a run whose Daz exited early
  * toasts a failure instead. A plain click on the working button is IGNORED
- * (a stray click must not reset the run's watch) — holding **Ctrl** turns it
- * into **Abort** (see {@link ExportProgressButton}): the claimed job file is
- * deleted and the button reset, which is the only way out of a batch that
- * stalled inside a Daz that is still running. The Houdini leg's button works
- * the same way (see {@link HoudiniProgressButton}) — Ctrl reveals **Stop
- * watching**, which drops the project queue with it; since that leg runs
- * headless there is no window left to close instead. Status refreshes on
- * window focus and polls lightly while pending/running.
+ * (a stray click must not reset the run's watch) — the way out is
+ * **Interrupt** beside it ({@link InterruptButton}), on both legs: it drops
+ * the studio's interrupt flag, which the generated Daz scripts, the DTH
+ * runtime and 456.py all poll, so the run stops at its next safe point and is
+ * reported as interrupted. Status refreshes on window focus and polls lightly
+ * while pending/running.
+ *
+ * History: both legs used to hide a modifier-revealed escape hatch here —
+ * **Ctrl** turned the Daz button into **Abort** (delete the claimed job file)
+ * and the Houdini button into **Stop watching** (drop the watch + the project
+ * queue). Both stopped the STUDIO, never the run, because stopping the run was
+ * impossible; both are gone now that it isn't. Clearing a job file nothing will
+ * ever finish stays available where housekeeping belongs — Settings → App Data.
  */
 /** The DazToHue brand mark as a button icon. The button's automatic icon
  *  sizing only targets SVGs, so the img sizes itself — `size-6`, larger than
@@ -173,55 +175,76 @@ function ElapsedSince({ since }: { since?: number }) {
 }
 
 /**
- * The live **Working** button — inert to plain clicks — and, while **Ctrl** is
- * held, the way out of a run that is never going to end: the same **Abort**
- * the pending state offers, in the phase where aborting is normally over (the
- * Runner has claimed the file and owns it from then on).
+ * **Interrupt** — the one button that stops the RUN rather than the studio's
+ * view of it, and the reason it sits beside every live progress button instead
+ * of hiding behind a modifier: "stop this" is a thing users need, not an
+ * expert escape hatch.
  *
- * It exists because the claimed file is the one the studio cannot clean up by
- * itself: the watch only deletes it at progress 100 or when Daz is gone, so a
- * Runner that stalled mid-batch — or a batch this window merely ADOPTED for
- * display and can never consume — leaves the button spinning and every later
- * export and scan refusing with "a batch is waiting for Daz Studio".
+ * It is the run's ONLY action button. The first shape of this feature kept the
+ * older modifier-revealed Abort / Stop watching beside it, and that was worse
+ * than either alone: two stop-flavoured buttons with nothing on them to say
+ * which stopped the run and which only stopped the studio watching it.
  *
- * Its own component for the reason the header's Save/Discard pair is one:
- * `useModifierHeld` flips on every Ctrl press AND release, and holding that up
- * in `DthExportAction` would re-render its whole subtree (the scene dialog
- * included) on each flip.
+ * What it promises is exactly what the runtimes can deliver, so the tooltip
+ * says it in full: the flag is dropped, and the generated Daz scripts + the
+ * DTH runtime + 456.py stop at their next checkpoint. The step running at that
+ * moment finishes first — a Daz content load, one `doExport`, one Houdini node
+ * are synchronous calls inside someone else's plugin, and the alternative to
+ * waiting for them is killing a process mid-write.
  *
- * The honest limit — which the tooltip states rather than implies: deleting the
- * job file stops the STUDIO, not Daz. A Runner that is genuinely working keeps
- * working through the batch it already parsed (and may write the file again on
- * its next row). What this reliably ends is this window's watch and the block
- * the file puts on the next handoff.
+ * Once pressed it does not offer itself again (`pending`): the flag is on
+ * disk, pressing it twice changes nothing, and a button that still says
+ * "Interrupt" after the user interrupted reads as "that didn't work".
+ */
+function InterruptButton({ pending, onClick }: { pending: boolean; onClick: () => void }) {
+  return (
+    <Button
+      variant="outline-destructive"
+      className="px-3"
+      disabled={pending}
+      onClick={onClick}
+      title={
+        pending
+          ? 'Stopping at the next safe point — whatever is running right now (a scene load, one export call, one Houdini node) has to finish first.'
+          : 'Interrupt: stop this export at the next point where stopping is safe. The ROM build stops between blocks, the export that would have followed is skipped, and every scene and Houdini project still queued is dropped. Everything already written stays.'
+      }
+    >
+      <CircleStop /> {pending ? 'Stopping…' : 'Interrupt'}
+    </Button>
+  )
+}
+
+/**
+ * The live **Working** button — inert to plain clicks — with
+ * {@link InterruptButton} beside it as the run's one action.
+ *
+ * There used to be a second, modifier-revealed action here: **Ctrl** turned this
+ * button into **Abort**, which deleted the claimed job file and reset the watch.
+ * It was the only way out of a run that would never end, back when the studio
+ * could not stop a run at all. Interrupt replaces it: it stops the actual work
+ * instead of only the studio's view of it, and it needs no modifier to find.
+ *
+ * The one thing Abort could do that Interrupt cannot — clear a job file nothing
+ * will ever finish (a Daz stuck on a modal reads no flag) — is not lost, it just
+ * isn't on this button: **Settings → App Data** clears a stuck handoff, which is
+ * where housekeeping belongs. Two stop-flavoured buttons on one run, one of them
+ * hidden behind a key, was worse than the rare case it served.
  */
 function ExportProgressButton({
   progress,
-  aborting,
-  onAbort,
+  interrupting,
+  onInterrupt,
 }: {
   progress: Extract<ExportRunProgress, { state: 'running' }>
-  aborting: boolean
-  onAbort: () => void
+  /** The interrupt has been requested — the run is draining to its next stop
+   *  point (either this window asked, or the restored watch says it did). */
+  interrupting: boolean
+  onInterrupt: () => void
 }) {
-  const ctrlHeld = useModifierHeld('Control')
-  if (ctrlHeld) {
-    return (
-      <Button
-        variant="outline-destructive"
-        className="px-3"
-        disabled={aborting}
-        onClick={onAbort}
-        title="Abort (Ctrl): deletes the job file and resets this button. A batch Daz Studio has already started keeps running there — this ends the studio's watch and unblocks the next export."
-      >
-        <Ban /> {aborting ? 'Aborting…' : 'Abort'}
-      </Button>
-    )
-  }
   // The Runner renamed the job file and owns its progress — the studio just
   // polls the file. A plain click is IGNORED: a stray click must never reset
   // the watch mid-run (measured: it did, and read as "the export vanished").
-  // Ctrl+click (above) is the one deliberate way out; the wait-cursor says
+  // Interrupt beside it is the deliberate way out; the wait-cursor says
   // "busy, not clickable" on hover.
   // The mini bar (::after, appears only in the collapsed header — styles.css)
   // mirrors the pipeline's CURRENT meter: the per-scene progress-log percent,
@@ -230,71 +253,56 @@ function ExportProgressButton({
     progress.step?.percent ??
     (progress.total > 0 ? Math.round((progress.processed / progress.total) * 100) : 0)
   return (
-    <Button
-      variant="outline"
-      className="export-button-progress cursor-wait px-3"
-      style={
-        {
-          '--export-progress': `${percent}%`,
-          '--export-progress-color': 'var(--color-emerald-600)',
-        } as CSSProperties
-      }
-      // Just the latest status — counts live in the panel; Ctrl (the abort)
-      // reveals itself the moment it is held.
-      title={capitalizeStatus(progress.step?.message || 'working…')}
-    >
-      {/* Just "Working" — the counts and percents live in the pipeline
-          panel above (and this button's tooltip); a constant label plus the
-          reserved-width clock keeps the button from resizing every tick. The
-          DAZ mark names which app is doing the work — the run happens
-          outside the studio, and this button is where the user looks to
-          know who is busy (the Houdini leg below wears its own mark). */}
-      <Loader2 className="animate-spin" />
-      <img src={dazLogo} alt="Daz Studio" className="size-5 shrink-0 object-contain" />
-      Working
-      <ElapsedSince since={progress.startedAtMs} />
-    </Button>
+    <>
+      <Button
+        variant="outline"
+        className="export-button-progress cursor-wait px-3"
+        style={
+          {
+            '--export-progress': `${percent}%`,
+            '--export-progress-color': 'var(--color-emerald-600)',
+          } as CSSProperties
+        }
+        // Just the latest status — the counts live in the panel.
+        title={capitalizeStatus(progress.step?.message || 'working…')}
+      >
+        {/* Just "Working" — the counts and percents live in the pipeline
+            panel above (and this button's tooltip); a constant label plus the
+            reserved-width clock keeps the button from resizing every tick. The
+            DAZ mark names which app is doing the work — the run happens
+            outside the studio, and this button is where the user looks to
+            know who is busy (the Houdini leg below wears its own mark). */}
+        <Loader2 className="animate-spin" />
+        <img src={dazLogo} alt="Daz Studio" className="size-5 shrink-0 object-contain" />
+        {interrupting ? 'Stopping' : 'Working'}
+        <ElapsedSince since={progress.startedAtMs} />
+      </Button>
+      <InterruptButton pending={interrupting} onClick={onInterrupt} />
+    </>
   )
 }
 
 /**
  * The Houdini leg's twin of {@link ExportProgressButton}: a live **Working**
- * button, inert to plain clicks, with **Ctrl** revealing the way out.
+ * button, inert to plain clicks, with **Interrupt** beside it.
  *
- * The Ctrl affordance is not decoration. The studio drives the project QUEUE,
- * so this watch is also the orchestration of every project still waiting —
- * and since the leg went headless there is no Houdini window left to close
- * either. Without it a wedged run, or a queue the user changed their mind
- * about, could only be ended by quitting the studio.
- *
- * What it can honestly promise is what the plain click always promised: the
- * studio stops watching and the queue is dropped. The export already running
- * inside hython keeps going — nothing here can reach into it.
+ * This leg also lost a Ctrl affordance to Interrupt — **Stop watching**, which
+ * dropped the watch and the project queue while the export ran on to its end
+ * inside hython. It existed because there was nothing better: the leg is
+ * headless, so there isn't even a window to close. Interrupt does the thing it
+ * only approximated — 456.py stops between nodes and closes its own Houdini,
+ * and the queued projects never start.
  */
 function HoudiniProgressButton({
   houdini,
-  queued,
-  onStopWatching,
+  interrupting,
+  onInterrupt,
 }: {
   houdini: HoudiniRunState
-  /** Projects still waiting their turn — they die with the watch, so the
-   *  tooltip has to say so before the user commits. */
-  queued: number
-  onStopWatching: () => void
+  /** The interrupt has been requested — 456.py stops at its next node. */
+  interrupting: boolean
+  onInterrupt: () => void
 }) {
-  const ctrlHeld = useModifierHeld('Control')
-  if (ctrlHeld) {
-    return (
-      <Button
-        variant="outline-destructive"
-        className="px-3"
-        onClick={onStopWatching}
-        title={`Stop watching (Ctrl): the export keeps running in Houdini — this ends the studio's watch${queued > 0 ? ` and the ${queued} queued project${queued === 1 ? '' : 's'} will not start` : ''}.`}
-      >
-        <Ban /> Stop watching
-      </Button>
-    )
-  }
   // The Daz batch is done and reported; Houdini is working (or opening the
   // project). Like the Daz leg's button, a plain click is IGNORED — a stray
   // click didn't just stop the watch, it silently stopped the orchestration of
@@ -306,33 +314,38 @@ function HoudiniProgressButton({
       ? Math.round(((1 + houdini.done) / (1 + houdini.total)) * 100)
       : 0
   return (
-    <Button
-      variant="outline"
-      className="export-button-progress cursor-wait px-3"
-      style={
-        {
-          '--export-progress': `${percent}%`,
-          '--export-progress-color': 'var(--color-orange-600)',
-        } as CSSProperties
-      }
-      // Just the latest status, like the Daz leg's button.
-      title={capitalizeStatus(
-        (houdini.state === 'running' && houdini.activity?.lines.at(-1)) ||
-          (houdini.state === 'running' ? 'exporting…' : 'opening project…'),
-      )}
-    >
-      {/* Same constant "Working" as the Daz leg — the node counts live in
-          the pipeline panel's meters and this tooltip; the Houdini mark is
-          what tells the legs apart. */}
-      <Loader2 className="animate-spin" />
-      <img src={houdiniLogo} alt="Houdini" className="size-5 shrink-0 object-contain" />
-      Working
-      <ElapsedSince
-        since={
-          houdini.state === 'starting' || houdini.state === 'running' ? houdini.startedAtMs : undefined
+    <>
+      <Button
+        variant="outline"
+        className="export-button-progress cursor-wait px-3"
+        style={
+          {
+            '--export-progress': `${percent}%`,
+            '--export-progress-color': 'var(--color-orange-600)',
+          } as CSSProperties
         }
-      />
-    </Button>
+        // Just the latest status, like the Daz leg's button.
+        title={capitalizeStatus(
+          (houdini.state === 'running' && houdini.activity?.lines.at(-1)) ||
+            (houdini.state === 'running' ? 'exporting…' : 'opening project…'),
+        )}
+      >
+        {/* Same constant "Working" as the Daz leg — the node counts live in
+            the pipeline panel's meters and this tooltip; the Houdini mark is
+            what tells the legs apart. */}
+        <Loader2 className="animate-spin" />
+        <img src={houdiniLogo} alt="Houdini" className="size-5 shrink-0 object-contain" />
+        {interrupting ? 'Stopping' : 'Working'}
+        <ElapsedSince
+          since={
+            houdini.state === 'starting' || houdini.state === 'running'
+              ? houdini.startedAtMs
+              : undefined
+          }
+        />
+      </Button>
+      <InterruptButton pending={interrupting} onClick={onInterrupt} />
+    </>
   )
 }
 
@@ -374,6 +387,11 @@ export function DthExportAction({
     null,
   )
   const [aborting, setAborting] = useState(false)
+  // The interrupt has been requested from THIS window. The api layer carries
+  // the same fact on the run itself (so a reloaded window still shows it) —
+  // this is the immediate half, because the flag lands on disk long before the
+  // next 2.5 s poll reports it back.
+  const [interrupting, setInterrupting] = useState(false)
   // The Houdini half of an "Export too" run, once the Daz batch has finished
   // and handed over. Its own watch: Houdini works long after Daz is done.
   const [houdini, setHoudini] = useState<HoudiniRunState | null>(null)
@@ -629,6 +647,8 @@ export function DthExportAction({
     pipelineRef.current = null
     unrealStatusRef.current = ''
     dazLaunchedRef.current = false
+    // The button pair is gone with the run; a fresh one starts un-interrupted.
+    setInterrupting(false)
     setPipeline(null)
   }
   // A finished Unreal leg is the one state that never clears itself (its watch
@@ -802,12 +822,64 @@ export function DthExportAction({
     return lines
   }
 
+  /** This run was interrupted — the fact the END-OF-RUN report needs, kept
+   *  outside `runReportRef` because a Daz-only run reports without ever
+   *  building one. Cleared when a new run is armed, never mid-run. */
+  const interruptedRef = useRef(false)
+
+  /**
+   * Ask the run to stop at its next safe point — the whole run, both legs (the
+   * flag is per character and every runtime the studio owns probes it).
+   *
+   * Order matters: nothing is dropped until the flag is actually on disk. The
+   * QUEUE is the one part the studio can stop outright — those projects have
+   * not started, so they simply never do — and dropping it before a failed
+   * write would cancel work while telling the user the interrupt failed.
+   */
+  async function onInterrupt() {
+    setInterrupting(true)
+    try {
+      await interruptExportRun({ data: { projectId, id: character.id } })
+    } catch (error) {
+      setInterrupting(false)
+      toast.error(
+        `Couldn't interrupt the export: ${error instanceof Error ? error.message : String(error)}`,
+      )
+      return
+    }
+    const droppedHips = houdiniQueueRef.current?.projects.length ?? 0
+    houdiniQueueRef.current = null
+    // The third leg goes with them. It fires when the Houdini queue drains,
+    // off whatever is on disk by then — which after an interrupt is a
+    // half-finished export. Sending that to Unreal would hand the user a
+    // partial import as if it were the run they asked for.
+    const droppedSends = unrealTargetsRef.current.length
+    unrealTargetsRef.current = []
+    interruptedRef.current = true
+    // Name everything that will now NOT happen — the parts the studio drops
+    // outright are exactly the parts the user cannot see for themselves.
+    const dropped = [
+      droppedHips > 0
+        ? `${droppedHips} queued Houdini project${droppedHips === 1 ? '' : 's'}`
+        : '',
+      droppedSends > 0 ? `the send to ${droppedSends} Unreal project${droppedSends === 1 ? '' : 's'}` : '',
+    ].filter(Boolean)
+    toast.info(
+      dropped.length > 0
+        ? `Stopping the export at the next safe point — ${dropped.join(' and ')} will not start.`
+        : 'Stopping the export at the next safe point — whatever is running right now has to finish first.',
+    )
+  }
+
   /** The one end-of-everything toast: a line for the Daz leg, one per Houdini
    *  project, the failures inline, and the total time across all legs. */
   function emitFinalReport() {
+    // The run's own facts, before clearPipeline resets this window's state.
+    const interrupted = interruptedRef.current
     clearPipeline()
     const report = runReportRef.current
     runReportRef.current = null
+    interruptedRef.current = false
     if (!report) return
     const lines: Array<string> = []
     let anyFailed = false
@@ -841,13 +913,22 @@ export function DthExportAction({
     // Last, because it happens last. A send that was refused says so on its own
     // line without souring the run's tone: the export itself still finished.
     if (report.unreal?.length) lines.push(...report.unreal)
-    const title = `DTH Export finished${totalKnown && totalMs > 0 ? ` in ${formatElapsed(totalMs)}` : ''}.`
+    // An interrupted run never says "finished": the legs it did run are
+    // reported exactly as they came back, but the run as a whole stopped
+    // short, and the counts describe what ran — not what was asked for.
+    const title = interrupted
+      ? `DTH Export interrupted${totalKnown && totalMs > 0 ? ` after ${formatElapsed(totalMs)}` : ''}.`
+      : `DTH Export finished${totalKnown && totalMs > 0 ? ` in ${formatElapsed(totalMs)}` : ''}.`
+    if (interrupted) {
+      lines.push('Stopped on request — anything not listed above did not run.')
+    }
     const options = {
       id: EXPORT_TOAST_ID,
       duration: Infinity,
       description: lines.join('\n') || undefined,
     }
-    if (anyFailed) toast.warning(title, options)
+    if (interrupted) toast.info(title, options)
+    else if (anyFailed) toast.warning(title, options)
     else toast.success(title, options)
   }
 
@@ -980,7 +1061,15 @@ export function DthExportAction({
       // while Houdini still works read as "all done" — measured on the first
       // live run) and the one sticky report fires after the last project.
       setProgress(null)
+      // An interrupted batch is finished only in the sense that the file is
+      // gone: rows the generated scripts SKIPPED come back `done`, so neither
+      // the counts nor the Houdini continuation may be believed. The api
+      // layer's flag is the authority (it survives a reload); this window's
+      // own memory covers the poll that lands before the flag is written back.
+      const interrupted = run.interrupted || interruptedRef.current
+      if (interrupted) interruptedRef.current = true
       const continuing =
+        !interrupted &&
         run.houdiniProjects.length > 0 &&
         run.failed < run.total &&
         // `skip` means no Houdini leg at all — the projects may still be
@@ -1030,6 +1119,25 @@ export function DthExportAction({
       // No export continuation — the batch IS the whole process: report now.
       const scenes = `${run.total} scene${run.total === 1 ? '' : 's'}`
       const took = run.elapsedMs !== undefined ? ` in ${formatElapsed(run.elapsedMs)}` : ''
+      if (interrupted) {
+        // Deliberately NO scene count: the studio cannot tell a scene the
+        // Runner exported from one whose script saw the flag and returned —
+        // both come back `done`. What it knows for certain is that the user
+        // stopped it, and where to look for what actually happened.
+        toast.info(`DTH Export interrupted${run.elapsedMs !== undefined ? ` after ${formatElapsed(run.elapsedMs)}` : ''}.`, {
+          id: EXPORT_TOAST_ID,
+          duration: Infinity,
+          description:
+            'Stopped on request. Scenes that had not started were skipped; the ROM run log shows which scene was interrupted mid-build.',
+        })
+        interruptedRef.current = false
+        // The run ends HERE — an accumulated report belongs to a process that
+        // no longer has an end, and would otherwise fire on a later, unrelated
+        // Houdini finish.
+        runReportRef.current = null
+        clearPipeline()
+        return
+      }
       if (run.failed > 0) {
         toast.warning(`DTH Export finished — ${run.failed} of ${scenes} failed${took}.`, {
           id: EXPORT_TOAST_ID,
@@ -1112,6 +1220,13 @@ export function DthExportAction({
     }
     if (run.state === 'finished') {
       setHoudini(null)
+      // 456.py stopped between nodes because the flag was there. The projects
+      // behind this one must not start — and the report has to say the batch
+      // was cut short, not that it was all there was to do.
+      if (run.cancelled) {
+        interruptedRef.current = true
+        houdiniQueueRef.current = null
+      }
       // A bare "nothing to export" is undiagnosable — point at the console
       // log, which names what was wanted vs found and survives the run.
       const summary =
@@ -1124,7 +1239,7 @@ export function DthExportAction({
       const report = runReportRef.current
       if (report) {
         report.houdini.push({
-          line: `${currentHipRef.current || 'Houdini'}: ${summary}${took}${detail ? ` — ${detail}` : ''}`,
+          line: `${currentHipRef.current || 'Houdini'}: ${summary}${run.cancelled ? ' — interrupted' : ''}${took}${detail ? ` — ${detail}` : ''}`,
           failed: run.failed > 0 || Boolean(run.error),
           elapsedMs: run.elapsedMs,
         })
@@ -1139,7 +1254,12 @@ export function DthExportAction({
       }
       // The LAST leg of the whole process — the export is on disk, so the
       // Unreal leg (if any) goes now, and its lines join the one report.
-      const unrealLines = await sendToUnreal()
+      // NOT after an interrupt: what is on disk then is a half-finished
+      // export, and handing that to Unreal would deliver a partial import as
+      // if it were the run. `onInterrupt` already drops the targets in the
+      // window that asked; this covers the run RESTORED into a window that
+      // didn't (adoptHoudiniRun re-arms them from the plan).
+      const unrealLines = run.cancelled ? [] : await sendToUnreal()
       if (report) {
         if (unrealLines.length > 0) report.unreal = unrealLines
         emitFinalReport()
@@ -1152,7 +1272,10 @@ export function DthExportAction({
           duration: Infinity,
           description: [detail, ...unrealLines].filter(Boolean).join('\n') || undefined,
         }
-        if (run.failed > 0 || run.error) {
+        if (run.cancelled) {
+          interruptedRef.current = false
+          toast.info(`Houdini export interrupted — ${summary}${took}.`, options)
+        } else if (run.failed > 0 || run.error) {
           toast.warning(`Houdini export finished — ${summary}${took}.`, options)
         } else {
           toast.success(`Houdini export finished — ${summary}${took}.`, options)
@@ -1311,45 +1434,11 @@ export function DthExportAction({
     }
   }
 
-  /**
-   * Ctrl+click on the live progress button: delete the job file(s) and reset
-   * this button. The counterpart to {@link onAbort} for the phase AFTER the
-   * Runner claimed the batch — a run that stalled in Daz, or one this window
-   * only adopted for display and could therefore never consume.
-   *
-   * Deliberately NOT {@link abortExporterJobs}: that one deletes the pending
-   * file and rolls the character's handoff stamps back, and neither fits here.
-   * The claimed file is the one to remove ({@link clearExporterJobFiles} takes
-   * both names and drops the in-memory watch with them), and the batch may well
-   * have exported scenes already — re-flagging those as never handed off would
-   * describe work that DID happen as work that didn't.
-   */
-  async function onAbortRunning() {
-    setAborting(true)
-    try {
-      const removed = await clearExporterJobFiles()
-      // The watch dies with the file either way — clearExporterJobFiles drops
-      // the api-side run, these two drop this button's own state, and the busy
-      // cursor is released by the `running` effect on the same render.
-      void dismissExportRun()
-      setProgress(null)
-      setPending(false)
-      clearPipeline()
-      toast.success(
-        removed.length > 0
-          ? `Export aborted — deleted ${removed.join(' and ')}. Anything Daz Studio already started keeps running there.`
-          : 'Export watch reset — the job file was already gone.',
-      )
-    } catch (error) {
-      // A locked file: the watch is NOT reset (the blockage is still there) —
-      // saying so beats a cheerful "aborted" that changed nothing.
-      toast.error(
-        `Couldn't delete the job file: ${error instanceof Error ? error.message : String(error)}`,
-      )
-    } finally {
-      setAborting(false)
-    }
-  }
+  // (Removed with the Ctrl affordances: `onAbortRunning`, which deleted a
+  // CLAIMED job file to unwedge the studio. Interrupt covers the case a user
+  // actually has — stopping a run — and the leftover-file case it also served
+  // is housekeeping, which lives in Settings → App Data
+  // (`housekeeping-section.tsx` calls the same `clearExporterJobFiles`).)
 
   if (pending === true) {
     return (
@@ -1368,8 +1457,11 @@ export function DthExportAction({
     return (
       <ExportProgressButton
         progress={progress}
-        aborting={aborting}
-        onAbort={() => void onAbortRunning()}
+        // Either half is enough: this window's click (immediate) or the run's
+        // own recorded flag (survives a reload, and covers a run interrupted
+        // from the window that started it).
+        interrupting={interrupting || progress.interrupted === true}
+        onInterrupt={() => void onInterrupt()}
       />
     )
   }
@@ -1378,27 +1470,12 @@ export function DthExportAction({
     return (
       <HoudiniProgressButton
         houdini={houdini}
-        queued={houdiniQueueRef.current?.projects.length ?? 0}
-        onStopWatching={() => {
-          // The one way out, mirroring the Daz leg's Ctrl+abort. The export
-          // itself is NOT stopped — hython owns it and has no window to close
-          // anymore — but the studio stops watching and drops the projects
-          // still queued behind this one, which is the part the user is
-          // actually asking to cancel.
-          void dismissHoudiniRun()
-          const dropped = houdiniQueueRef.current?.projects.length ?? 0
-          houdiniQueueRef.current = null
-          // The accumulated report belongs to a process that no longer ends
-          // here — dropping it stops a later, unrelated run from firing it.
-          runReportRef.current = null
-          setHoudini(null)
-          clearPipeline()
-          toast.info(
-            dropped > 0
-              ? `Stopped watching the Houdini export — it keeps running in the background, and the ${dropped} queued project${dropped === 1 ? '' : 's'} will not start.`
-              : 'Stopped watching the Houdini export — it keeps running in the background.',
-          )
-        }}
+        // The Houdini leg's run state carries no interrupted flag of its own —
+        // 456.py reports the stop only when it reaches a node boundary — so
+        // this window's own click is what the button goes by. A reloaded
+        // window shows "Working" again, which is the truth it can see.
+        interrupting={interrupting || interruptedRef.current}
+        onInterrupt={() => void onInterrupt()}
       />
     )
   }
@@ -1441,6 +1518,10 @@ export function DthExportAction({
             dismissFinishToasts()
             runReportRef.current = null
             resetUnrealLeg()
+            // A new run is never born interrupted — and the handoff itself
+            // cleared the flag on disk (executeCharacterJobs).
+            interruptedRef.current = false
+            setInterrupting(false)
             setPending(true)
             // The header's task cards: the run's selection in run order —
             // the Daz scenes, then the Houdini projects (rom-only continues
@@ -1471,6 +1552,8 @@ export function DthExportAction({
             dismissFinishToasts()
             runReportRef.current = null
             resetUnrealLeg()
+            interruptedRef.current = false
+            setInterrupting(false)
             pipelineRef.current = {
               daz: [],
               houdini: projects.map((path) => ({

@@ -310,6 +310,41 @@ loudly with a regenerate-in-studio error. When changing generated-script behavio
 bump `RUNTIME_VERSION` — Tools → Refresh assets flags characters generated on
 older runtimes as stale.
 
+## Interrupting a run (runtime v73)
+
+A DTH Export can be **stopped**, and the mechanism is worth understanding before
+touching either leg: the studio can reach neither half of a run (Daz is driven
+by a filesystem-watching plugin, Houdini is a headless hython it spawned), so
+the interrupt is a **flag file** that the code the studio DOES own polls.
+
+- The flag is `EXPORT_CANCEL_FILE` (`.dth_export_cancel`) in the character's
+  `.dcsmeta` folder — per CHARACTER, so two windows exporting two characters
+  don't interrupt each other. `cancelFlagPath()` (dsa.ts) is the ONE rule for
+  where it is; the studio writes it (`interruptExportRun`), bakes its path into
+  every carrier (`dthCancelPath`), hands it to the runtime (`config.cancelPath`)
+  and to 456.py (the job's `cancelPath`).
+- **Stop points**, in the order a run meets them: the carrier's entry (skips the
+  whole scene), the runtime's block boundaries + its frame-apply loop (probe
+  throttled to 750 ms — the flag can live on a network drive), the gate before
+  the exporter, and 456.py's between-nodes check. An interrupted ROM returns
+  false, so the pre-existing "only export a clean ROM" gate does the rest.
+- **What cannot be interrupted**, and must never be promised: a Daz content
+  load, `doExport`, the HDA's `do_export`. Synchronous calls inside someone
+  else's plugin — the current one always finishes.
+- **The counts of an interrupted Daz batch are meaningless.** A row whose script
+  saw the flag and returned reports `done`, exactly like a row that exported —
+  the Runner cannot tell them apart and neither can the studio. Hence the
+  `interrupted` flag on the run (`ActiveExportRun` → the finished snapshot), the
+  interrupted run's report carrying NO scene counts, and the hard rule that an
+  interrupted batch never continues into Houdini. The Houdini leg is the
+  opposite case: 456.py knows exactly, marks the nodes it skipped and sets
+  `cancelled: true`.
+- **The flag's lifetime is the studio's alone**: cleared at every handoff
+  (`executeCharacterJobs`, `startHoudiniExport`) and wherever a run ends
+  (both watches, abort, job-file clear). A leftover flag would silently skip
+  runs — which is why every runtime that honours it also LOGS it (run log,
+  progress log, console) instead of just returning.
+
 ## The exporter contract (measured, not documented upstream)
 
 - Bone-scale frames make the DTH Exporter write per-frame reference skeletons to
@@ -767,12 +802,12 @@ older runtimes as stale.
   already-reached percent. No mid-run toasts: the one report fires at the very
   end.
   Both live buttons are INERT to a plain click (a stray one used to drop the
-  watch, reading as "the export vanished") and reveal their escape hatch on
-  **Ctrl**: Abort on the Daz leg, Stop watching on the Houdini one — which
-  also drops the projects still queued behind the running one, since the
-  studio, not Houdini, owns that queue. On the Houdini leg this is the ONLY
-  way out now: headless left no window to close, and the export inside
-  hython keeps running either way (the toast says so).
+  watch, reading as "the export vanished"); the way out sits beside them as
+  **Interrupt** (see "Interrupting a run" below), which stops the run itself
+  and drops the queued Houdini projects with it. Until v0.77 each button hid a
+  modifier-revealed hatch instead — Ctrl → Abort / Stop watching — that stopped
+  the STUDIO and let the run carry on; both went when a real stop existed, and
+  the leftover-file case they also served lives in Settings → App Data.
   RELOAD SURVIVAL: every character handoff writes its plan to the app-data
   sidecar `export-run.json` (characterId, startedAtMs, houdiniProjects/mode,
   scenes, the Daz `mode`, the Unreal targets/sets; deleted on every run end).
@@ -1139,18 +1174,17 @@ older runtimes as stale.
   the outcome (failed rows + errors); a running file whose Daz exited below
   100 is a dead run (cleaned + reported). No export-folder watching anymore —
   the old delivered-CSV mtime watch is gone.
-- **The claimed batch has TWO manual escape hatches, and neither stops Daz.**
+- **A claimed batch's leftover file is HOUSEKEEPING, not a run control.**
   "Only an un-renamed file is abortable" is the CONTRACT's rule (the Runner
   owns the file after its rename) — it was never a rule about the user, who
   can be left with a spinning button and a blocked handoff when a batch stalls
-  inside a live Daz (a modal in the way, a Runner that died mid-batch). Both
-  hatches are `clearExporterJobFiles()` (api/execute.ts: deletes BOTH names,
-  settles both before throwing, drops the in-memory `activeRun`):
-  Settings → App Data (the readout + its signature-guarded confirm, #775) and
-  **Ctrl on the live progress button**, which flips it to Abort
-  (`ExportProgressButton` in character/dth-export.tsx — its own component
-  because `useModifierHeld` re-renders on every Ctrl press AND release).
-  What they end is the STUDIO's watch and the block on the next handoff; a
+  inside a live Daz (a modal in the way, a Runner that died mid-batch). The
+  hatch is `clearExporterJobFiles()` (api/execute.ts: deletes BOTH names,
+  settles both before throwing, drops the in-memory `activeRun`), reached from
+  **Settings → App Data** (the readout + its signature-guarded confirm, #775).
+  It had a twin on the character page until v0.77 — Ctrl on the live progress
+  button — retired with the arrival of a real Interrupt: what it ends is the
+  STUDIO's watch and the block on the next handoff, never the run, and a
   Runner that is genuinely working carries on and can even rewrite the file on
   its next row. Say that in the UI rather than implying the run was stopped.
   No stamp rollback either (unlike `abortExporterJobs`): a claimed batch may

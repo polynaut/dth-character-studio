@@ -177,6 +177,7 @@ export {
   abortProjectScanRun,
   clearExporterJobFiles,
   dismissExportRun,
+  interruptExportRun,
   executeCharacterJobs,
   ExporterJobFilesChangedError,
   exporterJobFilesSignature,

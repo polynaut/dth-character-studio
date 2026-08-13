@@ -1584,8 +1584,24 @@ export const CHARACTER_SCHEMA_VERSION = 31
  *       CSV", "exporting hair items") at the percent already reached, so the
  *       display can name what is running, not only what finished. A script
  *       without a baked path (manual/legacy) logs nothing.
+ * v73 — INTERRUPT. A DTH Export run can be stopped from the studio, and both
+ *       the generated carriers and the runtime stop at the next point where
+ *       stopping leaves nothing half-written. The signal is a flag file in the
+ *       character's `.dcsmeta` folder ({@link EXPORT_CANCEL_FILE}), baked into
+ *       every carrier as `dthCancelPath` and handed to the runtime as
+ *       `config.cancelPath`. Stop points: the carrier's own entry (a queued
+ *       row skips its whole scene and logs "skipped - the export was
+ *       interrupted"), the runtime's block boundaries (JCM/DK/GP/Physics/
+ *       custom frames) and its frame-apply loop (throttled to one probe per
+ *       750 ms — the flag may live on a network drive), and the gate before
+ *       the exporter runs. An interrupted ROM returns false, so the existing
+ *       export gate skips the export by itself; the run log carries one error
+ *       line naming the interrupt (plus `interrupted: true`) and NO dialog is
+ *       shown — an interrupt only ever happens in an unattended batch, where
+ *       a modal would block every row behind it. A script generated without a
+ *       meta folder bakes '' and can never be interrupted, exactly as before.
  */
-export const RUNTIME_VERSION = 72
+export const RUNTIME_VERSION = 73
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

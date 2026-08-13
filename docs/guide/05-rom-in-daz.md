@@ -345,19 +345,40 @@ live in the display. Nothing is announced mid-run: **one report** at the very
 end covers both legs, with any per-scene failures and the total time, and stays
 on screen until you close it (or start a new run).
 
-**Getting out of a live run takes Ctrl.** A plain click on the working button
-does nothing — a stray one used to drop the watch, which reads as *"the export
-vanished"*:
+**Interrupt** stops the run itself. It sits beside the working button through
+both legs, and it is the one control that reaches into the work rather than into
+the studio's view of it:
 
-- **Ctrl on the Daz leg** turns the button into **Abort** — the way out of a
-  batch that is stuck (Daz sitting on a dialog, the Runner never finishing). It
-  deletes the job file and resets the button, so the next export isn't refused
-  with *"a batch is waiting for Daz Studio"*. Anything Daz already started keeps
-  running there; what you get back is the studio. (The same file can also be
-  cleared from [Settings → App Data](./02-setup.md#the-app-data-tab).)
-- **Ctrl on the Houdini leg** offers **Stop watching**: the export itself keeps
-  running to its end, but the studio lets go — and the projects still queued
-  behind it will not start.
+- The **ROM build stops** where it happens to be — between two ROM blocks, or
+  between two custom frames.
+- The **export that would have followed it is skipped**, and so is every scene
+  still queued behind it. A queued scene still opens in Daz (the Runner owns the
+  batch and can't be told otherwise), it just does no work.
+- The **Houdini leg stops between export nodes** and closes its own background
+  Houdini; projects still queued never start.
+- The report says **DTH Export interrupted**, never *"n scenes exported"* —
+  after an interrupt the studio can no longer tell a scene that exported from
+  one that was skipped, so it doesn't guess. The character's ROM run log names
+  the scene that was cut off mid-build.
+
+What is already written stays. And what Interrupt cannot do is cut a *synchronous
+call inside someone else's plugin* short: a Daz scene load, one DTH Exporter
+export, one DazToHue node. Whichever of those is running finishes first — that
+wait is the price of stopping cleanly instead of killing a process mid-write, so
+on a long node the button can sit at **Stopping…** for a while.
+
+A plain click on the working button still does nothing — a stray one used to
+drop the watch, which reads as *"the export vanished"*. Interrupt is the only
+control a live run has, and it needs no modifier to find.
+
+> **If a run is stuck rather than running** — Daz sitting on a dialog, or a
+> batch this window is only *showing* and can never finish — nothing is left to
+> read the interrupt. That is housekeeping, not a run control:
+> [Settings → App Data](./02-setup.md#the-app-data-tab) clears a stuck batch
+> handoff, so the next export isn't refused with *"a batch is waiting for Daz
+> Studio"*. (Before v0.77 that same clean-up hid behind **Ctrl** on the progress
+> button, as **Abort** / **Stop watching**. Both stopped the studio rather than
+> the run — which was all that was possible then.)
 
 Before Daz has picked the batch up at all the button reads **Abort** without any
 modifier: nothing has started yet.

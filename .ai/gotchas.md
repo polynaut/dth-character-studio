@@ -1475,6 +1475,31 @@ spec can seed an mtime-keyed cache entry that reads as fresh.
 The wider lesson: three fixes were aimed at plausible causes before anyone dumped
 the drawer's own text, which had the error string in it the whole time. When a UI
 assertion fails, print what the UI actually says before theorising.
+
+## A modifier-revealed control that RELAYS OUT under the cursor is untestable in Playwright (measured 2026-08-13)
+
+`useModifierHeld` re-syncs from every `mousemove`/`mouseover`: pointer events
+carry the live modifier bits, and that is how it self-heals a missed keyup (Alt
+on Windows, where the native menu bar swallows key events). Fine in the app —
+and a trap under CDP.
+
+CDP's `Input.dispatchKeyEvent` does **not** update the modifier state the browser
+stamps onto its OWN generated events. So when a Ctrl press changes the layout
+under a stationary cursor, the browser fires `mouseover` on whatever is now
+there, that event says `ctrlKey: false`, the store clears, the layout reverts —
+and the two states flip-flop. `toBeVisible()` still passes (it polls and catches
+a transient true); `.click()` hangs to the test timeout, because it needs a
+stable target. Real users are unaffected: their Ctrl genuinely is down.
+
+Measured while adding **Interrupt** beside the export progress button, whose Ctrl
+branch then rendered one button where the normal branch rendered two. Those two
+modifier hatches are gone now (v0.77 — Interrupt replaced them), so the export
+buttons no longer hit this, but `useModifierHeld` is still behind the path chips
+and the Unreal install button. If a spec has to hold a modifier:
+
+- park the pointer off the affected element first (`page.mouse.move(0, 0)`), and
+- design the reveal so it does not move anything: **a modifier may swap what a
+  control does, never how much space it takes.**
 - **A figure's source asset is on the OBJECT, not reliably on the node — and in
   Daz Studio 4 the node answers nothing.** `node.getAssetUri()` returns a usable
   path in DS6 and empty in DS4, which silently disabled every generation

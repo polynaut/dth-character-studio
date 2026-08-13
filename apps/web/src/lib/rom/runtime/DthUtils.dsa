@@ -41,6 +41,61 @@ function runLogProblemCount(){
 	return DTH_RUN_LOG.errors.length + DTH_RUN_LOG.failedMorphs.length;
 }
 
+/**********************************************************************
+ * Interrupt — "stop this run at the next point where stopping is safe".
+ *
+ * A ROM build is the long pole of a DTH Export: minutes to an hour per scene,
+ * inside a Daz Studio nobody is watching, driven by a plugin the studio cannot
+ * talk to. So the studio drops a FLAG FILE (its path baked into the generated
+ * script's config as `cancelPath`) and this runtime polls it at every block
+ * boundary and inside the frame-apply loop. The build then stops with the
+ * scene coherent — no export follows, and the run log says why.
+ *
+ * STICKY on purpose: once seen, the flag stays seen for the rest of the run
+ * (`DTH_CANCELLED`), so a studio that deletes it the moment the run ends can
+ * never leave half a build thinking it should carry on.
+ *
+ * THROTTLED on purpose too: the flag lives in the project folder, which may sit
+ * on a network drive, and the frame loop asks thousands of times. One stat per
+ * DTH_CANCEL_POLL_MS is plenty — the user is waiting on a build measured in
+ * minutes, not on a sub-second reaction.
+ */
+var DTH_CANCEL_PATH = "";
+var DTH_CANCELLED = false;
+var DTH_CANCEL_CHECKED_MS = 0;
+var DTH_CANCEL_POLL_MS = 750;
+
+/** Arm (or disarm, with an empty path) the interrupt probe for one run. */
+function dthArmCancel(sPath){
+	DTH_CANCEL_PATH = sPath ? String(sPath) : "";
+	DTH_CANCELLED = false;
+	DTH_CANCEL_CHECKED_MS = 0;
+}
+
+/** Has the studio asked this run to stop? Best-effort: a flag that cannot be
+ *  read reads as "no". The dangerous answer is the false positive — it would
+ *  abandon a build nobody asked to stop. */
+function dthStopRequested(){
+	if(DTH_CANCELLED) return true;
+	if(!DTH_CANCEL_PATH) return false;
+	try {
+		var iNow = new Date().getTime();
+		if(iNow - DTH_CANCEL_CHECKED_MS < DTH_CANCEL_POLL_MS) return false;
+		DTH_CANCEL_CHECKED_MS = iNow;
+		if(new DzFile(DTH_CANCEL_PATH).exists()){
+			DTH_CANCELLED = true;
+			print("DTH Character Studio: stop requested - the ROM build will stop at the next safe point.");
+		}
+	} catch(e){ /* can't tell - keep working */ }
+	return DTH_CANCELLED;
+}
+
+/** Whether THIS run was stopped — read after the fact (it never re-probes), so
+ *  the reporting cannot disagree with the decision the build already made. */
+function dthWasInterrupted(){
+	return DTH_CANCELLED;
+}
+
 /** The scene-path convention shared with the studio (normalizeSceneKey in
  *  execute-jobs.ts): trimmed, '/'-separators, lowercased. It is what a stored
  *  run is matched by, so both sides must agree. */
@@ -638,6 +693,15 @@ function applyFrameDatas(oNodeRoot, frameDatas, successFrameDatas, failedFrameDa
 	if(Scene.getAnimRange().end / Scene.getTimeStep() < frameDatas.length)
 		setTotalFrames(frameDatas.length);
 	for(var i = startFrame; i < frameDatas.length; i++){
+		// The finest interrupt point the ROM has: one frame's keys are applied
+		// or they are not, and stopping between two frames leaves the timeline
+		// exactly as coherent as stopping after the last one. The caller
+		// (ApplyDTHWorkflow) checks again right after and ends the run — this
+		// loop only has to stop growing the ROM.
+		if(dthStopRequested()){
+			print("ROM frame loop interrupted at frame", i, "of", frameDatas.length);
+			return;
+		}
 		verbose("  applying frame:", i);
 		var frameData = frameDatas[i];
 		if(frameData){

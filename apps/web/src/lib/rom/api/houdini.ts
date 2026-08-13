@@ -28,6 +28,7 @@ import {
 } from '../houdini-jobs'
 import { normalizeSceneKey } from '../execute-jobs'
 import type { HoudiniResult, HoudiniRunState } from '../houdini-jobs'
+import { cancelFlagPath } from '@dth/rom'
 import type { Character } from '@dth/rom'
 // Houdini's half of the handoff, bundled as source and written into app-data
 // before each launch (see startHoudiniExport).
@@ -611,6 +612,9 @@ interface ActiveHoudiniRun {
   jobPath: string
   /** Absolute path of the result file 456.py writes. */
   resultPath: string
+  /** The interrupt flag handed to 456.py — kept so the run can drop it when it
+   *  ends, wherever it ends ('' = this run couldn't be interrupted). */
+  cancelPath: string
   /** Scenes that went into the job — the count shown until 456.py reports its
    *  own node total (one scene may hold several export nodes, or none). */
   scenes: number
@@ -645,6 +649,9 @@ const houdiniRunPlanSchema = z.object({
   hipPath: z.string().min(1),
   jobPath: z.string().min(1),
   resultPath: z.string().min(1),
+  /** Defaulted: a plan written by an older build carries none, and a restored
+   *  watch must still restore (it just can't clean the flag up). */
+  cancelPath: z.string().default(''),
   scenes: z.number().int().nonnegative(),
   startedAtMs: z.number(),
   /** Projects still waiting their turn, in order. */
@@ -780,6 +787,7 @@ export async function adoptHoudiniRun({ data }: { data: unknown }): Promise<Houd
     characterId: plan.characterId,
     jobPath: plan.jobPath,
     resultPath: plan.resultPath,
+    cancelPath: plan.cancelPath,
     scenes: plan.scenes,
     startedAtMs: plan.startedAtMs,
   }
@@ -869,6 +877,9 @@ export async function startHoudiniExport({
   const jobFile = joinPath(location.folderAbs, HOUDINI_JOB_FILE)
   const resultPath = joinPath(location.folderAbs, HOUDINI_RESULT_FILE)
   const scenesRootAbs = characterScenesRoot(character, location, project.dazSubdir ?? 'daz3d')
+  const cancelPath = cancelFlagPath(
+    storage.characterMetaDir(project.path, location.relFolder, character.id),
+  )
   const job = buildHoudiniJob(character, scenes, {
     resultPath,
     // A FALLBACK only: 456.py fills a node's blank export_directory with this
@@ -879,6 +890,10 @@ export async function startHoudiniExport({
     // used to bake; see buildHoudiniPrefill's exportDirectory note).
     exportDirectory: joinPath(location.folderAbs, normalizeRelFolder(project.exportSubdir)),
     scenesRootAbs,
+    // The interrupt flag 456.py checks between nodes — the SAME file the Daz
+    // leg's generated scripts probe, because "stop this character's export
+    // run" is one request, not one per leg.
+    cancelPath,
     // This Houdini instance exists to carry the batch — 456.py closes it again
     // after the final result lands. A project the user opened themselves is a
     // different instance entirely and is never touched by this.
@@ -896,6 +911,14 @@ export async function startHoudiniExport({
     if (await exists(resultPath)) await remove(resultPath)
   } catch {
     // locked — houdiniRunStateFrom tolerates the stale read until it is rewritten
+  }
+  // …and a leftover interrupt flag would stop this run before its first node.
+  // The Daz handoff clears it the same way; a Houdini-only run (skip Daz) never
+  // goes through that path, so it has to clear its own.
+  try {
+    if (cancelPath && (await exists(cancelPath))) await remove(cancelPath)
+  } catch {
+    // best effort — worst case the run stops immediately and reports it
   }
 
   // Both runner scripts into app-data. Deliberately NOT on HOUDINI_SCRIPT_PATH:
@@ -928,6 +951,7 @@ export async function startHoudiniExport({
     characterId: character.id,
     jobPath: jobFile,
     resultPath,
+    cancelPath,
     scenes: job.scenes.length,
     startedAtMs: Date.now(),
   }
@@ -939,6 +963,7 @@ export async function startHoudiniExport({
     hipPath: linkedHip,
     jobPath: jobFile,
     resultPath,
+    cancelPath,
     scenes: job.scenes.length,
     startedAtMs: activeHoudiniRun.startedAtMs,
     remaining,
@@ -997,6 +1022,14 @@ export async function fetchHoudiniRunProgress(): Promise<
   const state = houdiniRunStateFrom(result, houdiniUp, consoleText)
   if (state.state === 'finished' || state.state === 'dead') {
     if (activeHoudiniRun === run) activeHoudiniRun = null
+    // The interrupt flag dies with the run it was aimed at. It is the LAST leg
+    // that clears it (a queue stops at the interrupted project — there is no
+    // "next project" to protect), and clearing it twice is harmless anyway.
+    try {
+      if (run.cancelPath && (await exists(run.cancelPath))) await remove(run.cancelPath)
+    } catch {
+      // best effort — the next handoff clears it again before anything runs
+    }
     // The plan dies with the run it describes. A queue that continues writes a
     // fresh one when its next project arms — and that happens strictly AFTER
     // this await returns, so the clear can never eat the successor's plan.

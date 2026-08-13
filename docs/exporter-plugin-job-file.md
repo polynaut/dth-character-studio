@@ -308,6 +308,37 @@ While the un-renamed job file exists the button shows **Abort**: it deletes
 the file and rolls the aborted scenes' handoff stamps back. Once the plugin
 RENAMES the file, aborting is over.
 
+## Interrupting a claimed batch (studio-side today, plugin-side optional)
+
+A claimed batch cannot be stopped through this contract: the plugin owns the
+file and works its rows to the end. The studio therefore stops the batch
+**through the scripts it generated**, which need no plugin change at all.
+
+The signal is a flag file — `.dth_export_cancel` in the character's
+`.dcsmeta/characters/<folder>/` — whose **existence** means "stop this
+character's export run". The studio deletes it at every handoff and when a run
+ends. Every generated carrier bakes its path (`var dthCancelPath = …`) and
+probes it:
+
+- at the **top of the script**: the row's scene is skipped whole, and the
+  progress log gets `[100] <scene>: skipped - the export was interrupted`;
+- inside the **DTH runtime** (v73): between ROM blocks and inside the
+  frame-apply loop (throttled to one probe per 750 ms), so the ROM build stops
+  where it is;
+- **before the exporter runs**, so an interrupted ROM never ships an export.
+
+So from the plugin's side an interrupted batch simply looks like a batch of
+very fast rows, and every row still reports `done` — which is why **the studio
+never reports scene counts for an interrupted run**.
+
+**Optional plugin support.** A plugin that wants to stop properly may check for
+that flag between rows. Its path is not in the job file today (the scripts carry
+it); a future contract version can add a `cancelPath` field. Marking the
+remaining rows `failed` with `"error": "cancelled"` and writing `progress: 100`
+is the natural shape — the same one the unsaved-changes cancellation already
+uses. Nothing about this is required: the studio's interrupt works against a
+plugin that knows nothing about it.
+
 **Progress watch (studio-side):** the studio polls the `running_` file and
 shows the plugin-owned `progress` ("Exporting 40%"). When it reads
 `progress: 100` it **deletes the file** and reports the outcome (per-row

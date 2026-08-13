@@ -82,6 +82,15 @@ export interface HoudiniJobFile {
   /** Where 456.py writes progress + results for the studio to poll. */
   resultPath: string
   /**
+   * The studio's INTERRUPT flag for this character (`EXPORT_CANCEL_FILE` in
+   * the `.dcsmeta` folder — the same file the Daz leg's scripts probe, because
+   * one run is one thing to stop). 456.py checks it between export nodes: a
+   * node's `do_export` is synchronous and cannot be interrupted from outside,
+   * so the boundary between two of them is the earliest honest stop point.
+   * '' = this run cannot be interrupted (older studio, no meta folder).
+   */
+  cancelPath: string
+  /**
    * Close Houdini again once the batch has written its final result. The DTH
    * Export flow always sets this: its Houdini instance exists only to carry
    * the batch, and a queue of projects would otherwise stack open windows.
@@ -152,6 +161,11 @@ export const houdiniResultSchema = z.object({
   targets: z.array(houdiniTargetSchema).default([]),
   error: z.string().default(''),
   activity: houdiniActivitySchema.optional(),
+  /** 456.py saw the studio's interrupt flag and stopped between nodes. The
+   *  nodes it never reached are still in `nodes`, as `skipped` — so the counts
+   *  stay a complete account of the batch — and this is what tells "2 skipped
+   *  because the user stopped it" apart from "2 skipped, nothing to do". */
+  cancelled: z.boolean().default(false),
 })
 export type HoudiniResult = z.infer<typeof houdiniResultSchema>
 
@@ -209,6 +223,8 @@ export function buildHoudiniJob(
     exportDirectory?: string
     scenesRootAbs?: string
     closeWhenDone?: boolean
+    /** See {@link HoudiniJobFile.cancelPath} — omitted = uninterruptible. */
+    cancelPath?: string
   },
 ): HoudiniJobFile {
   // Scene KEYS are normalized (lowercased) for matching, so a label taken from
@@ -237,6 +253,7 @@ export function buildHoudiniJob(
     scenes,
     exportDirectory: (options.exportDirectory ?? '').replace(/\\/g, '/'),
     resultPath: options.resultPath.replace(/\\/g, '/'),
+    cancelPath: (options.cancelPath ?? '').replace(/\\/g, '/'),
     closeWhenDone: options.closeWhenDone ?? false,
   }
 }
@@ -398,6 +415,9 @@ export type HoudiniRunState =
        *  with Yes, so this is the ONLY place those warnings ever surface — and
        *  the result file they came from is deleted right after this snapshot. */
       problems: Array<string>
+      /** The run stopped because the studio interrupted it — the counts are
+       *  real, but they are not the whole batch. */
+      cancelled: boolean
       /** Handoff → finish, for the toast's "in 12m 34s". */
       elapsedMs?: number
     }
@@ -547,6 +567,7 @@ export function houdiniRunStateFrom(
     state: 'finished',
     ...counts,
     summary: houdiniResultSummary(result),
+    cancelled: result.cancelled,
     error: result.state === 'failed' ? result.error || 'the run failed in Houdini' : result.error,
     problems: result.nodes.flatMap((node) =>
       node.problems.map((problem) => `${node.scene || node.node}: ${problem}`),
