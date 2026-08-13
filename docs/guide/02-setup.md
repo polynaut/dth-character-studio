@@ -124,10 +124,9 @@ Every Unreal Engine version the Epic Games launcher has installed is listed
 below the Houdini section. Unlike Daz and Houdini there is **nothing to
 activate**: each linked `.uproject` names its own engine version, and the
 studio matches DTH content and plugins to it per project, at install time. The
-list is what the project windows' **Generate project** action (Unreal bar) can
-create a new project for — and your confirmation that detection sees what the
-launcher sees. An engine whose folder is gone (uninstalled outside the
-launcher) is flagged rather than hidden.
+list is your confirmation that detection sees what the launcher sees. An engine
+whose folder is gone (uninstalled outside the launcher) is flagged rather than
+hidden.
 
 Detection reads **two** sources: the launcher's registry entries and its
 `LauncherInstalled.dat` manifest. Both, because either can be incomplete — a

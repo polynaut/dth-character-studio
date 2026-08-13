@@ -15,8 +15,8 @@ import type { UnrealEngineScan } from '#/lib/unreal-install.ts'
  *
  * Purely informational, unlike the Daz/Houdini twins above it: there is no
  * "active" Unreal — a `.uproject` names its own engine version, and the studio
- * matches per project at install time. What this list feeds is the project
- * pages' Generate action (which engine a new project can bind) and the user's
+ * matches per project at install time. What this list feeds is the install
+ * dialog's engine matching (which plugin builds fit a project) and the user's
  * own confidence that detection sees what they see in the launcher.
  */
 export function UnrealInstallSection() {
@@ -63,8 +63,9 @@ export function UnrealInstallSection() {
                 per project, at install time.
               </p>
               <p>
-                A detected engine is what the project pages&apos; <strong>Generate project</strong>{' '}
-                action can create a new Unreal project for.
+                Create the Unreal project itself in Unreal — its New Project screen is where the
+                templates live. Link the <span className="font-mono">.uproject</span> here
+                afterwards and install into it.
               </p>
             </div>
           </InfoPopup>
@@ -100,7 +101,7 @@ export function UnrealInstallSection() {
                 {!install.exists && (
                   <p className="mt-1 flex items-center gap-1 text-xs text-amber-500">
                     <AlertTriangle className="size-3 shrink-0" /> folder not found — the launcher
-                    still registers this version, but nothing can be generated for it
+                    still registers this version, but its plugin builds cannot be matched
                   </p>
                 )}
               </div>

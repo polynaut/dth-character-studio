@@ -1,27 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from '@tanstack/react-router'
-import { ChevronLeft, ChevronRight, ExternalLink, FolderOpen, HardDriveDownload, Plus, Sparkles, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ExternalLink, FolderOpen, HardDriveDownload, Plus, X } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import { Button, RemoveAssetDialog, cn, useModifierHeld } from '@dth/ui'
 import unrealLogo from '#/assets/unreal-logo.svg'
-import {
-  UnrealGenerateDialog,
-  UnrealInstallDialog,
-  uprojectDisplayName,
-} from '#/components/unreal-install-dialog.tsx'
+import { UnrealInstallDialog, uprojectDisplayName } from '#/components/unreal-install-dialog.tsx'
 import { openScene, revealPath, setUnrealProjects, unrealDthContentPresent } from '#/lib/rom/api.ts'
 import { pickUprojectPath } from '#/lib/desktop.ts'
 import { PathCode } from '#/components/path-code.tsx'
 import { browseStart, displayPath, middleTruncatePath, normalizePath, parentDir } from '#/lib/path.ts'
-import { unrealProjectNameFrom } from '#/lib/unreal-install.ts'
 
 import type { ProjectInfo } from '#/lib/rom/api.ts'
-
-/** Where a generated Unreal project goes by default: a subfolder of the DTH
- *  project folder, beside `daz3d/` and the characters. Editable in the dialog. */
-const UNREAL_SUBFOLDER = 'unreal'
 
 /**
  * A linked Unreal project card in the footer bar: the U mark, name + a REAL
@@ -163,8 +154,6 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
   // The card whose install button was clicked — installing runs in a dialog
   // (what to install: DTH content + engine-matched plugins). '' = closed.
   const [installFor, setInstallFor] = useState('')
-  // The ✨ Generate-project dialog (create + install + link in one run).
-  const [generateOpen, setGenerateOpen] = useState(false)
   // The card whose hover-✕ was clicked — unlinking pauses on a confirm dialog
   // (same recipe as removing a Daz scene / Houdini project from a character).
   const [pendingRemove, setPendingRemove] = useState('')
@@ -289,33 +278,17 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
           <span className="text-[0.7rem] font-medium tracking-wide text-muted-foreground uppercase">
             Unreal projects
           </span>
-          <div className="flex gap-1">
-            <Button
-              variant="outline"
-              size="sm"
-              className={cn('h-7 w-fit gap-1 px-2 text-xs', busy && 'animate-pulse')}
-              disabled={busy}
-              // aria-label only — no tooltip; the visible "+ Add project" says it.
-              aria-label={addLabel}
-              onClick={() => void onPick()}
-            >
-              <Plus className="size-3.5" /> Add project
-            </Button>
-            {/* Generate: create a new Unreal project for a detected engine and
-                install DTH content + matched plugins in one run — the Unreal
-                twin of the character pages' Generate Houdini project. */}
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 w-fit gap-1 px-2 text-xs"
-              disabled={busy}
-              aria-label="Generate a new Unreal project"
-              title="Generate a new Unreal project"
-              onClick={() => setGenerateOpen(true)}
-            >
-              <Sparkles className="size-3.5" />
-            </Button>
-          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className={cn('h-7 w-fit gap-1 px-2 text-xs', busy && 'animate-pulse')}
+            disabled={busy}
+            // aria-label only — no tooltip; the visible "+ Add project" says it.
+            aria-label={addLabel}
+            onClick={() => void onPick()}
+          >
+            <Plus className="size-3.5" /> Add project
+          </Button>
         </div>
         {project.unrealProjects.length > 0 && (
           <>
@@ -392,19 +365,6 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
           onInstalled={(dthInstalled) => {
             if (dthInstalled) setDthStatus((s) => ({ ...s, [installFor]: true }))
           }}
-        />
-      )}
-      {generateOpen && (
-        <UnrealGenerateDialog
-          // The project's own `unreal` subfolder, not wherever the first
-          // LINKED project happens to sit: a generated project belongs to this
-          // DTH project, so it defaults to living inside it — beside daz3d/ and
-          // the characters — and the whole path stays editable (and Browse
-          // still puts it anywhere, e.g. an existing Unreal Projects folder).
-          suggestedDir={`${normalizePath(project.path)}/${UNREAL_SUBFOLDER}`}
-          suggestedName={unrealProjectNameFrom(project.name)}
-          onClose={() => setGenerateOpen(false)}
-          onGenerated={(uprojectPath) => add([uprojectPath])}
         />
       )}
       {pendingRemove && (

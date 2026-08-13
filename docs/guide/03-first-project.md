@@ -92,16 +92,11 @@ they are, and unlinking never deletes anything.
   `Content/DazToHue` exists, but stays clickable — reinstalls and plugins live
   in the dialog. A project whose engine association is a source-build GUID
   lists every build unchecked instead: only you know what fits it.
-- **The ✨ Generate button** (next to *Add project*) creates a **fresh
-  Blueprint-only Unreal project** for one of the engine versions the Epic
-  launcher has installed, installs the checked DTH content + plugins into it in
-  the same run, and links it to this studio project — a DTH-ready Unreal
-  project from nothing, without opening Unreal first. It opens **prefilled**:
-  the project's own name, and an **`unreal` subfolder of the project folder**
-  as the location, so the Unreal side lands beside `daz3d/` and the characters.
-  Both are editable and **Browse** puts it anywhere else. (Unreal accepts
-  letters, digits and `_` only, and no leading digit, so a studio project called
-  `3d-workflow` is suggested as `_3d_workflow`.)
+- **Creating the Unreal project itself is Unreal's job** — its New Project
+  screen is where the templates live (Third Person, Blueprint vs C++, the
+  starter content), and picking the right one for a production is a decision
+  worth making there. Make the project in Unreal, then link it here and use the
+  install button.
 
 <p align="center">
   <img width="900" alt="Unreal projects footer bar with a linked project card" src="screenshots/project-unreal-footer.png" />
