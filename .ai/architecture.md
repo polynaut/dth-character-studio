@@ -315,16 +315,24 @@ Three consequences worth knowing before touching this:
   serialized per file and fold into a fresh read (`queueScanStoreWrite`): a scan
   holds no store open across its hython run, so two workers finishing together
   append instead of last-writer-wins.
+- **The Utils drawer is scoped to ONE project** — the card its button was pressed
+  on, passed as the required `targetHip`. Utils are per project (that is why the
+  button is on the card, not the section header), so `targets` is `[targetHip]`
+  and not `character.houdiniProjects`. Everything downstream reads `targetScan`,
+  so narrowing that input scopes the whole drawer: one project's checks, nodes
+  and repairs. Two traps: `fetchCachedHoudiniScans` answers for the character's
+  WHOLE set, so its result must be filtered to the target before it is shown, or
+  the cache puts the other projects back on screen; and the transfer SOURCE stays
+  cross-project on purpose — copying a setup means copying it from somewhere else.
 - **The drawer reads the store** (`fetchCachedHoudiniScans`) **and scans only
   what it doesn't cover** — an outside-folder link (never swept), a `.hip` saved
-  since the last sweep — then merges, so a partial cache never hides a linked
-  project from the node lists or the repairs. Target scans pass the character
-  scope, so drawer-earned results land in the character's store, not the shared
-  source store — including an outside link's, which the sweep's prune keeps
-  (the keep-list is everything still LINKED), so it costs one scan, not one per
-  open. It briefly POLLED for the sweep instead; that is wrong, because
-  waiting is only safe if a sweep is guaranteed to deliver and it is not
-  (external project, no Houdini configured).
+  since the last sweep — so a partial cache never hides the project's nodes or
+  repairs. Target scans pass the character scope, so drawer-earned results land
+  in the character's store, not the shared source store — including an outside
+  link's, which the sweep's prune keeps (the keep-list is everything still
+  LINKED), so it costs one scan, not one per open. It briefly POLLED for the
+  sweep instead; that is wrong, because waiting is only safe if a sweep is
+  guaranteed to deliver and it is not (external project, no Houdini configured).
 - **The cache may never fail a scan.** Resolving the store path was once
   unguarded and took the drawer's whole project list down with it. A broken cache
   degrades to "no cache", never to "no scan".

@@ -395,8 +395,11 @@ export function HoudiniUtilsPanel({
   open,
   onClose,
   character,
-  /** The card the panel was opened from — its nodes start selected. */
-  initialHipPath,
+  /** The ONE project this drawer acts on — the card its Utils button was
+   *  pressed on. Required, because that is the whole scope of the drawer: every
+   *  check, every repair and every transfer target below belongs to this `.hip`
+   *  and no other. */
+  targetHip,
   /** The owning project — used to offer its Houdini template attachments. */
   projectId,
   /** The character's own folder — what `$JOB` should be (v0.64). */
@@ -405,12 +408,24 @@ export function HoudiniUtilsPanel({
   open: boolean
   onClose: () => void
   character: Character
-  initialHipPath?: string
+  targetHip: string
   projectId?: string
   charFolder?: string
 }) {
-  // --- target side: this character's own projects ---------------------------
-  const targets = character.houdiniProjects
+  // --- target side: the ONE project this drawer was opened for ---------------
+  //
+  // Not `character.houdiniProjects`. Houdini project utils are PER PROJECT —
+  // that is why the button lives on the project card and not on the section
+  // header — so listing the character's other projects here offered repairs and
+  // transfer targets the user never asked about, three clicks away from the
+  // card they actually pressed. Everything downstream reads `targetScan`, so
+  // narrowing the input scopes the whole drawer: one project's checks, one
+  // project's nodes, one project's repairs.
+  //
+  // The SOURCE side is deliberately still cross-project — copying a setup means
+  // copying it FROM somewhere else, which is the one thing here that legitimately
+  // names another project.
+  const targets = [targetHip]
   const [targetScan, setTargetScan] = useState<ScanState>(EMPTY_SCAN)
   const [selectedTargets, setSelectedTargets] = useState<ReadonlySet<string>>(new Set())
 
@@ -534,13 +549,7 @@ export function HoudiniUtilsPanel({
       // button that did nothing. Which is exactly how this read before it could
       // force at all: the cache answered in ten milliseconds and the spinner
       // never became visible. Say it ran.
-      if (force) {
-        utilsToast.success(
-          projects.length === 1
-            ? 'Rescanned the Houdini project'
-            : `Rescanned ${projects.length} Houdini projects`,
-        )
-      }
+      if (force) utilsToast.success('Rescanned the Houdini project')
       return projects
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -580,7 +589,13 @@ export function HoudiniUtilsPanel({
     // Nudge the sweep in case this drawer was reached without the page mounting
     // one (it coalesces, so an already-running sweep is joined, not doubled).
     void scanCharacterHoudiniProjects({ data: { projectId, id: character.id } })
-    const cached = await fetchCachedHoudiniScans({ data: { projectId, id: character.id } })
+    const allCached = await fetchCachedHoudiniScans({ data: { projectId, id: character.id } })
+    // The store answers for every project of the character, so it has to be
+    // narrowed to THIS one before anything is shown — otherwise scoping the scan
+    // would still leave the character's other projects on screen, served from
+    // the cache, which is the exact thing this drawer stopped doing.
+    const wanted = new Set(targets.map((t) => normalizePath(t).toLowerCase()))
+    const cached = allCached.filter((p) => wanted.has(normalizePath(p.hipPath).toLowerCase()))
     const covered = new Set(cached.map((p) => normalizePath(p.hipPath).toLowerCase()))
     const uncovered = targets.filter((t) => !covered.has(normalizePath(t).toLowerCase()))
     if (uncovered.length === 0) {
@@ -616,18 +631,18 @@ export function HoudiniUtilsPanel({
     if (!open) return
     void (async () => {
       const projects = await loadCachedTargets()
-      // Preselect the card's own nodes — the panel was opened FROM that project.
-      const from = initialHipPath
-      if (!from) return
+      // Every node of the project starts ticked. There is only one project now,
+      // so this is no longer "find the card's own project among the others" —
+      // it is simply "select what this drawer is for".
       const match = projects.find(
-        (p) => normalizePath(p.hipPath).toLowerCase() === normalizePath(from).toLowerCase(),
+        (p) => normalizePath(p.hipPath).toLowerCase() === normalizePath(targetHip).toLowerCase(),
       )
       if (match) {
         setSelectedTargets(new Set(match.nodes.map((n) => nodeKey(match.hipPath, n.path))))
       }
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, targetsKey, initialHipPath])
+  }, [open, targetsKey])
 
   // Candidate source characters: everything the studio can reach that actually
   // HAS a Houdini project, minus this character (copying onto itself is refused
@@ -1330,9 +1345,12 @@ export function HoudiniUtilsPanel({
             <img src={houdiniLogo} alt="" aria-hidden className="size-5 shrink-0 object-contain" />
             <span className="truncate">
               Houdini project utils
+              {/* The PROJECT is the subject, not the character — the drawer acts
+                  on this one `.hip` and nothing else, so its name belongs in the
+                  title rather than as an "opened from" aside next to a character
+                  who may own several. */}
               <span className="ml-2 text-sm font-normal text-muted-foreground">
-                {character.name}
-                {initialHipPath ? ` · opened from ${fileName(initialHipPath)}` : ''}
+                {fileName(targetHip)} · {character.name}
               </span>
             </span>
           </span>
@@ -1397,15 +1415,14 @@ export function HoudiniUtilsPanel({
               <Label className="mb-1 flex w-fit items-center gap-1 text-base font-semibold">
                 Target
                 <InfoPopup label="Target — more information">
-                  This character&apos;s linked Houdini projects and the DazToHue material nodes
-                  found in each. Select every node that should receive the copied bakers.
+                  The DazToHue material nodes in <strong>this</strong> project. Select every node
+                  that should receive the copied bakers. Utils act on the one project you opened
+                  them from — to work on another, open its own card&apos;s Utils.
                 </InfoPopup>
               </Label>
               <div className="mb-2 flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">
-                  {targets.length === 0
-                    ? 'No Houdini projects linked to this character.'
-                    : `${targets.length} linked project${targets.length === 1 ? '' : 's'}`}
+                <span className="truncate text-xs text-muted-foreground" title={targetHip}>
+                  {fileName(targetHip)}
                 </span>
                 <Button
                   variant="ghost"
@@ -2435,9 +2452,10 @@ function GeneralTab({
 }) {
   return (
     <div className="space-y-4">
-      {/* Title + Rescan on one line, the count beneath — one block, so the
-          section's `space-y-4` keeps its distance from the cards below while
-          the count stays tight under its own heading. */}
+      {/* Title + Rescan on one line. There used to be a "N projects read" count
+          under it, from when this tab listed the character's whole set; with one
+          project it only ever said "1 project read" — and the card below already
+          names it. */}
       <div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <Label className="flex w-fit items-center gap-1 text-base font-semibold">
@@ -2478,9 +2496,6 @@ function GeneralTab({
             <RefreshCw className={scan.loading ? 'animate-spin' : ''} /> Rescan
           </Button>
         </div>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {scan.projects.length} project{scan.projects.length === 1 ? '' : 's'} read
-        </p>
       </div>
 
       {scan.loading ? (

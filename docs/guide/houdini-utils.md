@@ -1,10 +1,16 @@
 # The Utils drawer
 
 Every Houdini project card on the character page carries a **Utils** button (the
-🔧 that appears on hover). It opens a drawer with a tab per job:
+🔧 that appears on hover). It opens a drawer with a tab per job.
 
-- **General** — the health check of the projects themselves, and the repairs for
-  what it finds. The tab it opens on, and the only one useful without a second
+**The drawer works on that one project.** Utils are per project — that is why the
+button lives on the card rather than on the section — so everything inside is
+about the `.hip` you pressed it on: its checks, its repairs, its nodes. To work
+on another project, open its own card's Utils. (The one exception is the
+**source** of a copy, which is by definition another project.)
+
+- **General** — the health check of the project itself, and the repairs for
+  what it finds. The tab it opens on, and the only one useful without a source
   project picked.
 - **Material**, **Skeleton**, **Occlusion** and **Groom occlusion** — copy a
   node's **complete setup** from one project into another. One tab per DazToHue
@@ -27,7 +33,7 @@ hand.
 <p align="center">
   <img width="900" alt="the Utils drawer: target projects, source project and what to copy" src="screenshots/houdini-utils-drawer.png" />
   <br>
-  <sub><em>The Utils drawer: the character's own projects as targets, a browsed project as the source, and what travels.</em></sub>
+  <sub><em>The Utils drawer: this project's nodes as targets, a browsed project as the source, and what travels.</em></sub>
 </p>
 
 - **Target** — this character's linked Houdini projects, with every DazToHue
@@ -254,8 +260,8 @@ depend on each other.
 
 ## The General tab
 
-The tab the drawer opens on, and the only one useful without a second project
-picked: what each linked project carries **now**, and what the studio can put
+The tab the drawer opens on, and the only one useful without a source project
+picked: what this project carries **now**, and what the studio can put
 right. Every check is one row — its name on the left, the verdict on the right,
 the value beneath — and the fixes sit in the footer, in the order they have to
 be run. (**Refresh assets** leads them but answers to no check; see below.)
@@ -381,8 +387,7 @@ repaired: it is *unknown*, not wrong.
 DazToHue asset definitions it was built with, so switching your installed
 DazToHue release leaves every project you already have on the old ones —
 DazToHue's own answer to that is the **Refresh Assets** tool on its shelf. This
-button runs *that tool*, on every project the scan could open, without you
-opening each one in Houdini.
+button runs *that tool* on this project, without you opening it in Houdini.
 
 Three things it does **not** do, because it can't:
 
@@ -392,7 +397,7 @@ Three things it does **not** do, because it can't:
   know you changed DazToHue.
 - **It can't preview.** The studio runs DazToHue's tool rather than doing the
   refresh itself, so it has no idea in advance what will change. The **Dry run**
-  still opens each project and runs the tool — it simply never saves the file.
+  still opens the project and runs the tool — it simply never saves the file.
   That is a weaker promise than the other dry runs' *nothing was written*, and
   the dialog says so.
 - **It won't tell you it worked.** The report names the shelf tool that ran and

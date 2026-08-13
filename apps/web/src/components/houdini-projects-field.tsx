@@ -696,9 +696,11 @@ export function HoudiniProjectsField({
         <HoudiniUtilsPanel
           open
           character={character}
-          initialHipPath={utilsFor}
+          // The drawer acts on THIS project alone — `utilsFor` is the card whose
+          // Utils button was pressed, and it is the drawer's entire scope.
+          targetHip={utilsFor}
           projectId={projectId}
-          // The General tab checks each project's `$JOB`, which should be the
+          // The General tab checks the project's `$JOB`, which should be the
           // CHARACTER folder (v0.64).
           charFolder={charFolder}
           onClose={() => {
