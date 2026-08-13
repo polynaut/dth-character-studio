@@ -258,7 +258,9 @@ either way. Leave it zipped; there is nothing to unpack by hand.
 Under each folder the panel previews exactly what was recognized, with the
 engine version each build was matched to (from a version in its path — deepest
 wins — falling back to the `.uplugin`'s own `EngineVersion`; no version
-anywhere means the build is offered for every engine). Nothing installs from
+anywhere means the build is offered for every engine). A number that could not
+be an engine version is skipped rather than believed: `KawaiiPhysics_5.7_1.21.0`
+names the engine *and* the plugin's own version, and only `5.7` is one. Nothing installs from
 here: the install dialog on a project's Unreal card does that, per project —
 see [Linking Unreal projects](./03-first-project.md#linking-unreal-projects).
 

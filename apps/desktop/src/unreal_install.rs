@@ -24,8 +24,10 @@
 //! plugin folder's full path (deepest wins — `UE_5.7`, `ue5.7`, `Daz 5.6`),
 //! falling back to the `.uplugin`'s own `EngineVersion`. The path wins over
 //! the manifest on purpose: the folder layout is the signal the user can see
-//! and fix, a stale manifest field is neither. No version anywhere = an
-//! any-engine plugin (matches every project).
+//! and fix, a stale manifest field is neither. A number that cannot BE an
+//! engine version is skipped either way (`plausible_engine_major` — a vendor's
+//! `KawaiiPhysics_5.7_1.21.0.zip` names the plugin's version too). No version
+//! anywhere = an any-engine plugin (matches every project).
 //!
 //! Registry access and the measured-unreliable `exists` probes (see
 //! `unreal_dth_present` in install.rs) are why this is native; matching
@@ -595,7 +597,9 @@ fn version_from_components(path: &Path) -> Option<String> {
 /// (`UE_5.7`, `ue5.7`, `DazToUnreal 5.6`, `Bridge_5.6.1` → `5.6`). A
 /// `UE`-prefixed occurrence beats a bare one; among bare occurrences the LAST
 /// wins (versions suffix names). Digits glued to a word (`Plugin2.0`) are not
-/// a version, and a lone `UE5` names a generation, not a build target.
+/// a version, a lone `UE5` names a generation, not a build target, and a number
+/// that cannot BE an engine version is skipped entirely (see
+/// {@link plausible_engine_major}) rather than winning by position.
 fn ue_version_in(segment: &str) -> Option<String> {
     let chars: Vec<char> = segment.chars().collect();
     let mut best_bare: Option<String> = None;
@@ -627,17 +631,32 @@ fn ue_version_in(segment: &str) -> Option<String> {
         if !after_ok || !before_ok {
             continue;
         }
-        let normalized = format!(
-            "{}.{}",
-            major.parse::<u32>().unwrap_or(0),
-            minor.parse::<u32>().unwrap_or(0)
-        );
+        let major_num = major.parse::<u32>().unwrap_or(0);
+        if !plausible_engine_major(major_num) {
+            continue;
+        }
+        let normalized = format!("{}.{}", major_num, minor.parse::<u32>().unwrap_or(0));
         if ue_prefixed {
             return Some(normalized);
         }
         best_bare = Some(normalized);
     }
     best_bare
+}
+
+/// Whether a `major.minor` read out of a NAME can be an Unreal Engine version
+/// at all. Unreal's plugin format (`.uplugin`) exists from UE4 on, so 4 is the
+/// floor: a lower number sharing the shape is some OTHER version — in practice
+/// the plugin's own. No upper bound; a UE 6 is a matter of time.
+///
+/// MEASURED 2026-08-13, and why this exists: `KawaiiPhysics_5.7_1.21.0.zip` and
+/// `KawaiiPhysics_5.8_1.21.0.zip` sat side by side, and BOTH reported `UE 1.21`
+/// — the plugin's version is last in the name and the last bare hit wins, so
+/// each build read as an engine that has never existed, and the two read as the
+/// SAME one. Skipping the impossible number lets the real one win on its own,
+/// whichever end of the name it sits at.
+fn plausible_engine_major(major: u32) -> bool {
+    major >= 4
 }
 
 /// Whether the digits starting at `start` sit on a word boundary, and whether
@@ -667,7 +686,10 @@ fn boundary_before(chars: &[char], start: usize) -> (bool, bool) {
 
 /// `major.minor` out of a `.uplugin`'s `EngineVersion` field (`"5.7.0"` →
 /// `5.7`), or None when the file is unreadable, not JSON, or carries none —
-/// a tolerant fallback, never an error.
+/// a tolerant fallback, never an error. A value that cannot be an engine
+/// version (`plausible_engine_major`) is None too: a field holding the plugin's
+/// own version is a mislabel, and "no signal, offer it everywhere" is a better
+/// answer than a constraint no project can ever satisfy.
 fn engine_version_from_uplugin(uplugin: &Path) -> Option<String> {
     let raw = std::fs::read_to_string(uplugin).ok()?;
     engine_version_from_uplugin_json(&raw)
@@ -679,6 +701,9 @@ fn engine_version_from_uplugin_json(raw: &str) -> Option<String> {
     let mut parts = version.split('.');
     let major: u32 = parts.next()?.trim().parse().ok()?;
     let minor: u32 = parts.next()?.trim().parse().ok()?;
+    if !plausible_engine_major(major) {
+        return None;
+    }
     Some(format!("{major}.{minor}"))
 }
 
@@ -1143,6 +1168,40 @@ mod tests {
     }
 
     #[test]
+    fn two_zips_of_one_plugin_report_the_engine_each_one_names() {
+        // The reported folder, verbatim. These two builds are told apart ONLY
+        // by the engine version in their file names — reading the plugin's own
+        // `1.21.0` instead made the two rows identical (same name, same
+        // version, same `zip` marker) and neither of them true.
+        let tmp = unique_temp_dir("uekawaii");
+        let root = tmp.join("KawaiiPhysics");
+        for (file, build_id) in [
+            ("KawaiiPhysics_5.7_1.21.0.zip", "47537391"),
+            ("KawaiiPhysics_5.8_1.21.0.zip", "55116800"),
+        ] {
+            let modules = format!(r#"{{"BuildId":"{build_id}"}}"#);
+            write_zip(
+                &root.join(file),
+                &[
+                    ("KawaiiPhysics/KawaiiPhysics.uplugin", "{}"),
+                    ("KawaiiPhysics/Binaries/Win64/UnrealEditor.modules", &modules),
+                ],
+            );
+        }
+        let found = scan_unreal_plugins(vec![root.to_string_lossy().into_owned()]);
+        let brief: Vec<(String, String)> =
+            found.iter().map(|p| (p.engine_version.clone(), p.build_id.clone())).collect();
+        assert_eq!(
+            brief,
+            vec![
+                ("5.7".to_string(), "47537391".to_string()),
+                ("5.8".to_string(), "55116800".to_string()),
+            ]
+        );
+        fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
     fn installing_a_zipped_plugin_strips_the_wrapping_folder() {
         let tmp = unique_temp_dir("ueinstall");
         let zip_path = tmp.join("DazToHue.zip");
@@ -1213,6 +1272,26 @@ mod tests {
     }
 
     #[test]
+    fn a_plugins_own_version_is_not_read_as_an_engine_version() {
+        // REPORTED 2026-08-13, verbatim file names: the engine is named first
+        // and the plugin's version last, so "the last bare hit wins" handed
+        // both builds `1.21` — an engine that does not exist, and the same one
+        // for two different builds.
+        assert_eq!(ue_version_in("KawaiiPhysics_5.7_1.21.0.zip"), Some("5.7".into()));
+        assert_eq!(ue_version_in("KawaiiPhysics_5.8_1.21.0.zip"), Some("5.8".into()));
+        // Either order works now — the impossible number is skipped, not
+        // out-positioned, so nothing depends on where the vendor puts it.
+        assert_eq!(ue_version_in("SuperTool_1.21.0_5.7"), Some("5.7".into()));
+        // A plugin version and nothing else = no engine signal at all, which
+        // means "offer it for every engine", never "offer it for UE 1.21".
+        assert_eq!(ue_version_in("KawaiiPhysics_1.21.0"), None);
+        assert_eq!(ue_version_in("Bridge_3.9"), None);
+        // The floor is UE4 — `.uplugin` does not predate it — with no ceiling.
+        assert_eq!(ue_version_in("Tool_4.27"), Some("4.27".into()));
+        assert_eq!(ue_version_in("Tool_6.0"), Some("6.0".into()));
+    }
+
+    #[test]
     fn deepest_path_segment_wins() {
         let p = Path::new("D:/Tools UE5.6/DazToUnrealBridge/UE_5.7/Plugins/DazToUnreal");
         assert_eq!(version_from_components(p), Some("5.7".into()));
@@ -1228,6 +1307,10 @@ mod tests {
         assert_eq!(engine_version_from_uplugin_json(r#"{ "FriendlyName": "X" }"#), None);
         assert_eq!(engine_version_from_uplugin_json("not json"), None);
         assert_eq!(engine_version_from_uplugin_json(r#"{ "EngineVersion": "next" }"#), None);
+        // A manifest holding the PLUGIN's version in the engine's field: an
+        // impossible constraint becomes no constraint (offered everywhere),
+        // not a version no project can match.
+        assert_eq!(engine_version_from_uplugin_json(r#"{ "EngineVersion": "1.21.0" }"#), None);
     }
 
     /// One scan over all three documented source-folder shapes.

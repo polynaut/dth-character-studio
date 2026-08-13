@@ -1304,6 +1304,21 @@ current code before relying on details, but assume the *lesson* still holds.
   now orders them: proven match > exact version label > any-engine > proven
   mismatch. Ranking is NOT filtering — a lone mismatching build is still listed
   and marked, because an empty checklist explains nothing.
+- **A vendor's zip name carries TWO versions, and the plugin's own can win.**
+  Reported 2026-08-13: `KawaiiPhysics_5.7_1.21.0.zip` and
+  `KawaiiPhysics_5.8_1.21.0.zip` in one folder both listed as **UE 1.21** — the
+  engine is named first, the plugin's version last, and `ue_version_in` took the
+  LAST bare `major.minor` ("versions suffix names"). So each build claimed an
+  engine that has never existed, and the two claimed the SAME one, which is what
+  made it visible: two identical rows for two different builds. The fix is not a
+  position rule (first-wins loses to `Tool_1.21.0_5.7`) but a plausibility one —
+  `.uplugin` exists from UE4 on, so a major below 4 is not an engine version and
+  is skipped wherever it sits (`plausible_engine_major`, unreal_install.rs).
+  Same rule on the `.uplugin`'s `EngineVersion` field: an impossible version
+  becomes NO constraint (offered for every engine), never a constraint no
+  project can satisfy. Note how thin the label evidence is here — the BuildIds
+  of these two zips (47537391 / 55116800) matched 5.7 and 5.8 exactly, so the
+  binaries knew all along what the name got wrong.
 - **`HKLM\SOFTWARE\EpicGames\Unreal Engine` can be MISSING an installed
   engine.** Measured 2026-08-12: a machine with 5.6, 5.7 and 5.8 installed had
   no 5.8 key, so the studio never offered it, a project was generated for 5.7,
