@@ -48,6 +48,12 @@ What it drives (all of it measured off the installed HDA, not assumed):
     report visible, then breathe — Houdini is visibly open and interactive
     before the first export starts.
 
+The batch can be INTERRUPTED from the studio: `cancelPath` in the job names a
+flag file, and the loop checks it between nodes (see `stop_requested`). The
+nodes it then never runs are reported as `skipped` and the result carries
+`cancelled: true` — the studio reports an interrupted run as interrupted, never
+as a batch that simply had less to do.
+
 The scene is never saved. Any parm this touches is restored afterwards. With
 `closeWhenDone` in the job (the DTH Export flow always sets it), the instance
 closes itself again once the final result is on disk — it existed to carry
@@ -361,11 +367,13 @@ class Report(object):
         # The following add() carries the flush.
         self.data.pop("activity", None)
 
-    def finish(self, state="done", error=""):
+    def finish(self, state="done", error="", cancelled=False):
         self.data["state"] = state
         self.data.pop("activity", None)
         if error:
             self.data["error"] = error
+        if cancelled:
+            self.data["cancelled"] = True
         self.flush(force=True)
 
     def flush(self, force=False):
@@ -388,6 +396,27 @@ class Report(object):
             os.rename(temporary, self.path)
         except Exception:
             pass
+
+
+def stop_requested(cancel_path):
+    """Has the studio asked this run to stop?
+
+    The signal is the mere existence of the flag file the studio drops (the
+    SAME one the Daz leg's generated scripts probe — one export run is one
+    thing to stop). Checked only BETWEEN nodes: `do_export` is synchronous and
+    owns the main thread from its first call, so there is no point inside it
+    where this could be asked, let alone answered.
+
+    Best-effort: a path we cannot stat reads as "not cancelled". The dangerous
+    answer here is the false positive — it would abandon a batch nobody asked
+    to stop.
+    """
+    if not cancel_path:
+        return False
+    try:
+        return os.path.exists(cancel_path)
+    except (OSError, ValueError):
+        return False
 
 
 def collect_targets(wanted):
@@ -520,7 +549,30 @@ def run(job):
         report.finish("done")
         return
 
+    cancel_path = job.get("cancelPath", "")
+    cancelled = False
     for node, source, label in targets:
+        # The one interrupt point this leg has, and it is a real one: every
+        # node is a fresh export of its own, so stopping before the next leaves
+        # nothing half-written. The nodes never reached are still REPORTED (as
+        # skipped, with the reason) — a run that silently shortened its own
+        # batch would read as "there was nothing else to do".
+        if not cancelled and stop_requested(cancel_path):
+            cancelled = True
+            print("DTH Character Studio: interrupted by the studio - stopping before {}".format(
+                node.path()))
+        if cancelled:
+            report.add({
+                "node": node.path(),
+                "type": node.type().name(),
+                "status": "skipped",
+                "problems": [],
+                "error": "the export was interrupted",
+                "seconds": 0,
+                "scene": label,
+                "dth": source,
+            })
+            continue
         print("DTH Character Studio: exporting {} ({})".format(node.path(), label))
         # The live-activity window: whatever the HDA emits during this node's
         # do_export streams into the polled result file as it happens.
@@ -531,7 +583,10 @@ def run(job):
         entry["dth"] = source
         report.add(entry)
         print("DTH Character Studio: {} -> {}".format(node.path(), entry["status"]))
-    report.finish("done")
+    # One last look, so a stop that lands during the FINAL node is still
+    # reported as an interrupt rather than as an ordinary finish.
+    cancelled = cancelled or stop_requested(cancel_path)
+    report.finish("done", cancelled=cancelled)
 
 
 def close_houdini():

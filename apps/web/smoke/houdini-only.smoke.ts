@@ -128,12 +128,14 @@ test('houdini only: hands the scenes straight to Houdini — no Daz job at all',
   expect(await unhandledCommands(page)).toEqual([])
 })
 
-test('the live Houdini button is inert — Ctrl is the way out of its watch', async ({ page }) => {
-  // The leg runs HEADLESS: there is no Houdini window the user could close to
-  // end a run that will not end by itself, and a plain click on the working
-  // button is deliberately ignored (a stray click used to silently drop the
-  // watch AND every project queued behind it). Ctrl is what is left, so it has
-  // to actually be there — the Daz leg's Abort has the same shape.
+test('the live Houdini button is inert — Interrupt is the way out', async ({ page }) => {
+  // A plain click on the working button is deliberately ignored: a stray one
+  // used to silently drop the watch AND every project queued behind it. The
+  // deliberate way out sits beside it, unmodified and unmodifiered.
+  //
+  // (Until v0.77 the way out was Ctrl → **Stop watching**, which let go of the
+  // run rather than stopping it — the leg is headless, so there wasn't even a
+  // window to close. Interrupt does the thing that only approximated.)
   await page.addInitScript(installTauriMock, houdiniSeed(true))
   await page.goto('/')
   await page.getByRole('link', { name: /Kira/ }).click()
@@ -145,27 +147,19 @@ test('the live Houdini button is inert — Ctrl is the way out of its watch', as
   await page.getByRole('button', { name: 'Start' }).click()
   await expect(page.getByRole('button', { name: /Working/ })).toBeVisible({ timeout: 15_000 })
 
-  // A plain click changes nothing.
+  // A plain click changes nothing — no modifier makes it do anything either.
   await page.getByRole('button', { name: /Working/ }).click()
   await expect(page.getByRole('button', { name: /Working/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Interrupt' })).toBeVisible()
 
-  // Ctrl reveals the escape hatch…
-  await page.keyboard.down('Control')
-  await expect(page.getByRole('button', { name: 'Stop watching' })).toBeVisible()
-  // …and releasing it puts the live button back, run untouched.
-  await page.keyboard.up('Control')
-  await expect(page.getByRole('button', { name: /Working/ })).toBeVisible()
+  await page.getByRole('button', { name: 'Interrupt' }).click()
 
-  await page.keyboard.down('Control')
-  await page.getByRole('button', { name: 'Stop watching' }).click()
-  await page.keyboard.up('Control')
-
-  // The watch is gone with the whole pipeline display, and the toast is honest
-  // about what did NOT stop: the export itself, which hython owns.
-  await expect(page.getByText(/keeps running in the background/)).toBeVisible()
-  await expect(page.getByRole('button', { name: 'DTH Export' })).toBeVisible()
-  await expect(page.locator('[data-task]')).toHaveCount(0)
-  await expect(page.locator('[data-export-status]')).toHaveCount(0)
+  // The flag is down and the leg says so; the run is NOT torn down here — the
+  // watch stays until 456.py reports that it stopped, which is the difference
+  // from the old "stop watching".
+  await expect(page.getByText(/Stopping the export at the next safe point/)).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Stopping…' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: /Houdini Stopping/ })).toBeVisible()
 
   // Nothing was deleted under Houdini — its job file is still there for the
   // run that is still working through it.

@@ -14,9 +14,27 @@ include (dir_self.filePath ("DthScanFrames.dsa")); // keyframe scanning (debug/s
  * Begin Tutorial Script
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */ 
 
+/**
+ * One interrupt checkpoint: has the studio asked this run to stop, and if so,
+ * end the build HERE. Closes the undo block the workflow opened (an abandoned
+ * one would leave Daz's undo stack half-open under the user's hands) and lets
+ * the caller return false — an interrupted ROM is not a finished ROM, so the
+ * generated script's export gate skips the export on its own.
+ *
+ * Called at every BLOCK boundary rather than inside the preset loads: those go
+ * through Daz's own synchronous content loader, which cannot be interrupted at
+ * all. Between blocks the timeline is a coherent, if short, ROM.
+ */
+function dthStopHere(sWhere){
+	if(!dthStopRequested()) return false;
+	print("DTH Character Studio: ROM build stopped (" + sWhere + ") - interrupted from the studio.");
+	acceptUndo("DTH Workflow (interrupted)");
+	return true;
+}
+
 function ApplyDTHWorkflow(options){
 
-	beginUndo();	
+	beginUndo();
 
 	Scene.setTime(0);
 
@@ -72,6 +90,10 @@ function ApplyDTHWorkflow(options){
 		logRunError("This DTH runtime no longer reads file-based configs (extraJSONs / art-direction JSON paths). Regenerate the character's ROM script in DTH Character Studio. ROM aborted.");
 		return false; }
 
+	// Before anything is touched: an interrupt that arrived while Daz was still
+	// opening the scene stops the run here, with the scene untouched.
+	if(dthStopHere("before the first block")) return false;
+
 	/**       *****************************************************/
 	print("Applying initial values... ");
 	ApplyInitialValues(options, oNodeRoot)
@@ -118,6 +140,8 @@ function ApplyDTHWorkflow(options){
 		if(oNodeMouth) closeDanglingMorphKeys([oNodeMouth], iAfterBase);
 	}
 
+	if(dthStopHere("before the DK block")) return false;
+
 	/**       *****************************************************/
 	if( options["bIncludeDK"] )
 	{
@@ -125,6 +149,8 @@ function ApplyDTHWorkflow(options){
 		var startFrame = Scene.getAnimRange().end / Scene.getTimeStep();
 		ApplyDK9(options, oNodeRoot, oNodeDk9, startFrame);
 	}
+
+	if(dthStopHere("before the GP block")) return false;
 
 	/**       *****************************************************/
 	if( options["bIncludeGP"] )
@@ -134,6 +160,8 @@ function ApplyDTHWorkflow(options){
 		if(!ApplyGP9(options, oNodeRoot, oNodeGP, startFrame))
 			return false;
 	}
+
+	if(dthStopHere("before the Physics block")) return false;
 
 	/**       *****************************************************/
 	if( options["bIncludePhysics"] )
@@ -151,6 +179,8 @@ function ApplyDTHWorkflow(options){
 	// whole figure tree (clothing fit morphs like "Expand All"; with no other
 	// keys the value holds across the whole ROM, so the export sees it everywhere).
 	applyFrameZeroMorphs(oNodeRoot, options.frameZeroMorphs);
+
+	if(dthStopHere("before the custom frames")) return false;
 
 	/** ****************************************************************/
 	print("Creating FrameDatas from the inline config");
@@ -177,6 +207,10 @@ function ApplyDTHWorkflow(options){
 	var successFrameDatas = [];
 	var failedFrameDatas = [];
 	applyFrameDatas(oNodeRoot, frameDatas, successFrameDatas, failedFrameDatas);
+	// applyFrameDatas stops mid-list on an interrupt — the tail below (linear
+	// interpolation over every keyed morph, the selection restore) describes a
+	// COMPLETE ROM, so an interrupted one ends here instead.
+	if(dthStopHere("during the custom frames")) return false;
 
 	if( options["bWriteDebugCSV"] ){
 		printCSV(successFrameDatas, options["successCSV"]);
@@ -448,11 +482,21 @@ function ApplyDTHCharacter(config){
 	// log in the studio) and, when anything failed, a dialog pointing back to the
 	// studio. Unexpected exceptions are caught so the log/dialog still happen.
 	resetRunLog();
+	// Arm the interrupt probe for this run (see dthStopRequested in DthUtils).
+	// A config without a cancelPath — an older generated script, or a pure
+	// context with no meta folder — simply cannot be interrupted.
+	dthArmCancel(config.cancelPath);
 	var bFinished = false;
 	try {
 		bFinished = ApplyDTHWorkflow(options) !== false;
 	} catch(e) {
 		logRunError("Unexpected error while building the ROM: " + e);
+	}
+	// An interrupted run is not a silent one: without a line in the log the
+	// studio would show a run that is "not ok" with nothing to say about why.
+	// It is filed as an error deliberately — this scene has NO usable ROM.
+	if(dthWasInterrupted()){
+		logRunError("The ROM build was interrupted from DTH Character Studio before it finished - this scene's ROM is incomplete and nothing was exported.");
 	}
 	var iProblems = runLogProblemCount();
 	writeRunLog(config.runLogPath, {
@@ -461,9 +505,17 @@ function ApplyDTHCharacter(config){
 		runtimeVersion: config.runtimeVersion || 0,
 		studioVersion: config.studioVersion || "",
 		framesTotal: Scene.getAnimRange().end / Scene.getTimeStep(),
-		ok: bFinished && iProblems === 0
+		ok: bFinished && iProblems === 0,
+		// Tells an interrupted run apart from a broken one for anything reading
+		// the log later; the error line above is what a human sees.
+		interrupted: dthWasInterrupted()
 	});
-	if(iProblems > 0){
+	if(dthWasInterrupted()){
+		// NO dialog. An interrupt is always the studio's doing, i.e. an
+		// unattended batch — a modal here would block every row behind it on a
+		// click that nobody is there to make.
+		print("ROM run interrupted from DTH Character Studio.");
+	} else if(iProblems > 0){
 		// Short + generic on purpose: the details (which morph, which frame, why)
 		// belong in the studio, which reads the run log back.
 		MessageBox.warning(

@@ -121,6 +121,18 @@ describe('buildHoudiniJob', () => {
     expect(job.scenes).toHaveLength(1)
   })
 
+  it('carries the interrupt flag 456.py probes between nodes', () => {
+    const job = buildHoudiniJob(kira(), [PRIMARY], {
+      resultPath: 'r.json',
+      cancelPath: 'X:\\p\\.dcsmeta\\characters\\Kira\\.dth_export_cancel',
+    })
+    // Forward-slashed like every other path in the job — 456.py stats it as-is.
+    expect(job.cancelPath).toBe('X:/p/.dcsmeta/characters/Kira/.dth_export_cancel')
+    // Omitted = this run cannot be interrupted; '' is what 456.py reads as
+    // "never probe" (a bare `if not cancel_path`).
+    expect(buildHoudiniJob(kira(), [PRIMARY], { resultPath: 'r.json' }).cancelPath).toBe('')
+  })
+
   it('prefill: primary-scene paths ride the $JOB prefix, export directory keeps its slash', () => {
     const prefill = buildHoudiniPrefill(kira(), {
       hipRefPrefix: '$JOB/houdini/daz-export',
@@ -451,7 +463,34 @@ describe('houdiniRunStateFrom', () => {
       failed: 0,
       summary: '2 exported, 1 skipped',
       error: '',
+      cancelled: false,
       problems: [],
+    })
+  })
+
+  it('reports an INTERRUPTED run as interrupted, not as a short batch', () => {
+    // What 456.py writes when the flag was there: the node it was on finished,
+    // the ones behind it are still listed (as skipped, with the reason), and
+    // `cancelled` is what stops the studio reading "1 exported, 2 skipped" as
+    // a batch that simply had little to do.
+    const stopped = parseHoudiniResult(
+      JSON.stringify({
+        state: 'done',
+        total: 3,
+        done: 3,
+        cancelled: true,
+        nodes: [
+          { node: '/obj/a', status: 'ok' },
+          { node: '/obj/b', status: 'skipped', error: 'the export was interrupted' },
+          { node: '/obj/c', status: 'skipped', error: 'the export was interrupted' },
+        ],
+      }),
+    )!
+    const state = houdiniRunStateFrom(stopped, true)
+    expect(state).toMatchObject({ state: 'finished', ok: 1, skipped: 2, cancelled: true })
+    // An older 456.py writes no field at all — that is a normal finish.
+    expect(houdiniRunStateFrom(parseHoudiniResult('{"state":"done"}'), true)).toMatchObject({
+      cancelled: false,
     })
   })
 

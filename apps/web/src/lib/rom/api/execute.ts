@@ -28,7 +28,7 @@ import {
   scanConfigJson,
   sceneExportFolderRel,
 } from '../execute-jobs'
-import { BUILD_ROM_ANIMATION_SCRIPT, sceneExportName } from '@dth/rom'
+import { BUILD_ROM_ANIMATION_SCRIPT, cancelFlagPath, sceneExportName } from '@dth/rom'
 import { sceneDthPath } from '../houdini-jobs'
 import {
   SCAN_RUN_SCRIPT,
@@ -484,6 +484,18 @@ interface ActiveExportRun {
    *  because the rows only name a script path, and a window that reloaded
    *  mid-batch has nothing else left to read the choice off. */
   mode: ExportMode
+  /** This run's interrupt flag ({@link EXPORT_CANCEL_FILE}) — recorded at the
+   *  handoff so the watch can delete it wherever the run ends, without having
+   *  to resolve the character's project all over again. '' for a run whose
+   *  character has no meta folder (it then cannot be interrupted). */
+  cancelPath: string
+  /** The user asked this run to stop. The run keeps going until the scripts
+   *  reach their next stop point — what changes HERE is the reporting: the
+   *  batch is no longer allowed to continue into Houdini, and its outcome is
+   *  reported as an interrupt, never as "n scenes exported" (the skipped rows
+   *  come back `done`, because the Runner ran a script that chose to do
+   *  nothing — believing those counts would be the lie this flag prevents). */
+  interrupted?: boolean
 }
 let activeRun: ActiveExportRun | null = null
 
@@ -513,6 +525,10 @@ const exportRunSidecarSchema = z.object({
   // Additive: a sidecar written before this field existed restores as the
   // default run, which is what the overwhelming majority of them were.
   mode: z.enum(EXPORT_MODES).default('rom-export'),
+  // Defaulted, not required: a sidecar written by an older build carries
+  // neither, and a restored watch must still restore.
+  cancelPath: z.string().default(''),
+  interrupted: z.boolean().default(false),
 })
 
 /**
@@ -612,6 +628,10 @@ export type ExportRunProgress =
        *  cards' subtitle. Absent on a display-only adoption: that window is
        *  reading a job file, which never carried the dialog's choice. */
       mode?: ExportMode
+      /** The user asked this run to stop and it hasn't reached a stop point
+       *  yet — the button says "Stopping…" instead of offering the interrupt
+       *  a second time. */
+      interrupted?: boolean
     }
   /** progress hit 100 — the studio has DELETED the file; final snapshot. */
   | {
@@ -631,6 +651,11 @@ export type ExportRunProgress =
       unrealProjects: Array<string>
       /** The export sets to hand them. */
       unrealSets: Array<string>
+      /** The batch ended because the user interrupted it. The counts above
+       *  describe ROWS, not work: a row the generated script skipped comes
+       *  back `done`, so an interrupted batch must never be reported as
+       *  "n scenes exported" — and must not continue into `houdiniProjects`. */
+      interrupted: boolean
       /** Handoff → finish, for the toast's "in 12m 34s". */
       elapsedMs?: number
     }
@@ -790,6 +815,9 @@ export async function fetchExportRunProgress(watcher?: string): Promise<ExportRu
           done: 0,
           failed: 0,
           startedAtMs: run.startedAtMs,
+          // Carried through the torn read too, or the button would flicker back
+          // from "Stopping…" to "Interrupt" on every mid-rewrite poll.
+          interrupted: run.interrupted === true,
         }
       }
       const done = parsed.jobs.filter((j) => j.status === 'done').length
@@ -803,10 +831,14 @@ export async function fetchExportRunProgress(watcher?: string): Promise<ExportRu
         }
         if (activeRun === run) activeRun = null
         await clearExportRunSidecar()
+        // The run is over however it got here — the flag has no business
+        // outliving it (a leftover would skip the NEXT run silently).
+        await clearCancelFlag(run.cancelPath)
         return {
           state: 'finished',
           characterId: run.characterId,
           total: parsed.jobs.length || run.total,
+          interrupted: run.interrupted === true,
           elapsedMs: Date.now() - run.startedAtMs,
           failed,
           errors: parsed.jobs
@@ -849,6 +881,7 @@ export async function fetchExportRunProgress(watcher?: string): Promise<ExportRu
         }
         if (activeRun === run) activeRun = null
         await clearExportRunSidecar()
+        await clearCancelFlag(run.cancelPath)
         return { state: 'dead', characterId: run.characterId, total: run.total }
       }
       return {
@@ -871,6 +904,7 @@ export async function fetchExportRunProgress(watcher?: string): Promise<ExportRu
         houdiniProjects: run.houdiniProjects,
         scenes: run.scenes,
         mode: run.mode,
+        interrupted: run.interrupted === true,
       }
     }
   } catch {
@@ -886,6 +920,7 @@ export async function fetchExportRunProgress(watcher?: string): Promise<ExportRu
   if (activeRun !== run) return null
   activeRun = null
   await clearExportRunSidecar()
+  await clearCancelFlag(run.cancelPath)
   return { state: 'dead', characterId: run.characterId, total: run.total }
 }
 
@@ -905,6 +940,83 @@ export function dismissExportRun(): Promise<void> {
   // Without the clear, the next poll would restore the very watch that was
   // just dismissed.
   return clearExportRunSidecar()
+}
+
+/**
+ * The interrupt flag for one character — the file whose EXISTENCE means "stop
+ * this character's export run" (see {@link EXPORT_CANCEL_FILE}). Resolving it
+ * needs the project, so it is done once per call rather than stored anywhere:
+ * the studio writes it, the generated Daz scripts and 456.py read it, and
+ * nothing else ever needs to know where it is.
+ */
+async function cancelFlagFor(projectId: string, id: string): Promise<string> {
+  const { project, location } = await loadCharacter(projectId, id)
+  return cancelFlagPath(storage.characterMetaDir(project.path, location.relFolder, id))
+}
+
+/**
+ * Ask a running DTH Export to STOP — at the next point where stopping leaves
+ * nothing half-written, not this instant.
+ *
+ * The studio cannot reach into either half of a run: Daz Studio is driven by a
+ * plugin that only watches the filesystem, and the Houdini leg is a headless
+ * hython the studio spawned but cannot talk to. Both of them execute code the
+ * studio DID write, though — the generated `.dsa` carriers with the DTH runtime
+ * behind them, and `456.py` — and those poll one flag file. So the interrupt is
+ * that file, and what it actually buys is:
+ *
+ *  - the ROM build stops at its next block boundary (or between two custom
+ *    frames — the runtime probes ~every 750 ms there);
+ *  - the export that would have followed it is skipped;
+ *  - every scene still queued behind it is skipped as the Runner reaches it
+ *    (the Runner owns the batch and cannot be told to stop, so those rows still
+ *    open their scene — they just don't do any work);
+ *  - the Houdini leg stops between export nodes and closes its own hython;
+ *  - the run reports as INTERRUPTED and never continues into Houdini.
+ *
+ * What it cannot do, and what the UI must not promise: interrupt the DTH
+ * Exporter's own `doExport`, the HDA's `do_export`, or a Daz content load
+ * already under way. Those are synchronous calls inside someone else's plugin;
+ * the wait for the current one is the honest cost of stopping cleanly rather
+ * than killing a process mid-write.
+ *
+ * Marking the in-memory run is deliberately best-effort-independent of the
+ * FILE write: the file is what the two runtimes obey, so it is written first
+ * and its failure is the only one that can fail the call.
+ */
+export async function interruptExportRun({ data }: { data: unknown }): Promise<void> {
+  const { projectId, id } = charScopeInput.parse(data)
+  const path = await cancelFlagFor(projectId, id)
+  if (!path) throw new Error('This character has no meta folder yet — nothing to interrupt.')
+  await mkdir(dirname(path), { recursive: true })
+  // The CONTENT is documentation for whoever finds the file, never a protocol:
+  // both runtimes test existence only, so a torn or empty write still stops the
+  // run. (A flag that had to parse could fail to stop one.)
+  await storage.writeTextFileAtomic(
+    path,
+    `${new Date().toISOString()} — DTH Character Studio asked this character's export run to stop. Safe to delete.\n`,
+  )
+  if (activeRun && activeRun.characterId === id) {
+    activeRun = { ...activeRun, interrupted: true }
+    await writeExportRunSidecar(activeRun)
+  }
+}
+
+/**
+ * Drop a character's interrupt flag. Called wherever a run BEGINS (a leftover
+ * flag would silently skip the run that is starting) and wherever one ENDS.
+ *
+ * Best-effort everywhere: the flag is only ever read by scripts that are about
+ * to run, and every one of those paths clears it first, so a delete that loses
+ * to a locked file costs nothing that the next handoff doesn't fix.
+ */
+async function clearCancelFlag(path: string): Promise<void> {
+  if (!path) return
+  try {
+    if (await exists(path)) await remove(path)
+  } catch {
+    // best effort — the next handoff clears it again
+  }
 }
 
 /**
@@ -928,9 +1040,15 @@ export async function abortExporterJobs({ data }: { data: unknown }): Promise<vo
     // scene reads "unchanged" until its next real change or a manual re-check)
   }
   await remove(paths.pending)
-  // The aborted handoff will never run — stop the export watch with it.
+  // The aborted handoff will never run — stop the export watch with it. Any
+  // interrupt flag goes too: it exists to stop a run, and there is none left.
+  // Both spellings, because the pending file may belong to ANOTHER character's
+  // handoff (Abort deletes whatever is waiting) while the flag is per
+  // character — clearing only one of the two would strand the other.
+  await clearCancelFlag(activeRun?.cancelPath ?? '')
   activeRun = null
   await clearExportRunSidecar()
+  await clearCancelFlag(await cancelFlagFor(projectId, id).catch(() => ''))
   if (rows.length === 0) return
   try {
     const { project, location } = await loadCharacter(projectId, id)
@@ -1081,6 +1199,10 @@ export async function clearExporterJobFiles(expect?: string): Promise<Array<stri
   // armed would only produce a "run died" toast for a batch the user just
   // cleared on purpose (same reason abortExporterJobs drops it).
   if (removed.length > 0) {
+    // The interrupt flag belonged to the run these files carried — it must not
+    // outlive them (unscoped call: the armed run is the only character this
+    // layer can name here).
+    await clearCancelFlag(activeRun?.cancelPath ?? '')
     activeRun = null
     await clearExportRunSidecar()
   }
@@ -1388,6 +1510,13 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
   // truncates it again at pickup, and both writers append from there. This is
   // the one handoff that also ARMS it (see resetExportProgressLog).
   const progressLogPath = await resetExportProgressLog()
+  // A leftover interrupt flag would make every script of THIS batch skip its
+  // scene — the run would look like it worked and export nothing. Clearing it
+  // is the arming step that matches the progress log's truncation above.
+  const cancelPath = cancelFlagPath(
+    storage.characterMetaDir(project.path, location.relFolder, id),
+  )
+  await clearCancelFlag(cancelPath)
   await storage.writeTextFileAtomic(jobFile, jobFileJson(jobs, 'bulk-export', progressLogPath))
 
   // Arm the watch: the run's identity only — all live state (progress,
@@ -1403,6 +1532,7 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
     unrealProjects,
     unrealSets,
     mode,
+    cancelPath,
   }
   await writeExportRunSidecar(activeRun)
 
@@ -1867,6 +1997,10 @@ export async function startProjectScan({ data }: { data: unknown }): Promise<Pro
     // A scan is not an export mode at all; the sentinel run has no character
     // editor to draw task cards for, so the field's value never reaches a UI.
     mode: 'rom-export',
+    // Not interruptible by the export flag: a scan spans MANY characters (so
+    // there is no one flag to write) and it has its own way out —
+    // {@link abortProjectScanRun}. The scan scripts probe nothing.
+    cancelPath: '',
   }
 
   const dazWasRunning = await dazStudioRunningNative(false, 'export')

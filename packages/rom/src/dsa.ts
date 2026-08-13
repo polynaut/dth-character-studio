@@ -307,6 +307,41 @@ export function characterScriptName(character: Character, sceneSlug?: string): s
 export const ROM_RUN_LOG_FILE = 'dth_rom_run_log.json'
 
 /**
+ * The INTERRUPT flag: its mere existence in the character's `.dcsmeta` folder
+ * means "stop this character's export run at the next point where stopping is
+ * safe".
+ *
+ * A file, for the same reason the whole Daz handoff is a file: nothing in this
+ * pipeline can be signalled any other way. The studio drives Daz through a
+ * plugin that watches the filesystem and Houdini through a headless hython it
+ * spawned — neither has a channel back, and the DTH Exporter's and the HDA's
+ * own export calls are synchronous and un-interruptible from outside. So the
+ * two runtimes that DO belong to the studio (the generated `.dsa` carriers +
+ * the DTH runtime, and `456.py`) poll for this one flag at every boundary
+ * where abandoning the work leaves nothing half-written, and stop there.
+ *
+ * Per CHARACTER, not per app: two windows can be exporting two characters at
+ * once, and interrupting one must not reach into the other. It lives beside
+ * the run log ({@link ROM_RUN_LOG_FILE}) because both are app-written
+ * per-character run state, and the generated scripts already carry that folder.
+ *
+ * The studio owns its lifetime and deletes it at every handoff and at every
+ * run end — a leftover flag would silently skip runs, which is why every
+ * runtime that honours it also says so loudly (run log + progress log + the
+ * console), never just returns.
+ */
+export const EXPORT_CANCEL_FILE = '.dth_export_cancel'
+
+/** The interrupt flag's absolute path for a character's meta folder — '' when
+ *  there is none (a pure/web context with no filesystem behind it), which every
+ *  consumer reads as "this script cannot be interrupted". ONE rule, so the
+ *  studio's writer and the generated scripts' probe can never look at different
+ *  files. */
+export function cancelFlagPath(metaDirAbs?: string): string {
+  return metaDirAbs ? `${metaDirAbs.replace(/\\/g, '/')}/${EXPORT_CANCEL_FILE}` : ''
+}
+
+/**
  * The per-item hair (groom) export loop — the heart of the Export_Hair flow,
  * shared verbatim by the standalone `Export_Hair_…` script and the inline
  * "export hair assets too" pass (`exportHairAssets`) inside the export block.
@@ -1065,6 +1100,11 @@ export function buildCharacterConfig(
   if (frames) config.presetFrames = frames
   if (metaDirAbs) {
     config.runLogPath = `${metaDirAbs.replace(/\\/g, '/')}/${ROM_RUN_LOG_FILE}`
+    // The interrupt flag the DTH runtime polls between ROM blocks and inside
+    // the frame-apply loop (see {@link EXPORT_CANCEL_FILE}). The carrier bakes
+    // its own copy for its own probes; the runtime is a separate file that only
+    // ever sees this config, so it needs the path handed to it.
+    config.cancelPath = cancelFlagPath(metaDirAbs)
   }
   // Custom JCM path wins over the catalog-resolved one.
   const jcmRomPath = jcmCustomPath || romPaths.jcm
@@ -1190,6 +1230,34 @@ function dthProgressLog(nPct, sMsg) {
             dthPFile.close();
         }
     } catch (dthPErr) { /* progress is best-effort - never fail the run over it */ }
+}
+`
+}
+
+/**
+ * The interrupt probe emitted into every generated carrier (inline, like
+ * {@link dthSettleSnippet} and {@link dthProgressSnippet} — the Export_ script
+ * includes no runtime, so nothing shared can carry it): "has the studio asked
+ * this run to stop?", answered by the existence of the baked
+ * {@link EXPORT_CANCEL_FILE}.
+ *
+ * A script generated WITHOUT a path (no meta folder — pure/test contexts) can
+ * never be interrupted and never checks: `dthCancelPath` is `""` and the probe
+ * returns false, so the emitted behaviour is exactly what it was before.
+ *
+ * The probe itself is best-effort — an unreadable flag reads as "not
+ * cancelled", because the failure that matters is the opposite one: a false
+ * positive would silently skip a run the user asked for.
+ */
+function dthCancelSnippet(): string {
+  return `// Interrupt: the studio drops this flag file when the user stops a running
+// DTH Export. Every carrier probes it at the points where abandoning the work
+// leaves nothing half-written; the studio deletes it again when the run ends.
+function dthCancelRequested() {
+    try {
+        if (typeof dthCancelPath == "undefined" || !dthCancelPath) return false;
+        return new DzFile(dthCancelPath).exists();
+    } catch (dthCErr) { return false; /* can't tell = keep working */ }
 }
 `
 }
@@ -1460,6 +1528,9 @@ var dthCharacterConfig = ${dazJson(config, 2)};
 // The verbose progress log (Runner v1.2.0) this run appends its finished
 // steps to — '' when this script was generated without one.
 var dthProgressLogPath = ${dazJson(progressLogPath)};
+// The studio's interrupt flag for this character — '' when this script was
+// generated without a meta folder (it is then uninterruptible, as before).
+var dthCancelPath = ${dazJson(cancelFlagPath(metaDirAbs))};
 // The wrong-scene guard: refuse to build when the OPEN scene isn't one of this
 // character's linked scenes (see dthSceneLinkError below the config).
 ${sceneGuardSnippet(character)}
@@ -1579,6 +1650,7 @@ function dthApplyUE5TearUV() {
 
 ${dthSettleSnippet()}
 ${dthProgressSnippet()}
+${dthCancelSnippet()}
 // The include MUST stay at the top level: Daz resolves include() through its
 // legacy-include mechanism, which fails inside try/catch ("URIError: Legacy Include").
 var dir_self = new DzDir(new DzFileInfo(getScriptFileName()).path());
@@ -1592,6 +1664,14 @@ if (dthSceneLinkErr) {
     // it so the studio's run report names the aborted run too.
     dthWriteFailureLog(dthSceneLinkErr);
     MessageBox.critical(dthSceneLinkErr, "DTH Character Studio", "&OK");
+} else if (dthCancelRequested()) {
+    // The studio interrupted the run before this row's turn came. The Runner
+    // still opens each remaining scene and executes this script — it owns the
+    // batch and cannot be told otherwise — so the row's whole job is to be
+    // cheap and to SAY it was skipped: silently returning would let the studio
+    // report a batch that never ran as a batch that ran.
+    print("DTH Character Studio: the export was interrupted - this scene was skipped.");
+    dthProgressLog(100, "skipped - the export was interrupted");
 } else if (typeof ApplyDTHCharacter != "function") {
     // Runtime not loaded (moved/deleted library?) — report instead of crashing.
     dthWriteFailureLog("The DTH runtime (.DthWorkflow.dsa) could not be loaded. Reinstall it from DTH Character Studio: save the character, or Tools \\u2192 Refresh assets.");
@@ -1676,10 +1756,21 @@ ${bulk ? `        // The Runner just loaded this scene — give Daz a beat befor
         if (dthRomOk === true) {
             dthProgressLog(${exportBlock ? 40 : 100}, "ROM generated");
         }${exportBlock ? `
+        // The last stop point of this scene, and the cheapest one: an interrupt
+        // that landed while the ROM was building (or during the ROM-scene save,
+        // past the runtime's own checkpoints) skips the export — minutes of
+        // exporter work the user has just asked not to happen, at a boundary
+        // where nothing has been written into the export folder yet. Probed
+        // ONCE, so the gate below can't disagree with the message above it.
+        var dthCancelledAfterRom = dthRomOk === true && dthCancelRequested();
+        if (dthCancelledAfterRom) {
+            print("DTH Character Studio: the export was interrupted - the ROM is built, the export was skipped.");
+            dthProgressLog(40, "stopped after the ROM - the export was interrupted");
+        }
         // Export only when the ROM built CLEAN (runtime v20: failed morphs count
         // as failure too, not just hard aborts) — a broken ROM must never ship
         // a PoseAsset CSV/FBX as if it were good. Fix the problem and re-run.
-        if (dthRomOk === true) {
+        if (dthRomOk === true && !dthCancelledAfterRom) {
             // The ROM build (and the ROM-scene save) just finished — give Daz
             // a beat before the exporter starts.
             dthSettle(1000);
@@ -1749,13 +1840,21 @@ include(dir_self_scan.filePath("../../.DthScanMorphs.dsa"));` : ''}${indexSync?.
 include(dir_self_scan.filePath("../../.DthProducts.dsa"));` : ''}
 
 var dthProgressLogPath = ${dazJson(progressLogPath)};
+// The studio's interrupt flag for this character — see EXPORT_CANCEL_FILE.
+var dthCancelPath = ${dazJson(cancelFlagPath(metaDirAbs))};
 ${sceneGuardSnippet(character)}
 ${openSceneFileSnippet()}${romAnimationSourceSnippet(romAnimationSourceMap(character))}
 ${dthSettleSnippet()}
 ${dthProgressSnippet()}
+${dthCancelSnippet()}
 ${figureAutoSelectSnippet(character.genesis)}var dthSceneLinkErr = dthSceneLinkError();
 if (dthSceneLinkErr) {
     MessageBox.critical(dthSceneLinkErr, "DTH Character Studio", "&OK");
+} else if (dthCancelRequested()) {
+    // Interrupted before this row's turn — skip the scene and say so (the
+    // bulk carrier's twin; see the ROM script's branch for why it must speak).
+    print("DTH Character Studio: the export was interrupted - this scene was skipped.");
+    dthProgressLog(100, "skipped - the export was interrupted");
 } else if (!dthFig) {
     MessageBox.critical("No ${character.genesis} figure found in the scene - load the character's scene and re-run.", "DTH Character Studio", "&OK");
 } else {

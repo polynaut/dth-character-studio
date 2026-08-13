@@ -2,7 +2,13 @@ import { invoke, isTauri } from '@tauri-apps/api/core'
 import { copyFile, exists, mkdir, readDir, readTextFile, remove } from '@tauri-apps/plugin-fs'
 import { z } from 'zod'
 
-import { CHARACTER_SCHEMA_VERSION, newId, romSectionSchema, ROM_SECTIONS } from '@dth/rom'
+import {
+  CHARACTER_SCHEMA_VERSION,
+  EXPORT_CANCEL_FILE,
+  newId,
+  romSectionSchema,
+  ROM_SECTIONS,
+} from '@dth/rom'
 
 import { characterExportRoot } from '#/lib/scene-subfolder.ts'
 import {
@@ -133,7 +139,12 @@ export async function exportCharacterZip({
           {
             prefix: ZIP_META_PREFIX,
             dir: storage.characterMetaDir(project.path, location.relFolder, character.id),
-            excludeRel: [],
+            // The interrupt flag is live run state on THIS machine, and it is
+            // the one meta file that changes behaviour just by existing: zipped
+            // along, it would land in the importer's meta folder and silently
+            // skip every scene of their first export. (Zipping mid-run is
+            // unlikely — "unlikely" is not a reason to ship a trap.)
+            excludeRel: [EXPORT_CANCEL_FILE],
             excludeDirNames: [],
           },
         ],
