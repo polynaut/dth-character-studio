@@ -138,14 +138,43 @@ The **real SPA in a real browser** against an in-memory fake of the native layer
   loser, not six broken tests.
   Two caveats worth keeping: the bundle is a PRODUCTION build, so
   `import.meta.env.DEV` is FALSE in CI — anything a spec needs must not sit
-  behind that flag (audited when this landed: `__dthToast` is read by nothing,
-  `__dthHideDevtools` guards devtools a prod build never renders, `updater.ts`
-  early-returns on `!isTauri()` anyway). And whether this actually ends the
+  behind that flag (`__dthToast` is read by nothing, `__dthHideDevtools` guards
+  devtools a prod build never renders). **The `updater.ts` line in that original
+  audit was wrong and is worth knowing about**: it does NOT early-return here.
+  Its guard is `!isTauri() || import.meta.env.DEV`, the mock sets
+  `isTauri = true`, and a prod build makes DEV false — so both halves are false
+  and `checkForUpdates()` (awaited unconditionally in `main.tsx` at startup)
+  really runs on every prebuilt page. It is harmless only because the mock
+  ANSWERS `plugin:updater|check` with "up to date", so the flow returns quietly
+  (verified 2026-08-13 by probing a prebuilt page: `unhandled == []`, no
+  `[updater]` log). That mock case is therefore load-bearing under CI —
+  deleting it as unused would fail every `unhandled == []` assertion, in CI
+  only. The general lesson: under the prebuilt bundle, a DEV-gated path that
+  "obviously no-ops" may be running for real, and the smoke mock is what
+  absorbs it. And whether this actually ends the
   flakes is NOT yet proven — the failure needs a saturated 4-vCPU box to
   reproduce and a dev machine is not one; what is proven is the mechanism, the
   saving, and that the suite passes prebuilt. Watch the next handful of PR runs
   before calling it closed. Sharding across runners stays the untaken lever, and
   still the maintainer's call because it changes the required check's shape.
+- **Do NOT run the whole smoke suite for every edit — CI is its gate.** Locally,
+  run the specs covering what you changed (`pnpm --filter @dth/web smoke
+  houdini-export` filters by filename substring). The full run is for CI, for a
+  change to a shared primitive whose blast radius really is the whole app
+  (`packages/ui` primitives, the app shell, the tauri mock), or as ONE pass
+  before opening a PR — not as a reflex after each edit. The suite grew 7 → 42
+  spec files in three weeks, it runs on the maintainer's own machine, and an
+  agent rerunning all of it per change burns his wall clock for a signal CI
+  already provides.
+- **A local smoke result can be a LIE if another checkout holds the port.**
+  `reuseExistingServer` is true off CI, so if a second clone/worktree of this
+  repo has a smoke server on 4331, your run attaches to **its** bundle and
+  reports pass/fail for code you never wrote. `--strictPort` does not save you:
+  it only refuses a second server from STARTING, and reuse starts nothing.
+  Measured 2026-08-13 — a review "proved" main was red across three runs, all
+  three serving a sibling checkout's tree. Set `SMOKE_PORT=<free port>` when two
+  checkouts are live, and treat a surprising local smoke result as a port
+  question before a code question.
 - **This layer is where browser-only bugs reproduce.** A window-freezing React
   render loop passed every jsdom test and only showed here — when a UI
   interaction "works in tests" but misbehaves in the app, write the repro as a

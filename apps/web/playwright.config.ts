@@ -8,7 +8,11 @@ import { defineConfig } from '@playwright/test'
 // `vitest run` (which picks up *.test.* / *.spec.*) never collects them.
 //
 // The suite's server runs on its own port (4331) so a developer's `pnpm dev`
-// on 4330 keeps working next to a test run.
+// on 4330 keeps working next to a test run. `SMOKE_PORT` moves it: a SECOND
+// CHECKOUT of this repo running its own suite is the case that matters, because
+// `reuseExistingServer` (below) is true off CI and will silently attach to the
+// other checkout's server — see the note there.
+const PORT = Number(process.env.SMOKE_PORT ?? 4331)
 
 // Serve a PREBUILT bundle instead of dev-mode transforms. On by default in CI
 // (see the webServer note at the bottom for the measured why); `SMOKE_PREBUILT`
@@ -52,7 +56,7 @@ export default defineConfig({
   retries: 0,
   reporter: process.env.CI ? [['list'], ['github']] : 'list',
   use: {
-    baseURL: 'http://localhost:4331',
+    baseURL: `http://localhost:${PORT}`,
     trace: 'retain-on-failure',
   },
   // WHAT SERVES THE APP is the lever that fixed the starvation flakes.
@@ -85,18 +89,38 @@ export default defineConfig({
   //
   // The bundle is a PRODUCTION build, so `import.meta.env.DEV` is false in it.
   // Nothing the suite needs lives behind that flag: `__dthToast` (__root.tsx)
-  // is set for ad-hoc harness use and read by nothing, `__dthHideDevtools`
-  // guards devtools a production build never renders, and `updater.ts` returns
-  // early in a browser regardless (`!isTauri()`).
+  // is set for ad-hoc harness use and read by nothing, and `__dthHideDevtools`
+  // guards devtools a production build never renders.
+  //
+  // `updater.ts` is the one that does NOT simply fall away, and the reason
+  // matters. Its guard is `!isTauri() || import.meta.env.DEV`, and the mock
+  // sets `isTauri = true` (tauri-mock.ts — "what isTauri() actually reads"), so
+  // with DEV false BOTH halves are false: `checkForUpdates()` runs for real on
+  // every prebuilt page, from `main.tsx`'s unconditional `await` at startup.
+  // It is harmless only because the mock ANSWERS `plugin:updater|check`
+  // (tauri-mock.ts) with no update, so the flow returns quietly — no unhandled
+  // command, no console warning. Verified 2026-08-13 by probing a prebuilt page
+  // directly: `unhandled == []` and no `[updater]` log.
+  // CONSEQUENCE: that mock case is load-bearing under CI's prebuilt bundle.
+  // Deleting it as "unused" would fail every spec asserting `unhandled == []`,
+  // in CI only.
   webServer: {
     command: PREBUILT
-      ? 'pnpm exec vite build && pnpm exec vite preview --port 4331 --strictPort'
-      : 'pnpm exec vite dev --port 4331 --strictPort',
-    url: 'http://localhost:4331',
-    // Locally this reuses whatever already answers on 4331 — including a
+      ? `pnpm exec vite build && pnpm exec vite preview --port ${PORT} --strictPort`
+      : `pnpm exec vite dev --port ${PORT} --strictPort`,
+    url: `http://localhost:${PORT}`,
+    // Locally this reuses whatever already answers on the port — including a
     // stale server from an interrupted run, which then serves the WRONG thing
-    // silently. `--strictPort` is the backstop: a second server refuses to
-    // start rather than landing on another port nobody is testing.
+    // silently. `--strictPort` is only half a backstop: it stops a SECOND
+    // server landing on a port nobody is testing, but it never fires when an
+    // existing server is REUSED — nothing is started to refuse.
+    //
+    // The case that actually bites is a second CHECKOUT of this repo (a
+    // sibling clone or worktree) whose suite already holds the port: the run
+    // attaches to ITS bundle and reports pass/fail for code you never wrote.
+    // Measured 2026-08-13 — three runs "proved" main was red against a sibling
+    // checkout's tree. `SMOKE_PORT=<free port>` is the fix; treat a surprising
+    // local smoke result as a port question before a code question.
     reuseExistingServer: !process.env.CI,
     // The build runs inside this budget, so the prebuilt path needs more of it.
     timeout: PREBUILT ? 180_000 : 60_000,
