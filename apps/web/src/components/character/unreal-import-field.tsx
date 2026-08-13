@@ -115,6 +115,32 @@ export function UnrealImportField({
     }
   }, [])
 
+  /**
+   * Adopt whatever is pending for the SELECTED project, whoever queued it.
+   *
+   * The panel used to watch only its own sends, so a job queued by the DTH
+   * Export dialog was invisible here: the toast said "queued", the editor was
+   * closed, and the studio then showed nothing at all — which reads as "nothing
+   * happened" rather than "waiting for Unreal". A pending job is a fact about
+   * the project; whoever wrote it, this is where it is watched.
+   */
+  useRefetchOnFocus(
+    () => {
+      if (!target || watching.current) return
+      void fetchUnrealImportProgress({ data: { uprojectPath: target } })
+        .then((state) => {
+          if (!state || state.state === 'finished') return
+          watching.current = target
+          setRun(state)
+        })
+        .catch(() => {
+          // No adoption, no harm: the panel simply shows its idle state.
+        })
+    },
+    [target],
+    { immediate: true },
+  )
+
   // 2.5s, the same cadence as the other two watches.
   useEffect(() => {
     if (!run || run.state === 'finished') return
@@ -271,9 +297,9 @@ export function UnrealImportField({
         <p className="mt-2 flex items-start gap-1.5 text-xs text-amber-500">
           <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
           <span>
-            Nothing has claimed it yet. That is normal while Unreal starts — if the project is
-            already open and this does not move, the bridge was installed after that editor
-            session began: restart the editor once.
+            Nothing has claimed it yet — the job waits on disk until the editor opens. That is
+            normal while Unreal starts. If the project is already open and this does not move,
+            the bridge was installed after that editor session began: restart the editor once.
           </span>
         </p>
       )}

@@ -123,3 +123,40 @@ test('…and does NOT tick for a run whose variant that project has never seen',
   const boxes = dialog.locator('li').filter({ hasText: /Kira(Default|Summertide)/ }).getByRole('checkbox')
   for (const box of await boxes.all()) await expect(box).not.toBeChecked()
 })
+
+test('a job queued elsewhere is watched here — "nothing happens" was the studio, not the job', async ({
+  page,
+}) => {
+  // The DTH Export dialog can queue a send with no Daz or Houdini leg at all.
+  // With the editor closed the job just sits on disk — correct, and invisible:
+  // the panel only ever watched its OWN sends, so the studio showed nothing and
+  // the run read as a failure. A pending job is a fact about the project.
+  const seed = buildSeed({
+    activeProjectFile: P.dcsp,
+    demo: true,
+    houdiniProject: true,
+    unrealProjects: [UPROJECT],
+  })
+  seed.files[`${EXPORT_ROOT}/KiraDefault/DTH_KiraDefault.dth`] = '{}'
+  seed.files[IMPORTED] = 'uasset-fixture'
+  // Exactly what a send writes, and nothing else: unclaimed, no result.
+  seed.files[`${UPROJECT_DIR}/Saved/DTHStudio/job.json`] = JSON.stringify({
+    version: 4,
+    imports: [
+      {
+        dth: `${EXPORT_ROOT}/KiraDefault/DTH_KiraDefault.dth`,
+        destination: '/Game/Characters/Kira',
+        existing: true,
+        character: 'KiraDefault',
+        files: [],
+      },
+    ],
+  })
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+
+  await expect(page.getByText('Waiting for the editor to pick it up…')).toBeVisible()
+  await expect(page.getByText(/the job waits on disk until the editor opens/)).toBeVisible()
+})

@@ -1467,10 +1467,27 @@ export function DthExportAction({
           // the dialog the rest of the pipeline lives in.
           onUnrealOnly={(targets, sets) => {
             dismissFinishToasts()
+            unrealSentRef.current = false
             unrealTargetsRef.current = targets
             unrealSetsRef.current = sets
+            // The run IS the send, so it gets the same card column as any other
+            // leg: writing a file and showing nothing reads as "nothing
+            // happened" — which is also exactly what a closed editor looks like.
+            pipelineRef.current = {
+              daz: [],
+              houdini: [],
+              unreal: targets.map((path) => ({ path, label: stemOf(path) })),
+            }
+            publishPipeline(null, null)
             void sendToUnreal().then((lines) => {
-              if (lines.length > 0) toast.info(lines.join('\n'), { duration: Infinity })
+              publishPipeline(null, null)
+              if (lines.length > 0) {
+                toast.info(lines.join('\n'), {
+                  duration: Infinity,
+                  description:
+                    'The bridge imports it when that project is open in Unreal — open the editor if it is closed.',
+                })
+              }
             })
           }}
           onDazClosing={() => setDazClosing(true)}
