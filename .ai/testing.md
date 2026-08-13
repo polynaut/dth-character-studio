@@ -112,16 +112,40 @@ The **real SPA in a real browser** against an in-memory fake of the native layer
   hide exactly this class of nondeterminism). Consequences: adding workers on
   the 4-vCPU runner is a net loss; trimming specs WOULD
   cut wall time (it is linear when CPU-bound) but trades real coverage for
-  ~2 minutes on an unwatched gate; the levers that genuinely move it are
-  **sharding across runners** (`--shard` + a job matrix — touches the required
-  `smoke` check's shape, so that is the maintainer's call) or serving a
-  **prebuilt bundle** (`vite build` + preview) instead of dev-mode transforms.
+  ~2 minutes on an unwatched gate.
   Two related facts that keep coming up: the docs suites
   (`guide.screenshots.ts`, clips) are NOT in CI — `testMatch: /.*\.smoke\.ts/`
   excludes them; they run only via `pnpm screenshots` / `pnpm clips` under
   their own configs. And worker counts well past 4 are proven daily by local
-  runs: tests share nothing but the stateless Vite dev server (every page
+  runs: tests share nothing but the stateless Vite server (every page
   installs its own in-memory fake), so per-file parallelism is safe.
+- **CI serves a PREBUILT BUNDLE, and that is the answer to the starvation
+  flakes.** Of the two levers named above, this is the one that was pulled
+  (2026-08-13): `webServer.command` is `vite build && vite preview` under CI
+  (`PREBUILT` in `playwright.config.ts`; `SMOKE_PREBUILT=1`/`=0` forces it
+  either way locally, so the CI arrangement is reproducible). The reasoning is
+  the measurement above read the other way round: if Chromium + *dev-mode
+  transforms* saturate the box, the fix is not fewer browsers but a server that
+  does no transforming. A build costs ~8 s ONCE, up front; `vite preview` then
+  serves static files for essentially nothing while the specs run, so the cores
+  go to the assertions. MEASURED on an 8-core dev box forced to CI's settings
+  (`CI=1`), 144 specs, two samples each: dev 2.3m/2.3m → prebuilt 1.6m/1.7m,
+  ~28% off wall time on a machine that is not even starved, 144 green both
+  times. The evidence it was needed: 6 of 8 PR-validation failures in the ~42 h
+  to 2026-08-13 were smoke, each a DIFFERENT spec (`jcm-bone-autocomplete`,
+  `houdini-utils-backups` ×2, `houdini-occlusion-tabs`, `unlink-dialogs`,
+  `houdini-refresh-assets`), every one green on rerun — contention picking a
+  loser, not six broken tests.
+  Two caveats worth keeping: the bundle is a PRODUCTION build, so
+  `import.meta.env.DEV` is FALSE in CI — anything a spec needs must not sit
+  behind that flag (audited when this landed: `__dthToast` is read by nothing,
+  `__dthHideDevtools` guards devtools a prod build never renders, `updater.ts`
+  early-returns on `!isTauri()` anyway). And whether this actually ends the
+  flakes is NOT yet proven — the failure needs a saturated 4-vCPU box to
+  reproduce and a dev machine is not one; what is proven is the mechanism, the
+  saving, and that the suite passes prebuilt. Watch the next handful of PR runs
+  before calling it closed. Sharding across runners stays the untaken lever, and
+  still the maintainer's call because it changes the required check's shape.
 - **This layer is where browser-only bugs reproduce.** A window-freezing React
   render loop passed every jsdom test and only showed here — when a UI
   interaction "works in tests" but misbehaves in the app, write the repro as a
