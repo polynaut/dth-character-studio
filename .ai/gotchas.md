@@ -991,11 +991,28 @@ current code before relying on details, but assume the *lesson* still holds.
   from a past run's artifacts, it cannot express the thing that has not
   happened yet — and forward-looking work is usually the point. Watch for the
   tell: an empty selection that is BOTH the default and a blocker.
-  Second, smaller lesson from the same fix: "the studio cannot say" and "the
-  answer is nothing" must not collapse into the same empty array — `[]` reaches
+  Second lesson from the same fix: "the studio cannot say" and "the answer is
+  nothing" must not collapse into the same empty array — `[]` reaches
   `startUnrealImport` as *every set in the export folder*, so a run believed to
   produce nothing would have handed over a stale export (`sendSets: null` vs
-  `[]`, dth-export.tsx).
+  `[]`, dth-export.tsx). The same collapse hides in a PROBE's failure path:
+  answering a rejected `fetchUnrealSendPlan` with `{sets: [], located: {}}` made
+  "could not look" identical to "looked, found nothing", which then disabled the
+  rows and stated *"nothing exported yet"* about something never read. A failed
+  probe leaves the state unset; null already means "cannot say" everywhere
+  downstream.
+  Third, and it outlived both the tick list and the read-only list that briefly
+  replaced it: **a lookup table only answers about the keys it was given —
+  absence is not evidence of absence.** `UnrealSendPlan.located` is built by
+  probing each Unreal project for *the export folder's* set names, and the
+  pre-tick reads a missing entry as "that project does not hold this set". For a
+  set the run is about to CREATE — not on disk yet, which is the whole reported
+  case — the entry was missing because nobody had asked, so a genuine re-import
+  of a variant the project already held read as a first import and did not
+  pre-tick. Fix: probe the names you intend to report on (`extraSets` on
+  `fetchUnrealSendPlan`, fed by the stored Houdini scans). The tell is a record
+  built from one source being queried with keys from another; if the two
+  sources cannot drift, there is no bug, and here drifting IS the feature.
 - **A default set in an effect can be cancelled by a handler somewhere else in
   the same component — and nothing fails when it is.** The Utils drawer ticked
   the opened card's nodes on open (#690). #691 made every tab switch clear the

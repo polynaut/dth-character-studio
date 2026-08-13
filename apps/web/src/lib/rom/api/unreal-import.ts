@@ -189,8 +189,19 @@ export async function startUnrealImport({ data }: { data: unknown }): Promise<Un
       ? available.filter((set) => input.sets?.some((name) => name.toLowerCase() === set.name.toLowerCase()))
       : available
   if (wanted.length === 0) {
+    // Two different failures, and telling the user the wrong one costs them the
+    // whole diagnosis. The folder being EMPTY means the export never ran. The
+    // folder holding other names means it ran and the caller asked for sets it
+    // does not contain — which the DTH Export dialog can now do, since it names
+    // the sets from the Houdini projects' STORED SCAN rather than from disk. A
+    // scan that predates a renamed export node says the run writes
+    // `Lara_THICK` while Houdini has just written `LaraClassic_THICK`, and
+    // "run the Houdini export first" is then advice to repeat what already
+    // worked.
     throw new Error(
-      `No Houdini export found for ${character.name} — run the Houdini export first (looked in ${exportRoot}).`,
+      available.length > 0
+        ? `The export folder holds ${available.map((set) => set.name).join(', ')}, but this run was sending ${(input.sets ?? []).join(', ')} — the Houdini projects' scan is out of date. Rescan them (Utils drawer) and send again (looked in ${exportRoot}).`
+        : `No Houdini export found for ${character.name} — run the Houdini export first (looked in ${exportRoot}).`,
     )
   }
 
@@ -328,15 +339,32 @@ async function locateSets(
   return found
 }
 
-/** What the send UI needs to offer a choice: the character's export sets, and
- *  which of them each linked Unreal project already holds. */
+/** What the send UI needs to say what a send does: the character's export sets,
+ *  and which of them each linked Unreal project already holds. */
 export interface UnrealSendPlan {
   /** Every export set in the character's export folder, sorted. */
   sets: Array<string>
-  /** Per linked `.uproject`: set name → the content path it sits at. A set
-   *  missing from the record is NOT in that project. */
+  /** Per linked `.uproject`: set name → the content path it sits at. Covers
+   *  {@link UnrealSendPlan.sets} PLUS whatever `extraSets` asked about, and
+   *  only those — a name that was never probed is absent for the same reason a
+   *  name that was probed and not found is, so a caller that reads "missing"
+   *  as "not in that project" must ask about every name it intends to report
+   *  on. A set missing from the record after being probed is NOT in that
+   *  project. */
   located: Record<string, Record<string, string>>
 }
+
+const sendPlanInput = charScopeInput.extend({
+  /** Set names to probe for BEYOND the export folder's own — the sets a run is
+   *  ABOUT to write, which by definition are not on disk yet.
+   *
+   * Without them `located` could only ever answer for sets a PREVIOUS run had
+   * left behind, so the first export of a variant read as "that project does
+   * not have it" when the question had never been asked — and the DTH Export
+   * dialog states where each set lands, which is a claim it may only make
+   * about names it actually looked for. */
+  extraSets: z.array(z.string()).default([]),
+})
 
 /**
  * The send plan for one character: what could be sent, and what each linked
@@ -354,9 +382,13 @@ export interface UnrealSendPlan {
  * that implies: a project whose assets were renamed reads as "not here", which
  * offers an unticked row the user can tick rather than ticking one they didn't
  * mean.
+ *
+ * `sets` is the export folder; `located` answers for those AND for `extraSets`,
+ * because "where does this land" has to be answerable about a set the run has
+ * not written yet — see {@link sendPlanInput.extraSets}.
  */
 export async function fetchUnrealSendPlan({ data }: { data: unknown }): Promise<UnrealSendPlan> {
-  const input = charScopeInput.parse(data)
+  const input = sendPlanInput.parse(data)
   const plan: UnrealSendPlan = { sets: [], located: {} }
   if (!isTauri()) return plan
   const project = await resolveProject(input.projectId)
@@ -365,11 +397,16 @@ export async function fetchUnrealSendPlan({ data }: { data: unknown }): Promise<
   if (!location) return plan
   const exportRoot = joinPath(location.folderAbs, normalizeRelFolder(project.exportSubdir))
   plan.sets = (await unrealExportSets(exportRoot)).map((set) => set.name)
-  if (plan.sets.length === 0 || linked.length === 0) return plan
+  // Deduped by exact spelling, not case-folded: `located` is keyed by the name
+  // it was asked about, and the caller looks its own spelling back up. Keeping
+  // both spellings costs one more filename suffix in the same walk; folding
+  // them would key the answer under a spelling the caller never uses.
+  const probe = [...new Set([...plan.sets, ...input.extraSets])]
+  if (probe.length === 0 || linked.length === 0) return plan
   await Promise.all(
     linked.map(async (uprojectPath) => {
       const { projectDir } = unrealJobPaths(uprojectPath)
-      plan.located[uprojectPath] = await locateSets(projectDir, plan.sets).catch(() => ({}))
+      plan.located[uprojectPath] = await locateSets(projectDir, probe).catch(() => ({}))
     }),
   )
   return plan

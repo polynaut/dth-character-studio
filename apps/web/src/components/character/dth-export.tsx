@@ -1985,7 +1985,11 @@ function UnrealRow({
         <div className="min-w-0 flex-1">
           <span className="block truncate text-base font-medium">{stem}</span>
           <p className="mt-0.5 truncate text-xs text-muted-foreground" title={uproject.replace(/\\/g, '/')}>
-            {has === true ? 'Already has this character' : shortPath}
+            {/* Not "already has this character": the whole point of the
+                pre-tick is that holding SOME variant is not holding the one
+                this run makes, and this line is where the user reads which
+                question was asked. */}
+            {has === true ? 'Already has what this run sends' : shortPath}
           </p>
         </div>
       </div>
@@ -2108,24 +2112,51 @@ function DthExportDialog({
   // null = the probe hasn't landed.
   const [sendPlan, setSendPlan] = useState<UnrealSendPlan | null>(null)
 
+  /**
+   * Every export set any linked Houdini project declares it writes — a superset
+   * of what any selection of them can put in play.
+   *
+   * The send plan probes THESE as well as the export folder's own, because the
+   * dialog states where each set lands and a set this run CREATES is not on
+   * disk to be found. Probed only for the folder's contents, `located` answered
+   * "not in that project" about names it had never looked for, and the row said
+   * `new — /Game/DazToHue/<Set>` as a fact — while `startUnrealImport` re-probes
+   * for real at handover and would refresh it wherever the project actually
+   * keeps it. A stated destination the send then ignores is the one thing this
+   * section may not do.
+   */
+  const scannedSets = [...new Set(hipImports.flatMap((scan) => scan.exportSets ?? []))].sort()
+  /** Deps for the probe below: the names themselves, not the array identity
+   *  `hipImports` rebuilds on every fetch. Serialized rather than joined on a
+   *  separator: an export set is an HDA `character_name` and may contain
+   *  anything, so `['Lara Classic']` and `['Lara', 'Classic']` must not collide
+   *  into one key. */
+  const scannedSetsKey = JSON.stringify(scannedSets)
+
   useEffect(() => {
     if (unrealProjects.length === 0) return
     let active = true
-    void fetchUnrealSendPlan({ data: { projectId, id: character.id } })
+    void fetchUnrealSendPlan({ data: { projectId, id: character.id, extraSets: scannedSets } })
       .then((plan) => {
         if (active) setSendPlan(plan)
       })
       .catch(() => {
-        // Detection is a convenience: with none, the rows simply start
-        // unchecked and the user picks.
-        if (active) setSendPlan({ sets: [], located: {} })
+        // Leave it UNSET. A failed probe is "the studio cannot say", and the
+        // rest of the dialog already reads null that way: the rows stay
+        // tickable, nothing pre-ticks, and the send falls back to the whole
+        // export folder. Answering `{sets: [], located: {}}` here instead made
+        // the failure indistinguishable from an empty export folder — which
+        // now disables the rows and states "nothing exported yet", i.e. blocks
+        // the send on something the studio never learned.
       })
     return () => {
       active = false
     }
-    // Mount-only, like the other probes.
+    // Twice at most: once at mount (the export folder alone, so `skip` has its
+    // answer immediately) and again when the stored scans land and name the
+    // sets a run could create. `scannedSets` IS `scannedSetsKey`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [scannedSetsKey])
 
   useEffect(() => {
     let active = true

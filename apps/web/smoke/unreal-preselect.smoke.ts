@@ -62,7 +62,29 @@ function scan(hipPath: string, exportSets: Array<string>) {
   }
 }
 
-async function openDialog(page: import('@playwright/test').Page) {
+/**
+ * The dialog over a seeded world, with the three facts that decide the Unreal
+ * section held APART on purpose:
+ *
+ * - `onDisk` — export sets already in the character's export folder (what a
+ *   PREVIOUS run left, and all `Skip Houdini` can ever send),
+ * - `scans` — what each linked Houdini project's STORED scan says it writes
+ *   (what THIS run puts in play; omit a project to leave it unscanned),
+ * - `inUnreal` — sets DemoGame already holds, under a folder of the user's own
+ *   choosing rather than `DazToHue/`.
+ *
+ * They are independent because the states worth testing are the ones where they
+ * disagree — above all "the run writes a set that is not on disk yet", which is
+ * the whole reason this section was rewritten.
+ */
+async function openDialogWith(
+  page: import('@playwright/test').Page,
+  opts: {
+    onDisk?: Array<string>
+    scans?: Array<{ hipPath: string; exportSets: Array<string> }>
+    inUnreal?: Array<string>
+  } = {},
+) {
   const seed = buildSeed({
     activeProjectFile: P.dcsp,
     demo: true,
@@ -74,32 +96,39 @@ async function openDialog(page: import('@playwright/test').Page) {
   character.houdiniProjects = [P.houdini, HOUDINI_2]
   seed.files[`${P.charFolder}/Kira.json`] = JSON.stringify(character)
   seed.files[HOUDINI_2] = 'hip-fixture'
-  // Two export sets on disk. Only KiraDefault is imported in Unreal.
-  seed.files[`${EXPORT_ROOT}/KiraDefault/DTH_KiraDefault.dth`] = '{}'
-  seed.files[`${EXPORT_ROOT}/KiraSummertide/DTH_KiraSummertide.dth`] = '{}'
-  seed.files[IMPORTED] = 'uasset-fixture'
-  seed.files[STORE] = JSON.stringify({
-    version: 1,
-    projects: Object.fromEntries(
-      [
-        { hipPath: P.houdini, exportSets: ['KiraDefault'] },
-        { hipPath: HOUDINI_2, exportSets: ['KiraSummertide'] },
-      ].map((entry) => [
-        entry.hipPath.toLowerCase(),
-        {
-          key: storeKey(entry.hipPath),
-          scannedAt: '2026-08-12T00:00:00.000Z',
-          project: scan(entry.hipPath, entry.exportSets),
-        },
-      ]),
-    ),
-  })
+  for (const name of opts.onDisk ?? []) {
+    seed.files[`${EXPORT_ROOT}/${name}/DTH_${name}.dth`] = '{}'
+  }
+  // `locateSets` finds a set by an asset named `*_<set>.uasset`, wherever it
+  // sits under Content/ — which is how the studio can say "that project already
+  // has it" without asking a running editor.
+  for (const name of opts.inUnreal ?? []) {
+    seed.files[`${UPROJECT_DIR}/Content/Characters/Kira/SKM_${name}.uasset`] = 'uasset-fixture'
+  }
+  const scans = opts.scans ?? []
+  if (scans.length > 0) {
+    seed.files[STORE] = JSON.stringify({
+      version: 1,
+      projects: Object.fromEntries(
+        scans.map((entry) => [
+          entry.hipPath.toLowerCase(),
+          {
+            key: storeKey(entry.hipPath),
+            scannedAt: '2026-08-12T00:00:00.000Z',
+            project: scan(entry.hipPath, entry.exportSets),
+          },
+        ]),
+      ),
+    })
+  }
   await page.addInitScript(installTauriMock, seed)
-  await page.addInitScript((storePath: string) => {
-    const mock = (window as any).__tauriMock
-    const raw = mock.files.get(storePath) as string
-    mock.files.set(storePath, raw.replace(/__MTIME__/g, String(mock.mtimeMs)))
-  }, STORE)
+  if (scans.length > 0) {
+    await page.addInitScript((storePath: string) => {
+      const mock = (window as any).__tauriMock
+      const raw = mock.files.get(storePath) as string
+      mock.files.set(storePath, raw.replace(/__MTIME__/g, String(mock.mtimeMs)))
+    }, STORE)
+  }
   await page.goto('/')
   await page.getByRole('link', { name: /Kira/ }).click()
   await page.getByText(/custom ROM frames/).waitFor()
@@ -108,6 +137,18 @@ async function openDialog(page: import('@playwright/test').Page) {
   await dialog.waitFor()
   return dialog
 }
+
+/** The baseline world: two export sets on disk, only KiraDefault imported in
+ *  Unreal, and each Houdini project scanned as writing one of them. */
+const openDialog = (page: import('@playwright/test').Page) =>
+  openDialogWith(page, {
+    onDisk: ['KiraDefault', 'KiraSummertide'],
+    inUnreal: ['KiraDefault'],
+    scans: [
+      { hipPath: P.houdini, exportSets: ['KiraDefault'] },
+      { hipPath: HOUDINI_2, exportSets: ['KiraSummertide'] },
+    ],
+  })
 
 test('the Unreal project ticks for a run that refreshes what it already holds', async ({
   page,
@@ -120,7 +161,7 @@ test('the Unreal project ticks for a run that refreshes what it already holds', 
   await expect(dialog.getByRole('checkbox', { name: 'Send to DemoGame' })).toBeChecked()
   // The row says WHY it is ticked — this project already holds what this run
   // refreshes — and that is the whole of what the section asks and answers.
-  await expect(dialog.getByText('Already has this character')).toBeVisible()
+  await expect(dialog.getByText('Already has what this run sends')).toBeVisible()
 })
 
 test('…and does NOT tick for a run whose variant that project has never seen', async ({ page }) => {
@@ -134,12 +175,121 @@ test('…and does NOT tick for a run whose variant that project has never seen',
   await expect(dialog.getByRole('checkbox', { name: 'Send to DemoGame' })).not.toBeChecked()
   // …and the row doesn't claim otherwise: this project holds a DIFFERENT
   // variant, which is not "has what this run makes".
-  await expect(dialog.getByText('Already has this character')).toHaveCount(0)
-  // Ticking it is all it takes — the tick list that used to sit under here
-  // could not offer a set that isn't on disk yet, so it made the first import
-  // of a new variant impossible.
+  await expect(dialog.getByText('Already has what this run sends')).toHaveCount(0)
+  // Ticking it is all it takes — and under the old tick list this was
+  // unreachable: a ticked project with no ticked set held Start, and the only
+  // sets on offer were what a previous run had left on disk.
   await dialog.getByRole('checkbox', { name: 'Send to DemoGame' }).check()
   await expect(dialog.getByRole('checkbox', { name: 'Send to DemoGame' })).toBeChecked()
+})
+
+// The set this run WRITES is not in the export folder yet — the actual reported
+// shape (a THICK variant nothing had exported). The pre-tick asks "does that
+// project already hold what this run makes", and it answers from a probe that
+// reads the EXPORT FOLDER's set names: left to itself it reports "not in that
+// project" about a name it never looked for, and a re-import reads as a first
+// import. Both halves are tested here — when the project has it, and when it
+// genuinely does not.
+test('a set this run CREATES is looked for in Unreal, not assumed missing', async ({ page }) => {
+  const dialog = await openDialogWith(page, {
+    // KiraSummertide is NOT on disk — this run would be its first export from
+    // this studio project…
+    onDisk: ['KiraDefault'],
+    scans: [
+      { hipPath: P.houdini, exportSets: ['KiraDefault'] },
+      { hipPath: HOUDINI_2, exportSets: ['KiraSummertide'] },
+    ],
+    // …but DemoGame already holds it, in the user's own folder. So it is a
+    // REFRESH, and the send will import it where those assets already are.
+    inUnreal: ['KiraDefault', 'KiraSummertide'],
+  })
+
+  await dialog.getByRole('checkbox', { name: 'Run in KiraSummertide' }).check()
+  await dialog.getByRole('checkbox', { name: 'Run in Kira', exact: true }).uncheck()
+  await expect(dialog.getByRole('checkbox', { name: 'Send to DemoGame' })).toBeChecked()
+  await expect(dialog.getByText('Already has what this run sends')).toBeVisible()
+})
+
+test('…and one that is genuinely nowhere stays the user’s decision', async ({ page }) => {
+  const dialog = await openDialogWith(page, {
+    onDisk: ['KiraDefault'],
+    scans: [
+      { hipPath: P.houdini, exportSets: ['KiraDefault'] },
+      { hipPath: HOUDINI_2, exportSets: ['KiraSummertide'] },
+    ],
+    // Not on disk, and not in DemoGame either — the probe now asks, and the
+    // answer is a real no. Without this half, "probe for everything" would
+    // pass the test above by ticking indiscriminately.
+    inUnreal: ['KiraDefault'],
+  })
+
+  await dialog.getByRole('checkbox', { name: 'Run in KiraSummertide' }).check()
+  await dialog.getByRole('checkbox', { name: 'Run in Kira', exact: true }).uncheck()
+  await expect(dialog.getByRole('checkbox', { name: 'Send to DemoGame' })).not.toBeChecked()
+  await expect(dialog.getByText('Already has what this run sends')).toHaveCount(0)
+})
+
+// The two states where the studio KNOWS the run puts nothing in play. They must
+// not send: an empty set list reaches `startUnrealImport` as "every set in the
+// export folder", so a run believed to produce nothing would hand over a stale
+// export. The rows go inert instead — the distinction `sendSets: null`
+// ("cannot say") vs `[]` ("nothing") exists for exactly this.
+test('“use last exports” with an empty export folder sends nothing, and says why', async ({
+  page,
+}) => {
+  const dialog = await openDialogWith(page, { onDisk: [], inUnreal: ['KiraDefault'] })
+
+  await dialog.locator('#daz-mode').click()
+  await page.getByRole('option', { name: /Skip Daz/ }).click()
+  await dialog.locator('#houdini-mode').click()
+  await page.getByRole('option', { name: /Skip Houdini/ }).click()
+
+  await expect(dialog.getByText(/Nothing in the export folder yet/)).toBeVisible()
+  // Inert, not merely unticked: a tickable row here would arm a send of "every
+  // set in the export folder" on a run that has none.
+  await expect(dialog.getByRole('checkbox', { name: 'Send to DemoGame' })).toBeDisabled()
+  // The send IS the whole run in this mode, so there is nothing left to start.
+  await expect(dialog.getByRole('button', { name: 'Start' })).toBeDisabled()
+})
+
+test('a scanned Houdini project that writes no export set arms no send', async ({ page }) => {
+  const dialog = await openDialogWith(page, {
+    // There IS a stale export on disk — precisely what must not go out on a run
+    // that produces nothing.
+    onDisk: ['KiraDefault'],
+    inUnreal: ['KiraDefault'],
+    scans: [{ hipPath: P.houdini, exportSets: [] }],
+  })
+
+  await dialog.getByRole('checkbox', { name: 'Run in Kira', exact: true }).check()
+  await dialog.getByRole('checkbox', { name: 'Run in KiraSummertide' }).uncheck()
+  await expect(dialog.getByText(/write no export set/)).toBeVisible()
+  await expect(dialog.getByRole('checkbox', { name: 'Send to DemoGame' })).toBeDisabled()
+  await expect(dialog.getByRole('checkbox', { name: 'Send to DemoGame' })).not.toBeChecked()
+})
+
+test('an unscanned Houdini project pre-selects nothing and says what sending anyway does', async ({
+  page,
+}) => {
+  // No scan store at all: the studio cannot name what this run writes. That is
+  // "cannot say", not "nothing" — the row stays tickable (sending hands over
+  // the whole export folder) and the notice says so, rather than the row going
+  // inert or Start being held with no way forward but a rescan.
+  const dialog = await openDialogWith(page, {
+    onDisk: ['KiraDefault', 'KiraSummertide'],
+    inUnreal: ['KiraDefault'],
+  })
+
+  await dialog.getByRole('checkbox', { name: 'Run in Kira', exact: true }).check()
+  // (No apostrophe in the pattern: the source spells it `&apos;`, which renders
+  //  as a straight quote, not the curly one this file's prose uses.)
+  await expect(dialog.getByText(/know yet which export sets/)).toBeVisible()
+  await expect(dialog.getByText(/everything/)).toBeVisible()
+  const send = dialog.getByRole('checkbox', { name: 'Send to DemoGame' })
+  await expect(send).not.toBeChecked()
+  await expect(send).toBeEnabled()
+  await send.check()
+  await expect(send).toBeChecked()
 })
 
 test('ONE task row per re-import — two sets into one project are two jobs', async ({ page }) => {

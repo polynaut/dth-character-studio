@@ -33,3 +33,14 @@ finishes…"* — is gone with it. It described the feature to somebody who had 
 ticked a box to use it. The section now says something only when it cannot send:
 no export to send from, an empty export folder, Houdini projects that write no
 set at all.
+
+And the pre-tick is looked up for real. The studio checks each linked Unreal
+project for the sets **this run writes**, not only for the ones a previous run
+left in the export folder — so a variant you are exporting for the first time
+from this studio project, but which that Unreal project already holds, is
+correctly ticked as the refresh it is. It used to read as a first import,
+because the check had only ever asked about sets that were already on disk.
+
+A send whose set names no longer match what Houdini wrote now says so — naming
+both lists and pointing at **Rescan** — instead of reporting "no Houdini export
+found, run the Houdini export first" straight after one succeeded.
