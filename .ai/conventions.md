@@ -65,6 +65,20 @@ doing it.
   argument splitting, and a bash `<<'EOF'` heredoc is a parse error. So **any
   multi-line or quote-bearing text goes to a file first**, then
   `gh pr create --body-file <path>` / `git commit -F <path>`. Never inline it.
+- **Don't re-run the whole smoke suite for every edit.** It is 42 spec files and
+  ~140 tests (7 files three weeks earlier), it runs on HIS machine, and CI
+  already gates it. Run the specs covering what you changed —
+  `pnpm --filter @dth/web smoke <filename-substring>` — and keep the full run
+  for a shared-primitive change or ONE pass before opening the PR. *Earned by:*
+  "every new claude session with every new tiny features runs again trough the
+  whole suit, slowing my development down tremendously". The full rule, plus the
+  port-collision trap that can make a local smoke result describe a DIFFERENT
+  checkout entirely, is in `.ai/testing.md`.
+- **`gh pr list` BEFORE starting any backlog item.** He runs more than one
+  session, and there is a second checkout of this repo — the other one may have
+  already built the thing under a different name. *Earned twice:* C13 built and
+  reverted (2026-08-07), and the smoke prebuilt-bundle work done in parallel by
+  both sessions (2026-08-13, #821 landed while #822 was being written).
 
 **These are enforced where they can be, not trusted.** The rules that have never
 been broken in this repo are the machine-checked ones (the changeset gate, lint,

@@ -435,6 +435,14 @@ export function installTauriMock(seed: TauriMockSeed): void {
       case 'plugin:event|unlisten':
       case 'plugin:event|emit':
         return null
+      // LOAD-BEARING under CI's prebuilt bundle, not a leftover. `updater.ts`
+      // guards on `!isTauri() || import.meta.env.DEV`; this mock sets
+      // `isTauri = true`, and a PRODUCTION build makes DEV false — so
+      // `checkForUpdates()` (awaited unconditionally in main.tsx at startup)
+      // really runs on every prebuilt page and really invokes this command.
+      // Answering it is what keeps the flow quiet; DELETING this case would
+      // make it an unhandled command and fail every spec asserting
+      // `unhandled == []` — in CI only, where the bundle is prebuilt.
       case 'plugin:updater|check':
         return null // "up to date"
       case 'plugin:dialog|open':
