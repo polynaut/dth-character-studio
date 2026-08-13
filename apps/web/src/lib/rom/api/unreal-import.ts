@@ -244,17 +244,72 @@ export async function startUnrealImport({ data }: { data: unknown }): Promise<Un
   }
 }
 
+/** How many folders one presence probe may open before giving up. A Content
+ *  tree is unbounded and this runs on a dialog open; 2000 covers a real project
+ *  comfortably and still cannot hang the dialog on a pathological one. */
+const PRESENCE_DIR_BUDGET = 2000
+
+/**
+ * Whether this Unreal project holds an asset belonging to one of these export
+ * sets — a filename search under `Content/`, breadth-first, first match wins.
+ *
+ * NOT just `Content/DazToHue/<set>`, which is only where a FRESH import lands.
+ * Measured on the first real project wired up end to end: the character sat in
+ * `Content/Characters/Lara` as `SKM_LaraClassic`, `DTH_LaraClassic` and
+ * `MCR_LaraClassic` — the user's own folder, nowhere near `DazToHue/`. A check
+ * that only knew the default destination called that project empty, which is
+ * the one project in the world that certainly wasn't.
+ *
+ * The set name is the thing that travels: every asset the pipeline creates is
+ * named `<PREFIX>_<set>`, so `*_<set>.uasset` finds them wherever they were
+ * moved. Renamed assets still read as absent — the safe direction, since a
+ * false positive would tick a project the user never imported into.
+ */
+async function projectHasAnySet(projectDir: string, sets: ReadonlyArray<string>): Promise<boolean> {
+  if (sets.length === 0) return false
+  const wanted = sets.map((name) => `_${unrealFolderFor(name).toLowerCase()}.uasset`)
+  const contentDir = `${projectDir}/Content`
+  // The default destination first: one `exists` answers the common case
+  // without walking anything.
+  for (const name of sets) {
+    if (await exists(`${contentDir}/DazToHue/${unrealFolderFor(name)}`).catch(() => false)) {
+      return true
+    }
+  }
+  const queue = [contentDir]
+  let opened = 0
+  while (queue.length > 0 && opened < PRESENCE_DIR_BUDGET) {
+    const dir = queue.shift()
+    if (dir === undefined) break
+    opened += 1
+    let entries
+    try {
+      // Sequential BY DESIGN: the first match ends the search, and a project
+      // where the character sits three folders in should cost three reads, not
+      // a full tree walk fired off in parallel.
+      // eslint-disable-next-line no-await-in-loop
+      entries = await readDir(dir)
+    } catch {
+      continue
+    }
+    for (const entry of entries) {
+      if (entry.isDirectory) queue.push(`${dir}/${entry.name}`)
+      else if (wanted.some((suffix) => entry.name.toLowerCase().endsWith(suffix))) return true
+    }
+  }
+  return false
+}
+
 /**
  * Which of a project's linked Unreal projects already hold this character —
  * the DTH Export dialog's pre-selection, the Unreal twin of "changed since the
  * last export" and "imports a selected scene".
  *
- * The test is the CONTENT FOLDER on disk: `Content/DazToHue/<set>` for any of
- * the character's export sets, which is where {@link unrealDestinationFor}
- * puts a fresh import. Filesystem only — the studio cannot read an editor's
- * asset registry from out here, so a character the user moved somewhere else in
- * Unreal reads as absent. That is the safe direction to be wrong in: it
- * un-ticks a row the user can tick, rather than ticking one they didn't mean.
+ * Filesystem only — the studio cannot read an editor's asset registry from out
+ * here — so this is {@link projectHasAnySet}'s filename search, with all the
+ * honesty that implies: a project whose assets were renamed reads as absent,
+ * which un-ticks a row the user can tick rather than ticking one they didn't
+ * mean.
  */
 export async function fetchUnrealCharacterPresence({
   data,
@@ -270,16 +325,11 @@ export async function fetchUnrealCharacterPresence({
   const location = await locateCharacter(charsRoot(project), input.id)
   if (!location) return out
   const exportRoot = joinPath(location.folderAbs, normalizeRelFolder(project.exportSubdir))
-  const sets = await unrealExportSets(exportRoot)
+  const sets = (await unrealExportSets(exportRoot)).map((set) => set.name)
   await Promise.all(
     linked.map(async (uprojectPath) => {
       const { projectDir } = unrealJobPaths(uprojectPath)
-      const found = await Promise.all(
-        sets.map((set) =>
-          exists(`${projectDir}/Content/DazToHue/${unrealFolderFor(set.name)}`).catch(() => false),
-        ),
-      )
-      out[uprojectPath] = found.some(Boolean)
+      out[uprojectPath] = await projectHasAnySet(projectDir, sets).catch(() => false)
     }),
   )
   return out
