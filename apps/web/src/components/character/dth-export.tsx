@@ -2013,6 +2013,17 @@ function DthExportDialog({
   // (one stat + signature per scene) fills in and pre-checks the changed ones.
   const [status, setStatus] = useState<Array<ExecuteSceneStatus> | null>(null)
   const [checked, setChecked] = useState<ReadonlySet<string>>(new Set())
+  /**
+   * The user has picked their own scenes, so stop re-seeding them.
+   *
+   * Each Daz mode has its own "outstanding work" rule, and switching mode used
+   * to re-run it over the whole list — which quietly threw away a hand-made
+   * selection: picking one scene and then switching to "Skip Daz" re-checked
+   * every scene that has an export, and the Houdini list (which follows the
+   * scenes) came with it. Seeding is a courtesy for a list nobody has touched;
+   * after that it is the user's list.
+   */
+  const [scenesTouched, setScenesTouched] = useState(false)
   const [busy, setBusy] = useState(false)
   // The Daz Mode dropdown. The ref mirrors it for the scene probe (kicked off
   // at mount), which seeds the pre-selection whenever it lands.
@@ -2383,6 +2394,7 @@ function DthExportDialog({
   }, [checked, hipImports, hipMissing, mode, character, sceneDth])
 
   function toggle(scene: string) {
+    setScenesTouched(true)
     setChecked((prev) => {
       const next = new Set(prev)
       if (next.has(scene)) next.delete(scene)
@@ -2398,7 +2410,8 @@ function DthExportDialog({
   function pickMode(next: RunChoice) {
     modeRef.current = next
     setMode(next)
-    if (status) setChecked(preCheckedScenes(next, status))
+    // Only seed a list the user has not made their own — see `scenesTouched`.
+    if (status && !scenesTouched) setChecked(preCheckedScenes(next, status))
     // ROM only writes no fresh export, so a Houdini continuation has nothing
     // of THIS run's to consume — whatever the list had armed (auto-selection
     // included) doesn't carry over, and the one thing it can still do is OPEN
@@ -2568,8 +2581,12 @@ function DthExportDialog({
               checked={checked.has(row.scenePath)}
               loading={status === null}
               onToggle={() => toggle(row.scenePath)}
-              onSolo={() => setChecked(new Set([row.scenePath]))}
-              onSelectAll={() =>
+              onSolo={() => {
+                setScenesTouched(true)
+                setChecked(new Set([row.scenePath]))
+              }}
+              onSelectAll={() => {
+                setScenesTouched(true)
                 setChecked(
                   new Set(
                     rows
@@ -2581,7 +2598,7 @@ function DthExportDialog({
                       .map((r) => r.scenePath),
                   ),
                 )
-              }
+              }}
             />
           ))}
         </div>
