@@ -395,52 +395,25 @@ export type ExportMode = (typeof EXPORT_MODES)[number]
 export type RunChoice = ExportMode | 'houdini-only'
 
 /**
- * The Houdini list's **Mode** dropdown — what the selected Houdini projects do
- * once their turn comes (after the Daz batch, or immediately in skip mode):
+ * The Houdini list's **Mode** dropdown — what the Houdini leg does:
  *
- * - `open` — just open the (single) project, run nothing. Only offered while
- *   EXACTLY one project is selected ({@link houdiniModeForSelection}): several
- *   Houdini instances opened "just to look at" is never what anyone meant.
- * - `export-selected` — run the projects' DazToHue exports for the CHECKED Daz
- *   scenes. The default the moment a project joins the run.
- * - `export-all` — run them for EVERY linked scene, whatever is checked.
+ * - `export-selected` — run the checked projects' DazToHue exports for the
+ *   CHECKED Daz scenes. The default, and for a long time the only thing this
+ *   dropdown really offered.
+ * - `skip` — run no Houdini at all; the run's Unreal leg hands over the LAST
+ *   exports as they stand on disk. Offered only when the studio project has a
+ *   linked `.uproject`, because without one "skip Houdini" means "do nothing".
+ *
+ * Two modes that used to sit here are gone (v0.77):
+ * - `open` — opened one project and ran nothing. The Houdini project cards open
+ *   a project on their own, so this was a second way to do the same thing
+ *   inside a dialog whose job is running a pipeline.
+ * - `export-all` — exported every LINKED scene instead of the checked ones. The
+ *   scene list is right above it: "export all" is what checking every scene
+ *   means, and two ways to say one thing invite picking the wrong one.
  */
-export const HOUDINI_RUN_MODES = ['open', 'export-selected', 'export-all'] as const
+export const HOUDINI_RUN_MODES = ['export-selected', 'skip'] as const
 export type HoudiniRunMode = (typeof HOUDINI_RUN_MODES)[number]
-
-/**
- * THE "Open only needs exactly one project" rule: picking a second project
- * under `open` flips the mode to `export-selected` (the default run) rather
- * than refusing the pick — the user asked for more projects, not a dead end.
- * Every other combination keeps the current mode.
- */
-export function houdiniModeForSelection(current: HoudiniRunMode, selected: number): HoudiniRunMode {
-  return current === 'open' && selected > 1 ? 'export-selected' : current
-}
-
-/**
- * THE "ROM only drives no Houdini export" rule, applied to the project
- * checkboxes: a ROM-only run writes no fresh `.dth`, so an export continuation
- * would re-consume the PREVIOUS exports while the report reads as "the new ROM
- * reached Houdini" — the misleading-success this studio exists to avoid. Under
- * `rom-only` the Houdini list can only OPEN a project, and open is
- * single-project ({@link houdiniModeForSelection}) — so its checkbox behaves
- * like a radio: picking another project REPLACES the pick instead of growing a
- * multi-selection no mode could legally run. Every other Daz mode toggles.
- * Unchecking works the same everywhere.
- */
-export function hipSelectionAfterToggle(
-  mode: RunChoice,
-  prev: ReadonlySet<string>,
-  hip: string,
-): Set<string> {
-  if (prev.has(hip)) {
-    const next = new Set(prev)
-    next.delete(hip)
-    return next
-  }
-  return mode === 'rom-only' ? new Set([hip]) : new Set([...prev, hip])
-}
 
 /** What one linked Houdini project imports, as the scan recorded it. */
 export interface HoudiniProjectImports {

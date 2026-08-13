@@ -235,11 +235,12 @@ ones that carry on with the results once the Daz side is done. They come
 pre-selected whenever scenes are, so a plain **Start** does the whole round
 trip; untick them and the run ends with Daz. Their own **Mode**:
 
-- **Open only** — just open the project, run nothing (needs exactly one
-  project selected — picking a second flips to the export run).
 - **Export selected scenes** — the default: run the projects' DazToHue
   exports for the checked Daz scenes.
-- **Export all** — run them for every linked scene, whatever is checked.
+- **Skip Houdini — use last exports** — run no Houdini at all and hand the
+  exports already on disk to the Unreal projects below. Offered only when the
+  studio project has a linked `.uproject`, since without one it would mean
+  "do nothing".
 
 **The project list follows the scene selection.** Untick a Daz scene and the
 projects that only import *that* scene leave the run with it; tick it back on
@@ -257,9 +258,13 @@ Several selected projects run **one after another**: each loads and exports,
 then the next starts — the outcome waits for the single report at the end.
 
 **ROM only** is the exception: it builds no fresh export, so there is nothing
-for a Houdini export to pick up — the projects don't pre-select there, and a
-project you tick by hand can only be **opened** (the export modes are
-disabled, and one project at a time).
+for a Houdini export to pick up — the projects don't pre-select there, and the
+export mode is disabled.
+
+> To just **open** a Houdini project, use the open button on its card — the
+> dialog runs the pipeline, and a mode that ran nothing sat oddly in it. And
+> "export every scene" is what checking every scene in the list above means, so
+> that mode is gone too.
 
 **Unreal projects** is the third leg, and appears once the studio project has
 [linked `.uproject` files](./03-first-project.md#linking-unreal-projects). Tick
@@ -273,8 +278,8 @@ Like the other two lists, it **pre-selects what the run is for**: a project that
 already holds this character (its `Content/DazToHue/…` folder) starts ticked, a
 project that doesn't stays for you to decide — putting a character into an
 Unreal project for the first time is a choice, not a continuation. The section
-needs an exporting Houdini leg: with **Open only** or **ROM only** there is no
-fresh export, and sending would only re-import the previous one.
+needs somewhere to send from: tick a Houdini project to export first, or pick
+**Skip Houdini — use last exports** to send the exports already on disk.
 
 Press **Start**: the batch is handed to Daz Studio, where the bundled
 [**Runner plugin**](./02-setup.md#daz-studio-plugins)
@@ -354,8 +359,8 @@ What happens:
 2. Houdini runs the project **headless**: `hython` loads it in the background,
    works the batch and exits again. No window opens, so there is nothing to wait
    for while a big project loads and nothing of yours to close — the log window
-   in the header is where you watch it. Want a project left open to work in?
-   That's the **Open only** mode, which still opens Houdini normally.
+   in the header is where you watch it. Want a project open to work in instead?
+   Open it from its card on the character page; this dialog runs the pipeline.
 3. Only the networks importing **the scenes you ticked** export. A project
    holding networks for other scenes — or other characters — is left alone.
 4. After the last project, **one report** names every leg — *"Daz: 2/2 scenes

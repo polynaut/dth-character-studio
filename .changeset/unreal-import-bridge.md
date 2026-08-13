@@ -40,6 +40,16 @@ that doesn't waits for you, because putting a character into an Unreal project
 the first time is a decision rather than a continuation. The selection rides the
 run's sidecars, so a window reloaded mid-export still sends.
 
+**The Houdini Mode dropdown is down to two.** `Open only` opened a project and
+ran nothing — the project cards already do that, and a mode that ran no pipeline
+sat oddly in the dialog that runs the pipeline. `Export all` exported every
+linked scene instead of the checked ones, which is what checking every scene in
+the list directly above it means. Both are gone. In their place, and only when
+the project has a linked `.uproject`: **Skip Houdini — use last exports**, which
+runs no Houdini and hands what is already on disk to the Unreal projects. With
+Daz skipped as well, that is a one-click "re-import this character in Unreal"
+from the same dialog as everything else.
+
 **Every export set goes, not "the" export.** A character's `export/` folder holds
 one folder per HDA *character name* — measured, one character here has three
 (outfit variants) — and the studio cannot predict those names. It scans for them

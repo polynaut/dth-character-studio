@@ -1286,11 +1286,11 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
 
   // ROM only writes no fresh export — an export continuation would re-consume
   // the PREVIOUS `.dth`s while the report reads as the new ROM's round trip.
-  // The dialog only offers "Open only" there (hipSelectionAfterToggle); this
-  // is the loud backstop against any other caller.
-  if (mode === 'rom-only' && hips.length > 0 && houdiniMode !== 'open') {
+  // The dialog forces `skip` there; this is the loud backstop against any
+  // other caller.
+  if (mode === 'rom-only' && hips.length > 0 && houdiniMode !== 'skip') {
     throw new Error(
-      'ROM only writes no export for Houdini to run on — use "Open only", or deselect the Houdini projects.',
+      'ROM only writes no export for Houdini to run on — use "Skip Houdini", or deselect the Houdini projects.',
     )
   }
 
