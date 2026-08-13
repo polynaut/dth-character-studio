@@ -71,15 +71,25 @@ function doc(rel) {
 function bullet(text, anchor) {
   const hit = text.indexOf(anchor)
   if (hit === -1) return ''
-  const lines = text.slice(0, hit).split('\n')
-  const startLine = lines.length - 1
   const all = text.split('\n')
-  // Walk back to the bullet's own `- ` (the anchor may sit mid-bullet).
+  const startLine = text.slice(0, hit).split('\n').length - 1
+  // Walk back to whichever comes first: the bullet's own `- ` (the anchor may
+  // sit mid-bullet), or the heading opening the section — because not every
+  // fact is a list item. `domain.md` writes its most important one, the
+  // never-store-frame-numbers invariant, as prose under a `##`; anchoring only
+  // on `- ` would walk past it and return an unrelated bullet from further up.
   let start = startLine
-  while (start > 0 && !/^- /.test(all[start])) start--
+  while (start > 0 && !/^(- |#{1,6} )/.test(all[start])) start--
+  const fromHeading = /^#{1,6} /.test(all[start])
+  if (fromHeading) start++ // the heading names it, the prose IS it
+  // A bullet ends at the next bullet; a SECTION runs to the next heading, so it
+  // carries its own bullets with it — the frame-math invariant is a paragraph
+  // whose actionable half (`presetEndFrame` returning -1, never clamp it) lives
+  // in the list underneath. `MAX_NOTE` is what bounds the result either way.
+  const stop = fromHeading ? /^#{1,6} / : /^(- |#{1,6} )/
   let end = start + 1
-  while (end < all.length && !/^(- |#{1,6} )/.test(all[end])) end++
-  return all.slice(start, end).join('\n').trimEnd()
+  while (end < all.length && !stop.test(all[end])) end++
+  return all.slice(start, end).join('\n').trim()
 }
 
 function stdinJson() {

@@ -42,6 +42,7 @@
 
 const GOTCHAS = '.ai/gotchas.md'
 const CONVENTIONS = '.ai/conventions.md'
+const DOMAIN = '.ai/domain.md'
 
 /** `git <sub>` at COMMAND position — not the same words inside a quoted string
  *  (`rg "git push" docs/` must not match). Mirrors check-branch-upstream.mjs. */
@@ -352,5 +353,67 @@ export const TRIGGERS = [
     path: /packages\/rom\/src\/dsa\.ts$|apps\/web\/src\/lib\/rom\/runtime\//,
     doc: GOTCHAS,
     anchor: 'Literal-char footgun when scripting edits',
+  },
+
+  /* ---- domain: the invariants the product IS ------------------------------ */
+  {
+    id: 'frame-math-invariant',
+    path: /packages\/rom\/src\/frames\.ts$/,
+    doc: DOMAIN,
+    anchor: 'Frame numbers are never stored.',
+  },
+  {
+    id: 'fps-30',
+    path: /apps\/web\/src\/lib\/rom\/houdini-defaults\.ts$|apps\/desktop\/src\/poses\.rs$/,
+    doc: DOMAIN,
+    anchor: 'A frame number is only a pose at ONE rate.',
+  },
+  {
+    id: 'runtime-version-owned',
+    path: /packages\/rom\/src\/types\.ts$/,
+    doc: DOMAIN,
+    anchor: 'The `.dsa` runtime (versioned by',
+  },
+  {
+    id: 'export-dir-derived',
+    path: /apps\/web\/src\/lib\/scene-subfolder\.ts$/,
+    doc: DOMAIN,
+    anchor: 'The **export directory is DERIVED**',
+  },
+  {
+    id: 'export-root-relocation',
+    path: /apps\/desktop\/src\/exports\.rs$|apps\/web\/src\/lib\/rom\/api\/characters\.ts$/,
+    doc: DOMAIN,
+    anchor: 'A relocation MOVES the already-exported files',
+  },
+  {
+    id: 'relocation-needs-refresh',
+    path: /apps\/web\/src\/lib\/rom\/api\/(characters|generate)\.ts$/,
+    doc: DOMAIN,
+    anchor: 'A relocation reaches a LIBRARY through Tools',
+  },
+  {
+    id: 'seed-character-folders',
+    path: /apps\/web\/src\/lib\/rom\/storage\/characters\.ts$/,
+    doc: DOMAIN,
+    anchor: 'THREE folders are seeded into every new character',
+  },
+  {
+    id: 'character-zip',
+    path: /apps\/web\/src\/lib\/rom\/character-zip\.ts$/,
+    doc: DOMAIN,
+    anchor: 'One character as one self-contained archive',
+  },
+  {
+    id: 'houdini-project-generate',
+    path: /apps\/desktop\/src\/houdini\.rs$|apps\/web\/src\/lib\/rom\/api\/houdini\.ts$/,
+    doc: DOMAIN,
+    anchor: '**Generate Houdini project**',
+  },
+  {
+    id: 'export-interrupt',
+    path: /apps\/web\/src\/lib\/rom\/api\/execute\.ts$|packages\/rom\/src\/dsa\.ts$/,
+    doc: DOMAIN,
+    anchor: 'The flag is `EXPORT_CANCEL_FILE`',
   },
 ]
