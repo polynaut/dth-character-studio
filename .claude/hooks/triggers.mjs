@@ -15,11 +15,15 @@
  *
  * ## Coverage — read this before trusting silence
  *
- * Swept in full: `.ai/gotchas.md` (all 1575 lines, ~90 measured facts — the
- * action-tied ones are below; the rest are semantic and stay doc-only).
- * Swept partially: `.ai/conventions.md` (Repo mechanics).
- * NOT swept: `.ai/domain.md`, `.ai/architecture.md`, `.ai/testing.md`,
- * `.ai/release.md`, `.ai/docs-site.md`, `CLAUDE.md`.
+ * Swept in full — every line read, the ACTION-TIED facts pulled out (the rest
+ * are semantic and stay doc-only): `.ai/gotchas.md` (1575 lines, ~90 measured
+ * facts), `.ai/domain.md`, `.ai/architecture.md`, `.ai/release.md`,
+ * `.ai/docs-site.md`.
+ * Swept partially: `.ai/conventions.md` (Repo mechanics), `.ai/testing.md`
+ * (the SMOKE_PORT collision and the mock's `stat` contract only).
+ * NOT swept: `CLAUDE.md` — deliberately, for now: it is the short version of
+ * the five above, so triggering off it would mostly duplicate them. The gap
+ * worth closing is anything CLAUDE.md states that no `.ai/` page does.
  *
  * So a silent tool call means "no trigger matched", NEVER "nothing is known
  * about this". The injected text says so too, on purpose: a half-populated
@@ -43,6 +47,9 @@
 const GOTCHAS = '.ai/gotchas.md'
 const CONVENTIONS = '.ai/conventions.md'
 const DOMAIN = '.ai/domain.md'
+const ARCH = '.ai/architecture.md'
+const RELEASE = '.ai/release.md'
+const DOCSSITE = '.ai/docs-site.md'
 
 /** `git <sub>` at COMMAND position — not the same words inside a quoted string
  *  (`rg "git push" docs/` must not match). Mirrors check-branch-upstream.mjs. */
@@ -415,5 +422,95 @@ export const TRIGGERS = [
     path: /apps\/web\/src\/lib\/rom\/api\/execute\.ts$|packages\/rom\/src\/dsa\.ts$/,
     doc: DOMAIN,
     anchor: 'The flag is `EXPORT_CANCEL_FILE`',
+  },
+
+  /* ---- architecture: boundaries that bite when crossed -------------------- */
+  {
+    id: 'ui-kit-no-tauri',
+    path: /packages\/ui\/src\//,
+    doc: ARCH,
+    anchor: '**No Tauri / router / filesystem imports**',
+  },
+  {
+    id: 'ffi-surface',
+    path: /apps\/desktop\/src\/lib\.rs$/,
+    doc: ARCH,
+    anchor: '**FFI surface: 52 commands**',
+  },
+  {
+    id: 'which-daz-launches',
+    path: /apps\/desktop\/src\/daz\.rs$/,
+    doc: ARCH,
+    anchor: '**Which Daz `launch_daz_studio` starts has two answers',
+  },
+  {
+    id: 'window-title',
+    path: /apps\/desktop\/src\/windows\.rs$/,
+    doc: ARCH,
+    anchor: "A project window's **native title is",
+  },
+  {
+    id: 'character-meta-dir',
+    path: /apps\/web\/src\/lib\/rom\/storage\/projects\.ts$/,
+    doc: ARCH,
+    anchor: '`.dcsmeta/characters/<library-relative character folder>/`',
+  },
+  {
+    id: 'detected-files',
+    path: /apps\/web\/src\/lib\/rom\/detected-files\.ts$/,
+    doc: ARCH,
+    anchor: '**The rule is pure subtraction**',
+  },
+  {
+    id: 'product-scan-store',
+    path: /apps\/web\/src\/lib\/rom\/character-products\.ts$/,
+    doc: ARCH,
+    anchor: '**The results are per SCENE, in `products.json`.**',
+  },
+
+  /* ---- the release train --------------------------------------------------- */
+  {
+    id: 'never-tag-by-hand',
+    command: gitCmd('tag'),
+    doc: RELEASE,
+    anchor: 'Fully automated — **never tag or publish by hand**',
+  },
+  {
+    id: 'empty-changeset-blocks-release',
+    path: /\.changeset\/.*\.md$/,
+    doc: RELEASE,
+    anchor: '**orphaned empty changesets block releasing.**',
+  },
+  {
+    id: 'bundled-runner',
+    path: /scripts\/fetch-runner\.mjs$/,
+    doc: RELEASE,
+    anchor: '**Bundled Runner plugin**',
+  },
+  {
+    id: 'release-pat-expiry',
+    command: /gh\s+run\s+rerun.*publish|gh\s+workflow\s+run\s+release/i,
+    doc: RELEASE,
+    anchor: "**If publish fails with 403/401: check the PAT's expiry first.**",
+  },
+
+  /* ---- the docs site ------------------------------------------------------- */
+  {
+    id: 'guide-hash-slug',
+    path: /docs\/guide\/.*\.md$/,
+    doc: DOCSSITE,
+    anchor: '**An `&` in a heading slugifies to `-amp-`, not `-`.**',
+  },
+  {
+    id: 'guide-nav-placement',
+    path: /docs\/guide\/.*\.md$/,
+    doc: DOCSSITE,
+    anchor: '**NAV placement**',
+  },
+  {
+    id: 'site-not-linted',
+    path: /site\/.*\.(js|css|html)$/,
+    doc: DOCSSITE,
+    anchor: 'Heads-up: `pnpm lint` covers only `apps packages`',
   },
 ]
