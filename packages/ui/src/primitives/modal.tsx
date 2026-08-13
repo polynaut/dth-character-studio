@@ -1,10 +1,10 @@
 import { Dialog } from 'radix-ui'
 import { X } from 'lucide-react'
-import { useEffect } from 'react'
+import { useLayoutEffect } from 'react'
 import type { ReactNode } from 'react'
 
 import { Button } from './button.tsx'
-import { closeAllInfoPopups } from './info-popup.tsx'
+import { closeFloatingLayers } from './overlay-sweep.ts'
 import { cn } from '../cn.ts'
 import { isRefocusPointerDown } from '../refocus-click.ts'
 
@@ -41,11 +41,20 @@ export function Modal({
   className?: string
   children: ReactNode
 }) {
-  // A dialog opening sweeps every open InfoPopup: the popups portal ABOVE this
-  // z-50 layer (that's what makes them usable inside dialogs), so one left
-  // open under an opening dialog would float over it.
-  useEffect(() => {
-    if (open) closeAllInfoPopups()
+  // A dialog opening sweeps the floating layers that render ABOVE it: every
+  // open InfoPopup (z-[60]) and any live tooltip (z-[100]). Both portal above
+  // this z-50 layer — which is what makes them usable INSIDE a dialog — so one
+  // left over from the control that opened the dialog would float over it.
+  // The tooltip sweep also cancels a hover delay still counting down, which no
+  // amount of hit-testing at show time can do.
+  //
+  // useLayoutEffect, not useEffect: a passive effect is deferred until AFTER
+  // paint, so the browser may show one frame of this dialog with the old
+  // tooltip still on top of it — the exact thing the sweep exists to prevent.
+  // Nothing here reads layout, so running pre-paint costs nothing.
+  useLayoutEffect(() => {
+    if (!open) return
+    closeFloatingLayers()
   }, [open])
   return (
     <Dialog.Root

@@ -2,7 +2,9 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { TooltipHost } from './tooltip-host'
+import { Modal } from './modal.tsx'
+import { SidePanel } from './side-panel.tsx'
+import { TooltipHost, closeTooltip } from './tooltip-host'
 
 beforeEach(() => vi.useFakeTimers())
 afterEach(() => {
@@ -116,6 +118,115 @@ describe('TooltipHost (global title → floating tooltip)', () => {
     await vi.advanceTimersByTimeAsync(0) // flush the MutationObserver microtask
 
     expect(tip.style.display).toBe('none')
+  })
+
+  it('closeTooltip() hides a live tooltip and cancels one still counting down', async () => {
+    render(
+      <>
+        <button title="Send to Unreal">Send</button>
+        <TooltipHost />
+      </>,
+    )
+    const button = screen.getByRole('button')
+    const tip = screen.getByRole('tooltip', { hidden: true })
+
+    fireEvent.mouseOver(button)
+    await vi.advanceTimersByTimeAsync(700)
+    expect(tip.style.display).toBe('block')
+    closeTooltip()
+    expect(tip.style.display).toBe('none')
+
+    // A hover delay already counting down must be cancelled too — no hit-test
+    // at show time can undo a tooltip that appears AFTER the overlay is up.
+    fireEvent.mouseLeave(button)
+    fireEvent.mouseOver(button)
+    await vi.advanceTimersByTimeAsync(300)
+    closeTooltip()
+    await vi.advanceTimersByTimeAsync(400) // the rest of the 700ms delay
+    expect(tip.style.display).toBe('none')
+  })
+
+  it('an opening dialog sweeps a live tooltip', async () => {
+    // Tooltips are the TOP layer (z-[100], above the z-50 dialog), so one left
+    // up by the button that opened the dialog floats over the dialog itself.
+    const ui = (withModal: boolean) => (
+      <>
+        <button title="Export this character">Export</button>
+        {withModal && (
+          <Modal open onClose={() => {}} title="Export character">
+            body
+          </Modal>
+        )}
+        <TooltipHost />
+      </>
+    )
+    const { rerender } = render(ui(false))
+    const tip = screen.getByRole('tooltip', { hidden: true })
+    fireEvent.mouseOver(screen.getByRole('button', { name: 'Export' }))
+    await vi.advanceTimersByTimeAsync(700)
+    expect(tip.style.display).toBe('block')
+
+    rerender(ui(true))
+    expect(tip.style.display).toBe('none')
+  })
+
+  it('an opening side panel sweeps a live tooltip', async () => {
+    const ui = (withPanel: boolean) => (
+      <>
+        <button title="Open the Houdini utilities">Utils</button>
+        {withPanel && (
+          <SidePanel open onClose={() => {}} title="Houdini utilities">
+            body
+          </SidePanel>
+        )}
+        <TooltipHost />
+      </>
+    )
+    const { rerender } = render(ui(false))
+    const tip = screen.getByRole('tooltip', { hidden: true })
+    fireEvent.mouseOver(screen.getByRole('button', { name: 'Utils' }))
+    await vi.advanceTimersByTimeAsync(700)
+    expect(tip.style.display).toBe('block')
+
+    rerender(ui(true))
+    expect(tip.style.display).toBe('none')
+  })
+
+  it('hides when the window loses focus to an external tool', async () => {
+    // Launching Daz/Unreal/Houdini (or revealing a path in Explorer) moves the
+    // pointer nowhere: no mouseleave, no anchor blur. Without this the tooltip
+    // stays painted over the app while the other tool is in front.
+    render(
+      <>
+        <button title="Open this scene in Daz Studio">Open</button>
+        <TooltipHost />
+      </>,
+    )
+    const tip = screen.getByRole('tooltip', { hidden: true })
+    fireEvent.mouseOver(screen.getByRole('button'))
+    await vi.advanceTimersByTimeAsync(700)
+    expect(tip.style.display).toBe('block')
+
+    fireEvent.blur(window)
+    expect(tip.style.display).toBe('none')
+  })
+
+  it('hides when the window is hidden (minimized) without a blur', async () => {
+    render(
+      <>
+        <button title="Open this scene in Daz Studio">Open</button>
+        <TooltipHost />
+      </>,
+    )
+    const tip = screen.getByRole('tooltip', { hidden: true })
+    fireEvent.mouseOver(screen.getByRole('button'))
+    await vi.advanceTimersByTimeAsync(700)
+    expect(tip.style.display).toBe('block')
+
+    const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true)
+    fireEvent(document, new Event('visibilitychange'))
+    expect(tip.style.display).toBe('none')
+    hidden.mockRestore()
   })
 
   it('shows immediately on keyboard focus and never overwrites an existing label', async () => {
