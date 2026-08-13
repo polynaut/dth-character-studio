@@ -222,15 +222,29 @@ The **real SPA in a real browser** against an in-memory fake of the native layer
   every failure (`trace: 'retain-on-failure'`) and were being deleted with the
   runner until the upload step in `validate-pull-request.yml`. The next CI
   failure is the first one that will be diagnosable rather than inferable.
-  One pattern to check first when it lands: the victim list is almost entirely
-  OVERLAY-driven specs (`unlink-dialogs`, `houdini-occlusion-tabs`,
+  One pattern to check first when it lands: the victim list is **entirely**
+  OVERLAY-driven specs — `unlink-dialogs`, `houdini-occlusion-tabs`,
   `houdini-utils-backups` x2, `houdini-refresh-assets`, `scan-scene-import`,
-  `jcm-bone-autocomplete`), and this app has a documented way for a floating
-  layer to sit above a dialog — tooltips at `z-[100]` and InfoPopups at
-  `z-[60]` outrank the overlays, swept only by `closeFloatingLayers()` in a
-  `useLayoutEffect` (see `.ai/gotchas.md`). A lost race there yields precisely a
-  click that never becomes actionable, gets likelier on a slower box, and would
-  explain why the prebuilt bundle bought 28% without curing anything.
+  `jcm-bone-autocomplete`, `houdini-project-health` (the last two added
+  2026-08-13, the drawer spec observed live) — eight distinct specs, not one of
+  which lacks a dialog or a drawer.
+  **And the mechanism was then found and fixed.** `closeAllInfoPopups` only ever
+  registered popups that were ALREADY open, so a hover peek on its 90ms
+  `useHover` open-delay was invisible to the sweep: it fired after the overlay
+  mounted and painted at `z-[60]`, over the dialog's z-50. A tooltip there is
+  harmless (`pointer-events-none`, hit-testing skips it) but an InfoPopup is
+  INTERACTIVE — it swallows clicks aimed at whatever is underneath, which is
+  exactly a click that never becomes actionable. Fixed in `info-popup.tsx` with
+  a fail-then-pass unit test.
+  **That is a matching signature, NOT yet a proven cause.** What would prove it
+  is one trace naming an InfoPopup portal as the element on top. Until then the
+  honest statement is: a real defect with this fingerprint existed and is gone;
+  whether it was THE flake is unconfirmed.
+  **Practical trap worth knowing: the trace upload only exists on the branch
+  that adds it.** A `pull_request` run uses the workflow from the MERGE ref, so
+  every other open PR still discards its traces — #830 flaked twice and produced
+  no artifact for exactly that reason. The instrument has to land on `main`
+  before it can catch anything anywhere else.
 - **Do NOT run the whole smoke suite for every edit — CI is its gate.** Locally,
   run the specs covering what you changed (`pnpm --filter @dth/web smoke
   houdini-export` filters by filename substring). The full run is for CI, for a
