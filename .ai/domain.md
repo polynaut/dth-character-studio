@@ -602,15 +602,16 @@ older runtimes as stale.
   install target is `Plugins/<uplugin stem>` — two builds of one name would be
   two writes to one folder), ranked by `buildRank` — a build whose `BuildId`
   equals the engine's beats an exact version LABEL, which beats any-engine,
-  which beats a build whose BuildId proves it cannot load. **Generate
-  Unreal project** (the bar's ✨) creates a Blueprint-only project — plain TS
-  file writes (`.uproject` + `Config`/`Content` skeleton), no Rust, no engine
-  run, since a module-less project needs no compile — bound to a DETECTED
-  launcher engine (`unreal_engine_installs`: HKLM
-  `SOFTWARE\EpicGames\Unreal Engine` subkeys' `InstalledDirectory`; the
-  registry can outlive an uninstall — measured on the dev machine — so paths
-  are existence-probed), installs the checked items, then links the result
-  through the same path a hand-picked `.uproject` takes.
+  which beats a build whose BuildId proves it cannot load. Engine detection
+  (`unreal_engine_installs`: HKLM `SOFTWARE\EpicGames\Unreal Engine` subkeys'
+  `InstalledDirectory`; the registry can outlive an uninstall — measured on
+  the dev machine — so paths are existence-probed) feeds the Settings list
+  and the BuildId matching above. Creating the Unreal project itself is
+  Unreal's job: the bar's ✨ Generate (a Blueprint-only skeleton bound to a
+  detected engine) shipped in v0.76 and was removed one release later —
+  Unreal's New Project screen owns the template decision, and a bare
+  no-template project is almost never what a production wants. Linking a
+  hand-made `.uproject` is the one path.
 - **Running a DazToHue shelf tool is now a shared strategy, used twice.**
   `create_houdini_project` (houdini.rs) builds a network by `exec`-ing the
   `daztohue` shelf tool's own script; `op_refresh` (material_utils.py, v0.72)

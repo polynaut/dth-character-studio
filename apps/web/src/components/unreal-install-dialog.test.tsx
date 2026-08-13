@@ -55,12 +55,6 @@ const installUnrealPlugin = vi.fn(
   async (_: { data: { pluginPath: string; uprojectPath: string; overwrite: boolean } }) => 5,
 )
 const installUnrealBridge = vi.fn(async (_: { data: { uprojectPath: string } }) => 3)
-const createUnrealProject = vi.fn(
-  async (_: { data: { parentDir: string; name: string; engineVersion: string } }) => ({
-    uprojectPath: 'D:/UE/New/New.uproject',
-    projectDir: 'D:/UE/New',
-  }),
-)
 const detectUnrealEngines = vi.fn(async () => ({
   installs: [
     { version: '5.7', path: 'D:/UE_5.7', name: 'Unreal Engine 5.7', exists: true, buildId: '47537391' },
@@ -76,14 +70,10 @@ vi.mock('#/lib/rom/api.ts', () => ({
     data: { pluginPath: string; uprojectPath: string; overwrite: boolean }
   }) => installUnrealPlugin(args),
   installUnrealBridge: (args: { data: { uprojectPath: string } }) => installUnrealBridge(args),
-  createUnrealProject: (args: { data: { parentDir: string; name: string; engineVersion: string } }) =>
-    createUnrealProject(args),
   detectUnrealEngines: () => detectUnrealEngines(),
-  fileExists: async () => false,
 }))
-vi.mock('#/lib/desktop.ts', () => ({ pickFolder: async () => '' }))
 
-import { UnrealGenerateDialog, UnrealInstallDialog } from './unreal-install-dialog'
+import { UnrealInstallDialog } from './unreal-install-dialog'
 
 const UPROJECT = 'C:/UE/Game/Game.uproject'
 
@@ -176,10 +166,10 @@ describe('UnrealInstallDialog', () => {
   })
 
   it('marks and unchecks a build whose binaries are for another engine build', async () => {
-    // The reported failure, in the dialog it actually happened in. This path
-    // has a step the Generate dialog does not — the engine is looked up by the
-    // version the `.uproject` associates (5.7 here) — and a break there would
-    // silently answer "cannot tell" for every build, with nothing to see.
+    // The reported failure, in the dialog it actually happened in: the engine
+    // is looked up by the version the `.uproject` associates (5.7 here), and a
+    // break there would silently answer "cannot tell" for every build, with
+    // nothing to see.
     scanUnrealPlugins.mockResolvedValueOnce([{ ...KAWAII, buildId: '55116800' }])
     render(<UnrealInstallDialog uprojectPath={UPROJECT} onClose={() => {}} onInstalled={() => {}} />)
     await waitFor(() => expect(screen.getByText('KawaiiPhysics')).toBeTruthy())
@@ -235,93 +225,5 @@ describe('UnrealInstallDialog', () => {
       const boxes = screen.getAllByRole('checkbox') as Array<HTMLInputElement>
       expect(boxes.map((box) => box.checked)).toEqual([false, false, true, true])
     })
-  })
-})
-
-describe('UnrealGenerateDialog', () => {
-  it('creates the project for the preselected newest engine, installs, links', async () => {
-    const onClose = vi.fn()
-    const onGenerated = vi.fn()
-    render(<UnrealGenerateDialog suggestedDir="D:/UE" onClose={onClose} onGenerated={onGenerated} />)
-    await waitFor(() => expect(screen.getByLabelText('Project name')).toBeTruthy())
-
-    fireEvent.change(screen.getByLabelText('Project name'), { target: { value: 'NewGame' } })
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: /Create$/ })).toHaveProperty('disabled', false),
-    )
-    fireEvent.click(screen.getByRole('button', { name: /Create$/ }))
-
-    await waitFor(() => expect(onGenerated).toHaveBeenCalledWith('D:/UE/New/New.uproject'))
-    expect(createUnrealProject.mock.calls[0][0].data).toEqual({
-      parentDir: 'D:/UE',
-      name: 'NewGame',
-      engineVersion: '5.7',
-    })
-    // The pre-checked items were installed into the CREATED project.
-    expect(installUnrealDthContent.mock.calls[0][0].data.uprojectPath).toBe(
-      'D:/UE/New/New.uproject',
-    )
-    expect(onClose).toHaveBeenCalled()
-  })
-
-  it('opens prefilled with the suggested name and folder — Create is live at once', async () => {
-    // The DTH project's own name and its `unreal` subfolder: the common case is
-    // one project, one Unreal project, so the dialog should already say what
-    // the user was going to type. Both fields stay editable.
-    const onGenerated = vi.fn()
-    render(
-      <UnrealGenerateDialog
-        suggestedDir="D:/Perforce/3d-workflow/unreal"
-        suggestedName="_3d_workflow"
-        onClose={() => {}}
-        onGenerated={onGenerated}
-      />,
-    )
-    await waitFor(() =>
-      // `toHaveProperty`, like the disabled check below — there is no jest-dom
-      // in this suite, and a cast to HTMLInputElement is what the lint gate
-      // rejects as an unnecessary assertion.
-      expect(screen.getByLabelText('Project name')).toHaveProperty('value', '_3d_workflow'),
-    )
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: /Create$/ })).toHaveProperty('disabled', false),
-    )
-    fireEvent.click(screen.getByRole('button', { name: /Create$/ }))
-    await waitFor(() => expect(createUnrealProject).toHaveBeenCalled())
-    expect(createUnrealProject.mock.calls[0][0].data).toMatchObject({
-      parentDir: 'D:/Perforce/3d-workflow/unreal',
-      name: '_3d_workflow',
-    })
-  })
-
-  it('does NOT pre-check a build whose binaries are for another engine', async () => {
-    // Exactly the reported failure: a fresh project generated for 5.8, and a
-    // KawaiiPhysics build that matches every project (no version signal) but
-    // carries 5.7 binaries. Installing it produces Unreal's missing-modules
-    // dialog on first open — so the checklist offers it unticked, with the
-    // reason on the row.
-    detectUnrealEngines.mockResolvedValueOnce({
-      installs: [
-        { version: '5.8', path: 'D:/UE_5.8', name: 'Unreal Engine 5.8', exists: true, buildId: '55116800' },
-      ],
-    })
-    scanUnrealPlugins.mockResolvedValueOnce([KAWAII])
-    render(<UnrealGenerateDialog suggestedDir="D:/UE" onClose={() => {}} onGenerated={() => {}} />)
-    await waitFor(() => expect(screen.getByText('KawaiiPhysics')).toBeTruthy())
-
-    expect(screen.getByText(/built for another engine build/)).toBeTruthy()
-    const boxes = screen.getAllByRole('checkbox') as Array<HTMLInputElement>
-    const kawaii = screen.getByText('KawaiiPhysics').closest('label')!.querySelector('input')!
-    expect(kawaii.checked).toBe(false)
-    // …while the engine-independent DTH content and bridge are still ticked:
-    // the warning is about ONE build, not a reason to install nothing.
-    expect(boxes.filter((box) => box.checked)).toHaveLength(2)
-  })
-
-  it('says so when no engine is detected instead of offering a dead Create', async () => {
-    detectUnrealEngines.mockResolvedValueOnce({ installs: [] })
-    render(<UnrealGenerateDialog suggestedDir="" onClose={() => {}} onGenerated={() => {}} />)
-    await waitFor(() => expect(screen.getByText(/No Unreal Engine detected/)).toBeTruthy())
-    expect(screen.queryByRole('button', { name: /Create$/ })).toBeNull()
   })
 })

@@ -1,19 +1,13 @@
-import { exists, mkdir, writeTextFile } from '@tauri-apps/plugin-fs'
+import { exists } from '@tauri-apps/plugin-fs'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
-import {
-  EMPTY_UNREAL_SCAN,
-  buildUnrealScan,
-  unrealProjectNameError,
-  uprojectFileContent,
-} from '#/lib/unreal-install.ts'
+import { EMPTY_UNREAL_SCAN, buildUnrealScan } from '#/lib/unreal-install.ts'
 import {
   unrealEngineInstallSchema,
   unrealPluginSourceSchema,
   unrealProjectStateSchema,
 } from './native-types.ts'
-import { joinPath } from './core'
 import * as storage from '../storage'
 
 import type { UnrealEngineScan, UnrealPluginSource } from '#/lib/unreal-install.ts'
@@ -21,7 +15,7 @@ import type { UnrealProjectState } from './native-types.ts'
 
 // Unreal Engine: which engines this machine has, which plugin builds the
 // configured source folders hold, what a linked project already carries, and
-// installing/creating. The registry + folder scanning is native
+// installing. The registry + folder scanning is native
 // (`unreal_install.rs`); the matching rules live in `lib/unreal-install.ts`.
 // This module is only the I/O.
 
@@ -109,53 +103,4 @@ export async function installUnrealPlugin({ data }: { data: unknown }): Promise<
   return z.number().parse(
     await invoke('install_unreal_plugin', { request: { pluginPath, uprojectPath, overwrite } }),
   )
-}
-
-const createProjectInput = z.object({
-  /** The folder the new project folder is created IN. */
-  parentDir: z.string().min(1),
-  /** Project name — becomes the folder and the `.uproject` name. */
-  name: z.string().min(1),
-  /** The launcher engine to bind (`5.7`) — a detected install's version. */
-  engineVersion: z.string().min(1),
-})
-
-/** What generating a new Unreal project produced. */
-export interface CreatedUnrealProject {
-  uprojectPath: string
-  projectDir: string
-}
-
-/**
- * Create a fresh Blueprint-only Unreal project: `<parentDir>/<name>/` with the
- * `.uproject` bound to the chosen engine, plus empty `Content/` and `Config/`
- * skeletons (Unreal fills its own defaults on first open — a Blueprint project
- * has no modules to compile). Refuses an existing target folder: generation
- * never writes into something that is already there.
- *
- * Plain writes, not Rust: three small files is not "heavy file work", and the
- * same plugin-fs calls write every `.dcsp` manifest.
- */
-export async function createUnrealProject({ data }: { data: unknown }): Promise<CreatedUnrealProject> {
-  const { parentDir, name, engineVersion } = createProjectInput.parse(data)
-  if (!isTauri()) throw new Error('Generating an Unreal project needs the desktop app.')
-  const trimmed = name.trim()
-  const nameError = unrealProjectNameError(trimmed)
-  if (nameError) throw new Error(nameError)
-  const projectDir = joinPath(parentDir, trimmed)
-  if (await exists(projectDir)) {
-    throw new Error(`${trimmed} already exists in that folder — pick another name.`)
-  }
-  await mkdir(joinPath(projectDir, 'Content'), { recursive: true })
-  await mkdir(joinPath(projectDir, 'Config'), { recursive: true })
-  const uprojectPath = joinPath(projectDir, `${trimmed}.uproject`)
-  await writeTextFile(uprojectPath, uprojectFileContent(engineVersion))
-  // The minimal identity Unreal's own template writes; everything else is
-  // engine defaults until the user opens Project Settings.
-  await writeTextFile(
-    joinPath(projectDir, 'Config', 'DefaultGame.ini'),
-    `[/Script/EngineSettings.GeneralProjectSettings]\nProjectName=${trimmed}\n`,
-  )
-  await writeTextFile(joinPath(projectDir, 'Config', 'DefaultEngine.ini'), '')
-  return { uprojectPath, projectDir }
 }

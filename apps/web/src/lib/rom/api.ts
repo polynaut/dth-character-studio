@@ -149,9 +149,8 @@ export type { DetectedFilesResult, ProjectDetectedCharacter } from './api/detect
 export { detectDazInstalls } from './api/daz-install'
 // --- the Houdini versions SideFX registered ---------------------------------
 export { detectHoudiniInstalls } from './api/houdini-install'
-// --- Unreal Engine: detected engines, plugin sources, project install/create -
+// --- Unreal Engine: detected engines, plugin sources, project install -------
 export {
-  createUnrealProject,
   detectUnrealEngines,
   installUnrealPlugin,
   scanUnrealPlugins,

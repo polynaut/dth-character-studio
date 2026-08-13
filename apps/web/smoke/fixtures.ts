@@ -264,7 +264,7 @@ export interface SeedOptions {
    *  what the install dialog's scan reads). */
   unrealPluginFolders?: Array<string>
   /** What `unreal_engine_installs` reports (the detected-engines Settings
-   *  section + the Generate Unreal project dialog). `buildId` is the engine's
+   *  section + the install dialog's engine matching). `buildId` is the engine's
    *  own id — what a plugin build's binaries are judged against. */
   unrealEngineInstalls?: Array<{ version: string; path: string; buildId?: string }>
   /** Plugin builds the fake `scan_unreal_plugins` finds (see tauri-mock).

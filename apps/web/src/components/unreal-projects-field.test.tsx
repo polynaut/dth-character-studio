@@ -24,12 +24,10 @@ vi.mock('#/lib/rom/api.ts', () => ({
   detectUnrealEngines: async () => ({ installs: [] }),
   installUnrealDthContent: async () => 0,
   installUnrealPlugin: async () => 0,
-  createUnrealProject: async () => ({ uprojectPath: '', projectDir: '' }),
-  fileExists: async () => false,
   openScene: async () => {},
   revealPath: async () => {},
 }))
-vi.mock('#/lib/desktop.ts', () => ({ pickUprojectPath: async () => '', pickFolder: async () => '' }))
+vi.mock('#/lib/desktop.ts', () => ({ pickUprojectPath: async () => '' }))
 // The drop-zone hook registers Tauri webview listeners — inert in jsdom.
 vi.mock('#/lib/file-drop.ts', () => ({ useFileDrop: () => ({ id: 1, isOver: false }) }))
 const invalidate = vi.fn()
