@@ -1525,3 +1525,36 @@ mod tests {
         }
     }
 }
+
+/// Whether ANY Unreal editor is running on this machine.
+///
+/// Deliberately coarse — "is THAT project open" is not answerable from a
+/// process list, and this is used for one decision only: whether the studio may
+/// open a `.uproject` itself after queueing an import. An editor that is
+/// already up, whatever it has loaded, is a reason NOT to launch a second one:
+/// a wrong guess there costs the user a duplicate editor and a lot of RAM,
+/// while the cost of not launching is a job that waits, which is what it did
+/// before this existed.
+///
+/// Same shape as `houdini_running`'s fallback: `tasklist` filtered by image
+/// name, no window, and any failure answers "not running" rather than blocking
+/// the caller.
+#[tauri::command(async)]
+pub fn unreal_editor_running() -> bool {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        std::process::Command::new("tasklist")
+            .args(["/FI", "IMAGENAME eq UnrealEditor*", "/NH", "/FO", "CSV"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .map(|o| {
+                let out = String::from_utf8_lossy(&o.stdout).to_ascii_lowercase();
+                out.contains("unrealeditor.exe") || out.contains("unrealeditor-cmd.exe")
+            })
+            .unwrap_or(false)
+    }
+    #[cfg(not(windows))]
+    false
+}

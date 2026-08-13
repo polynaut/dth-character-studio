@@ -24,7 +24,16 @@ sent a character. Sending to a project without it says exactly that. Unreal
 loads plugins at startup, so the editor wants one restart after installing it —
 which is where a restart is expected anyway.
 
-**The studio never starts Unreal.** An editor takes minutes to come up and holds
+**A closed project is opened for you** — five seconds after queueing, if the job
+is still unclaimed and no editor is running at all. That is the rest of the leg:
+the bridge claims a job on startup, so opening the project is what makes a
+queued send finish rather than wait. An editor that is already up is never
+doubled (a wrong guess there costs a duplicate editor and several gigabytes),
+and "is THAT project open" is not answerable from a process list — so the studio
+only acts on the two things it can prove: the job is still there, and nothing is
+running.
+
+**The studio still never starts Unreal to RUN an import.** An editor takes minutes to come up and holds
 its project, so a "launch it and wait" leg would be worse than useless — and a
 headless commandlet writing into `Content/` behind a running editor is worse
 still. The job is queued instead: an open editor picks it up within about a

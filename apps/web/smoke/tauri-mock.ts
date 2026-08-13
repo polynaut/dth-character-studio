@@ -896,6 +896,10 @@ export function installTauriMock(seed: TauriMockSeed): void {
             : [],
         }
       }
+      // No editor in the fake world — which is what makes the auto-open path
+      // reachable in a spec at all.
+      case 'unreal_editor_running':
+        return false
       case 'install_unreal_dth': {
         // The real command copies the release's Unreal content; the fake marks
         // the destination folder so presence probes flip, and answers with a

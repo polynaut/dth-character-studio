@@ -18,6 +18,7 @@ import {
   dismissUnrealImport,
   fetchUnrealImportProgress,
   fetchUnrealSendPlan,
+  openUnrealForPendingJob,
   startUnrealImport,
 } from '#/lib/rom/api.ts'
 import { uprojectDisplayName } from '#/components/unreal-install-dialog.tsx'
@@ -148,6 +149,27 @@ export function UnrealImportField({
     return () => clearInterval(timer)
   }, [run, poll])
 
+  /**
+   * Give the editor a moment to claim the job, then open the project if
+   * nothing did.
+   *
+   * The bridge polls once a second, so a running editor claims within about
+   * that; five is a slow disk and a busy game thread with room to spare. Only
+   * one attempt per send — an editor takes minutes to start, and a second
+   * launch while the first is loading is exactly what nobody wants.
+   */
+  function openWhenNobodyClaims(uprojectPath: string) {
+    window.setTimeout(() => {
+      void openUnrealForPendingJob({ data: { uprojectPath } })
+        .then((opened) => {
+          if (opened) toast.info(`Opening ${uprojectDisplayName(uprojectPath)} in Unreal…`)
+        })
+        .catch(() => {
+          // The job is queued either way; a failed launch is not a failed send.
+        })
+    }, 5000)
+  }
+
   async function onSend() {
     if (!target) return
     setBusy(true)
@@ -157,6 +179,7 @@ export function UnrealImportField({
       })
       watching.current = target
       setRun({ state: 'waiting' })
+      openWhenNobodyClaims(target)
       // `destination` is where a FRESH import goes; if the project already has
       // these files the bridge re-imports where they are, and the finish toast
       // says so. Hence "into" here and the real path on the way out.

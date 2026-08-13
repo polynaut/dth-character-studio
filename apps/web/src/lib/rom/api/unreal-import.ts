@@ -1,5 +1,5 @@
 import { exists, mkdir, readDir, readTextFile, remove } from '@tauri-apps/plugin-fs'
-import { isTauri } from '@tauri-apps/api/core'
+import { invoke, isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
 import * as storage from '../storage'
@@ -19,6 +19,9 @@ import {
 } from '../unreal-jobs'
 import type { UnrealImportState } from '../unreal-jobs'
 import { charScopeInput, joinPath, locateCharacter, charsRoot, resolveProject } from './core'
+// The `.uproject` opens through the same OS-association path as a `.hip` or a
+// `.duf` — one place that decides what is safe to hand to the shell.
+import { openScene } from './attachments'
 import { normalizeRelFolder } from '../library'
 // The bridge, bundled as source and rewritten into the project before every
 // run — the same self-repairing rule as 456.py and the Daz runtime: small,
@@ -401,6 +404,41 @@ export async function fetchUnrealImportProgress({
     if (!claimed) return null
   }
   return unrealImportStateFrom(jobStillPending, result)
+}
+
+/**
+ * Open the project in Unreal when its job is still sitting unclaimed and no
+ * editor is running at all. Answers whether it launched one.
+ *
+ * The studio deliberately does not START Unreal to run an import — an editor
+ * takes minutes to come up and holds its project, so a "launch and wait" leg
+ * would be worse than useless. But a queued job with nothing to claim it is a
+ * run that visibly does nothing, which is how this reads to the person who
+ * pressed Start. Opening the project IS the rest of the leg: the bridge claims
+ * the job on startup.
+ *
+ * TWO conditions, and both are about not guessing:
+ *
+ * - The job must still be PENDING. The claim is the only honest liveness probe
+ *   the studio has — an editor with the bridge renames the file within about a
+ *   second, so a job still sitting there means nothing is watching.
+ * - No editor may be running AT ALL (`unreal_editor_running`). "Is THAT project
+ *   open" cannot be answered from a process list, so this errs the safe way: an
+ *   editor that is up — with the bridge missing, or with another project — is a
+ *   reason not to launch a second one. A wrong guess costs a duplicate editor
+ *   and several gigabytes; not launching costs a job that waits, which is what
+ *   it did before this existed. The panel's amber notice covers that case.
+ */
+export async function openUnrealForPendingJob({ data }: { data: unknown }): Promise<boolean> {
+  const { uprojectPath } = z.object({ uprojectPath: z.string().min(1) }).parse(data)
+  if (!isTauri()) return false
+  const paths = unrealJobPaths(uprojectPath)
+  if (!(await exists(paths.jobFile).catch(() => false))) return false
+  // A primitive return — parsed, never a bare `invoke<T>()` cast.
+  const running = z.boolean().parse(await invoke('unreal_editor_running'))
+  if (running) return false
+  await openScene({ data: { scenePath: uprojectPath } })
+  return true
 }
 
 /** Clear a finished run's files so the next poll reports nothing. */

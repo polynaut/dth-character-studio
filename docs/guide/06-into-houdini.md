@@ -268,6 +268,14 @@ alongside DTH content — nothing appears in your `Plugins\` folder that you
 didn't tick. Sending to a project that hasn't got it says so rather than waiting
 for a watcher that will never come.
 
+**A closed project is opened for you.** The studio still never launches Unreal
+to *run* an import — an editor takes minutes to come up and holds its project —
+but a job nothing can claim is a run that visibly does nothing. So five seconds
+after queueing, if the job is still sitting there **and no editor is running at
+all**, the studio opens the `.uproject` and the bridge claims the job on
+startup. An editor that is already up is never doubled: if it does not pick the
+job up, its bridge was installed after that session began — restart it once.
+
 While the bridge works, Unreal shows its own **progress dialog** — the import
 holds the editor's main thread for minutes, and a frozen editor looks exactly
 like a hung one.

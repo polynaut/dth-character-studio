@@ -41,6 +41,7 @@ import {
   fetchSceneDthPaths,
   fetchUnrealSendPlan,
   fileExists,
+  openUnrealForPendingJob,
   launchDazForPendingJobs,
   startHoudiniExport,
   startUnrealImport,
@@ -798,6 +799,14 @@ export function DthExportAction({
             data: { projectId, id: character.id, uprojectPath, sets: unrealSetsRef.current },
           })
           const sets = started.sets.map((set) => set.name).join(', ')
+          // Nothing claims a job when no editor is open — so open one. Five
+          // seconds is the bridge's poll (1s) with room for a slow start; the
+          // api refuses when anything is already running.
+          window.setTimeout(() => {
+            void openUnrealForPendingJob({ data: { uprojectPath } }).catch(() => {
+              // queued either way — a failed launch is not a failed send
+            })
+          }, 5000)
           return `Unreal: queued for ${name} — ${sets}`
         } catch (error) {
           // A refusal here (no bridge, no export) must not read as an export

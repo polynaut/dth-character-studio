@@ -3,6 +3,17 @@ import { expect, test } from '@playwright/test'
 import { P, UPROJECT, buildSeed, scanStoreEntryKey } from './fixtures.ts'
 import { installTauriMock } from './tauri-mock.ts'
 
+/** The commands the fake recorded, newest last — see the twin in
+ *  daz-launch-activated.smoke.ts. */
+const callsNamed = (page: import('@playwright/test').Page, cmd: string) =>
+  page.evaluate(
+    (name) =>
+      ((window as any).__tauriMock.calls as Array<{ cmd: string; args: any }>)
+        .filter((c) => c.cmd === name)
+        .map((c) => c.args),
+    cmd,
+  )
+
 // The DTH Export dialog's UNREAL pre-selection, end to end through the fake:
 // stored scan (`exportSets`) → what this run writes → is any of THAT already in
 // the Unreal project → tick.
@@ -159,4 +170,38 @@ test('a job queued elsewhere is watched here — "nothing happens" was the studi
 
   await expect(page.getByText('Waiting for the editor to pick it up…')).toBeVisible()
   await expect(page.getByText(/the job waits on disk until the editor opens/)).toBeVisible()
+})
+
+test('nothing claims the job and no editor is running — the studio opens the project', async ({
+  page,
+}) => {
+  // The studio does not start Unreal to RUN an import (an editor takes minutes
+  // and holds its project), but a queued job with nothing watching is a run
+  // that visibly does nothing. Opening the project is the rest of that leg: the
+  // bridge claims the job on startup.
+  const seed = buildSeed({
+    activeProjectFile: P.dcsp,
+    demo: true,
+    houdiniProject: true,
+    unrealProjects: [UPROJECT],
+  })
+  seed.files[`${EXPORT_ROOT}/KiraDefault/DTH_KiraDefault.dth`] = '{}'
+  seed.files[IMPORTED] = 'uasset-fixture'
+  // The bridge is installed and current, or the send refuses before it starts.
+  seed.files[`${UPROJECT_DIR}/Plugins/DTHStudioBridge/DTHStudioBridge.uplugin`] = JSON.stringify({
+    Version: 4,
+  })
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+
+  await page.getByRole('button', { name: 'Send to Unreal', exact: true }).last().click()
+  await expect(page.getByText(/Queued for Unreal/)).toBeVisible()
+  // Nothing claims it (no editor in the fake world), so after the grace period
+  // the project is handed to the OS the same way a `.hip` or `.duf` is.
+  await expect
+    .poll(() => callsNamed(page, 'shell_open_file'), { timeout: 15_000 })
+    .toEqual([{ path: UPROJECT }])
+  await expect(page.getByText(/Opening DemoGame in Unreal/)).toBeVisible()
 })

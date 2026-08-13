@@ -165,6 +165,7 @@ export {
   fetchUnrealSendPlan,
   fetchUnrealImportProgress,
   installUnrealBridge,
+  openUnrealForPendingJob,
   startUnrealImport,
   unrealExportSets,
 } from './api/unreal-import'
