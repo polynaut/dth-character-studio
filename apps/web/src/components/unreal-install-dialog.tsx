@@ -71,10 +71,12 @@ function buildItems(
   engineVersion: string | null,
   state?: { dthPresent: boolean; installedPlugins: ReadonlyArray<string> },
   /** The engine this project actually uses, when the studio found it — its
-   *  `buildId` is what a plugin's binaries are checked against. */
+   *  `buildId` both PICKS the build to offer per name (a matching one beats a
+   *  mismatching one that only sorts first) and marks the one that is left. */
   engine?: UnrealEngineFound | null,
 ): Array<ChecklistItem> {
-  const builds = engineVersion === null ? allPluginBuilds(scan) : matchPluginsToEngine(scan, engineVersion)
+  const builds =
+    engineVersion === null ? allPluginBuilds(scan) : matchPluginsToEngine(scan, engineVersion, engine)
   const installed = new Set((state?.installedPlugins ?? []).map((name) => name.toLowerCase()))
   return [
     {

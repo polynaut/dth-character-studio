@@ -31,6 +31,15 @@ with underscores, which reads as *no version signal at all*, so it matched every
 project including a 5.8 one while its binaries were 5.7. A folder name is a
 label; the BuildId is the engine's own identity check.
 
+**It also decides which build you are offered.** Only one build per plugin can
+be listed — they all install to the same `Plugins/<name>` — and that choice used
+to be made on labels alone. With `KawaiiPhysics_5_7_1_…` and
+`KawaiiPhysics_5_8_…` side by side, both reading as *any engine*, the studio
+offered the alphabetically first one and hid the other; for a 5.8 project that
+meant being shown the build that cannot load while the one that can never
+appeared. The BuildId now picks: a build proven to fit outranks a version label,
+which outranks an any-engine guess, which outranks a build proven not to fit.
+
 It warns rather than refuses: a mismatch is left listed and unchecked, because
 you may know something the BuildId doesn't. And it never guesses — a plugin with
 no binaries, or an engine whose id cannot be read, is never called a mismatch.

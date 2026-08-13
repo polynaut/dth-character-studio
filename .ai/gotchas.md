@@ -1295,6 +1295,15 @@ current code before relying on details, but assume the *lesson* still holds.
   cannot load in. `pluginBuildMismatch` (`lib/unreal-install.ts`) is the check;
   either side reading `''` means "cannot tell" and must NEVER render as a
   mismatch — a false alarm costs the user a plugin that would have worked.
+  **And the BuildId must PICK, not only warn.** `matchPluginsToEngine` offers
+  ONE build per plugin name (the install target is `Plugins/<name>`), and its
+  tie-break knew labels only — so with `KawaiiPhysics_5_7_1_…` and
+  `KawaiiPhysics_5_8_…` side by side, both reading as `any engine`, the
+  alphabetically first was offered to a 5.8 project, marked unloadable, and the
+  build that WOULD have loaded was dropped from the list entirely. `buildRank`
+  now orders them: proven match > exact version label > any-engine > proven
+  mismatch. Ranking is NOT filtering — a lone mismatching build is still listed
+  and marked, because an empty checklist explains nothing.
 - **`HKLM\SOFTWARE\EpicGames\Unreal Engine` can be MISSING an installed
   engine.** Measured 2026-08-12: a machine with 5.6, 5.7 and 5.8 installed had
   no 5.8 key, so the studio never offered it, a project was generated for 5.7,

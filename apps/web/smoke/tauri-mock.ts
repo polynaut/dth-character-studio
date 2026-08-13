@@ -43,13 +43,24 @@ export interface TauriMockSeed {
   /** What `houdini_installs` reports — the registry, as the studio sees it.
    *  Omit for a machine with no Houdini installed. */
   houdiniInstalls?: Array<{ version: string; path: string }>
-  /** What `unreal_engine_installs` reports — Epic's registry, as the studio
-   *  sees it. Omit for a machine with no Unreal Engine installed. */
-  unrealEngineInstalls?: Array<{ version: string; path: string }>
+  /** What `unreal_engine_installs` reports — Epic's registry + launcher
+   *  manifest, as the studio sees it. Omit for a machine with no Unreal Engine
+   *  installed. `buildId` is the engine's own id out of
+   *  `Engine/Binaries/Win64/UnrealEditor.modules`; omit it for an engine whose
+   *  id could not be read (which the studio never treats as a mismatch). */
+  unrealEngineInstalls?: Array<{ version: string; path: string; buildId?: string }>
   /** Plugin builds `scan_unreal_plugins` finds — the real folder walk has no
    *  disk to walk here, so a spec states the builds; the mock serves each scan
-   *  filtered to the folders it was asked about (matched on `sourceFolder`). */
-  unrealPlugins?: Array<{ name: string; path: string; engineVersion: string; sourceFolder: string }>
+   *  filtered to the folders it was asked about (matched on `sourceFolder`).
+   *  `buildId` is what the build's binaries were compiled against; omit it for
+   *  a content-only plugin. */
+  unrealPlugins?: Array<{
+    name: string
+    path: string
+    engineVersion: string
+    sourceFolder: string
+    buildId?: string
+  }>
   /** The `.dcsp` this "window" was opened with — '' for a Home window. */
   activeProjectFile: string
   /** What `getVersion()` reports. */

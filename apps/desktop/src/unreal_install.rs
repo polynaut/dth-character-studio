@@ -439,7 +439,13 @@ fn zipped_plugin(zip_path: &Path) -> Option<ZippedPlugin> {
     let mut archive = zip::ZipArchive::new(file).ok()?;
     let mut best: Option<(usize, usize, String)> = None; // (depth, index, name)
     for idx in 0..archive.len() {
-        let entry = archive.by_index_raw(idx).ok()?;
+        // SKIP an unreadable entry, never abandon the archive: a `?` here threw
+        // away a whole plugin because ONE entry in its zip had an odd header —
+        // the scan then reported "no Unreal plugin found here" about a folder
+        // that plainly has one. Same policy as `zip_entry_index`.
+        let Ok(entry) = archive.by_index_raw(idx) else {
+            continue;
+        };
         if entry.is_dir() {
             continue;
         }
@@ -924,6 +930,27 @@ mod tests {
     }
 
     #[test]
+    fn an_engine_folder_reports_the_build_id_out_of_its_own_editor_modules() {
+        // The OTHER half of every comparison, and the half with nothing to
+        // catch a wrong path: `engine_build_id` answering '' means every plugin
+        // verdict is "cannot tell" and the whole feature is silently inert,
+        // exactly as it looks when it is working fine.
+        let tmp = unique_temp_dir("ueengine");
+        let engine = tmp.join("UE_5.8");
+        fs::create_dir_all(engine.join("Engine/Binaries/Win64")).unwrap();
+        fs::write(
+            engine.join("Engine/Binaries/Win64/UnrealEditor.modules"),
+            r#"{"BuildId":"55116800","Modules":{"CoreUObject":"UnrealEditor-CoreUObject.dll"}}"#,
+        )
+        .unwrap();
+        assert_eq!(engine_build_id(&engine), "55116800");
+        // An engine folder that is not there (a stale registry entry) answers
+        // '' rather than panicking — the UI flags it as missing anyway.
+        assert_eq!(engine_build_id(&tmp.join("UE_9.9")), "");
+        fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
     fn the_launcher_manifest_yields_engines_and_not_the_plugins_beside_them() {
         // The measured shape: the launcher lists what it installed INTO an
         // engine at the same InstallLocation, so an unfiltered read offers the
@@ -947,7 +974,10 @@ mod tests {
                 ("5.6".to_string(), r"C:\Epic\UE_5.6".to_string()),
             ],
             "engines only, trailing separator trimmed, a pathless entry dropped, \
-             and a three-part version left alone rather than guessed at"
+             and a three-part version SKIPPED rather than guessed down to 5.9 — \
+             `is_engine_version` is major.minor, the same rule the registry read \
+             applies, and inventing a version here would offer an engine a \
+             `.uproject` can never associate with"
         );
         // Nothing readable at all is empty, never a panic.
         assert!(launcher_installs_from_manifest("not json").is_empty());

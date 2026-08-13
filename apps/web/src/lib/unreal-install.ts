@@ -90,6 +90,19 @@ export function pluginBuildMismatch(
   return pluginId !== engineId
 }
 
+/** The other half of {@link pluginBuildMismatch}: both ids known and EQUAL —
+ *  positive proof this build loads in this engine, not merely the absence of
+ *  proof that it doesn't. Two different things, and {@link matchPluginsToEngine}
+ *  needs to tell them apart. */
+function pluginBuildAgrees(
+  plugin: Pick<UnrealPluginSource, 'buildId'>,
+  engine: Pick<UnrealEngineInstall, 'buildId'> | null | undefined,
+): boolean {
+  const pluginId = (plugin.buildId ?? '').trim()
+  const engineId = (engine?.buildId ?? '').trim()
+  return pluginId !== '' && pluginId === engineId
+}
+
 /** Numeric dotted compare — `5.7` < `5.10` (which a string compare gets
  *  wrong). Missing components count as 0. */
 function compareVersion(a: string, b: string): number {
@@ -158,25 +171,64 @@ export function pluginMatchesEngine(plugin: UnrealPluginSource, engineVersion: s
 }
 
 /**
+ * How well one build is KNOWN to fit the engine — the ranking
+ * {@link matchPluginsToEngine} picks by. Higher wins.
+ *
+ * Binary proof outranks a label in BOTH directions, because that is the whole
+ * lesson of `pluginBuildMismatch`: a matching `BuildId` is the engine's own
+ * yes, a differing one is its own no, and a folder name is neither.
+ *
+ * | rank | meaning |
+ * | ---- | ------- |
+ * | 3 | its `BuildId` equals the engine's — proven to load |
+ * | 2 | no BuildId evidence, but it names this exact engine version |
+ * | 1 | no BuildId evidence and no version signal (`any engine`) |
+ * | 0 | its `BuildId` differs from the engine's — proven NOT to load |
+ *
+ * With no BuildIds anywhere only 2 and 1 occur, which is exactly the older
+ * "an exact version beats an any-engine build" rule, unchanged.
+ */
+function buildRank(
+  plugin: UnrealPluginSource,
+  engine: Pick<UnrealEngineInstall, 'buildId'> | null | undefined,
+): number {
+  if (pluginBuildAgrees(plugin, engine)) return 3
+  if (pluginBuildMismatch(plugin, engine)) return 0
+  return plugin.engineVersion === '' ? 1 : 2
+}
+
+/**
  * The one build per plugin NAME that fits the given engine — the install
  * checklist for a project whose engine version is known.
  *
  * One per name because the install target is `Plugins/<name>`: offering two
- * builds of one plugin would offer two writes to the same folder. An exact
- * version match beats an any-engine build; a same-version tie keeps the scan's
- * own order — the Rust scan sorts by name, version, then PATH, so the
- * alphabetically first build path wins, deterministically.
+ * builds of one plugin would offer two writes to the same folder. Which one is
+ * {@link buildRank}; a tie keeps the scan's own order — the Rust scan sorts by
+ * name, version, then PATH, so the alphabetically first build path wins,
+ * deterministically.
+ *
+ * **Pass `engine` whenever it is known.** Without it the choice is made on
+ * labels alone, and MEASURED 2026-08-12 that is not enough: a user with
+ * `KawaiiPhysics_5_7_1_…` and `KawaiiPhysics_5_8_…` side by side has two builds
+ * that BOTH read as `any engine` (the underscores are not a version), so the
+ * alphabetically first — the 5.7 one — was offered to a 5.8 project, marked
+ * unloadable, while the 5.8 build that would have worked was dropped from the
+ * list entirely. Ranking by BuildId picks the one that loads instead of
+ * explaining why the other doesn't.
  */
 export function matchPluginsToEngine(
   plugins: ReadonlyArray<UnrealPluginSource>,
   engineVersion: string,
+  /** The engine this project uses, when the studio found it — its `buildId`
+   *  decides between two builds a label cannot separate. */
+  engine?: Pick<UnrealEngineInstall, 'buildId'> | null,
 ): Array<UnrealPluginSource> {
   const byName = new Map<string, UnrealPluginSource>()
   for (const plugin of plugins) {
     if (!pluginMatchesEngine(plugin, engineVersion)) continue
     const key = plugin.name.toLowerCase()
     const seen = byName.get(key)
-    if (!seen || (seen.engineVersion === '' && plugin.engineVersion !== '')) {
+    if (!seen || buildRank(plugin, engine) > buildRank(seen, engine)) {
       byName.set(key, plugin)
     }
   }

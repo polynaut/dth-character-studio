@@ -13,20 +13,31 @@ const state = {
   installedPlugins: [] as Array<string>,
 }
 const unrealProjectState = vi.fn(async (_: { data: { uprojectPath: string } }) => ({ ...state }))
+// `buildId` on every entry — the native scan always sends the field, and a mock
+// that omits it types itself without one, so a per-test override could not
+// express a build id at all (measured: TS2353 on the first test that tried).
 const scanUnrealPlugins = vi.fn(async () => [
   {
     name: 'DazToUnreal',
     path: 'D:/bridge/UE_5.7/Plugins/DazToUnreal',
     engineVersion: '5.7',
     sourceFolder: 'D:/bridge',
+    buildId: '',
   },
   {
     name: 'DazToUnreal',
     path: 'D:/bridge/UE_5.6/Plugins/DazToUnreal',
     engineVersion: '5.6',
     sourceFolder: 'D:/bridge',
+    buildId: '',
   },
-  { name: 'AnyTool', path: 'D:/any/AnyTool', engineVersion: '', sourceFolder: 'D:/any' },
+  {
+    name: 'AnyTool',
+    path: 'D:/any/AnyTool',
+    engineVersion: '',
+    sourceFolder: 'D:/any',
+    buildId: '',
+  },
 ])
 /** The reported shape: an `any engine` build (its folder writes the version
  *  with underscores, so nothing reads as a version) whose BINARIES are 5.7. */
@@ -130,6 +141,49 @@ describe('UnrealInstallDialog', () => {
     expect(boxes).toHaveLength(4)
     // …but only the engine-independent DTH content starts checked.
     expect(boxes.filter((box) => box.checked)).toHaveLength(1)
+  })
+
+  it('marks and unchecks a build whose binaries are for another engine build', async () => {
+    // The reported failure, in the dialog it actually happened in. This path
+    // has a step the Generate dialog does not — the engine is looked up by the
+    // version the `.uproject` associates (5.7 here) — and a break there would
+    // silently answer "cannot tell" for every build, with nothing to see.
+    scanUnrealPlugins.mockResolvedValueOnce([{ ...KAWAII, buildId: '55116800' }])
+    render(<UnrealInstallDialog uprojectPath={UPROJECT} onClose={() => {}} onInstalled={() => {}} />)
+    await waitFor(() => expect(screen.getByText('KawaiiPhysics')).toBeTruthy())
+
+    expect(screen.getByText(/built for another engine build/)).toBeTruthy()
+    const kawaii = screen.getByText('KawaiiPhysics').closest('label')!.querySelector('input')!
+    expect(kawaii.checked).toBe(false)
+    // DTH content is engine-independent and stays ticked.
+    const boxes = screen.getAllByRole('checkbox') as Array<HTMLInputElement>
+    expect(boxes.filter((box) => box.checked)).toHaveLength(1)
+  })
+
+  it('offers the build that FITS when two of them look identical by label', async () => {
+    // Two `any engine` builds of one plugin — the underscore-versioned folders
+    // the reporter had. Offering one per name is right (one install target),
+    // but picking the alphabetically first one meant offering the unloadable
+    // build and hiding the good one. The BuildId decides.
+    scanUnrealPlugins.mockResolvedValueOnce([
+      { ...KAWAII, path: 'X:/plugins/KawaiiPhysics_5_8_0/Plugins/KawaiiPhysics', buildId: '55116800' },
+      { ...KAWAII, path: 'X:/plugins/KawaiiPhysics_5_7_1/Plugins/KawaiiPhysics', buildId: '47537391' },
+    ])
+    render(<UnrealInstallDialog uprojectPath={UPROJECT} onClose={() => {}} onInstalled={() => {}} />)
+    await waitFor(() => expect(screen.getByText('KawaiiPhysics')).toBeTruthy())
+
+    // ONE row, no warning on it, and pre-checked — it is the 5.7-matching build.
+    expect(screen.getAllByText('KawaiiPhysics')).toHaveLength(1)
+    expect(screen.queryByText(/built for another engine build/)).toBeNull()
+    const boxes = screen.getAllByRole('checkbox') as Array<HTMLInputElement>
+    expect(boxes).toHaveLength(2)
+    expect(boxes.every((box) => box.checked)).toBe(true)
+
+    fireEvent.click(screen.getByRole('button', { name: /Install$/ }))
+    await waitFor(() => expect(installUnrealPlugin).toHaveBeenCalledTimes(1))
+    expect(installUnrealPlugin.mock.calls[0][0].data.pluginPath).toBe(
+      'X:/plugins/KawaiiPhysics_5_7_1/Plugins/KawaiiPhysics',
+    )
   })
 
   it('stays open and re-probes when an install fails (the checklist must tell the truth)', async () => {

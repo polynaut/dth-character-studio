@@ -258,7 +258,9 @@ either way. Leave it zipped; there is nothing to unpack by hand.
 Under each folder the panel previews exactly what was recognized, with the
 engine version each build was matched to (from a version in its path — deepest
 wins — falling back to the `.uplugin`'s own `EngineVersion`; no version
-anywhere means the build is offered for every engine).
+anywhere means the build is offered for every engine). Nothing installs from
+here: the install dialog on a project's Unreal card does that, per project —
+see [Linking Unreal projects](./03-first-project.md#linking-unreal-projects).
 
 > **A name is a label; the binaries are the truth.** A built plugin carries a
 > **`BuildId`** in `Binaries\Win64\UnrealEditor.modules`, and Unreal refuses to
@@ -268,9 +270,12 @@ anywhere means the build is offered for every engine).
 > still tick it; it is a warning, not a refusal). This is the only check that
 > catches a folder whose name says nothing — `KawaiiPhysics_5_7_1_…` writes its
 > version with underscores, so it reads as *any engine* and would otherwise be
-> offered for a project it cannot load in. Nothing installs from
-here: the install dialog on a project's Unreal card does that, per project —
-see [Linking Unreal projects](./03-first-project.md#linking-unreal-projects).
+> offered for a project it cannot load in.
+>
+> It also decides **which** build you are offered when two of them look alike:
+> with `KawaiiPhysics_5_7_1_…` and `KawaiiPhysics_5_8_…` both reading as *any
+> engine*, the one whose BuildId matches your project's engine is the one that
+> gets listed.
 
 ## Save
 

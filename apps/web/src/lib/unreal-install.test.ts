@@ -121,6 +121,79 @@ describe('plugin matching', () => {
     expect(offered.map((p) => p.path)).toEqual(['D:/first/DazToUnreal'])
   })
 
+  it('picks the build whose BINARIES fit over the one that merely sorts first', () => {
+    // The reporter's own folder shape, and the case the version label cannot
+    // reach: two KawaiiPhysics builds, BOTH reading as `any engine` (the
+    // underscores are not a version), so the alphabetically first — 5.7 — used
+    // to be the one offered to a 5.8 project. It was then marked unloadable
+    // while the 5.8 build that WOULD have worked never appeared at all.
+    const engine58 = { buildId: '55116800' }
+    const offered = matchPluginsToEngine(
+      [
+        plugin({
+          name: 'KawaiiPhysics',
+          engineVersion: '',
+          path: 'X:/p/KawaiiPhysics_5_7_1/Plugins/KawaiiPhysics',
+          buildId: '47537391',
+        }),
+        plugin({
+          name: 'KawaiiPhysics',
+          engineVersion: '',
+          path: 'X:/p/KawaiiPhysics_5_8_0/Plugins/KawaiiPhysics',
+          buildId: '55116800',
+        }),
+      ],
+      '5.8',
+      engine58,
+    )
+    expect(offered.map((p) => p.path)).toEqual(['X:/p/KawaiiPhysics_5_8_0/Plugins/KawaiiPhysics'])
+    expect(pluginBuildMismatch(offered[0], engine58)).toBe(false)
+  })
+
+  it('lets a proven BuildId outrank a version LABEL, in both directions', () => {
+    const engine57 = { buildId: '47537391' }
+    // An any-engine build proven to fit beats a 5.7-labelled build proven not
+    // to: the label is what someone typed, the id is what the compiler wrote.
+    const offered = matchPluginsToEngine(
+      [
+        plugin({ engineVersion: '5.7', path: 'D:/labelled', buildId: '55116800' }),
+        plugin({ engineVersion: '', path: 'D:/proven', buildId: '47537391' }),
+      ],
+      '5.7',
+      engine57,
+    )
+    expect(offered.map((p) => p.path)).toEqual(['D:/proven'])
+  })
+
+  it('falls back to the label rule EXACTLY when no BuildId is known', () => {
+    // No engine passed (the install dialog's own engine wasn't detected) and no
+    // ids on the builds: the older "exact version beats any-engine, ties keep
+    // scan order" behaviour must be untouched.
+    const noIds = [
+      plugin({ engineVersion: '', path: 'D:/a/DazToUnreal' }),
+      plugin({ engineVersion: '5.7', path: 'D:/b/DazToUnreal' }),
+      plugin({ engineVersion: '5.7', path: 'D:/c/DazToUnreal' }),
+    ]
+    expect(matchPluginsToEngine(noIds, '5.7').map((p) => p.path)).toEqual(['D:/b/DazToUnreal'])
+    expect(matchPluginsToEngine(noIds, '5.7', null).map((p) => p.path)).toEqual(['D:/b/DazToUnreal'])
+    // An engine WITH an id changes nothing while the builds carry none.
+    expect(
+      matchPluginsToEngine(noIds, '5.7', { buildId: '47537391' }).map((p) => p.path),
+    ).toEqual(['D:/b/DazToUnreal'])
+  })
+
+  it('still offers the ONE mismatching build when that is all there is', () => {
+    // Ranking must not become filtering: a user with only a 5.7 build gets it
+    // listed and marked, never an empty checklist that says nothing.
+    const offered = matchPluginsToEngine(
+      [plugin({ name: 'KawaiiPhysics', engineVersion: '', path: 'X:/p/K', buildId: '47537391' })],
+      '5.8',
+      { buildId: '55116800' },
+    )
+    expect(offered).toHaveLength(1)
+    expect(pluginBuildMismatch(offered[0], { buildId: '55116800' })).toBe(true)
+  })
+
   it('lists every distinct build for an unknown engine, deduped by path', () => {
     const all = allPluginBuilds([
       plugin({ engineVersion: '5.6', path: 'D:/x/UE_5.6/DazToUnreal' }),
