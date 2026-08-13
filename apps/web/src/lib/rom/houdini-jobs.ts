@@ -129,12 +129,27 @@ export type HoudiniActivity = z.infer<typeof houdiniActivitySchema>
 
 /** Tolerant: the file is read WHILE it's being written to, so every field
  *  carries a default and an unknown extra is ignored rather than fatal. */
+/** One network this run WILL export, named before it starts — see the running
+ *  state's `networks`. */
+const houdiniTargetSchema = z.object({
+  node: z.string().default(''),
+  /** The scene whose `.dth` its network imports. */
+  scene: z.string().default(''),
+  /** The title of the network box around it — the name the USER gave this
+   *  network, and the only human-meaningful one a multi-network project has. */
+  box: z.string().default(''),
+})
+
 export const houdiniResultSchema = z.object({
   version: z.number().default(1),
   state: z.enum(['running', 'done', 'failed']).default('running'),
   total: z.number().default(0),
   done: z.number().default(0),
   nodes: z.array(houdiniNodeResultSchema).default([]),
+  /** What the run is about to work through, named up front. Empty from a 456.py
+   *  older than this field — the task cards then fall back to counting, which
+   *  is what they did before it existed. */
+  targets: z.array(houdiniTargetSchema).default([]),
   error: z.string().default(''),
   activity: houdiniActivitySchema.optional(),
 })
@@ -361,6 +376,12 @@ export type HoudiniRunState =
       done: number
       total: number
       startedAtMs?: number
+      /** Every network of this project, in run order — named from the run's
+       *  own target list, with `status` filling in as each finishes. The task
+       *  cards are built from this; counts alone could only say "3 of 5", and
+       *  a network nobody has reached yet would read as "Network 2" where the
+       *  user has a name for it. */
+      networks: Array<{ label: string; status: 'ok' | 'skipped' | 'failed' | 'waiting' }>
       /** The live mid-node channel, when 456.py has streamed any — what the
        *  currently exporting node is SAYING (see {@link houdiniActivitySchema}). */
       activity?: HoudiniActivity
@@ -462,6 +483,33 @@ export function houdiniRunLooksDead(
   return !result || result.state === 'running'
 }
 
+/**
+ * Every network of the running project, in run order: named from the run's own
+ * target list, `status` filled in as each finishes.
+ *
+ * The two lists are matched BY POSITION, which is exactly how 456.py works
+ * through them — it collects its targets, then exports them in that order,
+ * appending one node result each time. A run from a 456.py older than the
+ * target list reports none, and then this can only name what has finished:
+ * the caller's fallback ("Network 2") is the honest answer there, not a guess.
+ */
+function houdiniNetworks(
+  result: HoudiniResult,
+): Array<{ label: string; status: 'ok' | 'skipped' | 'failed' | 'waiting' }> {
+  if (result.targets.length === 0) {
+    return result.nodes.map((node) => ({ label: node.scene || node.node, status: node.status }))
+  }
+  return result.targets.map((target, index) => {
+    const finished = result.nodes[index]
+    return {
+      // The user's own name for the network first — that is what they are
+      // looking at in Houdini.
+      label: target.box || target.scene || finished?.scene || target.node || `Network ${index + 1}`,
+      status: finished ? finished.status : ('waiting' as const),
+    }
+  })
+}
+
 export function houdiniRunStateFrom(
   result: HoudiniResult | null,
   houdiniRunning: boolean,
@@ -480,6 +528,12 @@ export function houdiniRunStateFrom(
       state: 'running',
       done: result.done,
       total: result.total,
+      // One entry per network the run will touch, named before it starts and
+      // marked as it finishes. The box title is what the USER called this
+      // network; the scene is the studio's name for it; the node path always
+      // exists. A run from an older 456.py reports no targets, so this falls
+      // back to naming only what has finished.
+      networks: houdiniNetworks(result),
       // Only a channel with something to say rides along — an empty one would
       // make the UI clear its "last activity" line between nodes for nothing.
       ...(result.activity && result.activity.lines.length > 0

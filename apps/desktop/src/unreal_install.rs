@@ -97,6 +97,15 @@ pub struct UnrealProjectState {
     pub dth_present: bool,
     /// Folder names under the project's `Plugins/`, sorted.
     pub installed_plugins: Vec<String>,
+    /// The `Version` of the installed DTH Character Studio Runner, or 0 when the project
+    /// has none (or its `.uplugin` cannot be read — the same answer, since
+    /// neither can run a job).
+    ///
+    /// The studio SHIPS that plugin, so a project can hold an older copy than
+    /// the app that talks to it — a folder keeps whatever was installed the day
+    /// it was installed. This is what the project card's staleness warning and
+    /// the pre-send check both read.
+    pub bridge_version: u32,
 }
 
 /// Every Unreal Engine the Epic launcher has registered, in registry order
@@ -765,7 +774,8 @@ pub fn unreal_project_state(uproject_path: String) -> Result<UnrealProjectState,
         })
         .unwrap_or_default();
     installed_plugins.sort();
-    Ok(UnrealProjectState { engine_association, dth_present, installed_plugins })
+    let bridge_version = bridge_version_at(&dir);
+    Ok(UnrealProjectState { engine_association, dth_present, installed_plugins, bridge_version })
 }
 
 #[derive(Deserialize)]
@@ -1440,6 +1450,14 @@ mod tests {
         let project = root.join("Game");
         fs::create_dir_all(project.join("Content").join("DazToHue")).unwrap();
         fs::create_dir_all(project.join("Plugins").join("DazToUnreal")).unwrap();
+        // The studio's own plugin, at a version that is NOT the one this app
+        // ships — the shape the project card's staleness warning exists for.
+        // Deliberately not tied to `UNREAL_BRIDGE_VERSION` (a TS constant this
+        // crate cannot see): what is asserted here is that the number is read
+        // back verbatim, and `bridgeOutdated` on the TS side owns the verdict.
+        let bridge = project.join("Plugins").join("DTHCharacterStudioRunner");
+        fs::create_dir_all(&bridge).unwrap();
+        fs::write(bridge.join("DTHCharacterStudioRunner.uplugin"), r#"{ "Version": 3 }"#).unwrap();
         let uproject = project.join("Game.uproject");
         fs::write(&uproject, r#"{ "FileVersion": 3, "EngineAssociation": "5.7" }"#).unwrap();
 
@@ -1449,7 +1467,8 @@ mod tests {
             UnrealProjectState {
                 engine_association: "5.7".into(),
                 dth_present: true,
-                installed_plugins: vec!["DazToUnreal".into()],
+                installed_plugins: vec!["DTHCharacterStudioRunner".into(), "DazToUnreal".into()],
+                bridge_version: 3,
             }
         );
         // A bare project: no association, nothing installed — still not an error.
@@ -1461,6 +1480,9 @@ mod tests {
         assert_eq!(state.engine_association, "");
         assert!(!state.dth_present);
         assert!(state.installed_plugins.is_empty());
+        // No bridge is 0 — which readers must treat as "not installed", never
+        // as "out of date": different message, different fix.
+        assert_eq!(state.bridge_version, 0);
         let _ = fs::remove_dir_all(&root);
     }
 
@@ -1524,4 +1546,56 @@ mod tests {
             println!("{} -> {}", install.version, install.path);
         }
     }
+}
+
+/// The installed bridge's `Version`, or 0 — one small JSON read.
+///
+/// Tolerant on purpose: a missing plugin, an unreadable file, a manifest that
+/// is not JSON or carries no `Version` all answer 0, and every reader treats
+/// that as "not installed" rather than "out of date". The two need different
+/// words in the UI and have different fixes.
+fn bridge_version_at(project_dir: &Path) -> u32 {
+    let manifest = project_dir
+        .join("Plugins")
+        .join("DTHCharacterStudioRunner")
+        .join("DTHCharacterStudioRunner.uplugin");
+    std::fs::read_to_string(manifest)
+        .ok()
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+        .and_then(|json| json.get("Version").and_then(serde_json::Value::as_u64))
+        .and_then(|version| u32::try_from(version).ok())
+        .unwrap_or(0)
+}
+
+/// Whether ANY Unreal editor is running on this machine.
+///
+/// Deliberately coarse — "is THAT project open" is not answerable from a
+/// process list, and this is used for one decision only: whether the studio may
+/// open a `.uproject` itself after queueing an import. An editor that is
+/// already up, whatever it has loaded, is a reason NOT to launch a second one:
+/// a wrong guess there costs the user a duplicate editor and a lot of RAM,
+/// while the cost of not launching is a job that waits, which is what it did
+/// before this existed.
+///
+/// Same shape as `houdini_running`'s fallback: `tasklist` filtered by image
+/// name, no window, and any failure answers "not running" rather than blocking
+/// the caller.
+#[tauri::command(async)]
+pub fn unreal_editor_running() -> bool {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        std::process::Command::new("tasklist")
+            .args(["/FI", "IMAGENAME eq UnrealEditor*", "/NH", "/FO", "CSV"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .map(|o| {
+                let out = String::from_utf8_lossy(&o.stdout).to_ascii_lowercase();
+                out.contains("unrealeditor.exe") || out.contains("unrealeditor-cmd.exe")
+            })
+            .unwrap_or(false)
+    }
+    #[cfg(not(windows))]
+    false
 }

@@ -488,6 +488,7 @@ function CharacterPage({ onImportRemount }: { onImportRemount: () => void }) {
         projectId={projectId}
         draft={draft}
         dazLibraryConfigured={Boolean(settings.dazLibraryFolder)}
+        unrealProjects={project?.unrealProjects ?? []}
         folderChip={folderChip}
         folderMove={folderMove}
         hasRunProblems={runLog.hasRunProblems}

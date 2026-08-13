@@ -40,6 +40,9 @@ import { normalizeRelFolder } from '../library'
 import { DTH_FPS } from '../houdini-defaults.ts'
 import { normalizePathLower } from '#/lib/path.ts'
 import { charScopeInput, charsRoot, joinPath, locateCharacter, resolveProject } from './core'
+// The scan store is `houdini-material.ts`'s (its path, its write queue) — a
+// renamed project has to take its scan with it.
+import { followRenamedScan } from './houdini-material'
 
 // "Generate project": create a ready-made DazToHue Houdini project for a
 // character. hython starts a fresh scene, bakes $JOB to the character's ONE
@@ -247,6 +250,12 @@ const renameProjectInput = z.object({
   /** The new file name WITHOUT extension (one typed WITH it is accepted too —
    *  see {@link renameStem}). */
   newName: z.string().min(1),
+  /** The character this project is linked to, when the caller knows — the scan
+   *  store is per character, and a renamed project has to take its scan with
+   *  it. Absent = the rename still happens, the scan is simply left behind
+   *  (and re-earned on the next Rescan). */
+  projectId: z.string().default(''),
+  id: z.string().default(''),
 })
 
 /**
@@ -292,7 +301,7 @@ function renameStem(typed: string, ext: string): string {
  * project (or the same project's other build), and a rename is not a merge.
  */
 export async function renameHoudiniProject({ data }: { data: unknown }): Promise<string> {
-  const { hipPath, newName } = renameProjectInput.parse(data)
+  const { hipPath, newName, projectId, id } = renameProjectInput.parse(data)
   const norm = hipPath.replace(/\\/g, '/')
   const cut = norm.lastIndexOf('/')
   // A path with no folder in it cannot be renamed in place, and must REFUSE
@@ -329,6 +338,18 @@ export async function renameHoudiniProject({ data }: { data: unknown }): Promise
     throw new Error(`“${clean}${ext}” already exists in that folder.`)
   }
   await rename(hipPath, dest)
+  // The scan follows the file. Every reader keys on the path, so without this
+  // a rename silently un-scans the project — measured: the DTH Export dialog
+  // stopped pre-selecting Unreal projects and asked for a Rescan nobody had a
+  // reason to suspect. Best-effort: a cache that cannot be updated is a rescan
+  // later, never a failed rename.
+  if (projectId && id) {
+    try {
+      await followRenamedScan(projectId, id, hipPath, dest)
+    } catch {
+      // see above — the rename itself already succeeded
+    }
+  }
   return dest
 }
 
@@ -570,6 +591,12 @@ const houdiniExportInput = charScopeInput.extend({
   remaining: z.array(z.string()).default([]),
   reportLines: z.array(z.string()).default([]),
   anyFailed: z.boolean().default(false),
+  /** Linked `.uproject`s to hand the finished export to, once the WHOLE queue
+   *  is done. Carried here for the same reason as the queue itself: the send
+   *  happens minutes later, in a window that may have reloaded since. */
+  unrealProjects: z.array(z.string()).default([]),
+  /** The export sets to hand over (the user's tick list). */
+  unrealSets: z.array(z.string()).default([]),
 })
 
 /**
@@ -629,6 +656,9 @@ const houdiniRunPlanSchema = z.object({
   reportLines: z.array(z.string()).default([]),
   /** Whether any leg so far failed — the report's tone. */
   anyFailed: z.boolean().default(false),
+  /** The Unreal projects this run finishes into (see the input's own field). */
+  unrealProjects: z.array(z.string()).default([]),
+  unrealSets: z.array(z.string()).default([]),
 })
 
 export type HoudiniRunPlan = z.infer<typeof houdiniRunPlanSchema>
@@ -771,7 +801,9 @@ export interface HoudiniExportStarted {
  * 2026-08-11: the live progress chip replaced "watching it happen", headless
  * kills the window/paint fragility class, and the full console — C++ cook
  * chatter included — lands in a per-run log the in-process tee could never
- * see). "Open only" still opens the visible GUI, through `openScene`.
+ * see). Opening a project to LOOK at it is a different action entirely — the
+ * Houdini project cards do that, through `openScene`, and it never comes
+ * through here.
  *
  * The scripts are rewritten on EVERY run rather than installed once: they are
  * small, must track the app version, and a self-repairing copy needs no marker
@@ -788,7 +820,7 @@ export async function startHoudiniExport({
 }: {
   data: unknown
 }): Promise<HoudiniExportStarted> {
-  const { projectId, id, hipPath, scenes, remaining, reportLines, anyFailed } =
+  const { projectId, id, hipPath, scenes, remaining, reportLines, anyFailed, unrealProjects, unrealSets } =
     houdiniExportInput.parse(data)
   if (!isTauri()) throw new Error('Export too needs the desktop app (it launches Houdini).')
 
@@ -848,7 +880,8 @@ export async function startHoudiniExport({
     exportDirectory: joinPath(location.folderAbs, normalizeRelFolder(project.exportSubdir)),
     scenesRootAbs,
     // This Houdini instance exists to carry the batch — 456.py closes it again
-    // after the final result lands ("Open only" never reaches this code path).
+    // after the final result lands. A project the user opened themselves is a
+    // different instance entirely and is never touched by this.
     closeWhenDone: true,
   })
   if (job.scenes.length === 0) {
@@ -912,6 +945,8 @@ export async function startHoudiniExport({
     sceneScope: scenes,
     reportLines,
     anyFailed,
+    unrealProjects,
+    unrealSets,
   })
   return { jobFile, scenes: job.scenes.length }
 }

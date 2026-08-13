@@ -164,6 +164,10 @@ export const unrealProjectStateSchema = z.object({
   engineAssociation: z.string(),
   dthPresent: z.boolean(),
   installedPlugins: z.array(z.string()),
+  /** The installed DTH Character Studio Runner's `Version`, or 0 for "no bridge" (see
+   *  `bridgeOutdated`). Defaulted: the studio SHIPS that plugin, so this field
+   *  is newer than some stored answers, and 0 is the right reading there too. */
+  bridgeVersion: z.number().default(0),
 })
 
 export const poseAssetFramesSchema = z.object({
@@ -466,6 +470,14 @@ export const materialScanProjectSchema = z.object({
    *  entry stored before this field existed is legitimate, and empty means
    *  "not known" there — never "imports nothing". */
   imports: z.array(z.string()).default([]),
+  /** The EXPORT-SET names this project writes — every export node's
+   *  `character_name`, which is the folder the HDA creates under the
+   *  character's `export/` and therefore the set that reaches Unreal. Read in
+   *  the same pass as the imports. Defaulted, and empty means **not known**
+   *  (an entry stored before this field existed, or a project the scan has
+   *  never reached) — never "writes nothing": a reader that treated it as the
+   *  latter would quietly decide a run produces no export set at all. */
+  exportSets: z.array(z.string()).default([]),
   /** What a repath would do to this project's stored file references. */
   refs: projectRefInfoSchema,
   /** Which DazToHue parms the studio could fill here, and which this DazToHue

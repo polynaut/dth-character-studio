@@ -165,7 +165,7 @@ test('the live Houdini button is inert — Ctrl is the way out of its watch', as
   await expect(page.getByText(/keeps running in the background/)).toBeVisible()
   await expect(page.getByRole('button', { name: 'DTH Export' })).toBeVisible()
   await expect(page.locator('[data-task]')).toHaveCount(0)
-  await expect(page.locator('[data-export-log]')).toHaveCount(0)
+  await expect(page.locator('[data-export-status]')).toHaveCount(0)
 
   // Nothing was deleted under Houdini — its job file is still there for the
   // run that is still working through it.
@@ -194,4 +194,41 @@ test('houdini only: a scene with no export on disk is disabled and blocks Start'
   await expect(page.getByRole('button', { name: 'Start' })).toBeDisabled()
 
   expect(await unhandledCommands(page)).toEqual([])
+})
+
+test('changing the Mode keeps a selection the user made themselves', async ({ page }) => {
+  // Each Daz mode has its own "outstanding work" rule, and switching used to
+  // re-run it over the whole list — so picking one scene and then changing the
+  // dropdown re-checked every scene the new mode liked, and the Houdini list
+  // (which follows the scenes) came along. Seeding is a courtesy for an
+  // untouched list; after that it is the user's list.
+  const seed = buildSeed({
+    activeProjectFile: P.dcsp,
+    demo: true,
+    houdiniProject: true,
+    extraScene: true,
+  })
+  // Both scenes have an export on disk, so "Skip Daz" would seed BOTH.
+  seed.files[`${P.exportDir}/KiraDefault_G9_GP/Kira.dth`] = '{}'
+  seed.files[`${P.exportDir}/KiraSummertide_G9_GP/Kira_KiraSummertide_G9_GP.dth`] = '{}'
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+  await page.getByRole('button', { name: 'DTH Export' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.waitFor()
+
+  // One scene, by hand.
+  const primary = dialog.getByRole('checkbox', { name: /Export KiraDefault/ })
+  const extra = dialog.getByRole('checkbox', { name: /Export KiraSummertide/ })
+  await extra.uncheck()
+  await primary.check()
+
+  await dialog.locator('#daz-mode').click()
+  await page.getByRole('option', { name: /Skip Daz/ }).click()
+
+  // Still exactly what was picked.
+  await expect(primary).toBeChecked()
+  await expect(extra).not.toBeChecked()
 })

@@ -898,6 +898,17 @@ export function installTauriMock(seed: TauriMockSeed): void {
           // a fixture .uproject that isn't JSON reads as "no association"
         }
         const pluginsDir = `${dir}/Plugins`
+        // The studio's own plugin carries a version, and a project keeps
+        // whatever was installed into it — 0 when there is none to read.
+        let bridgeVersion = 0
+        try {
+          const manifest = JSON.parse(
+            mustRead(`${pluginsDir}/DTHCharacterStudioRunner/DTHCharacterStudioRunner.uplugin`),
+          ) as { Version?: unknown }
+          bridgeVersion = typeof manifest.Version === 'number' ? manifest.Version : 0
+        } catch {
+          // no bridge, or an unreadable one — the same answer either way
+        }
         return {
           engineAssociation,
           dthPresent: isDir(`${dir}/Content/DazToHue`),
@@ -907,8 +918,13 @@ export function installTauriMock(seed: TauriMockSeed): void {
                 .map((e) => e.name)
                 .sort()
             : [],
+          bridgeVersion,
         }
       }
+      // No editor in the fake world — which is what makes the auto-open path
+      // reachable in a spec at all.
+      case 'unreal_editor_running':
+        return false
       case 'install_unreal_dth': {
         // The real command copies the release's Unreal content; the fake marks
         // the destination folder so presence probes flip, and answers with a

@@ -730,25 +730,41 @@ older runtimes as stale.
   v72, `dthProgressLog`) append the interior steps on the same per-scene
   scale (`jobStepsForMode`: 5/4/2). `fetchExportRunProgress` parses the log
   (`parseExportProgressLog`/`exportProgressStateFrom`, pure) into
-  `running.step`; the header's `ExportPipelinePanel` (meter row + task cards +
-  tail log) renders both legs. The meters: `current` = the unit under work
-  (Daz = the progress-log percent; Houdini = a stepwise scale, 1 open-project
-  step + 1 per network, because hython's console has phase lines but no
-  percents), plus an `overall` bar ONLY when the leg spans several units
-  (scenes / networks). The multi-network current bar estimates within the
-  active network from the HDA's phase-line count (measured: 9 on a full node
-  run), capped at 95% — an estimate, not a contract.
-  Display division of labor (deliberate, user-driven): the NUMBERED task
-  cards carry the scene/project identity, the meters carry percent and NOTHING
-  else, and the log window is a pure line tail whose newest line IS the status
-  (exportProgressStateFrom strips the `[pct]` bracket and `<stem>: ` prefix
-  for display — the on-disk format is unchanged). `ExportProgressBar.label`
-  survives as data, not display: it keys the per-step `sinceMs` clock. The
-  overall bar's old "Scenes 0/2" caption was REMOVED (Remo, 2026-08-12) — the
-  card column already is that queue, and the caption indented its track out of
-  line with the current bar's. The scripts log step START
-  markers too ("generating ROM", …) at the already-reached percent. No
-  mid-run toasts: the one report fires at the very end.
+  `running.step`; the header's `ExportPipelinePanel` renders every leg.
+  **THE DISPLAY IS ONE TASK LIST + ONE BAR** (Remo, 2026-08-13 — it was a
+  card column, a tail-mode log window and a two-level meter row, three
+  readouts saying the same thing three ways):
+  - **ONE ROW PER JOB**, built by the pure `lib/rom/export-cards.ts`
+    (`dazTaskCards`/`houdiniTaskCards`/`unrealTaskCards`): a selected Daz scene
+    (subtitle = `EXPORT_MODE_LABELS[mode]`, "ROM + Export"…), a DazToHue
+    NETWORK (not a `.hip`), an export set going into ONE Unreal project — two
+    sets into one project are two imports, so two rows. Rows carry
+    `label` (the unit's own name), `detail` (what will happen to it) and
+    `context` (where — the `.hip`, the `.uproject`). Finished rows STAY, ticked
+    off; the list is the whole run, not what's left.
+  - **ONE bar**, `runPercent(tasks, activeFraction)`: finished rows plus the
+    active one's own share (Daz = the progress-log percent; Houdini = the HDA's
+    phase-line count over ~9, measured on a full node run, capped at 95%;
+    Unreal = a flat 0.5 while importing — it has no signal). Rows are counted
+    EQUAL, which they are not (a ROM build is tens of minutes, an import is
+    seconds) — nothing here can weigh them, and equal steps are at least
+    predictable. With no rows at all the active fraction IS the answer.
+  - **ONE status line** printed on the bar: the newest thing the run said, and
+    only that (`exportProgressStateFrom` strips the `[pct]` bracket and
+    `<stem>: ` prefix for display — the on-disk format is unchanged; the HDA's
+    own lines keep their `Houdini; ` prefix, since they say nothing about
+    where they came from). The transcript is GONE with the log window: per-leg
+    full output lives on disk (Runner progress log, `.dth_houdini_console.log`,
+    the Unreal editor log), which is where a post-mortem was read anyway.
+  Honesty rules the rows keep: a Daz row shows no mode when the window only
+  ADOPTED the run (a job file carries rows, never the dialog's choice — hence
+  `ExportRunProgress.mode`, restored from the sidecar for the owner); an Unreal
+  row says "Re-import"/"First import" only from the send plan's own probe
+  (`UnrealSendPlan.located`, refined by `startUnrealImport`'s per-set
+  `existing`), and a plain "Import" when nobody looked.
+  The scripts log step START markers too ("generating ROM", …) at the
+  already-reached percent. No mid-run toasts: the one report fires at the very
+  end.
   Both live buttons are INERT to a plain click (a stray one used to drop the
   watch, reading as "the export vanished") and reveal their escape hatch on
   **Ctrl**: Abort on the Daz leg, Stop watching on the Houdini one — which
@@ -758,11 +774,11 @@ older runtimes as stale.
   hython keeps running either way (the toast says so).
   RELOAD SURVIVAL: every character handoff writes its plan to the app-data
   sidecar `export-run.json` (characterId, startedAtMs, houdiniProjects/mode,
-  scenes; deleted on every run end). The owning character's editor passes its
-  id as `fetchExportRunProgress`'s watcher and RESTORES the full watch from
-  the sidecar after a reload — clock, cards (re-armed from the run's `rows` +
-  plan) and the Export-too continuation, which previously died silently with
-  the window's memory. Non-owners get display-only adoption, itself rebuilt
+  scenes, the Daz `mode`, the Unreal targets/sets; deleted on every run end).
+  The owning character's editor passes its id as `fetchExportRunProgress`'s
+  watcher and RESTORES the full watch from the sidecar after a reload — clock,
+  rows (re-armed from the run's `rows` + plan) and the Export-too continuation,
+  which previously died silently with the window's memory. Non-owners get display-only adoption, itself rebuilt
   from disk (`rows` + the progress log). The Runner must never learn of the
   sidecar — it rewrites the job file from its own model, so anything stored
   IN the job file beyond the v1.2.0 contract would be dropped at pickup.
@@ -789,11 +805,10 @@ older runtimes as stale.
   never restore a run the user just stopped watching.
   What a restored window inherits is PRE-FORMATTED lines (`carried` on the run
   report), never entries in the `houdini` array: that array's LENGTH is "how
-  many Houdini projects have finished" and drives the task cards, so folding
-  the inherited Daz line into it marked the RUNNING project's card done the
-  moment a restore landed. `toBeVisible` could not see that — a done card is
-  visible throughout its fly-out — which is why the smoke asserts
-  `data-task-status` instead.
+  many Houdini projects have finished" and drives the task rows, so folding
+  the inherited Daz line into it marked the RUNNING project's row done the
+  moment a restore landed. `toBeVisible` cannot see that — a finished row stays
+  in the list — which is why the smoke asserts `data-task-status` instead.
   Mid-NODE the result also carries a live `activity` channel: 456.py's
   `ActivityCapture` tees `sys.stdout`/`stderr` + `hou.ui.setStatusMessage` while
   `do_export` runs and streams the lines (throttled 0.5 s, rolling 40) into the
@@ -979,6 +994,85 @@ older runtimes as stale.
   folders survive, failed deletes stay recorded for retry. Clearing
   `exportPath` deletes nothing (those are the user's last exports), it only
   drops the record.
+- **The Unreal-side `.dth` is a JSON manifest naming its own outputs**
+  (MEASURED on three real exports, `dth_version` 2.5): keys `character_name`,
+  `skinning_method`, `source_skeleton`/`target_skeleton`, and the collections
+  `skeletal_meshes` (each `{file, materials, name}` — `file` is the ABSOLUTE
+  path of `<export>/<Character>/Skeletal Meshes/SKM_<Character>.fbx`),
+  `animation_curves` (`{file, type}`, `.txt`), plus `cloth_panels`,
+  `cloth_panel_proxies`, `detached_props`, `collision_proxy` and `pose_assets`
+  — all EMPTY in every export seen here, so their shapes are unknown.
+  `dthExportFiles` (unreal-jobs.ts) therefore walks the whole manifest for
+  strings ending in `.fbx` instead of reading `skeletal_meshes`: it costs
+  nothing and covers the sections nobody has measured. Not to be confused with
+  the Daz-side `.dth` under `daz-export/`, which names the Daz→Houdini
+  intermediates the HDA READS.
+- **A Houdini run NAMES its networks before it exports them** (456.py's
+  `targets` in the result file: node path, scene, and the title of the network
+  box around it). The task rows are one per network, and could previously only
+  label the ones already finished — everything ahead read "Network 2" where the
+  user had a name. The box title wins: a multi-network project's nodes are all
+  `DazToHueExport`, `…1`, `…2`, and the box comment (NOT `name()`, which is an
+  internal id) is the only human-meaningful label the setup has — the same rule
+  the scan's `_network_box_label` measured. An older 456.py sends no targets,
+  and then only finished networks can be named, which is the pre-existing
+  behaviour rather than a guess.
+- **A character has EXPORT SETS, not "an export".** `<export>/<name>/DTH_<name>.dth`,
+  where `<name>` is the HDA's `character_name` parm — the USER's, not the
+  studio's. Measured: `LaraCroft_G81` has `LaraCroft`, `LaraClassic` and
+  `LaraNaked`, none of them the character's name. So `unrealExportSets`
+  (api/unreal-import.ts) SCANS for them; the earlier
+  `DTH_<character.name>.dth` guess found nothing on the first real character.
+  One job carries every set (`imports[]`), because the handoff is a single job
+  file and a second write replaces a pending one — but the run's TASK LIST
+  still shows one row per set, because that is one import each.
+- **A Houdini project declares the export SETS it writes** (`exportSets` on the
+  project scan — each export node's `character_name`, which the HDA
+  concatenates onto `export_directory`). Read in the scan pass beside
+  `imports`, because opening a `.hip` is the expensive part and it is already
+  open. Empty = NOT KNOWN (an unscanned project, or a scan entry stored before
+  the field existed) — never "writes nothing", and the dialog's `runSets`
+  collapses to `null` on one unknown project so every rule falls back instead
+  of concluding the run produces nothing. Without it "does this Unreal project
+  have what THIS RUN makes?" was unanswerable and the pre-selection asked "does
+  it have ANY set of this character?" — which ticked a project for a run about
+  to export a variant it had never seen.
+- **The DTH Export dialog's third leg** (`unrealProjects`): selected Unreal
+  projects ride the Daz run record AND the Houdini run plan — the send fires
+  when the whole Houdini queue drains, minutes later, possibly in a reloaded
+  window, so both sidecars carry it or a reload drops it silently. Pre-selection
+  is `fetchUnrealSendPlan`, which is `locateSets` (see the entry below) run once
+  per linked project: NOT a `Content/DazToHue/<set>` existence check — the whole
+  point is that it finds a set the user MOVED. A project is ticked when it holds
+  a set THIS RUN will write (`runSets`), never merely a set of this character.
+  The studio cannot read an editor's asset registry from out here, so a set
+  whose assets were RENAMED reads as absent — un-ticking a row the user can
+  tick, never ticking one they didn't mean.
+  Two rules the dialog enforces on top, both earned: a **rom-only** run is not
+  sendable at all (it writes no export, so the send could only hand over the
+  previous one while the run reads as this ROM reaching Unreal), and a ticked
+  project with NO ticked export set refuses Start rather than starting a run
+  whose Unreal leg silently does not exist.
+- **The STUDIO decides where a re-import lands, not the bridge.** MEASURED
+  2026-08-13, first real end-to-end run: the bridge's asset-registry lookup
+  (`get_tag_value('AssetImportData')`) found nothing and imported a second copy
+  into `/Game/DazToHue/LaraClassic`, beside the `/Game/Characters/Lara` the user
+  already had. The match DATA was never missing — the `.uasset` header names
+  exactly the FBX the job carries:
+
+      SKM_LaraClassic.uasset → RelativeFilename ".../export/LaraClassic/Skeletal Meshes/SKM_LaraClassic.fbx"
+
+  So the API call was the weak link and the filesystem is not. `locateSets`
+  (api/unreal-import.ts) BFS-walks `Content/` for `*_<set>.uasset` (every asset
+  the pipeline creates is `<PREFIX>_<set>`), maps `Content/X/Y` → `/Game/X/Y`
+  via `unrealContentPath`, and the job (`UNREAL_JOB_VERSION` 4) carries that as
+  `destination` + `existing: true`. The bridge then imports where it is told;
+  its registry search survives only as the fallback for `existing: false`.
+  Measured cost on the real project: 195 folder reads, capped at 2000.
+  It always imports the **`.dth`**, never the FBX files directly — the `.dth`
+  is what triggers mrpdean's pipeline (materials, curves, post-process ABP);
+  the file list is for FINDING assets, not for importing. Two folders holding
+  one set (a leftover duplicate) makes the pick arbitrary — first found wins.
 - **Housekeeping's orphan GCs** (app launch + "Clean up now",
   api/maintenance.ts): per-project `.dcsmeta` character dirs + avatars, and —
   since the deferred-findings pass — per-character SCRIPT dirs in the Daz

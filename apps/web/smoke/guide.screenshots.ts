@@ -720,14 +720,14 @@ test('dth-export-running', async ({ page }) => {
     },
     [pendingJob, runningJob, `${P.appData}/export-progress.log`],
   )
-  // Wait for the poll to have digested all of it: the newest line in the window
-  // and the per-scene meter on its percent (0 → 40 is the shot's whole point).
-  await expect(page.locator('[data-export-log]')).toContainText('Exporting character', {
+  // Wait for the poll to have digested all of it: the status line on the newest
+  // message, and the bar off 0 (a run visibly under way is the shot's point).
+  await expect(page.locator('[data-export-status]')).toHaveText('Exporting character', {
     timeout: 15_000,
   })
-  await expect(page.locator('[data-progressbar="current"]')).toHaveAttribute('data-percent', '40')
+  await expect(page.locator('[data-progressbar="run"]')).not.toHaveAttribute('data-percent', '0')
   // Close the "Started Daz Studio" toast the way a user would — it sits over
-  // the log window, which is the whole subject of this shot.
+  // the task list, which is the whole subject of this shot.
   const toast = page.locator('[data-sonner-toast]')
   await toast.first().locator('[data-close-button]').click()
   await expect(toast).toHaveCount(0)

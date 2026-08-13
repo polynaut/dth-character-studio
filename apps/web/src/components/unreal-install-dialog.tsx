@@ -18,11 +18,13 @@ import {
   createUnrealProject,
   detectUnrealEngines,
   fileExists,
+  installUnrealBridge,
   installUnrealDthContent,
   installUnrealPlugin,
   scanUnrealPlugins,
   unrealProjectState,
 } from '#/lib/rom/api.ts'
+import { UNREAL_BRIDGE_FOLDER, UNREAL_BRIDGE_NAME } from '#/lib/rom/unreal-jobs.ts'
 import {
   EMPTY_UNREAL_SCAN,
   allPluginBuilds,
@@ -44,19 +46,27 @@ function uprojectDisplayName(uprojectPath: string): string {
   return fileName.replace(/\.[^./\\]+$/, '')
 }
 
-/** The checklist's non-plugin entry — DTH content is always offered. */
+/** The two entries that are not a scanned plugin build — always offered, and
+ *  both engine-independent (content, and a content-only Python plugin). */
 const DTH_CONTENT_KEY = 'dth-content'
+const DTH_BRIDGE_KEY = 'dth-bridge'
+/** Pre-checked even when the project's engine is unknown, unlike a build. */
+const ENGINE_FREE_KEYS = [DTH_CONTENT_KEY, DTH_BRIDGE_KEY]
 
 interface ChecklistItem {
-  /** DTH_CONTENT_KEY, or the plugin build's path (unique per build). */
+  /** One of the two keys above, or the plugin build's path (unique per build). */
   key: string
   label: string
   /** The muted badge: the content target, or the build's engine label. */
   detail: string
   /** Already in the project — a check reinstalls (overwrites) it. */
   installed: boolean
-  /** Absent for the DTH content entry. */
+  /** Absent for the studio's own two entries (content and bridge). */
   plugin?: UnrealPluginSource
+  /** Ships INSIDE the app rather than coming from the user's plugin folders —
+   *  said out loud on the row, because every other line in this list is
+   *  something they downloaded and pointed the studio at. */
+  builtIn?: boolean
   /** Its binaries were built against a DIFFERENT engine build than the one this
    *  project uses — Unreal will refuse to load it. Such an item is listed but
    *  never pre-checked (same rule as an unknown engine association). */
@@ -85,6 +95,16 @@ function buildItems(
       detail: 'Content/DazToHue',
       installed: state?.dthPresent ?? false,
     },
+    {
+      // The studio's own plugin, installed like any other rather than appearing
+      // on its own the first time a character is sent. Content-only Python, so
+      // it fits every engine and carries no build to mismatch.
+      key: DTH_BRIDGE_KEY,
+      label: 'DTH Character Studio Runner',
+      detail: UNREAL_BRIDGE_FOLDER,
+      installed: installed.has(UNREAL_BRIDGE_NAME.toLowerCase()),
+      builtIn: true,
+    },
     ...builds.map((plugin) => ({
       key: plugin.path,
       label: plugin.name,
@@ -105,6 +125,18 @@ interface InstallOutcome {
   dthInstalled: boolean
 }
 
+/** What one item's install is, by key — three destinations, one uniform "how
+ *  many files" answer so every row reports the same way. */
+function installItem(item: ChecklistItem, uprojectPath: string): Promise<number> {
+  if (item.plugin) {
+    return installUnrealPlugin({
+      data: { pluginPath: item.plugin.path, uprojectPath, overwrite: true },
+    })
+  }
+  if (item.key === DTH_BRIDGE_KEY) return installUnrealBridge({ data: { uprojectPath } })
+  return installUnrealDthContent({ data: { uprojectPath, overwrite: true } })
+}
+
 /** Run every checked item, sequentially (installs write into one project —
  *  parallel copies buy nothing and interleave errors). One failure does not
  *  stop the rest: each item is its own verdict. `overwrite: true` throughout —
@@ -119,13 +151,9 @@ async function runChecked(
   for (const item of items) {
     if (!checked.has(item.key)) continue
     try {
-      const files = item.plugin
-        ? await installUnrealPlugin({
-            data: { pluginPath: item.plugin.path, uprojectPath, overwrite: true },
-          })
-        : await installUnrealDthContent({ data: { uprojectPath, overwrite: true } })
+      const files = await installItem(item, uprojectPath)
       outcome.installed.push(`${item.label} (${files} file${files === 1 ? '' : 's'})`)
-      if (!item.plugin) outcome.dthInstalled = true
+      if (item.key === DTH_CONTENT_KEY) outcome.dthInstalled = true
     } catch (e) {
       outcome.failed.push({
         key: item.key,
@@ -174,6 +202,18 @@ function InstallChecklist({
             <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
               <span className="font-medium">{item.label}</span>
               <span className="rounded bg-muted px-1 py-0.5 text-xs font-medium">{item.detail}</span>
+              {/* Every other row is a plugin the USER downloaded and pointed
+                  the studio at; this one comes out of the app itself, and
+                  where a build came from is the first thing you want to know
+                  about a row you didn't put there. */}
+              {item.builtIn && (
+                <span
+                  className="rounded bg-primary/15 px-1 py-0.5 text-xs font-medium text-primary"
+                  title="Ships with DTH Character Studio — it is what Send to Unreal hands its jobs to. Not from your plugin folders."
+                >
+                  built in
+                </span>
+              )}
               {item.installed && (
                 <span className="text-xs text-muted-foreground">
                   installed — a check overwrites it
@@ -198,6 +238,12 @@ function InstallChecklist({
       ))}
     </ul>
   )
+}
+
+/** Whether the checklist holds any SCANNED build — the studio's own two entries
+ *  are always there and don't count as "plugins were found". */
+function hasPluginBuilds(items: ReadonlyArray<ChecklistItem>): boolean {
+  return items.some((item) => item.plugin !== undefined)
 }
 
 /** The dashed hint when the scan offered no plugin builds. */
@@ -258,12 +304,13 @@ export function UnrealInstallDialog({
       setItems(list)
       // Everything pre-checked — the user unchecks. Two exceptions, same
       // reasoning both times (never pre-check what cannot be known to work):
-      // an UNKNOWN engine leaves only the engine-independent DTH content, and
-      // a build whose binaries are for another engine build is left off.
+      // an UNKNOWN engine leaves only the engine-independent items (DTH content
+      // and the bridge — neither carries a binary), and a build whose binaries
+      // are for another engine build is left off.
       setChecked(
         new Set(
           version === null
-            ? [DTH_CONTENT_KEY]
+            ? ENGINE_FREE_KEYS
             : list.filter((item) => !item.buildMismatch).map((item) => item.key),
         ),
       )
@@ -321,6 +368,12 @@ export function UnrealInstallDialog({
                 <code>Plugins/</code>.
               </p>
               <p>
+                <strong>DTH Character Studio Runner</strong> is the studio&apos;s own small plugin (pure
+                Python, no binaries): it lets <em>Send to Unreal</em> hand this project a
+                character&apos;s Houdini export. Unreal loads plugins at startup, so restart the
+                editor once after installing it.
+              </p>
+              <p>
                 Plugins come from your configured folders (Settings → General →{' '}
                 <strong>Unreal Engine Plugins</strong>), matched to this project&apos;s engine
                 version — read from its <code>.uproject</code> when this dialog opens.
@@ -371,7 +424,7 @@ export function UnrealInstallDialog({
               })
             }
           />
-          {items.length === 1 && <NoPluginsHint />}
+          {!hasPluginBuilds(items) && <NoPluginsHint />}
           <div className="flex justify-end gap-2">
             <Button variant="ghost" disabled={busy} onClick={onClose}>
               Cancel
@@ -651,7 +704,7 @@ export function UnrealGenerateDialog({
                   })
                 }
               />
-              {items.length === 1 && <NoPluginsHint />}
+              {!hasPluginBuilds(items) && <NoPluginsHint />}
             </div>
           )}
           <div className="flex justify-end gap-2">

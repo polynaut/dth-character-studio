@@ -26,10 +26,7 @@ import {
   scanConfigJson,
   formatClock,
   formatElapsed,
-  hipSelectionAfterToggle,
   hipsForSelectedScenes,
-  stampLogLines,
-  houdiniModeForSelection,
   scenesMissingExport,
   scenesMissingRomAnimation,
   staleExportFolders,
@@ -572,35 +569,6 @@ describe('preCheckedScenes — the dialog pre-selection per mode', () => {
   })
 })
 
-describe('houdiniModeForSelection — Open only is a single-project affair', () => {
-  it('flips open → export-selected when a second project joins', () => {
-    expect(houdiniModeForSelection('open', 2)).toBe('export-selected')
-  })
-  it('keeps every other combination', () => {
-    expect(houdiniModeForSelection('open', 1)).toBe('open')
-    expect(houdiniModeForSelection('open', 0)).toBe('open')
-    expect(houdiniModeForSelection('export-selected', 3)).toBe('export-selected')
-    expect(houdiniModeForSelection('export-all', 2)).toBe('export-all')
-  })
-})
-
-describe('hipSelectionAfterToggle — ROM only can only OPEN one project', () => {
-  const A = 'X:/p/Kira/houdini/Kira.hip'
-  const B = 'X:/p/Kira/houdini/KiraSummertide.hip'
-
-  it('replaces the pick under rom-only (radio), toggles everywhere else', () => {
-    // A rom-only run writes no fresh export, so only single-project "Open
-    // only" is legal — a second pick must not grow a selection no mode runs.
-    expect(hipSelectionAfterToggle('rom-only', new Set([A]), B)).toEqual(new Set([B]))
-    expect(hipSelectionAfterToggle('rom-export', new Set([A]), B)).toEqual(new Set([A, B]))
-    expect(hipSelectionAfterToggle('houdini-only', new Set([A]), B)).toEqual(new Set([A, B]))
-  })
-
-  it('unchecks normally in every mode', () => {
-    expect(hipSelectionAfterToggle('rom-only', new Set([A]), A)).toEqual(new Set())
-    expect(hipSelectionAfterToggle('export-only', new Set([A, B]), B)).toEqual(new Set([A]))
-  })
-})
 
 describe('formatElapsed — the run clock/total, three widths', () => {
   it('seconds, minutes and hours each keep their shape', () => {
@@ -683,36 +651,6 @@ describe('hipsForSelectedScenes — which projects a scene selection involves', 
     expect(hipsForSelectedScenes([slimHip, bothHip], [], new Set(), [SLIM, THICK])).toEqual(
       new Set(),
     )
-  })
-})
-
-describe('stampLogLines — first-seen [HH:MM:SS] prefixes across polls', () => {
-  it('keeps earlier stamps when the tail extends, stamps only the new lines', () => {
-    const store = { lines: [], stamps: [] }
-    expect(stampLogLines(store, ['a', 'b'], '10:00:00')).toEqual(['[10:00:00] a', '[10:00:00] b'])
-    expect(stampLogLines(store, ['a', 'b', 'c'], '10:00:05')).toEqual([
-      '[10:00:00] a',
-      '[10:00:00] b',
-      '[10:00:05] c',
-    ])
-  })
-
-  it('re-anchors a ROLLING window by its last known line', () => {
-    const store = { lines: [], stamps: [] }
-    stampLogLines(store, ['a', 'b', 'c'], '10:00:00')
-    // The window rolled: 'a' fell off the front, 'd' arrived.
-    expect(stampLogLines(store, ['b', 'c', 'd'], '10:00:05')).toEqual([
-      '[10:00:00] b',
-      '[10:00:00] c',
-      '[10:00:05] d',
-    ])
-  })
-
-  it('an empty tail resets the store; unrecognized content restamps fresh', () => {
-    const store = { lines: [], stamps: [] }
-    stampLogLines(store, ['a'], '10:00:00')
-    expect(stampLogLines(store, [], '10:00:01')).toEqual([])
-    expect(stampLogLines(store, ['x'], '10:00:02')).toEqual(['[10:00:02] x'])
   })
 })
 

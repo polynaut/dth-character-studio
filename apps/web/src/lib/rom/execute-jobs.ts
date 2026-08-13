@@ -271,50 +271,6 @@ function stripSceneMessagePrefix(message: string): string {
  *  shows, and a per-scene run works several of them in a row). */
 const SCENE_OPEN_MESSAGES: ReadonlySet<string> = new Set(['opening scene', 'scene opened'])
 
-/** First-seen stamps for a rolling/appending line tail, carried across polls
- *  by the caller. */
-export interface StampedLogStore {
-  lines: Array<string>
-  stamps: Array<string>
-}
-
-/**
- * Prefix each log line with the `[HH:MM:SS]` at which the STUDIO first saw it
- * (the on-disk log carries no timestamps — poll-first-seen is the honest
- * approximation, so several lines landing in one poll share a stamp). `store`
- * keeps the stamps across polls; both legs' tails only ever extend at the end
- * (and roll off the front), so the previous tail is re-anchored by its LAST
- * line and everything beyond it is new. An empty `next` resets the store.
- */
-export function stampLogLines(
-  store: StampedLogStore,
-  next: Array<string>,
-  now: string,
-): Array<string> {
-  if (next.length === 0) {
-    store.lines = []
-    store.stamps = []
-    return []
-  }
-  let overlap = 0
-  if (store.lines.length > 0) {
-    const lastPrev = store.lines[store.lines.length - 1]
-    for (let i = next.length - 1; i >= 0; i--) {
-      if (next[i] === lastPrev) {
-        overlap = i + 1
-        break
-      }
-    }
-  }
-  const stamps: Array<string> = []
-  for (let i = 0; i < next.length; i++) {
-    stamps.push(i < overlap ? (store.stamps[store.lines.length - overlap + i] ?? now) : now)
-  }
-  store.lines = [...next]
-  store.stamps = stamps
-  return next.map((line, i) => `[${stamps[i]}] ${line}`)
-}
-
 export function exportProgressStateFrom(
   parsed: Array<ExportProgressLine>,
   keep = 40,
@@ -382,6 +338,19 @@ export const EXPORT_MODES = ['rom-export', 'rom-only', 'export-only'] as const
 export type ExportMode = (typeof EXPORT_MODES)[number]
 
 /**
+ * What each Daz mode is CALLED, in the user's words — one spelling for the
+ * dialog's Mode dropdown and for the run's Daz task cards, which say what the
+ * run is about to do to each scene. Two spellings of "ROM + Export" would be
+ * two things to keep in step, and the card is read while the dropdown that
+ * chose it is long closed.
+ */
+export const EXPORT_MODE_LABELS: Record<ExportMode, string> = {
+  'rom-export': 'ROM + Export',
+  'rom-only': 'ROM only',
+  'export-only': 'Export only',
+}
+
+/**
  * Everything the dialog's Daz **Mode** dropdown can pick: the three Daz-side
  * {@link ExportMode}s plus `houdini-only` ("Skip Daz — use last exports"),
  * which never reaches `executeCharacterJobs` at all — no Daz run, no Runner.
@@ -395,56 +364,33 @@ export type ExportMode = (typeof EXPORT_MODES)[number]
 export type RunChoice = ExportMode | 'houdini-only'
 
 /**
- * The Houdini list's **Mode** dropdown — what the selected Houdini projects do
- * once their turn comes (after the Daz batch, or immediately in skip mode):
+ * The Houdini list's **Mode** dropdown — what the Houdini leg does:
  *
- * - `open` — just open the (single) project, run nothing. Only offered while
- *   EXACTLY one project is selected ({@link houdiniModeForSelection}): several
- *   Houdini instances opened "just to look at" is never what anyone meant.
- * - `export-selected` — run the projects' DazToHue exports for the CHECKED Daz
- *   scenes. The default the moment a project joins the run.
- * - `export-all` — run them for EVERY linked scene, whatever is checked.
+ * - `export-selected` — run the checked projects' DazToHue exports for the
+ *   CHECKED Daz scenes. The default, and for a long time the only thing this
+ *   dropdown really offered.
+ * - `skip` — run no Houdini at all; the run's Unreal leg hands over the LAST
+ *   exports as they stand on disk. Offered only when the studio project has a
+ *   linked `.uproject`, because without one "skip Houdini" means "do nothing".
+ *
+ * Two modes that used to sit here are gone (v0.77):
+ * - `open` — opened one project and ran nothing. The Houdini project cards open
+ *   a project on their own, so this was a second way to do the same thing
+ *   inside a dialog whose job is running a pipeline.
+ * - `export-all` — exported every LINKED scene instead of the checked ones. The
+ *   scene list is right above it: "export all" is what checking every scene
+ *   means, and two ways to say one thing invite picking the wrong one.
  */
-export const HOUDINI_RUN_MODES = ['open', 'export-selected', 'export-all'] as const
+export const HOUDINI_RUN_MODES = ['export-selected', 'skip'] as const
 export type HoudiniRunMode = (typeof HOUDINI_RUN_MODES)[number]
-
-/**
- * THE "Open only needs exactly one project" rule: picking a second project
- * under `open` flips the mode to `export-selected` (the default run) rather
- * than refusing the pick — the user asked for more projects, not a dead end.
- * Every other combination keeps the current mode.
- */
-export function houdiniModeForSelection(current: HoudiniRunMode, selected: number): HoudiniRunMode {
-  return current === 'open' && selected > 1 ? 'export-selected' : current
-}
-
-/**
- * THE "ROM only drives no Houdini export" rule, applied to the project
- * checkboxes: a ROM-only run writes no fresh `.dth`, so an export continuation
- * would re-consume the PREVIOUS exports while the report reads as "the new ROM
- * reached Houdini" — the misleading-success this studio exists to avoid. Under
- * `rom-only` the Houdini list can only OPEN a project, and open is
- * single-project ({@link houdiniModeForSelection}) — so its checkbox behaves
- * like a radio: picking another project REPLACES the pick instead of growing a
- * multi-selection no mode could legally run. Every other Daz mode toggles.
- * Unchecking works the same everywhere.
- */
-export function hipSelectionAfterToggle(
-  mode: RunChoice,
-  prev: ReadonlySet<string>,
-  hip: string,
-): Set<string> {
-  if (prev.has(hip)) {
-    const next = new Set(prev)
-    next.delete(hip)
-    return next
-  }
-  return mode === 'rom-only' ? new Set([hip]) : new Set([...prev, hip])
-}
 
 /** What one linked Houdini project imports, as the scan recorded it. */
 export interface HoudiniProjectImports {
   hipPath: string
+  /** The export-set names this project WRITES (each export node's
+   *  `character_name`). Empty = not known, never "writes none" — see the scan
+   *  schema's own note. */
+  exportSets?: Array<string>
   /** Every `.dth` its networks import (normalized lowercase) — EMPTY means
    *  "never scanned / not known", never "imports nothing": the scan only
    *  reaches projects inside the character folder, and a `.hip` saved since

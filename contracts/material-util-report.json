@@ -13,18 +13,28 @@
         "d:/chars/kira/houdini/daz-export/kiradefault_g9_gp/kira.dth",
         "d:/chars/kira/houdini/daz-export/kirayoga/kira.dth"
       ],
+      "exportSets": [
+        "KiraDefault",
+        "KiraYoga"
+      ],
       "refs": {
         "collapsible": 131,
         "foreign": 0,
         "broken": [],
-        "hipRelative": ["/obj/DazToHue/DazToHueImport import_character_fbx_file"],
+        "hipRelative": [
+          "/obj/DazToHue/DazToHueImport import_character_fbx_file"
+        ],
         "missingTextures": [
           "d:/daz 3d/my daz 3d library/runtime/textures/raiya/perfectly_imperfect_5_g9/rypi5_torso1_d_1002.jpg"
         ]
       },
       "prefill": {
-        "fillable": ["/obj/DazToHue/DazToHueImport import_character_rom_fbx_file"],
-        "missing": ["/obj/DazToHue/DazToHuePoseAsset pose_asset_csv_file_path"]
+        "fillable": [
+          "/obj/DazToHue/DazToHueImport import_character_rom_fbx_file"
+        ],
+        "missing": [
+          "/obj/DazToHue/DazToHuePoseAsset pose_asset_csv_file_path"
+        ]
       },
       "nodes": [
         {
@@ -36,8 +46,14 @@
           "uvChannels": 3,
           "bakers": 11,
           "layers": 43,
-          "bakerNames": ["T_Skin_Colour", "T_Skin_Normal"],
-          "materialNames": ["MI_Skin", "Skin"],
+          "bakerNames": [
+            "T_Skin_Colour",
+            "T_Skin_Normal"
+          ],
+          "materialNames": [
+            "MI_Skin",
+            "Skin"
+          ],
           "slots": [
             {
               "name": "Skin",
@@ -49,12 +65,16 @@
               ],
               "bakers": 4,
               "layers": 30,
-              "channelUvs": ["uv_geoshell"]
+              "channelUvs": [
+                "uv_geoshell"
+              ]
             },
             {
               "name": "Dress",
               "displayName": "MI_Dress",
-              "surfaces": ["@fbx_material_name=Dress"],
+              "surfaces": [
+                "@fbx_material_name=Dress"
+              ],
               "bakers": 4,
               "layers": 4,
               "channelUvs": []
@@ -75,9 +95,21 @@
           "materialNames": [],
           "slots": [],
           "sectionCounts": [
-            { "key": "general", "label": "General", "count": 2 },
-            { "key": "skeleton", "label": "Skeleton", "count": 48 },
-            { "key": "skinWeights", "label": "Skin Weights", "count": 3 }
+            {
+              "key": "general",
+              "label": "General",
+              "count": 2
+            },
+            {
+              "key": "skeleton",
+              "label": "Skeleton",
+              "count": 48
+            },
+            {
+              "key": "skinWeights",
+              "label": "Skin Weights",
+              "count": 3
+            }
           ]
         }
       ]
@@ -89,6 +121,7 @@
       "job": "",
       "fps": 0.0,
       "imports": [],
+      "exportSets": [],
       "refs": {
         "collapsible": 0,
         "foreign": 0,
@@ -111,18 +144,47 @@
           "key": "materials",
           "before": 25,
           "after": 11,
-          "evicted": ["Fingernails", "Head", "Body", "Mouth", "Teeth"],
-          "trimmed": ["Body1"]
+          "evicted": [
+            "Fingernails",
+            "Head",
+            "Body",
+            "Mouth",
+            "Teeth"
+          ],
+          "trimmed": [
+            "Body1"
+          ]
         },
-        { "key": "uvChannels", "before": 0, "after": 3, "evicted": [], "trimmed": [] },
-        { "key": "bakers", "before": 0, "after": 4, "evicted": [], "trimmed": [] }
+        {
+          "key": "uvChannels",
+          "before": 0,
+          "after": 3,
+          "evicted": [],
+          "trimmed": []
+        },
+        {
+          "key": "bakers",
+          "before": 0,
+          "after": 4,
+          "evicted": [],
+          "trimmed": []
+        }
       ],
-      "added": ["T_Skin_Colour", "T_Skin_Normal"],
+      "added": [
+        "T_Skin_Colour",
+        "T_Skin_Normal"
+      ],
       "replaced": false,
-      "missingMaterials": ["MI_Skin"],
+      "missingMaterials": [
+        "MI_Skin"
+      ],
       "missingGroups": [],
-      "missingUvSources": ["uv_geoshell"],
-      "unclaimedSurfaces": ["@fbx_material_name=GPVagina"],
+      "missingUvSources": [
+        "uv_geoshell"
+      ],
+      "unclaimedSurfaces": [
+        "@fbx_material_name=GPVagina"
+      ],
       "backupPath": "D:/chars/Ita/houdini/backup/Ita_dthbak.hiplc"
     }
   ],
@@ -180,7 +242,9 @@
           "to": "$JOB/houdini/daz-export/primary/Ita.dth"
         }
       ],
-      "foreign": ["X:/shared/textures/custom_skin.png"],
+      "foreign": [
+        "X:/shared/textures/custom_skin.png"
+      ],
       "backupPath": "D:/chars/Ita/houdini/backup/Ita_dthbak.hiplc"
     }
   ],
@@ -195,8 +259,12 @@
           "value": "$JOB/houdini/daz-export/primary/Ita_experimental_rom.fbx"
         }
       ],
-      "skippedMissing": ["/obj/DazToHue/DazToHuePoseAsset pose_asset_csv_file_path"],
-      "skippedSet": ["/obj/DazToHue/DazToHueImport import_character_dtu_file"],
+      "skippedMissing": [
+        "/obj/DazToHue/DazToHuePoseAsset pose_asset_csv_file_path"
+      ],
+      "skippedSet": [
+        "/obj/DazToHue/DazToHueImport import_character_dtu_file"
+      ],
       "backupPath": "D:/chars/Ita/houdini/backup/Ita_dthbak.hiplc"
     }
   ],
@@ -216,18 +284,32 @@
       "error": "No \"Refresh Assets\" tool was found on the DazToHue shelf.",
       "tool": "",
       "changed": false,
-      "availableTools": ["DazToHue", "Open Documentation"],
+      "availableTools": [
+        "DazToHue",
+        "Open Documentation"
+      ],
       "backupPath": ""
     }
   ],
   "sourceBakers": 4,
   "sourceLayers": 30,
-  "sourceBakerNames": ["T_Skin_Colour", "T_Skin_Normal"],
-  "sections": ["materials", "uvChannels", "bakers"],
-  "materials": ["Skin"],
+  "sourceBakerNames": [
+    "T_Skin_Colour",
+    "T_Skin_Normal"
+  ],
+  "sections": [
+    "materials",
+    "uvChannels",
+    "bakers"
+  ],
+  "materials": [
+    "Skin"
+  ],
   "useLibVar": true,
   "rewrittenPaths": 38,
-  "foreignPaths": ["X:/shared/textures/custom_skin.png"],
+  "foreignPaths": [
+    "X:/shared/textures/custom_skin.png"
+  ],
   "dryRun": false,
   "replace": false
 }

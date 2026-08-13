@@ -168,21 +168,22 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
   }
   expect(pending.progressLogPath).toBe(`${P.appData}/export-progress.log`)
   expect(pending.jobs[0].steps).toBe(5)
-  // The header grew the run's TASK CARDS: the scene, then the Houdini project —
-  // all still waiting (the Runner hasn't picked the batch up yet). The log
-  // window ALREADY stands (empty): while a run is live it must never vanish,
-  // not even in this pending stretch before any lines exist.
+  // The header grew the run's TASK LIST: the scene, then the Houdini project —
+  // all still waiting (the Runner hasn't picked the batch up yet). The scene
+  // row says what the run is about to do to it, which is the whole choice the
+  // dialog made a minute ago.
   await expect(page.locator(`[data-task="daz:${P.scene}"]`)).toBeVisible()
+  await expect(page.locator(`[data-task="daz:${P.scene}"]`)).toContainText('ROM + Export')
   await expect(page.locator(`[data-task="hou:${P.houdini}"]`)).toBeVisible()
-  // …and the log window ALREADY says what is being waited for. Daz was not
-  // running here, so the handoff started it: the opening line says so (an
-  // empty box read as "nothing is happening" while Daz takes its tens of
+  // …and the bar's status line ALREADY says what is being waited for. Daz was
+  // not running here, so the handoff started it: the opening line says so (a
+  // blank line read as "nothing is happening" while Daz takes its tens of
   // seconds to come up).
-  await expect(page.locator('[data-export-log]')).toContainText('Opening Daz Studio')
+  await expect(page.locator('[data-export-status]')).toHaveText('Opening Daz Studio')
 
   // The Runner claims the batch and works the scene: the running job file +
-  // the verbose progress log. The scene card goes ACTIVE, the log window
-  // tails the per-step lines with their percents.
+  // the verbose progress log. The scene row goes ACTIVE and the bar's status
+  // line follows the per-step lines.
   await page.evaluate(
     ([pendingPath, runningPath, progressPath]) => {
       const mock = (window as any).__tauriMock
@@ -207,34 +208,30 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
     },
     [PENDING_JOB, RUNNING_JOB, `${P.appData}/export-progress.log`],
   )
-  // The log window shows display-clean lines (no percent bracket, no scene
-  // prefix — the card carries the scene, the meter the percent), and the
-  // meter's label is the LATEST status text.
-  await expect(page.locator('[data-export-log]')).toContainText('ROM generated', {
+  // ONE status line, display-clean: no percent bracket and no scene prefix
+  // (the row carries the scene, the bar the percent), capitalized — the raw
+  // log line is lowercase — and only the NEWEST one.
+  await expect(page.locator('[data-export-status]')).toHaveText('ROM generated', {
     timeout: 15_000,
   })
-  // Display-capitalized ("Scene opened") — the raw log line is lowercase.
-  await expect(page.locator('[data-export-log]')).toContainText('Scene opened')
   await expect(page.locator(`[data-task="daz:${P.scene}"]`)).toHaveAttribute(
     'data-task-status',
     'active',
   )
-  // The numbered card: chronological ordinal, stable for the whole run.
+  // The numbered row: chronological ordinal, stable for the whole run.
   await expect(page.locator(`[data-task="daz:${P.scene}"]`)).toContainText('1.')
-  // The meter row above: a single-scene run shows ONE bar, riding the same
-  // per-scene percent the log lines carry — no overall bar for a one-unit leg.
-  await expect(page.locator('[data-progressbar="current"]')).toHaveAttribute('data-percent', '40')
-  // The newest line IS the status — the log window carries it, stamped.
-  await expect(page.locator('[data-export-log]')).toContainText(/\d+:\d{2}\] ROM generated/)
-  await expect(page.locator('[data-progressbar="overall"]')).toHaveCount(0)
+  // ONE bar, and it measures the WHOLE run: two rows (a scene + a project),
+  // the scene 40% through its own steps → 20%.
+  await expect(page.locator('[data-progressbar="run"]')).toHaveAttribute('data-percent', '20')
+  await expect(page.locator('[data-progressbar]')).toHaveCount(1)
   // …and picked up + finished by the Runner. NO toast on the baton pass (a
   // mid-run toast reads as an outcome) and NO finish toast yet — the batch
   // outcome is stashed for the one end-of-everything report.
   await runnerFinishesBatch(page)
   await expect(page.getByText(/Starting the Houdini export/)).toHaveCount(0)
   await expect(page.getByText(/DTH Export finished/)).toHaveCount(0)
-  // The baton passed: the Houdini project's card is the active one now (the
-  // finished scene card has tetris'd away).
+  // The baton passed: the Houdini project's row is the active one now (the
+  // scene row stays in the list, ticked off).
   await expect(page.locator(`[data-task="hou:${P.houdini}"]`)).toHaveAttribute(
     'data-task-status',
     'active',
@@ -287,31 +284,27 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
   expect(await fileKeys(page)).toContain(`${scriptsDir}/headless_export.py`)
 
   // Mid-node, the result's `activity` channel carries what the HDA is saying —
-  // the log window tails the captured lines (no caption row) and the meter's
-  // label shows the newest one. The chip itself stays a constant "Working"
-  // (counts live in the panel's meters + the tooltip).
+  // the status line shows the NEWEST captured line and nothing else. The chip
+  // itself stays a constant "Working" (the numbers live in the panel).
   await houdiniReportsExporting(page)
-  // Prefixed with the app they came from — the HDA's own lines say only
-  // "DazToHue: …", while the studio's status lines name their app themselves.
-  await expect(page.locator('[data-export-log]')).toContainText('Houdini; Baking textures 3/12…', {
-    timeout: 15_000,
-  })
-  await expect(page.locator('[data-export-log]')).toContainText('Houdini; Importing Alembic…')
-  // …and the DAZ half is still there above it: the run is one story, so the
-  // finished leg's lines stay in the transcript instead of being replaced.
-  await expect(page.locator('[data-export-log]')).toContainText('ROM generated')
-  // Including each leg's own opening line — the HDA's first word used to
-  // REPLACE "Opening Houdini", which is the moment the run gets interesting.
-  await expect(page.locator('[data-export-log]')).toContainText('Opening Houdini (hython)')
-  await expect(page.locator('[data-export-log]')).toContainText('Opening Daz Studio')
+  // Prefixed with the app it came from — the HDA's own lines say nothing about
+  // WHERE, while the studio's own status lines name their app themselves.
+  await expect(page.locator('[data-export-status]')).toHaveText(
+    'Houdini; Baking textures 3/12…',
+    { timeout: 15_000 },
+  )
   await expect(page.getByRole('button', { name: /Working/ })).toBeVisible()
-  // The Houdini meter is STEPWISE — open-project + each network, all equal
-  // (hython's console has no percents to read): 1 network → 2 steps, the open
-  // one done → 50%. One network = one bar, no overall; its label is the
-  // latest captured line.
-  await expect(page.locator('[data-progressbar="current"]')).toHaveAttribute('data-percent', '50')
-  await expect(page.locator('[data-export-log]')).toContainText('Houdini; Baking textures 3/12…')
-  await expect(page.locator('[data-progressbar="overall"]')).toHaveCount(0)
+  // …and the run's own list is still the whole story: the finished Daz scene
+  // is ticked off above the Houdini row being worked.
+  await expect(page.locator(`[data-task="daz:${P.scene}"]`)).toHaveAttribute(
+    'data-task-status',
+    'done',
+  )
+  // ONE bar, over the whole run: the scene row is done and the Houdini row is
+  // roughly a fifth in (2 of the ~9 phase lines a full node run emits — the
+  // only signal hython's console gives) → (1 + 0.22) / 2.
+  await expect(page.locator('[data-progressbar="run"]')).toHaveAttribute('data-percent', '61')
+  await expect(page.locator('[data-progressbar]')).toHaveCount(1)
 
   // 456.py works through it and reports — and NOW the one summary toast fires,
   // covering the whole process: the Daz leg and the Houdini leg, per line.
@@ -328,21 +321,22 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
   // in the character folder for good.
   await expect.poll(() => fileKeys(page)).not.toContain(HOUDINI_JOB)
   expect(await fileKeys(page)).not.toContain(HOUDINI_RESULT)
-  // The run is over — the task cards and the meters left with it.
+  // The run is over — the task list and its meter left with it.
   await expect(page.locator('[data-task]')).toHaveCount(0)
   await expect(page.locator('[data-progressbar]')).toHaveCount(0)
 
   expect(await unhandledCommands(page)).toEqual([])
 })
 
-test('a reloaded window ADOPTS the in-flight batch — cards from the rows, log from the file', async ({
+test('a reloaded window ADOPTS the in-flight batch — rows from the job file, status from the log', async ({
   page,
 }) => {
   // The batch is already running when the window opens (a reload mid-run, or
   // another window's run): no armed watch, no memory of the start — the whole
-  // display must be rebuilt from what is ON DISK. The card comes from the job
-  // file's own rows, the log window and meter from the global progress log;
-  // only the Houdini queue and the elapsed clock (memory-only) stay absent.
+  // display must be rebuilt from what is ON DISK. The row comes from the job
+  // file's own rows, the status line and bar from the global progress log; the
+  // Houdini queue, the elapsed clock and the run's MODE (memory-only, or on a
+  // sidecar this window has no claim to) stay absent.
   const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true })
   seed.files[RUNNING_JOB] = JSON.stringify({
     version: 1,
@@ -378,17 +372,22 @@ test('a reloaded window ADOPTS the in-flight batch — cards from the rows, log 
     'active',
     { timeout: 15_000 },
   )
-  await expect(page.locator('[data-export-log]')).toContainText('ROM generated')
-  await expect(page.locator('[data-progressbar="current"]')).toHaveAttribute('data-percent', '40')
+  await expect(page.locator('[data-export-status]')).toHaveText('ROM generated')
+  // One row, 40% into its own steps — the whole run, as far as this window can
+  // see it.
+  await expect(page.locator('[data-progressbar="run"]')).toHaveAttribute('data-percent', '40')
+  // …and it does NOT claim to know what the run does to that scene: an adopted
+  // window reads a job file, which never carried the dialog's choice.
+  await expect(page.locator(`[data-task="daz:${P.scene}"]`)).not.toContainText('ROM + Export')
   await expect(page.locator('[data-task^="hou:"]')).toHaveCount(0)
   await expect(page.getByRole('button', { name: /Working/ })).toBeVisible()
 
   // …and it LETS GO again. The batch's owner finishes it and deletes the job
   // file; this window's poll then finds nothing — and since an adoption owns
   // no outcome, that null is the only signal it ever gets. Without an explicit
-  // clear the cards, the log window and a still-ticking meter hung in the
-  // header for good (the poll interval stops with the watch, so nothing would
-  // ever come back to tidy them).
+  // clear the rows and a still-ticking meter hung in the header for good (the
+  // poll interval stops with the watch, so nothing would ever come back to
+  // tidy them).
   await page.evaluate(
     ([running]) => {
       ;((window as any).__tauriMock.files as Map<string, string>).delete(running)
@@ -396,7 +395,7 @@ test('a reloaded window ADOPTS the in-flight batch — cards from the rows, log 
     [RUNNING_JOB],
   )
   await expect(page.locator('[data-task]')).toHaveCount(0, { timeout: 15_000 })
-  await expect(page.locator('[data-export-log]')).toHaveCount(0)
+  await expect(page.locator('[data-export-status]')).toHaveCount(0)
   await expect(page.locator('[data-progressbar]')).toHaveCount(0)
   await expect(page.getByRole('button', { name: /Working/ })).toHaveCount(0)
 })
@@ -520,14 +519,13 @@ test('a reload whose FIRST poll finds the batch finished still shows the Houdini
   await expect(page.locator(`[data-task="hou:${P.houdini}"]`)).toBeVisible()
 })
 
-test('rom only: the Houdini list can only OPEN — no auto-select, no export continuation', async ({
+test('rom only: the Houdini list cannot export — no auto-select, no continuation', async ({
   page,
 }) => {
   // A ROM-only run writes no fresh `.dth`, so an export continuation would
   // re-consume the PREVIOUS exports while the report reads as "the new ROM
   // reached Houdini". The dialog therefore never auto-selects projects under
-  // ROM only, offers Open only as the one live Houdini mode — and the batch
-  // ends with the project OPENING, not exporting: no Houdini job, no launch.
+  // ROM only and the export mode is dead — the batch ends with the ROM build.
   const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true, dazInstallFolder: DAZ_INSTALL })
   // ROM only runs the visible ROM-animation build script, not the bulk export.
   seed.files[`${SCRIPTS_ROOT}/Demo/Kira/.Build_ROM_Animation.dsa`] = '// rom-build fixture'
@@ -546,20 +544,16 @@ test('rom only: the Houdini list can only OPEN — no auto-select, no export con
   await page.getByRole('option', { name: /ROM only/ }).click()
   await expect(page.getByRole('checkbox', { name: /Run in Kira/ })).not.toBeChecked()
 
-  // Re-picking a project by hand is allowed — but only to OPEN it: the mode
-  // lands on Open only and both export modes are dead.
+  // Re-picking a project by hand is allowed, but it cannot export: the mode
+  // lands on Skip Houdini and the export mode is dead.
   await page.getByRole('checkbox', { name: /Run in Kira/ }).check()
-  await expect(page.locator('#houdini-mode')).toHaveText(/Open only/)
+  await expect(page.locator('#houdini-mode')).toHaveText(/Skip Houdini/)
   await page.locator('#houdini-mode').click()
   await expect(page.getByRole('option', { name: /Export selected scenes/ })).toHaveAttribute(
     'aria-disabled',
     'true',
   )
-  await expect(page.getByRole('option', { name: /Export all/ })).toHaveAttribute(
-    'aria-disabled',
-    'true',
-  )
-  await page.getByRole('option', { name: /Open only/ }).click()
+  await page.keyboard.press('Escape')
   await page.getByRole('button', { name: 'Start' }).click()
 
   // The Daz batch is the ROM build…
@@ -567,14 +561,12 @@ test('rom only: the Houdini list can only OPEN — no auto-select, no export con
   expect(await fileContent(page, PENDING_JOB)).toContain('.Build_ROM_Animation.dsa')
   await runnerFinishesBatch(page)
 
-  // …and its finish IS the report (opening is not a watched leg): the project
-  // opens like an Explorer double-click, and no Houdini job ever exists.
+  // …and its finish IS the report: no Houdini job, no launch, nothing opened.
   await expect(page.getByText(/DTH Export finished — 1 scene exported/)).toBeVisible({
     timeout: 15_000,
   })
-  await expect(page.getByText(/Opening the Houdini project/)).toBeVisible()
-  await expect.poll(() => callsNamed(page, 'shell_open_file')).toEqual([{ path: P.houdini }])
   expect(await callsNamed(page, 'launch_houdini_job')).toEqual([])
+  expect(await callsNamed(page, 'shell_open_file')).toEqual([])
   expect(await fileKeys(page)).not.toContain(HOUDINI_JOB)
 
   expect(await unhandledCommands(page)).toEqual([])

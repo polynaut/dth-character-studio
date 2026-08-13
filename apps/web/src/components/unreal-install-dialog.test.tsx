@@ -54,6 +54,7 @@ const installUnrealDthContent = vi.fn(
 const installUnrealPlugin = vi.fn(
   async (_: { data: { pluginPath: string; uprojectPath: string; overwrite: boolean } }) => 5,
 )
+const installUnrealBridge = vi.fn(async (_: { data: { uprojectPath: string } }) => 3)
 const createUnrealProject = vi.fn(
   async (_: { data: { parentDir: string; name: string; engineVersion: string } }) => ({
     uprojectPath: 'D:/UE/New/New.uproject',
@@ -74,6 +75,7 @@ vi.mock('#/lib/rom/api.ts', () => ({
   installUnrealPlugin: (args: {
     data: { pluginPath: string; uprojectPath: string; overwrite: boolean }
   }) => installUnrealPlugin(args),
+  installUnrealBridge: (args: { data: { uprojectPath: string } }) => installUnrealBridge(args),
   createUnrealProject: (args: { data: { parentDir: string; name: string; engineVersion: string } }) =>
     createUnrealProject(args),
   detectUnrealEngines: () => detectUnrealEngines(),
@@ -86,18 +88,22 @@ import { UnrealGenerateDialog, UnrealInstallDialog } from './unreal-install-dial
 const UPROJECT = 'C:/UE/Game/Game.uproject'
 
 describe('UnrealInstallDialog', () => {
-  it('pre-checks DTH content + the builds matching the project engine', async () => {
+  it('pre-checks DTH content, the bridge, and the builds matching the project engine', async () => {
     render(<UnrealInstallDialog uprojectPath={UPROJECT} onClose={() => {}} onInstalled={() => {}} />)
     await waitFor(() => expect(screen.getByText('DTH content')).toBeTruthy())
 
     // Engine read from the .uproject; the 5.6 build is filtered out — ONE
-    // DazToUnreal row (the 5.7 build), plus the any-engine tool.
+    // DazToUnreal row (the 5.7 build), plus the any-engine tool, plus the
+    // studio's own two engine-independent entries.
     expect(screen.getByText('Unreal Engine 5.7')).toBeTruthy()
     const boxes = screen.getAllByRole('checkbox') as Array<HTMLInputElement>
-    expect(boxes).toHaveLength(3)
+    expect(boxes).toHaveLength(4)
     expect(boxes.every((box) => box.checked)).toBe(true)
+    expect(screen.getByText('Plugins/DTHCharacterStudioRunner')).toBeTruthy()
     expect(screen.getByText('DazToUnreal')).toBeTruthy()
     expect(screen.getByText('AnyTool')).toBeTruthy()
+    // Exactly one row is the app's own — the scanned builds must not claim it.
+    expect(screen.getAllByText('built in')).toHaveLength(1)
   })
 
   it('installs the checked items with overwrite and reports back', async () => {
@@ -126,6 +132,31 @@ describe('UnrealInstallDialog', () => {
     expect(onInstalled).toHaveBeenCalledWith(true)
   })
 
+  it('installs the bridge from the checklist — and says when the project has it', async () => {
+    // The studio's own plugin is an ITEM, not a side effect of sending a
+    // character: it lands in the user's `Plugins/` only because they ticked it,
+    // and a project that already has it says so like any other install.
+    unrealProjectState.mockResolvedValueOnce({
+      engineAssociation: '5.7',
+      dthPresent: false,
+      installedPlugins: ['DTHCharacterStudioRunner'],
+    })
+    render(<UnrealInstallDialog uprojectPath={UPROJECT} onClose={() => {}} onInstalled={() => {}} />)
+    await waitFor(() => expect(screen.getByText('Plugins/DTHCharacterStudioRunner')).toBeTruthy())
+
+    const row = screen.getByText('Plugins/DTHCharacterStudioRunner').closest('label')!
+    expect(row.textContent).toContain('Plugins/DTHCharacterStudioRunner')
+    // Marked as OURS: every other row is a plugin the user downloaded and
+    // pointed the studio at, and this one arrives out of the app itself.
+    expect(row.textContent).toContain('built in')
+    expect(row.textContent).toContain('installed — a check overwrites it')
+    expect(row.querySelector('input')!.checked).toBe(true)
+
+    fireEvent.click(screen.getByRole('button', { name: /Install$/ }))
+    await waitFor(() => expect(installUnrealBridge).toHaveBeenCalledTimes(1))
+    expect(installUnrealBridge.mock.calls[0][0].data).toEqual({ uprojectPath: UPROJECT })
+  })
+
   it('lists every build UNCHECKED when the engine association is a source-build GUID', async () => {
     unrealProjectState.mockResolvedValueOnce({
       engineAssociation: '{1AC42E62-5A4F-2D31-A3C4-9DA2BBBB78A2}',
@@ -136,11 +167,12 @@ describe('UnrealInstallDialog', () => {
     await waitFor(() => expect(screen.getByText('DTH content')).toBeTruthy())
 
     expect(screen.getByText(/Engine version unknown/)).toBeTruthy()
-    // ALL builds listed (both DazToUnreal builds + AnyTool + DTH content)…
+    // ALL builds listed (both DazToUnreal builds + AnyTool + the studio's two)…
     const boxes = screen.getAllByRole('checkbox') as Array<HTMLInputElement>
-    expect(boxes).toHaveLength(4)
-    // …but only the engine-independent DTH content starts checked.
-    expect(boxes.filter((box) => box.checked)).toHaveLength(1)
+    expect(boxes).toHaveLength(5)
+    // …but only the engine-independent pair starts checked: DTH content and the
+    // bridge carry no binaries, so an unknown engine cannot make them wrong.
+    expect(boxes.filter((box) => box.checked)).toHaveLength(2)
   })
 
   it('marks and unchecks a build whose binaries are for another engine build', async () => {
@@ -155,9 +187,9 @@ describe('UnrealInstallDialog', () => {
     expect(screen.getByText(/built for another engine build/)).toBeTruthy()
     const kawaii = screen.getByText('KawaiiPhysics').closest('label')!.querySelector('input')!
     expect(kawaii.checked).toBe(false)
-    // DTH content is engine-independent and stays ticked.
+    // DTH content and the bridge are engine-independent and stay ticked.
     const boxes = screen.getAllByRole('checkbox') as Array<HTMLInputElement>
-    expect(boxes.filter((box) => box.checked)).toHaveLength(1)
+    expect(boxes.filter((box) => box.checked)).toHaveLength(2)
   })
 
   it('offers the build that FITS when two of them look identical by label', async () => {
@@ -176,7 +208,7 @@ describe('UnrealInstallDialog', () => {
     expect(screen.getAllByText('KawaiiPhysics')).toHaveLength(1)
     expect(screen.queryByText(/built for another engine build/)).toBeNull()
     const boxes = screen.getAllByRole('checkbox') as Array<HTMLInputElement>
-    expect(boxes).toHaveLength(2)
+    expect(boxes).toHaveLength(3)
     expect(boxes.every((box) => box.checked)).toBe(true)
 
     fireEvent.click(screen.getByRole('button', { name: /Install$/ }))
@@ -196,11 +228,12 @@ describe('UnrealInstallDialog', () => {
     // A failed item keeps the dialog open, and the state is re-read from disk.
     await waitFor(() => expect(unrealProjectState).toHaveBeenCalledTimes(2))
     expect(onClose).not.toHaveBeenCalled()
-    // Only the FAILED items stay checked for the retry — the succeeded DTH
-    // content is unchecked, so a second Install redoes just what went wrong.
+    // Only the FAILED items stay checked for the retry — the DTH content and
+    // bridge that succeeded are unchecked, so a second Install redoes just what
+    // went wrong.
     await waitFor(() => {
       const boxes = screen.getAllByRole('checkbox') as Array<HTMLInputElement>
-      expect(boxes.map((box) => box.checked)).toEqual([false, true, true])
+      expect(boxes.map((box) => box.checked)).toEqual([false, false, true, true])
     })
   })
 })
@@ -280,9 +313,9 @@ describe('UnrealGenerateDialog', () => {
     const boxes = screen.getAllByRole('checkbox') as Array<HTMLInputElement>
     const kawaii = screen.getByText('KawaiiPhysics').closest('label')!.querySelector('input')!
     expect(kawaii.checked).toBe(false)
-    // …while the engine-independent DTH content is still ticked: the warning is
-    // about ONE build, not a reason to install nothing.
-    expect(boxes.filter((box) => box.checked)).toHaveLength(1)
+    // …while the engine-independent DTH content and bridge are still ticked:
+    // the warning is about ONE build, not a reason to install nothing.
+    expect(boxes.filter((box) => box.checked)).toHaveLength(2)
   })
 
   it('says so when no engine is detected instead of offering a dead Create', async () => {
