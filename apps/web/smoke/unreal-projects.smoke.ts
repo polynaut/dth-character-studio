@@ -75,3 +75,70 @@ test('the install dialog offers DTH content + the engine-matched plugin builds',
   await expect(page.getByText(/DazToUnreal \(3 files\)/)).toBeVisible()
   await expect(dialog).toHaveCount(0)
 })
+
+test('the install dialog judges plugin builds by BuildId, not by their folder name', async ({
+  page,
+}) => {
+  // The whole path, unmocked above the native boundary: the fake's wire shape →
+  // the zod schema → `buildUnrealScan` → the dialog. The component tests can't
+  // prove this stretch — they mock `detectUnrealEngines` — and it is precisely
+  // where the check was inert once already (a mapper that named its fields
+  // dropped `buildId` on the way to the UI). See `.ai/gotchas.md`.
+  const plugins = 'D:/Unreal Plugins'
+  const ue57 = 'C:/Program Files/Epic Games/UE_5.7'
+  const seed = buildSeed({
+    activeProjectFile: P.dcsp,
+    unrealProjects: [UPROJECT], // seeded with EngineAssociation 5.7
+    unrealPluginFolders: [plugins],
+    unrealEngineInstalls: [{ version: '5.7', path: ue57, buildId: '47537391' }],
+    unrealPlugins: [
+      // Underscore-versioned folders: NEITHER reads as a version, so the label
+      // says `any engine` for both and only the BuildId separates them.
+      {
+        name: 'KawaiiPhysics',
+        path: `${plugins}/KawaiiPhysics_5_8_0/Plugins/KawaiiPhysics`,
+        engineVersion: '',
+        sourceFolder: plugins,
+        buildId: '55116800',
+      },
+      // Two builds of ONE plugin, and the alphabetically first is the wrong
+      // one — offering it and hiding the other is the bug this ranking fixes.
+      {
+        name: 'DazToUnreal',
+        path: `${plugins}/DazToUnreal_5_8/Plugins/DazToUnreal`,
+        engineVersion: '',
+        sourceFolder: plugins,
+        buildId: '55116800',
+      },
+      {
+        name: 'DazToUnreal',
+        path: `${plugins}/DazToUnreal_5_7/Plugins/DazToUnreal`,
+        engineVersion: '',
+        sourceFolder: plugins,
+        buildId: '47537391',
+      },
+    ],
+  })
+  seed.files[`${ue57}/Engine/Build/Build.version`] = '{}'
+
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await expect(page.getByText('DemoGame', { exact: true })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Install DTH content and plugins into DemoGame' }).click()
+  const dialog = page.getByRole('dialog', { name: /Install into DemoGame/ })
+  await expect(dialog).toBeVisible()
+
+  // KawaiiPhysics has only a 5.8 build: listed, marked, and NOT pre-checked —
+  // a warning, never a refusal.
+  const kawaii = dialog.locator('li').filter({ hasText: 'KawaiiPhysics' })
+  await expect(kawaii.getByText('built for another engine build')).toBeVisible()
+  await expect(kawaii.getByRole('checkbox')).not.toBeChecked()
+
+  // DazToUnreal has both: exactly one row, unmarked and pre-checked, because
+  // the 5.7-matching build won the pick.
+  const bridge = dialog.locator('li').filter({ hasText: 'DazToUnreal' })
+  await expect(bridge).toHaveCount(1)
+  await expect(bridge.getByText('built for another engine build')).toHaveCount(0)
+  await expect(bridge.getByRole('checkbox')).toBeChecked()
+})

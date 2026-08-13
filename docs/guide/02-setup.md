@@ -129,6 +129,11 @@ create a new project for — and your confirmation that detection sees what the
 launcher sees. An engine whose folder is gone (uninstalled outside the
 launcher) is flagged rather than hidden.
 
+Detection reads **two** sources: the launcher's registry entries and its
+`LauncherInstalled.dat` manifest. Both, because either can be incomplete — a
+machine with 5.6, 5.7 and 5.8 installed had no registry key for 5.8 at all, so
+an engine that was plainly there could not be picked.
+
 ## Setup DTH Release
 
 <p align="center">
@@ -256,6 +261,21 @@ wins — falling back to the `.uplugin`'s own `EngineVersion`; no version
 anywhere means the build is offered for every engine). Nothing installs from
 here: the install dialog on a project's Unreal card does that, per project —
 see [Linking Unreal projects](./03-first-project.md#linking-unreal-projects).
+
+> **A name is a label; the binaries are the truth.** A built plugin carries a
+> **`BuildId`** in `Binaries\Win64\UnrealEditor.modules`, and Unreal refuses to
+> load one whose id differs from the engine's — that is the *"missing or built
+> with a different engine version"* dialog. The install dialog checks it, marks
+> a mismatch **built for another engine build** and leaves it unchecked (you can
+> still tick it; it is a warning, not a refusal). This is the only check that
+> catches a folder whose name says nothing — `KawaiiPhysics_5_7_1_…` writes its
+> version with underscores, so it reads as *any engine* and would otherwise be
+> offered for a project it cannot load in.
+>
+> It also decides **which** build you are offered when two of them look alike:
+> with `KawaiiPhysics_5_7_1_…` and `KawaiiPhysics_5_8_…` both reading as *any
+> engine*, the one whose BuildId matches your project's engine is the one that
+> gets listed.
 
 ## Save
 

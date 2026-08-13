@@ -13,21 +13,41 @@ const state = {
   installedPlugins: [] as Array<string>,
 }
 const unrealProjectState = vi.fn(async (_: { data: { uprojectPath: string } }) => ({ ...state }))
+// `buildId` on every entry — the native scan always sends the field, and a mock
+// that omits it types itself without one, so a per-test override could not
+// express a build id at all (measured: TS2353 on the first test that tried).
 const scanUnrealPlugins = vi.fn(async () => [
   {
     name: 'DazToUnreal',
     path: 'D:/bridge/UE_5.7/Plugins/DazToUnreal',
     engineVersion: '5.7',
     sourceFolder: 'D:/bridge',
+    buildId: '',
   },
   {
     name: 'DazToUnreal',
     path: 'D:/bridge/UE_5.6/Plugins/DazToUnreal',
     engineVersion: '5.6',
     sourceFolder: 'D:/bridge',
+    buildId: '',
   },
-  { name: 'AnyTool', path: 'D:/any/AnyTool', engineVersion: '', sourceFolder: 'D:/any' },
+  {
+    name: 'AnyTool',
+    path: 'D:/any/AnyTool',
+    engineVersion: '',
+    sourceFolder: 'D:/any',
+    buildId: '',
+  },
 ])
+/** The reported shape: an `any engine` build (its folder writes the version
+ *  with underscores, so nothing reads as a version) whose BINARIES are 5.7. */
+const KAWAII = {
+  name: 'KawaiiPhysics',
+  path: 'X:/plugins/KawaiiPhysics_5_7_1_v1.19.1__recompiled/Plugins/KawaiiPhysics',
+  engineVersion: '',
+  sourceFolder: 'X:/plugins',
+  buildId: '47537391',
+}
 const installUnrealDthContent = vi.fn(
   async (_: { data: { uprojectPath: string; overwrite: boolean } }) => 12,
 )
@@ -42,8 +62,8 @@ const createUnrealProject = vi.fn(
 )
 const detectUnrealEngines = vi.fn(async () => ({
   installs: [
-    { version: '5.7', path: 'D:/UE_5.7', name: 'Unreal Engine 5.7', exists: true },
-    { version: '5.6', path: 'D:/UE_5.6', name: 'Unreal Engine 5.6', exists: true },
+    { version: '5.7', path: 'D:/UE_5.7', name: 'Unreal Engine 5.7', exists: true, buildId: '47537391' },
+    { version: '5.6', path: 'D:/UE_5.6', name: 'Unreal Engine 5.6', exists: true, buildId: '43139311' },
   ],
 }))
 vi.mock('#/lib/rom/api.ts', () => ({
@@ -123,6 +143,49 @@ describe('UnrealInstallDialog', () => {
     expect(boxes.filter((box) => box.checked)).toHaveLength(1)
   })
 
+  it('marks and unchecks a build whose binaries are for another engine build', async () => {
+    // The reported failure, in the dialog it actually happened in. This path
+    // has a step the Generate dialog does not — the engine is looked up by the
+    // version the `.uproject` associates (5.7 here) — and a break there would
+    // silently answer "cannot tell" for every build, with nothing to see.
+    scanUnrealPlugins.mockResolvedValueOnce([{ ...KAWAII, buildId: '55116800' }])
+    render(<UnrealInstallDialog uprojectPath={UPROJECT} onClose={() => {}} onInstalled={() => {}} />)
+    await waitFor(() => expect(screen.getByText('KawaiiPhysics')).toBeTruthy())
+
+    expect(screen.getByText(/built for another engine build/)).toBeTruthy()
+    const kawaii = screen.getByText('KawaiiPhysics').closest('label')!.querySelector('input')!
+    expect(kawaii.checked).toBe(false)
+    // DTH content is engine-independent and stays ticked.
+    const boxes = screen.getAllByRole('checkbox') as Array<HTMLInputElement>
+    expect(boxes.filter((box) => box.checked)).toHaveLength(1)
+  })
+
+  it('offers the build that FITS when two of them look identical by label', async () => {
+    // Two `any engine` builds of one plugin — the underscore-versioned folders
+    // the reporter had. Offering one per name is right (one install target),
+    // but picking the alphabetically first one meant offering the unloadable
+    // build and hiding the good one. The BuildId decides.
+    scanUnrealPlugins.mockResolvedValueOnce([
+      { ...KAWAII, path: 'X:/plugins/KawaiiPhysics_5_8_0/Plugins/KawaiiPhysics', buildId: '55116800' },
+      { ...KAWAII, path: 'X:/plugins/KawaiiPhysics_5_7_1/Plugins/KawaiiPhysics', buildId: '47537391' },
+    ])
+    render(<UnrealInstallDialog uprojectPath={UPROJECT} onClose={() => {}} onInstalled={() => {}} />)
+    await waitFor(() => expect(screen.getByText('KawaiiPhysics')).toBeTruthy())
+
+    // ONE row, no warning on it, and pre-checked — it is the 5.7-matching build.
+    expect(screen.getAllByText('KawaiiPhysics')).toHaveLength(1)
+    expect(screen.queryByText(/built for another engine build/)).toBeNull()
+    const boxes = screen.getAllByRole('checkbox') as Array<HTMLInputElement>
+    expect(boxes).toHaveLength(2)
+    expect(boxes.every((box) => box.checked)).toBe(true)
+
+    fireEvent.click(screen.getByRole('button', { name: /Install$/ }))
+    await waitFor(() => expect(installUnrealPlugin).toHaveBeenCalledTimes(1))
+    expect(installUnrealPlugin.mock.calls[0][0].data.pluginPath).toBe(
+      'X:/plugins/KawaiiPhysics_5_7_1/Plugins/KawaiiPhysics',
+    )
+  })
+
   it('stays open and re-probes when an install fails (the checklist must tell the truth)', async () => {
     const onClose = vi.fn()
     installUnrealPlugin.mockRejectedValue(new Error('locked'))
@@ -196,6 +259,30 @@ describe('UnrealGenerateDialog', () => {
       parentDir: 'D:/Perforce/3d-workflow/unreal',
       name: '_3d_workflow',
     })
+  })
+
+  it('does NOT pre-check a build whose binaries are for another engine', async () => {
+    // Exactly the reported failure: a fresh project generated for 5.8, and a
+    // KawaiiPhysics build that matches every project (no version signal) but
+    // carries 5.7 binaries. Installing it produces Unreal's missing-modules
+    // dialog on first open — so the checklist offers it unticked, with the
+    // reason on the row.
+    detectUnrealEngines.mockResolvedValueOnce({
+      installs: [
+        { version: '5.8', path: 'D:/UE_5.8', name: 'Unreal Engine 5.8', exists: true, buildId: '55116800' },
+      ],
+    })
+    scanUnrealPlugins.mockResolvedValueOnce([KAWAII])
+    render(<UnrealGenerateDialog suggestedDir="D:/UE" onClose={() => {}} onGenerated={() => {}} />)
+    await waitFor(() => expect(screen.getByText('KawaiiPhysics')).toBeTruthy())
+
+    expect(screen.getByText(/built for another engine build/)).toBeTruthy()
+    const boxes = screen.getAllByRole('checkbox') as Array<HTMLInputElement>
+    const kawaii = screen.getByText('KawaiiPhysics').closest('label')!.querySelector('input')!
+    expect(kawaii.checked).toBe(false)
+    // …while the engine-independent DTH content is still ticked: the warning is
+    // about ONE build, not a reason to install nothing.
+    expect(boxes.filter((box) => box.checked)).toHaveLength(1)
   })
 
   it('says so when no engine is detected instead of offering a dead Create', async () => {

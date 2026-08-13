@@ -264,10 +264,18 @@ export interface SeedOptions {
    *  what the install dialog's scan reads). */
   unrealPluginFolders?: Array<string>
   /** What `unreal_engine_installs` reports (the detected-engines Settings
-   *  section + the Generate Unreal project dialog). */
-  unrealEngineInstalls?: Array<{ version: string; path: string }>
-  /** Plugin builds the fake `scan_unreal_plugins` finds (see tauri-mock). */
-  unrealPlugins?: Array<{ name: string; path: string; engineVersion: string; sourceFolder: string }>
+   *  section + the Generate Unreal project dialog). `buildId` is the engine's
+   *  own id — what a plugin build's binaries are judged against. */
+  unrealEngineInstalls?: Array<{ version: string; path: string; buildId?: string }>
+  /** Plugin builds the fake `scan_unreal_plugins` finds (see tauri-mock).
+   *  `buildId` is the id its binaries carry; omit for a content-only build. */
+  unrealPlugins?: Array<{
+    name: string
+    path: string
+    engineVersion: string
+    sourceFolder: string
+    buildId?: string
+  }>
   /** settings.json: the DIM manifests folder (Settings → Project product config). */
   dimManifestsFolder?: string
   /** settings.json: the Daz Studio install folder. The DTH Export dialog's

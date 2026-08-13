@@ -1,10 +1,12 @@
 [
   {
     "version": "5.7",
-    "path": "D:/Unreal Library/UE_5.7"
+    "path": "D:/Unreal Library/UE_5.7",
+    "buildId": "47537391"
   },
   {
     "version": "5.6",
-    "path": "C:/Program Files/Epic Games/UE_5.6"
+    "path": "C:/Program Files/Epic Games/UE_5.6",
+    "buildId": ""
   }
 ]

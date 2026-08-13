@@ -20,6 +20,8 @@ export interface UnrealEngineInstall {
   /** Epic's major.minor (`5.7`) — the identity a `.uproject` associates with. */
   version: string
   path: string
+  /** The engine's own `BuildId` — see {@link pluginBuildMismatch}. */
+  buildId?: string
 }
 
 /** An install plus what the studio worked out about it. */
@@ -54,6 +56,51 @@ export interface UnrealPluginSource {
   engineVersion: string
   /** The configured settings folder it was found under. */
   sourceFolder: string
+  /** The `BuildId` its binaries were compiled against — see
+   *  {@link pluginBuildMismatch}. Absent/'' for a plugin with no binaries. */
+  buildId?: string
+}
+
+/**
+ * Whether a plugin build's binaries CANNOT load in a given engine.
+ *
+ * The version match above compares labels — a folder called `UE_5.7`, or a
+ * `.uplugin` field. Unreal itself compares `BuildId`s: the engine's, out of
+ * `Engine/Binaries/Win64/UnrealEditor.modules`, against each plugin's. They
+ * must be equal or the editor reports *"missing or built with a different
+ * engine version"* and offers to rebuild — which a Blueprint-only project
+ * cannot do.
+ *
+ * MEASURED 2026-08-12, and why this exists: a plugin folder named
+ * `Unreal Engine 5.7 Plugin` held binaries built for 5.8. Every label agreed;
+ * only the BuildId disagreed, and it was the one that mattered.
+ *
+ * Returns false whenever either side is unknown (`''`): a plugin with no
+ * binaries has nothing to mismatch, and an engine whose id the studio could not
+ * read is not evidence of anything. Never guess a mismatch — the cost of a
+ * false alarm here is the user unchecking a plugin that would have worked.
+ */
+export function pluginBuildMismatch(
+  plugin: Pick<UnrealPluginSource, 'buildId'>,
+  engine: Pick<UnrealEngineInstall, 'buildId'> | null | undefined,
+): boolean {
+  const pluginId = (plugin.buildId ?? '').trim()
+  const engineId = (engine?.buildId ?? '').trim()
+  if (!pluginId || !engineId) return false
+  return pluginId !== engineId
+}
+
+/** The other half of {@link pluginBuildMismatch}: both ids known and EQUAL —
+ *  positive proof this build loads in this engine, not merely the absence of
+ *  proof that it doesn't. Two different things, and {@link matchPluginsToEngine}
+ *  needs to tell them apart. */
+function pluginBuildAgrees(
+  plugin: Pick<UnrealPluginSource, 'buildId'>,
+  engine: Pick<UnrealEngineInstall, 'buildId'> | null | undefined,
+): boolean {
+  const pluginId = (plugin.buildId ?? '').trim()
+  const engineId = (engine?.buildId ?? '').trim()
+  return pluginId !== '' && pluginId === engineId
 }
 
 /** Numeric dotted compare — `5.7` < `5.10` (which a string compare gets
@@ -71,8 +118,18 @@ function compareVersion(a: string, b: string): number {
   return 0
 }
 
-/** Sort + annotate the raw registry list. Newest first, so the first present
- *  install is also the one to preselect. */
+/**
+ * Sort + annotate the raw registry list. Newest first, so the first present
+ * install is also the one to preselect.
+ *
+ * SPREADS the install rather than naming its fields. Listing them meant a field
+ * added to {@link UnrealEngineInstall} was silently dropped on the way to the
+ * UI — which is exactly what happened to `buildId`: the native side read it,
+ * the schema parsed it, and this function threw it away, so every plugin build
+ * check quietly answered "cannot tell". Nothing caught it, because the dialog
+ * tests mock `detectUnrealEngines` and never run this. A spread makes the next
+ * field arrive on its own.
+ */
 export function buildUnrealScan(
   installs: ReadonlyArray<UnrealEngineInstall>,
   /** Which engine folders are actually on disk (the caller stats them). */
@@ -80,8 +137,7 @@ export function buildUnrealScan(
 ): UnrealEngineScan {
   const found = installs.map(
     (install): UnrealEngineFound => ({
-      version: install.version,
-      path: install.path,
+      ...install,
       name: `Unreal Engine ${install.version}`,
       exists: existing.has(install.path),
     }),
@@ -115,25 +171,64 @@ export function pluginMatchesEngine(plugin: UnrealPluginSource, engineVersion: s
 }
 
 /**
+ * How well one build is KNOWN to fit the engine — the ranking
+ * {@link matchPluginsToEngine} picks by. Higher wins.
+ *
+ * Binary proof outranks a label in BOTH directions, because that is the whole
+ * lesson of `pluginBuildMismatch`: a matching `BuildId` is the engine's own
+ * yes, a differing one is its own no, and a folder name is neither.
+ *
+ * | rank | meaning |
+ * | ---- | ------- |
+ * | 3 | its `BuildId` equals the engine's — proven to load |
+ * | 2 | no BuildId evidence, but it names this exact engine version |
+ * | 1 | no BuildId evidence and no version signal (`any engine`) |
+ * | 0 | its `BuildId` differs from the engine's — proven NOT to load |
+ *
+ * With no BuildIds anywhere only 2 and 1 occur, which is exactly the older
+ * "an exact version beats an any-engine build" rule, unchanged.
+ */
+function buildRank(
+  plugin: UnrealPluginSource,
+  engine: Pick<UnrealEngineInstall, 'buildId'> | null | undefined,
+): number {
+  if (pluginBuildAgrees(plugin, engine)) return 3
+  if (pluginBuildMismatch(plugin, engine)) return 0
+  return plugin.engineVersion === '' ? 1 : 2
+}
+
+/**
  * The one build per plugin NAME that fits the given engine — the install
  * checklist for a project whose engine version is known.
  *
  * One per name because the install target is `Plugins/<name>`: offering two
- * builds of one plugin would offer two writes to the same folder. An exact
- * version match beats an any-engine build; a same-version tie keeps the scan's
- * own order — the Rust scan sorts by name, version, then PATH, so the
- * alphabetically first build path wins, deterministically.
+ * builds of one plugin would offer two writes to the same folder. Which one is
+ * {@link buildRank}; a tie keeps the scan's own order — the Rust scan sorts by
+ * name, version, then PATH, so the alphabetically first build path wins,
+ * deterministically.
+ *
+ * **Pass `engine` whenever it is known.** Without it the choice is made on
+ * labels alone, and MEASURED 2026-08-12 that is not enough: a user with
+ * `KawaiiPhysics_5_7_1_…` and `KawaiiPhysics_5_8_…` side by side has two builds
+ * that BOTH read as `any engine` (the underscores are not a version), so the
+ * alphabetically first — the 5.7 one — was offered to a 5.8 project, marked
+ * unloadable, while the 5.8 build that would have worked was dropped from the
+ * list entirely. Ranking by BuildId picks the one that loads instead of
+ * explaining why the other doesn't.
  */
 export function matchPluginsToEngine(
   plugins: ReadonlyArray<UnrealPluginSource>,
   engineVersion: string,
+  /** The engine this project uses, when the studio found it — its `buildId`
+   *  decides between two builds a label cannot separate. */
+  engine?: Pick<UnrealEngineInstall, 'buildId'> | null,
 ): Array<UnrealPluginSource> {
   const byName = new Map<string, UnrealPluginSource>()
   for (const plugin of plugins) {
     if (!pluginMatchesEngine(plugin, engineVersion)) continue
     const key = plugin.name.toLowerCase()
     const seen = byName.get(key)
-    if (!seen || (seen.engineVersion === '' && plugin.engineVersion !== '')) {
+    if (!seen || buildRank(plugin, engine) > buildRank(seen, engine)) {
       byName.set(key, plugin)
     }
   }
