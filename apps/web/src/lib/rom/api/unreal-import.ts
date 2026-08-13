@@ -76,8 +76,9 @@ const importInput = charScopeInput.extend({
   /** The linked `.uproject` to import into. */
   uprojectPath: z.string().min(1),
   /** Export-set names to send, when the caller knows which ones this run
-   *  produced. Omitted/empty = every set in the character's export folder,
-   *  which is what the character page's panel means by "send". */
+   *  produced. Omitted/empty = every set in the character's export folder —
+   *  what the DTH Export dialog falls back to when the Houdini projects in the
+   *  run have never been scanned, so their set names are unknown. */
   sets: z.array(z.string()).optional(),
 })
 

@@ -78,6 +78,7 @@ import type {
 } from '#/components/character/export-pipeline-panel.tsx'
 import { HOUDINI_CONSOLE_FILE } from '#/lib/rom/houdini-jobs.ts'
 import type { HoudiniRunState } from '#/lib/rom/houdini-jobs.ts'
+import { unrealDestinationFor } from '#/lib/rom/unreal-jobs.ts'
 import type { UnrealImportState } from '#/lib/rom/unreal-jobs.ts'
 import type { ExportMode, HoudiniRunMode, RunChoice } from '#/lib/rom/execute-jobs.ts'
 import type { Character } from '@dth/rom'
@@ -710,9 +711,10 @@ export function DthExportAction({
    * mid-export still sends when the queue drains.
    */
   const unrealTargetsRef = useRef<Array<string>>([])
-  /** WHICH export sets the send hands over — the dialog's tick list. Empty is
-   *  meaningful ("send nothing"), so it travels beside the targets rather than
-   *  defaulting to "everything" anywhere down the line. */
+  /** WHICH export sets the send hands over — the sets THIS RUN puts in play
+   *  (see the dialog's `sendSets`). Empty means the studio could not name them,
+   *  and the send then hands over every set in the character's export folder;
+   *  the targets list is what decides whether anything is sent at all. */
   const unrealSetsRef = useRef<Array<string>>([])
   /**
    * Each linked project's export-set names, from the STORED scan — the only
@@ -770,7 +772,8 @@ export function DthExportAction({
    * in the end report.
    *
    * Runs when the WHOLE Houdini queue has drained: one job file per Unreal
-   * project, each naming every export set the character has. Nothing is
+   * project, each naming the export sets this run put in play (or every set in
+   * the export folder, when the studio could not name them). Nothing is
    * watched afterwards — the send is a file write, and the editor picks it up
    * whenever it is next open (the character page's panel is where a live
    * import is followed).
@@ -1950,11 +1953,13 @@ function UnrealRow({
 }: {
   uproject: string
   checked: boolean
-  /** The project already holds this character (an asset named after one of its
-   *  export sets) — why it comes pre-checked. null = the probe hasn't landed. */
+  /** The project already holds at least one export set THIS RUN is sending it
+   *  (assets named after it) — a re-import, and why the row comes pre-checked.
+   *  null = the probe hasn't landed. */
   has: boolean | null
-  /** This run produces no export, so there is nothing to send — the row goes
-   *  inert rather than sitting there ticked and lying about what Start does. */
+  /** There is nothing for this run to send — it produces no export, or the
+   *  export folder it would hand over is empty. The row goes inert rather than
+   *  sitting there ticked and lying about what Start does. */
   disabled: boolean
   onToggle: () => void
 }) {
@@ -2103,7 +2108,6 @@ function DthExportDialog({
   // The character's export sets + which of them each linked project holds.
   // null = the probe hasn't landed.
   const [sendPlan, setSendPlan] = useState<UnrealSendPlan | null>(null)
-  const [checkedSets, setCheckedSets] = useState<ReadonlySet<string>>(new Set())
 
   useEffect(() => {
     if (unrealProjects.length === 0) return
@@ -2252,20 +2256,6 @@ function DthExportDialog({
   const unrealSendable = mode !== 'rom-only' && (houdiniMode === 'skip' || checkedHips.size > 0)
 
   /**
-   * A ticked Unreal project with NO ticked export set — the one combination
-   * that looks armed and hands over nothing.
-   *
-   * `onExport` drops the projects when no set is ticked (a set list is what a
-   * job carries), so this state used to start a run whose Unreal leg silently
-   * did not exist — and in the send-only run, pressing Start did literally
-   * nothing at all: no send, no rows, no message, dialog closed. It is also the
-   * DEFAULT state of the flow the feature is for: a FIRST import pre-ticks no
-   * set, by design, so the user must tick one. Refusing with a reason beats a
-   * button that lies.
-   */
-  const unrealIncomplete = unrealSendable && checkedUnreal.size > 0 && checkedSets.size === 0
-
-  /**
    * The export sets THIS RUN will produce, or null when the studio cannot say.
    *
    * Each checked Houdini project declares the sets it writes (its export
@@ -2294,6 +2284,56 @@ function DthExportDialog({
           return new Set(known.flatMap((scan) => scan?.exportSets ?? []))
         })()
 
+  /**
+   * WHAT the send hands over: the export sets this run puts in play, or null
+   * when the studio cannot name them (→ every set in the export folder, which
+   * is what an empty `sets` means to `startUnrealImport`).
+   *
+   * **There is no per-set tick list.** There was one, and it was drawn from the
+   * export folder — i.e. from what a PREVIOUS run had written — which made it
+   * an answer to the wrong question. Reported on the run it was built for: a
+   * THICK variant whose Houdini project writes `LaraClassic_THICK` and
+   * `LaraNaked_THICK` offered `LaraClassic` and `LaraNaked` to tick, because
+   * those are what happened to be on disk. The sets the run was ABOUT to make
+   * were not in the list at all, and since a ticked project with no ticked set
+   * held Start, the one thing the picker made impossible was the thing it was
+   * for: putting a new character into an Unreal project. A choice that can only
+   * re-pick the past is not a choice.
+   *
+   * So the run names its own sets. Under `skip` ("use last exports") those ARE
+   * the folder's contents, which is not a prediction; under an export run they
+   * are what the checked Houdini projects declare they write (the stored scan),
+   * and an unscanned project makes the answer null rather than a guess. The
+   * names are shown, so a stale scan is visible before Start rather than a
+   * surprise afterwards.
+   */
+  const sendSets: Array<string> | null =
+    houdiniMode === 'skip'
+      ? (sendPlan?.sets ?? null)
+      : runSets === null
+        ? null
+        : [...runSets].sort()
+
+  /** Does this project already hold something this run is sending it? The
+   *  pre-tick and the row's own subtitle ask exactly that — "has this
+   *  character" is not "has what this run makes". */
+  function holdsSendSet(uproject: string): boolean {
+    const located = sendPlan?.located[uproject] ?? {}
+    if (sendSets === null) return Object.keys(located).length > 0
+    return sendSets.some((name) => located[name] !== undefined)
+  }
+
+  /**
+   * The studio knows what this run puts in play, and it is NOTHING — an empty
+   * export folder under `Skip Houdini`, or checked Houdini projects whose scan
+   * found no export node at all. Nothing to send, so nothing to tick.
+   *
+   * Distinct from `sendSets === null` ("cannot say"), and the distinction has
+   * teeth: an empty list would otherwise travel as `[]`, which the send reads
+   * as "every set in the export folder" — the studio would hand over a stale
+   * export while believing this run writes none.
+   */
+  const nothingToSend = sendSets !== null && sendSets.length === 0
 
   /**
    * The Unreal selection FOLLOWS the Houdini one, the same way the Houdini list
@@ -2313,53 +2353,16 @@ function DthExportDialog({
       return
     }
     setCheckedUnreal(
-      runSets === null && houdiniMode !== 'skip'
+      sendSets === null && houdiniMode !== 'skip'
         ? EMPTY_SELECTION
-        : new Set(
-            unrealProjects.filter((path) =>
-              Object.keys(sendPlan.located[path] ?? {}).some(
-                (name) => runSets === null || runSets.has(name),
-              ),
-            ),
-          ),
+        : new Set(unrealProjects.filter(holdsSendSet)),
     )
     // `unrealProjects` is the prop array, stable per render of the parent.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    // `runSets` is derived from the state this effect already depends on.
+    // `sendSets`/`holdsSendSet` are derived from the state this effect already
+    // depends on.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unrealSendable, sendPlan, houdiniMode, checkedHips, hipImports])
-
-  /**
-   * WHICH export sets go. Ticked = the set is already in one of the ticked
-   * projects (a re-import); a set no ticked project has is a FIRST import and
-   * waits to be asked for — measured the hard way, when a send imported an
-   * outfit variant its owner had never put in that project.
-   *
-   * And only sets THIS RUN produces: picking the THICK scene and its project
-   * pre-ticked a set the run was never going to touch — and the Unreal project
-   * with it — because "has this character" is not "has what this run makes".
-   */
-  useEffect(() => {
-    if (!unrealSendable || sendPlan === null) {
-      setCheckedSets(EMPTY_SELECTION)
-      return
-    }
-    if (runSets === null && houdiniMode !== 'skip') {
-      setCheckedSets(EMPTY_SELECTION)
-      return
-    }
-    setCheckedSets(
-      new Set(
-        sendPlan.sets
-          .filter((name) => runSets === null || runSets.has(name))
-          .filter((name) =>
-            [...checkedUnreal].some((path) => sendPlan.located[path]?.[name] !== undefined),
-          ),
-      ),
-    )
-    // `runSets` is derived from the state this effect already depends on.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [unrealSendable, sendPlan, checkedUnreal, houdiniMode, checkedHips, hipImports])
 
   useEffect(() => {
     let active = true
@@ -2508,9 +2511,16 @@ function DthExportDialog({
       const chosenUnreal = unrealSendable
         ? unrealProjects.filter((path) => checkedUnreal.has(path))
         : []
-      // No set ticked = nothing to send, whatever is ticked above it.
-      const chosenSets = [...checkedSets]
-      const unrealTargets = chosenSets.length > 0 ? chosenUnreal : []
+      // WHICH sets go: the ones this run puts in play. `[]` travels as "every
+      // set in the export folder" — the send's own default, and the honest
+      // answer when the studio cannot name them (see {@link sendSets}). The
+      // ticked projects alone decide whether anything is sent at all.
+      const chosenSets = sendSets ?? []
+      // …and never on a run the studio knows produces nothing: `[]` would then
+      // travel as "send the whole export folder" (see {@link nothingToSend}).
+      // The rows are inert in that state; this is the backstop for a selection
+      // made before the mode changed under it.
+      const unrealTargets = nothingToSend ? [] : chosenUnreal
       // The probe behind the pre-selection, handed up so the run's Unreal rows
       // can say re-import vs first import per project ({@link UnrealSendPlan}).
       const located = sendPlan?.located ?? {}
@@ -2772,12 +2782,8 @@ function DthExportDialog({
                 key={uproject}
                 uproject={uproject}
                 checked={checkedUnreal.has(uproject)}
-                has={
-                  sendPlan === null
-                    ? null
-                    : Object.keys(sendPlan.located[uproject] ?? {}).length > 0
-                }
-                disabled={!unrealSendable}
+                has={sendPlan === null ? null : holdsSendSet(uproject)}
+                disabled={!unrealSendable || nothingToSend}
                 onToggle={() =>
                   setCheckedUnreal((current) => {
                     const next = new Set(current)
@@ -2789,9 +2795,15 @@ function DthExportDialog({
               />
             ))}
           </div>
-          {unrealSendable && sendPlan !== null && sendPlan.sets.length > 0 && (
+          {/* WHAT goes, not WHICH to pick: this run's own export sets and where
+              each one lands. A set the ticked project has is refreshed in
+              place; one it hasn't is a new character in that project, named
+              with the folder it will create — the case the old tick list could
+              not express at all, since it only ever listed what a previous run
+              had already written. */}
+          {unrealSendable && sendSets !== null && sendSets.length > 0 && (
             <ul className="mt-2 space-y-1">
-              {sendPlan.sets.map((name) => {
+              {sendSets.map((name) => {
                 // Where it would land: in the first TICKED project that has it,
                 // or — when nothing is ticked yet — in any linked project that
                 // does. Reading only the ticked ones made every row say "not in
@@ -2799,45 +2811,31 @@ function DthExportDialog({
                 // which is exactly when the user needs the truth to decide.
                 const lookIn = checkedUnreal.size > 0 ? [...checkedUnreal] : unrealProjects
                 const at = lookIn
-                  .map((path) => sendPlan.located[path]?.[name])
+                  .map((path) => sendPlan?.located[path]?.[name])
                   .find((found) => found !== undefined)
                 return (
-                  <li key={name}>
-                    <label className="flex cursor-pointer items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        className="size-4 shrink-0 accent-unreal-blue"
-                        checked={checkedSets.has(name)}
-                        onChange={(e) =>
-                          setCheckedSets((current) => {
-                            const next = new Set(current)
-                            if (e.target.checked) next.add(name)
-                            else next.delete(name)
-                            return next
-                          })
-                        }
-                      />
-                      <span className="font-mono">{name}</span>
-                      {at !== undefined ? (
-                        <span className="text-xs text-muted-foreground">{at}</span>
-                      ) : (
-                        <span className="rounded bg-amber-500/15 px-1 py-0.5 text-xs font-medium text-amber-500">
-                          not in this project
-                        </span>
-                      )}
-                    </label>
+                  <li key={name} data-send-set={name} className="flex items-center gap-2 text-sm">
+                    <span className="font-mono">{name}</span>
+                    {at !== undefined ? (
+                      <span className="text-xs text-muted-foreground">{at}</span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">
+                        new — <span className="font-mono">{unrealDestinationFor(name)}</span>
+                      </span>
+                    )}
                   </li>
                 )
               })}
             </ul>
           )}
-          {unrealSendable && runSets === null && houdiniMode !== 'skip' && (
+          {unrealSendable && sendSets === null && houdiniMode !== 'skip' && (
             <p className="mt-1.5 flex items-start gap-1.5 text-xs text-amber-500">
               <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
               <span>
-                Nothing pre-selected: the studio doesn&apos;t know yet which export set these
-                Houdini projects write. <strong>Rescan</strong> them (Utils drawer) and it will
-                tick what this run actually refreshes.
+                The studio doesn&apos;t know yet which export sets these Houdini projects write,
+                so nothing is pre-selected and <strong>everything</strong> in the export folder
+                would be sent. <strong>Rescan</strong> them (Utils drawer) and it will send only
+                what this run makes.
               </span>
             </p>
           )}
@@ -2848,8 +2846,12 @@ function DthExportDialog({
                   //  take: rom-only cleared that list and runs no Houdini at all.
                   'ROM only writes no export — nothing to send. Run “ROM + Export”, or send the last export with “Skip Daz”.'
                 : 'Needs somewhere to send from: tick a Houdini project, or pick “Skip Houdini”.'
-              : sendPlan !== null && sendPlan.sets.length === 0
-                ? 'Nothing exported yet — this run’s own export can be sent from the character page afterwards.'
+              : nothingToSend
+                ? houdiniMode === 'skip'
+                  ? // "Use last exports" with no last export: the mode hands
+                    //  over what is on disk, and the export folder is empty.
+                    'Nothing in the export folder yet — there is no last export to send. Run the Houdini export instead.'
+                  : 'These Houdini projects write no export set, so this run produces nothing to send.'
                 : 'Queued for import when the whole export finishes — the editor picks it up when it is next open.'}
           </p>
         </div>
@@ -2906,9 +2908,6 @@ function DthExportDialog({
           disabled={
             busy ||
             checking ||
-            // A ticked project with no ticked set sends nothing — true of every
-            // mode, so it gates them all rather than only the send-only run.
-            unrealIncomplete ||
             (mode === 'houdini-only' && houdiniMode === 'skip'
               ? // Neither app runs: the whole run is the send, so the Unreal
                 // pick is the only thing that can gate it.
@@ -2926,11 +2925,7 @@ function DthExportDialog({
                 ? mode === 'houdini-only'
                   ? 'Checking each scene for a Daz export on disk — a moment'
                   : 'Checking each scene for a saved ROM animation — a moment'
-                : unrealIncomplete
-                  ? // Before the mode-specific wording: this one is about the
-                    //  Unreal list whatever the rest of the run is doing.
-                    'Tick an export set to send, or untick the Unreal project'
-                  : mode === 'houdini-only' && houdiniMode === 'skip'
+                : mode === 'houdini-only' && houdiniMode === 'skip'
                   ? // The send-only run's single requirement — the Daz-scene
                     // wording below would name a selection it never reads.
                     checkedUnreal.size === 0

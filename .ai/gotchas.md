@@ -972,6 +972,27 @@ current code before relying on details, but assume the *lesson* still holds.
 
 ## Web app
 
+- **A picker built from the OUTPUT folder can only ever re-pick the past.**
+  Reported 2026-08-13 on the DTH Export dialog's Unreal section: under the
+  project rows sat a tick list of export sets, read from the character's
+  `export/` folder — i.e. from what an EARLIER run wrote. Running the THICK
+  variant (whose Houdini project writes `LaraClassic_THICK` /
+  `LaraNaked_THICK`) offered `LaraClassic` and `LaraNaked` to tick, because
+  those were the folders on disk; the sets the run was about to make appeared
+  nowhere, and a ticked project with no ticked set held Start. The list made
+  its own reason for existing — a FIRST import into an Unreal project —
+  impossible. The fix is not a better list but a different question: the dialog
+  now STATES what the run puts in play (the checked Houdini projects' scanned
+  `exportSets`, or the folder's contents under *Skip Houdini*, which is not a
+  prediction) and where each lands. Generalises: when a control's options come
+  from a past run's artifacts, it cannot express the thing that has not
+  happened yet — and forward-looking work is usually the point. Watch for the
+  tell: an empty selection that is BOTH the default and a blocker.
+  Second, smaller lesson from the same fix: "the studio cannot say" and "the
+  answer is nothing" must not collapse into the same empty array — `[]` reaches
+  `startUnrealImport` as *every set in the export folder*, so a run believed to
+  produce nothing would have handed over a stale export (`sendSets: null` vs
+  `[]`, dth-export.tsx).
 - **A default set in an effect can be cancelled by a handler somewhere else in
   the same component — and nothing fails when it is.** The Utils drawer ticked
   the opened card's nodes on open (#690). #691 made every tab switch clear the

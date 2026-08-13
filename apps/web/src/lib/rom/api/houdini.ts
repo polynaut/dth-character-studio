@@ -596,7 +596,8 @@ const houdiniExportInput = charScopeInput.extend({
    *  is done. Carried here for the same reason as the queue itself: the send
    *  happens minutes later, in a window that may have reloaded since. */
   unrealProjects: z.array(z.string()).default([]),
-  /** The export sets to hand over (the user's tick list). */
+  /** The export sets to hand over — the ones this run puts in play ([] = not
+   *  known, so the send hands over every set in the export folder). */
   unrealSets: z.array(z.string()).default([]),
 })
 

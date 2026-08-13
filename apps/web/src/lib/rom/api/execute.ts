@@ -473,7 +473,8 @@ interface ActiveExportRun {
    *  queue behind this batch has drained ([] = none). Rides the whole run for
    *  the same reason the Houdini plan does: the send is minutes away. */
   unrealProjects: Array<string>
-  /** The export sets to hand over — the dialog's tick list. */
+  /** The export sets to hand over — the ones this run puts in play ([] = not
+   *  known, so the send hands over every set in the export folder). */
   unrealSets: Array<string>
   /** The scenes this batch ran, in job order — the Houdini run exports only
    *  the networks importing THESE scenes, so the list has to survive the batch
@@ -1325,7 +1326,9 @@ const executeInput = charScopeInput.extend({
   /** Linked Unreal projects the finished export is sent to, after the Houdini
    *  queue. [] = none, which is every run that isn't asked for one. */
   unrealProjects: z.array(z.string().min(1)).default([]),
-  /** The export sets to send ([] = nothing, which is a real choice). */
+  /** The export sets to send — the ones this run puts in play. [] = the studio
+   *  could not name them, and the send falls back to every set in the export
+   *  folder; `unrealProjects` is what decides whether anything is sent. */
   unrealSets: z.array(z.string()).default([]),
 })
 
