@@ -82,10 +82,11 @@ they are, and unlinking never deletes anything.
   inert — no accidental launches.
 - **The small install button** on each card opens the **install dialog**: what
   goes into this Unreal project — the linked DTH release's *Unreal Engine
-  Content* (into `Content/DazToHue`), the **DTH Studio Bridge** (the studio's
-  own small Python plugin, which is what makes
-  [Send to Unreal](./06-into-houdini.md#send-to-unreal) work — restart the
-  editor once after installing it), plus every plugin build from your
+  Content* (into `Content/DazToHue`), the **DTH Studio Bridge** — marked
+  **built in**, because it ships inside the app rather than coming from your
+  plugin folders; it is the small Python plugin that makes
+  [Send to Unreal](./06-into-houdini.md#send-to-unreal) work, so restart the
+  editor once after installing it — plus every plugin build from your
   [Unreal Engine Plugins folders](./02-setup.md#unreal-engine-plugins) that
   matches this project's engine version (read from its `.uproject` when the
   dialog opens). Everything is pre-checked; uncheck what you don't want and

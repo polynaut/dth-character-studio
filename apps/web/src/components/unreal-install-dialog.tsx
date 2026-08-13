@@ -63,6 +63,10 @@ interface ChecklistItem {
   installed: boolean
   /** Absent for the studio's own two entries (content and bridge). */
   plugin?: UnrealPluginSource
+  /** Ships INSIDE the app rather than coming from the user's plugin folders —
+   *  said out loud on the row, because every other line in this list is
+   *  something they downloaded and pointed the studio at. */
+  builtIn?: boolean
   /** Its binaries were built against a DIFFERENT engine build than the one this
    *  project uses — Unreal will refuse to load it. Such an item is listed but
    *  never pre-checked (same rule as an unknown engine association). */
@@ -99,6 +103,7 @@ function buildItems(
       label: 'DTH Studio Bridge',
       detail: UNREAL_BRIDGE_FOLDER,
       installed: installed.has(UNREAL_BRIDGE_NAME.toLowerCase()),
+      builtIn: true,
     },
     ...builds.map((plugin) => ({
       key: plugin.path,
@@ -197,6 +202,18 @@ function InstallChecklist({
             <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
               <span className="font-medium">{item.label}</span>
               <span className="rounded bg-muted px-1 py-0.5 text-xs font-medium">{item.detail}</span>
+              {/* Every other row is a plugin the USER downloaded and pointed
+                  the studio at; this one comes out of the app itself, and
+                  where a build came from is the first thing you want to know
+                  about a row you didn't put there. */}
+              {item.builtIn && (
+                <span
+                  className="rounded bg-primary/15 px-1 py-0.5 text-xs font-medium text-primary"
+                  title="Ships with DTH Character Studio — it is what Send to Unreal hands its jobs to. Not from your plugin folders."
+                >
+                  built in
+                </span>
+              )}
               {item.installed && (
                 <span className="text-xs text-muted-foreground">
                   installed — a check overwrites it

@@ -102,6 +102,8 @@ describe('UnrealInstallDialog', () => {
     expect(screen.getByText('Plugins/DTHStudioBridge')).toBeTruthy()
     expect(screen.getByText('DazToUnreal')).toBeTruthy()
     expect(screen.getByText('AnyTool')).toBeTruthy()
+    // Exactly one row is the app's own — the scanned builds must not claim it.
+    expect(screen.getAllByText('built in')).toHaveLength(1)
   })
 
   it('installs the checked items with overwrite and reports back', async () => {
@@ -144,6 +146,9 @@ describe('UnrealInstallDialog', () => {
 
     const row = screen.getByText('Plugins/DTHStudioBridge').closest('label')!
     expect(row.textContent).toContain('Plugins/DTHStudioBridge')
+    // Marked as OURS: every other row is a plugin the user downloaded and
+    // pointed the studio at, and this one arrives out of the app itself.
+    expect(row.textContent).toContain('built in')
     expect(row.textContent).toContain('installed — a check overwrites it')
     expect(row.querySelector('input')!.checked).toBe(true)
 
