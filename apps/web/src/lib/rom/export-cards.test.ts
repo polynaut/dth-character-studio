@@ -115,6 +115,32 @@ describe('houdiniTaskCards', () => {
     ])
   })
 
+  it('does not tick off a network that FAILED', () => {
+    // 456.py answers per network, and a failed one is finished-but-wrong. It
+    // used to render exactly like a good one — a green list with the failure
+    // living only in a toast the user may already have dismissed. `skipped`
+    // stays `done`: it finished with nothing to do, which is not a failure.
+    const cards = houdiniTaskCards(
+      project(),
+      0,
+      running({
+        total: 3,
+        networks: [
+          { label: 'LaraClassic', status: 'ok' },
+          { label: 'LaraNaked', status: 'failed' },
+          { label: 'LaraThick', status: 'skipped' },
+        ],
+      }),
+      true,
+      0,
+    )
+    expect(cards.map((c) => [c.label, c.status])).toEqual([
+      ['LaraClassic', 'done'],
+      ['LaraNaked', 'failed'],
+      ['LaraThick', 'done'],
+    ])
+  })
+
   it('falls back to the live activity, then to counting', () => {
     // A run whose targets predate this feature names only what has finished —
     // the active one comes off the activity channel, and anything past that
@@ -206,7 +232,17 @@ describe('unrealTaskCards', () => {
 })
 
 describe('runPercent', () => {
-  const rows = (...statuses: Array<'waiting' | 'active' | 'done'>) => statuses.map((status) => ({ status }))
+  const rows = (...statuses: Array<'waiting' | 'active' | 'done' | 'failed'>) =>
+    statuses.map((status) => ({ status }))
+
+  it('counts a FAILED row as behind us, like a finished one', () => {
+    // The bar measures how much of the list is OVER, not how much of it worked
+    // — counting only `done` leaves a run with one bad network short of 100%
+    // forever, which reads as "still going" when nothing is. The failure is
+    // said by the row and the report; a percentage cannot carry it.
+    expect(runPercent(rows('done', 'failed'), 0)).toBe(100)
+    expect(runPercent(rows('failed', 'active', 'waiting', 'waiting'), 0.5)).toBe(38)
+  })
 
   it('counts finished rows and the active one’s own share', () => {
     expect(runPercent(rows('done', 'active', 'waiting', 'waiting'), 0.5)).toBe(38)

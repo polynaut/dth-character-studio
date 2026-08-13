@@ -575,10 +575,14 @@ export function DthExportAction({
     const houdiniActive = houdiniNow !== null ? currentHipRef.current : ''
     // Queued is not done: the Unreal leg is done when the editor has imported
     // it (or said why it could not), which is minutes after the file write.
+    // And "said why it could not" is a FAILED row, not a ticked one — including
+    // the partial case, where some sets landed and the rest carried an error.
     const unrealNow = unrealRunRef.current
     const unrealStatus: ExportTask['status'] =
       unrealNow?.state === 'finished'
-        ? 'done'
+        ? unrealNow.error
+          ? 'failed'
+          : 'done'
         : unrealNow !== null || unrealSentRef.current
           ? 'active'
           : 'waiting'
@@ -632,6 +636,13 @@ export function DthExportAction({
   // start with its rows already ticked. Every run start goes through here.
   function resetUnrealLeg() {
     unrealSentRef.current = false
+    // The WATCH belongs to the run that armed it. Only a finished import clears
+    // it, so a send whose editor was never opened keeps it forever — and since
+    // `sendToUnreal` only arms a watch when there is none, the next run's
+    // import would never be polled at all, while the previous project's files
+    // answered in its name. A new run watches its own send or nothing.
+    unrealWatchRef.current = ''
+    unrealStatusRef.current = ''
     setUnrealState(null)
   }
   // A handoff written against a SHUTTING-DOWN Daz (running process, batch
@@ -917,11 +928,18 @@ export function DthExportAction({
     // The outcome becomes the status line, like every other leg's — and it
     // lands minutes after the run's toast, so this is where it is read.
     const what = state.reimported ? 're-imported' : 'imported'
-    unrealStatusRef.current = state.error
-      ? `Unreal; import failed — ${state.error}`
-      : `Unreal; ${what} ${state.assets} asset${state.assets === 1 ? '' : 's'}${
-          state.destination ? ` in ${state.destination}` : ''
-        }`
+    const landed = `${what} ${state.assets} asset${state.assets === 1 ? '' : 's'}${
+      state.destination ? ` in ${state.destination}` : ''
+    }`
+    // THREE outcomes, not two. The bridge imports each export set on its own and
+    // reports `done` as long as one landed, so "some worked, some didn't" is a
+    // real state — and it used to be reported as unqualified success, which is
+    // the one thing this leg must never do.
+    unrealStatusRef.current = !state.error
+      ? `Unreal; ${landed}`
+      : state.sets > 0
+        ? `Unreal; ${landed} — but ${state.error}`
+        : `Unreal; import failed — ${state.error}`
     publishPipeline(progressRef.current, houdiniRef.current)
     void dismissUnrealImport({ data: { uprojectPath } })
   }
@@ -1053,10 +1071,9 @@ export function DthExportAction({
     setProgress(run.state === 'running' ? run : null)
     // A sidecar-restored watch (this window reloaded mid-run): the module
     // watch is whole again, but the component's armed selection is not —
-    // re-arm the task cards from the run itself, once. Rows carry the Daz
-    // leg; the persisted plan carries the Houdini projects (their network
-    // tooltip shows the batch's scenes — export-all's exact scope is
-    // recomputed at the continuation as always).
+    // re-arm the task rows from the run itself, once. Rows carry the Daz leg;
+    // the persisted plan carries the Houdini projects and the scene scope its
+    // networks are matched against.
     if (
       run.state === 'running' &&
       run.characterId === character.id &&
@@ -1460,7 +1477,7 @@ export function DthExportAction({
                 path,
                 label: stemOf(path),
                 networks: scenes.map(stemOf),
-              sets: hipSetsRef.current[path],
+                sets: hipSetsRef.current[path],
               })),
               unreal: unrealTargetsFrom(unrealTargets, unrealSets, located),
             }
@@ -1975,8 +1992,8 @@ function DthExportDialog({
   const [mode, setMode] = useState<RunChoice>('rom-export')
   const modeRef = useRef<RunChoice>('rom-export')
   // The Houdini list's selection + its Mode dropdown. `export-selected` is the
-  // default the moment a project joins the run; `open` is single-project only
-  // (houdiniModeForSelection flips it back when a second project is picked).
+  // default the moment a project joins the run; `skip` runs no Houdini at all
+  // and is offered only when the project has a linked `.uproject` to send to.
   const [checkedHips, setCheckedHips] = useState<ReadonlySet<string>>(new Set())
   const [houdiniMode, setHoudiniMode] = useState<HoudiniRunMode>('export-selected')
   // Projects whose `.hip` is gone from disk — their rows are refused up front
@@ -2128,9 +2145,8 @@ function DthExportDialog({
   const noRomChecked = scenesMissingRomAnimation(mode, status, checked)
   /** The skip-Daz Start gate, {@link noRomChecked}'s sibling: selected scenes
    *  whose last Daz export is not on disk — nothing to rely on. Moot under
-   *  "Export all" (the checked scenes don't scope that run) — and under
-   *  "Open only", which consumes no export at all (it just opens the one
-   *  picked `.hip`; see `onExport`). */
+   *  "Skip Houdini", which runs no export and therefore consumes none: it
+   *  hands over what is already in the character's export folder. */
   const noExportChecked =
     houdiniMode === 'skip' ? [] : scenesMissingExport(mode, status, checked)
   // The probe (one stat per scene) is sub-second; holding Start for it closes
@@ -2138,12 +2154,33 @@ function DthExportDialog({
   // Both artifact-gated modes wait it out the same way.
   const checking = (mode === 'export-only' || mode === 'houdini-only') && status === null
   /**
-   * Whether this run will produce something to send: a Houdini project that
-   * EXPORTS. "Open only" opens a scene and exports nothing, and "ROM only"
-   * stops before Houdini — in both cases a send could only hand over the
-   * PREVIOUS export, which is not what pressing Start meant.
+   * Whether this run has something to hand over: a Houdini project that
+   * EXPORTS, or the deliberate `skip` that sends the exports already on disk.
+   *
+   * **ROM only is excluded even though it forces `skip`.** That mode stops
+   * before Houdini, so its send could only hand over the PREVIOUS export while
+   * the run reads as "the new ROM reached Unreal" — the misleading success this
+   * studio exists to avoid, and the same reasoning that makes `executeJobs`
+   * refuse a rom-only run with Houdini projects attached. `skip` is a CHOICE
+   * ("use last exports") when the user picks it; under rom-only it is merely
+   * what `pickMode` was left with, and inheriting a send from it would be a
+   * choice nobody made.
    */
-  const unrealSendable = houdiniMode === 'skip' || checkedHips.size > 0
+  const unrealSendable = mode !== 'rom-only' && (houdiniMode === 'skip' || checkedHips.size > 0)
+
+  /**
+   * A ticked Unreal project with NO ticked export set — the one combination
+   * that looks armed and hands over nothing.
+   *
+   * `onExport` drops the projects when no set is ticked (a set list is what a
+   * job carries), so this state used to start a run whose Unreal leg silently
+   * did not exist — and in the send-only run, pressing Start did literally
+   * nothing at all: no send, no rows, no message, dialog closed. It is also the
+   * DEFAULT state of the flow the feature is for: a FIRST import pre-ticks no
+   * set, by design, so the user must tick one. Refusing with a reason beats a
+   * button that lies.
+   */
+  const unrealIncomplete = unrealSendable && checkedUnreal.size > 0 && checkedSets.size === 0
 
   /**
    * The export sets THIS RUN will produce, or null when the studio cannot say.
@@ -2256,8 +2293,9 @@ function DthExportDialog({
         // of the scene selection); this only seeds the untouched case with
         // every linked project, which the effect then narrows the moment the
         // stored scans say what each one imports. Never under rom-only: that
-        // run writes no export, so there is no continuation to arm (see
-        // hipSelectionAfterToggle for the full why).
+        // run writes no fresh export, so a Houdini continuation could only
+        // re-consume the PREVIOUS one while the report reads as the new ROM's
+        // round trip (`executeCharacterJobs` refuses that combination outright).
         if (pre.size > 0 && modeRef.current !== 'rom-only' && character.houdiniProjects.length > 0) {
           setCheckedHips((prev) =>
             prev.size > 0
@@ -2331,8 +2369,9 @@ function DthExportDialog({
     setCheckedHips((prev) => {
       const next = hipsForSelectedScenes(judged, scenesDth, prev, deselectedDth)
       for (const hip of hipMissing) next.delete(hip)
-      // Same members → same object, so the Houdini list doesn't re-render (and
-      // `houdiniModeForSelection` isn't re-run) on every unrelated poll.
+      // Same members → same object, so the Houdini list doesn't re-render on
+      // every unrelated poll (and the Unreal effects, which key on this set,
+      // don't re-seed a selection the user has since made their own).
       if (next.size === prev.size && [...next].every((hip) => prev.has(hip))) return prev
       return next
     })
@@ -2367,11 +2406,10 @@ function DthExportDialog({
     }
   }
 
-  /** The Houdini list's toggle. "Open only" is a single-project affair —
-   *  picking a second project flips the mode to the default export run
-   *  ({@link houdiniModeForSelection}) instead of refusing the pick. */
+  /** The Houdini list's toggle — a plain multi-select now that both
+   *  single-project modes are gone: every remaining mode runs any number of
+   *  projects, so there is no combination to steer the user out of. */
   function toggleHip(hip: string) {
-    // Under rom-only the toggle is a radio — the pure rule owns why.
     const next = new Set(checkedHips)
     if (next.has(hip)) next.delete(hip)
     else next.add(hip)
@@ -2617,13 +2655,11 @@ function DthExportDialog({
                   <SelectItem
                     key={option.mode}
                     value={option.mode}
-                    // "Open only" is a single-project affair — see
-                    // houdiniModeForSelection for the auto-flip on a 2nd pick.
-                    // The EXPORT modes are dead under ROM only: that run
-                    // writes no fresh export, so they could only re-consume
-                    // the previous ones (hipSelectionAfterToggle has the why).
-                    // `skip` needs somewhere to send to; the export mode
-                    // needs a run that produces an export.
+                    // The EXPORT mode is dead under ROM only: that run writes
+                    // no fresh export, so it could only re-consume the previous
+                    // one while reading as this run's output.
+                    // `skip` needs somewhere to send to; the export mode needs
+                    // a run that produces an export.
                     disabled={
                       option.mode === 'skip'
                         ? unrealProjects.length === 0
@@ -2724,7 +2760,11 @@ function DthExportDialog({
           )}
           <p className="mt-1.5 text-xs text-muted-foreground">
             {!unrealSendable
-              ? 'Needs somewhere to send from: tick a Houdini project, or pick “Skip Houdini”.'
+              ? mode === 'rom-only'
+                ? // Naming the Houdini pick here would be advice the user cannot
+                  //  take: rom-only cleared that list and runs no Houdini at all.
+                  'ROM only writes no export — nothing to send. Run “ROM + Export”, or send the last export with “Skip Daz”.'
+                : 'Needs somewhere to send from: tick a Houdini project, or pick “Skip Houdini”.'
               : sendPlan !== null && sendPlan.sets.length === 0
                 ? 'Nothing exported yet — this run’s own export can be sent from the character page afterwards.'
                 : 'Queued for import when the whole export finishes — the editor picks it up when it is next open.'}
@@ -2783,6 +2823,9 @@ function DthExportDialog({
           disabled={
             busy ||
             checking ||
+            // A ticked project with no ticked set sends nothing — true of every
+            // mode, so it gates them all rather than only the send-only run.
+            unrealIncomplete ||
             (mode === 'houdini-only' && houdiniMode === 'skip'
               ? // Neither app runs: the whole run is the send, so the Unreal
                 // pick is the only thing that can gate it.
@@ -2800,7 +2843,11 @@ function DthExportDialog({
                 ? mode === 'houdini-only'
                   ? 'Checking each scene for a Daz export on disk — a moment'
                   : 'Checking each scene for a saved ROM animation — a moment'
-                : mode === 'houdini-only' && houdiniMode === 'skip'
+                : unrealIncomplete
+                  ? // Before the mode-specific wording: this one is about the
+                    //  Unreal list whatever the rest of the run is doing.
+                    'Tick an export set to send, or untick the Unreal project'
+                  : mode === 'houdini-only' && houdiniMode === 'skip'
                   ? // The send-only run's single requirement — the Daz-scene
                     // wording below would name a selection it never reads.
                     checkedUnreal.size === 0

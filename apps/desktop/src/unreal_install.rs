@@ -1450,8 +1450,11 @@ mod tests {
         let project = root.join("Game");
         fs::create_dir_all(project.join("Content").join("DazToHue")).unwrap();
         fs::create_dir_all(project.join("Plugins").join("DazToUnreal")).unwrap();
-        // The studio's own plugin, one version behind what this app ships —
-        // the shape the project card's staleness warning exists for.
+        // The studio's own plugin, at a version that is NOT the one this app
+        // ships — the shape the project card's staleness warning exists for.
+        // Deliberately not tied to `UNREAL_BRIDGE_VERSION` (a TS constant this
+        // crate cannot see): what is asserted here is that the number is read
+        // back verbatim, and `bridgeOutdated` on the TS side owns the verdict.
         let bridge = project.join("Plugins").join("DTHCharacterStudioRunner");
         fs::create_dir_all(&bridge).unwrap();
         fs::write(bridge.join("DTHCharacterStudioRunner.uplugin"), r#"{ "Version": 3 }"#).unwrap();

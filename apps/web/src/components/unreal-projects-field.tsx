@@ -432,7 +432,20 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
           // The dialog's install just proved the content is there — adopt that
           // over whatever the card's probe said.
           onInstalled={(dthInstalled) => {
-            if (dthInstalled) setDthStatus((s) => ({ ...s, [installFor]: true }))
+            const path = installFor
+            if (dthInstalled) setDthStatus((s) => ({ ...s, [path]: true }))
+            // …and the bridge's version with it. The amber warning's whole
+            // message is "re-install it", and Install is where you do that —
+            // leaving it up afterwards told the user the fix hadn't worked.
+            // Re-READ rather than assume: the bridge row can be unticked, so an
+            // install is not proof that this particular thing was installed.
+            void unrealProjectState({ data: { uprojectPath: path } })
+              .then((state) => {
+                setBridgeStale((s) => ({ ...s, [path]: bridgeOutdated(state.bridgeVersion) }))
+              })
+              .catch(() => {
+                // Same rule as the mount probe: a failed read says nothing.
+              })
           }}
         />
       )}

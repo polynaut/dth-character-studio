@@ -104,7 +104,19 @@ export function houdiniTaskCards(
         detail: 'DazToHue network',
         context: project.label,
         kind: 'houdini',
-        status: done ? 'done' : n === running ? 'active' : 'waiting',
+        // 456.py answers per network — and a network that FAILED is finished,
+        // not fine. Ticking it off beside the ones that worked was the report's
+        // only trace of the failure disappearing into a green list; the run's
+        // toast still names it, but the row the user is watching said nothing.
+        // `skipped` stays `done`: it finished with nothing to do, which is not
+        // a failure.
+        status: done
+          ? network.status === 'failed'
+            ? 'failed'
+            : 'done'
+          : n === running
+            ? 'active'
+            : 'waiting',
       }
     })
   }
@@ -196,7 +208,12 @@ export function runPercent(
 ): number {
   const fraction = Math.min(1, Math.max(0, activeFraction))
   if (tasks.length === 0) return Math.round(fraction * 100)
-  const done = tasks.filter((task) => task.status === 'done').length
+  // A FAILED row is behind us too. The bar measures how much of the list is
+  // over, not how much of it worked — counting only `done` would leave a run
+  // with one bad network stuck short of 100% forever, reading as still running
+  // when nothing is. The failure is said by the row and the report, which is
+  // where it belongs; a bar cannot carry it.
+  const done = tasks.filter((task) => task.status === 'done' || task.status === 'failed').length
   const active = tasks.some((task) => task.status === 'active') ? fraction : 0
   return Math.min(100, Math.round(((done + active) / tasks.length) * 100))
 }

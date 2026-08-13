@@ -1041,10 +1041,18 @@ older runtimes as stale.
   projects ride the Daz run record AND the Houdini run plan — the send fires
   when the whole Houdini queue drains, minutes later, possibly in a reloaded
   window, so both sidecars carry it or a reload drops it silently. Pre-selection
-  is `fetchUnrealCharacterPresence`: `Content/DazToHue/<set>` on disk. The
-  studio cannot read an editor's asset registry, so a character moved elsewhere
-  in Unreal reads as absent — un-ticking a row the user can tick, never ticking
-  one they didn't mean.
+  is `fetchUnrealSendPlan`, which is `locateSets` (see the entry below) run once
+  per linked project: NOT a `Content/DazToHue/<set>` existence check — the whole
+  point is that it finds a set the user MOVED. A project is ticked when it holds
+  a set THIS RUN will write (`runSets`), never merely a set of this character.
+  The studio cannot read an editor's asset registry from out here, so a set
+  whose assets were RENAMED reads as absent — un-ticking a row the user can
+  tick, never ticking one they didn't mean.
+  Two rules the dialog enforces on top, both earned: a **rom-only** run is not
+  sendable at all (it writes no export, so the send could only hand over the
+  previous one while the run reads as this ROM reaching Unreal), and a ticked
+  project with NO ticked export set refuses Start rather than starting a run
+  whose Unreal leg silently does not exist.
 - **The STUDIO decides where a re-import lands, not the bridge.** MEASURED
   2026-08-13, first real end-to-end run: the bridge's asset-registry lookup
   (`get_tag_value('AssetImportData')`) found nothing and imported a second copy

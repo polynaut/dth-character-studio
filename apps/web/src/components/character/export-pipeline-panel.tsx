@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Check, Loader2 } from 'lucide-react'
+import { Check, Loader2, X } from 'lucide-react'
 
 import { cn } from '@dth/ui'
 import dazLogo from '#/assets/daz-logo.png'
@@ -43,7 +43,12 @@ export interface ExportTask {
    *  file it names. */
   context?: string
   kind: ExportTaskKind
-  status: 'waiting' | 'active' | 'done'
+  /** `failed` is FINISHED-but-wrong, not a third kind of pending: the row is
+   *  over, and the list must not tick it off beside the ones that worked. The
+   *  legs carry that verdict (456.py reports per-network `failed`, the Unreal
+   *  bridge reports an error per job) and it used to be dropped on the way to
+   *  the list — a failed DazToHue network read exactly like a good one. */
+  status: 'waiting' | 'active' | 'done' | 'failed'
 }
 
 export interface ExportPipelineView {
@@ -80,6 +85,7 @@ const APP: Record<ExportTaskKind, string> = {
 
 function ExportTaskCard({ task, ordinal }: { task: ExportTask; ordinal: number }) {
   const active = task.status === 'active'
+  const failed = task.status === 'failed'
   const done = task.status === 'done'
   const accent = ACCENT[task.kind]
   // The subtitle is "what · where" — either half can be absent (a Daz scene has
@@ -94,32 +100,41 @@ function ExportTaskCard({ task, ordinal }: { task: ExportTask; ordinal: number }
         'relative flex items-center gap-2.5 overflow-hidden rounded-md py-1.5 pr-2 pl-3 transition-colors',
         active
           ? 'bg-accent text-foreground'
-          : done
-            ? 'bg-card/40 text-muted-foreground'
-            : 'bg-card/60 text-muted-foreground',
+          : failed
+            ? // The one row that has to catch the eye AFTER the run moved on:
+              //  it sits in a finished list, and a muted one would read as done.
+              'bg-destructive/10 text-destructive'
+            : done
+              ? 'bg-card/40 text-muted-foreground'
+              : 'bg-card/60 text-muted-foreground',
       )}
     >
       {/* The leg's color rides a left bar — full strength on the row being
           worked, a hairline on the rest, so a queue reads as a list rather
-          than a row of paint. */}
+          than a row of paint. A failed row wears the destructive edge instead:
+          which LEG it was matters less than that it did not work. */}
       <span
         aria-hidden
         className={cn(
           'absolute inset-y-0 left-0 w-[3px] rounded-full',
-          accent,
-          active ? 'opacity-100' : 'opacity-40',
+          failed ? 'bg-destructive' : accent,
+          active || failed ? 'opacity-100' : 'opacity-40',
         )}
       />
       <span className="w-4 shrink-0 text-right text-[11px] tabular-nums opacity-50">{ordinal}.</span>
       {/* One mark per state: the run's spinner on the active row, a tick on a
-          finished one, the leg's dot on everything still to come. */}
-      <span aria-hidden className="flex size-3.5 shrink-0 items-center justify-center">
+          finished one, a cross on one that failed, the leg's dot on everything
+          still to come. The mark is not decoration — it is the only thing
+          telling a failed row from a finished one at a glance. */}
+      <span className="flex size-3.5 shrink-0 items-center justify-center">
         {active ? (
-          <Loader2 className="size-3.5 animate-spin" />
+          <Loader2 aria-hidden className="size-3.5 animate-spin" />
+        ) : failed ? (
+          <X className="size-3.5" aria-label="failed" />
         ) : done ? (
-          <Check className="size-3.5 opacity-60" />
+          <Check aria-hidden className="size-3.5 opacity-60" />
         ) : (
-          <span className={cn('size-1.5 rounded-full opacity-50', accent)} />
+          <span aria-hidden className={cn('size-1.5 rounded-full opacity-50', accent)} />
         )}
       </span>
       <span className="min-w-0 flex-1">
@@ -127,6 +142,8 @@ function ExportTaskCard({ task, ordinal }: { task: ExportTask; ordinal: number }
           className={cn(
             'block truncate text-xs',
             active ? 'font-semibold' : 'font-medium',
+            // A failed row keeps its label plain: struck through, it would read
+            // as one more thing crossed off the list.
             done && 'line-through decoration-1 opacity-70',
           )}
         >

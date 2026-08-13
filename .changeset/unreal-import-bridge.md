@@ -67,6 +67,14 @@ runs no Houdini and hands what is already on disk to the Unreal projects. With
 Daz skipped as well, that is a one-click "re-import this character in Unreal"
 from the same dialog as everything else.
 
+**A send is refused rather than faked.** A run that builds the ROM and stops
+(*ROM only*) writes no export, so it does not offer to send one — its send could
+only hand Unreal the PREVIOUS export while the run read as this ROM reaching the
+editor. Ticking an Unreal project but no export set holds Start with a reason
+instead of starting a run whose Unreal leg silently does nothing. And when the
+editor imports some of the sets and fails on another, the run says both — what
+landed AND what did not — rather than reporting the whole job as a success.
+
 **You pick which export sets go.** A character's `export/` folder holds one set
 per HDA character name — outfit variants, experiments — and a send used to take
 all of them, so a variant nobody had asked for could land in Unreal on its own.

@@ -24,8 +24,11 @@ carrying the newest thing the run said as a single line.
 
 Rows are ticked off as they finish and stay in the list, so it reads as the
 whole run rather than only what is left, and the mark on the right says which
-application is doing it. The bar measures the whole run — every row, plus the
-share of the one being worked that its leg can actually report.
+application is doing it. A row that **failed** is marked as such rather than
+ticked off — a DazToHue network that fell over, an Unreal import that came back
+with an error — because a run's own list is the worst possible place to be told
+everything went fine. The bar measures the whole run — every row, plus the share
+of the one being worked that its leg can actually report.
 
 The log window's **transcript** is what this gives up: only the newest line
 survives, on the bar. Each leg's full output is on disk either way — the

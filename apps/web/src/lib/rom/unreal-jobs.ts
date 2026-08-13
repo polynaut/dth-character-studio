@@ -84,8 +84,12 @@ export const UNREAL_JOB_VERSION = 4
  * History:
  * - 1 — the first shipped bridge (job contract 4): claim, import, re-import
  *   what the studio located, the progress dialog.
+ * - 2 — a job that cannot be READ after it was claimed writes a failed result
+ *   instead of going quiet. No contract change (hence the same
+ *   {@link UNREAL_JOB_VERSION}) — and exactly the kind of fix this number
+ *   exists for: it has to reach every project already holding v1.
  */
-export const UNREAL_BRIDGE_VERSION = 1
+export const UNREAL_BRIDGE_VERSION = 2
 
 /**
  * The bridge's own `.uplugin`.
@@ -324,6 +328,11 @@ export type UnrealImportState =
       state: 'finished'
       /** Assets touched across every set in the job. */
       assets: number
+      /** What went wrong, '' when nothing did — and NOT only when the whole job
+       *  failed: the bridge imports each export set independently and reports
+       *  `done` as long as ONE landed, carrying the others' errors in this
+       *  field. Reading it only on `state === 'failed'` is what let a job where
+       *  two sets landed and a third blew up report as clean success. */
       error: string
       /** How many export sets the job carried. */
       sets: number
@@ -352,7 +361,12 @@ export function unrealImportStateFrom(
   return {
     state: 'finished',
     assets: result.imports.reduce((total, one) => total + one.assets.length, 0),
-    error: result.state === 'failed' ? result.error || 'the import failed in Unreal' : '',
+    // A total failure always needs SOMETHING to show; a partial one carries the
+    // bridge's own per-set message. `imports` holds only the sets that landed,
+    // so `error` with a non-empty `imports` IS the partial case, and the caller
+    // tells the two apart by that rather than by a flag neither side sets.
+    error:
+      result.state === 'failed' ? result.error || 'the import failed in Unreal' : result.error,
     sets: result.imports.length,
     reimported: result.imports.some((one) => one.mode === 'reimport'),
     // One set names its folder; several would need a list, and the toast is not

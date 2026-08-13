@@ -87,6 +87,12 @@ def _claim():
 
     The rename IS the claim, and it is atomic — so a second editor with the
     same bridge cannot run the same job twice. None means "nothing to do".
+
+    A job that cannot be READ after being claimed is the one case that needs a
+    result written from here: the file is already gone from under the studio,
+    which then sees no pending job and no result and waits for an import that
+    can never start. Saying so costs one line and turns a silent forever-wait
+    into a message.
     """
     pending = _path(JOB_FILE)
     if not os.path.isfile(pending):
@@ -98,10 +104,23 @@ def _claim():
         if os.path.isfile(claimed):
             os.remove(claimed)
         os.replace(pending, claimed)
+    except Exception:
+        unreal.log_error("DTH Runner: could not claim the job file\n" + traceback.format_exc())
+        return None
+    try:
         with open(claimed, "r", encoding="utf-8") as handle:
             return json.load(handle)
     except Exception:
-        unreal.log_error("DTH Runner: could not claim the job file\n" + traceback.format_exc())
+        detail = traceback.format_exc()
+        unreal.log_error("DTH Runner: the claimed job file could not be read\n" + detail)
+        _write_result(
+            {
+                "version": JOB_VERSION,
+                "state": "failed",
+                "error": "the job file could not be read — send it again",
+                "imports": [],
+            }
+        )
         return None
 
 

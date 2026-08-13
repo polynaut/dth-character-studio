@@ -23,9 +23,11 @@ import { charScopeInput, joinPath, locateCharacter, charsRoot, resolveProject } 
 // `.duf` — one place that decides what is safe to hand to the shell.
 import { openScene } from './attachments'
 import { normalizeRelFolder } from '../library'
-// The bridge, bundled as source and rewritten into the project before every
-// run — the same self-repairing rule as 456.py and the Daz runtime: small,
-// must track the app version, and needs no install ritual.
+// The bridge, bundled as source and written into the project by the INSTALL
+// dialog — deliberately NOT the self-repairing rule 456.py and the Daz runtime
+// use (see `installUnrealBridge` for why an Unreal project is different: its
+// `Plugins/` folder is the user's, and Unreal only loads plugins at startup).
+// Staleness is caught by reading the installed `.uplugin`'s version instead.
 import bridgeScript from '../unreal-runtime/dth_runner.py?raw'
 import bridgeInit from '../unreal-runtime/init_unreal.py?raw'
 

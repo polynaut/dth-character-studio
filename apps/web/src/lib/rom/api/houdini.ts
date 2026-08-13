@@ -801,7 +801,9 @@ export interface HoudiniExportStarted {
  * 2026-08-11: the live progress chip replaced "watching it happen", headless
  * kills the window/paint fragility class, and the full console — C++ cook
  * chatter included — lands in a per-run log the in-process tee could never
- * see). "Open only" still opens the visible GUI, through `openScene`.
+ * see). Opening a project to LOOK at it is a different action entirely — the
+ * Houdini project cards do that, through `openScene`, and it never comes
+ * through here.
  *
  * The scripts are rewritten on EVERY run rather than installed once: they are
  * small, must track the app version, and a self-repairing copy needs no marker
@@ -878,7 +880,8 @@ export async function startHoudiniExport({
     exportDirectory: joinPath(location.folderAbs, normalizeRelFolder(project.exportSubdir)),
     scenesRootAbs,
     // This Houdini instance exists to carry the batch — 456.py closes it again
-    // after the final result lands ("Open only" never reaches this code path).
+    // after the final result lands. A project the user opened themselves is a
+    // different instance entirely and is never touched by this.
     closeWhenDone: true,
   })
   if (job.scenes.length === 0) {

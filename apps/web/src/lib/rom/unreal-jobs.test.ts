@@ -281,6 +281,37 @@ describe('unrealImportStateFrom', () => {
     })
   })
 
+  it('does not call a PARTLY failed job a success', () => {
+    // The bridge imports each export set on its own and reports `done` as long
+    // as one landed, carrying the rest's errors in `error` — so a job where two
+    // sets imported and a third blew up arrives as state 'done' WITH an error.
+    // Reading that field only on 'failed' reported the whole thing as clean,
+    // which is the one thing this leg must never do: the user is told their
+    // character reached Unreal while a variant of it silently did not.
+    const partial = unrealImportStateFrom(
+      false,
+      result({
+        state: 'done',
+        error: 'LaraNaked: RuntimeError: duplicate_asset returned None',
+        imports: [oneImport(), oneImport({ character: 'LaraClassic' })],
+      }),
+    )
+    expect(partial).toMatchObject({
+      state: 'finished',
+      // BOTH halves survive: what landed, and what did not.
+      sets: 2,
+      error: 'LaraNaked: RuntimeError: duplicate_asset returned None',
+    })
+  })
+
+  it('leaves the error empty when nothing went wrong', () => {
+    // The other side of the same change — carrying `error` unconditionally must
+    // not invent one for a clean run.
+    expect(unrealImportStateFrom(false, result({ state: 'done', error: '' }))).toMatchObject({
+      error: '',
+    })
+  })
+
   it('treats a torn read as "ask again", not as a failure', () => {
     expect(parseUnrealResult('{"version":1,"sta')).toBeNull()
     expect(parseUnrealResult('')).toBeNull()
