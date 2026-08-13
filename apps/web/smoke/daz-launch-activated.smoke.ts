@@ -50,10 +50,10 @@ async function openCharacter(
 test('opening a scene starts the ACTIVATED Daz, not the file association', async ({ page }) => {
   await openCharacter(page)
 
-  // The card's open icon is a MENU (Open Original / Open ROM Animation) — a
+  // The card's open icon is a MENU (Open scene / Open ROM Animation) — a
   // plain click only opens it.
   await page.getByRole('button', { name: /Open in Daz/ }).first().click()
-  await page.getByRole('button', { name: /Open Original/ }).click()
+  await page.getByRole('button', { name: /Open scene/ }).click()
 
   await expect
     .poll(() => callsNamed(page, 'launch_daz_studio'))

@@ -3,7 +3,7 @@
 ## Run the script
 
 1. Open the character's scene in Daz Studio — each scene card on the character
-   page has an open menu (**Open Original**, or the saved
+   page has an open menu (**Open scene**, or the saved
    [ROM animation](#direct-export-optional-recommended) once one exists).
 2. In Daz's **Content Library** pane, browse your library:
    **Scripts → DTH-Character-Studio → \<Project\> → \<Character\>**.
