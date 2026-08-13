@@ -1,11 +1,10 @@
 import { Dialog } from 'radix-ui'
 import { X } from 'lucide-react'
-import { useEffect } from 'react'
+import { useLayoutEffect } from 'react'
 import type { ReactNode } from 'react'
 
 import { Button } from './button.tsx'
-import { closeAllInfoPopups } from './info-popup.tsx'
-import { closeTooltip } from './tooltip-host.tsx'
+import { closeFloatingLayers } from './overlay-sweep.ts'
 import { cn } from '../cn.ts'
 import { isRefocusPointerDown } from '../refocus-click.ts'
 
@@ -48,10 +47,14 @@ export function Modal({
   // left over from the control that opened the dialog would float over it.
   // The tooltip sweep also cancels a hover delay still counting down, which no
   // amount of hit-testing at show time can do.
-  useEffect(() => {
+  //
+  // useLayoutEffect, not useEffect: a passive effect is deferred until AFTER
+  // paint, so the browser may show one frame of this dialog with the old
+  // tooltip still on top of it — the exact thing the sweep exists to prevent.
+  // Nothing here reads layout, so running pre-paint costs nothing.
+  useLayoutEffect(() => {
     if (!open) return
-    closeAllInfoPopups()
-    closeTooltip()
+    closeFloatingLayers()
   }, [open])
   return (
     <Dialog.Root

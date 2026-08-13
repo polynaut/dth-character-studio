@@ -1,11 +1,10 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { DismissableLayer, FocusScope } from 'radix-ui/internal'
 
 import { Button } from './button.tsx'
-import { closeAllInfoPopups } from './info-popup.tsx'
-import { closeTooltip } from './tooltip-host.tsx'
+import { closeFloatingLayers } from './overlay-sweep.ts'
 import { cn } from '../cn.ts'
 import { isRefocusPointerDown } from '../refocus-click.ts'
 
@@ -75,11 +74,11 @@ export function SidePanel({
 
   // Same sweep as Modal: InfoPopups (z-[60]) and tooltips (z-[100]) portal
   // ABOVE this z-50 layer, so one left over from the control that opened the
-  // drawer would float over it as it slides in.
-  useEffect(() => {
+  // drawer would float over it as it slides in. Pre-paint (useLayoutEffect) for
+  // the same reason as Modal — see the comment there.
+  useLayoutEffect(() => {
     if (!open) return
-    closeAllInfoPopups()
-    closeTooltip()
+    closeFloatingLayers()
   }, [open])
 
   // Lock body scroll while open (the non-modal layer doesn't).

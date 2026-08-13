@@ -1,8 +1,16 @@
-import { Suspense, lazy, useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import {
+  Suspense,
+  lazy,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react'
 import { createPortal } from 'react-dom'
 import { toast } from 'sonner'
 
-import { Button } from '@dth/ui'
+import { Button, closeFloatingLayers } from '@dth/ui'
 import { openExternal } from '#/lib/desktop.ts'
 import {
   clearUpdatePrompt,
@@ -56,6 +64,18 @@ function UpdatePromptDialog({ req, onClose }: { req: UpdatePromptRequest; onClos
     if (isBusy) hiddenRef.current = true
     onClose()
   }
+
+  // This dialog is the ONE overlay in the app that appears with no user gesture
+  // — an update check finishing puts it on screen. Every other z-50 overlay is
+  // opened by a click, so the tooltip host's own `pointerdown` hide has already
+  // cleared the layers above it; here nothing has. Without this sweep a tooltip
+  // the user happened to be hovering (or one whose delay was still counting
+  // down) floats over the update dialog, because tooltips are z-[100] and
+  // InfoPopups z-[60] against this layer's z-50. Modal/SidePanel do this
+  // themselves — this dialog is hand-rolled, so it must ask.
+  useLayoutEffect(() => {
+    closeFloatingLayers()
+  }, [])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

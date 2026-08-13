@@ -1130,8 +1130,17 @@ current code before relying on details, but assume the *lesson* still holds.
   side panels at z-50, InfoPopups at `z-[60]` and tooltips at `z-[100]`; the two
   upper layers are deliberately above so they stay usable INSIDE a dialog, which
   also means anything left over from the control that opened the dialog floats
-  on top of it. Both overlays therefore call `closeAllInfoPopups()` **and**
-  `closeTooltip()` on open. `TooltipHost.show()` does hit-test (`elementFromPoint`
+  on top of it. Both overlays therefore call `closeFloatingLayers()`
+  (`primitives/overlay-sweep.ts` — one call, not two exported closers, so a site
+  can't remember half the sweep) in a **`useLayoutEffect`**: a passive effect is
+  deferred until after paint, which is one frame of the new overlay with the old
+  tooltip still on top of it.
+  **Modal/SidePanel do NOT cover the whole app** — `update-prompt.tsx` is
+  hand-rolled and sweeps itself, and it is the case that matters most: it is the
+  only overlay that appears with *no user gesture* (an update check finishing),
+  so the host's own `pointerdown` hide — which quietly covers every click-opened
+  dialog — never fires. Any future hand-rolled overlay owes the same call.
+  `TooltipHost.show()` does hit-test (`elementFromPoint`
   at the anchor's centre, skipped on a 0×0 rect so jsdom can't trip it), but that
   only guards the *moment of showing*: a tooltip already up, or a hover delay
   still counting down, never re-runs it. Same reason the host hides on window

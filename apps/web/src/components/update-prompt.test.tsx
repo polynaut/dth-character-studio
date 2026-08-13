@@ -19,6 +19,7 @@ vi.mock('sonner', () => ({
   },
 }))
 
+import { TooltipHost } from '@dth/ui'
 import { ReleaseNotes } from './release-notes'
 import { UpdatePromptHost } from './update-prompt'
 import {
@@ -104,6 +105,38 @@ describe('update dialog skipped-versions list', () => {
       'https://github.com/polynaut/dth-character-studio/releases/tag/v0.32.3',
     )
     clearUpdatePrompt()
+  })
+})
+
+describe('update dialog sweeps the layers above it', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => {
+    clearUpdatePrompt()
+    vi.useRealTimers()
+  })
+
+  it('closes a live tooltip when the prompt appears on its own', async () => {
+    // This dialog is the only overlay that shows up with NO user gesture, so
+    // the tooltip host's pointerdown hide — which covers every click-opened
+    // dialog in the app — never fires. Tooltips are z-[100] against this
+    // dialog's z-50, so without the sweep one sits on top of the update prompt.
+    render(
+      <>
+        <button title="Open this scene in Daz Studio">Open</button>
+        <TooltipHost />
+        <UpdatePromptHost />
+      </>,
+    )
+    const tip = screen.getByRole('tooltip', { hidden: true })
+    fireEvent.mouseOver(screen.getByRole('button', { name: 'Open' }))
+    await vi.advanceTimersByTimeAsync(700)
+    expect(tip.style.display).toBe('block')
+
+    act(() =>
+      requestUpdatePrompt({ version: '0.99.0', install: async () => {}, relaunch: async () => {} }),
+    )
+    expect(screen.getByText('Update available')).toBeTruthy()
+    expect(tip.style.display).toBe('none')
   })
 })
 

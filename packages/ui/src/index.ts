@@ -30,6 +30,8 @@ export { Tabs, TabsContent, TabsList, TabsTrigger } from './primitives/tabs.tsx'
 export { Textarea } from './primitives/textarea.tsx'
 export { TooltipHost, closeTooltip } from './primitives/tooltip-host.tsx'
 export { InfoPopup } from './primitives/info-popup.tsx'
+// For overlays that can't use Modal/SidePanel — those two sweep themselves.
+export { closeFloatingLayers } from './primitives/overlay-sweep.ts'
 
 // Components
 export { Tag } from './components/tag.tsx'
