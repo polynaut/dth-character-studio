@@ -6,6 +6,39 @@ lint → typecheck → per-package tests → web build → `pnpm build:guide` (t
 guide-site guards fail the PR), plus `smoke`, `rust` (clippy `-D warnings` +
 `cargo test`) and `changeset` as separate jobs — all four are required checks.
 
+## 0. Do the gates actually gate? (audited 2026-08-13)
+
+A required check that cannot fail is worse than no check, because it also stops
+anyone looking. `pnpm lint:budget` was exactly that from #694 until it was fixed:
+it parsed oxlint's human output, counted 0 on CI, and 0 is under every baseline.
+Nobody noticed for months — the baseline simply stopped moving.
+
+So every other gate was then tested the only way that settles it: **break it on
+purpose and confirm it goes red.** Each probe was reverted immediately; the tree
+was verified clean after every one.
+
+| Gate | Probe | Result |
+|---|---|---|
+| `build:guide` hash links | added `href` to a non-existent anchor | ✅ exit 1 |
+| `build:guide` NAV | added a guide page not listed in `NAV` | ✅ exit 1 |
+| `build:guide` assets | referenced a missing screenshot | ✅ exit 1 |
+| FFI contract (Rust) | renamed a key in `contracts/pose-asset-frames.json` | ✅ panics, *"missing field `path`"* |
+| FFI contract (zod) | renamed a key in `contracts/dedup-report.json` | ✅ 1 of 12 fails |
+| `cargo clippy -D warnings` | added a `clone()` on a `u32` | ✅ 3 errors, build fails |
+| smoke `unhandled == []` | disabled `scan_files_by_ext` in the mock | ✅ 5 specs fail |
+| `changeset` status | code change, no changeset | ✅ exit 1 |
+| `changeset` require-real | code change + an EMPTY changeset | ✅ exit 1 (the interesting one — empty does not buy off shipped code) |
+| `changeset` bump-type | comment-only change | ⚪ exit 0, correctly: no capability signal. **Not exercised** — a real capability-adding probe would be needed to prove this one. |
+| `lint:budget` | — | ❌ **was inert**; fixed, see `scripts/lint-budget.mjs` |
+
+Nine gates verified to fail when they should. One was rotten. One is untested.
+
+**Two rules out of it.** When you add a gate, prove it FAILS before trusting it —
+"it passed" is not evidence a gate works, it is the only output a broken gate can
+produce. And when a gate parses another tool's output, parse the MACHINE format
+(`--format=json`), never the human one: the same 223 warnings render as 60,354
+bytes locally and 47,019 on CI, which is what made this one silently useless.
+
 ## 1. Unit tests (vitest, per package)
 
 - **`packages/rom`** — the heavyweight suite. `generate.test.ts` pins generated
