@@ -6,7 +6,7 @@ import { z } from 'zod'
  *
  * Daz gets `dth_exporter_jobs.json` claimed by the Runner; Houdini gets
  * `.dth_houdini_job.json` claimed by 456.py; Unreal gets `job.json` claimed by
- * the studio's own bridge plugin (`unreal-runtime/dth_bridge.py`). Same three
+ * the studio's own Runner plugin (`unreal-runtime/dth_runner.py`). Same three
  * moves each time: write a job, the other side renames it to claim it, the
  * studio polls a result file.
  *
@@ -35,7 +35,7 @@ export function bridgeOutdated(installed: number): boolean {
 /** The bridge plugin's folder name under `Plugins/` — also what
  *  `unrealProjectState` reports in `installedPlugins`, which is how the install
  *  dialog knows whether the project already has it. */
-export const UNREAL_BRIDGE_NAME = 'DTHStudioBridge'
+export const UNREAL_BRIDGE_NAME = 'DTHCharacterStudioRunner'
 /** Where the bridge plugin is installed inside a project. */
 export const UNREAL_BRIDGE_FOLDER = `Plugins/${UNREAL_BRIDGE_NAME}`
 export const UNREAL_BRIDGE_UPLUGIN = `${UNREAL_BRIDGE_NAME}.uplugin`
@@ -70,7 +70,7 @@ export const UNREAL_JOB_VERSION = 4
  * The BRIDGE's own version — the shipped plugin's build, not the job contract.
  *
  * **Bump this on ANY change to the files the studio writes into a project**:
- * `dth_bridge.py`, `init_unreal.py`, the `.uplugin`. A fix to the Python that
+ * `dth_runner.py`, `init_unreal.py`, the `.uplugin`. A fix to the Python that
  * changes no contract still has to reach the projects that already have the old
  * one, and the studio has no other way to tell — a plugin folder holds whatever
  * was installed the day it was installed.
@@ -103,7 +103,7 @@ export function bridgeUpluginJson(): string {
       // reads them back: `Version` is the number it compares.
       Version: UNREAL_BRIDGE_VERSION,
       VersionName: `1.${UNREAL_BRIDGE_VERSION}`,
-      FriendlyName: 'DTH Studio Bridge',
+      FriendlyName: 'DTH Character Studio Runner',
       Description:
         'Watches for an import job written by DTH Character Studio and runs the DazToHue import.',
       Category: 'Pipeline',

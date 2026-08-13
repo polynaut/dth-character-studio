@@ -18,13 +18,14 @@ display stays up until it answers.
 
 It is the same handoff the other two legs use: the studio writes a job file,
 the other side claims it by rename, the studio polls a result. On the Unreal
-side that "other side" is a small **bridge plugin** — `Plugins/DTHStudioBridge`,
-content-only, pure Python — which watches `Saved/DTHStudio/job.json` and runs the
-import. The import itself is **mrpdean's DazToHue pipeline, unmodified**: meshes,
+side that "other side" is the **DTH Character Studio Runner for Unreal** —
+`Plugins/DTHCharacterStudioRunner`, content-only, pure Python, the Unreal
+counterpart of the Runner plugin that drives Daz — which watches
+`Saved/DTHStudio/job.json` and runs the import. The import itself is **mrpdean's DazToHue pipeline, unmodified**: meshes,
 textures, materials, animation curves, the post-process anim blueprint. The
-bridge decides only *when*.
+Runner decides only *when*.
 
-**The bridge installs like any other plugin**, from the project card's install
+**The Runner installs like any other plugin**, from the project card's install
 dialog, where it is pre-checked next to DTH content — a plugin in your own
 Unreal project is something you tick, not something that appears because you
 sent a character. Sending to a project without it says exactly that. Unreal
@@ -33,7 +34,7 @@ which is where a restart is expected anyway.
 
 **A closed project is opened for you** — five seconds after queueing, if the job
 is still unclaimed and no editor is running at all. That is the rest of the leg:
-the bridge claims a job on startup, so opening the project is what makes a
+the Runner claims a job on startup, so opening the project is what makes a
 queued send finish rather than wait. An editor that is already up is never
 doubled (a wrong guess there costs a duplicate editor and several gigabytes),
 and "is THAT project open" is not answerable from a process list — so the studio
@@ -92,7 +93,7 @@ fresh import at the default, exactly as before. The finish toast says which
 happened and where.
 
 **A re-import is Unreal's own Reimport.** Where the character is already in the
-project, the bridge reimports those assets from the FBX the export just wrote —
+project, the Runner reimports those assets from the FBX the export just wrote —
 the same action as right-click → *Reimport*. Meshes and their morph targets come
 back fresh; materials, curves and the anim blueprint stay as the first import
 built them. A second `.dth` import cannot do this at all: the DazToHue pipeline
@@ -104,8 +105,8 @@ triggers the DazToHue pipeline, and importing the meshes on their own would lose
 the materials, curves and anim blueprint it builds. The file list is for finding
 assets, not for importing them.
 
-Every Install rewrites the bridge, so a re-install refreshes it; and it lives in
+Every Install rewrites the Runner, so a re-install refreshes it; and it lives in
 its own plugin rather than inside the DazToHue one, which is beta and iterating
 — nothing here forks or edits mrpdean's files. The studio reads the installed
-bridge's version before sending, so an out-of-date one is named up front instead
+Runner's version before sending, so an out-of-date one is named up front instead
 of refusing the job from inside Unreal.

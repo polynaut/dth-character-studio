@@ -64,7 +64,7 @@ test('the install dialog offers DTH content + the engine-matched plugin builds',
   await expect(dialog).toBeVisible()
   // The engine is read from the .uproject; every offered item is pre-checked,
   // and only the 5.7 build of the bridge plugin is offered (one row, not two).
-  // Three rows: DTH content, the studio's own DTHStudioBridge, that one build.
+  // Three rows: DTH content, the studio's own DTHCharacterStudioRunner, that one build.
   await expect(dialog.getByText('Unreal Engine 5.7')).toBeVisible()
   const boxes = dialog.getByRole('checkbox')
   await expect(boxes).toHaveCount(3)
@@ -77,7 +77,7 @@ test('the install dialog offers DTH content + the engine-matched plugin builds',
   await expect(page.getByText(/DazToUnreal \(3 files\)/)).toBeVisible()
   // The bridge is written by the FS layer, not by a native install command —
   // the one item whose whole install path runs above the mocked boundary.
-  await expect(page.getByText(/DTH Studio Bridge \(3 files\)/)).toBeVisible()
+  await expect(page.getByText(/DTH Character Studio Runner \(3 files\)/)).toBeVisible()
   await expect(dialog).toHaveCount(0)
 })
 
@@ -155,7 +155,7 @@ test('a project holding an OLD bridge is flagged on its card', async ({ page }) 
   // warning sits next to it.
   const seed = buildSeed({ activeProjectFile: P.dcsp, unrealProjects: [UPROJECT] })
   const dir = UPROJECT.replace(/\/[^/]*$/, '')
-  seed.files[`${dir}/Plugins/DTHStudioBridge/DTHStudioBridge.uplugin`] = JSON.stringify({
+  seed.files[`${dir}/Plugins/DTHCharacterStudioRunner/DTHCharacterStudioRunner.uplugin`] = JSON.stringify({
     Version: 0.5,
   })
   await page.addInitScript(installTauriMock, seed)
@@ -171,7 +171,7 @@ test('a project with the CURRENT bridge — and one with none — are not flagge
   // fix, and crying wolf on a project nobody has installed into is noise.
   const seed = buildSeed({ activeProjectFile: P.dcsp, unrealProjects: [UPROJECT] })
   const dir = UPROJECT.replace(/\/[^/]*$/, '')
-  seed.files[`${dir}/Plugins/DTHStudioBridge/DTHStudioBridge.uplugin`] = JSON.stringify({
+  seed.files[`${dir}/Plugins/DTHCharacterStudioRunner/DTHCharacterStudioRunner.uplugin`] = JSON.stringify({
     Version: UNREAL_BRIDGE_VERSION,
   })
   await page.addInitScript(installTauriMock, seed)

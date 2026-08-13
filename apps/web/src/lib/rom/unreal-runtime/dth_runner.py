@@ -28,7 +28,7 @@ studio starts Unreal and this claims the job on startup.
 What it does NOT do: any content decisions. The import runs mrpdean's own
 DazToHue Interchange pipeline, unmodified — this file only decides WHEN.
 
-Lives in the studio's own plugin (`DTHStudioBridge`), never inside the DazToHue
+Lives in the studio's own plugin (`DTHCharacterStudioRunner`), never inside the DazToHue
 plugin: that one is beta and iterating, and a fork of it would need re-merging
 on every release.
 """
@@ -79,7 +79,7 @@ def _write_result(payload):
         with open(_path(RESULT_FILE), "w", encoding="utf-8") as handle:
             json.dump(payload, handle, indent=2)
     except Exception:
-        unreal.log_error("DTH bridge: could not write its result file\n" + traceback.format_exc())
+        unreal.log_error("DTH Runner: could not write its result file\n" + traceback.format_exc())
 
 
 def _claim():
@@ -101,7 +101,7 @@ def _claim():
         with open(claimed, "r", encoding="utf-8") as handle:
             return json.load(handle)
     except Exception:
-        unreal.log_error("DTH bridge: could not claim the job file\n" + traceback.format_exc())
+        unreal.log_error("DTH Runner: could not claim the job file\n" + traceback.format_exc())
         return None
 
 
@@ -156,7 +156,7 @@ def _reimport_existing(destination_path, files):
             touched.append(asset_path)
         except Exception:
             unreal.log_error(
-                "DTH bridge: could not reimport %s\n%s" % (asset_path, traceback.format_exc())
+                "DTH Runner: could not reimport %s\n%s" % (asset_path, traceback.format_exc())
             )
     return touched
 
@@ -245,7 +245,7 @@ def _existing_destination(files):
         registry.wait_for_completion()
         assets = registry.get_assets_by_path("/Game", recursive=True)
     except Exception:
-        unreal.log_warning("DTH bridge: could not read the asset registry\n" + traceback.format_exc())
+        unreal.log_warning("DTH Runner: could not read the asset registry\n" + traceback.format_exc())
         return None
 
     counts = {}
@@ -262,7 +262,7 @@ def _existing_destination(files):
         return None
     best = max(counts.items(), key=lambda item: item[1])
     unreal.log(
-        "DTH bridge: %d of these files are already imported under %s" % (best[1], best[0])
+        "DTH Runner: %d of these files are already imported under %s" % (best[1], best[0])
     )
     return best[0]
 
@@ -293,7 +293,7 @@ class _Progress(object):
         except Exception:
             self.task = None
             unreal.log_warning(
-                "DTH bridge: no progress dialog (continuing)\n" + traceback.format_exc()
+                "DTH Runner: no progress dialog (continuing)\n" + traceback.format_exc()
             )
 
     def step(self, label):
@@ -352,7 +352,7 @@ def _run_one(entry):
     if mode == "reimport":
         names = _reimport_existing(destination, entry.get("files") or [])
         if names:
-            unreal.log("DTH bridge: reimported %d asset(s) in %s" % (len(names), destination))
+            unreal.log("DTH Runner: reimported %d asset(s) in %s" % (len(names), destination))
             return {
                 "character": entry.get("character", ""),
                 "destination": destination,
@@ -360,11 +360,11 @@ def _run_one(entry):
                 "assets": names,
             }
         unreal.log(
-            "DTH bridge: nothing to reimport in %s — importing the .dth instead" % destination
+            "DTH Runner: nothing to reimport in %s — importing the .dth instead" % destination
         )
         mode = "import"
 
-    unreal.log("DTH bridge: %s %s into %s" % (mode, dth, destination))
+    unreal.log("DTH Runner: %s %s into %s" % (mode, dth, destination))
     assets = _import_dth(dth, destination) or []
     for asset in assets:
         try:
@@ -414,7 +414,7 @@ def _run(job):
                 done.append(_run_one(entry))
             except Exception:
                 detail = traceback.format_exc()
-                unreal.log_error("DTH bridge: import failed for one set\n" + detail)
+                unreal.log_error("DTH Runner: import failed for one set\n" + detail)
                 last = detail.strip().splitlines()[-1] if detail.strip() else "import failed"
                 errors.append("%s: %s" % (name, last))
     finally:
@@ -450,7 +450,7 @@ def _tick(delta_seconds):
             _write_result(_run(job))
         except Exception:
             detail = traceback.format_exc()
-            unreal.log_error("DTH bridge: the import failed\n" + detail)
+            unreal.log_error("DTH Runner: the import failed\n" + detail)
             _write_result(
                 {
                     "version": JOB_VERSION,
@@ -467,7 +467,7 @@ def _tick(delta_seconds):
             except OSError:
                 pass
     except Exception:
-        unreal.log_error("DTH bridge: watcher error\n" + traceback.format_exc())
+        unreal.log_error("DTH Runner: watcher error\n" + traceback.format_exc())
     finally:
         _busy = False
 
@@ -480,7 +480,7 @@ def start():
         return
     _tick_handle = unreal.register_slate_post_tick_callback(_tick)
     unreal.register_python_shutdown_callback(stop)
-    unreal.log("DTH bridge: watching %s" % _path(JOB_FILE))
+    unreal.log("DTH Runner: watching %s" % _path(JOB_FILE))
 
 
 def stop():

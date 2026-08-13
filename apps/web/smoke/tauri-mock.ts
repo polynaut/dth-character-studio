@@ -890,7 +890,7 @@ export function installTauriMock(seed: TauriMockSeed): void {
         let bridgeVersion = 0
         try {
           const manifest = JSON.parse(
-            mustRead(`${pluginsDir}/DTHStudioBridge/DTHStudioBridge.uplugin`),
+            mustRead(`${pluginsDir}/DTHCharacterStudioRunner/DTHCharacterStudioRunner.uplugin`),
           ) as { Version?: unknown }
           bridgeVersion = typeof manifest.Version === 'number' ? manifest.Version : 0
         } catch {

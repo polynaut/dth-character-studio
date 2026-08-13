@@ -82,7 +82,7 @@ they are, and unlinking never deletes anything.
   inert — no accidental launches.
 - **The small install button** on each card opens the **install dialog**: what
   goes into this Unreal project — the linked DTH release's *Unreal Engine
-  Content* (into `Content/DazToHue`), the **DTH Studio Bridge** — marked
+  Content* (into `Content/DazToHue`), the **DTH Character Studio Runner** — marked
   **built in**, because it ships inside the app rather than coming from your
   plugin folders (and carries a version, so a card shows an amber ⚠ when its
   project holds an older copy than the app ships — re-install and restart the

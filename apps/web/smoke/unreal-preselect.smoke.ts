@@ -153,7 +153,7 @@ test('ONE task row per re-import — two sets into one project are two jobs', as
   // Only KiraDefault is already in that project — so its row is a RE-import
   // and the other one's is a first import. The studio located them itself.
   seed.files[IMPORTED] = 'uasset-fixture'
-  seed.files[`${UPROJECT_DIR}/Plugins/DTHStudioBridge/DTHStudioBridge.uplugin`] = JSON.stringify({
+  seed.files[`${UPROJECT_DIR}/Plugins/DTHCharacterStudioRunner/DTHCharacterStudioRunner.uplugin`] = JSON.stringify({
     // From the source of truth, so bumping the bridge can never strand this
     // fixture into "your bridge is out of date" (the same rule the scan-store
     // key follows).
@@ -234,7 +234,7 @@ test('nothing claims the job and no editor is running — the studio opens the p
   seed.files[`${EXPORT_ROOT}/KiraDefault/DTH_KiraDefault.dth`] = '{}'
   seed.files[IMPORTED] = 'uasset-fixture'
   // The bridge is installed and current, or the send refuses before it starts.
-  seed.files[`${UPROJECT_DIR}/Plugins/DTHStudioBridge/DTHStudioBridge.uplugin`] = JSON.stringify({
+  seed.files[`${UPROJECT_DIR}/Plugins/DTHCharacterStudioRunner/DTHCharacterStudioRunner.uplugin`] = JSON.stringify({
     // From the source of truth, so bumping the bridge can never strand this
     // fixture into "your bridge is out of date" (the same rule the scan-store
     // key follows).

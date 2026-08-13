@@ -164,7 +164,7 @@ export const unrealProjectStateSchema = z.object({
   engineAssociation: z.string(),
   dthPresent: z.boolean(),
   installedPlugins: z.array(z.string()),
-  /** The installed DTH Studio Bridge's `Version`, or 0 for "no bridge" (see
+  /** The installed DTH Character Studio Runner's `Version`, or 0 for "no bridge" (see
    *  `bridgeOutdated`). Defaulted: the studio SHIPS that plugin, so this field
    *  is newer than some stored answers, and 0 is the right reading there too. */
   bridgeVersion: z.number().default(0),

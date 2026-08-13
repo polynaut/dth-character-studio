@@ -26,7 +26,7 @@ import { normalizeRelFolder } from '../library'
 // The bridge, bundled as source and rewritten into the project before every
 // run — the same self-repairing rule as 456.py and the Daz runtime: small,
 // must track the app version, and needs no install ritual.
-import bridgeScript from '../unreal-runtime/dth_bridge.py?raw'
+import bridgeScript from '../unreal-runtime/dth_runner.py?raw'
 import bridgeInit from '../unreal-runtime/init_unreal.py?raw'
 
 // The Unreal leg of the round trip: hand a `.dth` to a watching editor.
@@ -56,13 +56,13 @@ import bridgeInit from '../unreal-runtime/init_unreal.py?raw'
  */
 export async function installUnrealBridge({ data }: { data: unknown }): Promise<number> {
   const { uprojectPath } = z.object({ uprojectPath: z.string().min(1) }).parse(data)
-  if (!isTauri()) throw new Error('Installing the bridge needs the desktop app.')
+  if (!isTauri()) throw new Error('Installing the Runner needs the desktop app.')
   const { bridgeDir } = unrealJobPaths(uprojectPath)
   const pythonDir = `${bridgeDir}/Content/Python`
   await mkdir(pythonDir, { recursive: true })
   const files: Array<[string, string]> = [
     [`${bridgeDir}/${UNREAL_BRIDGE_UPLUGIN}`, bridgeUpluginJson()],
-    [`${pythonDir}/dth_bridge.py`, bridgeScript],
+    [`${pythonDir}/dth_runner.py`, bridgeScript],
     [`${pythonDir}/init_unreal.py`, bridgeInit],
   ]
   // Distinct paths, so nothing races; the mkdir above already made the folder.
@@ -201,12 +201,12 @@ export async function startUnrealImport({ data }: { data: unknown }): Promise<Un
   const installedBridge = await readBridgeVersion(paths.bridgeDir)
   if (installedBridge === 0) {
     throw new Error(
-      'The DTH Studio Bridge is not installed in this Unreal project — install it from the project card (Install), then restart the editor once.',
+      'The DTH Character Studio Runner is not installed in this Unreal project — install it from the project card (Install), then restart the editor once.',
     )
   }
   if (installedBridge !== UNREAL_BRIDGE_VERSION) {
     throw new Error(
-      `This project has DTH Studio Bridge v${installedBridge}; this studio ships v${UNREAL_BRIDGE_VERSION} — re-install it from the project card, then restart the editor once.`,
+      `This project has DTH Character Studio Runner v${installedBridge}; this studio ships v${UNREAL_BRIDGE_VERSION} — re-install it from the project card, then restart the editor once.`,
     )
   }
   await mkdir(paths.jobDir, { recursive: true })

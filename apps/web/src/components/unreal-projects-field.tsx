@@ -54,7 +54,7 @@ function UnrealCard({
   /** undefined while the Content/DazToHue probe is still running — the button
    *  stays usable either way; the dialog does its own probing. */
   dthPresent: boolean | undefined
-  /** The project has a DTH Studio Bridge, but not the one this app ships —
+  /** The project has a DTH Character Studio Runner, but not the one this app ships —
    *  a plugin folder keeps whatever was installed the day it was installed,
    *  and the studio ships fixes to it. */
   bridgeStale: boolean
@@ -101,7 +101,7 @@ function UnrealCard({
         {bridgeStale && (
           <span
             className="shrink-0 text-amber-500"
-            title="The DTH Studio Bridge in this project is older than the one this app ships — re-install it (and restart the editor once)."
+            title="The DTH Character Studio Runner in this project is older than the one this app ships — re-install it (and restart the editor once)."
             aria-label="Bridge plugin out of date"
           >
             <AlertTriangle className="size-4" />

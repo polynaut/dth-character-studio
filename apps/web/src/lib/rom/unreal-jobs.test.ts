@@ -30,7 +30,7 @@ describe('unrealJobPaths', () => {
     expect(p.resultFile).toBe('D:/Unreal Projects/DemoGame/Saved/DTHStudio/result.json')
     // Anything under Content/ would be mistaken for an asset by the editor.
     expect(p.jobFile).not.toMatch(/\/Content\//)
-    expect(p.bridgeDir).toBe('D:/Unreal Projects/DemoGame/Plugins/DTHStudioBridge')
+    expect(p.bridgeDir).toBe('D:/Unreal Projects/DemoGame/Plugins/DTHCharacterStudioRunner')
   })
 
   it('accepts a Windows path verbatim — the picker returns backslashes', () => {
@@ -70,7 +70,7 @@ describe('unrealContentPath', () => {
   it('answers nothing for a folder outside Content/', () => {
     // '' is "no destination", never a guess — the caller falls back to the
     // default rather than importing somewhere invented.
-    expect(unrealContentPath(PROJECT, `${PROJECT}/Plugins/DTHStudioBridge`)).toBe('')
+    expect(unrealContentPath(PROJECT, `${PROJECT}/Plugins/DTHCharacterStudioRunner`)).toBe('')
     expect(unrealContentPath(PROJECT, 'D:/elsewhere/Content/X')).toBe('')
     expect(unrealContentPath(PROJECT, '')).toBe('')
   })

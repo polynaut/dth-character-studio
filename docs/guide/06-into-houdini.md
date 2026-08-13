@@ -244,7 +244,7 @@ the post-process animation blueprint.
 **A second send re-imports what you already have.** Before sending, the studio
 looks through the project's `Content/` for assets belonging to each export set —
 they are all named `<PREFIX>_<set>`, so it finds them **wherever you moved
-them** — and tells the bridge to import *there*, on top of what is already
+them** — and tells the Runner to import *there*, on top of what is already
 present, instead of creating a second set under `/Game/DazToHue/<Character>`.
 Move your character to `Content/Characters/Lara` and that is where the next send
 lands. The finish toast says which happened and where: *Re-imported in Unreal —
@@ -264,13 +264,14 @@ already exist), so a second `.dth` import fails outright where a reimport
 updates the mesh.
 
 **The studio does not start Unreal.** An editor takes minutes to come up and
-holds its project open, so the job is *queued* instead: the **DTH Studio
-Bridge** plugin (`Plugins\DTHStudioBridge`, pure Python) watches for the job and
-runs the import within about a second. An editor you open later claims the job
+holds its project open, so the job is *queued* instead: the **DTH Character
+Studio Runner** for Unreal (`Plugins\DTHCharacterStudioRunner`, pure Python —
+the Unreal counterpart of the [Runner plugin](./02-setup.md#daz-studio-plugins)
+that drives Daz) watches for the job and runs the import within about a second. An editor you open later claims the job
 on startup — the same way a closed Daz picks up a batch that was queued while it
 wasn't running.
 
-**Install the bridge first.** It is an ordinary item in the project card's
+**Install the Runner first.** It is an ordinary item in the project card's
 [install dialog](./03-first-project.md#linking-unreal-projects), pre-checked
 alongside DTH content — nothing appears in your `Plugins\` folder that you
 didn't tick. Sending to a project that hasn't got it says so rather than waiting
@@ -280,23 +281,24 @@ for a watcher that will never come.
 to *run* an import — an editor takes minutes to come up and holds its project —
 but a job nothing can claim is a run that visibly does nothing. So five seconds
 after queueing, if the job is still sitting there **and no editor is running at
-all**, the studio opens the `.uproject` and the bridge claims the job on
+all**, the studio opens the `.uproject` and the Runner claims the job on
 startup. An editor that is already up is never doubled: if it does not pick the
-job up, its bridge was installed after that session began — restart it once.
+job up, its Runner was installed after that session began — restart it once.
 
-While the bridge works, Unreal shows its own **progress dialog** — the import
+While the Runner works, Unreal shows its own **progress dialog** — the import
 holds the editor's main thread for minutes, and a frozen editor looks exactly
 like a hung one.
 
 > [!NOTE]
 > **Restart the editor once after installing it.** Unreal loads plugins at
-> startup, so a bridge installed into an open project does nothing until that
+> startup, so a Runner installed into an open project does nothing until that
 > editor restarts. The panel says *"Waiting for the editor to pick it up…"*
 > until something claims the job — normal while Unreal starts, and the sign of a
 > missed restart when the project is already open.
 
-Every Install rewrites the bridge, so a re-install is also how you refresh it;
-and it lives in its own plugin, so the DazToHue plugin is never edited.
+Every Install rewrites the Runner, so a re-install is also how you refresh it
+— and the project card shows an amber ⚠ when its copy is older than the one this
+app ships. It lives in its own plugin, so the DazToHue plugin is never edited.
 
 For the Unreal side itself, continue with the [DazToHue](https://docs.google.com/document/d/1LYXl90FCXPX5KVpru4_T_hCY_XLr9vinR_9zYENPHUw/edit?tab=t.0)
 documentation.

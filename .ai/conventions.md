@@ -6,7 +6,7 @@ the reference.
 ## Shipped-plugin versions
 
 The studio ships two plugins into other people's applications — the Daz
-**Runner** and Unreal's **DTH Studio Bridge** — and a plugin folder keeps
+**Runner** and Unreal's **DTH Character Studio Runner** — and a plugin folder keeps
 whatever was installed the day it was installed. So each carries a version the
 studio can read back, and **any change to the shipped files bumps it**:
 
@@ -17,7 +17,7 @@ studio can read back, and **any change to the shipped files bumps it**:
   numbers named.
 - Do NOT reuse `UNREAL_JOB_VERSION` for this. That one is the job/result
   CONTRACT — what the two sides must agree on — and only changes when the file
-  shape does. A bug fix in `dth_bridge.py` changes no contract and still has to
+  shape does. A bug fix in `dth_runner.py` changes no contract and still has to
   reach every project holding the old copy.
 
 `0` means "no plugin", never "old plugin": different message, different fix.

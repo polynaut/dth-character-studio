@@ -99,7 +99,7 @@ describe('UnrealInstallDialog', () => {
     const boxes = screen.getAllByRole('checkbox') as Array<HTMLInputElement>
     expect(boxes).toHaveLength(4)
     expect(boxes.every((box) => box.checked)).toBe(true)
-    expect(screen.getByText('Plugins/DTHStudioBridge')).toBeTruthy()
+    expect(screen.getByText('Plugins/DTHCharacterStudioRunner')).toBeTruthy()
     expect(screen.getByText('DazToUnreal')).toBeTruthy()
     expect(screen.getByText('AnyTool')).toBeTruthy()
     // Exactly one row is the app's own — the scanned builds must not claim it.
@@ -139,13 +139,13 @@ describe('UnrealInstallDialog', () => {
     unrealProjectState.mockResolvedValueOnce({
       engineAssociation: '5.7',
       dthPresent: false,
-      installedPlugins: ['DTHStudioBridge'],
+      installedPlugins: ['DTHCharacterStudioRunner'],
     })
     render(<UnrealInstallDialog uprojectPath={UPROJECT} onClose={() => {}} onInstalled={() => {}} />)
-    await waitFor(() => expect(screen.getByText('Plugins/DTHStudioBridge')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Plugins/DTHCharacterStudioRunner')).toBeTruthy())
 
-    const row = screen.getByText('Plugins/DTHStudioBridge').closest('label')!
-    expect(row.textContent).toContain('Plugins/DTHStudioBridge')
+    const row = screen.getByText('Plugins/DTHCharacterStudioRunner').closest('label')!
+    expect(row.textContent).toContain('Plugins/DTHCharacterStudioRunner')
     // Marked as OURS: every other row is a plugin the user downloaded and
     // pointed the studio at, and this one arrives out of the app itself.
     expect(row.textContent).toContain('built in')

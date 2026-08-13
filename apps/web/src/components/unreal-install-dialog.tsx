@@ -100,7 +100,7 @@ function buildItems(
       // on its own the first time a character is sent. Content-only Python, so
       // it fits every engine and carries no build to mismatch.
       key: DTH_BRIDGE_KEY,
-      label: 'DTH Studio Bridge',
+      label: 'DTH Character Studio Runner',
       detail: UNREAL_BRIDGE_FOLDER,
       installed: installed.has(UNREAL_BRIDGE_NAME.toLowerCase()),
       builtIn: true,
@@ -368,7 +368,7 @@ export function UnrealInstallDialog({
                 <code>Plugins/</code>.
               </p>
               <p>
-                <strong>DTH Studio Bridge</strong> is the studio&apos;s own small plugin (pure
+                <strong>DTH Character Studio Runner</strong> is the studio&apos;s own small plugin (pure
                 Python, no binaries): it lets <em>Send to Unreal</em> hand this project a
                 character&apos;s Houdini export. Unreal loads plugins at startup, so restart the
                 editor once after installing it.

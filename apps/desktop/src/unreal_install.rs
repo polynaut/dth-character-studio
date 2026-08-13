@@ -97,7 +97,7 @@ pub struct UnrealProjectState {
     pub dth_present: bool,
     /// Folder names under the project's `Plugins/`, sorted.
     pub installed_plugins: Vec<String>,
-    /// The `Version` of the installed DTH Studio Bridge, or 0 when the project
+    /// The `Version` of the installed DTH Character Studio Runner, or 0 when the project
     /// has none (or its `.uplugin` cannot be read — the same answer, since
     /// neither can run a job).
     ///
@@ -1452,9 +1452,9 @@ mod tests {
         fs::create_dir_all(project.join("Plugins").join("DazToUnreal")).unwrap();
         // The studio's own plugin, one version behind what this app ships —
         // the shape the project card's staleness warning exists for.
-        let bridge = project.join("Plugins").join("DTHStudioBridge");
+        let bridge = project.join("Plugins").join("DTHCharacterStudioRunner");
         fs::create_dir_all(&bridge).unwrap();
-        fs::write(bridge.join("DTHStudioBridge.uplugin"), r#"{ "Version": 3 }"#).unwrap();
+        fs::write(bridge.join("DTHCharacterStudioRunner.uplugin"), r#"{ "Version": 3 }"#).unwrap();
         let uproject = project.join("Game.uproject");
         fs::write(&uproject, r#"{ "FileVersion": 3, "EngineAssociation": "5.7" }"#).unwrap();
 
@@ -1464,7 +1464,7 @@ mod tests {
             UnrealProjectState {
                 engine_association: "5.7".into(),
                 dth_present: true,
-                installed_plugins: vec!["DTHStudioBridge".into(), "DazToUnreal".into()],
+                installed_plugins: vec!["DTHCharacterStudioRunner".into(), "DazToUnreal".into()],
                 bridge_version: 3,
             }
         );
@@ -1554,8 +1554,8 @@ mod tests {
 fn bridge_version_at(project_dir: &Path) -> u32 {
     let manifest = project_dir
         .join("Plugins")
-        .join("DTHStudioBridge")
-        .join("DTHStudioBridge.uplugin");
+        .join("DTHCharacterStudioRunner")
+        .join("DTHCharacterStudioRunner.uplugin");
     std::fs::read_to_string(manifest)
         .ok()
         .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())

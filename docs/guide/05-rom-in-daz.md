@@ -271,7 +271,7 @@ export mode is disabled.
 one and the finished export is **queued for import** when the whole run ends —
 every export set the character has, in one job. Nothing waits on Unreal: the
 job is a file, and the project's
-[DTH Studio Bridge](./06-into-houdini.md#send-to-unreal) picks it up whenever
+[DTH Character Studio Runner](./06-into-houdini.md#send-to-unreal) picks it up whenever
 that editor is next open.
 
 Under the projects it lists the character's **export sets**, ticked the same
