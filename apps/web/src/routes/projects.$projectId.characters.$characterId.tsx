@@ -589,14 +589,10 @@ function CharacterPage({ onImportRemount }: { onImportRemount: () => void }) {
                     houdiniSubdir={project?.houdiniSubdir ?? 'houdini'}
                     projectId={projectId}
                   />
-                  {/* Directly under the Houdini projects, because what it sends
-                      is what they export — and it renders nothing at all until
-                      the project has a linked .uproject. */}
-                  <UnrealImportField
-                    projectId={projectId}
-                    characterId={character.id}
-                    unrealProjects={project?.unrealProjects ?? []}
-                  />
+                  {/* Status only, under the Houdini projects whose export it
+                      reports on — and invisible unless an import is in flight.
+                      Sending is the DTH Export dialog's job, and only its. */}
+                  <UnrealImportField unrealProjects={project?.unrealProjects ?? []} />
                 </SceneLock>
               </>
             )}

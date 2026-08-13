@@ -179,6 +179,9 @@ test('nothing claims the job and no editor is running — the studio opens the p
   // and holds its project), but a queued job with nothing watching is a run
   // that visibly does nothing. Opening the project is the rest of that leg: the
   // bridge claims the job on startup.
+  //
+  // Driven through the ONE way to send — the DTH Export dialog, with both Daz
+  // and Houdini skipped, which is the "just re-import in Unreal" run.
   const seed = buildSeed({
     activeProjectFile: P.dcsp,
     demo: true,
@@ -195,13 +198,23 @@ test('nothing claims the job and no editor is running — the studio opens the p
   await page.goto('/')
   await page.getByRole('link', { name: /Kira/ }).click()
   await page.getByText(/custom ROM frames/).waitFor()
+  await page.getByRole('button', { name: 'DTH Export' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.waitFor()
 
-  await page.getByRole('button', { name: 'Send to Unreal', exact: true }).last().click()
-  await expect(page.getByText(/Queued for Unreal/)).toBeVisible()
+  // Skip Daz, skip Houdini: the whole run is the send.
+  await dialog.locator('#daz-mode').click()
+  await page.getByRole('option', { name: /Skip Daz/ }).click()
+  await dialog.locator('#houdini-mode').click()
+  await page.getByRole('option', { name: /Skip Houdini/ }).click()
+  await dialog.getByRole('checkbox', { name: 'Send to DemoGame' }).check()
+  await dialog.locator('li').filter({ hasText: 'KiraDefault' }).getByRole('checkbox').check()
+  await dialog.getByRole('button', { name: 'Start' }).click()
+
+  await expect(page.getByText(/Unreal: queued for DemoGame/)).toBeVisible()
   // Nothing claims it (no editor in the fake world), so after the grace period
   // the project is handed to the OS the same way a `.hip` or `.duf` is.
   await expect
     .poll(() => callsNamed(page, 'shell_open_file'), { timeout: 15_000 })
     .toEqual([{ path: UPROJECT }])
-  await expect(page.getByText(/Opening DemoGame in Unreal/)).toBeVisible()
 })

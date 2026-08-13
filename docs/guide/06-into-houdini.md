@@ -211,24 +211,27 @@ pick up changes.
 
 ## Send to Unreal
 
-Once Houdini has exported, the character page's **Send to Unreal** panel (under
-the Houdini projects) hands that export to a linked Unreal project. It appears
-only when the studio project has a linked `.uproject` — see
-[Linking Unreal projects](./03-first-project.md#linking-unreal-projects).
+Sending happens in **one** place: the
+[DTH Export dialog](./05-rom-in-daz.md#batch-export--dth-export)'s **Unreal
+projects** section, so a full **Daz → Houdini → Unreal** run is one Start. To
+send an export you already have without running anything, pick **Skip Daz — use
+last exports** and **Skip Houdini — use last exports**: then the whole run is
+the send.
 
-> The [DTH Export dialog](./05-rom-in-daz.md#batch-export--dth-export) has the
-> same thing as a third section, so a full **Daz → Houdini → Unreal** run is one
-> Start. This panel is for sending what is already exported — and for watching
-> an import while it runs.
+The character page shows a small status line under the Houdini projects while an
+import is in flight — and nothing at all otherwise. It exists because an import
+runs for minutes inside an editor that may not even have been open when the job
+was queued, so its outcome arrives long after the run that queued it has
+finished.
 
-What it sends is the **export sets you tick**. Each is a folder in the
-character's `export/` folder named by the HDA's *character name* and holding a
-`DTH_<name>.dth`, so one character can have several (outfit variants, for
-instance). The panel lists them: a set the project already holds shows the
-folder it will refresh and comes **ticked**; one it doesn't is marked *not in
-this project* and stays unticked, so a variant never lands in Unreal by
-accident. Ticking it is how you do that first import. They travel in one job and
-import into one content folder each. This is the end of the
+What it sends is the **export sets you tick** in that section. Each is a folder
+in the character's `export/` folder named by the HDA's *character name* and
+holding a `DTH_<name>.dth`, so one character can have several (outfit variants,
+for instance). A set the project already holds shows the folder it will refresh
+and comes **ticked**; one it doesn't is marked *not in this project* and stays
+unticked, so a variant never lands in Unreal by accident. Ticking it is how you
+do that first import. They travel in one job and import into one content folder
+each. This is the end of the
 pipeline, not the `daz-export` intermediate the Houdini imports read. What imports it is **mrpdean's DazToHue importer plugin**, whose
 own pipeline does the work: meshes, textures, materials, animation curves and
 the post-process animation blueprint.

@@ -2558,8 +2558,14 @@ function DthExportDialog({
               value={houdiniMode}
               onValueChange={(value) => setHoudiniMode(value as HoudiniRunMode)}
               // Inert without a selected project — and without a checked Daz
-              // scene, when the whole run has nothing to start from.
-              disabled={checkedHips.size === 0 || checked.size === 0}
+              // scene, when the whole run has nothing to start from. NOT when
+              // the project has a linked Unreal project: `skip` is precisely
+              // the choice for a run with no Houdini in it, so requiring a
+              // ticked Houdini project to reach it locks the user out of the
+              // one mode that says "don't run Houdini".
+              disabled={
+                unrealProjects.length === 0 && (checkedHips.size === 0 || checked.size === 0)
+              }
             >
               <SelectTrigger id="houdini-mode" className="w-80">
                 {/* Title only — see the Daz trigger above. */}
