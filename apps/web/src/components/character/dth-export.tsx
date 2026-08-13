@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
-import { Ban, Loader2, Play, Wand } from 'lucide-react'
+import { AlertTriangle, Ban, Loader2, Play, Wand } from 'lucide-react'
 import { toast } from 'sonner'
 
 import {
@@ -2096,11 +2096,17 @@ function DthExportDialog({
    * Each checked Houdini project declares the sets it writes (its export
    * nodes' `character_name`, read in the project scan). A project the scan has
    * never reached declares nothing — and "not known" is not "writes nothing",
-   * so one unscanned project makes the whole answer null and the rules below
-   * fall back to what they did before.
+   * so one unscanned project makes the whole answer null.
+   *
+   * **Null pre-ticks NOTHING**, rather than falling back to "does this project
+   * hold this character at all". That fallback is what the report was about:
+   * picking the THICK project ticked an Unreal project because it held a
+   * DIFFERENT variant, and the run then imported one nobody asked for. An
+   * un-ticked row the user can tick costs a click; a ticked one they did not
+   * mean costs a stray character in their project.
    *
    * Under `skip` the run produces nothing new: the sets in play are whatever is
-   * on disk, so the question does not arise.
+   * on disk, so the question does not arise and presence alone decides.
    */
   const runSets =
     houdiniMode === 'skip'
@@ -2132,13 +2138,15 @@ function DthExportDialog({
       return
     }
     setCheckedUnreal(
-      new Set(
-        unrealProjects.filter((path) =>
-          Object.keys(sendPlan.located[path] ?? {}).some(
-            (name) => runSets === null || runSets.has(name),
+      runSets === null && houdiniMode !== 'skip'
+        ? EMPTY_SELECTION
+        : new Set(
+            unrealProjects.filter((path) =>
+              Object.keys(sendPlan.located[path] ?? {}).some(
+                (name) => runSets === null || runSets.has(name),
+              ),
+            ),
           ),
-        ),
-      ),
     )
     // `unrealProjects` is the prop array, stable per render of the parent.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2158,6 +2166,10 @@ function DthExportDialog({
    */
   useEffect(() => {
     if (!unrealSendable || sendPlan === null) {
+      setCheckedSets(EMPTY_SELECTION)
+      return
+    }
+    if (runSets === null && houdiniMode !== 'skip') {
       setCheckedSets(EMPTY_SELECTION)
       return
     }
@@ -2623,6 +2635,16 @@ function DthExportDialog({
                 )
               })}
             </ul>
+          )}
+          {unrealSendable && runSets === null && houdiniMode !== 'skip' && (
+            <p className="mt-1.5 flex items-start gap-1.5 text-xs text-amber-500">
+              <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+              <span>
+                Nothing pre-selected: the studio doesn&apos;t know yet which export set these
+                Houdini projects write. <strong>Rescan</strong> them (Utils drawer) and it will
+                tick what this run actually refreshes.
+              </span>
+            </p>
           )}
           <p className="mt-1.5 text-xs text-muted-foreground">
             {!unrealSendable

@@ -137,8 +137,15 @@ export function scanCacheKey(
  *     Reported on the first real use, which is the second time this exact
  *     trap has been paid for: a scan that learns to SEE something new is a
  *     changed question, just like one that learns to report a new field.
+ *   - **v4** adds `exportSets` — each export node's `character_name`, which is
+ *     the folder the HDA writes under the character's `export/`. THIRD time,
+ *     and this one bit within the hour: a v3 entry has no such field, zod
+ *     defaults it to `[]`, and `[]` is indistinguishable from "this project
+ *     has no export nodes" — so the DTH Export dialog read every already-scanned
+ *     project as writing nothing at all. Bumping is what makes an old entry
+ *     say "ask me again" instead of answering a question it was never asked.
  */
-export const SCAN_ANSWER_VERSION = 3
+export const SCAN_ANSWER_VERSION = 4
 
 /**
  * Fold the installed operator libraries into one comparable string — name, mtime
