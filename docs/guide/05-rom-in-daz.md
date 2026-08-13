@@ -261,6 +261,21 @@ for a Houdini export to pick up — the projects don't pre-select there, and a
 project you tick by hand can only be **opened** (the export modes are
 disabled, and one project at a time).
 
+**Unreal projects** is the third leg, and appears once the studio project has
+[linked `.uproject` files](./03-first-project.md#linking-unreal-projects). Tick
+one and the finished export is **queued for import** when the whole run ends —
+every export set the character has, in one job. Nothing waits on Unreal: the
+job is a file, and the project's
+[DTH Studio Bridge](./06-into-houdini.md#send-to-unreal) picks it up whenever
+that editor is next open.
+
+Like the other two lists, it **pre-selects what the run is for**: a project that
+already holds this character (its `Content/DazToHue/…` folder) starts ticked, a
+project that doesn't stays for you to decide — putting a character into an
+Unreal project for the first time is a choice, not a continuation. The section
+needs an exporting Houdini leg: with **Open only** or **ROM only** there is no
+fresh export, and sending would only re-import the previous one.
+
 Press **Start**: the batch is handed to Daz Studio, where the bundled
 [**Runner plugin**](./02-setup.md#daz-studio-plugins)
 works through it unattended — every scene gets its full ROM build, export and

@@ -468,6 +468,10 @@ interface ActiveExportRun {
   /** What those projects do when their turn comes — the Houdini list's Mode
    *  dropdown (see {@link HoudiniRunMode}; api/houdini.ts runs the exports). */
   houdiniMode: HoudiniRunMode
+  /** Linked `.uproject`s to hand the finished export to, once the Houdini
+   *  queue behind this batch has drained ([] = none). Rides the whole run for
+   *  the same reason the Houdini plan does: the send is minutes away. */
+  unrealProjects: Array<string>
   /** The scenes this batch ran, in job order — the Houdini run exports only
    *  the networks importing THESE scenes, so the list has to survive the batch
    *  to be available when it finishes. */
@@ -496,6 +500,7 @@ const exportRunSidecarSchema = z.object({
   houdiniProjects: z.array(z.string()),
   houdiniMode: z.enum(HOUDINI_RUN_MODES),
   scenes: z.array(z.string()),
+  unrealProjects: z.array(z.string()).default([]),
 })
 
 /**
@@ -606,6 +611,8 @@ export type ExportRunProgress =
       houdiniMode: HoudiniRunMode
       /** The scenes the batch ran — the Houdini job's scope. */
       scenes: Array<string>
+      /** Linked Unreal projects to send to once the Houdini queue drains. */
+      unrealProjects: Array<string>
       /** Handoff → finish, for the toast's "in 12m 34s". */
       elapsedMs?: number
     }
@@ -792,6 +799,7 @@ export async function fetchExportRunProgress(watcher?: string): Promise<ExportRu
           houdiniProjects: run.houdiniProjects,
           houdiniMode: run.houdiniMode,
           scenes: run.scenes,
+          unrealProjects: run.unrealProjects,
         }
       }
       // Below 100 with Daz gone = the run died (crash / user quit) — it will
@@ -1172,6 +1180,9 @@ const executeInput = charScopeInput.extend({
    *  dialog selected a project explicitly (or via its involved-projects
    *  auto-selection). */
   houdiniMode: z.enum(HOUDINI_RUN_MODES).default('export-selected'),
+  /** Linked Unreal projects the finished export is sent to, after the Houdini
+   *  queue. [] = none, which is every run that isn't asked for one. */
+  unrealProjects: z.array(z.string().min(1)).default([]),
 })
 
 export interface ExecuteJobsSummary {
@@ -1231,6 +1242,7 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
     mode,
     houdiniProjects,
     houdiniMode,
+    unrealProjects,
   } = executeInput.parse(data)
   if (!isTauri()) throw new Error('DTH Export needs the desktop app (Daz Studio is launched natively).')
 
@@ -1365,6 +1377,7 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
     houdiniProjects: hips,
     houdiniMode,
     scenes,
+    unrealProjects,
   }
   await writeExportRunSidecar(activeRun)
 
@@ -1824,6 +1837,7 @@ export async function startProjectScan({ data }: { data: unknown }): Promise<Pro
     houdiniProjects: [],
     houdiniMode: 'export-selected',
     scenes: sceneWork.map((s) => s.scenePath),
+    unrealProjects: [],
   }
 
   const dazWasRunning = await dazStudioRunningNative(false, 'export')

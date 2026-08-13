@@ -19,6 +19,7 @@ import {
 import dazLogo from '#/assets/daz-logo.png'
 import dthLogo from '#/assets/dth-logo.webp'
 import houdiniLogo from '#/assets/houdini-logo.svg'
+import unrealLogo from '#/assets/unreal-logo.svg'
 import { Portrait } from '#/components/portrait.tsx'
 import { PrimaryBadge } from '#/components/primary-badge.tsx'
 import { RunnerGateNotice } from '#/components/runner-gate-notice.tsx'
@@ -38,10 +39,12 @@ import {
   fetchExportRunnerGate,
   fetchHoudiniRunProgress,
   fetchSceneDthPaths,
+  fetchUnrealCharacterPresence,
   fileExists,
   launchDazForPendingJobs,
   openScene,
   startHoudiniExport,
+  startUnrealImport,
 } from '#/lib/rom/api.ts'
 import { holdBusyCursor } from '#/lib/busy-cursor.ts'
 import {
@@ -319,12 +322,17 @@ function HoudiniProgressButton({
   )
 }
 
+/** A stable empty default for the optional linked-`.uproject` list — a fresh
+ *  `[]` per render is a new reference every time (and the lint gate says so). */
+const NO_UNREAL_PROJECTS: ReadonlyArray<string> = []
+
 export function DthExportAction({
   projectId,
   character,
   saving,
   dirty,
   dazLibraryConfigured,
+  unrealProjects = NO_UNREAL_PROJECTS,
   onPipeline,
 }: {
   projectId: string
@@ -333,6 +341,9 @@ export function DthExportAction({
   dirty: boolean
   /** “My DAZ 3D Library” is set — where the job file and scripts live. */
   dazLibraryConfigured: boolean
+  /** The PROJECT's linked `.uproject`s (per-project, not per-character) — the
+   *  dialog's third leg. Empty = no Unreal section at all. */
+  unrealProjects?: ReadonlyArray<string>
   /** The run's live pipeline view (task cards + the tail-mode log), reported
    *  up so the header can render {@link ExportPipelinePanel} ABOVE the whole
    *  button cluster (this component only owns its own buttons). Null = no run. */
@@ -684,9 +695,53 @@ export function DthExportAction({
     /** Whether any inherited leg failed — the report's tone, which the lines
      *  themselves can't carry. */
     carriedFailed?: boolean
+    /** The Unreal leg's lines — one per selected project, added at the very
+     *  end (it runs after the last Houdini project). */
+    unreal?: Array<string>
   } | null>(null)
   /** The project the LIVE Houdini run belongs to — attribution for its line. */
   const currentHipRef = useRef('')
+  /**
+   * The Unreal projects this run finishes into — the dialog's third leg.
+   *
+   * A ref for the same reason as the queue: the poll interval's closure is
+   * armed once. It rides the Houdini run plan too, so a window that reloads
+   * mid-export still sends when the queue drains.
+   */
+  const unrealTargetsRef = useRef<Array<string>>([])
+
+  /**
+   * Hand what the run just exported to the selected Unreal projects, and say so
+   * in the end report.
+   *
+   * Runs when the WHOLE Houdini queue has drained: one job file per Unreal
+   * project, each naming every export set the character has. Nothing is
+   * watched afterwards — the send is a file write, and the editor picks it up
+   * whenever it is next open (the character page's panel is where a live
+   * import is followed).
+   */
+  async function sendToUnreal(): Promise<Array<string>> {
+    const targets = unrealTargetsRef.current
+    unrealTargetsRef.current = []
+    if (targets.length === 0) return []
+    const lines = await Promise.all(
+      targets.map(async (uprojectPath) => {
+        const name = stemOf(uprojectPath)
+        try {
+          const started = await startUnrealImport({
+            data: { projectId, id: character.id, uprojectPath },
+          })
+          const sets = started.sets.map((set) => set.name).join(', ')
+          return `Unreal: queued for ${name} — ${sets}`
+        } catch (error) {
+          // A refusal here (no bridge, no export) must not read as an export
+          // failure: the Houdini leg is done and its output is on disk.
+          return `Unreal: not queued for ${name} — ${error instanceof Error ? error.message : String(error)}`
+        }
+      }),
+    )
+    return lines
+  }
 
   /** The one end-of-everything toast: a line for the Daz leg, one per Houdini
    *  project, the failures inline, and the total time across all legs. */
@@ -724,6 +779,9 @@ export function DthExportAction({
       if (leg.elapsedMs === undefined) totalKnown = false
       else totalMs += leg.elapsedMs
     }
+    // Last, because it happens last. A send that was refused says so on its own
+    // line without souring the run's tone: the export itself still finished.
+    if (report.unreal?.length) lines.push(...report.unreal)
     const title = `DTH Export finished${totalKnown && totalMs > 0 ? ` in ${formatElapsed(totalMs)}` : ''}.`
     const options = {
       id: EXPORT_TOAST_ID,
@@ -779,6 +837,10 @@ export function DthExportAction({
             report?.carriedFailed === true ||
             (report?.daz?.failed ?? 0) > 0 ||
             (report?.houdini.some((leg) => leg.failed) ?? false),
+          // The third leg rides along for the same reason as the queue: it
+          // fires when the LAST project finishes, minutes from now, in a
+          // window that may have reloaded since.
+          unrealProjects: unrealTargetsRef.current,
         },
       })
       setHoudini({ state: 'starting', startedAtMs: Date.now() })
@@ -869,6 +931,9 @@ export function DthExportAction({
         publishPipeline(null, houdiniRef.current)
         // No toast here — the panel shows the handover; the report comes at
         // the very end of the whole process.
+        // The Unreal targets came through the Daz run record, so a window that
+        // reloaded during the batch still finishes into Unreal.
+        unrealTargetsRef.current = run.unrealProjects
         void startHoudiniQueue(
           run.houdiniProjects,
           run.houdiniMode === 'export-all'
@@ -982,8 +1047,11 @@ export function DthExportAction({
         void startHoudiniQueue(queued.projects, queued.scenes)
         return
       }
-      // The LAST leg of the whole process — now the one report fires.
+      // The LAST leg of the whole process — the export is on disk, so the
+      // Unreal leg (if any) goes now, and its lines join the one report.
+      const unrealLines = await sendToUnreal()
       if (report) {
+        if (unrealLines.length > 0) report.unreal = unrealLines
         emitFinalReport()
       } else {
         clearPipeline()
@@ -992,7 +1060,7 @@ export function DthExportAction({
         const options = {
           id: HOUDINI_TOAST_ID,
           duration: Infinity,
-          description: detail || undefined,
+          description: [detail, ...unrealLines].filter(Boolean).join('\n') || undefined,
         }
         if (run.failed > 0 || run.error) {
           toast.warning(`Houdini export finished — ${summary}${took}.`, options)
@@ -1009,6 +1077,9 @@ export function DthExportAction({
       // Houdini nobody asked for. Drop the rest of the queue; what already
       // finished rides the error as context, so it isn't lost with the run.
       houdiniQueueRef.current = null
+      // …and no send: the export this run was going to hand over never
+      // finished, so queueing one would import whatever was there before.
+      unrealTargetsRef.current = []
       const report = runReportRef.current
       runReportRef.current = null
       const done = report
@@ -1062,6 +1133,9 @@ export function DthExportAction({
           plan.remaining.length > 0
             ? { projects: plan.remaining, scenes: plan.sceneScope }
             : null
+        // The Unreal leg is part of the plan too — without this, a reload
+        // between the export and its send silently drops the send.
+        unrealTargetsRef.current = plan.unrealProjects
         // The report is REBUILT from the lines the plan carries — this window
         // never saw those legs, and the one end-of-everything report has to
         // name them anyway. They ride as pre-formatted lines (their per-leg
@@ -1265,6 +1339,7 @@ export function DthExportAction({
         <DthExportDialog
           projectId={projectId}
           character={character}
+          unrealProjects={unrealProjects}
           onClose={() => setOpen(false)}
           onExported={(run) => {
             // A new run supersedes the previous outcome (see dismissFinishToasts).
@@ -1275,6 +1350,9 @@ export function DthExportAction({
             // the Daz scenes, then the Houdini projects (rom-only continues
             // into nothing, so its houdini list is already empty here).
             dazLaunchedRef.current = run.dazLaunched
+            // Held for the end of the WHOLE process; the Daz run record carries
+            // a copy so a reload during the batch doesn't lose it.
+            unrealTargetsRef.current = run.unrealProjects
             pipelineRef.current = {
               daz: run.scenes.map((path) => ({ path, label: stemOf(path) })),
               houdini: run.houdiniProjects.map((path) => ({
@@ -1289,7 +1367,7 @@ export function DthExportAction({
           }}
           // A skip-Daz run hands its selection straight to the Houdini queue —
           // the same machinery the after-batch continuation drives.
-          onHoudiniQueue={(projects, scenes) => {
+          onHoudiniQueue={(projects, scenes, unrealTargets) => {
             dismissFinishToasts()
             runReportRef.current = null
             pipelineRef.current = {
@@ -1300,6 +1378,7 @@ export function DthExportAction({
                 networks: scenes.map(stemOf),
               })),
             }
+            unrealTargetsRef.current = unrealTargets
             void startHoudiniQueue(projects, scenes)
           }}
           onDazClosing={() => setDazClosing(true)}
@@ -1656,9 +1735,63 @@ function HipRow({
   )
 }
 
+/** One linked Unreal project in the dialog's third section. Same shape as
+ *  {@link HipRow} — checkbox, logo, name, one line of context. */
+function UnrealRow({
+  uproject,
+  checked,
+  has,
+  onToggle,
+}: {
+  uproject: string
+  checked: boolean
+  /** The project already holds this character (`Content/DazToHue/<set>`) —
+   *  why it comes pre-checked. null = the probe hasn't landed. */
+  has: boolean | null
+  onToggle: () => void
+}) {
+  const stem = (uproject.split(/[\\/]/).pop() ?? uproject).replace(/\.[^./\\]+$/, '')
+  const parts = uproject.replace(/\\/g, '/').split('/').filter(Boolean)
+  const shortPath = parts.length > 2 ? `…/${parts.slice(-2).join('/')}` : uproject.replace(/\\/g, '/')
+  return (
+    <div className="group/card relative w-full">
+      <div
+        className="unreal-pick-card relative flex items-center gap-3 rounded-lg border p-3 pl-4"
+        data-selected={checked ? 'true' : undefined}
+      >
+        <input
+          type="checkbox"
+          className="relative z-10 size-4 shrink-0 accent-unreal-blue"
+          aria-label={`Send to ${stem}`}
+          checked={checked}
+          onChange={onToggle}
+        />
+        <span className="flex aspect-[3/4] h-[56px] shrink-0 items-center justify-center rounded-md bg-[#262626]">
+          <img src={unrealLogo} alt="" aria-hidden className="size-8 object-contain" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <span className="block truncate text-base font-medium">{stem}</span>
+          <p className="mt-0.5 truncate text-xs text-muted-foreground" title={uproject.replace(/\\/g, '/')}>
+            {has === true ? 'Already has this character' : shortPath}
+          </p>
+        </div>
+      </div>
+      <button
+        type="button"
+        aria-hidden
+        tabIndex={-1}
+        onClick={onToggle}
+        className="absolute inset-0 rounded-lg"
+      />
+      <div aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-1.5 rounded-l-lg bg-unreal-blue" />
+    </div>
+  )
+}
+
 function DthExportDialog({
   projectId,
   character,
+  unrealProjects,
   onClose,
   onExported,
   onHoudiniQueue,
@@ -1666,6 +1799,8 @@ function DthExportDialog({
 }: {
   projectId: string
   character: Character
+  /** The project's linked `.uproject`s — the run's third leg. */
+  unrealProjects: ReadonlyArray<string>
   onClose: () => void
   /** A handoff was written — the header button flips to Abort. Carries the
    *  run's selection (run order) for the header's task cards; `houdiniProjects`
@@ -1675,12 +1810,18 @@ function DthExportDialog({
     scenes: Array<string>
     houdiniProjects: Array<string>
     houdiniScenes: Array<string>
+    /** The Unreal projects the run finishes into ([] = none picked). */
+    unrealProjects: Array<string>
     /** The handoff started Daz itself (vs. handing to a running one). */
     dazLaunched: boolean
   }) => void
   /** A skip-Daz run handed its selection straight to Houdini (no Daz batch) —
    *  the caller starts the sequential project queue on these scenes. */
-  onHoudiniQueue: (projects: Array<string>, scenes: Array<string>) => void
+  onHoudiniQueue: (
+    projects: Array<string>,
+    scenes: Array<string>,
+    unrealProjects: Array<string>,
+  ) => void
   /** The handoff went to a Daz that is still shutting down — the caller shows
    *  the wait-and-relaunch modal (see WaitForDazCloseModal). */
   onDazClosing: () => void
@@ -1716,6 +1857,36 @@ function DthExportDialog({
   const [sceneDth, setSceneDth] = useState<Record<string, string>>({})
   // null = still checking (Start stays off for the moment the probe takes).
   const [runner, setRunner] = useState<RunnerGate | null>(null)
+  // The Unreal list's selection, and which projects already hold this
+  // character (the pre-selection, the Unreal twin of "changed since the last
+  // export" and "imports a selected scene").
+  const [checkedUnreal, setCheckedUnreal] = useState<ReadonlySet<string>>(new Set())
+  const [unrealHas, setUnrealHas] = useState<Record<string, boolean> | null>(null)
+
+  useEffect(() => {
+    if (unrealProjects.length === 0) return
+    let active = true
+    void fetchUnrealCharacterPresence({ data: { projectId, id: character.id } })
+      .then((presence) => {
+        if (!active) return
+        setUnrealHas(presence)
+        // Pre-check the ones that already hold this character: those are the
+        // projects a re-export is FOR. A project that doesn't have it yet is
+        // left to the user — sending a character into a project on its first
+        // run is a decision, not a continuation.
+        setCheckedUnreal(new Set(unrealProjects.filter((path) => presence[path])))
+      })
+      .catch(() => {
+        // Detection is a convenience: with none, the rows simply start
+        // unchecked and the user picks.
+        if (active) setUnrealHas({})
+      })
+    return () => {
+      active = false
+    }
+    // Mount-only, like the other probes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -1823,6 +1994,14 @@ function DthExportDialog({
   // the window where a row checked mid-flight could start with unknown state.
   // Both artifact-gated modes wait it out the same way.
   const checking = (mode === 'export-only' || mode === 'houdini-only') && status === null
+  /**
+   * Whether this run will produce something to send: a Houdini project that
+   * EXPORTS. "Open only" opens a scene and exports nothing, and "ROM only"
+   * stops before Houdini — in both cases a send could only hand over the
+   * PREVIOUS export, which is not what pressing Start meant.
+   */
+  const unrealSendable =
+    checkedHips.size > 0 && houdiniMode !== 'open' && mode !== 'rom-only'
 
   useEffect(() => {
     let active = true
@@ -1963,6 +2142,10 @@ function DthExportDialog({
     try {
       const chosenScenes = rows.filter((r) => checked.has(r.scenePath)).map((r) => r.scenePath)
       const chosenHips = character.houdiniProjects.filter((hip) => checkedHips.has(hip))
+      // Only when this run actually exports — see `unrealSendable`.
+      const chosenUnreal = unrealSendable
+        ? unrealProjects.filter((path) => checkedUnreal.has(path))
+        : []
       // Skip Daz: the Houdini selection IS the run — the same machinery the
       // after-batch continuation drives, minus the batch.
       if (mode === 'houdini-only') {
@@ -1991,7 +2174,7 @@ function DthExportDialog({
             return
           }
         }
-        onHoudiniQueue(chosenHips, houdiniMode === 'export-all' ? linked : chosenScenes)
+        onHoudiniQueue(chosenHips, houdiniMode === 'export-all' ? linked : chosenScenes, chosenUnreal)
         onClose()
         return
       }
@@ -2024,6 +2207,7 @@ function DthExportDialog({
           mode,
           houdiniProjects: chosenHips,
           houdiniMode,
+          unrealProjects: chosenUnreal,
         },
       })
       onExported({
@@ -2032,6 +2216,7 @@ function DthExportDialog({
         // The scene scope the Houdini leg will export (→ the networks its
         // task cards name) — the continuation recomputes the same set.
         houdiniScenes: houdiniMode === 'export-all' ? linked : chosenScenes,
+        unrealProjects: chosenUnreal,
         // Whether the handoff STARTED Daz — the log window's opening line
         // says "opening Daz Studio" only when that is what is happening.
         dazLaunched: result.dazLaunched,
@@ -2186,6 +2371,37 @@ function DthExportDialog({
               </SelectContent>
             </Select>
           </div>
+        </div>
+      )}
+      {/* The third leg. Only when the run can actually produce an export —
+          a send needs something exported, and the Houdini list is what
+          produces it. */}
+      {unrealProjects.length > 0 && character.houdiniProjects.length > 0 && (
+        <div>
+          <Label className="mb-1.5">Unreal projects</Label>
+          <div className="space-y-2">
+            {unrealProjects.map((uproject) => (
+              <UnrealRow
+                key={uproject}
+                uproject={uproject}
+                checked={checkedUnreal.has(uproject)}
+                has={unrealHas === null ? null : (unrealHas[uproject] ?? false)}
+                onToggle={() =>
+                  setCheckedUnreal((current) => {
+                    const next = new Set(current)
+                    if (next.has(uproject)) next.delete(uproject)
+                    else next.add(uproject)
+                    return next
+                  })
+                }
+              />
+            ))}
+          </div>
+          <p className="mt-1.5 text-xs text-muted-foreground">
+            {unrealSendable
+              ? 'Queued for import when the whole export finishes — the editor picks it up when it is next open.'
+              : 'Needs a Houdini export: pick a project above and an export mode.'}
+          </p>
         </div>
       )}
       {/* The Runner gate is the DAZ plugin's — a skip-Daz run never goes

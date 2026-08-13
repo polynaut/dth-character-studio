@@ -31,6 +31,21 @@ still. The job is queued instead: an open editor picks it up within about a
 second, and one opened later claims it on startup, exactly like a Daz that was
 closed when a batch was queued.
 
+**The DTH Export dialog carries it too.** Under the Daz scenes and the Houdini
+projects there is now an **Unreal projects** section, so one Start does the
+whole round trip: Daz builds the ROM, Houdini exports, and the result is queued
+for import when the last project finishes. It pre-selects the same way the other
+two lists do — a project that already holds this character comes ticked, one
+that doesn't waits for you, because putting a character into an Unreal project
+the first time is a decision rather than a continuation. The selection rides the
+run's sidecars, so a window reloaded mid-export still sends.
+
+**Every export set goes, not "the" export.** A character's `export/` folder holds
+one folder per HDA *character name* — measured, one character here has three
+(outfit variants) — and the studio cannot predict those names. It scans for them
+now; the first version guessed `DTH_<character name>.dth` and would have found
+nothing at all on that character. One job carries every set.
+
 **A second send re-imports what the project already has.** The job carries the
 FBX files the export produced — the `.dth` names them — and the bridge looks for
 them in the open project before importing anything. Found, wherever they are:

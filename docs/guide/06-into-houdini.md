@@ -216,9 +216,16 @@ the Houdini projects) hands that export to a linked Unreal project. It appears
 only when the studio project has a linked `.uproject` — see
 [Linking Unreal projects](./03-first-project.md#linking-unreal-projects).
 
-What it sends is the `.dth` Houdini wrote into the character's **`export/`**
-folder — the end of the pipeline, not the `daz-export` intermediate the Houdini
-imports read. What imports it is **mrpdean's DazToHue importer plugin**, whose
+> The [DTH Export dialog](./05-rom-in-daz.md#batch-export--dth-export) has the
+> same thing as a third section, so a full **Daz → Houdini → Unreal** run is one
+> Start. This panel is for sending what is already exported — and for watching
+> an import while it runs.
+
+What it sends is every **export set** in the character's `export/` folder — each
+is a folder named by the HDA's *character name* holding a `DTH_<name>.dth`, so
+one character can have several (outfit variants, for instance). They travel in
+one job and import into one content folder each. This is the end of the
+pipeline, not the `daz-export` intermediate the Houdini imports read. What imports it is **mrpdean's DazToHue importer plugin**, whose
 own pipeline does the work: meshes, textures, materials, animation curves and
 the post-process animation blueprint.
 

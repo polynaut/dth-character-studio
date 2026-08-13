@@ -77,6 +77,9 @@ function HeaderActions({ draft }: { draft: CharacterDraft }) {
  * that belong to these controls — the inline rename (persist + regenerate at
  * the new name, with `previousName` cleanup) and the avatar apply.
  */
+/** Stable empty default — see the twin in dth-export.tsx. */
+const NO_UNREAL_PROJECTS: ReadonlyArray<string> = []
+
 export function EditorHeader({
   projectId,
   draft,
@@ -84,6 +87,7 @@ export function EditorHeader({
   folderMove,
   hasRunProblems,
   dazLibraryConfigured,
+  unrealProjects = NO_UNREAL_PROJECTS,
 }: {
   projectId: string
   draft: CharacterDraft
@@ -97,6 +101,8 @@ export function EditorHeader({
   hasRunProblems: boolean
   /** “My DAZ 3D Library” is set (DTH Export needs it for the job file + scripts). */
   dazLibraryConfigured: boolean
+  /** The project's linked `.uproject`s — the DTH Export dialog's third leg. */
+  unrealProjects?: ReadonlyArray<string>
 }) {
   const { character } = draft
   const [imageDialogOpen, setImageDialogOpen] = useState(false)
@@ -315,6 +321,7 @@ export function EditorHeader({
               saving={draft.saving}
               dirty={draft.dirty}
               dazLibraryConfigured={dazLibraryConfigured}
+              unrealProjects={unrealProjects}
               onPipeline={setExportPipeline}
             />
             <HeaderActions draft={draft} />

@@ -60,11 +60,15 @@ export function UnrealImportField({
         // Which of the two happened is worth saying: a re-import landed on the
         // assets that were already there (possibly somewhere the studio never
         // chose), a plain import created a set at the destination it asked for.
-        const what = state.mode === 'reimport' ? 'Re-imported in Unreal' : 'Imported into Unreal'
-        toast.success(
-          `${what} — ${state.assets} asset${state.assets === 1 ? '' : 's'} in ${state.destination}.`,
-          { duration: Infinity },
-        )
+        const what = state.reimported ? 'Re-imported in Unreal' : 'Imported into Unreal'
+        const assets = `${state.assets} asset${state.assets === 1 ? '' : 's'}`
+        // One set names its folder; several name their count, because a toast
+        // listing three content paths is a wall.
+        const where =
+          state.destination !== ''
+            ? ` in ${state.destination}`
+            : ` across ${state.sets} export set${state.sets === 1 ? '' : 's'}`
+        toast.success(`${what} — ${assets}${where}.`, { duration: Infinity })
       }
       // The files have said what they had to; the next run starts clean.
       void dismissUnrealImport({ data: { uprojectPath } })
@@ -90,10 +94,14 @@ export function UnrealImportField({
       // `destination` is where a FRESH import goes; if the project already has
       // these files the bridge re-imports where they are, and the finish toast
       // says so. Hence "into" here and the real path on the way out.
+      const what =
+        started.destination !== ''
+          ? started.destination
+          : `${started.sets.length} export sets (${started.sets.map((set) => set.name).join(', ')})`
       toast.info(
         started.replacedPending
-          ? `Queued for Unreal — replaced a job the editor had not picked up yet. Importing into ${started.destination}.`
-          : `Queued for Unreal — importing into ${started.destination}. Open the project if it isn't already.`,
+          ? `Queued for Unreal — replaced a job the editor had not picked up yet. Importing ${what}.`
+          : `Queued for Unreal — importing ${what}. Open the project if it isn't already.`,
       )
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e), { duration: Infinity })

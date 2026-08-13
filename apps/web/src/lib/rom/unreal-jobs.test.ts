@@ -50,19 +50,34 @@ describe('unrealDestinationFor', () => {
 
 describe('unrealJobJson', () => {
   it('writes the version the bridge checks, and forward-slashed paths', () => {
-    const raw = unrealJobJson({
-      dth: 'D:\\p\\Kira\\export\\Kira\\DTH_Kira.dth',
-      destination: '/Game/DazToHue/Kira',
-      character: 'Kira',
-      files: ['D:\\p\\Kira\\export\\Kira\\Skeletal Meshes\\SKM_Kira.fbx'],
-    })
-    const job = JSON.parse(raw) as Record<string, unknown>
+    const raw = unrealJobJson([
+      {
+        dth: 'D:\\p\\Kira\\export\\Kira\\DTH_Kira.dth',
+        destination: '/Game/DazToHue/Kira',
+        character: 'Kira',
+        files: ['D:\\p\\Kira\\export\\Kira\\Skeletal Meshes\\SKM_Kira.fbx'],
+      },
+    ])
+    const job = JSON.parse(raw) as { version: number; imports: Array<Record<string, unknown>> }
     expect(job.version).toBe(UNREAL_JOB_VERSION)
     // Python's os.path handles either, but a JSON file full of `\p` is a
     // string-escape accident waiting to happen.
-    expect(job.dth).toBe('D:/p/Kira/export/Kira/DTH_Kira.dth')
-    expect(job.files).toEqual(['D:/p/Kira/export/Kira/Skeletal Meshes/SKM_Kira.fbx'])
+    expect(job.imports[0].dth).toBe('D:/p/Kira/export/Kira/DTH_Kira.dth')
+    expect(job.imports[0].files).toEqual(['D:/p/Kira/export/Kira/Skeletal Meshes/SKM_Kira.fbx'])
     expect(raw.endsWith('\n')).toBe(true)
+  })
+
+  it('carries EVERY export set in one job — the handoff is a single file', () => {
+    // A character's export folder holds one set per HDA `character_name`
+    // (measured: three outfit variants). Sending them as separate jobs would
+    // mean each one replacing the last before the editor ever claimed it.
+    const job = JSON.parse(
+      unrealJobJson([
+        { dth: 'D:/x/LaraCroft/DTH_LaraCroft.dth', destination: '/Game/DazToHue/LaraCroft', character: 'LaraCroft', files: [] },
+        { dth: 'D:/x/LaraNaked/DTH_LaraNaked.dth', destination: '/Game/DazToHue/LaraNaked', character: 'LaraNaked', files: [] },
+      ]),
+    ) as { imports: Array<{ character: string }> }
+    expect(job.imports.map((one) => one.character)).toEqual(['LaraCroft', 'LaraNaked'])
   })
 })
 
@@ -151,8 +166,17 @@ describe('bridgeUpluginJson', () => {
 })
 
 describe('unrealImportStateFrom', () => {
+  const oneImport = (over: Record<string, unknown> = {}) => ({
+    character: 'Kira',
+    destination: '/Game/DazToHue/Kira',
+    mode: 'import',
+    assets: ['/Game/x'],
+    ...over,
+  })
   const result = (over: Record<string, unknown> = {}) =>
-    parseUnrealResult(JSON.stringify({ version: 1, state: 'done', assets: ['/Game/x'], ...over }))!
+    parseUnrealResult(
+      JSON.stringify({ version: 3, state: 'done', imports: [oneImport()], ...over }),
+    )!
 
   it('is WAITING while the job sits unclaimed — Unreal is not watching yet', () => {
     // The stretch the user sees first, and the one that must not read as an
@@ -162,24 +186,37 @@ describe('unrealImportStateFrom', () => {
 
   it('is running once the job has been claimed but no result exists yet', () => {
     expect(unrealImportStateFrom(false, null)).toEqual({ state: 'running' })
-    expect(unrealImportStateFrom(false, result({ state: 'running', assets: [] }))).toEqual({
+    expect(unrealImportStateFrom(false, result({ state: 'running', imports: [] }))).toEqual({
       state: 'running',
     })
   })
 
   it('reports what landed when it finishes', () => {
     expect(
-      unrealImportStateFrom(
-        false,
-        result({ assets: ['/Game/a', '/Game/b'], destination: '/Game/DazToHue/Kira' }),
-      ),
+      unrealImportStateFrom(false, result({ imports: [oneImport({ assets: ['/Game/a', '/Game/b'] })] })),
     ).toEqual({
       state: 'finished',
       assets: 2,
       error: '',
-      mode: 'import',
+      sets: 1,
+      reimported: false,
       destination: '/Game/DazToHue/Kira',
     })
+  })
+
+  it('sums several export sets and names no single folder', () => {
+    // Three outfit variants of one character land in three content folders —
+    // a toast listing all of them is a wall, so the count carries it.
+    const state = unrealImportStateFrom(
+      false,
+      result({
+        imports: [
+          oneImport({ assets: ['/Game/a'] }),
+          oneImport({ character: 'LaraNaked', destination: '/Game/DazToHue/LaraNaked', assets: ['/Game/b', '/Game/c'] }),
+        ],
+      }),
+    )
+    expect(state).toMatchObject({ state: 'finished', assets: 3, sets: 2, destination: '' })
   })
 
   it('carries the re-import verdict and the folder it actually landed in', () => {
@@ -189,15 +226,9 @@ describe('unrealImportStateFrom', () => {
     expect(
       unrealImportStateFrom(
         false,
-        result({ mode: 'reimport', destination: '/Game/Characters/Kira' }),
+        result({ imports: [oneImport({ mode: 'reimport', destination: '/Game/Characters/Kira' })] }),
       ),
-    ).toMatchObject({ state: 'finished', mode: 'reimport', destination: '/Game/Characters/Kira' })
-  })
-
-  it('reads a version-1 bridge\'s result as a plain import', () => {
-    // The field is defaulted, so an older bridge (no `mode`) still parses —
-    // it only ever did fresh imports, which is exactly what the default says.
-    expect(unrealImportStateFrom(false, result())).toMatchObject({ mode: 'import' })
+    ).toMatchObject({ state: 'finished', reimported: true, destination: '/Game/Characters/Kira' })
   })
 
   it('never reports a failure without something to show', () => {

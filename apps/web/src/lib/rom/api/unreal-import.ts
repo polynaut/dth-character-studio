@@ -1,4 +1,4 @@
-import { exists, mkdir, readTextFile, remove } from '@tauri-apps/plugin-fs'
+import { exists, mkdir, readDir, readTextFile, remove } from '@tauri-apps/plugin-fs'
 import { isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
@@ -11,6 +11,7 @@ import {
   dthExportFiles,
   parseUnrealResult,
   unrealDestinationFor,
+  unrealFolderFor,
   unrealImportStateFrom,
   unrealJobJson,
   unrealJobPaths,
@@ -68,38 +69,70 @@ export async function installUnrealBridge({ data }: { data: unknown }): Promise<
 const importInput = charScopeInput.extend({
   /** The linked `.uproject` to import into. */
   uprojectPath: z.string().min(1),
+  /** Export-set names to send, when the caller knows which ones this run
+   *  produced. Omitted/empty = every set in the character's export folder,
+   *  which is what the character page's panel means by "send". */
+  sets: z.array(z.string()).optional(),
 })
 
 export interface UnrealImportStarted {
-  /** The `.dth` handed over. */
-  dth: string
-  /** The Unreal content path a FRESH import goes to. A re-import lands where
-   *  the existing assets already are — the bridge decides that, and reports it
-   *  back in the result. */
+  /** The export sets handed over, in job order. */
+  sets: Array<{ name: string; destination: string; files: number }>
+  /** The Unreal content path a FRESH import goes to, for a single set (''
+   *  for several). A re-import lands where the existing assets already are —
+   *  the bridge decides that, and reports it back in the result. */
   destination: string
-  /** The FBX files the manifest declares — what the bridge matches on. */
-  files: Array<string>
   /** True when a previous job was still sitting unclaimed — the editor was not
    *  watching, and this run replaced it rather than queueing behind it. */
   replacedPending: boolean
 }
 
+/** One thing Houdini exported for Unreal: a folder under the character's
+ *  `export/` root, and the `.dth` manifest inside it. */
+export interface UnrealExportSet {
+  /** The export folder's name — the HDA's `character_name`, which is what the
+   *  Unreal content folder gets named after. */
+  name: string
+  /** Absolute path of its `DTH_<name>.dth`. */
+  dth: string
+}
+
 /**
- * The `.dth` Houdini wrote for Unreal.
+ * Everything Houdini has exported for Unreal under a character's `export/`
+ * root, newest last, by SCANNING for `<folder>/DTH_*.dth`.
  *
- * NOT the Daz-side `.dth` the Houdini imports read: that one names the
- * Daz→Houdini intermediates. This is the END of the pipeline — the file
- * Houdini's own export writes into the character's `export/` folder, naming
- * the skeletal meshes, textures and animation curves Unreal consumes.
+ * It used to guess ONE path — `<export>/<character.name>/DTH_<character.name>.dth`
+ * — and that is wrong on the first real character it met. The folder is named
+ * by the HDA's `character_name` parm, which the USER owns: measured on this
+ * repo's own dev machine, the character `LaraCroft_G81` has three export sets
+ * called `LaraCroft`, `LaraClassic` and `LaraNaked` (outfit variants), and not
+ * one of them is the character's name. The guess found nothing and the send
+ * reported "no Houdini export found" about a folder holding three.
+ *
+ * So: no guessing. One `readDir` of the export root, one of each subfolder.
  */
-async function houdiniDthFor(exportRoot: string, characterName: string): Promise<string> {
-  // `<export>/<CharacterName>/DTH_<CharacterName>.dth` — measured on a real
-  // export. The folder inside `export/` is the HDA's `character_name`, which
-  // the studio sets itself, so this resolves without a scan and reports
-  // honestly when it is not there.
-  const candidate = joinPath(exportRoot, characterName, `DTH_${characterName}.dth`)
-  if (await exists(candidate)) return candidate
-  return ''
+export async function unrealExportSets(exportRoot: string): Promise<Array<UnrealExportSet>> {
+  if (!(await exists(exportRoot).catch(() => false))) return []
+  let folders: Array<string> = []
+  try {
+    folders = (await readDir(exportRoot)).filter((e) => e.isDirectory).map((e) => e.name)
+  } catch {
+    return []
+  }
+  const sets = await Promise.all(
+    folders.sort().map(async (name): Promise<UnrealExportSet | null> => {
+      const dir = joinPath(exportRoot, name)
+      try {
+        const dth = (await readDir(dir)).find(
+          (entry) => entry.isFile && /^DTH_.*\.dth$/i.test(entry.name),
+        )
+        return dth ? { name, dth: joinPath(dir, dth.name) } : null
+      } catch {
+        return null
+      }
+    }),
+  )
+  return sets.filter((set): set is UnrealExportSet => set !== null)
 }
 
 /** The installed bridge's contract version, or 0 when there is no bridge (or
@@ -138,8 +171,17 @@ export async function startUnrealImport({ data }: { data: unknown }): Promise<Un
   // Never `daz-export`, which is the regenerable Daz→Houdini intermediate the
   // Houdini imports READ (the same distinction `startHoudiniExport` draws).
   const exportRoot = joinPath(location.folderAbs, normalizeRelFolder(project.exportSubdir))
-  const dth = await houdiniDthFor(exportRoot, character.name)
-  if (!dth) {
+  // EVERY set, not one: a character's export folder holds one per HDA
+  // `character_name`, and the studio cannot know those names (measured: three
+  // outfit variants under one character). Sending "the" export would send an
+  // alphabetical guess and silently drop the rest. A caller that wants a subset
+  // passes `sets`.
+  const available = await unrealExportSets(exportRoot)
+  const wanted =
+    input.sets && input.sets.length > 0
+      ? available.filter((set) => input.sets?.some((name) => name.toLowerCase() === set.name.toLowerCase()))
+      : available
+  if (wanted.length === 0) {
     throw new Error(
       `No Houdini export found for ${character.name} — run the Houdini export first (looked in ${exportRoot}).`,
     )
@@ -175,17 +217,72 @@ export async function startUnrealImport({ data }: { data: unknown }): Promise<Un
   }
   const replacedPending = await exists(paths.jobFile).catch(() => false)
 
-  const destination = unrealDestinationFor(character.name)
   // The manifest names its own outputs, so the job can say WHICH files this
   // export produced. The bridge uses them to find where they are already
   // imported — an unreadable manifest just means no matching, never a refusal
   // to send (the importer will report it far better than a path check here).
-  const files = dthExportFiles(await readTextFile(dth).catch(() => ''))
-  await storage.writeTextFileAtomic(
-    paths.jobFile,
-    unrealJobJson({ dth, destination, character: character.name, files }),
+  const imports = await Promise.all(
+    wanted.map(async (set) => ({
+      dth: set.dth,
+      // Named after the EXPORT SET, not the character: the set's name is the
+      // HDA's `character_name`, which is what the user sees in Unreal and what
+      // separates three outfit variants of one character.
+      destination: unrealDestinationFor(set.name),
+      character: set.name,
+      files: dthExportFiles(await readTextFile(set.dth).catch(() => '')),
+    })),
   )
-  return { dth, destination, files, replacedPending }
+  await storage.writeTextFileAtomic(paths.jobFile, unrealJobJson(imports))
+  return {
+    sets: imports.map((one) => ({
+      name: one.character,
+      destination: one.destination,
+      files: one.files.length,
+    })),
+    destination: imports.length === 1 ? imports[0].destination : '',
+    replacedPending,
+  }
+}
+
+/**
+ * Which of a project's linked Unreal projects already hold this character —
+ * the DTH Export dialog's pre-selection, the Unreal twin of "changed since the
+ * last export" and "imports a selected scene".
+ *
+ * The test is the CONTENT FOLDER on disk: `Content/DazToHue/<set>` for any of
+ * the character's export sets, which is where {@link unrealDestinationFor}
+ * puts a fresh import. Filesystem only — the studio cannot read an editor's
+ * asset registry from out here, so a character the user moved somewhere else in
+ * Unreal reads as absent. That is the safe direction to be wrong in: it
+ * un-ticks a row the user can tick, rather than ticking one they didn't mean.
+ */
+export async function fetchUnrealCharacterPresence({
+  data,
+}: {
+  data: unknown
+}): Promise<Record<string, boolean>> {
+  const input = charScopeInput.parse(data)
+  const out: Record<string, boolean> = {}
+  if (!isTauri()) return out
+  const project = await resolveProject(input.projectId)
+  const linked = project.unrealProjects ?? []
+  if (linked.length === 0) return out
+  const location = await locateCharacter(charsRoot(project), input.id)
+  if (!location) return out
+  const exportRoot = joinPath(location.folderAbs, normalizeRelFolder(project.exportSubdir))
+  const sets = await unrealExportSets(exportRoot)
+  await Promise.all(
+    linked.map(async (uprojectPath) => {
+      const { projectDir } = unrealJobPaths(uprojectPath)
+      const found = await Promise.all(
+        sets.map((set) =>
+          exists(`${projectDir}/Content/DazToHue/${unrealFolderFor(set.name)}`).catch(() => false),
+        ),
+      )
+      out[uprojectPath] = found.some(Boolean)
+    }),
+  )
+  return out
 }
 
 /**

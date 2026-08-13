@@ -970,8 +970,24 @@ older runtimes as stale.
   nothing and covers the sections nobody has measured. Not to be confused with
   the Daz-side `.dth` under `daz-export/`, which names the Daz→Houdini
   intermediates the HDA READS.
+- **A character has EXPORT SETS, not "an export".** `<export>/<name>/DTH_<name>.dth`,
+  where `<name>` is the HDA's `character_name` parm — the USER's, not the
+  studio's. Measured: `LaraCroft_G81` has `LaraCroft`, `LaraClassic` and
+  `LaraNaked`, none of them the character's name. So `unrealExportSets`
+  (api/unreal-import.ts) SCANS for them; the earlier
+  `DTH_<character.name>.dth` guess found nothing on the first real character.
+  One job carries every set (`imports[]`), because the handoff is a single job
+  file and a second write replaces a pending one.
+- **The DTH Export dialog's third leg** (`unrealProjects`): selected Unreal
+  projects ride the Daz run record AND the Houdini run plan — the send fires
+  when the whole Houdini queue drains, minutes later, possibly in a reloaded
+  window, so both sidecars carry it or a reload drops it silently. Pre-selection
+  is `fetchUnrealCharacterPresence`: `Content/DazToHue/<set>` on disk. The
+  studio cannot read an editor's asset registry, so a character moved elsewhere
+  in Unreal reads as absent — un-ticking a row the user can tick, never ticking
+  one they didn't mean.
 - **The Unreal bridge re-imports where the assets ALREADY are.** The job
-  (`UNREAL_JOB_VERSION` 2) carries that FBX list; `dth_bridge.py` searches the
+  (`UNREAL_JOB_VERSION` 3) carries each set's FBX list; `dth_bridge.py` searches the
   asset registry under `/Game` for assets whose `AssetImportData` tag names one
   of them (absolute or by basename — a `RelativeFilename` is relative to the
   asset's package), and the folder with the most matches becomes the import

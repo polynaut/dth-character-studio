@@ -575,6 +575,26 @@ a {
   }
 }
 
+/* The SELECTABLE Unreal card — the DTH Export dialog's third section. Same
+   states as `houdini-card` (group-hover + `data-selected`) in Unreal cyan, and
+   the same faint resting tint: these rows sit on the dialog's plain surface,
+   not on the footer dock's gradient, so they need far less colour than
+   `unreal-card` below to read as cyan. */
+@utility unreal-pick-card {
+  background-color: color-mix(in oklab, var(--unreal-blue) 6%, var(--card));
+  border-color: color-mix(in oklab, var(--unreal-blue) 26%, var(--border));
+  &:hover,
+  .group\/card:hover & {
+    background-color: color-mix(in oklab, var(--unreal-blue) 11%, var(--card));
+    border-color: color-mix(in oklab, var(--unreal-blue) 55%, var(--border));
+  }
+  &[data-selected='true'] {
+    background-color: color-mix(in oklab, var(--unreal-blue) 20%, var(--card));
+    border-color: var(--unreal-blue);
+    box-shadow: 0 0 0 2px color-mix(in oklab, var(--unreal-blue) 65%, transparent);
+  }
+}
+
 /* The linked-project "Unreal card" in the project footer bar: same visual
    language as the Daz/Houdini cards — a Unreal-cyan LEFT ACCENT BAR (drawn in the
    component) over a cyan tint / border that brighten on hover. Not selectable.

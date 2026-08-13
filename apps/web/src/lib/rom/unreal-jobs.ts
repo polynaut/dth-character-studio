@@ -48,8 +48,12 @@ export const UNREAL_BRIDGE_UPLUGIN = `${UNREAL_BRIDGE_NAME}.uplugin`
  * - 2 — `files`: the export's own FBX list, so the bridge can find where those
  *   files are ALREADY imported and re-import there instead of duplicating them
  *   at the studio's guessed destination.
+ * - 3 — `imports`: a LIST. One character can hold several export sets (the
+ *   folder is named by the HDA's `character_name`, not by the character), and
+ *   the handoff is one job file — so a job carries every set rather than the
+ *   sets overwriting each other's job.
  */
-export const UNREAL_JOB_VERSION = 2
+export const UNREAL_JOB_VERSION = 3
 
 /**
  * The bridge's own `.uplugin`.
@@ -113,28 +117,43 @@ export function unrealJobPaths(uprojectPath: string): {
  * lands, so this one path decides the whole layout.
  */
 export function unrealDestinationFor(characterName: string): string {
+  return `/Game/DazToHue/${unrealFolderFor(characterName)}`
+}
+
+/** The folder-name half of {@link unrealDestinationFor} — also the on-disk
+ *  folder under `Content/DazToHue/`, which is how the studio can tell from the
+ *  filesystem whether an Unreal project already holds an export set. */
+export function unrealFolderFor(characterName: string): string {
   const clean = characterName
     .trim()
     .replace(/[^A-Za-z0-9_]+/g, '_')
     .replace(/_+/g, '_')
     .replace(/^_+|_+$/g, '')
-  return `/Game/DazToHue/${clean || 'Character'}`
+  return clean || 'Character'
 }
 
-export function unrealJobJson(job: {
+/** One export set on its way into Unreal. */
+export interface UnrealJobImport {
+  /** The manifest to import — what triggers the DazToHue pipeline. */
   dth: string
+  /** Where a FRESH import goes; a re-import lands where the assets already are. */
   destination: string
+  /** The export set's name (the HDA's `character_name`), for the log/report. */
   character: string
-  /** The export's own FBX files — see {@link dthExportFiles}. */
+  /** The set's own FBX files — see {@link dthExportFiles}. */
   files: ReadonlyArray<string>
-}): string {
+}
+
+export function unrealJobJson(imports: ReadonlyArray<UnrealJobImport>): string {
   return `${JSON.stringify(
     {
       version: UNREAL_JOB_VERSION,
-      dth: job.dth.replace(/\\/g, '/'),
-      destination: job.destination,
-      character: job.character,
-      files: job.files.map((file) => file.replace(/\\/g, '/')),
+      imports: imports.map((one) => ({
+        dth: one.dth.replace(/\\/g, '/'),
+        destination: one.destination,
+        character: one.character,
+        files: one.files.map((file) => file.replace(/\\/g, '/')),
+      })),
     },
     null,
     2,
@@ -210,15 +229,21 @@ const resultSchema = z.object({
   version: z.number().default(0),
   state: z.enum(['running', 'done', 'failed']).default('running'),
   error: z.string().default(''),
-  assets: z.array(z.string()).default([]),
-  character: z.string().default(''),
-  /** Where it actually landed — the job's destination for a fresh import, the
-   *  folder the existing assets live in for a re-import. */
-  destination: z.string().default(''),
-  /** `reimport` = the bridge found these files already imported and refreshed
-   *  those assets in place; `import` = a fresh import at the job's destination.
-   *  Defaulted, so a version-1 bridge's result still parses. */
-  mode: z.enum(['import', 'reimport']).default('import'),
+  /** One entry per export set the job carried, in job order. */
+  imports: z
+    .array(
+      z.object({
+        character: z.string().default(''),
+        /** Where it actually landed — the job's destination for a fresh
+         *  import, the folder the existing assets live in for a re-import. */
+        destination: z.string().default(''),
+        /** `reimport` = the bridge found these files already imported and
+         *  refreshed those assets in place; `import` = a fresh import. */
+        mode: z.enum(['import', 'reimport']).default('import'),
+        assets: z.array(z.string()).default([]),
+      }),
+    )
+    .default([]),
 })
 
 export type UnrealImportResult = z.infer<typeof resultSchema>
@@ -241,12 +266,15 @@ export type UnrealImportState =
   | { state: 'running' }
   | {
       state: 'finished'
+      /** Assets touched across every set in the job. */
       assets: number
       error: string
-      /** What the bridge did — see the result schema's `mode`. */
-      mode: 'import' | 'reimport'
-      /** The content path it landed in, which for a re-import is where the
-       *  assets already were, not what the job asked for. */
+      /** How many export sets the job carried. */
+      sets: number
+      /** True when at least one set landed on assets that were already there —
+       *  the whole point of the file list. */
+      reimported: boolean
+      /** Where it landed: the one set's folder, or '' when several did. */
       destination: string
     }
 
@@ -267,9 +295,12 @@ export function unrealImportStateFrom(
   if (result.state === 'running') return { state: 'running' }
   return {
     state: 'finished',
-    assets: result.assets.length,
+    assets: result.imports.reduce((total, one) => total + one.assets.length, 0),
     error: result.state === 'failed' ? result.error || 'the import failed in Unreal' : '',
-    mode: result.mode,
-    destination: result.destination,
+    sets: result.imports.length,
+    reimported: result.imports.some((one) => one.mode === 'reimport'),
+    // One set names its folder; several would need a list, and the toast is not
+    // the place for one — the editor's log has them all.
+    destination: result.imports.length === 1 ? result.imports[0].destination : '',
   }
 }

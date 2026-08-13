@@ -8,7 +8,11 @@ claims it by RENAME, works, and writes a result file the studio polls:
     Saved/DTHStudio/running_job.json  <- this side renames it (the claim)
     Saved/DTHStudio/result.json       <- this side writes this, the studio polls
 
-The job also names the FBX files the export produced. They are not imported
+A job carries one or more EXPORT SETS (`imports`) — a character's export folder
+holds one per HDA `character_name`, and the handoff is a single job file, so
+they travel together rather than overwriting each other.
+
+Each set also names the FBX files the export produced. They are not imported
 directly — importing them would bypass the DazToHue pipeline that builds the
 materials, curves and anim blueprint — they are used to FIND those assets in
 this project, so a second send refreshes what the user already has, wherever
@@ -47,7 +51,7 @@ RESULT_FILE = "result.json"
 #: silently doing the old thing is how a "successful" import imports nothing.
 #: (The studio checks this before writing a job, by reading the `Version` out of
 #: the installed `.uplugin`, so a stale bridge is normally caught there.)
-JOB_VERSION = 2
+JOB_VERSION = 3
 
 #: Seconds between directory checks. The tick fires every frame; a stat per
 #: frame on a network project folder is not free, and nobody needs sub-second
@@ -207,23 +211,12 @@ def _existing_destination(files):
     return best[0]
 
 
-def _run(job):
-    dth = job.get("dth", "")
-    destination = job.get("destination", "") or "/Game/DazToHue"
-    if job.get("version") != JOB_VERSION:
-        return {
-            "version": JOB_VERSION,
-            "state": "failed",
-            "error": "This job was written by a different studio version — re-install the bridge from the project card.",
-            "assets": [],
-        }
+def _run_one(entry):
+    """One export set: find where it already lives, import there, report."""
+    dth = entry.get("dth", "")
+    destination = entry.get("destination", "") or "/Game/DazToHue"
     if not dth or not os.path.isfile(dth):
-        return {
-            "version": JOB_VERSION,
-            "state": "failed",
-            "error": "The .dth file named by the job is not on disk: %s" % dth,
-            "assets": [],
-        }
+        raise IOError("The .dth file named by the job is not on disk: %s" % dth)
 
     # Re-import in place when this project already has these files; a fresh
     # import at the job's destination when it doesn't. Either way the import
@@ -231,7 +224,7 @@ def _run(job):
     # `replace_existing`, which is what makes landing on top of the existing
     # assets a REFRESH rather than a second copy. Importing the FBX files
     # directly would bypass that pipeline and lose everything it builds.
-    existing = _existing_destination(job.get("files") or [])
+    existing = _existing_destination(entry.get("files") or [])
     mode = "import"
     if existing:
         destination = existing
@@ -248,13 +241,50 @@ def _run(job):
             # must not lie because one entry was awkward.
             names.append("<unnamed>")
     return {
-        "version": JOB_VERSION,
-        "state": "done",
-        "error": "",
-        "character": job.get("character", ""),
+        "character": entry.get("character", ""),
         "destination": destination,
         "mode": mode,
         "assets": names,
+    }
+
+
+def _run(job):
+    if job.get("version") != JOB_VERSION:
+        return {
+            "version": JOB_VERSION,
+            "state": "failed",
+            "error": "This job was written by a different studio version — re-install the bridge from the project card.",
+            "imports": [],
+        }
+    entries = job.get("imports") or []
+    if not entries:
+        return {
+            "version": JOB_VERSION,
+            "state": "failed",
+            "error": "The job names no export set to import.",
+            "imports": [],
+        }
+
+    # One job, N export sets — a character's export folder holds one per HDA
+    # `character_name`, and they are separate imports into separate content
+    # folders. A set that fails does NOT take the others with it: each is its
+    # own import, and reporting nothing because the third one broke would hide
+    # two that worked.
+    done = []
+    errors = []
+    for entry in entries:
+        try:
+            done.append(_run_one(entry))
+        except Exception:
+            detail = traceback.format_exc()
+            unreal.log_error("DTH bridge: import failed for one set\n" + detail)
+            last = detail.strip().splitlines()[-1] if detail.strip() else "import failed"
+            errors.append("%s: %s" % (entry.get("character", "?"), last))
+    return {
+        "version": JOB_VERSION,
+        "state": "failed" if errors and not done else "done",
+        "error": "; ".join(errors),
+        "imports": done,
     }
 
 
@@ -276,7 +306,7 @@ def _tick(delta_seconds):
         # Say "running" BEFORE the work: the import blocks the game thread for
         # minutes, and a studio polling an absent result file cannot tell
         # "not started" from "started and silent".
-        _write_result({"version": JOB_VERSION, "state": "running", "error": "", "assets": []})
+        _write_result({"version": JOB_VERSION, "state": "running", "error": "", "imports": []})
         try:
             _write_result(_run(job))
         except Exception:
@@ -287,7 +317,7 @@ def _tick(delta_seconds):
                     "version": JOB_VERSION,
                     "state": "failed",
                     "error": detail.strip().splitlines()[-1] if detail.strip() else "import failed",
-                    "assets": [],
+                    "imports": [],
                 }
             )
         finally:
