@@ -140,6 +140,45 @@ describe('InfoPopup', () => {
     await waitFor(() => expect(trigger.getAttribute('aria-expanded')).toBe('false'))
   })
 
+  it('a hover peek still COUNTING DOWN when a dialog opens must not land on top of it', async () => {
+    // The sweep above only reaches popups that are already OPEN — `openPopups`
+    // is registered from an effect guarded on `open`. A hover peek is on a 90ms
+    // delay (useHover `delay: { open: 90 }`), so a pointer resting on the "i"
+    // when an overlay opens leaves a timer the sweep cannot see: it fires after
+    // the dialog is up and paints the popup at z-[60], OVER the z-50 dialog.
+    //
+    // Unlike a tooltip (pointer-events-none, so it can never take a click) this
+    // popup is interactive, which means it does not merely look wrong — it
+    // swallows clicks aimed at whatever is beneath it. That is the shape of the
+    // CI smoke flake: `locator.click` waiting for actionability until the 60s
+    // budget, on a different overlay-driven spec each run, never reproducible on
+    // a fast machine where the 90ms window closes before the dialog opens.
+    //
+    // TooltipHost already guards exactly this ("cancel one that is counting down
+    // to appear" — its hide() clears the pending timer). This is the same rule
+    // for the other floating layer.
+    const ui = (withModal: boolean) => (
+      <UiConfigProvider value={{}}>
+        <InfoPopup>Peeked help</InfoPopup>
+        {withModal && (
+          <Modal open onClose={() => {}} title="Busy work">
+            body
+          </Modal>
+        )}
+      </UiConfigProvider>
+    )
+    const { getByRole, queryByText, rerender } = render(ui(false))
+    const trigger = getByRole('button', { name: 'More information' })
+    // Pointer lands on the "i" — the peek is now counting down, NOT open.
+    fireEvent.mouseEnter(trigger)
+    // The dialog opens inside that window and sweeps what it can see.
+    rerender(ui(true))
+    // Let the pending peek fire.
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    expect(queryByText('Peeked help')).toBeNull()
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
+  })
+
   it('eats a relative href instead of letting it replace the webview', async () => {
     const onNavigate = vi.fn()
     const onOpenExternal = vi.fn()
