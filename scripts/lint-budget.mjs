@@ -44,21 +44,42 @@ function countByRule() {
   // and every PR stayed green. It worked locally (Windows: stdout), which is the
   // worst version of this bug — the one place it reported honestly was the one
   // place nobody was gating on it.
-  // One command STRING, not command+args, because `shell: true` with an args
-  // array is Node DEP0190 (the args are concatenated, not escaped) and prints a
-  // deprecation into every CI log. There is nothing to escape here — the
-  // command is a constant — so the string form is both quieter and honest about
-  // what it does. `shell` itself is required: on Windows `pnpm` is a `.cmd`
-  // shim, which cannot be spawned directly.
-  const run = spawnSync('pnpm -s lint', { encoding: 'utf8', shell: true })
+  // `--format=json`, NOT the human output. The human format is not stable
+  // across environments and this script parsed it for months: the same 223
+  // warnings rendered as 60,354 bytes locally (Windows) and 47,019 bytes on
+  // ubuntu CI — measured 2026-08-13 from the runner's own
+  // `stdout=47019b stderr=0b` against a local run. Whatever the rendering
+  // difference is (it is NOT the stream, NOT ANSI colour, and NOT `CI` /
+  // `GITHUB_ACTIONS` — all three were tested and ruled out), a text format
+  // meant for humans is simply the wrong contract for a gate. JSON is the
+  // machine one: `{"diagnostics":[{"code":"oxc(no-map-spread)","severity":…}]}`.
+  //
+  // One command STRING, not command+args: `shell: true` with an args array is
+  // Node DEP0190 and prints a deprecation into every CI log. `shell` itself is
+  // required — on Windows `pnpm` is a `.cmd` shim that cannot be spawned
+  // directly. `maxBuffer` is raised because the JSON of a few hundred
+  // diagnostics comfortably exceeds Node's 1 MB default, and an overflow would
+  // truncate the capture into exactly the silent under-count this whole change
+  // exists to prevent.
+  const run = spawnSync('pnpm -s lint --format=json', {
+    encoding: 'utf8',
+    shell: true,
+    maxBuffer: 64 * 1024 * 1024,
+  })
   const out = `${run.stdout ?? ''}${run.stderr ?? ''}`
   const counts = {}
-  for (const line of out.split('\n')) {
-    const match = /warning\s+([\w-]+)\(([\w-]+)\)/.exec(line)
-    if (match) {
-      const rule = `${match[1]}/${match[2]}`
+  try {
+    // Slice from the first `{` so a stray banner line can't break the parse.
+    const parsed = JSON.parse(out.slice(out.indexOf('{')))
+    for (const d of parsed.diagnostics ?? []) {
+      if (d.severity !== 'warning') continue
+      const m = /^([\w-]+)\(([\w-]+)\)/.exec(d.code ?? '')
+      if (!m) continue
+      const rule = `${m[1]}/${m[2]}`
       counts[rule] = (counts[rule] ?? 0) + 1
     }
+  } catch {
+    // Fall through to the zero-parse guard below, which reports properly.
   }
   // A ratchet that parsed NOTHING must never report "under budget". That is
   // precisely the failure above, and from the outside it is indistinguishable
