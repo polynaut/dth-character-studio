@@ -361,6 +361,10 @@ export type HoudiniRunState =
       done: number
       total: number
       startedAtMs?: number
+      /** The networks this project has FINISHED, in run order — one entry per
+       *  `total`, filling up as the run works through them. The task cards
+       *  name them; the counts alone could only say "3 of 5". */
+      networks: Array<{ label: string; status: 'ok' | 'skipped' | 'failed' }>
       /** The live mid-node channel, when 456.py has streamed any — what the
        *  currently exporting node is SAYING (see {@link houdiniActivitySchema}). */
       activity?: HoudiniActivity
@@ -480,6 +484,12 @@ export function houdiniRunStateFrom(
       state: 'running',
       done: result.done,
       total: result.total,
+      // The scene the network imports is the name a human recognises; the node
+      // path is the fallback for a network the scan can't attribute.
+      networks: result.nodes.map((node) => ({
+        label: node.scene || node.node,
+        status: node.status,
+      })),
       // Only a channel with something to say rides along — an empty one would
       // make the UI clear its "last activity" line between nodes for nothing.
       ...(result.activity && result.activity.lines.length > 0

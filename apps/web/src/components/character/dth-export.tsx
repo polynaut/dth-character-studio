@@ -605,22 +605,60 @@ export function DthExportAction({
                 ? ('active' as const)
                 : ('waiting' as const),
         })),
-        ...armed.houdini.map((hip, index) => ({
-          id: `hou:${hip.path}`,
-          label: hip.label,
-          // The networks it will export, ONE PER LINE under the full project
-          // name — a comma-joined list wrapped into a wall of text. Each is
-          // named by the scene whose `.dth` the HDA node imports (the actual
-          // node paths only exist mid-run, inside Houdini).
-          detail: hip.networks.length > 0 ? hip.networks.join('\n') : undefined,
-          kind: 'houdini' as const,
-          status:
-            index < houdiniDone
-              ? ('done' as const)
-              : hip.label === houdiniActive && houdiniNow !== null
-                ? ('active' as const)
-                : ('waiting' as const),
-        })),
+        ...armed.houdini.flatMap((hip, index) => {
+          const live =
+            hip.label === houdiniActive && houdiniNow?.state === 'running' ? houdiniNow : null
+          // ONE CARD PER NETWORK while the project runs. A `.hip` can hold
+          // several DazToHue networks (measured: two in one project), and the
+          // meters were already counting them — so the column said "one thing"
+          // about work the bar said was two, and the active network's name
+          // appeared only in the bar's label.
+          //
+          // Only the RUNNING project expands: how many networks a project holds
+          // is something only the run can say (it opens the `.hip` to find
+          // out), so a queued one is still one card. `total > 1` because a lone
+          // network IS the project.
+          if (live && live.total > 1) {
+            return Array.from({ length: live.total }, (_, n) => {
+              const finished = live.networks[n]
+              const current = n === live.networks.length
+              return {
+                id: `hou:${hip.path}#${n}`,
+                // A network the run has not reached yet has no name to give —
+                // "Network 2" is honest, an invented scene name would not be.
+                label:
+                  finished?.label ||
+                  (current ? live.activity?.scene || '' : '') ||
+                  `Network ${n + 1}`,
+                detail: hip.label,
+                kind: 'houdini' as const,
+                status: finished
+                  ? ('done' as const)
+                  : current
+                    ? ('active' as const)
+                    : ('waiting' as const),
+              }
+            })
+          }
+          return [
+            {
+              id: `hou:${hip.path}`,
+              label: hip.label,
+              // The networks it will export, ONE PER LINE under the full
+              // project name — a comma-joined list wrapped into a wall of text.
+              // Each is named by the scene whose `.dth` the HDA node imports
+              // (the actual node paths only exist mid-run, inside Houdini).
+              detail: hip.networks.length > 0 ? hip.networks.join('\n') : undefined,
+              kind: 'houdini' as const,
+              status:
+                index < houdiniDone
+                  ? ('done' as const)
+                  : hip.label === houdiniActive && houdiniNow !== null
+                    ? ('active' as const)
+                    : ('waiting' as const),
+            },
+          ]
+        }),
         // Last, because it happens last: the send waits for every Houdini
         // project to finish. It is a file write, so it is never `active` for
         // longer than a poll — `waiting` until it has run, `done` after.

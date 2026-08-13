@@ -318,7 +318,34 @@ describe('houdiniRunStateFrom', () => {
   })
 
   it('reports node progress while the run works', () => {
-    expect(houdiniRunStateFrom(result({}), true)).toEqual({ state: 'running', done: 1, total: 3 })
+    expect(houdiniRunStateFrom(result({}), true)).toEqual({
+      state: 'running',
+      done: 1,
+      total: 3,
+      networks: [],
+    })
+  })
+
+  it('names the networks it has finished — one task card each', () => {
+    // A `.hip` can hold several DazToHue networks, and the run is the only
+    // thing that knows how many: the count comes from `total`, the NAMES from
+    // the nodes as they land. The scene the network imports is what a human
+    // recognises; a node the scan cannot attribute falls back to its path.
+    const state = houdiniRunStateFrom(
+      result({
+        nodes: [
+          { node: '/obj/DazToHue1/export', scene: 'LaraClassic', status: 'ok' },
+          { node: '/obj/DazToHue2/export', scene: '', status: 'skipped' },
+        ],
+      }),
+      true,
+    )
+    expect(state).toMatchObject({
+      networks: [
+        { label: 'LaraClassic', status: 'ok' },
+        { label: '/obj/DazToHue2/export', status: 'skipped' },
+      ],
+    })
   })
 
   it('carries the live mid-node activity — only when it has something to say', () => {
@@ -339,6 +366,7 @@ describe('houdiniRunStateFrom', () => {
       state: 'running',
       done: 1,
       total: 3,
+      networks: [],
       activity: {
         node: '/obj/DazToHue1/export',
         scene: 'KiraDefault',
@@ -351,7 +379,12 @@ describe('houdiniRunStateFrom', () => {
     // An EMPTY channel is dropped — the UI must not clear its last-activity
     // line between nodes for nothing.
     const emptyActivity = result({ activity: { node: '/obj/x', scene: '', lines: [] } })
-    expect(houdiniRunStateFrom(emptyActivity, true)).toEqual({ state: 'running', done: 1, total: 3 })
+    expect(houdiniRunStateFrom(emptyActivity, true)).toEqual({
+      state: 'running',
+      done: 1,
+      total: 3,
+      networks: [],
+    })
   })
 
   it('keeps a node’s captured log tail on its report entry', () => {
