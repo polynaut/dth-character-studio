@@ -620,19 +620,19 @@ export function DthExportAction({
           // network IS the project.
           if (live && live.total > 1) {
             return Array.from({ length: live.total }, (_, n) => {
-              const finished = live.networks[n]
-              const current = n === live.networks.length
+              const network = live.networks[n]
+              const done = network !== undefined && network.status !== 'waiting'
+              const current = n === live.networks.filter((one) => one.status !== 'waiting').length
               return {
                 id: `hou:${hip.path}#${n}`,
-                // A network the run has not reached yet has no name to give —
-                // "Network 2" is honest, an invented scene name would not be.
+                // The run names every network up front now (the title of the
+                // network box around it, which is what the user called it), so
+                // the count is only reached with a 456.py too old to say.
                 label:
-                  finished?.label ||
-                  (current ? live.activity?.scene || '' : '') ||
-                  `Network ${n + 1}`,
+                  network?.label || (current ? live.activity?.scene || '' : '') || `Network ${n + 1}`,
                 detail: hip.label,
                 kind: 'houdini' as const,
-                status: finished
+                status: done
                   ? ('done' as const)
                   : current
                     ? ('active' as const)

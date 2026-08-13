@@ -989,6 +989,16 @@ older runtimes as stale.
   nothing and covers the sections nobody has measured. Not to be confused with
   the Daz-side `.dth` under `daz-export/`, which names the Daz→Houdini
   intermediates the HDA READS.
+- **A Houdini run NAMES its networks before it exports them** (456.py's
+  `targets` in the result file: node path, scene, and the title of the network
+  box around it). The task cards are one per network, and could previously only
+  label the ones already finished — everything ahead read "Network 2" where the
+  user had a name. The box title wins: a multi-network project's nodes are all
+  `DazToHueExport`, `…1`, `…2`, and the box comment (NOT `name()`, which is an
+  internal id) is the only human-meaningful label the setup has — the same rule
+  the scan's `_network_box_label` measured. An older 456.py sends no targets,
+  and then only finished networks can be named, which is the pre-existing
+  behaviour rather than a guess.
 - **A character has EXPORT SETS, not "an export".** `<export>/<name>/DTH_<name>.dth`,
   where `<name>` is the HDA's `character_name` parm — the USER's, not the
   studio's. Measured: `LaraCroft_G81` has `LaraCroft`, `LaraClassic` and

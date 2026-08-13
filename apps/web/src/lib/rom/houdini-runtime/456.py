@@ -259,6 +259,50 @@ class ActivityCapture(object):
         return False
 
 
+def network_box_label(node):
+    """Title of the network box the node sits in, or ''.
+
+    A project with several DazToHue networks has each wrapped in a titled
+    network box — `LaraClassic`, `LaraNaked` — and that title is the only
+    human-meaningful name the setup has: the nodes themselves are
+    `DazToHueExport`, `…1`, `…2`. The visible title is the box's COMMENT
+    (`name()` is an internal id), boxes live in the node's PARENT network, and
+    they nest, so the innermost containing box wins. Same rule as the scan's
+    `_network_box_label`, which is where it was measured.
+    """
+
+    def search(container, depth=0):
+        try:
+            boxes = container.networkBoxes()
+        except Exception:
+            return None
+        best = None
+        for box in boxes:
+            try:
+                members = box.nodes()
+            except Exception:
+                continue
+            deeper = search(box, depth + 1)
+            if deeper is not None:
+                if best is None or deeper[1] > best[1]:
+                    best = deeper
+            elif node in members and (best is None or depth > best[1]):
+                best = (box, depth)
+        return best
+
+    parent = node.parent()
+    if parent is None:
+        return ""
+    found = search(parent)
+    if found is None:
+        return ""
+    try:
+        comment = (found[0].comment() or "").strip()
+    except Exception:
+        comment = ""
+    return comment.splitlines()[0].strip() if comment else ""
+
+
 class Report(object):
     """The result file. Written after every node so the studio's poll sees
     progress rather than one silent block and a result at the end — and, while
@@ -266,9 +310,21 @@ class Report(object):
     lines {@ActivityCapture} caught mid-`do_export`, so the studio can show
     what the minutes-long synchronous call is doing."""
 
-    def __init__(self, path, total):
+    def __init__(self, path, total, targets=None):
         self.path = path
-        self.data = {"version": 1, "state": "running", "total": total, "done": 0, "nodes": []}
+        self.data = {
+            "version": 1,
+            "state": "running",
+            "total": total,
+            "done": 0,
+            "nodes": [],
+            # WHAT this run will export, named, before any of it has happened.
+            # The studio draws one task card per network and could only label
+            # the ones already finished — everything ahead read as "Network 2",
+            # which is a count where the user has a name. The run knows its
+            # targets the moment it has collected them; it just never said so.
+            "targets": targets or [],
+        }
         self._last_flush = 0.0
         self.flush(force=True)
 
@@ -428,7 +484,18 @@ def run(job):
     fallback = with_trailing_slash(job.get("exportDirectory", ""))
 
     targets = collect_targets(wanted)
-    report = Report(job.get("resultPath", ""), len(targets))
+    # The network box's title is the name the user gave this network; the scene
+    # is what the studio calls it; the node path is the last resort and always
+    # exists.
+    labels = [
+        {
+            "node": node.path(),
+            "scene": label,
+            "box": network_box_label(node),
+        }
+        for node, _source, label in targets
+    ]
+    report = Report(job.get("resultPath", ""), len(targets), labels)
     print("DTH Character Studio: {} export node(s) match the selected scenes".format(len(targets)))
 
     if not targets:

@@ -326,6 +326,32 @@ describe('houdiniRunStateFrom', () => {
     })
   })
 
+  it('names EVERY network up front, from the run’s own targets', () => {
+    // A `.hip` with two DazToHue networks: the run collects both before it
+    // exports either, so the studio can name both cards immediately. The box
+    // title is what the user called the network — the nodes are just
+    // `DazToHueExport`, `…1` — so it wins over the studio's scene name.
+    const state = houdiniRunStateFrom(
+      result({
+        total: 2,
+        done: 1,
+        targets: [
+          { node: '/obj/DazToHue/DazToHueExport', scene: 'KiraDefault', box: 'LaraClassic' },
+          { node: '/obj/DazToHue/DazToHueExport1', scene: 'KiraYoga', box: '' },
+        ],
+        nodes: [{ node: '/obj/DazToHue/DazToHueExport', scene: 'KiraDefault', status: 'ok' }],
+      }),
+      true,
+    )
+    expect(state).toMatchObject({
+      networks: [
+        { label: 'LaraClassic', status: 'ok' },
+        // No box title: the scene name is the next best thing the run knows.
+        { label: 'KiraYoga', status: 'waiting' },
+      ],
+    })
+  })
+
   it('names the networks it has finished — one task card each', () => {
     // A `.hip` can hold several DazToHue networks, and the run is the only
     // thing that knows how many: the count comes from `total`, the NAMES from
