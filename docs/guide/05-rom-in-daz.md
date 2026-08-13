@@ -269,7 +269,7 @@ export mode is disabled.
 **Unreal projects** is the third leg, and appears once the studio project has
 [linked `.uproject` files](./03-first-project.md#linking-unreal-projects). Tick
 one and the finished export is **queued for import** when the whole run ends —
-every export set the character has, in one job. Nothing waits on Unreal: the
+the export sets you ticked below, in one job. Nothing waits on Unreal: the
 job is a file, and the project's
 [DTH Character Studio Runner](./06-into-houdini.md#send-to-unreal) picks it up whenever
 that editor is next open.

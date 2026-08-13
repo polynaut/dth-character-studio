@@ -161,9 +161,11 @@ with the reason in the tooltip:
 | `$JOB` points at … | the project's Set Project is another character's folder — every path it stores collapses against the wrong root |
 | the timeline runs at … | the scene is not on the ROM's 30 fps (Houdini's own default is 24), so imported ROM frames don't land on the scene's frames |
 | import paths do not resolve | a `.dth`/FBX/Alembic reference points at a file that isn't there |
+| paths still anchored on `$HIP` | references written as `$HIP/../…` by a project made before v0.69 — they resolve today, but `$HIP` names the scene's own folder, so moving that `.hip` one level deeper breaks every one of them |
 | Not filled in yet | a DazToHue parameter the studio knows the value for is still blank |
+| baker textures are missing | a material baker's layer texture names a file that is no longer on disk — usually a Daz product that was uninstalled |
 
-All of them are repaired from the
+All but the last are repaired from the
 [**Utils** drawer's *General* tab](./houdini-utils.md#the-general-tab)
 (**Repair project settings**, **Make paths portable**, **Fill network**) — which
 is exactly what makes **copying** a project workable: a copy arrives carrying the
@@ -171,12 +173,21 @@ source's `$JOB` and file references, the card tells you so, and three buttons fi
 it. That drawer also copies a **material or skeleton setup** from one project
 into another; it has [its own page](./houdini-utils.md).
 
+**The missing texture has no repair button, deliberately** — putting the file
+back is a reinstall, outside the app. It earns the badge anyway: it is the one
+failure here that the rest of the pipeline reports as *success*, so without it
+the first sign is a wrong-looking character in Unreal.
+
 > [!NOTE]
-> The checks cover `$JOB`, the timeline, the DazToHue import paths and blank
-> parameters. They do **not** verify material texture paths — a clean card is
-> not a promise that every path in the scene resolves. A project the studio has
-> never managed to read a value from is reported as *could not be read*, never
-> as wrong: an unknown is not a fault, and nothing repairs one.
+> The checks cover `$JOB`, the timeline, the DazToHue import paths, blank
+> parameters and the material bakers' **layer textures**. Nothing else in the
+> scene is verified — a clean card is not a promise that every path in it
+> resolves. The texture check is deliberately scoped to those baker parameters,
+> because "the file is missing" is no use as a general rule here: a healthy
+> project names several of Houdini's own scratch files that simply don't exist
+> until something writes them. A project the studio has never managed to read a
+> value from is reported as *could not be read*, never as wrong: an unknown is
+> not a fault, and nothing repairs one.
 
 ## `$DAZ3D_LIB` — your Daz library, as a variable
 
@@ -304,7 +315,11 @@ like a hung one.
 
 Every Install rewrites the Runner, so a re-install is also how you refresh it
 — and the project card shows an amber ⚠ when its copy is older than the one this
-app ships. It lives in its own plugin, so the DazToHue plugin is never edited.
+app ships. A send to that project is then **refused rather than attempted**, and
+says both versions: the studio reads the installed Runner before it queues
+anything, so an out-of-date one is a message here instead of a job that fails
+inside Unreal. Re-install from the card, restart the editor once, and send again.
+It lives in its own plugin, so the DazToHue plugin is never edited.
 
 For the Unreal side itself, continue with the [DazToHue](https://docs.google.com/document/d/1LYXl90FCXPX5KVpru4_T_hCY_XLr9vinR_9zYENPHUw/edit?tab=t.0)
 documentation.
