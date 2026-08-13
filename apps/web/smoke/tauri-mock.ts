@@ -107,6 +107,15 @@ export interface TauriMockSeed {
    *  A path with no entry scans as a readable project with NO nodes, which is
    *  exactly what a scene that never got a DTH network looks like. */
   materialScan?: Record<string, Array<Record<string, unknown>>>
+  /** Hold a `scan` op open for this many ms before answering.
+   *
+   *  The fake answers instantly, which is right for every spec about what a
+   *  scan SAYS — but wrong for the ones about what the UI does WHILE one runs.
+   *  A real scan is a whole hython start plus seconds per `.hip`, and the card
+   *  spinner exists for exactly that window; without a delay it opens and closes
+   *  inside one frame and no spec could ever see it. Scans only: the other ops
+   *  have no such window. */
+  materialScanDelayMs?: number
   /** The `$JOB` a scanned project reports — the General tab's input. Omit and
    *  the project reads as unreadable, which the tab reports and never repairs. */
   materialJob?: Record<string, string>
@@ -678,6 +687,10 @@ export function installTauriMock(seed: TauriMockSeed): void {
           replace: request.replace ?? false,
         }
         if (request.op === 'scan') {
+          // See `materialScanDelayMs` — the window the card spinner lives in.
+          if (seed.materialScanDelayMs) {
+            await new Promise((resolve) => setTimeout(resolve, seed.materialScanDelayMs))
+          }
           return {
             ...base,
             projects: (request.hipPaths as Array<string>).map((hipPath) => ({

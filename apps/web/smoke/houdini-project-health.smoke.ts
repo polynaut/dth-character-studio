@@ -124,6 +124,96 @@ function linkOutside(seed: { files: Record<string, string> }) {
   seed.files[charPath] = JSON.stringify(char)
 }
 
+// --- the card spinner -------------------------------------------------------
+//
+// A scan is the one part of this feature the user never asked for and cannot
+// see: it runs on a background sweep, costs tens of seconds per `.hip`, and
+// until it lands the card still shows the PREVIOUS verdict. The spinner is what
+// makes that window honest — so these specs are about WHEN it shows, which the
+// fake's `materialScanDelayMs` is what makes observable at all.
+
+/** A second project INSIDE the character folder — the sweep scans those, so it
+ *  is the only way to have one project cached and one stale in the same view. */
+const SECOND = 'D:/DTH Projects/Demo/Kira/houdini/Kira_Alt.hip'
+
+/** A seed with hython configured — without it the sweep throws and scans
+ *  nothing, which would make a "no spinner" assertion pass for the wrong reason. */
+function seedWithHython(delayMs: number) {
+  const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true, houdiniProject: true })
+  const settingsPath = `${P.appData}/settings.json`
+  seed.files[settingsPath] = JSON.stringify({
+    ...JSON.parse(seed.files[settingsPath] ?? '{}'),
+    houdiniInstallFolder: HOUDINI_INSTALL,
+    houdiniDocsFolder: 'C:/Users/dev/Documents/houdini22.0',
+  })
+  seed.files[`${HOUDINI_INSTALL}/bin/hython.exe`] = 'hython-exe-fixture'
+  seed.materialScan = { [P.houdini]: [node('FreshBox')], [SECOND]: [node('AltBox')] }
+  seed.materialScanDelayMs = delayMs
+  return seed
+}
+
+/** The card body for a project, by its displayed name. */
+const cardFor = (page: Page, name: string) => page.locator('.houdini-card', { hasText: name })
+const spinners = (page: Page) =>
+  page.getByRole('status', { name: /Reading this project in Houdini/ })
+
+test('a card spins while hython has its project open, and stops when the scan lands', async ({
+  page,
+}) => {
+  // No store entry, so the sweep really has to open the file.
+  await page.addInitScript(installTauriMock, seedWithHython(2000))
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await expect(page.getByText(/custom ROM frames/)).toBeVisible()
+
+  await expect(spinners(page)).toHaveCount(1)
+  // And it is not a spinner that never stops — the worst of the three states,
+  // because it reads as "still working" forever.
+  await expect(spinners(page)).toHaveCount(0, { timeout: 20_000 })
+})
+
+test('a project served from the cache never spins — only the one being read does', async ({
+  page,
+}) => {
+  // The decision this pins. A cache hit starts no hython process and answers in
+  // microseconds; spinning its card would flicker on every page load and teach
+  // the eye to ignore the spinner. Two projects, one fresh in the store and one
+  // not, so "which card spins" is answered without timing anything.
+  const seed = seedWithHython(2000)
+  seed.files[SECOND] = 'hip-fixture'
+  const charPath = `${P.charFolder}/Kira.json`
+  const char = JSON.parse(seed.files[charPath] ?? '{}')
+  char.houdiniProjects = [P.houdini, SECOND]
+  seed.files[charPath] = JSON.stringify(char)
+  seed.files[STORE] = JSON.stringify({
+    version: 1,
+    projects: {
+      [SECOND.toLowerCase()]: {
+        key: storeKey(SECOND),
+        scannedAt: '2026-08-07T00:00:00.000Z',
+        project: scan({ hipPath: SECOND }),
+      },
+    },
+  })
+  await page.addInitScript(installTauriMock, seed)
+  await page.addInitScript((storePath: string) => {
+    const mock = (window as any).__tauriMock
+    const raw = mock.files.get(storePath) as string
+    mock.files.set(storePath, raw.split('__MTIME__').join(String(mock.mtimeMs)))
+  }, STORE)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await expect(page.getByText(/custom ROM frames/)).toBeVisible()
+
+  // Exactly one card is being read, and it is not the cached one. The cached
+  // card is asserted to EXIST first — without that, a locator typo would make
+  // the next line pass by matching nothing at all.
+  await expect(spinners(page)).toHaveCount(1)
+  await expect(cardFor(page, 'Kira_Alt')).toHaveCount(1)
+  await expect(cardFor(page, 'Kira_Alt').getByRole('status')).toHaveCount(0)
+  await expect(spinners(page)).toHaveCount(0, { timeout: 20_000 })
+})
+
 test('the drawer merges the store with a scan of what it does not cover', async ({ page }) => {
   // One linked project the store answers for (inside the character folder,
   // fresh entry) and one it cannot answer for yet (linked from outside — the
