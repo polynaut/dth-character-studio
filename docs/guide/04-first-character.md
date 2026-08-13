@@ -72,11 +72,13 @@ generation they are shown greyed out):
   as the primary**, so every scene produces the primary's skeleton — and are
   copied into the character's folder or left in place. The original scene
   can't be unlinked; extras can. Each scene's open icon is a menu: **Open
-  Original**, and — for the saved
+  scene**, and — for the saved
   [ROM animation](./05-rom-in-daz.md#direct-export-optional-recommended) —
-  **Open ROM Animation** when a current one exists, or **Open and Generate ROM
-  Animation**, which builds it in Daz and opens the result (Ctrl forces a
-  rebuild; Alt+click reveals the folder). A running Daz Studio opens the scene
+  **Open ROM Animation** whenever one is on disk, marked when it predates the
+  current definition (it opens anyway; stale is not wrong). **Open and Generate
+  ROM Animation** builds it in Daz and opens the result, and is offered when
+  there is none or the saved one is stale (Ctrl offers it for a current one too;
+  Alt+click reveals the folder). A running Daz Studio opens the scene
   right away (handed over via the bundled
   [Runner plugin](./02-setup.md#daz-studio-plugins)),
   otherwise Daz is started with it.

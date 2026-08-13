@@ -1332,8 +1332,8 @@ export const CHARACTER_SCHEMA_VERSION = 31
  *       meant to OPEN, so hiding it was wrong, and the name now matches the
  *       lowercase-hyphenated convention the other studio folders use
  *       (`dth-exports`, `houdini-project`). One spelling for both sides now —
- *       `ROM_ANIMATIONS_FOLDER` in dsa.ts, which `romAnimationPath` and the
- *       emitted `.dsa` both read, so the host can't stat a path Daz never
+ *       `ROM_ANIMATIONS_FOLDER` in rom-animation.ts, which `romAnimationPath`
+ *       and the emitted `.dsa` both read, so the host can't stat a path Daz never
  *       wrote. Refresh assets regenerates the scripts AND renames an existing
  *       `.ROM_Animations` folder beside each linked scene, so already-saved
  *       ROM animations follow rather than being orphaned.

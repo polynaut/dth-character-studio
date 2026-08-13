@@ -2070,9 +2070,14 @@ export interface RomAnimationStatus {
   /**
    * …and was built from the CURRENT inputs: its mtime is at/after both the
    * source `.duf` and the character's generated ROM script (rewritten on every
-   * save, so it dates the definition the ROM would be built from now). Stale ⇒
-   * the card offers "Open and Generate" instead of opening a ROM that no
-   * longer matches the definition.
+   * save, so it dates the definition the ROM would be built from now).
+   *
+   * That makes it a MUCH stricter test than it reads: since every character
+   * save rewrites the script, one edit of anything stales every saved animation
+   * of that character. So `current` gates whether a REBUILD is worth offering —
+   * never whether the file may be opened. Stale ⇒ the card marks the open entry
+   * and adds "Open and Generate" under it; {@link exists} alone decides that the
+   * entry is there at all.
    */
   current: boolean
 }
