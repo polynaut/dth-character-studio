@@ -26,10 +26,12 @@ describe('LinkedAssetCard busy', () => {
     expect(screen.queryByRole('status')).toBeNull()
   })
 
-  it('announces the spinner with its label rather than as a bare icon', () => {
+  it('gives the spinner its label as an accessible name, not a bare icon', () => {
     // A spinner with no accessible name is invisible to a screen reader — the
     // card would simply say nothing about a scan that takes tens of seconds.
-    // Queried BY that name, so the assertion is the accessible name itself.
+    // Queried BY that name, so the assertion IS the accessible name — whether a
+    // real screen reader announces a live region that arrives with its content
+    // already in it is a separate question, and not one jsdom can answer.
     renderCard({ busy: true, busyLabel: 'Reading this project in Houdini…' })
     expect(screen.getByRole('status', { name: 'Reading this project in Houdini…' })).toBeTruthy()
   })

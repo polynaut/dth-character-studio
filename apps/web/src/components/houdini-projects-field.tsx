@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { AlertTriangle, Plus, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -66,6 +66,10 @@ function defaultProjectName(characterName: string): string {
 import type { CharacterLocation } from '#/lib/rom/api.ts'
 import type { PersistCharacterPatch } from '#/lib/use-character-draft.ts'
 import type { Character } from '@dth/rom'
+
+/** The "nothing is being scanned" list — one shared empty array, so the ref that
+ *  remembers the previous one costs no allocation on the common path. */
+const NO_PATHS: ReadonlyArray<string> = []
 
 /** A linked Houdini project: the Houdini logo (no preview image), the filename,
  *  and its folder — the corner icon opens it in Houdini. A Houdini project has no
@@ -240,10 +244,20 @@ export function HoudiniProjectsField({
   // read is instant and needs no Houdini; the sweep fills the store for next
   // time, which is why a first-ever open shows no badges and a later one does.
   const [warnings, setWarnings] = useState<ReadonlyMap<string, string>>(new Map())
-  /** Read the STORED verdicts. Instant and needs no Houdini — the sweep is what
-   *  fills the store. */
+  /** Last-ISSUED wins, not last to resolve. Three paths read concurrently — the
+   *  landing effect below and the focus refetch's before/after pair — and a read
+   *  issued against the PRE-scan store must never overwrite one issued after it
+   *  landed. That is exactly the stale "Needs attention" over a healthy project
+   *  this field already had to fix once (see the focus refetch). */
+  const warningsSeq = useRef(0)
+  /** Read the STORED verdicts — no hython and no process, but not free either:
+   *  the character definition, the scan store, the export root, the installed
+   *  HDA libraries (deliberately un-memoized — a readDir plus a stat each) and a
+   *  stat per linked project. Worth a thought before adding a caller. */
   const readWarnings = useCallback(async () => {
+    const seq = ++warningsSeq.current
     const status = await fetchHoudiniProjectStatus({ data: { projectId, id: character.id } })
+    if (seq !== warningsSeq.current) return
     setWarnings(
       new Map(
         status.filter((s) => !s.ok).map((s) => [normalizePath(s.hipPath).toLowerCase(), s.summary]),
@@ -255,13 +269,31 @@ export function HoudiniProjectsField({
   // by the api layer's scan funnel, so it covers BOTH triggers: this page's
   // background sweep and the drawer's Rescan.
   const scanning = useHoudiniScanning()
-  // Re-read the stored verdicts every time that set changes, i.e. as each
-  // project LANDS. Without it the sweep's own read is the only one, and it runs
-  // after the last project finishes — so a card would stop spinning while still
-  // showing the verdict from before its scan. A store read, not a scan: no
-  // hython, no process, just the JSON the sweep just wrote.
-  const scanningKey = [...scanning].sort().join('|')
+  // Narrowed to the projects THIS field renders. The store is process-wide, so
+  // it also moves for another character's still-running sweep, the drawer's
+  // cached-first open and a transfer — none of which changes what these cards
+  // show.
+  const scanningKey = projects
+    .filter((hip) => isHoudiniProjectScanning(scanning, hip))
+    .map((hip) => normalizePath(hip).toLowerCase())
+    .sort()
+    .join('|')
+  // Re-read the stored verdicts as each project LANDS. Without this the sweep's
+  // own read is the only one and it runs after the LAST project finishes — so a
+  // card would stop spinning while still showing the verdict from before its
+  // scan.
+  //
+  // On a RELEASE only, and never on the first run. A project ENTERING the set is
+  // hython being started: nothing has been written for it yet, so that read can
+  // only return what the card already shows. And the first run would duplicate
+  // the immediate read of the focus refetch just below. Both matter because a
+  // read is not free (see `readWarnings`) and each one re-renders every card.
+  const held = useRef<ReadonlyArray<string>>(NO_PATHS)
   useEffect(() => {
+    const before = held.current
+    const now = scanningKey === '' ? NO_PATHS : scanningKey.split('|')
+    held.current = now
+    if (!before.some((key) => !now.includes(key))) return
     void readWarnings().catch(() => {})
   }, [scanningKey, readWarnings])
 

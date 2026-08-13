@@ -339,6 +339,13 @@ Three consequences worth knowing before touching this:
   would otherwise clear a spinner the other still needs. The mark is released
   after the result is STORED, not when hython returns — releasing earlier leaves
   a window where the spinner is gone and the badge still shows the old verdict.
+  On the reading side, `HoudiniProjectsField` re-reads its verdicts on a RELEASE
+  of one of its OWN projects and nothing else: a mark means hython was just
+  started (nothing is written yet), the set is process-wide so it also moves for
+  other characters' sweeps, and a verdict read is not the cheap thing it looks
+  like — `fetchHoudiniProjectStatus` costs the character load, the store, the
+  export root, the un-memoized HDA-library key and a stat per project, and
+  re-renders every card.
 - **`validateHoudiniProject`** (`lib/rom/houdini-validate.ts`) is a pure function
   over the scan the studio already has — `$JOB`, `refs.broken`,
   `prefill.fillable`. An UNSCANNED project is never a fault (else every page load

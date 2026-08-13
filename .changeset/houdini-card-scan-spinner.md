@@ -1,5 +1,6 @@
 ---
 '@dth/web': minor
+'@dth/ui': minor
 ---
 
 **A Houdini project card now shows a spinner while it is being read.**

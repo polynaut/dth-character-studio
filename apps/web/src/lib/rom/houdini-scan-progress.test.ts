@@ -114,11 +114,33 @@ describe('the Houdini scan-progress store', () => {
     // running": every project served from the mtime cache costs no process, and
     // spinning those cards on every page load would train the eye to ignore it.
     const listener = vi.fn()
-    subscribeHoudiniScanning(listener)
+    const unsubscribe = subscribeHoudiniScanning(listener)
     const release = markHoudiniScanning([])
     expect(houdiniScanningSnapshot().size).toBe(0)
     expect(listener).not.toHaveBeenCalled()
     release()
+    unsubscribe()
+  })
+
+  it('resets the marks without dropping subscribers', () => {
+    // The reset is exported from a PRODUCTION module, so it has to be safe to
+    // call with a card mounted: wiping the listener set is the one part of a
+    // reset nothing can undo — the card would stop hearing about every later
+    // scan, silently. It clears the holders and publishes instead.
+    const listener = vi.fn()
+    const unsubscribe = subscribeHoudiniScanning(listener)
+    markHoudiniScanning([HIP])
+    expect(listener).toHaveBeenCalledTimes(1)
+
+    resetHoudiniScanningForTests()
+    expect(houdiniScanningSnapshot().size).toBe(0)
+    // Still subscribed, and told about the clearing.
+    expect(listener).toHaveBeenCalledTimes(2)
+
+    const release = markHoudiniScanning([HIP])
+    expect(listener).toHaveBeenCalledTimes(3)
+    release()
+    unsubscribe()
   })
 
   it('holds each path of a batch independently', () => {

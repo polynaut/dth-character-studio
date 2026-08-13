@@ -93,10 +93,18 @@ function publish(): void {
   for (const listener of listeners) listener()
 }
 
-/** Test seam: drop all state. Never called by the app — the store is
- *  process-wide and a real release always pairs with its mark. */
+/**
+ * Test seam: drop every in-flight mark. Never called by the app — the store is
+ * process-wide and a real release always pairs with its mark.
+ *
+ * Deliberately leaves `listeners` alone. Dropping subscribers is the one part of
+ * a reset nothing can undo: a card that is mounted and subscribed would go
+ * silently dead for the rest of the session, and this function is exported from
+ * a production module with nothing but its name to stop that. Clearing the
+ * holders and PUBLISHING is the whole reset — anything listening then sees the
+ * empty set, which is what a reset means.
+ */
 export function resetHoudiniScanningForTests(): void {
   holders.clear()
-  snapshot = new Set()
-  listeners.clear()
+  publish()
 }

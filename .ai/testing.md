@@ -76,6 +76,17 @@ The **real SPA in a real browser** against an in-memory fake of the native layer
   immediately found the scene-key lookup bug that had made the feature a no-op
   on every real path. Teaching the mock the new commands (and writing the spec
   that drives them) is part of the feature PR, not a later test PR.
+- **The mock answers instantly, so any UI state that exists only DURING an async
+  op is untestable until the fake can hold that op open.** A spinner, a
+  disabled-while-running control, a progress line: against an instant fake the
+  window they live in opens and closes inside one frame and no spec can ever
+  observe it — so the spec quietly asserts the finished state and the feature
+  ships unpinned. The fix is a per-op delay knob on the seed, not a `waitFor` in
+  the spec. `materialScanDelayMs` (#816) is the pattern: documented on
+  `TauriMockSeed`, applied to the `scan` op only, and it is what makes "exactly
+  one card spins, and the cached one does not" assertable without timing
+  anything. A feature whose whole point is what the UI does while something runs
+  needs one of these before it needs a spec.
 - `apps/web/smoke/fixtures.ts` — `buildSeed(opts)` builds the world (project
   "Demo", character "Kira", DTH release tree). The character goes through the
   **real `characterSchema`**, so schema bumps fail here loudly.

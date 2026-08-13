@@ -5,6 +5,11 @@ import {
   subscribeHoudiniScanning,
 } from './rom/houdini-scan-progress.ts'
 
+/** The server snapshot, hoisted so it is the same reference every time — a
+ *  fresh Set here would fail the SSR check the same way an unstable client
+ *  snapshot loops the client one. */
+const EMPTY: ReadonlySet<string> = new Set()
+
 /**
  * The Houdini projects hython is reading right now — for the card spinner.
  *
@@ -14,13 +19,9 @@ import {
  * card mounting mid-scan gets the CURRENT set on its first render instead of
  * flashing "idle" for a frame.
  *
- * The server snapshot is the same empty set every time — a stable reference, or
- * the SSR check would loop. Nothing renders this on a server today, but a
- * missing third argument is a hydration error waiting for the first one that
- * does.
+ * Nothing renders this on a server today, but a missing third argument is a
+ * hydration error waiting for the first one that does — hence {@link EMPTY}.
  */
-const EMPTY: ReadonlySet<string> = new Set()
-
 export function useHoudiniScanning(): ReadonlySet<string> {
   return useSyncExternalStore(subscribeHoudiniScanning, houdiniScanningSnapshot, () => EMPTY)
 }
