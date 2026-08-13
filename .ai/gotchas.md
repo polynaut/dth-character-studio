@@ -972,6 +972,47 @@ current code before relying on details, but assume the *lesson* still holds.
 
 ## Web app
 
+- **A picker built from the OUTPUT folder can only ever re-pick the past.**
+  Reported 2026-08-13 on the DTH Export dialog's Unreal section: under the
+  project rows sat a tick list of export sets, read from the character's
+  `export/` folder — i.e. from what an EARLIER run wrote. Running the THICK
+  variant (whose Houdini project writes `LaraClassic_THICK` /
+  `LaraNaked_THICK`) offered `LaraClassic` and `LaraNaked` to tick, because
+  those were the folders on disk; the sets the run was about to make appeared
+  nowhere, and a ticked project with no ticked set held Start. The list made
+  its own reason for existing — a FIRST import into an Unreal project —
+  impossible. The fix is not a better list but a different question: the dialog
+  now WORKS OUT what the run puts in play (the checked Houdini projects' scanned
+  `exportSets`, or the folder's contents under *Skip Houdini*, which is not a
+  prediction) and asks nothing — the run's task cards name each set and whether
+  it is a re-import once Start is pressed. A read-only version of the same list
+  was built first and dropped on the same report: the clutter was the list, not
+  only its checkboxes. Generalises: when a control's options come
+  from a past run's artifacts, it cannot express the thing that has not
+  happened yet — and forward-looking work is usually the point. Watch for the
+  tell: an empty selection that is BOTH the default and a blocker.
+  Second lesson from the same fix: "the studio cannot say" and "the answer is
+  nothing" must not collapse into the same empty array — `[]` reaches
+  `startUnrealImport` as *every set in the export folder*, so a run believed to
+  produce nothing would have handed over a stale export (`sendSets: null` vs
+  `[]`, dth-export.tsx). The same collapse hides in a PROBE's failure path:
+  answering a rejected `fetchUnrealSendPlan` with `{sets: [], located: {}}` made
+  "could not look" identical to "looked, found nothing", which then disabled the
+  rows and stated *"nothing exported yet"* about something never read. A failed
+  probe leaves the state unset; null already means "cannot say" everywhere
+  downstream.
+  Third, and it outlived both the tick list and the read-only list that briefly
+  replaced it: **a lookup table only answers about the keys it was given —
+  absence is not evidence of absence.** `UnrealSendPlan.located` is built by
+  probing each Unreal project for *the export folder's* set names, and the
+  pre-tick reads a missing entry as "that project does not hold this set". For a
+  set the run is about to CREATE — not on disk yet, which is the whole reported
+  case — the entry was missing because nobody had asked, so a genuine re-import
+  of a variant the project already held read as a first import and did not
+  pre-tick. Fix: probe the names you intend to report on (`extraSets` on
+  `fetchUnrealSendPlan`, fed by the stored Houdini scans). The tell is a record
+  built from one source being queried with keys from another; if the two
+  sources cannot drift, there is no bug, and here drifting IS the feature.
 - **A default set in an effect can be cancelled by a handler somewhere else in
   the same component — and nothing fails when it is.** The Utils drawer ticked
   the opened card's nodes on open (#690). #691 made every tab switch clear the

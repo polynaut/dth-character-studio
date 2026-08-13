@@ -268,31 +268,34 @@ export mode is disabled.
 
 **Unreal projects** is the third leg, and appears once the studio project has
 [linked `.uproject` files](./03-first-project.md#linking-unreal-projects). Tick
-one and the finished export is **queued for import** when the whole run ends —
-the export sets you ticked below, in one job. Nothing waits on Unreal: the
-job is a file, and the project's
+one and the finished export is **queued for import** when the whole run ends, in
+one job. Nothing waits on Unreal: the job is a file, and the project's
 [DTH Character Studio Runner](./06-into-houdini.md#send-to-unreal) picks it up whenever
 that editor is next open.
 
-Under the projects it lists the character's **export sets**, ticked the same
-way: a set the chosen project already holds names the folder it will refresh, a
-set it doesn't is marked *not in this project* and stays unticked — no variant
-lands in Unreal without you asking. Untick everything and the run simply doesn't
-send.
+**The project is the only thing you tick.** Which export sets go is worked out,
+not asked: the ones the checked Houdini projects write (their export nodes name
+them, read when the project is scanned), or — under *Skip Houdini* — the exports
+already on disk. Whether each one is a refresh of what that project has or a new
+character in it is worked out too, from the project's own `Content/`, and the
+run's task list names every set with the project it lands in once you press
+Start.
 
-Like the other two lists, it **pre-selects what the run is for** — and "what the
-run is for" means the sets the checked Houdini projects actually write (each
-project's export nodes name them, read when the project is scanned). Export a
-variant this Unreal project has never seen and nothing pre-ticks; export one it
-already holds and both the project and that set do. A project the scan hasn't
-reached yet says nothing about what it writes, so the pre-selection falls back
-to "does this project hold this character at all".
+Like the other two lists, it **pre-selects what the run is for**: a project that
+already holds one of the sets this run makes starts ticked (it is a refresh), a
+project that would get something new stays for you to decide — putting a
+character into an Unreal project the first time is a choice, not a continuation.
+Tick it and the new one is sent; that is how a character gets into an Unreal
+project in the first place.
 
-A project that already holds this character starts ticked, a project that
-doesn't stays for you to decide — putting a character into an
-Unreal project for the first time is a choice, not a continuation. The section
-needs somewhere to send from: tick a Houdini project to export first, or pick
-**Skip Houdini — use last exports** to send the exports already on disk.
+A Houdini project the background scan hasn't reached yet says nothing about what
+it writes, so nothing is pre-ticked and the section says so: send it anyway and
+**everything** in the export folder goes. **Rescan** those projects (Utils
+drawer) and the run sends only what it makes.
+
+The section needs somewhere to send from: tick a Houdini project to export
+first, or pick **Skip Houdini — use last exports** to send the exports already
+on disk.
 
 Press **Start**: the batch is handed to Daz Studio, where the bundled
 [**Runner plugin**](./02-setup.md#daz-studio-plugins)
