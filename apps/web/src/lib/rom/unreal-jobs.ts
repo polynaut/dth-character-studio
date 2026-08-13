@@ -25,9 +25,13 @@ export const UNREAL_JOB_FILE = 'job.json'
 export const UNREAL_CLAIMED_FILE = 'running_job.json'
 export const UNREAL_RESULT_FILE = 'result.json'
 
+/** The bridge plugin's folder name under `Plugins/` — also what
+ *  `unrealProjectState` reports in `installedPlugins`, which is how the install
+ *  dialog knows whether the project already has it. */
+export const UNREAL_BRIDGE_NAME = 'DTHStudioBridge'
 /** Where the bridge plugin is installed inside a project. */
-export const UNREAL_BRIDGE_FOLDER = 'Plugins/DTHStudioBridge'
-export const UNREAL_BRIDGE_UPLUGIN = 'DTHStudioBridge.uplugin'
+export const UNREAL_BRIDGE_FOLDER = `Plugins/${UNREAL_BRIDGE_NAME}`
+export const UNREAL_BRIDGE_UPLUGIN = `${UNREAL_BRIDGE_NAME}.uplugin`
 
 /**
  * Bumped whenever the job or result shape changes. The bridge REFUSES a job

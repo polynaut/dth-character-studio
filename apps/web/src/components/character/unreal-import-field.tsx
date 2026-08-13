@@ -20,6 +20,11 @@ import type { UnrealImportState } from '#/lib/rom/unreal-jobs.ts'
  * to start and holds its project, so the studio never starts one. It hands over
  * a job; a watching editor picks it up (and one that opens later picks it up
  * on startup, exactly like a Daz that was closed when the batch was queued).
+ *
+ * The watcher — the DTH Studio Bridge plugin — is installed from the project
+ * card's Install action, not from here: it is a plugin in the user's own Unreal
+ * project, and sending must not put one there behind their back. Sending
+ * without it fails saying exactly that.
  */
 export function UnrealImportField({
   projectId,
@@ -106,9 +111,14 @@ export function UnrealImportField({
             </p>
             <p>
               The studio does <strong>not</strong> start Unreal: an editor takes minutes to come up
-              and holds its project. It writes a job file, and the studio&apos;s bridge plugin —
-              installed into the project on every send — picks it up within about a second. An
+              and holds its project. It writes a job file, and the{' '}
+              <strong>DTH Studio Bridge</strong> plugin picks it up within about a second — an
               editor opened later claims it on startup.
+            </p>
+            <p>
+              The bridge installs like any other plugin: the project card&apos;s{' '}
+              <strong>Install</strong> action, where it is pre-checked. Unreal loads plugins at
+              startup, so restart the editor once after installing it.
             </p>
             <p>
               The import itself is the DazToHue plugin&apos;s own pipeline, unmodified: meshes,
@@ -154,8 +164,8 @@ export function UnrealImportField({
           <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
           <span>
             Nothing has claimed it yet. That is normal while Unreal starts — if the project is
-            already open and this does not move, its bridge plugin may need the editor restarting
-            once.
+            already open and this does not move, the bridge was installed after that editor
+            session began: restart the editor once.
           </span>
         </p>
       )}

@@ -61,18 +61,22 @@ test('the install dialog offers DTH content + the engine-matched plugin builds',
   await page.getByRole('button', { name: 'Install DTH content and plugins into DemoGame' }).click()
   const dialog = page.getByRole('dialog', { name: /Install into DemoGame/ })
   await expect(dialog).toBeVisible()
-  // The engine is read from the .uproject; both offered items are pre-checked,
+  // The engine is read from the .uproject; every offered item is pre-checked,
   // and only the 5.7 build of the bridge plugin is offered (one row, not two).
+  // Three rows: DTH content, the studio's own DTHStudioBridge, that one build.
   await expect(dialog.getByText('Unreal Engine 5.7')).toBeVisible()
   const boxes = dialog.getByRole('checkbox')
-  await expect(boxes).toHaveCount(2)
+  await expect(boxes).toHaveCount(3)
   for (const box of await boxes.all()) await expect(box).toBeChecked()
 
   await dialog.getByRole('button', { name: 'Install', exact: true }).click()
-  // Success toast names both installs; the dialog closes.
+  // Success toast names every install; the dialog closes.
   await expect(page.getByText(/Installed into DemoGame/)).toBeVisible()
   await expect(page.getByText(/DTH content \(7 files\)/)).toBeVisible()
   await expect(page.getByText(/DazToUnreal \(3 files\)/)).toBeVisible()
+  // The bridge is written by the FS layer, not by a native install command —
+  // the one item whose whole install path runs above the mocked boundary.
+  await expect(page.getByText(/DTH Studio Bridge \(3 files\)/)).toBeVisible()
   await expect(dialog).toHaveCount(0)
 })
 

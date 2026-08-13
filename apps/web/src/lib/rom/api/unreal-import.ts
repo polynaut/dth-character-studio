@@ -29,20 +29,37 @@ import bridgeInit from '../unreal-runtime/init_unreal.py?raw'
 // labour as the Houdini leg.
 
 /**
- * Write the bridge plugin into an Unreal project.
+ * Write the bridge plugin into an Unreal project. Returns how many files it
+ * wrote, so the install dialog can report it like every other item.
  *
- * Rewritten before EVERY run rather than installed once, so a project can never
- * hold a bridge older than the app that talks to it — the trap the Daz Runner
- * and 456.py both taught. Cheap: three small text files.
+ * A CHECKLIST ITEM, not a side effect of sending. It was the latter first —
+ * rewritten before every run, on the "always current, no install ritual"
+ * reasoning the Daz runtime and 456.py both use — and that was wrong here for
+ * one reason those two don't have: an Unreal project is the user's own, plugins
+ * in it are things they chose, and a `Plugins/` folder that grows on its own is
+ * a surprise. It also hid the awkward part rather than solving it (Unreal loads
+ * plugins at startup, so a bridge that appears mid-session does nothing until a
+ * restart) — as an install action, the restart lands where the user already
+ * expects one.
+ *
+ * Refreshing is still automatic in the sense that matters: every Install
+ * (re)writes it, and the bridge REFUSES a job whose version it doesn't know
+ * rather than silently doing the old thing, so a stale one says so.
  */
-export async function installUnrealBridge(uprojectPath: string): Promise<string> {
+export async function installUnrealBridge({ data }: { data: unknown }): Promise<number> {
+  const { uprojectPath } = z.object({ uprojectPath: z.string().min(1) }).parse(data)
+  if (!isTauri()) throw new Error('Installing the bridge needs the desktop app.')
   const { bridgeDir } = unrealJobPaths(uprojectPath)
   const pythonDir = `${bridgeDir}/Content/Python`
   await mkdir(pythonDir, { recursive: true })
-  await storage.writeTextFileAtomic(`${bridgeDir}/${UNREAL_BRIDGE_UPLUGIN}`, bridgeUpluginJson())
-  await storage.writeTextFileAtomic(`${pythonDir}/dth_bridge.py`, bridgeScript)
-  await storage.writeTextFileAtomic(`${pythonDir}/init_unreal.py`, bridgeInit)
-  return bridgeDir
+  const files: Array<[string, string]> = [
+    [`${bridgeDir}/${UNREAL_BRIDGE_UPLUGIN}`, bridgeUpluginJson()],
+    [`${pythonDir}/dth_bridge.py`, bridgeScript],
+    [`${pythonDir}/init_unreal.py`, bridgeInit],
+  ]
+  // Distinct paths, so nothing races; the mkdir above already made the folder.
+  await Promise.all(files.map(([path, text]) => storage.writeTextFileAtomic(path, text)))
+  return files.length
 }
 
 const importInput = charScopeInput.extend({
@@ -55,8 +72,6 @@ export interface UnrealImportStarted {
   dth: string
   /** The Unreal content path it imports into. */
   destination: string
-  /** Where the bridge was (re)written. */
-  bridgeDir: string
   /** True when a previous job was still sitting unclaimed — the editor was not
    *  watching, and this run replaced it rather than queueing behind it. */
   replacedPending: boolean
@@ -112,7 +127,15 @@ export async function startUnrealImport({ data }: { data: unknown }): Promise<Un
   }
 
   const paths = unrealJobPaths(input.uprojectPath)
-  const bridgeDir = await installUnrealBridge(input.uprojectPath)
+  // Nothing is installed from here — the bridge is an install-dialog item like
+  // every other plugin. Without it there is no watcher, so the job would sit
+  // unclaimed forever and the panel would blame a slow editor start; say what
+  // is actually missing instead.
+  if (!(await exists(`${paths.bridgeDir}/${UNREAL_BRIDGE_UPLUGIN}`))) {
+    throw new Error(
+      'The DTH Studio Bridge is not installed in this Unreal project — install it from the project card (Install), then restart the editor once.',
+    )
+  }
   await mkdir(paths.jobDir, { recursive: true })
 
   // A result from an earlier run would be read as this one's before the editor
@@ -130,7 +153,7 @@ export async function startUnrealImport({ data }: { data: unknown }): Promise<Un
     paths.jobFile,
     unrealJobJson({ dth, destination, character: character.name }),
   )
-  return { dth, destination, bridgeDir, replacedPending }
+  return { dth, destination, replacedPending }
 }
 
 /**

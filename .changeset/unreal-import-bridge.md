@@ -11,12 +11,18 @@ project has a linked `.uproject`) hands that export over.
 
 It is the same handoff the other two legs use: the studio writes a job file,
 the other side claims it by rename, the studio polls a result. On the Unreal
-side that "other side" is a small **bridge plugin** the studio installs into the
-project — `Plugins/DTHStudioBridge`, content-only, pure Python — which watches
-`Saved/DTHStudio/job.json` and runs the import. The import itself is
-**mrpdean's DazToHue pipeline, unmodified**: meshes, textures, materials,
-animation curves, the post-process anim blueprint. The bridge decides only
-*when*.
+side that "other side" is a small **bridge plugin** — `Plugins/DTHStudioBridge`,
+content-only, pure Python — which watches `Saved/DTHStudio/job.json` and runs the
+import. The import itself is **mrpdean's DazToHue pipeline, unmodified**: meshes,
+textures, materials, animation curves, the post-process anim blueprint. The
+bridge decides only *when*.
+
+**The bridge installs like any other plugin**, from the project card's install
+dialog, where it is pre-checked next to DTH content — a plugin in your own
+Unreal project is something you tick, not something that appears because you
+sent a character. Sending to a project without it says exactly that. Unreal
+loads plugins at startup, so the editor wants one restart after installing it —
+which is where a restart is expected anyway.
 
 **The studio never starts Unreal.** An editor takes minutes to come up and holds
 its project, so a "launch it and wait" leg would be worse than useless — and a
@@ -25,7 +31,6 @@ still. The job is queued instead: an open editor picks it up within about a
 second, and one opened later claims it on startup, exactly like a Daz that was
 closed when a batch was queued.
 
-The bridge is rewritten into the project on every send, so a project can never
-hold a bridge older than the app talking to it. It lives in its own plugin
-rather than inside the DazToHue one, which is beta and iterating — nothing here
-forks or edits mrpdean's files.
+Every Install rewrites the bridge, so a re-install refreshes it; and it lives in
+its own plugin rather than inside the DazToHue one, which is beta and iterating
+— nothing here forks or edits mrpdean's files.
