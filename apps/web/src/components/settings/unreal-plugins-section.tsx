@@ -98,7 +98,11 @@ export function UnrealPluginsSection({
                 per project. Which engine a build targets is read from a version in its path
                 (deepest wins), falling back to the{' '}
                 <span className="font-mono">.uplugin</span>&apos;s own EngineVersion; no version
-                anywhere means it is offered for every engine.
+                anywhere means it is offered for every engine. A number that could not be an
+                engine version is skipped — in{' '}
+                <span className="font-mono">KawaiiPhysics_5.7_1.21.0.zip</span> only the 5.7 is
+                one, the rest is the plugin&apos;s own version, and a year like{' '}
+                <span className="font-mono">2024.1</span> is neither.
               </p>
             </div>
           </InfoPopup>
