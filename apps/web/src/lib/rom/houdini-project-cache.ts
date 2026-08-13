@@ -144,8 +144,15 @@ export function scanCacheKey(
  *     has no export nodes" — so the DTH Export dialog read every already-scanned
  *     project as writing nothing at all. Bumping is what makes an old entry
  *     say "ask me again" instead of answering a question it was never asked.
+ *   - **v5** fixes what v4 READ. v4 looked for a `character_name` parm on the
+ *     export node; the HDA has no such parm (measured off DazToHue 2.5's own
+ *     dialog script) — it appends a GEOMETRY attribute, sourced from the import
+ *     node's `import_character_name`. So every v4 entry answered `[]` from a
+ *     real scan, which is a legitimate value ("no export nodes") and therefore
+ *     would have been served forever. A version is owed for a scan that starts
+ *     answering CORRECTLY, not only for one that starts answering at all.
  */
-export const SCAN_ANSWER_VERSION = 4
+export const SCAN_ANSWER_VERSION = 5
 
 /**
  * Fold the installed operator libraries into one comparable string — name, mtime

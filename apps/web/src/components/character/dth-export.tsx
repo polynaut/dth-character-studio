@@ -2014,7 +2014,16 @@ function DthExportDialog({
       .then(([scans, dthPaths]) => {
         if (!active) return
         setSceneDth(dthPaths)
-        setHipImports(scans.map((scan) => ({ hipPath: scan.hipPath, imports: scan.imports })))
+        setHipImports(
+          scans.map((scan) => ({
+            hipPath: scan.hipPath,
+            imports: scan.imports,
+            // The sets this project WRITES — what the Unreal pre-selection
+            // asks about. Dropping it here is what made every run read as
+            // "cannot tell" no matter how fresh the scan was.
+            exportSets: scan.exportSets,
+          })),
+        )
       })
       .catch(() => {
         // Read-only convenience: no scan, no auto-adjust — the list simply

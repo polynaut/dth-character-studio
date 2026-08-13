@@ -1549,36 +1549,73 @@ def fire_import_callback(node):
 EXPORT_TYPE_NAMES = ("daztohueexport", "daztohuegroomexport")
 
 
-def _scene_export_sets():
-    """The EXPORT-SET names this project writes: every export node's
-    `character_name`, normalized + deduped.
+def _network_character_name(network):
+    """The character name of one DazToHue network — its import node's
+    `import_character_name`.
 
-    The HDA builds its output path as `export_directory + character_name + "/"`,
-    so this parm IS the name of the folder under the character's `export/` — and
-    therefore of the set that reaches Unreal. Nothing else on the studio side
-    knows it: the studio prefills `import_character_name` when it generates a
-    project, but the user owns it afterwards, and a hand-built project never had
-    a prefill at all.
+    MEASURED off the installed HDA (2.5) and off two real `.hip` files, because
+    the first attempt at this read a parm that does not exist. The export node
+    has NO character name of its own; it builds its output path from a GEOMETRY
+    attribute:
 
-    Why it is worth a line in the scan: without it "does this Unreal project
-    already have what this run produces?" is unanswerable, and the dialog fell
-    back to "does it have ANY set of this character?" — which pre-ticked an
-    Unreal project for a run that was about to export a variant that project had
-    never seen. Read in the same pass as the nodes; opening a `.hip` is the
-    expensive part and it is already open.
+        character_name = hou.pwd().geometry().attribValue("character_name")
+        export_directory = hou.pwd().parm("export_directory").eval() + character_name + "/"
+
+    and that attribute comes from the import node, which the HDA sets from the
+    Daz payload (`import_node.parm("import_character_name").set(data["Character
+    Name"])`) and which the studio prefills when it generates a project.
+
+    So the parm is read, not the attribute: reading the attribute means COOKING
+    the network — loading FBX and Alembic — which is minutes per project inside
+    a scan whose whole point is to be cheap. The cost is that a network which
+    overwrites the attribute downstream (a wrangle) would report its parm value
+    rather than the folder it really writes; nothing measured does that, and the
+    reader treats a mismatch as "not in this project", which un-ticks a row
+    rather than ticking a wrong one.
+
+    Verified against `3d-workflow_LaraCroft_G81.hiplc` (LaraClassic, LaraNaked)
+    and `..._THICK.hiplc` (LaraClassic_Thick, LaraNaked_Thick) — the first
+    project's two names being exactly the two folders in that character's
+    `export/`.
     """
-    found = []
-    seen = set()
-    for node in hou.node("/").allSubChildren():
-        if node.type().name().lower() not in EXPORT_TYPE_NAMES:
+    for child in network.children():
+        # `daztohuegroomimport` does NOT contain `daztohueimport`, so the groom
+        # importer is excluded by the same test 456.py uses for the scene id.
+        if "daztohueimport" not in child.type().name().lower():
             continue
-        parm = node.parm("character_name")
+        parm = child.parm("import_character_name")
         if parm is None:
             continue
         try:
             value = str(parm.evalAsString() or "").strip()
         except Exception:
             continue
+        if value:
+            return value
+    return ""
+
+
+def _scene_export_sets():
+    """The EXPORT-SET names this project writes — one per export node, from its
+    own network's import node ({@link _network_character_name}).
+
+    The HDA appends that name to `export_directory`, so it IS the folder under
+    the character's `export/` and therefore the set that reaches Unreal.
+    Nothing else on the studio side knows it.
+
+    Why it earns a line in the scan: without it "does this Unreal project
+    already have what this run produces?" is unanswerable, and the dialog fell
+    back to "does it hold ANY set of this character?" — which pre-ticked an
+    Unreal project for a run about to export a variant that project had never
+    seen. Read in the same pass as the nodes; opening a `.hip` is the expensive
+    part and it is already open.
+    """
+    found = []
+    seen = set()
+    for node in hou.node("/").allSubChildren():
+        if node.type().name().lower() not in EXPORT_TYPE_NAMES:
+            continue
+        value = _network_character_name(node.parent())
         key = value.lower()
         if not value or key in seen:
             continue
