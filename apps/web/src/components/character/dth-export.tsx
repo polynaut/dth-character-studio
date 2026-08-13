@@ -2601,9 +2601,13 @@ function DthExportDialog({
           {unrealSendable && sendPlan !== null && sendPlan.sets.length > 0 && (
             <ul className="mt-2 space-y-1">
               {sendPlan.sets.map((name) => {
-                // Where it would land in the FIRST ticked project that has it —
-                // enough to tell a refresh from a new import at a glance.
-                const at = [...checkedUnreal]
+                // Where it would land: in the first TICKED project that has it,
+                // or — when nothing is ticked yet — in any linked project that
+                // does. Reading only the ticked ones made every row say "not in
+                // this project" the moment the pre-selection ticked nothing,
+                // which is exactly when the user needs the truth to decide.
+                const lookIn = checkedUnreal.size > 0 ? [...checkedUnreal] : unrealProjects
+                const at = lookIn
                   .map((path) => sendPlan.located[path]?.[name])
                   .find((found) => found !== undefined)
                 return (
