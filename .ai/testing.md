@@ -151,12 +151,29 @@ The **real SPA in a real browser** against an in-memory fake of the native layer
   deleting it as unused would fail every `unhandled == []` assertion, in CI
   only. The general lesson: under the prebuilt bundle, a DEV-gated path that
   "obviously no-ops" may be running for real, and the smoke mock is what
-  absorbs it. And whether this actually ends the
-  flakes is NOT yet proven — the failure needs a saturated 4-vCPU box to
-  reproduce and a dev machine is not one; what is proven is the mechanism, the
-  saving, and that the suite passes prebuilt. Watch the next handful of PR runs
-  before calling it closed. Sharding across runners stays the untaken lever, and
-  still the maintainer's call because it changes the required check's shape.
+  absorbs it. **Whether this ends the flakes was left open — "watch the next
+  handful of PR runs before calling it closed". ANSWERED 2026-08-13, same day,
+  and the answer is NO.** PR #827's validation ran the prebuilt suite twice
+  within half an hour and failed both times, on a DIFFERENT spec each time —
+  `unlink-dialogs.smoke.ts:96`, then `scan-scene-import.smoke.ts:80` — both
+  `locator.click: Test timeout of 60000ms exceeded`, i.e. the same starvation
+  signature the bundle was pulled to remove, and `unlink-dialogs` was already
+  on the victim list above. The same commit passes **155/155 against the same
+  production bundle** on an 8-core dev box (`SMOKE_PREBUILT=1`, `SMOKE_PORT`
+  set) in 49s, against CI's 3.4m — so the code is not the variable, the box is.
+  The honest reading of the measurement: the build removes ~28% of the wall
+  clock without removing the CONTENTION. Two Chromium workers saturate a 4-vCPU
+  runner on their own; `vite dev`'s transforms were only ever part of what
+  filled it, so taking them out moved the suite further from the cliff without
+  stepping back off it. Sharding across runners is therefore no longer the
+  merely-untaken lever — it is the only one left, and still the maintainer's
+  call because it changes the required check's shape.
+  Until then, read a CI smoke failure exactly as before: a different spec each
+  run, instant locally, green on rerun. **Do not "fix" the spec it lands on.**
+  Two reruns cost minutes; a day spent debugging a healthy test costs a day,
+  and this one nearly took one — the first failure was read as a real break
+  introduced by the PR, and only the SECOND failure landing on an unrelated
+  spec proved otherwise. One rerun before any diagnosis is the cheap move.
 - **Do NOT run the whole smoke suite for every edit — CI is its gate.** Locally,
   run the specs covering what you changed (`pnpm --filter @dth/web smoke
   houdini-export` filters by filename substring). The full run is for CI, for a
