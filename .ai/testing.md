@@ -108,8 +108,10 @@ The **real SPA in a real browser** against an in-memory fake of the native layer
   different houdini-* specs across five PR runs failed as timeouts on
   interactions that are instant locally, a different spec each run, one past
   a doubled 60 s budget; main stayed green only by scheduling luck. CI runs 2
-  workers + a 60 s per-test budget now (`retries: 0` stays — a retry would
-  hide exactly this class of nondeterminism). Consequences: adding workers on
+  workers + a 60 s per-test budget now (`retries: 0` stayed here — a retry
+  would hide exactly this class of nondeterminism; **reversed to `retries: 1`
+  on CI once the class was understood, see the retry bullet below**).
+  Consequences: adding workers on
   the 4-vCPU runner is a net loss; trimming specs WOULD
   cut wall time (it is linear when CPU-bound) but trades real coverage for
   ~2 minutes on an unwatched gate.
@@ -174,6 +176,20 @@ The **real SPA in a real browser** against an in-memory fake of the native layer
   and this one nearly took one — the first failure was read as a real break
   introduced by the PR, and only the SECOND failure landing on an unrelated
   spec proved otherwise. One rerun before any diagnosis is the cheap move.
+- **`retries: 1` on CI — and a retry is not a skip.** With the flake class
+  measured rather than mysterious, the manual rerun above is a human doing by
+  hand what Playwright does in seconds, so CI retries once (locally still 0 — a
+  dev box is not starved, and a retry there really would hide something).
+  The distinction that makes this the right instrument, and the reason the
+  obvious alternative is wrong: **a starved test passes on attempt two; a
+  genuinely broken one fails BOTH and the check still goes red.** Skipping the
+  spec that failed — what a red gate tempts you into — deletes real coverage AND
+  does not work, because the flake is not a property of any spec. Contention
+  picks a different loser every run (seven named victims so far), so skipping
+  them one at a time ends with the suite gone and the gate still red.
+  Playwright reports `flaky` separately from `passed`, so the rate stays
+  VISIBLE — that number is the health signal now. If it climbs, the box is the
+  problem again and sharding is the next lever.
 - **Do NOT run the whole smoke suite for every edit — CI is its gate.** Locally,
   run the specs covering what you changed (`pnpm --filter @dth/web smoke
   houdini-export` filters by filename substring). The full run is for CI, for a
