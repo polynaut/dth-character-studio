@@ -221,6 +221,7 @@ export {
   generatedHoudiniScenePath,
   generateHoudiniProject,
   removeGeneratedHoudiniProject,
+  renameHoudiniProject,
   startHoudiniExport,
 } from './api/houdini'
 export type { GeneratedHoudiniProject, HoudiniExportStarted, HoudiniRunPlan } from './api/houdini'

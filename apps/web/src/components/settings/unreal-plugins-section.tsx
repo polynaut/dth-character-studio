@@ -101,7 +101,8 @@ export function UnrealPluginsSection({
                 anywhere means it is offered for every engine. A number that could not be an
                 engine version is skipped — in{' '}
                 <span className="font-mono">KawaiiPhysics_5.7_1.21.0.zip</span> only the 5.7 is
-                one, the rest is the plugin&apos;s own version.
+                one, the rest is the plugin&apos;s own version, and a year like{' '}
+                <span className="font-mono">2024.1</span> is neither.
               </p>
             </div>
           </InfoPopup>

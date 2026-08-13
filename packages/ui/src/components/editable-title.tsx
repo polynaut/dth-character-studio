@@ -16,6 +16,7 @@ export function EditableTitle({
   onSave,
   onEditingChange,
   ariaLabel = 'Name',
+  subject,
   as: As = 'h1',
   textClass = 'text-3xl font-bold',
 }: {
@@ -23,6 +24,13 @@ export function EditableTitle({
   onSave: (value: string) => Promise<void> | void
   onEditingChange?: (editing: boolean) => void
   ariaLabel?: string
+  /** WHAT this title names ("Scene", "Houdini project"), woven into the rename
+   *  BUTTON's accessible name so two editable titles on one page can be told
+   *  apart. Measured: a generated Houdini project takes the character's own
+   *  name, so the character header and the project card both announced
+   *  "Rename — Kira" and nothing but position distinguished them. Omit where
+   *  the title is the page's single subject (the character/project headers). */
+  subject?: string
   /** Heading element for the display state — 'div' for non-heading contexts
    *  (e.g. a card title). */
   as?: 'h1' | 'div'
@@ -108,7 +116,7 @@ export function EditableTitle({
         <button
           type="button"
           title="Rename"
-          aria-label={`Rename — ${name}`}
+          aria-label={subject ? `Rename ${subject} — ${name}` : `Rename — ${name}`}
           onClick={startEdit}
           className="cursor-pointer text-left [font:inherit]"
         >

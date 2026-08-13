@@ -512,7 +512,20 @@ older runtimes as stale.
   (a pre-v0.64 project's real `$JOB` output) is kept and named in the Refresh
   assets report. `removeGeneratedHoudiniProject` deletes only the `.hiplc`.
   Generated projects (hip directly in the houdini folder) are studio-managed;
-  hand-linked ones stay unlink-only. Returns whether the network was created
+  hand-linked ones stay unlink-only. **RENAMING a project file is safe where
+  moving it is not, and that follows from the anchors above**: `$JOB` (the
+  character folder) and `$HIP` (the folder the hip sits in) are both FOLDER
+  variables, so no baked reference names the file itself — `$HIPNAME`/`$HIPFILE`
+  would, and nothing the studio writes uses them. So `renameHoudiniProject`
+  (api/houdini.ts) renames in place and the caller repoints `houdiniProjects`,
+  while copying stays a copy. Two rules on it: the EXTENSION is carried over,
+  never assumed (`.hip`/`.hiplc`/`.hipnc` encode the licence tier — rewriting a
+  commercial hip to `.hiplc` mislabels it), and the card offers the rename only
+  for a project INSIDE the character folder (`insideCharFolder`, the same gate
+  the Daz scenes use — the studio does not rename files in the user's own tree).
+  The scan store is keyed by hip PATH, so a rename orphans the old verdict and
+  the card reads unscanned until the next sweep — which the linked-set change
+  kicks off immediately. That is the honest answer, not a bug to migrate around. Returns whether the network was created
   (HDA not visible to hython → empty scene, UI says "add it from the shelf");
   the UI (houdini-projects-field "Generate project" dialog, name prefilled
   `<Project>_<Character>`) links the result as a Houdini card. Fails loud
@@ -574,13 +587,19 @@ older runtimes as stale.
   Unreal. Plugin sources are the `unrealPluginFolders` setting, scanned by
   Rust `scan_unreal_plugins` (a bounded 3-deep walk covering three shapes: a
   plugin folder, a folder of plugins, a multi-build root
-  `…/UE_5.7/Plugins/…`). Which engine a build is FOR: the deepest
-  version-looking PATH segment wins, falling back to the `.uplugin`'s own
-  `EngineVersion` — the path is the signal the user can see and fix, a stale
-  manifest field is neither; no version anywhere = offered for every engine.
+  `…/UE_5.7/Plugins/…`). Which engine a build is FOR: the deepest PATH segment
+  holding a POSSIBLE engine version wins (major `4..=9` — `plausible_engine_major`;
+  a `KawaiiPhysics_5.7_1.21.0.zip` names the plugin's version too and a
+  `MyPlugin_2024.1` names a year, and believing either hides the build from
+  every project, since matching is by equality), falling back to the
+  `.uplugin`'s own `EngineVersion` under the same rule — the path is the signal
+  the user can see and fix, a stale manifest field is neither; no version
+  anywhere = offered for every engine, which is the deliberately safe answer.
   Matching is TS (`lib/unreal-install.ts`): one build per plugin NAME (the
   install target is `Plugins/<uplugin stem>` — two builds of one name would be
-  two writes to one folder), exact version beats any-engine. **Generate
+  two writes to one folder), ranked by `buildRank` — a build whose `BuildId`
+  equals the engine's beats an exact version LABEL, which beats any-engine,
+  which beats a build whose BuildId proves it cannot load. **Generate
   Unreal project** (the bar's ✨) creates a Blueprint-only project — plain TS
   file writes (`.uproject` + `Config`/`Content` skeleton), no Rust, no engine
   run, since a module-less project needs no compile — bound to a DETECTED

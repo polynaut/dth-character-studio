@@ -91,6 +91,14 @@ generation they are shown greyed out):
   folder is simply linked; there is nothing to decide. See
   [project checks](./06-into-houdini.md#project-checks--what-the-card-warns-about)
   for what a copied project needs afterwards.
+  **Click a card's name to rename it** — the file on disk is renamed with it and
+  the link follows, so a generated `3d-workflow_LaraCroft_G81` can just become
+  `Lara`. The extension is kept (`.hip` / `.hiplc` / `.hipnc` carry the licence
+  tier). Renaming is safe where *moving* is not: everything the studio bakes in
+  is anchored on `$JOB` and `$HIP`, which are **folders** — the file's own name
+  is the one part of its location nothing points at. Only projects inside the
+  character folder are renamable; one you linked in place from your own tree
+  stays untouched, so its name has no pencil.
 - **Saved something new?** The studio notices by itself: save a `.duf` or a
   Houdini project anywhere into the character's folder, tab back, and a banner
   offers to **Review** the new files — a wizard with one page per file runs the

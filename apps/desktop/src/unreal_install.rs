@@ -24,10 +24,13 @@
 //! plugin folder's full path (deepest wins — `UE_5.7`, `ue5.7`, `Daz 5.6`),
 //! falling back to the `.uplugin`'s own `EngineVersion`. The path wins over
 //! the manifest on purpose: the folder layout is the signal the user can see
-//! and fix, a stale manifest field is neither. A number that cannot BE an
-//! engine version is skipped either way (`plausible_engine_major` — a vendor's
-//! `KawaiiPhysics_5.7_1.21.0.zip` names the plugin's version too). No version
-//! anywhere = an any-engine plugin (matches every project).
+//! and fix, a stale manifest field is neither. A number OUTSIDE the engine
+//! range is skipped either way (`plausible_engine_major` — a vendor's
+//! `KawaiiPhysics_5.7_1.21.0.zip` names the plugin's version too, and a
+//! `MyPlugin_2024.1` names a year). No version anywhere = an any-engine plugin
+//! (matches every project), which is the deliberate fallback: matching is by
+//! EQUALITY, so a version no engine has would hide the build from every
+//! checklist instead of over-offering it.
 //!
 //! Registry access and the measured-unreliable `exists` probes (see
 //! `unreal_dth_present` in install.rs) are why this is native; matching
@@ -598,8 +601,9 @@ fn version_from_components(path: &Path) -> Option<String> {
 /// `UE`-prefixed occurrence beats a bare one; among bare occurrences the LAST
 /// wins (versions suffix names). Digits glued to a word (`Plugin2.0`) are not
 /// a version, a lone `UE5` names a generation, not a build target, and a number
-/// that cannot BE an engine version is skipped entirely (see
-/// {@link plausible_engine_major}) rather than winning by position.
+/// OUTSIDE the engine range — below 4 or above 9, see
+/// {@link plausible_engine_major} — is skipped entirely rather than winning by
+/// position, because a name carries the plugin's own version too.
 fn ue_version_in(segment: &str) -> Option<String> {
     let chars: Vec<char> = segment.chars().collect();
     let mut best_bare: Option<String> = None;
@@ -644,10 +648,8 @@ fn ue_version_in(segment: &str) -> Option<String> {
     best_bare
 }
 
-/// Whether a `major.minor` read out of a NAME can be an Unreal Engine version
-/// at all. Unreal's plugin format (`.uplugin`) exists from UE4 on, so 4 is the
-/// floor: a lower number sharing the shape is some OTHER version — in practice
-/// the plugin's own. No upper bound; a UE 6 is a matter of time.
+/// Whether a `major.minor` read out of a NAME (or a `.uplugin`'s
+/// `EngineVersion`) can be an Unreal Engine version at all.
 ///
 /// MEASURED 2026-08-13, and why this exists: `KawaiiPhysics_5.7_1.21.0.zip` and
 /// `KawaiiPhysics_5.8_1.21.0.zip` sat side by side, and BOTH reported `UE 1.21`
@@ -655,8 +657,26 @@ fn ue_version_in(segment: &str) -> Option<String> {
 /// each build read as an engine that has never existed, and the two read as the
 /// SAME one. Skipping the impossible number lets the real one win on its own,
 /// whichever end of the name it sits at.
+///
+/// The two bounds are NOT equally certain, and the difference is worth stating:
+///
+/// - **The floor of 4 is a fact.** Unreal's plugin format (`.uplugin`) exists
+///   from UE4 on, so a `.uplugin`-bearing build cannot target UE3.
+/// - **The ceiling of 9 is a judgement**, and it is here because the two
+///   failures are not symmetric. A two-digit major is common TODAY as a plugin
+///   or year version (`MyPlugin_2024.1`, a `Houdini_20.5` folder in a plugins
+///   root), and believing one is the bug this function exists to stop: the
+///   match is by EQUALITY, so a build labelled `2024.1` fits no project and
+///   disappears from every install checklist with nothing said anywhere.
+///   Disbelieving a real UE10 someday costs only the label — the build reads as
+///   "any engine", is offered everywhere, and the BuildId check (see
+///   `pluginBuildMismatch`) still marks it if the binaries don't fit. Silent
+///   and invisible beats loud and wrong, so the bound that fails LOUDLY wins.
+///
+/// Epic's majors have been single digits since 1998 and UE5 landed in 2022; a
+/// UE10 is decades of cadence away. When it ships, this is the one line.
 fn plausible_engine_major(major: u32) -> bool {
-    major >= 4
+    (4..=9).contains(&major)
 }
 
 /// Whether the digits starting at `start` sit on a word boundary, and whether
@@ -1202,6 +1222,27 @@ mod tests {
     }
 
     #[test]
+    fn a_build_naming_only_its_own_version_is_offered_for_every_engine() {
+        // The promise the changeset and the guide both make, end to end: when
+        // NEITHER the name nor the `.uplugin` holds a possible engine version,
+        // the answer is '' — no constraint, offered everywhere — and never
+        // `1.21`, a constraint no project can satisfy, which would drop the
+        // build out of every install checklist without saying a word.
+        let tmp = unique_temp_dir("ueanyengine");
+        write_zip(
+            &tmp.join("KawaiiPhysics_1.21.0.zip"),
+            &[(
+                "KawaiiPhysics/KawaiiPhysics.uplugin",
+                r#"{"FriendlyName":"KawaiiPhysics","EngineVersion":"1.21.0"}"#,
+            )],
+        );
+        let found = scan_unreal_plugins(vec![tmp.to_string_lossy().into_owned()]);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].engine_version, "", "no signal beats a false one");
+        fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
     fn installing_a_zipped_plugin_strips_the_wrapping_folder() {
         let tmp = unique_temp_dir("ueinstall");
         let zip_path = tmp.join("DazToHue.zip");
@@ -1286,9 +1327,37 @@ mod tests {
         // means "offer it for every engine", never "offer it for UE 1.21".
         assert_eq!(ue_version_in("KawaiiPhysics_1.21.0"), None);
         assert_eq!(ue_version_in("Bridge_3.9"), None);
-        // The floor is UE4 — `.uplugin` does not predate it — with no ceiling.
+        // The floor is UE4 — `.uplugin` does not predate it — and the range
+        // reaches to 9, which covers every Unreal that has existed plus room.
         assert_eq!(ue_version_in("Tool_4.27"), Some("4.27".into()));
         assert_eq!(ue_version_in("Tool_6.0"), Some("6.0".into()));
+        assert_eq!(ue_version_in("Tool_9.99"), Some("9.99".into()));
+        // …and a TWO-digit major is the same mislabel from the other end: a
+        // year or a plugin version, never an engine. Believing one is worse
+        // than ignoring it — an engine nothing matches drops the build out of
+        // every install checklist silently, while no version at all offers it
+        // everywhere and lets the BuildId check speak.
+        assert_eq!(ue_version_in("MyPlugin_2024.1"), None);
+        assert_eq!(ue_version_in("Substance_2023.2"), None);
+        assert_eq!(ue_version_in("Tool_10.0"), None);
+        // The real engine still wins when the impossible number is beside it,
+        // at EITHER end — the whole point of skipping rather than out-ranking.
+        assert_eq!(ue_version_in("KawaiiPhysics_5.7_2024.1"), Some("5.7".into()));
+        assert_eq!(ue_version_in("KawaiiPhysics_2024.1_5.7"), Some("5.7".into()));
+    }
+
+    #[test]
+    fn an_impossible_version_deep_in_the_path_yields_to_a_real_one_above_it() {
+        // The reported vendor's actual layout: zips filed under a folder named
+        // for the PLUGIN's version, inside a folder named for the engine. The
+        // deepest-segment rule alone read `1.21` and stopped there; skipping it
+        // lets the walk keep going and find the engine that is really named.
+        let p = Path::new("D:/UE 5.7 Plugins/KawaiiPhysics_1.21.0/Plugins/KawaiiPhysics");
+        assert_eq!(version_from_components(p), Some("5.7".into()));
+        // Nothing plausible anywhere is still None — "offer it for every
+        // engine", never a version no project can match.
+        let none = Path::new("D:/Plugins/KawaiiPhysics_1.21.0/KawaiiPhysics");
+        assert_eq!(version_from_components(none), None);
     }
 
     #[test]
@@ -1309,8 +1378,10 @@ mod tests {
         assert_eq!(engine_version_from_uplugin_json(r#"{ "EngineVersion": "next" }"#), None);
         // A manifest holding the PLUGIN's version in the engine's field: an
         // impossible constraint becomes no constraint (offered everywhere),
-        // not a version no project can match.
+        // not a version no project can match. Both ends of the range.
         assert_eq!(engine_version_from_uplugin_json(r#"{ "EngineVersion": "1.21.0" }"#), None);
+        assert_eq!(engine_version_from_uplugin_json(r#"{ "EngineVersion": "2024.1.0" }"#), None);
+        assert_eq!(engine_version_from_uplugin_json(r#"{ "EngineVersion": "5.7.0" }"#), Some("5.7".into()));
     }
 
     /// One scan over all three documented source-folder shapes.
