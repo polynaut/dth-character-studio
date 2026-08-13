@@ -340,8 +340,33 @@ export const projectRefInfoSchema = z.object({
   /** Refs still written the pre-v63 way (`$HIP/../…`). They RESOLVE, so they
    *  are not broken — but `$HIP` encodes the scene's depth and disagrees with
    *  what Houdini's own picker writes, so the card flags them and Make paths
-   *  portable re-anchors them on `$JOB`. */
-  hipRelative: z.array(z.string()),
+   *  portable re-anchors them on `$JOB`.
+   *
+   *  Defaulted because the Python's failed-load fallback once omitted it, and an
+   *  absent list failed the parse of the entire report — one unreadable `.hip`
+   *  took every other project in the sweep with it. Fixed in all THREE places it
+   *  has to be: the Python emits the key, and both parsers default it. Note the
+   *  order — Rust's serde runs first (`run_houdini_material_util`), so a default
+   *  here alone would never fire; `ProjectRefInfo` carries the matching
+   *  `#[serde(default)]`. */
+  hipRelative: z.array(z.string()).default([]),
+  /** Baker LAYER textures whose file is not there — unique absolute paths, not
+   *  `<node> <parm>` labels: one uninstalled product takes out the same file
+   *  from many layers, and the useful count is how many TEXTURES are gone.
+   *
+   *  Scoped to the DazToHue material node's
+   *  `material_texture_baker_layer_texture*` parms for the same reason `broken`
+   *  is scoped — measured on a real project (Kira, 11 bakers / 43 layers), 51 of
+   *  the material node's 86 file parms are these and all 51 resolve: zero false
+   *  positives, unlike a whole-scene sweep.
+   *
+   *  Worth a badge because NOTHING else in the pipeline reports it. Measured on
+   *  DazToHue 2.5 / Houdini 22.0: baking with a layer texture pointed at a file
+   *  that does not exist prints `export finished in 0:00:02` and raises nothing.
+   *  Unlike every other problem the card reports, this one has no repair in the
+   *  Utils drawer — the fix is outside the studio (reinstall the product, or
+   *  restore the library), so the badge is deliberately diagnostic only. */
+  missingTextures: z.array(z.string()).default([]),
 })
 
 /** One import reference a repath rebuilt. */

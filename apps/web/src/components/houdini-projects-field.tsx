@@ -83,8 +83,11 @@ function HoudiniCard({
   /** Gender-based placeholder avatar (a Houdini project has no thumbnail). */
   avatarSrc: string
   /** What the last background scan found wrong with this project; '' = healthy,
-   *  or not scanned yet. Everything it can report has a repair in the Utils
-   *  drawer, which is what the badge points at. */
+   *  or not scanned yet. Nearly everything it can report has a repair in the
+   *  Utils drawer, which is what the badge points at — the exception is a
+   *  missing baker texture, which the drawer can only NAME (the fix is a
+   *  reinstall, outside the studio). The badge still opens the drawer for it,
+   *  because that is where the full paths are. */
   warning?: string
   onOpen: (e: React.MouseEvent) => void
   /** When set, a hover ✕ unlinks the project from the character. */
@@ -122,18 +125,19 @@ function HoudiniCard({
       }
       // The scan verdict, pinned bottom-left: a project that will fail when it
       // opens should say so here, not the first time an import comes up empty
-      // in Houdini. Everything it reports is repairable in the Utils drawer —
-      // and the badge opens it: it is the card's only always-visible signal,
-      // so it must also be a way in (the wrench alone is hover-only). The card
-      // renders `extra` above its cover button precisely so it can be
-      // interactive.
+      // in Houdini. The badge opens the Utils drawer: it is the card's only
+      // always-visible signal, so it must also be a way in (the wrench alone is
+      // hover-only). The card renders `extra` above its cover button precisely
+      // so it can be interactive. Most of what it reports is repairable there;
+      // missing baker textures are only listed, so the label says "see it in
+      // Utils" rather than promising a repair that isn't offered.
       extra={
         warning ? (
           <button
             type="button"
             className="flex items-center gap-1 rounded-sm text-xs text-amber-500 outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
             title={warning}
-            aria-label={`Needs attention: ${warning} — open the repairs in Utils`}
+            aria-label={`Needs attention: ${warning} — see it in Utils`}
             onClick={onUtils}
           >
             <AlertTriangle className="size-3.5 shrink-0" />

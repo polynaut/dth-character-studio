@@ -466,7 +466,10 @@ older runtimes as stale.
      move changes every one of them without touching the file — on mtime alone
      the store keeps serving the pre-move "all resolve".
   Then it surfaces as the card's `broken-refs` badge → Utils → **Make paths
-  portable**. The TS half of that chain is vitest-pinned
+  portable**. `refs.missingTextures` rides the same scan but ends the chain
+  early: it is badged and listed, and there is deliberately no repair (a missing
+  Daz texture is fixed by reinstalling the product), so it is NOT counted by
+  `planRepath` and never gates the button. The TS half of that chain is vitest-pinned
   (`houdini-defaults.test.ts`, `houdini-validate.test.ts`). The Python half has
   no committed test — the repo has no Python harness, `material_utils` runs only
   inside hython. `_relocated_donor` itself touches nothing but `os.path`, so it

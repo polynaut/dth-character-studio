@@ -137,22 +137,27 @@ export function scanCacheKey(
  *     Reported on the first real use, which is the second time this exact
  *     trap has been paid for: a scan that learns to SEE something new is a
  *     changed question, just like one that learns to report a new field.
- *   - **v4** adds `exportSets` — each export node's `character_name`, which is
- *     the folder the HDA writes under the character's `export/`. THIRD time,
- *     and this one bit within the hour: a v3 entry has no such field, zod
- *     defaults it to `[]`, and `[]` is indistinguishable from "this project
- *     has no export nodes" — so the DTH Export dialog read every already-scanned
- *     project as writing nothing at all. Bumping is what makes an old entry
- *     say "ask me again" instead of answering a question it was never asked.
- *   - **v5** fixes what v4 READ. v4 looked for a `character_name` parm on the
- *     export node; the HDA has no such parm (measured off DazToHue 2.5's own
- *     dialog script) — it appends a GEOMETRY attribute, sourced from the import
- *     node's `import_character_name`. So every v4 entry answered `[]` from a
- *     real scan, which is a legitimate value ("no export nodes") and therefore
- *     would have been served forever. A version is owed for a scan that starts
+ * 4 — + `refs.missingTextures` (baker layer textures whose file is gone). A v3
+ *     entry answers it with an empty list, which reads as "this project's
+ *     textures are all present" — the exact false all-clear the field exists to
+ *     stop, and unfixable from the UI since Rescan reads through this cache.
+ * 5 — + `exportSets` — each export node's character name, which is the folder
+ *     the HDA writes under the character's `export/`. THIRD time this trap was
+ *     paid for, and this one bit within the hour: an older entry has no such
+ *     field, zod defaults it to `[]`, and `[]` is indistinguishable from "this
+ *     project has no export nodes" — so the DTH Export dialog read every
+ *     already-scanned project as writing nothing at all. Bumping is what makes
+ *     an old entry say "ask me again" instead of answering a question it was
+ *     never asked.
+ * 6 — fixes what 5 READ. v5 looked for a `character_name` parm on the export
+ *     node; the HDA has no such parm (measured off DazToHue 2.5's own dialog
+ *     script) — it appends a GEOMETRY attribute, sourced from the import node's
+ *     `import_character_name`. So every v5 entry answered `[]` from a real
+ *     scan, which is a legitimate value ("no export nodes") and therefore would
+ *     have been served forever. A version is owed for a scan that starts
  *     answering CORRECTLY, not only for one that starts answering at all.
  */
-export const SCAN_ANSWER_VERSION = 5
+export const SCAN_ANSWER_VERSION = 6
 
 /**
  * Fold the installed operator libraries into one comparable string — name, mtime

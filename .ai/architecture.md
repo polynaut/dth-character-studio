@@ -330,11 +330,17 @@ Three consequences worth knowing before touching this:
   degrades to "no cache", never to "no scan".
 - **`validateHoudiniProject`** (`lib/rom/houdini-validate.ts`) is a pure function
   over the scan the studio already has — `$JOB`, `refs.broken`,
-  `prefill.fillable`. An UNSCANNED project is never a fault (else every page load
-  flashes warnings), and an unreadable one reports only that. It does NOT cover
-  material textures: `refs.broken` is deliberately scoped to the DazToHue import
-  parms, because a healthy project reports several of Houdini's own scratch files
-  as missing.
+  `refs.missingTextures`, `prefill.fillable`. An UNSCANNED project is never a
+  fault (else every page load flashes warnings), and an unreadable one reports
+  only that. Existence checks are always SCOPED to a known parm set, never a
+  whole-scene sweep, because a healthy project reports several of Houdini's own
+  scratch files as missing: `refs.broken` covers the DazToHue import parms,
+  `refs.missingTextures` the material node's baker layer textures (measured 51/51
+  resolving on a real project — zero false positives).
+  `missingTextures` is the one problem here with **no repair** in the drawer, and
+  the one exception to the rule below: the fix is a reinstall, outside the app.
+  It is badged anyway because a DazToHue bake with a missing texture reports
+  SUCCESS (`gotchas.md`), so nothing else in the pipeline would ever say so.
 - **That check is what unlocked COPYING a project** (`copyHoudiniProject`,
   api/houdini.ts). It was refused for years because a copy carries the source's
   `$JOB` and absolute references; it is offered now because the card flags

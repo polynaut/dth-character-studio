@@ -15,12 +15,19 @@ import type { MaterialScanProject } from './api/native-types.ts'
  * arrival in exactly the ways checked here — and every one of them has a repair
  * in the Utils drawer.
  *
- * **What it does NOT check**, so nobody reads a clean badge as more than it is:
- * material texture paths. `refs.broken` is deliberately scoped to the DazToHue
- * IMPORT parms, because "the file is missing" is not a usable definition of
- * broken in general — a healthy project reports four of Houdini's own scratch
- * files that simply don't exist until used. Texture breakage needs its own
- * signal from the Python side before it can be reported honestly.
+ * Material TEXTURE paths are checked too, but by their own scoped signal
+ * (`refs.missingTextures`) rather than by `refs.broken` — "the file is missing"
+ * is not a usable definition of broken in general, since a healthy project
+ * reports four of Houdini's own scratch files that simply don't exist until
+ * used. The texture set dodges that by being scoped to the DazToHue material
+ * node's baker layer parms, measured at zero false positives on a real project.
+ *
+ * That one is the exception to the repair rule above, and deliberately so: a
+ * missing texture is fixed OUTSIDE the studio (reinstall the product, restore
+ * the library), so the badge only reports it. It earns the badge anyway because
+ * nothing else in the pipeline does — measured on DazToHue 2.5 / Houdini 22.0,
+ * baking with a layer texture pointed at a file that does not exist prints
+ * `export finished in 0:00:02` and raises nothing at all.
  */
 
 /** One thing wrong with a project. `code` is for tests and styling, `label` is
@@ -34,6 +41,7 @@ export interface HoudiniProjectProblem {
     | 'broken-refs'
     | 'hip-relative'
     | 'blank-parms'
+    | 'missing-textures'
   label: string
 }
 
@@ -127,7 +135,30 @@ export function validateHoudiniProject(
     })
   }
 
+  if (project.refs.missingTextures.length > 0) {
+    // Last, and the only problem here with no button to point at: the fix is
+    // outside the studio. It is still worth the badge — this is the one failure
+    // in the list that the rest of the pipeline reports as SUCCESS, so without
+    // it the first sign is a wrong-looking character in Unreal.
+    const n = project.refs.missingTextures.length
+    problems.push({
+      code: 'missing-textures',
+      label:
+        `${n} baker texture${n === 1 ? '' : 's'} ${n === 1 ? 'is' : 'are'} missing ` +
+        `(${nameList(project.refs.missingTextures)}) — DazToHue bakes without ` +
+        `${n === 1 ? 'it' : 'them'} and still reports success.`,
+    })
+  }
+
   return finish(problems)
+}
+
+/** Basenames, capped — this goes in a tooltip, and a project missing a whole
+ *  product can be missing dozens of files. Full paths live in the Utils drawer. */
+function nameList(paths: ReadonlyArray<string>, cap = 3): string {
+  const names = paths.map((p) => p.slice(p.lastIndexOf('/') + 1))
+  const shown = names.slice(0, cap).join(', ')
+  return names.length > cap ? `${shown} +${names.length - cap} more` : shown
 }
 
 function finish(problems: Array<HoudiniProjectProblem>): HoudiniProjectHealth {

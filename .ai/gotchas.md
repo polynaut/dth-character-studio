@@ -562,6 +562,32 @@ current code before relying on details, but assume the *lesson* still holds.
   when it actually exists. Related dry-run trap: the repaired value is stored
   in its already-collapsed form, because collapsing it in the following pass
   made a real run report one more rewrite than its own dry run.
+- **A DazToHue bake with a MISSING layer texture reports SUCCESS.** Measured
+  2026-08-13 on DazToHue 2.5 / Houdini 22.0, on a real project: point
+  `material_texture_baker_layer_texture<b>_<l>` at a file that does not exist,
+  press Bake, and the Houdini console prints `DazToHue: export started` /
+  `baking material textures` / `export finished in 0:00:02` — no dialog, no node
+  error, nothing in the log. There is no check to inherit: the HDA is
+  **black-boxed** (`hotl -X` refuses: *"the library is black boxed"*), but its
+  bake path is readable and `do_bake_material_textures` is a bare
+  `hou.node('bake_textures/OUT_TEXTURE_BAKER').cook(force=True)`, while the
+  entire 60 KB material PythonModule holds ONE `os.path.exists` — in the texture
+  browser's drag-and-drop handler. So the studio is the only thing in the
+  pipeline that can report it, which is why `refs.missingTextures` exists and
+  why it is the one badge problem with no repair button (the fix is a reinstall,
+  outside the app). Scoped by parm-name PREFIX, and measured to earn it: on that
+  project the material node carries 86 FileReference parms, 51 of them these,
+  and all 51 resolve — zero false positives, unlike the whole-scene sweep above.
+  Counted as unique PATHS, not `<node> <parm>` labels: one uninstalled product
+  takes the same file out of many layers.
+  Two traps if you go re-measure this. **Driving the bake headlessly does not
+  work**: the button callback calls `hou.ui`, which hython has not got, and
+  force-cooking `OUT_TEXTURE_BAKER` directly completes clean and writes nothing.
+  It has to be pressed in the GUI. And **never name a hython script after a
+  stdlib module** — an `inspect.py` in the script's own directory is imported by
+  Houdini's bundled `future` package during `hou` init, which re-enters the
+  script mid-import and segfaults hython (exit 139) with a traceback that blames
+  `hipFile.load()`.
 - **Let Houdini decide the anchor — `collapseCommonVars` is the spec, and its
   answer MOVED when the exports moved.** Measured 2026-08-10 on a real project
   (`hou.text.collapseCommonVars`, the call behind the HDA's file picker):

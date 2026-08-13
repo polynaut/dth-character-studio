@@ -23,6 +23,9 @@
         "broken": [],
         "hipRelative": [
           "/obj/DazToHue/DazToHueImport import_character_fbx_file"
+        ],
+        "missingTextures": [
+          "d:/daz 3d/my daz 3d library/runtime/textures/raiya/perfectly_imperfect_5_g9/rypi5_torso1_d_1002.jpg"
         ]
       },
       "prefill": {
@@ -123,12 +126,10 @@
         "collapsible": 0,
         "foreign": 0,
         "broken": [],
-        "hipRelative": []
+        "hipRelative": [],
+        "missingTextures": []
       },
-      "prefill": {
-        "fillable": [],
-        "missing": []
-      },
+      "prefill": { "fillable": [], "missing": [] },
       "nodes": []
     }
   ],

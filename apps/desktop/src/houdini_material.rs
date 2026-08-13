@@ -215,7 +215,29 @@ pub struct ProjectRefInfo {
     /// `$JOB`. Only the escaping form is counted here — a plain `$HIP/…` that
     /// stays inside the houdini folder is what v66 EMITS (and what Houdini's
     /// own picker writes), so it is never flagged.
+    ///
+    /// Defaulted because the Python's failed-load fallback once omitted it, and
+    /// THIS is the parse that runs first: the whole report is deserialized here
+    /// before the zod schema in `api/native-types.ts` sees a byte, so a default
+    /// on the TS side alone could never have fired. One unreadable `.hip` took
+    /// every other project in the sweep with it.
+    #[serde(default)]
     pub hip_relative: Vec<String>,
+    /// Baker LAYER textures whose file is not there — unique absolute paths,
+    /// NOT `<node> <parm>` labels like `broken`: one uninstalled product takes
+    /// the same file out of many layers, and the useful count is how many
+    /// textures are gone. Scoped to the material node's
+    /// `material_texture_baker_layer_texture*` parms, which measured 51/51
+    /// resolving on a real project — zero false positives, unlike a whole-scene
+    /// sweep.
+    ///
+    /// Reported although the studio cannot repair it (the fix is a reinstall)
+    /// because nothing else in the pipeline reports it at all: measured on
+    /// DazToHue 2.5 / Houdini 22.0, baking with one of these pointed at a file
+    /// that does not exist prints `export finished in 0:00:02` and raises
+    /// nothing.
+    #[serde(default)]
+    pub missing_textures: Vec<String>,
 }
 
 /// One import reference a repath rebuilt.
