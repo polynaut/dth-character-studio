@@ -46,13 +46,14 @@ one folder per HDA *character name* — measured, one character here has three
 now; the first version guessed `DTH_<character name>.dth` and would have found
 nothing at all on that character. One job carries every set.
 
-**A second send re-imports what the project already has.** The job carries the
-FBX files the export produced — the `.dth` names them — and the bridge looks for
-them in the open project before importing anything. Found, wherever they are:
-the import runs in **that** folder, on top of the existing assets, instead of
-building a second set under `/Game/DazToHue/<Character>` and leaving you to
-reconcile them. Not found: a fresh import at the studio's destination, exactly
-as before. The finish toast says which happened and where.
+**A second send re-imports what the project already has.** Before sending, the
+studio searches the project's `Content/` for each export set's assets — they are
+all named `<PREFIX>_<set>`, so it finds them wherever they were moved — and
+names that folder in the job. The import then runs **there**, on top of the
+existing assets, instead of building a second set under
+`/Game/DazToHue/<Character>` and leaving you to reconcile them. Nothing found: a
+fresh import at the default, exactly as before. The finish toast says which
+happened and where.
 
 It still imports the `.dth`, never the FBX files directly — the `.dth` is what
 triggers the DazToHue pipeline, and importing the meshes on their own would lose

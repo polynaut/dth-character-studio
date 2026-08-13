@@ -51,7 +51,7 @@ RESULT_FILE = "result.json"
 #: silently doing the old thing is how a "successful" import imports nothing.
 #: (The studio checks this before writing a job, by reading the `Version` out of
 #: the installed `.uplugin`, so a stale bridge is normally caught there.)
-JOB_VERSION = 3
+JOB_VERSION = 4
 
 #: Seconds between directory checks. The tick fires every frame; a stat per
 #: frame on a network project folder is not free, and nobody needs sub-second
@@ -224,11 +224,21 @@ def _run_one(entry):
     # `replace_existing`, which is what makes landing on top of the existing
     # assets a REFRESH rather than a second copy. Importing the FBX files
     # directly would bypass that pipeline and lose everything it builds.
-    existing = _existing_destination(entry.get("files") or [])
+    #
+    # The STUDIO's answer wins. MEASURED 2026-08-13, first real run: the
+    # registry lookup below found nothing and a second copy landed in
+    # `/Game/DazToHue/LaraClassic` beside the user's `/Game/Characters/Lara`.
+    # The studio can read the same fact off the `.uasset` files on disk, and
+    # does, so `existing` means "these assets are AT destination — import
+    # there". The search stays as the fallback for a job that has no answer.
     mode = "import"
-    if existing:
-        destination = existing
+    if entry.get("existing"):
         mode = "reimport"
+    else:
+        found = _existing_destination(entry.get("files") or [])
+        if found:
+            destination = found
+            mode = "reimport"
 
     unreal.log("DTH bridge: %s %s into %s" % (mode, dth, destination))
     assets = _import_dth(dth, destination) or []

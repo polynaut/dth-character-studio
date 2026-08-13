@@ -10,6 +10,7 @@ import {
   bridgeVersionFrom,
   dthExportFiles,
   parseUnrealResult,
+  unrealContentPath,
   unrealDestinationFor,
   unrealFolderFor,
   unrealImportStateFrom,
@@ -77,7 +78,7 @@ const importInput = charScopeInput.extend({
 
 export interface UnrealImportStarted {
   /** The export sets handed over, in job order. */
-  sets: Array<{ name: string; destination: string; files: number }>
+  sets: Array<{ name: string; destination: string; existing: boolean; files: number }>
   /** The Unreal content path a FRESH import goes to, for a single set (''
    *  for several). A re-import lands where the existing assets already are —
    *  the bridge decides that, and reports it back in the result. */
@@ -221,13 +222,21 @@ export async function startUnrealImport({ data }: { data: unknown }): Promise<Un
   // export produced. The bridge uses them to find where they are already
   // imported — an unreadable manifest just means no matching, never a refusal
   // to send (the importer will report it far better than a path check here).
+  // Where these sets already live in THIS project, worked out from disk — the
+  // job then names the destination instead of the bridge hunting for it (see
+  // `locateSets`: the hunt from inside Unreal was measured coming back empty).
+  const located: Record<string, string> = await locateSets(
+    paths.projectDir,
+    wanted.map((set) => set.name),
+  ).catch(() => ({}))
   const imports = await Promise.all(
     wanted.map(async (set) => ({
       dth: set.dth,
-      // Named after the EXPORT SET, not the character: the set's name is the
-      // HDA's `character_name`, which is what the user sees in Unreal and what
-      // separates three outfit variants of one character.
-      destination: unrealDestinationFor(set.name),
+      // Where the set ALREADY is, else the default — named after the EXPORT
+      // SET, not the character: the set's name is the HDA's `character_name`,
+      // which is what separates three outfit variants of one character.
+      destination: located[set.name] ?? unrealDestinationFor(set.name),
+      existing: located[set.name] !== undefined,
       character: set.name,
       files: dthExportFiles(await readTextFile(set.dth).catch(() => '')),
     })),
@@ -237,6 +246,7 @@ export async function startUnrealImport({ data }: { data: unknown }): Promise<Un
     sets: imports.map((one) => ({
       name: one.character,
       destination: one.destination,
+      existing: one.existing,
       files: one.files.length,
     })),
     destination: imports.length === 1 ? imports[0].destination : '',
@@ -244,60 +254,72 @@ export async function startUnrealImport({ data }: { data: unknown }): Promise<Un
   }
 }
 
-/** How many folders one presence probe may open before giving up. A Content
- *  tree is unbounded and this runs on a dialog open; 2000 covers a real project
- *  comfortably and still cannot hang the dialog on a pathological one. */
-const PRESENCE_DIR_BUDGET = 2000
+/** How many folders one search may open before giving up. A Content tree is
+ *  unbounded and this runs on a dialog open (and again per send); 2000 covers a
+ *  real project comfortably and still cannot hang on a pathological one. */
+const CONTENT_DIR_BUDGET = 2000
 
 /**
- * Whether this Unreal project holds an asset belonging to one of these export
- * sets — a filename search under `Content/`, breadth-first, first match wins.
+ * Where each export set is ALREADY imported in this Unreal project, as content
+ * paths (`/Game/Characters/Lara`), keyed by set name. Absent = not found.
  *
- * NOT just `Content/DazToHue/<set>`, which is only where a FRESH import lands.
- * Measured on the first real project wired up end to end: the character sat in
- * `Content/Characters/Lara` as `SKM_LaraClassic`, `DTH_LaraClassic` and
- * `MCR_LaraClassic` — the user's own folder, nowhere near `DazToHue/`. A check
- * that only knew the default destination called that project empty, which is
- * the one project in the world that certainly wasn't.
+ * This is the studio's answer to a question the bridge could not answer from
+ * inside Unreal. MEASURED 2026-08-13, on the first real end-to-end run: the
+ * bridge's asset-registry lookup (`get_tag_value('AssetImportData')`) found
+ * nothing and imported a second copy into `/Game/DazToHue/LaraClassic`, beside
+ * the `/Game/Characters/Lara` the user already had. The data was never the
+ * problem — reading the `.uasset` headers off disk shows exactly the FBX the
+ * job names:
  *
- * The set name is the thing that travels: every asset the pipeline creates is
- * named `<PREFIX>_<set>`, so `*_<set>.uasset` finds them wherever they were
- * moved. Renamed assets still read as absent — the safe direction, since a
- * false positive would tick a project the user never imported into.
+ *     SKM_LaraClassic.uasset → "…/export/LaraClassic/Skeletal Meshes/SKM_LaraClassic.fbx"
+ *
+ * — so the API call was the weak link, and the filesystem is not. Every asset
+ * the pipeline creates is named `<PREFIX>_<set>`, so `*_<set>.uasset` finds the
+ * folder wherever the user moved it, and `Content/X/Y` → `/Game/X/Y` turns it
+ * into the destination the job carries.
+ *
+ * Renamed assets still read as absent — the safe direction, since inventing a
+ * destination would import ON TOP of something else.
  */
-async function projectHasAnySet(projectDir: string, sets: ReadonlyArray<string>): Promise<boolean> {
-  if (sets.length === 0) return false
-  const wanted = sets.map((name) => `_${unrealFolderFor(name).toLowerCase()}.uasset`)
+async function locateSets(
+  projectDir: string,
+  sets: ReadonlyArray<string>,
+): Promise<Record<string, string>> {
+  const found: Record<string, string> = {}
+  if (sets.length === 0) return found
+  const wanted = sets.map((name) => ({ name, suffix: `_${unrealFolderFor(name).toLowerCase()}.uasset` }))
   const contentDir = `${projectDir}/Content`
-  // The default destination first: one `exists` answers the common case
-  // without walking anything.
-  for (const name of sets) {
-    if (await exists(`${contentDir}/DazToHue/${unrealFolderFor(name)}`).catch(() => false)) {
-      return true
-    }
-  }
   const queue = [contentDir]
   let opened = 0
-  while (queue.length > 0 && opened < PRESENCE_DIR_BUDGET) {
+  while (queue.length > 0 && opened < CONTENT_DIR_BUDGET && Object.keys(found).length < sets.length) {
     const dir = queue.shift()
     if (dir === undefined) break
     opened += 1
     let entries
     try {
-      // Sequential BY DESIGN: the first match ends the search, and a project
-      // where the character sits three folders in should cost three reads, not
-      // a full tree walk fired off in parallel.
+      // Sequential BY DESIGN: this stops as soon as every set is placed, and a
+      // character three folders in should cost three reads, not a whole tree
+      // walk fired off at once.
       // eslint-disable-next-line no-await-in-loop
       entries = await readDir(dir)
     } catch {
       continue
     }
     for (const entry of entries) {
-      if (entry.isDirectory) queue.push(`${dir}/${entry.name}`)
-      else if (wanted.some((suffix) => entry.name.toLowerCase().endsWith(suffix))) return true
+      if (entry.isDirectory) {
+        queue.push(`${dir}/${entry.name}`)
+        continue
+      }
+      const name = entry.name.toLowerCase()
+      for (const set of wanted) {
+        if (found[set.name] === undefined && name.endsWith(set.suffix)) {
+          const contentPath = unrealContentPath(projectDir, dir)
+          if (contentPath) found[set.name] = contentPath
+        }
+      }
     }
   }
-  return false
+  return found
 }
 
 /**
@@ -306,8 +328,8 @@ async function projectHasAnySet(projectDir: string, sets: ReadonlyArray<string>)
  * last export" and "imports a selected scene".
  *
  * Filesystem only — the studio cannot read an editor's asset registry from out
- * here — so this is {@link projectHasAnySet}'s filename search, with all the
- * honesty that implies: a project whose assets were renamed reads as absent,
+ * here — so this is {@link locateSets}'s filename search, with all the honesty
+ * that implies: a project whose assets were renamed reads as absent,
  * which un-ticks a row the user can tick rather than ticking one they didn't
  * mean.
  */
@@ -329,7 +351,8 @@ export async function fetchUnrealCharacterPresence({
   await Promise.all(
     linked.map(async (uprojectPath) => {
       const { projectDir } = unrealJobPaths(uprojectPath)
-      out[uprojectPath] = await projectHasAnySet(projectDir, sets).catch(() => false)
+      const located: Record<string, string> = await locateSets(projectDir, sets).catch(() => ({}))
+      out[uprojectPath] = Object.keys(located).length > 0
     }),
   )
   return out

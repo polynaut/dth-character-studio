@@ -6,6 +6,7 @@ import {
   bridgeVersionFrom,
   dthExportFiles,
   parseUnrealResult,
+  unrealContentPath,
   unrealDestinationFor,
   unrealImportStateFrom,
   unrealJobJson,
@@ -48,12 +49,38 @@ describe('unrealDestinationFor', () => {
   })
 })
 
+describe('unrealContentPath', () => {
+  const PROJECT = 'D:/Perforce/3d-workflow/unreal/workflow3d'
+
+  it('maps a folder under Content/ to the path Unreal knows it by', () => {
+    // The real one, measured: the character the bridge failed to find sat here,
+    // and this is how the studio hands its location over instead.
+    expect(unrealContentPath(PROJECT, `${PROJECT}/Content/Characters/Lara`)).toBe(
+      '/Game/Characters/Lara',
+    )
+    expect(unrealContentPath(PROJECT, `${PROJECT}/Content`)).toBe('/Game')
+    // Windows separators and a trailing slash both arrive from real callers.
+    expect(unrealContentPath(PROJECT, `${PROJECT}\\Content\\DazToHue\\LaraClassic\\`)).toBe(
+      '/Game/DazToHue/LaraClassic',
+    )
+  })
+
+  it('answers nothing for a folder outside Content/', () => {
+    // '' is "no destination", never a guess — the caller falls back to the
+    // default rather than importing somewhere invented.
+    expect(unrealContentPath(PROJECT, `${PROJECT}/Plugins/DTHStudioBridge`)).toBe('')
+    expect(unrealContentPath(PROJECT, 'D:/elsewhere/Content/X')).toBe('')
+    expect(unrealContentPath(PROJECT, '')).toBe('')
+  })
+})
+
 describe('unrealJobJson', () => {
   it('writes the version the bridge checks, and forward-slashed paths', () => {
     const raw = unrealJobJson([
       {
         dth: 'D:\\p\\Kira\\export\\Kira\\DTH_Kira.dth',
         destination: '/Game/DazToHue/Kira',
+        existing: false,
         character: 'Kira',
         files: ['D:\\p\\Kira\\export\\Kira\\Skeletal Meshes\\SKM_Kira.fbx'],
       },
@@ -73,8 +100,8 @@ describe('unrealJobJson', () => {
     // mean each one replacing the last before the editor ever claimed it.
     const job = JSON.parse(
       unrealJobJson([
-        { dth: 'D:/x/LaraCroft/DTH_LaraCroft.dth', destination: '/Game/DazToHue/LaraCroft', character: 'LaraCroft', files: [] },
-        { dth: 'D:/x/LaraNaked/DTH_LaraNaked.dth', destination: '/Game/DazToHue/LaraNaked', character: 'LaraNaked', files: [] },
+        { dth: 'D:/x/LaraCroft/DTH_LaraCroft.dth', destination: '/Game/Characters/Lara', existing: true, character: 'LaraCroft', files: [] },
+        { dth: 'D:/x/LaraNaked/DTH_LaraNaked.dth', destination: '/Game/DazToHue/LaraNaked', existing: false, character: 'LaraNaked', files: [] },
       ]),
     ) as { imports: Array<{ character: string }> }
     expect(job.imports.map((one) => one.character)).toEqual(['LaraCroft', 'LaraNaked'])

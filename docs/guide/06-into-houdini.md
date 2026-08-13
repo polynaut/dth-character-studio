@@ -229,13 +229,17 @@ pipeline, not the `daz-export` intermediate the Houdini imports read. What impor
 own pipeline does the work: meshes, textures, materials, animation curves and
 the post-process animation blueprint.
 
-**A second send re-imports what you already have.** The job also carries the
-FBX files the export produced (the `.dth` names them), and the bridge looks for
-them in the open project first. If those files are already imported — anywhere,
-including a folder you chose yourself — the import runs **there**, on top of the
-existing assets, instead of creating a second set under
-`/Game/DazToHue/<Character>`. The finish toast says which happened and where:
-*Re-imported in Unreal — 6 assets in /Game/Characters/Lara*.
+**A second send re-imports what you already have.** Before sending, the studio
+looks through the project's `Content/` for assets belonging to each export set —
+they are all named `<PREFIX>_<set>`, so it finds them **wherever you moved
+them** — and tells the bridge to import *there*, on top of what is already
+present, instead of creating a second set under `/Game/DazToHue/<Character>`.
+Move your character to `Content/Characters/Lara` and that is where the next send
+lands. The finish toast says which happened and where: *Re-imported in Unreal —
+6 assets in /Game/Characters/Lara*.
+
+Renamed assets are the one thing it cannot follow: those read as "not here", and
+the send falls back to a fresh import at the default location.
 
 **The studio does not start Unreal.** An editor takes minutes to come up and
 holds its project open, so the job is *queued* instead: the **DTH Studio

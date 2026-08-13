@@ -52,8 +52,12 @@ export const UNREAL_BRIDGE_UPLUGIN = `${UNREAL_BRIDGE_NAME}.uplugin`
  *   folder is named by the HDA's `character_name`, not by the character), and
  *   the handoff is one job file — so a job carries every set rather than the
  *   sets overwriting each other's job.
+ * - 4 — `existing`: the studio located the set's assets itself and the
+ *   destination is where they ARE. A bridge that ignored this would keep
+ *   searching from inside Unreal and keep importing a second copy — exactly
+ *   the silent wrong answer the version check exists to prevent.
  */
-export const UNREAL_JOB_VERSION = 3
+export const UNREAL_JOB_VERSION = 4
 
 /**
  * The bridge's own `.uplugin`.
@@ -120,6 +124,23 @@ export function unrealDestinationFor(characterName: string): string {
   return `/Game/DazToHue/${unrealFolderFor(characterName)}`
 }
 
+/**
+ * An Unreal project folder + a folder inside its `Content/` → the content path
+ * Unreal knows it by: `…/workflow3d` + `…/workflow3d/Content/Characters/Lara`
+ * → `/Game/Characters/Lara`. `''` when the folder is not under `Content/`.
+ *
+ * `/Game` IS `Content/` — the mount point every project has — which is what
+ * lets the studio hand the bridge a destination it worked out from the
+ * filesystem, instead of the bridge having to find it from inside Unreal.
+ */
+export function unrealContentPath(projectDir: string, folderAbs: string): string {
+  const root = `${projectDir.replace(/\\/g, '/').replace(/\/+$/, '')}/Content`
+  const dir = folderAbs.replace(/\\/g, '/').replace(/\/+$/, '')
+  if (dir.toLowerCase() === root.toLowerCase()) return '/Game'
+  if (!dir.toLowerCase().startsWith(`${root.toLowerCase()}/`)) return ''
+  return `/Game/${dir.slice(root.length + 1)}`
+}
+
 /** The folder-name half of {@link unrealDestinationFor} — also the on-disk
  *  folder under `Content/DazToHue/`, which is how the studio can tell from the
  *  filesystem whether an Unreal project already holds an export set. */
@@ -136,8 +157,12 @@ export function unrealFolderFor(characterName: string): string {
 export interface UnrealJobImport {
   /** The manifest to import — what triggers the DazToHue pipeline. */
   dth: string
-  /** Where a FRESH import goes; a re-import lands where the assets already are. */
+  /** Where to import. With {@link UnrealJobImport.existing} this is where the
+   *  set's assets ALREADY are; otherwise the default `/Game/DazToHue/<set>`. */
   destination: string
+  /** The studio found this set's assets at `destination` — so the bridge
+   *  imports on top of them (a re-import) instead of searching for them. */
+  existing: boolean
   /** The export set's name (the HDA's `character_name`), for the log/report. */
   character: string
   /** The set's own FBX files — see {@link dthExportFiles}. */
@@ -151,6 +176,7 @@ export function unrealJobJson(imports: ReadonlyArray<UnrealJobImport>): string {
       imports: imports.map((one) => ({
         dth: one.dth.replace(/\\/g, '/'),
         destination: one.destination,
+        existing: one.existing,
         character: one.character,
         files: one.files.map((file) => file.replace(/\\/g, '/')),
       })),

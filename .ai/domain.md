@@ -986,17 +986,26 @@ older runtimes as stale.
   studio cannot read an editor's asset registry, so a character moved elsewhere
   in Unreal reads as absent — un-ticking a row the user can tick, never ticking
   one they didn't mean.
-- **The Unreal bridge re-imports where the assets ALREADY are.** The job
-  (`UNREAL_JOB_VERSION` 3) carries each set's FBX list; `dth_bridge.py` searches the
-  asset registry under `/Game` for assets whose `AssetImportData` tag names one
-  of them (absolute or by basename — a `RelativeFilename` is relative to the
-  asset's package), and the folder with the most matches becomes the import
-  destination, reported back as `mode: 'reimport'`. No match = a fresh import
-  at `/Game/DazToHue/<Character>`. It always imports the **`.dth`**, never the
-  FBX files directly — the `.dth` is what triggers mrpdean's pipeline
-  (materials, curves, post-process ABP); the file list is for FINDING assets,
-  not for importing. UNVERIFIED against a live editor: the registry-tag shape
-  is Unreal's, and every failure path degrades to the fresh import.
+- **The STUDIO decides where a re-import lands, not the bridge.** MEASURED
+  2026-08-13, first real end-to-end run: the bridge's asset-registry lookup
+  (`get_tag_value('AssetImportData')`) found nothing and imported a second copy
+  into `/Game/DazToHue/LaraClassic`, beside the `/Game/Characters/Lara` the user
+  already had. The match DATA was never missing — the `.uasset` header names
+  exactly the FBX the job carries:
+
+      SKM_LaraClassic.uasset → RelativeFilename ".../export/LaraClassic/Skeletal Meshes/SKM_LaraClassic.fbx"
+
+  So the API call was the weak link and the filesystem is not. `locateSets`
+  (api/unreal-import.ts) BFS-walks `Content/` for `*_<set>.uasset` (every asset
+  the pipeline creates is `<PREFIX>_<set>`), maps `Content/X/Y` → `/Game/X/Y`
+  via `unrealContentPath`, and the job (`UNREAL_JOB_VERSION` 4) carries that as
+  `destination` + `existing: true`. The bridge then imports where it is told;
+  its registry search survives only as the fallback for `existing: false`.
+  Measured cost on the real project: 195 folder reads, capped at 2000.
+  It always imports the **`.dth`**, never the FBX files directly — the `.dth`
+  is what triggers mrpdean's pipeline (materials, curves, post-process ABP);
+  the file list is for FINDING assets, not for importing. Two folders holding
+  one set (a leftover duplicate) makes the pick arbitrary — first found wins.
 - **Housekeeping's orphan GCs** (app launch + "Clean up now",
   api/maintenance.ts): per-project `.dcsmeta` character dirs + avatars, and —
   since the deferred-findings pass — per-character SCRIPT dirs in the Daz
