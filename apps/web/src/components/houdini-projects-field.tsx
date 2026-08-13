@@ -32,6 +32,7 @@ import {
   generateHoudiniProject,
   openScene,
   removeGeneratedHoudiniProject,
+  renameHoudiniProject,
   revealPath,
   scanCharacterHoudiniProjects,
 } from '#/lib/rom/api.ts'
@@ -75,6 +76,7 @@ function HoudiniCard({
   warning,
   onOpen,
   onRemove,
+  onRename,
   onUtils,
 }: {
   hipPath: string
@@ -87,6 +89,9 @@ function HoudiniCard({
   onOpen: (e: React.MouseEvent) => void
   /** When set, a hover ✕ unlinks the project from the character. */
   onRemove?: () => void
+  /** When set, the title becomes an inline rename (click → input). Absent for a
+   *  project linked from the user's own tree — see the field's `renameProject`. */
+  onRename?: (next: string) => Promise<void> | void
   /** Opens the Utils drawer with this project's nodes preselected. */
   onUtils?: () => void
 }) {
@@ -145,6 +150,12 @@ function HoudiniCard({
       onOpen={onOpen}
       onRemove={onRemove}
       removeTitle="Unlink from character"
+      onRename={onRename}
+      // Not the card's default ("Scene") — and not optional cosmetics: since
+      // #809 a generated project takes the CHARACTER's name, so this title and
+      // the character header's are routinely the same string. Without the noun
+      // both announce "Rename — Kira" and only position tells them apart.
+      renameSubject="Houdini project"
       onUtils={onUtils}
       utilsTitle="Utils — repairs + copy material setups between projects"
     />
@@ -424,6 +435,41 @@ export function HoudiniProjectsField({
     return normalizePath(parentDir(hip)).toLowerCase() === dir
   }
 
+  /**
+   * Rename a linked project's FILE (extension kept) and repoint the card.
+   *
+   * Offered only for a project inside the CHARACTER folder — the identical rule
+   * the Daz scenes use (`insideCharFolder`), for the identical reason: a project
+   * linked from the user's own tree is their file, sitting in a tree the studio
+   * cannot see the rest of, and renaming files there is not the studio's call.
+   * The affordance is simply absent on those cards rather than disabled: unlike
+   * the remove dialog's delete toggle there is no dialog to explain it in, and a
+   * title that refuses to edit reads as broken.
+   *
+   * Errors are RETHROWN — `EditableTitle` rolls its own text back and toasts
+   * them, so swallowing here would leave the card showing a name that never
+   * reached disk.
+   */
+  async function renameProject(hip: string, nextName: string): Promise<void> {
+    const clean = nextName.trim()
+    if (!clean) return
+    setError('')
+    setBusy(true)
+    try {
+      const moved = await renameHoudiniProject({ data: { hipPath: hip, newName: clean } })
+      // Unchanged (same name, or the browser build's no-op) — nothing to persist.
+      if (normalizePath(moved).toLowerCase() === normalizePath(hip).toLowerCase()) return
+      // Repoint IN PLACE: the cards render in array order, so a rename must not
+      // reshuffle the row the user is looking at.
+      await persistPatch(
+        { houdiniProjects: character.houdiniProjects.map((p) => (p === hip ? moved : p)) },
+        { toast: `Renamed to “${clean}”` },
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
   function askRemove(hip: string) {
     setError('')
     // Delete always starts OFF, even for the studio's own copy — that copy can
@@ -480,7 +526,12 @@ export function HoudiniProjectsField({
           Linked in place, never copied — moving a Houdini project safely needs every reference
           to be relative <em>and</em> its <code>$JOB</code> project folder to travel with it, and
           the studio can&apos;t guarantee that for a project you authored elsewhere. Drag{' '}
-          <code>.hip</code> files here or use the button.
+          <code>.hip</code> files here or use the button.{' '}
+          <strong>Click a card&apos;s name to rename it</strong> — the file is renamed with it,
+          keeping its extension. That is safe for the same reason moving isn&apos;t:{' '}
+          <code>$JOB</code> and <code>$HIP</code> are <em>folders</em>, so nothing baked into
+          the project points at the file&apos;s own name. A project linked from your own tree
+          isn&apos;t renamed by the studio, so its name isn&apos;t editable.
         </InfoPopup>
       </Label>
       {projectDirChip && <p className="mb-3 text-xs">{projectDirChip}</p>}
@@ -516,6 +567,9 @@ export function HoudiniProjectsField({
                 warning={warnings.get(normalizePath(hip).toLowerCase()) ?? ''}
                 onOpen={(e) => void onOpen(hip, e)}
                 onRemove={() => askRemove(hip)}
+                onRename={
+                  insideCharFolder(hip) ? (next) => renameProject(hip, next) : undefined
+                }
                 onUtils={() => setUtilsFor(hip)}
               />
             ),

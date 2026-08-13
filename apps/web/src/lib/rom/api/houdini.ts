@@ -1,4 +1,4 @@
-import { copyFile, exists, mkdir, readTextFile, remove } from '@tauri-apps/plugin-fs'
+import { copyFile, exists, mkdir, readTextFile, remove, rename } from '@tauri-apps/plugin-fs'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
@@ -237,6 +237,59 @@ Rename one of them, or link the existing file instead.`,
       // the copy is on disk and is what the character now links.
     }
   }
+  return dest
+}
+
+const renameProjectInput = z.object({
+  /** Absolute path of the linked project file to rename. It stays in its
+   *  folder — only the file NAME changes. */
+  hipPath: z.string().min(1),
+  /** The new file name WITHOUT extension. */
+  newName: z.string().min(1),
+})
+
+/**
+ * Rename a linked Houdini project IN PLACE, keeping its extension. Returns the
+ * renamed file's absolute path; the caller repoints `houdiniProjects`.
+ *
+ * **Renaming is safe where moving is not**, and that asymmetry is the reason
+ * this exists at all while {@link copyHoudiniProject} stays a copy. Everything
+ * the studio bakes into a generated project is anchored on a FOLDER variable —
+ * `$JOB` (the character folder) and `$HIP` (the folder the scene file sits in) —
+ * and neither one moves when the file is renamed. `$HIPNAME`/`$HIPFILE` would
+ * follow the name, and nothing the studio writes uses them.
+ *
+ * The extension is CARRIED OVER, never assumed: a generated project is
+ * `.hiplc`, but a hand-linked one can be `.hip` or `.hipnc`, and rewriting a
+ * commercial `.hip` to `.hiplc` would tell Houdini the file is licence-limited.
+ *
+ * Refuses to overwrite — a file already sitting on that name is someone else's
+ * project (or the same project's other build), and a rename is not a merge.
+ */
+export async function renameHoudiniProject({ data }: { data: unknown }): Promise<string> {
+  const { hipPath, newName } = renameProjectInput.parse(data)
+  const clean = newName.trim()
+  // REJECT rather than silently clean (which is what the Generate dialog's
+  // `cleanFileName` does to a value being typed for the first time): this name
+  // replaces one the user already has, and quietly turning it into something
+  // else is a worse answer than saying it cannot be used.
+  if (!clean || /[\\/:*?"<>|]/.test(clean) || clean === '.' || clean === '..') {
+    throw new Error('Enter a plain file name (no slashes or special characters).')
+  }
+  // Browser build: no filesystem to rename on — report the path unchanged, so
+  // the caller repoints nothing (the same "nothing happened" the pickers no-op to).
+  if (!isTauri()) return hipPath
+  const norm = hipPath.replace(/\\/g, '/')
+  const cut = norm.lastIndexOf('/')
+  const dir = norm.slice(0, cut)
+  const file = norm.slice(cut + 1)
+  // `> 0`, not `>= 0`: a leading dot is a name, not an extension separator.
+  const dot = file.lastIndexOf('.')
+  const ext = dot > 0 ? file.slice(dot) : ''
+  const dest = `${dir}/${clean}${ext}`
+  if (dest.toLowerCase() === norm.toLowerCase()) return hipPath
+  if (await exists(dest)) throw new Error(`“${clean}${ext}” already exists in that folder.`)
+  await rename(hipPath, dest)
   return dest
 }
 

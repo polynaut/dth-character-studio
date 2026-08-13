@@ -44,6 +44,7 @@ export function LinkedAssetCard({
   selected,
   onSelect,
   onRename,
+  renameSubject = 'Scene',
   openIconOnly = false,
 }: {
   title: string
@@ -53,6 +54,13 @@ export function LinkedAssetCard({
    *  input, Enter/blur commits, Escape cancels). The title then sits ABOVE the
    *  cover button — clicking it edits instead of selecting. */
   onRename?: (next: string) => Promise<void> | void
+  /** WHAT this card's title names — the noun in both the rename button's
+   *  accessible name ("Rename Houdini project — Lara") and its input's ("Houdini
+   *  project name"). Defaults to the Daz-scene wording the card shipped with.
+   *  A card kind that leaves it at the default alongside another that doesn't
+   *  is the bug this exists for: two titles announcing the identical
+   *  "Rename — Kira" with only position to tell them apart. */
+  renameSubject?: string
   /** Brand mark floated bottom-left over the media. */
   badge?: ReactNode
   /** Extra content pinned to the card's bottom-left (e.g. a "primary" tag). */
@@ -133,7 +141,8 @@ export function LinkedAssetCard({
             <EditableTitle
               name={title}
               onSave={onRename}
-              ariaLabel="Scene name"
+              ariaLabel={`${renameSubject} name`}
+              subject={renameSubject}
               as="div"
               textClass="text-base font-medium"
             />

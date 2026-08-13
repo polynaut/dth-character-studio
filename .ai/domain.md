@@ -512,7 +512,20 @@ older runtimes as stale.
   (a pre-v0.64 project's real `$JOB` output) is kept and named in the Refresh
   assets report. `removeGeneratedHoudiniProject` deletes only the `.hiplc`.
   Generated projects (hip directly in the houdini folder) are studio-managed;
-  hand-linked ones stay unlink-only. Returns whether the network was created
+  hand-linked ones stay unlink-only. **RENAMING a project file is safe where
+  moving it is not, and that follows from the anchors above**: `$JOB` (the
+  character folder) and `$HIP` (the folder the hip sits in) are both FOLDER
+  variables, so no baked reference names the file itself — `$HIPNAME`/`$HIPFILE`
+  would, and nothing the studio writes uses them. So `renameHoudiniProject`
+  (api/houdini.ts) renames in place and the caller repoints `houdiniProjects`,
+  while copying stays a copy. Two rules on it: the EXTENSION is carried over,
+  never assumed (`.hip`/`.hiplc`/`.hipnc` encode the licence tier — rewriting a
+  commercial hip to `.hiplc` mislabels it), and the card offers the rename only
+  for a project INSIDE the character folder (`insideCharFolder`, the same gate
+  the Daz scenes use — the studio does not rename files in the user's own tree).
+  The scan store is keyed by hip PATH, so a rename orphans the old verdict and
+  the card reads unscanned until the next sweep — which the linked-set change
+  kicks off immediately. That is the honest answer, not a bug to migrate around. Returns whether the network was created
   (HDA not visible to hython → empty scene, UI says "add it from the shelf");
   the UI (houdini-projects-field "Generate project" dialog, name prefilled
   `<Project>_<Character>`) links the result as a Houdini card. Fails loud
