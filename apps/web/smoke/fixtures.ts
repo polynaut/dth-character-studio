@@ -13,6 +13,13 @@ import {
   characterSchema,
 } from '../../../packages/rom/src/types.ts'
 
+// Same reason as the schema above: the specs that seed a Houdini scan store
+// must build the CURRENT freshness key, and three of them used to hard-code its
+// trailing version number. Bumping SCAN_ANSWER_VERSION then left them seeding
+// entries that read as stale, which surfaces as an empty node list — a
+// confusing failure a long way from its cause.
+import { SCAN_ANSWER_VERSION } from '../src/lib/rom/houdini-project-cache.ts'
+
 import { installTauriMock } from './tauri-mock.ts'
 
 import type { TauriMockSeed } from './tauri-mock.ts'
@@ -162,6 +169,23 @@ export function fakeDll(version: string): string {
   return `data:application/octet-stream;base64,${Buffer.from(bytes).toString('base64')}`
 }
 
+/**
+ * A scan-store entry's freshness key, in the shape `scanCacheKey` builds it:
+ * `<path>|<mtime>|<export root>|<installed-HDA fingerprint>|<answer version>`,
+ * all normalised. `__MTIME__` is a placeholder the spec substitutes INSIDE the
+ * page, because the fake stamps its world when it is installed.
+ *
+ * The EXPORT ROOT is in the key because part of a scan's verdict is about files
+ * that are NOT the `.hip` (`refs.broken`). The HDA FINGERPRINT is empty here —
+ * the fake world has no Houdini install to pair a prefs folder with, so
+ * `installedHdaKey()` takes its documented "cannot read it" path and answers ''
+ * — hence the bare separator. The ANSWER VERSION comes from the source of truth
+ * rather than a literal, so bumping it can never strand a fixture.
+ */
+export function scanStoreEntryKey(hipPath: string, exportRoot: string): string {
+  return `${hipPath.toLowerCase()}|__MTIME__|${exportRoot.toLowerCase()}||${SCAN_ANSWER_VERSION}`
+}
+
 export const P = {
   appData: 'C:/Users/You/AppData/Local/com.polynaut.dthcharacterstudio',
   dazLib: 'D:/DAZ 3D/My DAZ 3D Library',
@@ -240,10 +264,18 @@ export interface SeedOptions {
    *  what the install dialog's scan reads). */
   unrealPluginFolders?: Array<string>
   /** What `unreal_engine_installs` reports (the detected-engines Settings
-   *  section + the Generate Unreal project dialog). */
-  unrealEngineInstalls?: Array<{ version: string; path: string }>
-  /** Plugin builds the fake `scan_unreal_plugins` finds (see tauri-mock). */
-  unrealPlugins?: Array<{ name: string; path: string; engineVersion: string; sourceFolder: string }>
+   *  section + the Generate Unreal project dialog). `buildId` is the engine's
+   *  own id — what a plugin build's binaries are judged against. */
+  unrealEngineInstalls?: Array<{ version: string; path: string; buildId?: string }>
+  /** Plugin builds the fake `scan_unreal_plugins` finds (see tauri-mock).
+   *  `buildId` is the id its binaries carry; omit for a content-only build. */
+  unrealPlugins?: Array<{
+    name: string
+    path: string
+    engineVersion: string
+    sourceFolder: string
+    buildId?: string
+  }>
   /** settings.json: the DIM manifests folder (Settings → Project product config). */
   dimManifestsFolder?: string
   /** settings.json: the Daz Studio install folder. The DTH Export dialog's

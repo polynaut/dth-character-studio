@@ -46,6 +46,11 @@ pub struct UnrealEngineInstall {
     pub version: String,
     /// Engine install folder, trailing separator trimmed.
     pub path: String,
+    /// The engine's own `BuildId` — the value a prebuilt plugin's binaries must
+    /// carry EXACTLY or the editor refuses to load them ("missing or built with
+    /// a different engine version"). `''` when it cannot be read. See
+    /// {@link read_build_id}.
+    pub build_id: String,
 }
 
 /// One plugin build found under a configured source folder.
@@ -62,6 +67,15 @@ pub struct UnrealPluginSource {
     pub engine_version: String,
     /// The configured settings folder this was found under.
     pub source_folder: String,
+    /// The `BuildId` this plugin's binaries were compiled against, or `''` when
+    /// it has none (a content-only or source-only plugin — nothing to mismatch).
+    ///
+    /// MEASURED 2026-08-12, and the reason this field exists: a plugin folder
+    /// named `Unreal Engine 5.7 Plugin` held binaries built for 5.8, and a
+    /// project generated for 5.7 came up with "missing or built with a
+    /// different engine version". The folder name is a label; this is the
+    /// engine's own identity check, and it is one small file read away.
+    pub build_id: String,
 }
 
 /// What a linked `.uproject` is and already carries — one probe for the
@@ -89,7 +103,142 @@ pub struct UnrealProjectState {
 /// error.
 #[tauri::command(async)]
 pub fn unreal_engine_installs() -> Vec<UnrealEngineInstall> {
-    read_engine_installs()
+    all_engine_installs()
+}
+
+/// The `BuildId` out of a `*.modules` manifest — the editor's own identity for
+/// "which build compiled this". An engine carries it in
+/// `Engine/Binaries/Win64/UnrealEditor.modules`, a plugin in
+/// `Binaries/Win64/UnrealEditor.modules`, and they must match exactly.
+///
+/// Tolerant: an unreadable or absent file answers `''`, which every caller
+/// treats as "cannot tell" and never as a mismatch.
+fn read_build_id(modules_file: &Path) -> String {
+    std::fs::read_to_string(modules_file)
+        .ok()
+        .and_then(|raw| build_id_from_modules_json(&raw))
+        .unwrap_or_default()
+}
+
+fn build_id_from_modules_json(raw: &str) -> Option<String> {
+    let json: serde_json::Value = serde_json::from_str(raw).ok()?;
+    let id = json.get("BuildId")?.as_str()?.trim();
+    if id.is_empty() { None } else { Some(id.to_string()) }
+}
+
+fn engine_build_id(engine_dir: &Path) -> String {
+    read_build_id(&engine_dir.join("Engine/Binaries/Win64/UnrealEditor.modules"))
+}
+
+/// Engines the Epic launcher INSTALLED, from its own manifest.
+///
+/// The registry (`read_engine_installs`) is authoritative when it has an entry
+/// — but MEASURED 2026-08-12 it can simply lack one: a machine with 5.6, 5.7
+/// and 5.8 installed had no `5.8` key at all, so the studio could not offer the
+/// engine the user actually opened their project with. `LauncherInstalled.dat`
+/// listed all three. Reading both and merging is the only way to see what is
+/// really there.
+fn launcher_engine_installs() -> Vec<UnrealEngineInstall> {
+    // %PROGRAMDATA%, not a hardcoded `C:\ProgramData`: the folder is
+    // relocatable and a machine whose system drive is not C: is not exotic.
+    // The literal stays as the fallback — it is the default everywhere.
+    let program_data =
+        std::env::var("ProgramData").unwrap_or_else(|_| r"C:\ProgramData".to_string());
+    let path =
+        Path::new(&program_data).join(r"Epic\UnrealEngineLauncher\LauncherInstalled.dat");
+    let Ok(raw) = std::fs::read_to_string(&path) else {
+        return Vec::new();
+    };
+    launcher_installs_from_manifest(&raw)
+}
+
+/// The parse half of {@link launcher_engine_installs}, split out so the entry
+/// filter — the part with an actual rule in it — is testable without a machine
+/// that has the launcher installed.
+fn launcher_installs_from_manifest(raw: &str) -> Vec<UnrealEngineInstall> {
+    #[derive(Deserialize)]
+    struct Entry {
+        #[serde(rename = "AppName", default)]
+        app_name: String,
+        #[serde(rename = "InstallLocation", default)]
+        install_location: String,
+    }
+    #[derive(Deserialize)]
+    struct Manifest {
+        #[serde(rename = "InstallationList", default)]
+        installation_list: Vec<Entry>,
+    }
+
+    let Ok(manifest) = serde_json::from_str::<Manifest>(raw) else {
+        return Vec::new();
+    };
+    manifest
+        .installation_list
+        .into_iter()
+        .filter_map(|entry| {
+            // `UE_5.8` is an engine; `QuixelBridge_5.8`, `FabPlugin_5.7` and the
+            // `HTTPJSON…` entries are plugins the launcher installed INTO one,
+            // and they point at the same folder — listing them would offer the
+            // same engine four times.
+            let version = entry.app_name.strip_prefix("UE_")?;
+            if !is_engine_version(version) {
+                return None;
+            }
+            let path = trim_trailing_sep(&entry.install_location);
+            if path.is_empty() {
+                return None;
+            }
+            Some(UnrealEngineInstall {
+                version: version.to_string(),
+                path,
+                build_id: String::new(),
+            })
+        })
+        .collect()
+}
+
+/// Merge the two sources, one entry per VERSION.
+///
+/// The registry leads — an entry there is what `UnrealVersionSelector` itself
+/// resolves against — with ONE exception: a registry entry whose folder is gone
+/// yields to a launcher entry whose folder is there. The registry going stale is
+/// measured behaviour on this project's own dev machine (an uninstalled 4.0 kept
+/// its key), and the same premise that makes this merge necessary at all — the
+/// registry can be wrong about what is installed — makes "present but pointing
+/// nowhere" just as wrong as "absent". Without this, a reinstall to a new folder
+/// would show the dead path and hide the live one.
+///
+/// `is_dir` is injected so the rule is testable without laying down engine trees.
+fn merge_engine_installs(
+    registry: Vec<UnrealEngineInstall>,
+    launcher: Vec<UnrealEngineInstall>,
+    is_dir: impl Fn(&str) -> bool,
+) -> Vec<UnrealEngineInstall> {
+    let mut out = registry;
+    for candidate in launcher {
+        // `position` (not `iter_mut().find`) so the borrow ends before the push.
+        match out.iter().position(|e| e.version == candidate.version) {
+            Some(i) => {
+                if !is_dir(&out[i].path) && is_dir(&candidate.path) {
+                    out[i].path = candidate.path;
+                }
+            }
+            None => out.push(candidate),
+        }
+    }
+    out
+}
+
+/// Registry + launcher manifest, deduped by VERSION — see
+/// {@link merge_engine_installs} — with each engine's own `BuildId` filled in.
+fn all_engine_installs() -> Vec<UnrealEngineInstall> {
+    let mut out = merge_engine_installs(read_engine_installs(), launcher_engine_installs(), |p| {
+        Path::new(p).is_dir()
+    });
+    for engine in &mut out {
+        engine.build_id = engine_build_id(Path::new(&engine.path));
+    }
+    out
 }
 
 #[cfg(not(windows))]
@@ -177,7 +326,7 @@ fn read_engine_installs() -> Vec<UnrealEngineInstall> {
         if path.is_empty() {
             continue;
         }
-        installs.push(UnrealEngineInstall { version, path });
+        installs.push(UnrealEngineInstall { version, path, build_id: String::new() });
     }
 
     // SAFETY: `key` is the handle RegOpenKeyExW returned and is not used after.
@@ -228,6 +377,16 @@ fn scan_dir(dir: &Path, depth: u32, source_folder: &str, out: &mut Vec<UnrealPlu
         push_plugin(dir, &uplugin, source_folder, out);
         return;
     }
+    // A plugin can also arrive ZIPPED — several vendors ship exactly one
+    // `<Plugin>.zip` in a versioned folder and nothing else (measured:
+    // `…/UnrealEnginePlugin/Unreal Engine 5.7 Plugin/DazToHue.zip`). The folder
+    // holds no `.uplugin`, so the walk used to pass straight over it and report
+    // "no Unreal plugin found here" about a folder that plainly has one.
+    for zip in sorted_zips(dir) {
+        if let Some(found) = zipped_plugin(&zip) {
+            push_zipped_plugin(&zip, &found, source_folder, out);
+        }
+    }
     if depth == 0 {
         return;
     }
@@ -251,7 +410,138 @@ fn push_plugin(dir: &Path, uplugin: &Path, source_folder: &str, out: &mut Vec<Un
         path: dir.to_string_lossy().into_owned(),
         engine_version,
         source_folder: source_folder.to_string(),
+        build_id: read_build_id(&dir.join("Binaries/Win64/UnrealEditor.modules")),
     });
+}
+
+/// A plugin found INSIDE a zip: the `.uplugin` entry's name, the archive-
+/// relative folder it sits in ('' when it is at the archive root), and the
+/// `EngineVersion` its JSON declares.
+struct ZippedPlugin {
+    name: String,
+    /// Everything under this prefix is the plugin; the install strips it so the
+    /// `.uplugin` lands directly in `Plugins/<name>/`.
+    prefix: String,
+    engine_version: Option<String>,
+    /// The archived binaries' `BuildId`, read WITHOUT extracting the archive —
+    /// the whole point of checking it before an install rather than after.
+    build_id: String,
+}
+
+/// Read a zip's directory and, if it holds a `.uplugin`, describe the plugin.
+///
+/// Only the ONE `.uplugin` entry is inflated (a few hundred bytes) — the rest
+/// of the archive is never touched, so scanning a folder of large plugin zips
+/// stays a central-directory read. The SHALLOWEST `.uplugin` wins: a plugin
+/// that vendors a second plugin under its own `Content` is still one install.
+fn zipped_plugin(zip_path: &Path) -> Option<ZippedPlugin> {
+    let file = std::fs::File::open(zip_path).ok()?;
+    let mut archive = zip::ZipArchive::new(file).ok()?;
+    let mut best: Option<(usize, usize, String)> = None; // (depth, index, name)
+    for idx in 0..archive.len() {
+        // SKIP an unreadable entry, never abandon the archive: a `?` here threw
+        // away a whole plugin because ONE entry in its zip had an odd header —
+        // the scan then reported "no Unreal plugin found here" about a folder
+        // that plainly has one. Same policy as `zip_entry_index`.
+        let Ok(entry) = archive.by_index_raw(idx) else {
+            continue;
+        };
+        if entry.is_dir() {
+            continue;
+        }
+        let name = entry.name().replace('\\', "/");
+        if !name.to_lowercase().ends_with(".uplugin") {
+            continue;
+        }
+        let depth = name.matches('/').count();
+        // Ties broken by name so a two-`.uplugin` archive scans the same way
+        // every time.
+        let better = match &best {
+            None => true,
+            Some((d, _, n)) => depth < *d || (depth == *d && &name < n),
+        };
+        if better {
+            best = Some((depth, idx, name));
+        }
+    }
+    let (_, idx, entry_name) = best?;
+    let prefix = match entry_name.rfind('/') {
+        Some(cut) => entry_name[..=cut].to_string(),
+        None => String::new(),
+    };
+    let name = Path::new(&entry_name).file_stem()?.to_string_lossy().into_owned();
+    // Tolerant like the loose-file read: an unreadable manifest costs the
+    // version fallback, never the plugin.
+    let engine_version = crate::archive::read_zip_entry_string(&mut archive, idx, ".uplugin")
+        .ok()
+        .as_deref()
+        .and_then(engine_version_from_uplugin_json);
+    // The binaries' identity, from the same archive read. `<prefix>Binaries/
+    // Win64/UnrealEditor.modules` is where a built plugin carries it; a
+    // content- or source-only zip simply has no such entry.
+    let modules_entry = format!("{prefix}Binaries/Win64/UnrealEditor.modules");
+    let build_id = zip_entry_index(&mut archive, &modules_entry)
+        .and_then(|i| crate::archive::read_zip_entry_string(&mut archive, i, ".modules").ok())
+        .and_then(|raw| build_id_from_modules_json(&raw))
+        .unwrap_or_default();
+    Some(ZippedPlugin { name, prefix, engine_version, build_id })
+}
+
+/// Index of an archive entry by name, compared case-insensitively (zips written
+/// on Windows are not consistent about case).
+///
+/// One unreadable entry SKIPS, it does not abort the search: giving up on the
+/// whole archive would answer "no BuildId", and "no BuildId" is how this feature
+/// says "everything is fine". A check that fails open on the first odd entry in
+/// a big zip is worse than no check, because it looks like one.
+fn zip_entry_index(archive: &mut zip::ZipArchive<std::fs::File>, wanted: &str) -> Option<usize> {
+    let wanted = wanted.to_lowercase();
+    for idx in 0..archive.len() {
+        let Ok(entry) = archive.by_index_raw(idx) else {
+            continue;
+        };
+        if entry.name().replace('\\', "/").to_lowercase() == wanted {
+            return Some(idx);
+        }
+    }
+    None
+}
+
+fn push_zipped_plugin(
+    zip_path: &Path,
+    found: &ZippedPlugin,
+    source_folder: &str,
+    out: &mut Vec<UnrealPluginSource>,
+) {
+    // Same precedence as a loose plugin: the path the user can see and fix
+    // outranks the manifest. The zip's own folder carries the version here
+    // ("Unreal Engine 5.7 Plugin"), which is exactly the visible signal.
+    let engine_version = version_from_components(zip_path)
+        .or_else(|| found.engine_version.clone())
+        .unwrap_or_default();
+    out.push(UnrealPluginSource {
+        name: found.name.clone(),
+        path: zip_path.to_string_lossy().into_owned(),
+        engine_version,
+        source_folder: source_folder.to_string(),
+        build_id: found.build_id.clone(),
+    });
+}
+
+/// `.zip` files directly in `dir`, sorted by name.
+fn sorted_zips(dir: &Path) -> Vec<PathBuf> {
+    let mut zips: Vec<PathBuf> = std::fs::read_dir(dir)
+        .map(|entries| {
+            entries
+                .flatten()
+                .filter(|e| e.file_type().map(|t| t.is_file()).unwrap_or(false))
+                .map(|e| e.path())
+                .filter(|p| p.extension().map(|e| e.eq_ignore_ascii_case("zip")).unwrap_or(false))
+                .collect()
+        })
+        .unwrap_or_default();
+    zips.sort();
+    zips
 }
 
 /// The first `.uplugin` file directly in `dir` (sorted, so a stray second one
@@ -455,8 +745,14 @@ pub(crate) struct UnrealPluginInstallRequest {
 #[tauri::command(async)]
 pub fn install_unreal_plugin(request: UnrealPluginInstallRequest) -> Result<u64, String> {
     let project_dir = uproject_dir(&request.uproject_path)?;
-    let plugin_dir = Path::new(&request.plugin_path);
-    let uplugin = uplugin_in(plugin_dir)
+    let source = Path::new(&request.plugin_path);
+    // A zipped plugin installs by EXTRACTING, not copying: what the scan
+    // offered is the archive, and what Unreal needs is its contents under
+    // `Plugins/<name>/`.
+    if source.extension().map(|e| e.eq_ignore_ascii_case("zip")).unwrap_or(false) {
+        return install_plugin_from_zip(source, &project_dir, request.overwrite);
+    }
+    let uplugin = uplugin_in(source)
         .ok_or_else(|| "Not an Unreal plugin folder (no .uplugin inside).".to_string())?;
     let name = uplugin
         .file_stem()
@@ -466,7 +762,85 @@ pub fn install_unreal_plugin(request: UnrealPluginInstallRequest) -> Result<u64,
     if dest.exists() && !request.overwrite {
         return Err(format!("Plugins/{name} already exists in this project."));
     }
-    copy_dir(plugin_dir, &dest).map(|stats| stats.files).map_err(|e| e.to_string())
+    copy_dir(source, &dest).map(|stats| stats.files).map_err(|e| e.to_string())
+}
+
+/// Extract a zipped plugin into `<project>/Plugins/<name>/`.
+///
+/// Everything under the `.uplugin`'s own folder inside the archive is written,
+/// with that prefix STRIPPED — a zip wrapping its plugin in `DazToHue/` and one
+/// holding the files at its root both land as `Plugins/DazToHue/DazToHue.uplugin`.
+/// Entries outside that prefix (a README beside the plugin folder, a
+/// `__MACOSX` sidecar) are not the plugin and are skipped.
+///
+/// Like every other install here it is copy-OVER, never delete-first: an
+/// existing folder keeps whatever the archive does not replace.
+fn install_plugin_from_zip(
+    zip_path: &Path,
+    project_dir: &Path,
+    overwrite: bool,
+) -> Result<u64, String> {
+    let found = zipped_plugin(zip_path)
+        .ok_or_else(|| "That zip holds no Unreal plugin (no .uplugin inside).".to_string())?;
+    let dest = project_dir.join("Plugins").join(&found.name);
+    if dest.exists() && !overwrite {
+        return Err(format!("Plugins/{} already exists in this project.", found.name));
+    }
+    let file = std::fs::File::open(zip_path).map_err(|e| format!("Could not open the zip: {e}"))?;
+    let mut archive =
+        zip::ZipArchive::new(file).map_err(|e| format!("Could not read the zip: {e}"))?;
+    let mut budget = crate::archive::InflateBudget::new(
+        zip_path.file_name().unwrap_or_default().to_string_lossy().into_owned(),
+        std::fs::metadata(zip_path).map(|m| m.len()).unwrap_or(0),
+    );
+    budget.check_entry_count(archive.len()).map_err(|e| e.to_string())?;
+
+    let mut written = 0u64;
+    for idx in 0..archive.len() {
+        let (name, is_dir) = {
+            let entry = archive
+                .by_index_raw(idx)
+                .map_err(|e| format!("Could not read a zip entry: {e}"))?;
+            (entry.name().replace('\\', "/"), entry.is_dir())
+        };
+        if is_dir {
+            continue;
+        }
+        let Some(rel) = name.strip_prefix(&found.prefix) else { continue };
+        let Some(safe) = safe_relative(rel) else {
+            // Zip-slip: an entry naming `..` or an absolute path would write
+            // outside the project. Skipped, never resolved.
+            continue;
+        };
+        crate::archive::extract_zip_entry(&mut archive, idx, &dest.join(safe), &mut budget)
+            .map_err(|e| format!("Could not extract {rel}: {e}"))?;
+        written += 1;
+    }
+    if written == 0 {
+        return Err("That zip holds no plugin files to install.".into());
+    }
+    Ok(written)
+}
+
+/// An archive entry name as a relative path that cannot escape its destination.
+/// Rejects absolute paths, drive letters and any `..` component outright rather
+/// than normalizing them away — a refusal is auditable, a rewrite is not.
+fn safe_relative(rel: &str) -> Option<PathBuf> {
+    let rel = rel.trim_start_matches('/');
+    if rel.is_empty() || rel.contains(':') {
+        return None;
+    }
+    let mut out = PathBuf::new();
+    for part in rel.split('/') {
+        if part.is_empty() || part == "." {
+            continue;
+        }
+        if part == ".." {
+            return None;
+        }
+        out.push(part);
+    }
+    if out.as_os_str().is_empty() { None } else { Some(out) }
 }
 
 #[cfg(test)]
@@ -474,6 +848,338 @@ mod tests {
     use super::*;
     use crate::testutil::unique_temp_dir;
     use std::fs;
+
+    /// Write a zip at `path` from `(entry name, contents)` pairs.
+    fn write_zip(path: &Path, entries: &[(&str, &str)]) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        let file = fs::File::create(path).unwrap();
+        let mut zipw = zip::ZipWriter::new(file);
+        for (name, body) in entries {
+            zipw.start_file(*name, zip::write::SimpleFileOptions::default()).unwrap();
+            std::io::Write::write_all(&mut zipw, body.as_bytes()).unwrap();
+        }
+        zipw.finish().unwrap();
+    }
+
+    const UPLUGIN: &str = r#"{"FriendlyName":"DazToHue","EngineVersion":"5.6.0"}"#;
+
+    /// Point this at a real configured plugin folder to see what the scan makes
+    /// of it — the same shape as `unreal_engine_installs_here`, and the fastest
+    /// way to check a vendor's packaging without building the app:
+    ///
+    /// ```text
+    /// DTH_PLUGIN_SCAN_DIR="X:\…\UnrealEnginePlugin" cargo test unreal_plugins_here -- --ignored --nocapture
+    /// ```
+    #[test]
+    #[ignore = "machine-dependent: scans the folder in DTH_PLUGIN_SCAN_DIR"]
+    fn unreal_plugins_here() {
+        let Ok(dir) = std::env::var("DTH_PLUGIN_SCAN_DIR") else {
+            println!("set DTH_PLUGIN_SCAN_DIR to a plugin folder");
+            return;
+        };
+        // Engine BuildIds beside the plugin ones: a label and its binaries
+        // disagreeing is exactly what this print is for.
+        for engine in all_engine_installs() {
+            println!("engine {} build {} ({})", engine.version, engine.build_id, engine.path);
+        }
+        for p in scan_unreal_plugins(vec![dir]) {
+            println!(
+                "{} [{}] build {} {}",
+                p.name,
+                if p.engine_version.is_empty() { "any" } else { &p.engine_version },
+                if p.build_id.is_empty() { "-" } else { &p.build_id },
+                p.path
+            );
+        }
+    }
+
+    /// Install a REAL vendor zip into a scratch project, to check a shipped
+    /// archive's packaging end to end:
+    ///
+    /// ```text
+    /// DTH_PLUGIN_ZIP="…\DazToHue.zip" DTH_PLUGIN_PROJECT="…\Game" cargo test unreal_plugin_zip_installs_here -- --ignored --nocapture
+    /// ```
+    #[test]
+    #[ignore = "machine-dependent: installs DTH_PLUGIN_ZIP into DTH_PLUGIN_PROJECT"]
+    fn unreal_plugin_zip_installs_here() {
+        let (Ok(zip), Ok(project)) =
+            (std::env::var("DTH_PLUGIN_ZIP"), std::env::var("DTH_PLUGIN_PROJECT"))
+        else {
+            println!("set DTH_PLUGIN_ZIP and DTH_PLUGIN_PROJECT");
+            return;
+        };
+        match install_plugin_from_zip(Path::new(&zip), Path::new(&project), true) {
+            Ok(n) => println!("installed {n} files"),
+            Err(e) => println!("FAILED: {e}"),
+        }
+    }
+
+    #[test]
+    fn build_id_comes_out_of_a_modules_manifest() {
+        assert_eq!(
+            build_id_from_modules_json(r#"{"BuildId":"47537391","Modules":{}}"#),
+            Some("47537391".into())
+        );
+        // Every "cannot tell" answers None, which the UI never renders as a
+        // mismatch — the studio must not invent an incompatibility.
+        assert_eq!(build_id_from_modules_json(r#"{"Modules":{}}"#), None);
+        assert_eq!(build_id_from_modules_json(r#"{"BuildId":""}"#), None);
+        assert_eq!(build_id_from_modules_json("not json"), None);
+    }
+
+    #[test]
+    fn an_engine_folder_reports_the_build_id_out_of_its_own_editor_modules() {
+        // The OTHER half of every comparison, and the half with nothing to
+        // catch a wrong path: `engine_build_id` answering '' means every plugin
+        // verdict is "cannot tell" and the whole feature is silently inert,
+        // exactly as it looks when it is working fine.
+        let tmp = unique_temp_dir("ueengine");
+        let engine = tmp.join("UE_5.8");
+        fs::create_dir_all(engine.join("Engine/Binaries/Win64")).unwrap();
+        fs::write(
+            engine.join("Engine/Binaries/Win64/UnrealEditor.modules"),
+            r#"{"BuildId":"55116800","Modules":{"CoreUObject":"UnrealEditor-CoreUObject.dll"}}"#,
+        )
+        .unwrap();
+        assert_eq!(engine_build_id(&engine), "55116800");
+        // An engine folder that is not there (a stale registry entry) answers
+        // '' rather than panicking — the UI flags it as missing anyway.
+        assert_eq!(engine_build_id(&tmp.join("UE_9.9")), "");
+        fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn the_launcher_manifest_yields_engines_and_not_the_plugins_beside_them() {
+        // The measured shape: the launcher lists what it installed INTO an
+        // engine at the same InstallLocation, so an unfiltered read offers the
+        // same engine three times. Only `UE_<major.minor>` is an engine.
+        let installs = launcher_installs_from_manifest(
+            r#"{"InstallationList":[
+                {"AppName":"UE_5.8","InstallLocation":"D:\\Epic\\UE_5.8\\"},
+                {"AppName":"QuixelBridge_5.8","InstallLocation":"D:\\Epic\\UE_5.8"},
+                {"AppName":"FabPlugin_5.8","InstallLocation":"D:\\Epic\\UE_5.8"},
+                {"AppName":"UE_5.6","InstallLocation":"C:\\Epic\\UE_5.6"},
+                {"AppName":"UE_5.9.1","InstallLocation":"C:\\Epic\\UE_5.9.1"},
+                {"AppName":"UE_5.7","InstallLocation":""}
+            ]}"#,
+        );
+        let seen: Vec<(String, String)> =
+            installs.iter().map(|e| (e.version.clone(), e.path.clone())).collect();
+        assert_eq!(
+            seen,
+            vec![
+                ("5.8".to_string(), r"D:\Epic\UE_5.8".to_string()),
+                ("5.6".to_string(), r"C:\Epic\UE_5.6".to_string()),
+            ],
+            "engines only, trailing separator trimmed, a pathless entry dropped, \
+             and a three-part version SKIPPED rather than guessed down to 5.9 — \
+             `is_engine_version` is major.minor, the same rule the registry read \
+             applies, and inventing a version here would offer an engine a \
+             `.uproject` can never associate with"
+        );
+        // Nothing readable at all is empty, never a panic.
+        assert!(launcher_installs_from_manifest("not json").is_empty());
+        assert!(launcher_installs_from_manifest("{}").is_empty());
+    }
+
+    #[test]
+    fn the_merge_adds_what_the_registry_missed_and_replaces_what_it_got_wrong() {
+        let reg = |v: &str, p: &str| UnrealEngineInstall {
+            version: v.to_string(),
+            path: p.to_string(),
+            build_id: String::new(),
+        };
+        let merged = merge_engine_installs(
+            vec![reg("5.7", r"D:\live\UE_5.7"), reg("5.6", r"D:\gone\UE_5.6")],
+            vec![
+                // Same version, and the registry's folder is really there — the
+                // registry wins, because that is what UnrealVersionSelector uses.
+                reg("5.7", r"D:\other\UE_5.7"),
+                // Same version, but the registry points at a folder that is gone
+                // (a reinstall elsewhere) — the live path must win, or the studio
+                // offers a dead engine and hides the real one.
+                reg("5.6", r"D:\moved\UE_5.6"),
+                // The measured case this merge exists for: installed, no key.
+                reg("5.8", r"D:\live\UE_5.8"),
+            ],
+            |p| p.starts_with(r"D:\live") || p.starts_with(r"D:\moved"),
+        );
+        let seen: Vec<(&str, &str)> =
+            merged.iter().map(|e| (e.version.as_str(), e.path.as_str())).collect();
+        assert_eq!(
+            seen,
+            vec![
+                ("5.7", r"D:\live\UE_5.7"),
+                ("5.6", r"D:\moved\UE_5.6"),
+                ("5.8", r"D:\live\UE_5.8"),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_plugin_folder_reports_the_build_its_binaries_were_made_for() {
+        let tmp = unique_temp_dir("uebuild");
+        let plugin = tmp.join("MyPlugin");
+        fs::create_dir_all(plugin.join("Binaries/Win64")).unwrap();
+        fs::write(plugin.join("MyPlugin.uplugin"), "{}").unwrap();
+        fs::write(
+            plugin.join("Binaries/Win64/UnrealEditor.modules"),
+            r#"{"BuildId":"55116800"}"#,
+        )
+        .unwrap();
+        let found = scan_unreal_plugins(vec![plugin.to_string_lossy().into_owned()]);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].build_id, "55116800");
+        fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn a_plugin_with_no_binaries_reports_no_build_id() {
+        // Content-only or source-only: nothing to mismatch, and '' is how the
+        // matcher is told to stay quiet.
+        let tmp = unique_temp_dir("uebuild");
+        let plugin = tmp.join("ContentOnly");
+        fs::create_dir_all(&plugin).unwrap();
+        fs::write(plugin.join("ContentOnly.uplugin"), "{}").unwrap();
+        let found = scan_unreal_plugins(vec![plugin.to_string_lossy().into_owned()]);
+        // Asserted before indexing: an empty scan would otherwise fail this as
+        // an index panic, which reads as a broken test rather than a broken scan.
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].build_id, "");
+        fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn a_zipped_plugin_reports_its_build_id_without_extracting() {
+        // The measured case this whole field exists for: the folder says 5.7,
+        // the archived binaries say otherwise — and it is answerable from the
+        // archive's directory, before anything is written to disk.
+        let tmp = unique_temp_dir("uezipbuild");
+        let zip_path = tmp.join("Unreal Engine 5.7 Plugin").join("DazToHue.zip");
+        write_zip(
+            &zip_path,
+            &[
+                ("DazToHue/DazToHue.uplugin", UPLUGIN),
+                ("DazToHue/Binaries/Win64/UnrealEditor.modules", r#"{"BuildId":"55116800"}"#),
+            ],
+        );
+        let found = scan_unreal_plugins(vec![tmp.to_string_lossy().into_owned()]);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].engine_version, "5.7", "the folder label still wins for the version");
+        assert_eq!(found[0].build_id, "55116800", "…and the binaries tell the truth");
+        fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn a_zipped_plugin_is_found_with_its_name_prefix_and_version() {
+        let tmp = unique_temp_dir("uezip");
+        let zip_path = tmp.join("DazToHue.zip");
+        write_zip(
+            &zip_path,
+            &[("DazToHue/DazToHue.uplugin", UPLUGIN), ("DazToHue/Content/x.uasset", "data")],
+        );
+        let found = zipped_plugin(&zip_path).expect("plugin in zip");
+        assert_eq!(found.name, "DazToHue");
+        // The wrapping folder is the prefix the install strips.
+        assert_eq!(found.prefix, "DazToHue/");
+        assert_eq!(found.engine_version.as_deref(), Some("5.6"));
+        fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn a_zip_with_the_plugin_at_its_root_has_no_prefix() {
+        let tmp = unique_temp_dir("uezip");
+        let zip_path = tmp.join("Flat.zip");
+        write_zip(&zip_path, &[("Flat.uplugin", UPLUGIN), ("Content/y.uasset", "data")]);
+        let found = zipped_plugin(&zip_path).expect("plugin in zip");
+        assert_eq!(found.name, "Flat");
+        assert_eq!(found.prefix, "");
+        fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn the_shallowest_uplugin_wins_over_one_vendored_inside_it() {
+        let tmp = unique_temp_dir("uezip");
+        let zip_path = tmp.join("Outer.zip");
+        write_zip(
+            &zip_path,
+            &[
+                ("Outer/Content/Vendored/Inner.uplugin", UPLUGIN),
+                ("Outer/Outer.uplugin", UPLUGIN),
+            ],
+        );
+        assert_eq!(zipped_plugin(&zip_path).unwrap().name, "Outer");
+        fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn a_zip_without_a_uplugin_is_not_a_plugin() {
+        let tmp = unique_temp_dir("uezip");
+        let zip_path = tmp.join("NotAPlugin.zip");
+        write_zip(&zip_path, &[("readme.txt", "hello")]);
+        assert!(zipped_plugin(&zip_path).is_none());
+        fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn the_scan_reports_a_zipped_plugin_with_the_version_from_its_folder() {
+        // The shape that prompted this: one zip in a versioned folder, no
+        // loose `.uplugin` anywhere. The FOLDER names the engine (5.7), which
+        // outranks the manifest's own 5.6 — same precedence as a loose plugin.
+        let tmp = unique_temp_dir("uescan");
+        let root = tmp.join("UnrealEnginePlugin");
+        write_zip(&root.join("Unreal Engine 5.7 Plugin").join("DazToHue.zip"), &[(
+            "DazToHue/DazToHue.uplugin",
+            UPLUGIN,
+        )]);
+        let found = scan_unreal_plugins(vec![root.to_string_lossy().into_owned()]);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].name, "DazToHue");
+        assert_eq!(found[0].engine_version, "5.7");
+        assert!(found[0].path.ends_with("DazToHue.zip"));
+        fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn installing_a_zipped_plugin_strips_the_wrapping_folder() {
+        let tmp = unique_temp_dir("ueinstall");
+        let zip_path = tmp.join("DazToHue.zip");
+        write_zip(
+            &zip_path,
+            &[
+                ("DazToHue/DazToHue.uplugin", UPLUGIN),
+                ("DazToHue/Content/x.uasset", "data"),
+                // Beside the plugin folder, so not part of the plugin.
+                ("readme.txt", "ignored"),
+            ],
+        );
+        let project = tmp.join("Game");
+        fs::create_dir_all(&project).unwrap();
+        let written = install_plugin_from_zip(&zip_path, &project, false).unwrap();
+        assert_eq!(written, 2);
+        assert!(project.join("Plugins/DazToHue/DazToHue.uplugin").is_file());
+        assert!(project.join("Plugins/DazToHue/Content/x.uasset").is_file());
+        assert!(!project.join("Plugins/DazToHue/readme.txt").exists());
+
+        // Second install without overwrite is refused, not silently merged.
+        assert!(install_plugin_from_zip(&zip_path, &project, false).is_err());
+        assert!(install_plugin_from_zip(&zip_path, &project, true).is_ok());
+        fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn a_zip_entry_cannot_escape_the_plugin_folder() {
+        assert_eq!(safe_relative("Content/x.uasset"), Some(PathBuf::from("Content/x.uasset")));
+        assert_eq!(safe_relative("./Content/x"), Some(PathBuf::from("Content/x")));
+        // Zip-slip shapes: refused outright rather than normalized away.
+        assert_eq!(safe_relative("../evil.txt"), None);
+        assert_eq!(safe_relative("Content/../../evil.txt"), None);
+        assert_eq!(safe_relative("C:/evil.txt"), None);
+        assert_eq!(safe_relative("/abs.txt"), Some(PathBuf::from("abs.txt")));
+        assert_eq!(safe_relative(""), None);
+    }
 
     #[test]
     fn engine_version_accepts_major_minor_and_nothing_else() {

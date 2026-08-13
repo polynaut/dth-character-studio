@@ -112,7 +112,7 @@ scattering per scene.
 Ita/                            ← $JOB (Set Project), baked into every scene
 ├─ daz3d/                       ← your Daz scenes
 └─ houdini/                     ← $HIP, and the shared project folder
-   ├─ PlaygroundAssets_Ita.hiplc   ← the generated scene (imports daz-export/…)
+   ├─ Ita.hiplc                    ← the generated scene (imports daz-export/…)
    ├─ daz-export/                  ← what the DTH Exporter wrote, per scene
    └─ render/ geo/ backup/         ← Houdini's own output, shared by every scene here
 ```

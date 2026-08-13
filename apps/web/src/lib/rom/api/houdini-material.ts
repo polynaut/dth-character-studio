@@ -625,6 +625,22 @@ export async function rememberHoudiniSource({ data }: { data: unknown }): Promis
 }
 
 /**
+ * Drop a `.hip` from the shortcut row.
+ *
+ * The row fills itself from every source ever picked — including the one-off
+ * look — so it needs a way out. Deliberately NOT a file operation: the entry is
+ * a remembered path and nothing else, the `.hip` is untouched, and picking it
+ * again puts it back at the top. This one DOES surface its failure, unlike
+ * `rememberHoudiniSource`: the user asked for it, so a silent no-op would read
+ * as a broken button.
+ */
+export async function forgetHoudiniSource({ data }: { data: unknown }): Promise<void> {
+  const { hipPath } = rememberSourceInput.parse(data)
+  if (!isTauri()) return
+  await storage.forgetHoudiniSource(hipPath)
+}
+
+/**
  * The character's projects as the store has them — no hython, no waiting.
  *
  * This is what the Utils drawer opens on: it reads what the background sweep

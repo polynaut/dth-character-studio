@@ -587,7 +587,6 @@ function CharacterPage({ onImportRemount }: { onImportRemount: () => void }) {
                     persistPatch={draft.persistPatch}
                     houdiniSubdir={project?.houdiniSubdir ?? 'houdini'}
                     projectId={projectId}
-                    projectName={project?.name ?? ''}
                   />
                   {/* Directly under the Houdini projects, because what it sends
                       is what they export — and it renders nothing at all until

@@ -133,6 +133,11 @@ export const houdiniInstallSchema = z.object({
 export const unrealEngineInstallSchema = z.object({
   version: z.string(),
   path: z.string(),
+  /** The engine's own `BuildId`, from `Engine/Binaries/Win64/UnrealEditor.modules`.
+   *  A prebuilt plugin's binaries must carry the SAME id or the editor refuses
+   *  to load them; `''` = the studio could not read it, which is never treated
+   *  as a mismatch. */
+  buildId: z.string().default(''),
 })
 
 /** One plugin build `scan_unreal_plugins` found under a configured source
@@ -145,6 +150,10 @@ export const unrealPluginSourceSchema = z.object({
   path: z.string(),
   engineVersion: z.string(),
   sourceFolder: z.string(),
+  /** The `BuildId` this build's binaries were compiled against, `''` for a
+   *  plugin with no binaries. Checked against the target engine's — a folder
+   *  NAME saying `5.7` is a label, this is the engine's own identity check. */
+  buildId: z.string().default(''),
 })
 
 /** What a linked `.uproject` is and already carries (mirrors Rust

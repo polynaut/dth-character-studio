@@ -1283,6 +1283,48 @@ current code before relying on details, but assume the *lesson* still holds.
   `lib/unreal-install.ts`); that one is a `while (s.endsWith('_'))` loop now.
   A *global, unanchored* replace (`/_+/g`, `/[^A-Za-z0-9_]+/g`) is fine — every
   match consumes, so there is nothing to backtrack.
+- **Unreal decides a plugin fits by `BuildId` EQUALITY, not by any version
+  label.** Measured 2026-08-12. The engine carries one in
+  `Engine/Binaries/Win64/UnrealEditor.modules`, every built plugin in
+  `Binaries/Win64/UnrealEditor.modules`, and *"The following modules are missing
+  or built with a different engine version"* IS that comparison failing. A
+  folder name (`Unreal Engine 5.7 Plugin`), a path segment, a `.uplugin`'s
+  `EngineVersion` — all labels, and a folder like
+  `KawaiiPhysics_5_7_1_v1.19.1` writes its version with underscores, so it
+  parses as *no version at all* and matches every project including one it
+  cannot load in. `pluginBuildMismatch` (`lib/unreal-install.ts`) is the check;
+  either side reading `''` means "cannot tell" and must NEVER render as a
+  mismatch — a false alarm costs the user a plugin that would have worked.
+  **And the BuildId must PICK, not only warn.** `matchPluginsToEngine` offers
+  ONE build per plugin name (the install target is `Plugins/<name>`), and its
+  tie-break knew labels only — so with `KawaiiPhysics_5_7_1_…` and
+  `KawaiiPhysics_5_8_…` side by side, both reading as `any engine`, the
+  alphabetically first was offered to a 5.8 project, marked unloadable, and the
+  build that WOULD have loaded was dropped from the list entirely. `buildRank`
+  now orders them: proven match > exact version label > any-engine > proven
+  mismatch. Ranking is NOT filtering — a lone mismatching build is still listed
+  and marked, because an empty checklist explains nothing.
+- **`HKLM\SOFTWARE\EpicGames\Unreal Engine` can be MISSING an installed
+  engine.** Measured 2026-08-12: a machine with 5.6, 5.7 and 5.8 installed had
+  no 5.8 key, so the studio never offered it, a project was generated for 5.7,
+  and 5.8 opened and rebound it — every 5.7-built plugin then unloadable.
+  Second source: `%PROGRAMDATA%\Epic\UnrealEngineLauncher\LauncherInstalled.dat`
+  (`merge_engine_installs`, unreal_install.rs). Two traps in it: only
+  `UE_<major.minor>` entries are ENGINES — `QuixelBridge_5.8`, `FabPlugin_5.7`
+  and friends are plugins installed INTO one and carry the same
+  `InstallLocation`, so an unfiltered read offers the same engine several times;
+  and the registry is preferred per version but must YIELD when its folder is
+  gone, since "present but pointing nowhere" is the same staleness (an
+  uninstalled 4.0 keeping its key is measured on this repo's own dev machine).
+- **A mapper that names its fields silently drops the next one added.**
+  `buildUnrealScan` rebuilt each engine field by field, so `buildId` — read in
+  Rust, parsed by the zod schema, typed all the way down — never reached the
+  dialog, and the whole plugin-build check answered "cannot tell" in the real
+  app while every test passed. Nothing covered it because the dialog tests mock
+  `detectUnrealEngines` and the pure tests call the matcher directly. Two
+  lessons: **spread in a mapper** whose input is a wire type, and when a feature
+  reads a NEW native field, cover the schema→transform→consumer path once, not
+  just the leaf function.
 - **An NTFS junction stores an ABSOLUTE target — anything that moves the
   target leaves the junction pointing at the old path**, silently (Windows
   happily keeps a dangling reparse point, and re-creating the old folder makes
