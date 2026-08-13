@@ -205,8 +205,9 @@ export function HoudiniProjectsField({
   // hand-linked ones stay unlink-only like before.
   const [keepFiles, setKeepFiles] = useState(true)
 
-  // The Houdini project whose Utils drawer is open ('' = closed). The path also
-  // seeds the drawer's target preselection.
+  // The Houdini project whose Utils drawer is open ('' = closed). The path is
+  // the drawer's whole SCOPE, not just a preselection: utils are per project,
+  // so everything in there acts on this `.hip` alone.
   const [utilsFor, setUtilsFor] = useState('')
 
   // A project pending the unlink confirm. Houdini projects are only ever linked

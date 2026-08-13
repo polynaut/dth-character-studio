@@ -36,9 +36,10 @@ hand.
   <sub><em>The Utils drawer: this project's nodes as targets, a browsed project as the source, and what travels.</em></sub>
 </p>
 
-- **Target** — this character's linked Houdini projects, with every DazToHue
-  material node found in each. Tick as many as you want; the card you opened
-  Utils from starts selected.
+- **Target** — the DazToHue material nodes in **this** project, the one whose
+  card you opened Utils from. Tick the ones that should receive the copy;
+  nothing is ticked for you, because this writes to the project. To copy into a
+  different project, open that card's Utils.
 
   **Network boxes are picked up if you use them.** Once a project holds more
   than one DTH network, the usual way to keep them apart is to wrap each in a
@@ -193,9 +194,9 @@ Only paths **under** your Daz library are rewritten. A texture living somewhere
 else can't be made portable, so it stays absolute and the report lists it — the
 copy is only as movable as those paths.
 
-Every project the transfer writes is saved once. **Close the target projects in
-Houdini first** — Houdini writes the entire scene when you save, so an open copy
-would overwrite the transfer.
+The transfer saves the target project once — the source is only read. **Close
+that project in Houdini first** — Houdini writes the entire scene when you save,
+so an open copy would overwrite the transfer.
 
 > **Every run that writes takes a backup first**, and you never have to think
 > about it: one rolling `backup/<name>_dthbak.hiplc` beside Houdini's own,
@@ -374,12 +375,11 @@ same step [Generate project](./06-into-houdini.md#generate-the-houdini-project-a
 takes). It is skipped when the export files aren't on disk yet: there is nothing
 to load.
 
-**Repair project settings** is enabled only when at least one project actually
-differs, and it touches only those — a project already on the right folder *and*
-the right timeline is listed and left alone, so running it twice rewrites nothing
-the second time. The two values are judged separately: a project whose `$JOB` is
-fine and whose timeline is 24 gets its timeline written and nothing else, and the
-report says which of them moved. It offers the same **Dry run** as the transfer,
+**Repair project settings** is enabled only when the project actually differs —
+one already on the right folder *and* the right timeline leaves the button dead,
+so running it twice rewrites nothing the second time. The two values are judged
+separately: a project whose `$JOB` is fine and whose timeline is 24 gets its
+timeline written and nothing else, and the report says which of them moved. It offers the same **Dry run** as the transfer,
 and the same backup before saving. A value the scan couldn't read is never
 repaired: it is *unknown*, not wrong.
 
@@ -414,12 +414,11 @@ installed for the Houdini version the studio is pointed at.
 
 Like [Generate project](./06-into-houdini.md#generate-the-houdini-project-automatically),
 this runs Houdini's `hython`, so it needs the **Houdini installation folder**
-and its matching documents folder in Settings. The drawer scans when it opens
-and after a run, and a project is only re-read when something it depends on
-changed — so coming back to projects nobody touched costs nothing. Reading a
-`.hip` the first time takes a few seconds; a transfer rewrites its targets, so
-exactly those are read again and their neighbours aren't. One scan serves all
-three tabs — the `$JOB` and `$HIP` values are read in the same pass as the
+and its matching documents folder in Settings. The drawer scans the one project
+it was opened on — when it opens and again after a run — and only when something
+that project depends on changed, so coming back to one nobody touched costs
+nothing. Reading a `.hip` the first time takes a few seconds; a transfer
+rewrites it, so it is read once more afterwards. One scan serves all three tabs — the `$JOB` and `$HIP` values are read in the same pass as the
 nodes — so switching between General, Material and Skeleton is instant.
 
 **Installing a new DazToHue invalidates it.** What the scan remembers depends on
@@ -429,9 +428,9 @@ project that depended on it. Without that, a verdict phrased in the *old*
 release's vocabulary outlives the install that replaced it: a freshly installed
 DazToHue would keep being reported as the one it replaced.
 
-**Rescan re-reads everything.** The button bypasses the cache and reads every
-project with hython again, then reports how many it read — so a verdict you
-believe is wrong has a way out. (It used to be served by that same cache, which
+**Rescan re-reads the project.** The button bypasses the cache and opens the
+`.hip` with hython again, then says so — so a verdict you believe is wrong has a
+way out. (It used to be served by that same cache, which
 on a project that looked fresh made it indistinguishable from a dead button.)
 
 &nbsp;

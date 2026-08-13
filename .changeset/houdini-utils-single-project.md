@@ -28,3 +28,9 @@ Two side effects worth knowing:
 - Copying one source setup into several projects in a single run is gone. It was
   only reachable by ticking targets across projects in a drawer opened from one
   of them — do it per project instead.
+
+The guide and the drawer's own tooltips have been corrected along with it: the
+**Target** list never actually pre-ticked anything (the drawer opens on General,
+and moving to a transfer tab clears the selection), so the guide no longer says
+it does — tick the nodes that should receive the copy, which is also the right
+default for something that writes to a `.hip`.

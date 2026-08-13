@@ -320,10 +320,15 @@ Three consequences worth knowing before touching this:
   button is on the card, not the section header), so `targets` is `[targetHip]`
   and not `character.houdiniProjects`. Everything downstream reads `targetScan`,
   so narrowing that input scopes the whole drawer: one project's checks, nodes
-  and repairs. Two traps: `fetchCachedHoudiniScans` answers for the character's
+  and repairs. Three traps: `fetchCachedHoudiniScans` answers for the character's
   WHOLE set, so its result must be filtered to the target before it is shown, or
-  the cache puts the other projects back on screen; and the transfer SOURCE stays
-  cross-project on purpose — copying a setup means copying it from somewhere else.
+  the cache puts the other projects back on screen; the transfer SOURCE stays
+  cross-project on purpose — copying a setup means copying it from somewhere else;
+  and **narrowing the data does not narrow the PROSE**. The tab's tooltips, empty
+  states and the guide were all written for a set ("on every project the scan
+  could open", "No Houdini projects linked to this character"), and each one
+  survives the code change as a confident false statement — the strings are part
+  of the scope, not decoration on it.
 - **The drawer reads the store** (`fetchCachedHoudiniScans`) **and scans only
   what it doesn't cover** — an outside-folder link (never swept), a `.hip` saved
   since the last sweep — so a partial cache never hides the project's nodes or
