@@ -28,10 +28,19 @@ was verified clean after every one.
 | smoke `unhandled == []` | disabled `scan_files_by_ext` in the mock | ✅ 5 specs fail |
 | `changeset` status | code change, no changeset | ✅ exit 1 |
 | `changeset` require-real | code change + an EMPTY changeset | ✅ exit 1 (the interesting one — empty does not buy off shipped code) |
-| `changeset` bump-type | comment-only change | ⚪ exit 0, correctly: no capability signal. **Not exercised** — a real capability-adding probe would be needed to prove this one. |
+| `changeset` bump-type | new route file + a patch-only changeset | ✅ exit 1, naming the signal |
+| `changeset` bump-type escape hatch | the same, plus `# bump:` in the frontmatter | ✅ exit 0, *"patch is marked deliberate — accepted"* |
 | `lint:budget` | — | ❌ **was inert**; fixed, see `scripts/lint-budget.mjs` |
 
-Nine gates verified to fail when they should. One was rotten. One is untested.
+Ten gates verified to fail when they should. One was rotten.
+
+The bump-type probe is worth keeping in mind if you ever touch that script: a
+comment-only change answers *"no new-capability signals"* and exits 0, which
+looks like a pass and proves nothing. Only a probe carrying a real signal — a
+new `apps/web/src/routes/*.tsx`, a new value export from the api barrel, or a
+new `#[tauri::command]` — exercises it. That is the general trap in auditing
+gates: an input the gate is INDIFFERENT to produces the same green as an input
+it approves.
 
 **Two rules out of it.** When you add a gate, prove it FAILS before trusting it —
 "it passed" is not evidence a gate works, it is the only output a broken gate can
