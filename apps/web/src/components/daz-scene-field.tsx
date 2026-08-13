@@ -183,6 +183,12 @@ function SceneCard({
  * "Open and Generate ROM Animation" then sits under it: shown when the file is
  * missing or stale, and on Ctrl (force a rebuild of a current one — the save
  * overwrites). Closes on outside click / Escape.
+ *
+ * `generating` disables BOTH rom rows, not just the rebuild: a build in flight
+ * OVERWRITES the very file the open row points at, and opening it would hand
+ * the running Daz an `open-scene` job mid-build. The menu closes on the click
+ * that starts a build, so this is the reopened-menu case — reachable, and now
+ * reachable for a STALE animation too, which is the common one.
  */
 function SceneOpenMenu({
   onOpenScene,
@@ -239,10 +245,13 @@ function SceneOpenMenu({
         <button
           type="button"
           className={item}
+          disabled={generating}
           title={
-            romStale
-              ? 'Opens the ROM animation saved by an earlier run — it was not built from the current definition'
-              : 'Opens the saved ROM animation — the built ROM, without the rebuild'
+            generating
+              ? 'A rebuild is running — it overwrites this file, so it opens once the build is done'
+              : romStale
+                ? 'Opens the ROM animation saved by an earlier run — it was not built from the current definition'
+                : 'Opens the saved ROM animation — the built ROM, without the rebuild'
           }
           onClick={onOpenRom}
         >
@@ -402,19 +411,29 @@ export function DazSceneField({
   const scenesRootRel = deriveScenesRootRel(primaryDirRel, defaultSubdir)
   const baseDazRel = scenesRootRel || defaultSubdir
 
-  // ── Open-in-Daz dropdown: Original vs ROM animation ─────────────────────
-  // The card's open button shows a two-entry menu (Alt+click keeps the direct
-  // Explorer reveal). The second entry opens the scene's saved
-  // `rom-animations/<stem>_ROM.duf` when it exists AND was built from the
-  // current inputs (`fetchRomAnimations` — file mtimes, no stamps, so a focus
-  // re-read always tells the truth); Ctrl forces a rebuild. Otherwise it reads
-  // "Open and Generate ROM Animation": a one-row Runner batch on the hidden
-  // ROM-only script, then the fresh file opens by itself.
+  // ── Open-in-Daz dropdown: the scene vs its saved ROM animation ──────────
+  // The card's open button shows a menu (Alt+click keeps the direct Explorer
+  // reveal): "Open scene", the scene's saved `rom-animations/<stem>_ROM.duf`
+  // WHENEVER THAT FILE EXISTS (marked when it predates the current definition —
+  // see SceneOpenMenu for why that is not a reason to hide it), and "Open and
+  // Generate ROM Animation" when there is none, the saved one is stale, or Ctrl
+  // is held: a one-row Runner batch on the hidden ROM-only script, then the
+  // fresh file opens by itself.
+  //
+  // Both facts come from `fetchRomAnimations` — file mtimes, no stamps, so a
+  // focus re-read always tells the truth.
   const [menuFor, setMenuFor] = useState<string | null>(null)
   const [romReadySet, setRomReadySet] = useState<ReadonlySet<string>>(new Set())
-  /** Scenes with a saved ROM animation ON DISK, current or not — the open entry
-   *  follows this, the rebuild entry follows `romReadySet`. */
+  /** Scenes with a saved ROM animation ON DISK, current or not — `romReadySet`
+   *  is the subset built from what the character says now. */
   const [romExistsSet, setRomExistsSet] = useState<ReadonlySet<string>>(new Set())
+  /** The two menu facts for one scene, derived in ONE place: the primary card
+   *  and every extra render the same menu, so a hand-written expression per
+   *  card is how they drift apart. */
+  function romMenuState(scene: string): { exists: boolean; stale: boolean } {
+    const exists = romExistsSet.has(scene)
+    return { exists, stale: exists && !romReadySet.has(scene) }
+  }
   const [generatingRom, setGeneratingRom] = useState('')
   // onGenerateRom's poll can run for up to 30 minutes — without a cancellation
   // flag it outlives this component and auto-opens the ROM scene in Daz long
@@ -1312,11 +1331,8 @@ export function DazSceneField({
                         void onOpen(romAnimationPath(character.scenePath))
                       }}
                       onGenerateRom={() => void onGenerateRom(character.scenePath)}
-                      romExists={romExistsSet.has(character.scenePath)}
-                      romStale={
-                        romExistsSet.has(character.scenePath) &&
-                        !romReadySet.has(character.scenePath)
-                      }
+                      romExists={romMenuState(character.scenePath).exists}
+                      romStale={romMenuState(character.scenePath).stale}
                       forceGenerate={ctrlHeld}
                       generating={generatingRom === character.scenePath}
                       onClose={() => setMenuFor(null)}
@@ -1356,8 +1372,8 @@ export function DazSceneField({
                         void onOpen(romAnimationPath(scene))
                       }}
                       onGenerateRom={() => void onGenerateRom(scene)}
-                      romExists={romExistsSet.has(scene)}
-                      romStale={romExistsSet.has(scene) && !romReadySet.has(scene)}
+                      romExists={romMenuState(scene).exists}
+                      romStale={romMenuState(scene).stale}
                       forceGenerate={ctrlHeld}
                       generating={generatingRom === scene}
                       onClose={() => setMenuFor(null)}

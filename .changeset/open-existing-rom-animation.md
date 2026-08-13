@@ -22,3 +22,8 @@ one, or Ctrl held to force a fresh build of a current one.
 
 **Open Original** is now **Open scene** — it opens the scene, and "original"
 only meant anything next to the entry it used to replace.
+
+While a rebuild is running, the open entry is disabled rather than merely the
+rebuild: the build overwrites the very file that entry points at, and opening it
+would hand the running Daz a scene switch mid-build. It comes back by itself
+when the freshly built animation opens.

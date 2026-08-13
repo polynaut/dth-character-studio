@@ -958,10 +958,16 @@ the interrupt is a **flag file** that the code the studio DOES own polls.
   export — every ROM-building script (ROM_, .Bulk_ROM_Export) saves the scene
   as `<stem>_ROM.duf` into `<sceneDir>/rom-animations/`, so the built ROM
   animation reopens without a rebuild. Bounded: fixed name, overwritten per
-  run. `romAnimationPath` (dsa.ts) is THE rule, shared by generation and the
+  run. `romAnimationPath` (**rom-animation.ts**, re-exported by dsa.ts) is THE
+  rule, shared by generation and the
   host, and both read `ROM_ANIMATIONS_FOLDER` — the folder name is ONE constant
   now, because a drift between the emitted `.dsa` and the host's path means the
-  studio stats a file Daz never wrote. Renamed from the hidden
+  studio stats a file Daz never wrote. It lives in an import-FREE leaf module so
+  node-side tooling can reach it: dsa.ts pulls in csv.ts's Vite `?raw` template
+  imports, which Playwright's loader cannot resolve, and a smoke fixture that
+  restated the rule instead would seed the saved animation where the app does
+  not stat it — reading as "no saved ROM animation", a confusing failure a long
+  way from its cause. Renamed from the hidden
   `.ROM_Animations` in **runtime v48** (it holds scenes the user OPENS, so
   hiding it was wrong; the name matches the other studio folders, `daz-export`).
   `migrateRomAnimationFolders` (api/generate.ts) renames an existing one beside
@@ -972,6 +978,19 @@ the interrupt is a **flag file** that the code the studio DOES own polls.
   reads the `dthOpenSceneFile` capture (`openSceneFileSnippet`, emitted once
   per carrier) instead of the live filename; a new scene-keyed snippet must do
   the same.
+- **A saved ROM animation's "current" is far stricter than it reads.**
+  `fetchRomAnimations` (api/execute.ts) derives it from FILES alone — no stamps,
+  so a focus re-read always tells the truth — as `romMtime >= sceneMtime &&
+  romMtime >= scriptMtime`, where the script is the character's generated
+  `.Build_ROM_Animation.dsa`. **Every character save rewrites that script**, so
+  editing anything at all stales every saved animation of that character at
+  once. Consequence, and the rule for any new consumer: `current` may gate
+  whether a REBUILD is worth offering, never whether the saved animation may be
+  used. Treating it as "is this file any good?" cost the scene card's open menu
+  exactly that — a primary scene whose ROM was built and exported offered only
+  to build it again (a Daz run of many minutes) with the file sitting there.
+  `exists` is the separate field for "there is one", and it is the one that
+  decides whether an action is offered at all.
 - **DTH Export runs in one of three Daz MODES** (the dialog's first step; the
   `ExportMode` union in `execute-jobs.ts` owns the mapping):
   `rom-export` → `.Bulk_ROM_Export.dsa` on the source scene (fresh ROM, saved

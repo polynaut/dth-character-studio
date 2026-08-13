@@ -3,6 +3,14 @@ import { expect, test } from '@playwright/test'
 import { P, buildSeed } from './fixtures.ts'
 import { installTauriMock } from './tauri-mock.ts'
 
+// The path rule itself, not a copy of it — this seed has to land exactly where
+// the app stats, and both the folder name and the `_ROM` suffix have moved
+// before (the folder was the hidden `.ROM_Animations` until runtime v48). Taken
+// from the import-FREE leaf module that exists for this: dsa.ts, which
+// re-exports it, drags in csv.ts's Vite `?raw` templates that Playwright's
+// node-side loader cannot resolve.
+import { romAnimationPath } from '../../../packages/rom/src/rom-animation.ts'
+
 import type { Page } from '@playwright/test'
 
 // A scene card's open menu, and the one thing it used to refuse: opening a
@@ -17,9 +25,8 @@ import type { Page } from '@playwright/test'
 // "not from the current definition", which is the user's call.
 
 const DS4 = 'C:/Program Files/DAZ 3D/DAZStudio4'
-/** Where the primary scene's saved ROM animation lives — the rule in
- *  `romAnimationPath`: `<dir>/rom-animations/<stem>_ROM.duf`. */
-const ROM = `${P.charFolder}/daz3d/rom-animations/KiraDefault_G9_GP_ROM.duf`
+/** Where the primary scene's saved ROM animation lives. */
+const ROM = romAnimationPath(P.scene)
 
 const callsNamed = (page: Page, cmd: string) =>
   page.evaluate(
@@ -76,7 +83,28 @@ test('a CURRENT one opens without offering a pointless rebuild', async ({ page }
     'From an earlier run',
   )
   // Nothing to refresh, so the multi-minute Daz run is not offered (Ctrl still
-  // reveals it — a forced rebuild is a deliberate act).
+  // reveals it — the test below).
+  await expect(page.getByRole('button', { name: /Open and Generate ROM Animation/ })).toHaveCount(0)
+})
+
+test('Ctrl adds a rebuild of a CURRENT one — it no longer takes the open entry away', async ({
+  page,
+}) => {
+  await openCharacter(page, { stale: false })
+  await expect(page.getByRole('button', { name: /Open ROM Animation/ })).toBeVisible()
+
+  // Ctrl used to REPLACE the open entry (`romReady = has && !ctrlHeld`), so a
+  // forced rebuild cost the ability to open what was already built. It only
+  // ADDS now: forcing a rebuild and opening the current file are two offers,
+  // not a choice between them.
+  await page.keyboard.down('Control')
+  try {
+    await expect(page.getByRole('button', { name: /Open and Generate ROM Animation/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Open ROM Animation/ })).toBeVisible()
+  } finally {
+    await page.keyboard.up('Control')
+  }
+  // …and releasing it puts the menu back — the rebuild is offered only while held.
   await expect(page.getByRole('button', { name: /Open and Generate ROM Animation/ })).toHaveCount(0)
 })
 
