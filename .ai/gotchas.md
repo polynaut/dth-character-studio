@@ -1342,6 +1342,17 @@ current code before relying on details, but assume the *lesson* still holds.
   thin the label evidence is throughout — the BuildIds of these two zips
   (47537391 / 55116800) matched 5.7 and 5.8 exactly, so the binaries knew all
   along what the name got wrong.
+- **A path-keyed cache is orphaned by a RENAME, and every reader then answers
+  "never scanned".** Measured 2026-08-13, right after editable project names
+  shipped: renaming a `.hip` left its scan entry under the old path, so the DTH
+  Export dialog stopped pre-selecting Unreal projects — it no longer knew which
+  export sets those projects write — and the only cure was a Rescan the user had
+  no reason to suspect. `renameScanEntry` (houdini-project-cache.ts) moves the
+  entry: map key, the freshness key's first segment, and the project's own
+  `hipPath`. Re-keying is honest ONLY because a rename touches neither mtime nor
+  contents, so every other part of the verdict is still true — re-dating an
+  entry would not be. The lesson generalises past this cache: anything keyed by
+  path needs a hand-off wherever the studio itself moves a file.
 - **`HKLM\SOFTWARE\EpicGames\Unreal Engine` can be MISSING an installed
   engine.** Measured 2026-08-12: a machine with 5.6, 5.7 and 5.8 installed had
   no 5.8 key, so the studio never offered it, a project was generated for 5.7,
