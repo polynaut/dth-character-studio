@@ -40,6 +40,9 @@ import { normalizeRelFolder } from '../library'
 import { DTH_FPS } from '../houdini-defaults.ts'
 import { normalizePathLower } from '#/lib/path.ts'
 import { charScopeInput, charsRoot, joinPath, locateCharacter, resolveProject } from './core'
+// The scan store is `houdini-material.ts`'s (its path, its write queue) — a
+// renamed project has to take its scan with it.
+import { followRenamedScan } from './houdini-material'
 
 // "Generate project": create a ready-made DazToHue Houdini project for a
 // character. hython starts a fresh scene, bakes $JOB to the character's ONE
@@ -247,6 +250,12 @@ const renameProjectInput = z.object({
   /** The new file name WITHOUT extension (one typed WITH it is accepted too —
    *  see {@link renameStem}). */
   newName: z.string().min(1),
+  /** The character this project is linked to, when the caller knows — the scan
+   *  store is per character, and a renamed project has to take its scan with
+   *  it. Absent = the rename still happens, the scan is simply left behind
+   *  (and re-earned on the next Rescan). */
+  projectId: z.string().default(''),
+  id: z.string().default(''),
 })
 
 /**
@@ -292,7 +301,7 @@ function renameStem(typed: string, ext: string): string {
  * project (or the same project's other build), and a rename is not a merge.
  */
 export async function renameHoudiniProject({ data }: { data: unknown }): Promise<string> {
-  const { hipPath, newName } = renameProjectInput.parse(data)
+  const { hipPath, newName, projectId, id } = renameProjectInput.parse(data)
   const norm = hipPath.replace(/\\/g, '/')
   const cut = norm.lastIndexOf('/')
   // A path with no folder in it cannot be renamed in place, and must REFUSE
@@ -329,6 +338,18 @@ export async function renameHoudiniProject({ data }: { data: unknown }): Promise
     throw new Error(`“${clean}${ext}” already exists in that folder.`)
   }
   await rename(hipPath, dest)
+  // The scan follows the file. Every reader keys on the path, so without this
+  // a rename silently un-scans the project — measured: the DTH Export dialog
+  // stopped pre-selecting Unreal projects and asked for a Rescan nobody had a
+  // reason to suspect. Best-effort: a cache that cannot be updated is a rescan
+  // later, never a failed rename.
+  if (projectId && id) {
+    try {
+      await followRenamedScan(projectId, id, hipPath, dest)
+    } catch {
+      // see above — the rename itself already succeeded
+    }
+  }
   return dest
 }
 

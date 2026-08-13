@@ -18,6 +18,7 @@ import {
   hdaLibraryKey,
   houdiniScanStoreJson,
   parseScanStore,
+  renameScanEntry,
   scanCacheKey,
   withScanResults,
 } from '../houdini-project-cache.ts'
@@ -682,6 +683,28 @@ export async function fetchCachedHoudiniScans({
   } catch {
     return []
   }
+}
+
+/**
+ * Move a character's stored scan to a project's NEW path after a rename.
+ *
+ * Lives here because this module owns the store (its path, its read/write
+ * queue); the rename itself is in `api/houdini.ts` and calls in. Goes through
+ * the same serialized write as a scan does, so a rename during a sweep folds in
+ * rather than overwriting it.
+ */
+export async function followRenamedScan(
+  projectId: string,
+  characterId: string,
+  fromHip: string,
+  toHip: string,
+): Promise<void> {
+  const storePath = await scanStorePath(projectId, characterId)
+  await queueScanStoreWrite(storePath, (store) => renameScanEntry(store, fromHip, toHip))
+  // The in-memory layer is keyed the same way and would keep answering for the
+  // old path — and, worse, answer NOTHING for the new one while the store has
+  // the entry. Cheapest correct move: forget it, the store still has it.
+  scanCache.clear()
 }
 
 /** One project's stored verdict, for the character page's cards. */

@@ -188,6 +188,44 @@ export function freshScan(
 }
 
 /**
+ * Follow a RENAMED project: the same scan, under the new path.
+ *
+ * A store entry is keyed by path — map key, the freshness `key`'s first
+ * segment, and the project's own `hipPath` — so renaming a `.hip` orphans its
+ * scan and every reader answers "never scanned". Measured on a real rename: the
+ * DTH Export dialog stopped pre-selecting Unreal projects, because it no longer
+ * knew which export sets those projects write, and the fix was a Rescan the
+ * user had no reason to suspect they needed.
+ *
+ * Nothing else about the verdict changes: a rename touches neither the file's
+ * mtime nor its contents, so the rest of the key (mtime, export root, installed
+ * HDAs, answer version) is still true — which is why re-keying is honest here
+ * where re-dating an entry would not be.
+ *
+ * A store with no entry for `fromHip` comes back untouched: nothing to follow.
+ */
+export function renameScanEntry(
+  store: HoudiniScanStore,
+  fromHip: string,
+  toHip: string,
+): HoudiniScanStore {
+  const fromKey = scanStoreKey(fromHip)
+  const entry = store.projects[fromKey]
+  if (!entry) return store
+  const projects = { ...store.projects }
+  delete projects[fromKey]
+  // The freshness key is `<path>|<mtime>|<exportRoot>|<tooling>|<version>` —
+  // only the first segment is about the name.
+  const [, ...rest] = entry.key.split('|')
+  projects[scanStoreKey(toHip)] = {
+    ...entry,
+    key: [scanStoreKey(toHip), ...rest].join('|'),
+    project: { ...entry.project, hipPath: toHip },
+  }
+  return { ...store, projects }
+}
+
+/**
  * Fold fresh scans into the store, replacing each project's entry and leaving
  * the others alone.
  *

@@ -456,7 +456,11 @@ export function HoudiniProjectsField({
     setError('')
     setBusy(true)
     try {
-      const moved = await renameHoudiniProject({ data: { hipPath: hip, newName: clean } })
+      const moved = await renameHoudiniProject({
+        // The character scope is what lets the rename carry the project's
+        // stored scan to its new path.
+        data: { hipPath: hip, newName: clean, projectId, id: character.id },
+      })
       // Unchanged (same name, or the browser build's no-op) — nothing to persist.
       // Compared EXACTLY, never case-insensitively: `lara` → `Lara` is a real
       // rename that already happened on disk, and folding case here would skip
