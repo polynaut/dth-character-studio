@@ -47,6 +47,7 @@ import {
   startUnrealImport,
 } from '#/lib/rom/api.ts'
 import { holdBusyCursor } from '#/lib/busy-cursor.ts'
+import { houdiniTaskCards } from '#/lib/rom/export-cards.ts'
 import {
   formatClock,
   formatElapsed,
@@ -373,7 +374,14 @@ export function DthExportAction({
     daz: Array<{ path: string; label: string }>
     /** `networks` = the scene stems the project will export (the DazToHue
      *  networks are matched per scene) — the card tooltip names them. */
-    houdini: Array<{ path: string; label: string; networks: Array<string> }>
+    houdini: Array<{
+      path: string
+      label: string
+      networks: Array<string>
+      /** What the scan says this project WRITES (its export nodes'
+       *  `character_name`) — what names the cards before the run can. */
+      sets?: Array<string>
+    }>
     /** The Unreal projects the export is handed to when the queue drains —
      *  the run's third leg, and a card like any other: a leg the user picked
      *  and cannot see must not be invisible just because it is quick. */
@@ -606,60 +614,15 @@ export function DthExportAction({
                 ? ('active' as const)
                 : ('waiting' as const),
         })),
-        ...armed.houdini.flatMap((hip, index) => {
-          const live =
-            hip.label === houdiniActive && houdiniNow?.state === 'running' ? houdiniNow : null
-          // ONE CARD PER NETWORK while the project runs. A `.hip` can hold
-          // several DazToHue networks (measured: two in one project), and the
-          // meters were already counting them — so the column said "one thing"
-          // about work the bar said was two, and the active network's name
-          // appeared only in the bar's label.
-          //
-          // Only the RUNNING project expands: how many networks a project holds
-          // is something only the run can say (it opens the `.hip` to find
-          // out), so a queued one is still one card. `total > 1` because a lone
-          // network IS the project.
-          if (live && live.total > 1) {
-            return Array.from({ length: live.total }, (_, n) => {
-              const network = live.networks[n]
-              const done = network !== undefined && network.status !== 'waiting'
-              const current = n === live.networks.filter((one) => one.status !== 'waiting').length
-              return {
-                id: `hou:${hip.path}#${n}`,
-                // The run names every network up front now (the title of the
-                // network box around it, which is what the user called it), so
-                // the count is only reached with a 456.py too old to say.
-                label:
-                  network?.label || (current ? live.activity?.scene || '' : '') || `Network ${n + 1}`,
-                detail: hip.label,
-                kind: 'houdini' as const,
-                status: done
-                  ? ('done' as const)
-                  : current
-                    ? ('active' as const)
-                    : ('waiting' as const),
-              }
-            })
-          }
-          return [
-            {
-              id: `hou:${hip.path}`,
-              label: hip.label,
-              // The networks it will export, ONE PER LINE under the full
-              // project name — a comma-joined list wrapped into a wall of text.
-              // Each is named by the scene whose `.dth` the HDA node imports
-              // (the actual node paths only exist mid-run, inside Houdini).
-              detail: hip.networks.length > 0 ? hip.networks.join('\n') : undefined,
-              kind: 'houdini' as const,
-              status:
-                index < houdiniDone
-                  ? ('done' as const)
-                  : hip.label === houdiniActive && houdiniNow !== null
-                    ? ('active' as const)
-                    : ('waiting' as const),
-            },
-          ]
-        }),
+        ...armed.houdini.flatMap((hip, index) =>
+          houdiniTaskCards(
+            hip,
+            index,
+            hip.label === houdiniActive && houdiniNow?.state === 'running' ? houdiniNow : null,
+            hip.label === houdiniActive && houdiniNow !== null,
+            houdiniDone,
+          ),
+        ),
         // Last, because it happens last: the send waits for every Houdini
         // project to finish. It is a file write, so it is never `active` for
         // longer than a poll — `waiting` until it has run, `done` after.
@@ -772,6 +735,31 @@ export function DthExportAction({
    *  meaningful ("send nothing"), so it travels beside the targets rather than
    *  defaulting to "everything" anywhere down the line. */
   const unrealSetsRef = useRef<Array<string>>([])
+  /**
+   * Each linked project's export-set names, from the STORED scan — the only
+   * thing that can name a project's networks before hython has opened it.
+   * Reported as "there should be two" while the log still said "Opening
+   * Houdini": the run knows, minutes later, and the scan knew all along.
+   */
+  const hipSetsRef = useRef<Record<string, Array<string>>>({})
+  useEffect(() => {
+    let active = true
+    void fetchCachedHoudiniScans({ data: { projectId, id: character.id } })
+      .then((scans) => {
+        if (!active) return
+        hipSetsRef.current = Object.fromEntries(
+          scans.map((scan) => [scan.hipPath, scan.exportSets]),
+        )
+      })
+      .catch(() => {
+        // No scan, no names — the cards fall back to one per project.
+      })
+    return () => {
+      active = false
+    }
+    // Mount-only: a character cannot change under a mounted editor.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   /** Set once the send has run — the Unreal cards' `done`. (The targets ref is
    *  emptied by the send itself, so it cannot answer this.) */
   const unrealSentRef = useRef(false)
@@ -1004,6 +992,7 @@ export function DthExportAction({
               path,
               label: stemOf(path),
               networks: run.scenes.map(stemOf),
+              sets: hipSetsRef.current[path],
             })),
             unreal: run.unrealProjects.map((path) => ({ path, label: stemOf(path) })),
           }
@@ -1237,6 +1226,7 @@ export function DthExportAction({
             path,
             label: stemOf(path),
             networks: plan.sceneScope.map(stemOf),
+            sets: hipSetsRef.current[path],
           })),
           unreal: plan.unrealProjects.map((path) => ({ path, label: stemOf(path) })),
         }
@@ -1445,6 +1435,7 @@ export function DthExportAction({
                 path,
                 label: stemOf(path),
                 networks: run.houdiniScenes.map(stemOf),
+                sets: hipSetsRef.current[path],
               })),
               unreal: run.unrealProjects.map((path) => ({ path, label: stemOf(path) })),
             }
@@ -1464,6 +1455,7 @@ export function DthExportAction({
                 path,
                 label: stemOf(path),
                 networks: scenes.map(stemOf),
+              sets: hipSetsRef.current[path],
               })),
               unreal: unrealTargets.map((path) => ({ path, label: stemOf(path) })),
             }
