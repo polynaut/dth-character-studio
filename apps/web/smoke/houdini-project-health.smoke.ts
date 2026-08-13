@@ -28,7 +28,7 @@ function scan(over: Record<string, unknown> = {}) {
     nodes: [],
     job: P.charFolder,
     fps: 30,
-    refs: { collapsible: 0, foreign: 0, broken: [], hipRelative: [] },
+    refs: { collapsible: 0, foreign: 0, broken: [], hipRelative: [], missingTextures: [] },
     prefill: { fillable: [], missing: [] },
     ...over,
   }
@@ -246,6 +246,70 @@ test('unresolved imports and blank parms are both named', async ({ page }) => {
   const title = (await badge.getAttribute('title')) ?? ''
   expect(title).toContain('import_character_dtu_file')
   expect(title).toContain('export_directory')
+})
+
+/** A texture the DazToHue material node's bakers point at, uninstalled since. */
+const GONE = 'd:/daz 3d/my daz 3d library/runtime/textures/raiya/rypi5_torso1.jpg'
+
+test('a baker texture whose file is gone is flagged, and the badge says the bake will not', async ({
+  page,
+}) => {
+  // The one problem the card reports that has NO repair, and the reason it is
+  // reported at all: measured on DazToHue 2.5 / Houdini 22.0, baking with a
+  // layer texture pointed at a missing file prints `export finished in 0:00:02`
+  // and raises nothing. Without this badge the first sign is a wrong-looking
+  // character in Unreal.
+  await openWithStore(
+    page,
+    scan({
+      refs: {
+        collapsible: 0,
+        foreign: 0,
+        broken: [],
+        hipRelative: [],
+        missingTextures: [GONE],
+      },
+    }),
+  )
+
+  const badge = page.getByText('Needs attention')
+  await expect(badge).toBeVisible()
+  const title = (await badge.getAttribute('title')) ?? ''
+  // The BASENAME, not the whole path — this lands in a tooltip.
+  expect(title).toContain('rypi5_torso1.jpg')
+  expect(title).not.toContain('my daz 3d library')
+  // Naming the silent success is the point of the wording: without it "missing"
+  // reads as something Houdini would have caught.
+  expect(title).toContain('reports success')
+})
+
+test('the drawer names the missing textures in full, and does not gate the repair on them', async ({
+  page,
+}) => {
+  // Two facts in one state. The row shows the FULL paths (this is the view where
+  // "which product is gone" is answerable) — and Make paths portable stays
+  // pressable, because a missing texture is not work that repath can do. Gating
+  // it would strand the button on a problem the studio cannot fix.
+  await openWithStore(
+    page,
+    scan({
+      refs: {
+        collapsible: 2,
+        foreign: 0,
+        broken: [],
+        hipRelative: [],
+        missingTextures: [GONE],
+      },
+    }),
+  )
+
+  await page.getByRole('button', { name: /^Utils/ }).first().click()
+  const drawer = page.getByRole('dialog')
+  await expect(drawer.getByText('Baker textures')).toBeVisible()
+  await expect(drawer.getByText('1 missing')).toBeVisible()
+  await expect(drawer.getByText(GONE)).toBeVisible()
+  await expect(drawer.getByText(/still reports success/)).toBeVisible()
+  await expect(drawer.getByRole('button', { name: 'Make paths portable' })).toBeEnabled()
 })
 
 test('a badge from a STALE store clears itself once the sweep re-reads the project', async ({

@@ -339,8 +339,12 @@ export const projectRefInfoSchema = z.object({
    *  portable re-anchors them on `$JOB`.
    *
    *  Defaulted because the Python's failed-load fallback once omitted it, and an
-   *  absent list here failed the parse of the entire report — one unreadable
-   *  `.hip` took every other project in the sweep with it. Fixed on both sides. */
+   *  absent list failed the parse of the entire report — one unreadable `.hip`
+   *  took every other project in the sweep with it. Fixed in all THREE places it
+   *  has to be: the Python emits the key, and both parsers default it. Note the
+   *  order — Rust's serde runs first (`run_houdini_material_util`), so a default
+   *  here alone would never fire; `ProjectRefInfo` carries the matching
+   *  `#[serde(default)]`. */
   hipRelative: z.array(z.string()).default([]),
   /** Baker LAYER textures whose file is not there — unique absolute paths, not
    *  `<node> <parm>` labels: one uninstalled product takes out the same file

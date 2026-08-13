@@ -207,6 +207,13 @@ pub struct ProjectRefInfo {
     /// `$JOB`. Only the escaping form is counted here — a plain `$HIP/…` that
     /// stays inside the houdini folder is what v66 EMITS (and what Houdini's
     /// own picker writes), so it is never flagged.
+    ///
+    /// Defaulted because the Python's failed-load fallback once omitted it, and
+    /// THIS is the parse that runs first: the whole report is deserialized here
+    /// before the zod schema in `api/native-types.ts` sees a byte, so a default
+    /// on the TS side alone could never have fired. One unreadable `.hip` took
+    /// every other project in the sweep with it.
+    #[serde(default)]
     pub hip_relative: Vec<String>,
     /// Baker LAYER textures whose file is not there — unique absolute paths,
     /// NOT `<node> <parm>` labels like `broken`: one uninstalled product takes

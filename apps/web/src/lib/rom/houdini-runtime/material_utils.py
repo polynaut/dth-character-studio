@@ -1349,7 +1349,12 @@ def _missing_texture_refs(node):
     """
     out = []
     try:
-        if "DazToHueMaterial" not in node.type().name():
+        # Exactly how `_dth_nodes` picks the same node — an equality test against
+        # MATERIAL_TYPE, not a substring of a literal. The drawer's node list and
+        # this check have to agree about what a material node IS, or a renamed
+        # type would silently stop the texture check while the drawer went on
+        # listing the node as scanned.
+        if node.type().name() != MATERIAL_TYPE:
             return out
     except Exception:
         return out
@@ -1361,6 +1366,14 @@ def _missing_texture_refs(node):
         except Exception:
             continue
         if not value:
+            continue
+        # Absolute only — `eval()` has already expanded `$DAZ3D_LIB` and friends,
+        # so anything still relative would be stat'd against hython's CWD, which
+        # has nothing to do with the scene: every such parm would report missing.
+        # A feature whose whole claim is zero false positives under-reports here
+        # rather than guess an anchor, and it keeps the promise the wire contract
+        # makes (`missingTextures` is documented as absolute paths).
+        if not _looks_absolute(value):
             continue
         if not os.path.exists(value):
             out.append(_norm_path(value))
