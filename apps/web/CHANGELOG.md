@@ -1,5 +1,405 @@
 # @dth/web
 
+## 0.77.0
+
+### Minor Changes
+
+- [#820](https://github.com/polynaut/dth-character-studio/pull/820) [`590a94d`](https://github.com/polynaut/dth-character-studio/commit/590a94dae97ce5b345fecc7024c4ccd17b082dbd) Thanks [@polynaut](https://github.com/polynaut)! - **A DTH Export run can be interrupted — it stops at the next point where
+  stopping is safe.**
+
+  Until now a started run had to be waited out. Holding **Ctrl** on the working
+  button offered **Abort** (Daz leg) or **Stop watching** (Houdini leg), and both
+  were honest about being escape hatches for the _studio_: they delete a job file
+  or drop a watch, while Daz keeps grinding through the batch and Houdini keeps
+  exporting. There was no way to say "stop".
+
+  There is now an **Interrupt** button beside the working button, through both
+  legs — no modifier, since stopping something you started is not an expert
+  manoeuvre. It stops the run itself:
+
+  - The **ROM build** stops between two ROM blocks — or between two custom
+    frames, which the runtime checks about once a second.
+  - The **export that would have followed** is skipped, and so is every scene
+    still queued behind it. A queued scene still opens in Daz (the Runner owns the
+    batch and cannot be told otherwise) and then does no work.
+  - The **Houdini leg** stops between export nodes and closes its own background
+    Houdini; projects still queued never start.
+
+  Everything already written stays where it is. Nothing is killed mid-write:
+  whatever synchronous call is running at that moment — a Daz scene load, one DTH
+  Exporter export, one DazToHue node — finishes first, which is why the button can
+  sit at **Stopping…** for a while on a long node. That wait is the price of
+  stopping cleanly, and the tooltip says so rather than promising an instant halt.
+
+  The report says **DTH Export interrupted**, and deliberately quotes **no scene
+  counts**: once the flag is down, a scene that exported and a scene whose script
+  skipped itself both come back as `done`, and the studio will not guess between
+  them. The character's ROM run log names the scene that was cut off mid-build.
+  An interrupted Daz batch also never continues into its Houdini projects — the
+  point of stopping is that the rest does not happen.
+
+  **The two Ctrl affordances are gone with it.** Both stopped the studio rather
+  than the run, which was all that was possible before — keeping them beside
+  Interrupt just put two stop-flavoured buttons on one run with nothing on them to
+  say which was which. The one thing only Abort could do — clear a job file that
+  nothing will ever finish, because a Daz stuck on a dialog reads no flag — is not
+  lost, it moved to where housekeeping belongs: **Settings → App Data** clears a
+  stuck batch handoff, exactly as it already did.
+
+  Mechanically it is one flag file in the character's meta folder that every
+  runtime the studio owns polls: the generated `.dsa` carriers, the DTH runtime
+  (now **v73** — regenerate, or Tools → Refresh assets, to get it) and the Houdini
+  runner. It is dropped when a run ends and cleared before every new one, so it
+  can never quietly skip a run nobody meant to stop. The Runner plugin needs no
+  change; the job-file contract documents the optional plugin-side half for later.
+
+- [#816](https://github.com/polynaut/dth-character-studio/pull/816) [`4958a3c`](https://github.com/polynaut/dth-character-studio/commit/4958a3c3de40d1e4c63f7f1be0b393e31ae43680) Thanks [@polynaut](https://github.com/polynaut)! - **A Houdini project card now shows a spinner while it is being read.**
+
+  Checking a project means opening the whole scene in hython — tens of seconds per
+  `.hip` — and it happens on a background sweep nobody asked for. Until it landed
+  the card showed the _previous_ verdict with nothing to say it was out of date, so
+  a badge that was about to appear (or clear) looked settled while it was still
+  being decided. A small spinner now sits on the corner of the thumbnail while
+  Houdini has that project open, and the card's verdict refreshes the moment its
+  own scan lands rather than waiting for the whole sweep to finish.
+
+  Only the projects actually being re-read show it. A project you haven't touched
+  is answered from the cache without starting Houdini at all, so a quiet card means
+  "nothing to do" — not "not checked yet". Marking those too would have flickered a
+  spinner on every card on every page load, which is how a status indicator becomes
+  something you stop looking at.
+
+  The card stays fully usable while it spins: opening, renaming, unlinking and the
+  Utils drawer all keep working. The scan is something the studio started on its
+  own, and it has no business taking the controls away.
+
+- [#815](https://github.com/polynaut/dth-character-studio/pull/815) [`ab222ae`](https://github.com/polynaut/dth-character-studio/commit/ab222ae1e85c13fdccf2854de04c89e195516fac) Thanks [@polynaut](https://github.com/polynaut)! - **Houdini project checks now catch baker textures whose file is gone.**
+
+  A missing texture was the one failure in this pipeline that reported itself as
+  success. Measured on DazToHue 2.5 / Houdini 22.0: point a material baker's layer
+  texture at a file that does not exist, press Bake, and the Houdini console prints
+
+  ```
+  DazToHue: export started
+  DazToHue: baking material textures
+  DazToHue: export finished in 0:00:02
+  ```
+
+  No dialog, no node error, nothing in the log. The HDA is black-boxed so the cook
+  itself can't be read, but its bake path can — `do_bake_material_textures` is a
+  bare `cook(force=True)`, and the whole material PythonModule holds exactly one
+  `os.path.exists`, in the texture browser's drag-and-drop handler. There is no
+  check to inherit. The first sign was a wrong-looking character in Unreal.
+
+  The card badge and the Utils drawer's General tab now report it. Like the import
+  check, it is deliberately SCOPED — to the material node's
+  `material_texture_baker_layer_texture*` parms — because "the file is missing" is
+  not a usable definition of broken across a whole `.hip`: a healthy project names
+  four of Houdini's own scratch files that simply don't exist until used. Measured
+  on a real project (11 bakers, 43 layers): 51 of the material node's 86 file
+  parms are these, and all 51 resolve. Zero false positives.
+
+  Unlike everything else the badge reports, this one has no repair button, and
+  that is on purpose — the fix is outside the studio (reinstall the product, or
+  restore the library). It earns the badge anyway, because nothing else in the
+  pipeline will tell you. The wording says so rather than letting "missing" read
+  as something Houdini would have caught.
+
+  Also fixed alongside it: a project hython could not open shipped a `refs` block
+  without `hipRelative`, which the schema requires — so a single unreadable `.hip`
+  failed the parse of the whole scan report and took every other project in the
+  sweep with it.
+
+- [#814](https://github.com/polynaut/dth-character-studio/pull/814) [`a5ec8cb`](https://github.com/polynaut/dth-character-studio/commit/a5ec8cb2f7ee92dcf5e5794466933ee838e01c48) Thanks [@polynaut](https://github.com/polynaut)! - **Houdini project names are editable.** Click a project card's name and type a
+  new one — the file on disk is renamed with it and the link follows, so a
+  generated `3d-workflow_LaraCroft_G81` can just become `Lara`. The same inline
+  edit the character title and the Daz scene cards already had.
+
+  The extension is carried over rather than assumed: `.hip`, `.hiplc` and `.hipnc`
+  encode the licence tier, and rewriting a commercial `.hip` to `.hiplc` would
+  tell Houdini the file is licence-limited. Typing the extension back yourself is
+  fine — `Lara.hiplc` renames to `Lara.hiplc`, not `Lara.hiplc.hiplc` — and
+  trailing dots or spaces are dropped, because Windows drops them too and the
+  project would otherwise be saved under a name you cannot type back.
+
+  Changing only the **capitalisation** is a real rename: `lara` → `Lara` renames
+  the file and updates the card, instead of quietly doing nothing.
+
+  Renaming is offered where _moving_ a project still isn't, and that is not an
+  inconsistency: everything the studio bakes into a project is anchored on `$JOB`
+  (the character folder) and `$HIP` (the folder the file sits in) — both
+  **folders**, so the file's own name is the one part of its location nothing
+  points at. Moving it would change both.
+
+  Only projects inside the character folder are renamable. One you linked in place
+  from your own tree is your file, in a tree the studio can't see the rest of, so
+  its name has no pencil — the same rule the Daz scenes already apply.
+
+- [#817](https://github.com/polynaut/dth-character-studio/pull/817) [`2ce67d6`](https://github.com/polynaut/dth-character-studio/commit/2ce67d68289e3758b5af30c418aeeb6d75227f90) Thanks [@polynaut](https://github.com/polynaut)! - **The Houdini Utils drawer now works on the one project you opened it from.**
+
+  Utils are per project — that is why the 🔧 lives on the project card and not on
+  the section header. The drawer took that as a starting point rather than a scope:
+  it noted _"opened from Kira.hip"_ in its title and then listed every Houdini
+  project the character had, offering their checks, their repairs and their nodes
+  as transfer targets. Pressing Utils on one card put you in front of work
+  belonging to three others.
+
+  Now the card you pressed is the whole subject. The General tab checks that
+  project and repairs that project; **Refresh assets**, **Repair project
+  settings**, **Make paths portable** and **Fill network** act on it alone; and the
+  transfer target is its own DazToHue nodes. To work on another project, open its
+  own card's Utils.
+
+  The **source** of a copy is unchanged and still cross-project — copying a setup
+  means copying it _from_ somewhere else, which is the one thing here that
+  legitimately names another project.
+
+  Two side effects worth knowing:
+
+  - Opening the drawer is cheaper. It used to scan every linked project the cache
+    could not answer for; now it scans at most one.
+  - Copying one source setup into several projects in a single run is gone. It was
+    only reachable by ticking targets across projects in a drawer opened from one
+    of them — do it per project instead.
+
+  The guide and the drawer's own tooltips have been corrected along with it: the
+  **Target** list never actually pre-ticked anything (the drawer opens on General,
+  and moving to a transfer tab clears the selection), so the guide no longer says
+  it does — tick the nodes that should receive the copy, which is also the right
+  default for something that writes to a `.hip`.
+
+- [#811](https://github.com/polynaut/dth-character-studio/pull/811) [`6c2cc20`](https://github.com/polynaut/dth-character-studio/commit/6c2cc204aded19515132d4b9262194fbdf5b3931) Thanks [@polynaut](https://github.com/polynaut)! - **The live run display is one task list and one progress bar.**
+
+  It used to be three readouts side by side — a narrow column of task cards, a
+  tail-mode log window and a two-level meter row — which between them said the
+  same thing three ways and left no room for any of them to say anything useful.
+  Now there is a single list of what the run does, and one bar underneath it
+  carrying the newest thing the run said as a single line.
+
+  **One row per job**, which is what the extra room bought:
+
+  - every selected **Daz scene** says what the run does to it — _ROM + Export_,
+    _ROM only_, _Export only_. That choice is made once, in a dropdown that is
+    long closed by the time anyone is watching the run;
+  - every **DazToHue network** is its own row, named as the network is, with the
+    Houdini project it belongs to beside it;
+  - every **export set going into an Unreal project** is its own row. Sending two
+    characters to one Unreal project is two imports, so it is two rows — each
+    naming the set, the project it lands in, and whether it is a **Re-import** of
+    assets already there or a **First import**.
+
+  Rows are ticked off as they finish and stay in the list, so it reads as the
+  whole run rather than only what is left, and the mark on the right says which
+  application is doing it. A row that **failed** is marked as such rather than
+  ticked off — a DazToHue network that fell over, an Unreal import that came back
+  with an error — because a run's own list is the worst possible place to be told
+  everything went fine. The bar measures the whole run — every row, plus the share
+  of the one being worked that its leg can actually report.
+
+  The log window's **transcript** is what this gives up: only the newest line
+  survives, on the bar. Each leg's full output is on disk either way — the
+  Runner's progress log, `.dth_houdini_console.log` in the character folder, and
+  the Unreal editor's own log — which is where a post-mortem was read from
+  anyway.
+
+- [#812](https://github.com/polynaut/dth-character-studio/pull/812) [`7029342`](https://github.com/polynaut/dth-character-studio/commit/7029342c40f2864afcdbffd8841a3240d632d79f) Thanks [@polynaut](https://github.com/polynaut)! - **Unreal plugins are checked against the engine's actual build, and engines the registry forgot are found.**
+
+  Two fixes for one real failure: a freshly generated project, everything
+  installed by the studio, and Unreal opening on _"The following modules are
+  missing or built with a different engine version"_.
+
+  **Engine detection now reads Epic's `LauncherInstalled.dat` as well as the
+  registry.** Measured: a machine with 5.6, 5.7 and 5.8 installed had **no
+  registry key for 5.8** — so the studio never offered it, the project was
+  generated for 5.7, and Unreal 5.8 opened it and rebound it. Both sources are
+  merged, the registry first — except where the registry names a folder that is
+  no longer there and the launcher names one that is, which is the same staleness
+  seen from the other side (an engine reinstalled elsewhere would otherwise be
+  listed at its dead path while the live one stayed hidden).
+
+  **A plugin build is now judged by its `BuildId`, not by its folder name.** Every
+  built plugin carries one in `Binaries/Win64/UnrealEditor.modules`, and Unreal
+  refuses to load a plugin whose id differs from the engine's — that is exactly
+  what the missing-modules dialog is. The studio reads both (for a zipped plugin,
+  straight out of the archive — nothing is extracted) and marks a mismatched build
+  **built for another engine build**, leaving it unchecked rather than installing
+  something that cannot load.
+
+  This catches the case a version label structurally cannot. The plugin that broke
+  the run above was in a folder called `KawaiiPhysics_5_7_1_…` — a version written
+  with underscores, which reads as _no version signal at all_, so it matched every
+  project including a 5.8 one while its binaries were 5.7. A folder name is a
+  label; the BuildId is the engine's own identity check.
+
+  **It also decides which build you are offered.** Only one build per plugin can
+  be listed — they all install to the same `Plugins/<name>` — and that choice used
+  to be made on labels alone. With `KawaiiPhysics_5_7_1_…` and
+  `KawaiiPhysics_5_8_…` side by side, both reading as _any engine_, the studio
+  offered the alphabetically first one and hid the other; for a 5.8 project that
+  meant being shown the build that cannot load while the one that can never
+  appeared. The BuildId now picks: a build proven to fit outranks a version label,
+  which outranks an any-engine guess, which outranks a build proven not to fit.
+
+  It warns rather than refuses: a mismatch is left listed and unchecked, because
+  you may know something the BuildId doesn't. And it never guesses — a plugin with
+  no binaries, or an engine whose id cannot be read, is never called a mismatch.
+
+- [#811](https://github.com/polynaut/dth-character-studio/pull/811) [`6c2cc20`](https://github.com/polynaut/dth-character-studio/commit/6c2cc204aded19515132d4b9262194fbdf5b3931) Thanks [@polynaut](https://github.com/polynaut)! - **Send a character to Unreal — the third leg of the round trip.**
+
+  Daz builds the ROM, Houdini bakes it and exports for Unreal, and until now
+  somebody dragged the result into the editor by hand. The **DTH Export** dialog
+  hands that export over itself — one Start for the whole round trip, and with
+  both **Skip Daz** and **Skip Houdini** it becomes a plain "re-import this
+  character in Unreal" with nothing else running. That dialog is the ONLY way to
+  send, and the leg reports where the other two do — the run's own task list and
+  status line, with **one row per import job**: two export sets going into one
+  Unreal project are two imports, so they are two rows, each naming the set and
+  whether it is a re-import or a first import. Its outcome arrives minutes later,
+  from an editor that may not have been open when the job was queued, so the run's
+  display stays up until it answers.
+
+  It is the same handoff the other two legs use: the studio writes a job file,
+  the other side claims it by rename, the studio polls a result. On the Unreal
+  side that "other side" is the **DTH Character Studio Runner for Unreal** —
+  `Plugins/DTHCharacterStudioRunner`, content-only, pure Python, the Unreal
+  counterpart of the Runner plugin that drives Daz — which watches
+  `Saved/DTHStudio/job.json` and runs the import. The import itself is **mrpdean's DazToHue pipeline, unmodified**: meshes,
+  textures, materials, animation curves, the post-process anim blueprint. The
+  Runner decides only _when_.
+
+  **The Runner installs like any other plugin**, from the project card's install
+  dialog, where it is pre-checked next to DTH content — a plugin in your own
+  Unreal project is something you tick, not something that appears because you
+  sent a character. Sending to a project without it says exactly that. Unreal
+  loads plugins at startup, so the editor wants one restart after installing it —
+  which is where a restart is expected anyway.
+
+  **A closed project is opened for you** — five seconds after queueing, if the job
+  is still unclaimed and no editor is running at all. That is the rest of the leg:
+  the Runner claims a job on startup, so opening the project is what makes a
+  queued send finish rather than wait. An editor that is already up is never
+  doubled (a wrong guess there costs a duplicate editor and several gigabytes),
+  and "is THAT project open" is not answerable from a process list — so the studio
+  only acts on the two things it can prove: the job is still there, and nothing is
+  running.
+
+  **The studio still never starts Unreal to RUN an import.** An editor takes minutes to come up and holds
+  its project, so a "launch it and wait" leg would be worse than useless — and a
+  headless commandlet writing into `Content/` behind a running editor is worse
+  still. The job is queued instead: an open editor picks it up within about a
+  second, and one opened later claims it on startup, exactly like a Daz that was
+  closed when a batch was queued.
+
+  **The DTH Export dialog carries it too.** Under the Daz scenes and the Houdini
+  projects there is now an **Unreal projects** section, so one Start does the
+  whole round trip: Daz builds the ROM, Houdini exports, and the result is queued
+  for import when the last project finishes. It pre-selects the same way the other
+  two lists do — a project that already holds this character comes ticked, one
+  that doesn't waits for you, because putting a character into an Unreal project
+  the first time is a decision rather than a continuation. The selection rides the
+  run's sidecars, so a window reloaded mid-export still sends.
+
+  **The Houdini Mode dropdown is down to two.** `Open only` opened a project and
+  ran nothing — the project cards already do that, and a mode that ran no pipeline
+  sat oddly in the dialog that runs the pipeline. `Export all` exported every
+  linked scene instead of the checked ones, which is what checking every scene in
+  the list directly above it means. Both are gone. In their place, and only when
+  the project has a linked `.uproject`: **Skip Houdini — use last exports**, which
+  runs no Houdini and hands what is already on disk to the Unreal projects. With
+  Daz skipped as well, that is a one-click "re-import this character in Unreal"
+  from the same dialog as everything else.
+
+  **A send is refused rather than faked.** A run that builds the ROM and stops
+  (_ROM only_) writes no export, so it does not offer to send one — its send could
+  only hand Unreal the PREVIOUS export while the run read as this ROM reaching the
+  editor. Ticking an Unreal project but no export set holds Start with a reason
+  instead of starting a run whose Unreal leg silently does nothing. And when the
+  editor imports some of the sets and fails on another, the run says both — what
+  landed AND what did not — rather than reporting the whole job as a success.
+
+  **You pick which export sets go.** A character's `export/` folder holds one set
+  per HDA character name — outfit variants, experiments — and a send used to take
+  all of them, so a variant nobody had asked for could land in Unreal on its own.
+  Both send surfaces now list the sets with checkboxes and pre-tick the same way:
+  a set the project **already holds** shows the folder it will refresh and comes
+  ticked; one it doesn't is marked _not in this project_ and waits to be asked
+  for. The first import of anything into an Unreal project is a decision, not a
+  continuation — the same rule the project rows already used, applied one level
+  down.
+
+  **Every export set the studio finds is offered, not "the" export.** A character's `export/` folder holds
+  one folder per HDA _character name_ — measured, one character here has three
+  (outfit variants) — and the studio cannot predict those names. It scans for them
+  now; the first version guessed `DTH_<character name>.dth` and would have found
+  nothing at all on that character. One job carries every set.
+
+  **A second send re-imports what the project already has.** Before sending, the
+  studio searches the project's `Content/` for each export set's assets — they are
+  all named `<PREFIX>_<set>`, so it finds them wherever they were moved — and
+  names that folder in the job. The import then runs **there**, on top of the
+  existing assets, instead of building a second set under
+  `/Game/DazToHue/<Character>` and leaving you to reconcile them. Nothing found: a
+  fresh import at the default, exactly as before. The finish toast says which
+  happened and where.
+
+  **A re-import is Unreal's own Reimport.** Where the character is already in the
+  project, the Runner reimports those assets from the FBX the export just wrote —
+  the same action as right-click → _Reimport_. Meshes and their morph targets come
+  back fresh; materials, curves and the anim blueprint stay as the first import
+  built them. A second `.dth` import cannot do this at all: the DazToHue pipeline
+  duplicates its master materials into names that already exist and fails, so
+  "import over the existing set" has no path through it.
+
+  A FIRST import still imports the `.dth`, never the FBX files directly — the `.dth` is what
+  triggers the DazToHue pipeline, and importing the meshes on their own would lose
+  the materials, curves and anim blueprint it builds. The file list is for finding
+  assets, not for importing them.
+
+  Every Install rewrites the Runner, so a re-install refreshes it; and it lives in
+  its own plugin rather than inside the DazToHue one, which is beta and iterating
+  — nothing here forks or edits mrpdean's files. The studio reads the installed
+  Runner's version before sending, so an out-of-date one is named up front instead
+  of refusing the job from inside Unreal.
+
+### Patch Changes
+
+- [#811](https://github.com/polynaut/dth-character-studio/pull/811) [`6c2cc20`](https://github.com/polynaut/dth-character-studio/commit/6c2cc204aded19515132d4b9262194fbdf5b3931) Thanks [@polynaut](https://github.com/polynaut)! - Renaming a Houdini project keeps its scan. The stored verdict is keyed by path,
+  so a rename orphaned it and everything that reads a scan went back to "never
+  scanned" — which showed up as the DTH Export dialog no longer pre-selecting
+  Unreal projects, since it no longer knew which export sets those projects write.
+  The scan now follows the file, and the only cure before this — a Rescan nobody
+  had a reason to suspect — is not needed.
+
+- [#809](https://github.com/polynaut/dth-character-studio/pull/809) [`6f77111`](https://github.com/polynaut/dth-character-studio/commit/6f77111564273db4561264cacfcfddba1e935629) Thanks [@polynaut](https://github.com/polynaut)! - **Generate Houdini project prefills the character's name, not the project's.**
+
+  The name field opened on `<Project>_<Character>` — `3d-workflow_LaraCroft_G81`.
+  A generated scene already lives inside its project, under
+  `<project>/…/<character>/houdini/`, so repeating the project in the filename
+  only made every scene longer without telling you anything the path doesn't.
+  What tells one `.hiplc` from another in the folder it sits in is the character,
+  and after that whatever you type.
+
+  Existing projects keep their names — this is the suggestion the dialog opens
+  with, nothing is renamed.
+
+- [#811](https://github.com/polynaut/dth-character-studio/pull/811) [`6c2cc20`](https://github.com/polynaut/dth-character-studio/commit/6c2cc204aded19515132d4b9262194fbdf5b3931) Thanks [@polynaut](https://github.com/polynaut)! - The export run's task list names every Houdini network, not just the finished
+  ones. A project with two DazToHue networks showed the first by name and the
+  second as "Network 2" — a count, where the user has a name for it. The run
+  already knew both the moment it collected them, so it says so up front, and the
+  row carries the title of the **network box** around each one: the nodes are all
+  `DazToHueExport`, `…1`, `…2`, so the box title is the only human-meaningful name
+  a multi-network project has.
+
+- [#811](https://github.com/polynaut/dth-character-studio/pull/811) [`6c2cc20`](https://github.com/polynaut/dth-character-studio/commit/6c2cc204aded19515132d4b9262194fbdf5b3931) Thanks [@polynaut](https://github.com/polynaut)! - Changing the DTH Export dialog's **Mode** no longer throws away the scenes you
+  picked. Each mode has its own "outstanding work" rule and switching re-ran it
+  over the whole list, so choosing one scene and then switching to _Skip Daz_
+  re-checked every scene with an export on disk — and the Houdini list, which
+  follows the scenes, came with it. The pre-selection is a courtesy for a list
+  nobody has touched; once you have picked, it stays picked.
+- Updated dependencies [[`590a94d`](https://github.com/polynaut/dth-character-studio/commit/590a94dae97ce5b345fecc7024c4ccd17b082dbd), [`4958a3c`](https://github.com/polynaut/dth-character-studio/commit/4958a3c3de40d1e4c63f7f1be0b393e31ae43680), [`6f1cc99`](https://github.com/polynaut/dth-character-studio/commit/6f1cc99505f0cb0c2c9509c7ac6232c5a82a19da)]:
+  - @dth/rom@0.77.0
+  - @dth/ui@0.77.0
+
 ## 0.76.0
 
 ### Minor Changes

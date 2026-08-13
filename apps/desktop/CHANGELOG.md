@@ -1,5 +1,66 @@
 # @dth/desktop
 
+## 0.77.0
+
+### Minor Changes
+
+- [#819](https://github.com/polynaut/dth-character-studio/pull/819) [`f3bbdd5`](https://github.com/polynaut/dth-character-studio/commit/f3bbdd5923b5eda704fa6c19421b762952c1aa7b) Thanks [@polynaut](https://github.com/polynaut)! - The ✨ **Generate project** button is gone from the Unreal projects bar.
+
+  Creating an Unreal project is Unreal's own job: its New Project screen is where
+  the templates live (Third Person, Blueprint vs C++, starter content), and which
+  one a production starts from is a decision worth making there. What the studio
+  generated instead was a bare Blueprint project with empty `Content/` and
+  `Config/` folders — no template, which is almost never what you actually want.
+
+  Nothing else changes: link a `.uproject` you made in Unreal with **Add project**
+  (or by dropping it on the bar), then use the card's install button for the DTH
+  content and plugins exactly as before. Engine detection in **Settings** stays —
+  it is what matches plugin builds to each project.
+
+### Patch Changes
+
+- [#811](https://github.com/polynaut/dth-character-studio/pull/811) [`6c2cc20`](https://github.com/polynaut/dth-character-studio/commit/6c2cc204aded19515132d4b9262194fbdf5b3931) Thanks [@polynaut](https://github.com/polynaut)! - The **DTH Character Studio Runner for Unreal** is versioned and tracked, like
+  its Daz counterpart. The studio ships that plugin into your Unreal projects, and a plugin folder keeps whatever
+  was installed the day it was installed — so it now carries a version the studio
+  reads back, and a project holding an older copy gets an amber warning on its
+  card (re-install from the same card, then restart the editor once). A send
+  refuses outright and names both versions.
+
+  The plugin's version is deliberately separate from the job contract: a fix to
+  the Runner's Python changes nothing the two sides must agree on, and still has
+  to reach every project holding the old copy.
+
+- [#813](https://github.com/polynaut/dth-character-studio/pull/813) [`eb70daa`](https://github.com/polynaut/dth-character-studio/commit/eb70daa4a7bc928cf8eecc7ab320b30142714520) Thanks [@polynaut](https://github.com/polynaut)! - Unreal plugin scan: a plugin's own version is no longer read as the engine's.
+  `KawaiiPhysics_5.7_1.21.0.zip` and `KawaiiPhysics_5.8_1.21.0.zip` both listed as
+  **UE 1.21** — the engine is named first and the plugin's version last, and the
+  last version-looking number won. An Unreal Engine major is between 4 and 9
+  (`.uplugin` starts at UE4, and a two-digit number in a plugin name is a year or
+  the plugin's own version, never an engine), so anything outside that is now
+  skipped wherever it sits in the name, and the two builds read as 5.7 and 5.8.
+
+  The same rule applies to a `.uplugin` whose `EngineVersion` holds the plugin's
+  version: an impossible version means **no** constraint — the build is offered
+  for every engine — rather than a constraint no project can satisfy, which would
+  have dropped it out of every install checklist without saying so. Where a build
+  is offered for every engine, the BuildId check still marks it if its binaries
+  were made for a different engine build.
+
+- [#818](https://github.com/polynaut/dth-character-studio/pull/818) [`6f1cc99`](https://github.com/polynaut/dth-character-studio/commit/6f1cc99505f0cb0c2c9509c7ac6232c5a82a19da) Thanks [@polynaut](https://github.com/polynaut)! - Tooltips get out of the way. Opening a dialog or a side panel now closes any
+  tooltip that is showing — and cancels one whose hover delay is still counting
+  down, so it can't appear a moment later on top of the panel you just opened.
+  Tooltips float above every other layer, so one left over from the button you
+  clicked used to hang over the dialog it opened.
+
+  The update prompt gets the same treatment, and it is the one that needed it
+  most: it appears on its own when an update check finishes, so — unlike every
+  other dialog — no click had already dismissed whatever you were hovering.
+
+  The same applies whenever the window hands focus to something else: launching
+  Daz Studio, Unreal or Houdini, revealing a path in Explorer, opening a link — or
+  just alt-tabbing away. The pointer never moves in those cases, so nothing told
+  the tooltip to go, and it stayed painted over the app while the other tool was
+  in front.
+
 ## 0.76.0
 
 ## 0.75.0
