@@ -23,6 +23,7 @@ import {
 } from '../houdini-project-cache.ts'
 import type { HoudiniScanStore } from '../houdini-project-cache.ts'
 import { DTH_FPS } from '../houdini-defaults.ts'
+import { markHoudiniScanning } from '../houdini-scan-progress.ts'
 import { validateHoudiniProject } from '../houdini-validate.ts'
 import { charsRoot, locateCharacter, resolveProject } from './core'
 import type { Character } from '@dth/rom'
@@ -472,30 +473,42 @@ export async function scanHoudiniMaterials({
         inFlightScans.delete(key)
       })
   if (!running) inFlightScans.set(key, pending)
-  const fresh = await pending
+  // Only `stale` is marked, never `cached` — a cache hit starts no process and
+  // returned above, so spinning its card would flicker on every page load and
+  // teach the eye to ignore the spinner. Held until the RESULT IS STORED, not
+  // merely returned: releasing at `await pending` leaves a window where the
+  // spinner is gone and the badge still shows the previous verdict.
+  const releaseScanning = markHoudiniScanning(stale)
+  try {
+    const fresh = await pending
 
-  // Re-key AFTER the scan: hython read the file at that moment, so the mtime
-  // taken before it is the one this result describes. Only ok results are
-  // cached — a failure is a reason to look again, not a fact to remember.
-  const persist: Array<{ hipPath: string; key: string; project: MaterialScanProject }> = []
-  fresh.forEach((project) => {
-    const i = hipPaths.findIndex((p) => normalizePath(p) === normalizePath(project.hipPath))
-    const cacheAt = i >= 0 ? keys[i] : ''
-    if (cacheAt && project.ok) {
-      cacheScan(cacheAt, project)
-      persist.push({ hipPath: hipPaths[i], key: cacheAt, project })
+    // Re-key AFTER the scan: hython read the file at that moment, so the mtime
+    // taken before it is the one this result describes. Only ok results are
+    // cached — a failure is a reason to look again, not a fact to remember.
+    const persist: Array<{ hipPath: string; key: string; project: MaterialScanProject }> = []
+    fresh.forEach((project) => {
+      const i = hipPaths.findIndex((p) => normalizePath(p) === normalizePath(project.hipPath))
+      const cacheAt = i >= 0 ? keys[i] : ''
+      if (cacheAt && project.ok) {
+        cacheScan(cacheAt, project)
+        persist.push({ hipPath: hipPaths[i], key: cacheAt, project })
+      }
+    })
+    if (persist.length > 0 && storePath) {
+      await queueScanStoreWrite(storePath, (store) =>
+        withScanResults(store, persist, new Date().toISOString()),
+      )
     }
-  })
-  if (persist.length > 0 && storePath) {
-    await queueScanStoreWrite(storePath, (store) =>
-      withScanResults(store, persist, new Date().toISOString()),
-    )
-  }
 
-  const byPath = new Map(fresh.map((p) => [normalizePath(p.hipPath).toLowerCase(), p]))
-  return hipPaths
-    .map((p) => cached.get(p) ?? byPath.get(normalizePath(p).toLowerCase()))
-    .filter((p): p is MaterialScanProject => Boolean(p))
+    const byPath = new Map(fresh.map((p) => [normalizePath(p.hipPath).toLowerCase(), p]))
+    return hipPaths
+      .map((p) => cached.get(p) ?? byPath.get(normalizePath(p).toLowerCase()))
+      .filter((p): p is MaterialScanProject => Boolean(p))
+  } finally {
+    // A THROWN scan has to clear the spinner too — a card left spinning forever
+    // is the worst of the three states, because it reads as "still working".
+    releaseScanning()
+  }
 }
 
 /** Scans in flight, keyed by their file list — see {@link scanHoudiniMaterials}. */

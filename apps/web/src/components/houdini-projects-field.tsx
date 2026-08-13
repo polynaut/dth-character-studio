@@ -37,6 +37,8 @@ import {
   scanCharacterHoudiniProjects,
 } from '#/lib/rom/api.ts'
 import { DTH_FPS, formatFps, sameFps } from '#/lib/rom/houdini-defaults.ts'
+import { isHoudiniProjectScanning } from '#/lib/rom/houdini-scan-progress.ts'
+import { useHoudiniScanning } from '#/lib/use-houdini-scanning.ts'
 import { pickHipPath } from '#/lib/desktop.ts'
 import { browseStart, displayPath, normalizePath, parentDir } from '#/lib/path.ts'
 import { characterHoudiniDir } from '#/lib/scene-subfolder.ts'
@@ -74,6 +76,7 @@ function HoudiniCard({
   hipPath,
   avatarSrc,
   warning,
+  scanning = false,
   onOpen,
   onRemove,
   onRename,
@@ -82,6 +85,10 @@ function HoudiniCard({
   hipPath: string
   /** Gender-based placeholder avatar (a Houdini project has no thumbnail). */
   avatarSrc: string
+  /** hython has this `.hip` open right now. Only true for a scan that really
+   *  starts a process — a cache hit never sets it (see `houdini-scan-progress`),
+   *  so the spinner means "this is being re-read", not "a sweep ran". */
+  scanning?: boolean
   /** What the last background scan found wrong with this project; '' = healthy,
    *  or not scanned yet. Everything it can report has a repair in the Utils
    *  drawer, which is what the badge points at. */
@@ -103,6 +110,10 @@ function HoudiniCard({
   return (
     <LinkedAssetCard
       title={displayName}
+      busy={scanning}
+      // Named, not just "Working…": this card can be busy for tens of seconds
+      // (hython opens the whole scene), and the honest reason is worth the room.
+      busyLabel="Reading this project in Houdini…"
       media={
         <Portrait
           src={avatarSrc}
@@ -239,6 +250,20 @@ export function HoudiniProjectsField({
       ),
     )
   }, [projectId, character.id])
+
+  // Which of these projects hython has open right now — the card spinner. Fed
+  // by the api layer's scan funnel, so it covers BOTH triggers: this page's
+  // background sweep and the drawer's Rescan.
+  const scanning = useHoudiniScanning()
+  // Re-read the stored verdicts every time that set changes, i.e. as each
+  // project LANDS. Without it the sweep's own read is the only one, and it runs
+  // after the last project finishes — so a card would stop spinning while still
+  // showing the verdict from before its scan. A store read, not a scan: no
+  // hython, no process, just the JSON the sweep just wrote.
+  const scanningKey = [...scanning].sort().join('|')
+  useEffect(() => {
+    void readWarnings().catch(() => {})
+  }, [scanningKey, readWarnings])
 
   useRefetchOnFocus(
     () => {
@@ -568,6 +593,7 @@ export function HoudiniProjectsField({
                 hipPath={hip}
                 avatarSrc={placeholderSrc}
                 warning={warnings.get(normalizePath(hip).toLowerCase()) ?? ''}
+                scanning={isHoudiniProjectScanning(scanning, hip)}
                 onOpen={(e) => void onOpen(hip, e)}
                 onRemove={() => askRemove(hip)}
                 onRename={

@@ -328,6 +328,17 @@ Three consequences worth knowing before touching this:
 - **The cache may never fail a scan.** Resolving the store path was once
   unguarded and took the drawer's whole project list down with it. A broken cache
   degrades to "no cache", never to "no scan".
+- **`houdini-scan-progress.ts` is the card spinner's store** — a pure, counted
+  set of the projects hython has open, published from `scanHoudiniMaterials` and
+  read through `useHoudiniScanning` (`useSyncExternalStore`). Two rules make it
+  mean something. It marks the `stale` list ONLY, never the cache hits: a hit
+  starts no process, so marking those would flicker a spinner on every card on
+  every page load and train the eye to ignore it. And it COUNTS holders rather
+  than setting a flag, because the sweep and the drawer's Rescan can hold the
+  same project at once (only identical batches coalesce) and the first to finish
+  would otherwise clear a spinner the other still needs. The mark is released
+  after the result is STORED, not when hython returns — releasing earlier leaves
+  a window where the spinner is gone and the badge still shows the old verdict.
 - **`validateHoudiniProject`** (`lib/rom/houdini-validate.ts`) is a pure function
   over the scan the studio already has — `$JOB`, `refs.broken`,
   `prefill.fillable`. An UNSCANNED project is never a fault (else every page load
