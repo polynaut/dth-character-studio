@@ -418,6 +418,10 @@ export type HoudiniRunMode = (typeof HOUDINI_RUN_MODES)[number]
 /** What one linked Houdini project imports, as the scan recorded it. */
 export interface HoudiniProjectImports {
   hipPath: string
+  /** The export-set names this project WRITES (each export node's
+   *  `character_name`). Empty = not known, never "writes none" — see the scan
+   *  schema's own note. */
+  exportSets?: Array<string>
   /** Every `.dth` its networks import (normalized lowercase) — EMPTY means
    *  "never scanned / not known", never "imports nothing": the scan only
    *  reaches projects inside the character folder, and a `.hip` saved since

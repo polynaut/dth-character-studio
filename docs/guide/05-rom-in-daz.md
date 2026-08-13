@@ -280,9 +280,16 @@ set it doesn't is marked *not in this project* and stays unticked — no variant
 lands in Unreal without you asking. Untick everything and the run simply doesn't
 send.
 
-Like the other two lists, it **pre-selects what the run is for**: a project that
-already holds this character starts ticked, a project that doesn't stays for you
-to decide — putting a character into an
+Like the other two lists, it **pre-selects what the run is for** — and "what the
+run is for" means the sets the checked Houdini projects actually write (each
+project's export nodes name them, read when the project is scanned). Export a
+variant this Unreal project has never seen and nothing pre-ticks; export one it
+already holds and both the project and that set do. A project the scan hasn't
+reached yet says nothing about what it writes, so the pre-selection falls back
+to "does this project hold this character at all".
+
+A project that already holds this character starts ticked, a project that
+doesn't stays for you to decide — putting a character into an
 Unreal project for the first time is a choice, not a continuation. The section
 needs somewhere to send from: tick a Houdini project to export first, or pick
 **Skip Houdini — use last exports** to send the exports already on disk.

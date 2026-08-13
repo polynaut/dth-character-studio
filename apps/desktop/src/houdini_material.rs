@@ -129,6 +129,14 @@ pub struct MaterialScanProject {
     /// means "not known", never "imports nothing".
     #[serde(default)]
     pub imports: Vec<String>,
+    /// The EXPORT-SET names this project writes — each export node's
+    /// `character_name`, which the HDA concatenates onto `export_directory` to
+    /// make the folder under the character's `export/`, and therefore the set
+    /// that reaches Unreal. Read in the same pass as the imports.
+    /// `#[serde(default)]` for the same reason: empty means "not known", never
+    /// "writes nothing".
+    #[serde(default)]
+    pub export_sets: Vec<String>,
     /// What a repath would do to this project's stored file references.
     pub refs: ProjectRefInfo,
     /// Which DazToHue parms the studio could fill here, and which this

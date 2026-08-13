@@ -2091,6 +2091,30 @@ function DthExportDialog({
   const unrealSendable = houdiniMode === 'skip' || checkedHips.size > 0
 
   /**
+   * The export sets THIS RUN will produce, or null when the studio cannot say.
+   *
+   * Each checked Houdini project declares the sets it writes (its export
+   * nodes' `character_name`, read in the project scan). A project the scan has
+   * never reached declares nothing — and "not known" is not "writes nothing",
+   * so one unscanned project makes the whole answer null and the rules below
+   * fall back to what they did before.
+   *
+   * Under `skip` the run produces nothing new: the sets in play are whatever is
+   * on disk, so the question does not arise.
+   */
+  const runSets =
+    houdiniMode === 'skip'
+      ? null
+      : (() => {
+          const chosen = character.houdiniProjects.filter((hip) => checkedHips.has(hip))
+          if (chosen.length === 0) return null
+          const known = chosen.map((hip) => hipImports.find((scan) => scan.hipPath === hip))
+          if (known.some((scan) => scan === undefined || scan.exportSets === undefined)) return null
+          return new Set(known.flatMap((scan) => scan?.exportSets ?? []))
+        })()
+
+
+  /**
    * The Unreal selection FOLLOWS the Houdini one, the same way the Houdini list
    * follows the Daz scenes: untick the projects that would export and the send
    * has nothing to hand over, so it leaves the run with them — and comes back
@@ -2108,17 +2132,29 @@ function DthExportDialog({
       return
     }
     setCheckedUnreal(
-      new Set(unrealProjects.filter((path) => Object.keys(sendPlan.located[path] ?? {}).length > 0)),
+      new Set(
+        unrealProjects.filter((path) =>
+          Object.keys(sendPlan.located[path] ?? {}).some(
+            (name) => runSets === null || runSets.has(name),
+          ),
+        ),
+      ),
     )
     // `unrealProjects` is the prop array, stable per render of the parent.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [unrealSendable, sendPlan])
+    // `runSets` is derived from the state this effect already depends on.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unrealSendable, sendPlan, houdiniMode, checkedHips, hipImports])
 
   /**
    * WHICH export sets go. Ticked = the set is already in one of the ticked
    * projects (a re-import); a set no ticked project has is a FIRST import and
    * waits to be asked for — measured the hard way, when a send imported an
    * outfit variant its owner had never put in that project.
+   *
+   * And only sets THIS RUN produces: picking the THICK scene and its project
+   * pre-ticked a set the run was never going to touch — and the Unreal project
+   * with it — because "has this character" is not "has what this run makes".
    */
   useEffect(() => {
     if (!unrealSendable || sendPlan === null) {
@@ -2127,12 +2163,16 @@ function DthExportDialog({
     }
     setCheckedSets(
       new Set(
-        sendPlan.sets.filter((name) =>
-          [...checkedUnreal].some((path) => sendPlan.located[path]?.[name] !== undefined),
-        ),
+        sendPlan.sets
+          .filter((name) => runSets === null || runSets.has(name))
+          .filter((name) =>
+            [...checkedUnreal].some((path) => sendPlan.located[path]?.[name] !== undefined),
+          ),
       ),
     )
-  }, [unrealSendable, sendPlan, checkedUnreal])
+    // `runSets` is derived from the state this effect already depends on.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unrealSendable, sendPlan, checkedUnreal, houdiniMode, checkedHips, hipImports])
 
   useEffect(() => {
     let active = true

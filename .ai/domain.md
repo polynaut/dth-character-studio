@@ -978,6 +978,17 @@ older runtimes as stale.
   `DTH_<character.name>.dth` guess found nothing on the first real character.
   One job carries every set (`imports[]`), because the handoff is a single job
   file and a second write replaces a pending one.
+- **A Houdini project declares the export SETS it writes** (`exportSets` on the
+  project scan — each export node's `character_name`, which the HDA
+  concatenates onto `export_directory`). Read in the scan pass beside
+  `imports`, because opening a `.hip` is the expensive part and it is already
+  open. Empty = NOT KNOWN (an unscanned project, or a scan entry stored before
+  the field existed) — never "writes nothing", and the dialog's `runSets`
+  collapses to `null` on one unknown project so every rule falls back instead
+  of concluding the run produces nothing. Without it "does this Unreal project
+  have what THIS RUN makes?" was unanswerable and the pre-selection asked "does
+  it have ANY set of this character?" — which ticked a project for a run about
+  to export a variant it had never seen.
 - **The DTH Export dialog's third leg** (`unrealProjects`): selected Unreal
   projects ride the Daz run record AND the Houdini run plan — the send fires
   when the whole Houdini queue drains, minutes later, possibly in a reloaded

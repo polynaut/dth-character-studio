@@ -1118,6 +1118,7 @@ def op_scan(request):
             "job": "",
             "fps": 0.0,
             "imports": [],
+            "exportSets": [],
             "refs": {"collapsible": 0, "foreign": 0, "broken": []},
             "prefill": {"fillable": [], "missing": []},
         }
@@ -1129,6 +1130,7 @@ def op_scan(request):
             entry["job"] = _scene_job()
             entry["fps"] = _scene_fps()
             entry["imports"] = _scene_dth_imports()
+            entry["exportSets"] = _scene_export_sets()
             entry["refs"] = _project_ref_info(export_dir)
             entry["prefill"] = _prefill_scan()
         except Exception as exc:
@@ -1541,6 +1543,48 @@ def fire_import_callback(node):
         return True
     except Exception:
         return False
+
+
+#: The export nodes, by type name — the same pair 456.py triggers.
+EXPORT_TYPE_NAMES = ("daztohueexport", "daztohuegroomexport")
+
+
+def _scene_export_sets():
+    """The EXPORT-SET names this project writes: every export node's
+    `character_name`, normalized + deduped.
+
+    The HDA builds its output path as `export_directory + character_name + "/"`,
+    so this parm IS the name of the folder under the character's `export/` — and
+    therefore of the set that reaches Unreal. Nothing else on the studio side
+    knows it: the studio prefills `import_character_name` when it generates a
+    project, but the user owns it afterwards, and a hand-built project never had
+    a prefill at all.
+
+    Why it is worth a line in the scan: without it "does this Unreal project
+    already have what this run produces?" is unanswerable, and the dialog fell
+    back to "does it have ANY set of this character?" — which pre-ticked an
+    Unreal project for a run that was about to export a variant that project had
+    never seen. Read in the same pass as the nodes; opening a `.hip` is the
+    expensive part and it is already open.
+    """
+    found = []
+    seen = set()
+    for node in hou.node("/").allSubChildren():
+        if node.type().name().lower() not in EXPORT_TYPE_NAMES:
+            continue
+        parm = node.parm("character_name")
+        if parm is None:
+            continue
+        try:
+            value = str(parm.evalAsString() or "").strip()
+        except Exception:
+            continue
+        key = value.lower()
+        if not value or key in seen:
+            continue
+        seen.add(key)
+        found.append(value)
+    return found
 
 
 def _scene_dth_imports():
