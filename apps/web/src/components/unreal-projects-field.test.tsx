@@ -114,10 +114,13 @@ describe('UnrealProjectsBar mutations', () => {
     unrealDthContentPresent.mockResolvedValueOnce(false)
     render(<UnrealProjectsBar project={projectWith([A])} />)
 
+    // The CARD already probes this project once, for the bridge-staleness
+    // warning — so the dialog's own probe is the second call, not the first.
+    await waitFor(() => expect(unrealProjectState).toHaveBeenCalledTimes(1))
     fireEvent.click(screen.getByLabelText('Install DTH content and plugins into A'))
     // The dialog probes THIS project and renders its checklist.
-    await waitFor(() => expect(unrealProjectState).toHaveBeenCalledTimes(1))
-    expect(unrealProjectState.mock.calls[0][0].data.uprojectPath).toBe(A)
+    await waitFor(() => expect(unrealProjectState).toHaveBeenCalledTimes(2))
+    expect(unrealProjectState.mock.calls[1][0].data.uprojectPath).toBe(A)
     await waitFor(() => expect(screen.getByText('DTH content')).toBeTruthy())
     expect(screen.getByRole('button', { name: /Install$/ })).toBeTruthy()
   })

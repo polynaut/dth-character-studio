@@ -25,6 +25,13 @@ export const UNREAL_JOB_FILE = 'job.json'
 export const UNREAL_CLAIMED_FILE = 'running_job.json'
 export const UNREAL_RESULT_FILE = 'result.json'
 
+/** Whether an installed bridge is the one this app ships. `0` (absent or
+ *  unreadable) is NOT out of date — it is not installed, which is a different
+ *  message and a different fix. */
+export function bridgeOutdated(installed: number): boolean {
+  return installed > 0 && installed !== UNREAL_BRIDGE_VERSION
+}
+
 /** The bridge plugin's folder name under `Plugins/` — also what
  *  `unrealProjectState` reports in `installedPlugins`, which is how the install
  *  dialog knows whether the project already has it. */
@@ -60,6 +67,27 @@ export const UNREAL_BRIDGE_UPLUGIN = `${UNREAL_BRIDGE_NAME}.uplugin`
 export const UNREAL_JOB_VERSION = 4
 
 /**
+ * The BRIDGE's own version — the shipped plugin's build, not the job contract.
+ *
+ * **Bump this on ANY change to the files the studio writes into a project**:
+ * `dth_bridge.py`, `init_unreal.py`, the `.uplugin`. A fix to the Python that
+ * changes no contract still has to reach the projects that already have the old
+ * one, and the studio has no other way to tell — a plugin folder holds whatever
+ * was installed the day it was installed.
+ *
+ * Separate from {@link UNREAL_JOB_VERSION} because they answer different
+ * questions. The job version is what the two sides must AGREE on, and only
+ * changes when the job or result shape does. This one is "is the installed copy
+ * the one this app ships", which is true far more often — every bug fix — and
+ * is what puts the warning on a project card.
+ *
+ * History:
+ * - 1 — the first shipped bridge (job contract 4): claim, import, re-import
+ *   what the studio located, the progress dialog.
+ */
+export const UNREAL_BRIDGE_VERSION = 1
+
+/**
  * The bridge's own `.uplugin`.
  *
  * Content-only (no `Modules`): everything it does is Python, and a code module
@@ -71,8 +99,10 @@ export function bridgeUpluginJson(): string {
   return `${JSON.stringify(
     {
       FileVersion: 3,
-      Version: UNREAL_JOB_VERSION,
-      VersionName: '1.0',
+      // Unreal's own plugin version fields, and the studio's staleness check
+      // reads them back: `Version` is the number it compares.
+      Version: UNREAL_BRIDGE_VERSION,
+      VersionName: `1.${UNREAL_BRIDGE_VERSION}`,
       FriendlyName: 'DTH Studio Bridge',
       Description:
         'Watches for an import job written by DTH Character Studio and runs the DazToHue import.',
@@ -236,9 +266,9 @@ export function dthExportFiles(text: string): Array<string> {
 }
 
 /**
- * The `Version` an installed bridge's `.uplugin` declares — the same number
- * {@link UNREAL_JOB_VERSION} writes into it. 0 = no bridge, unreadable, or a
- * manifest without the field, which the caller treats as "not installed".
+ * The `Version` an installed bridge's `.uplugin` declares — the number
+ * {@link UNREAL_BRIDGE_VERSION} wrote into it. 0 = no bridge, unreadable, or a
+ * manifest without the field, which every caller treats as "not installed".
  */
 export function bridgeVersionFrom(uplugin: string): number {
   try {

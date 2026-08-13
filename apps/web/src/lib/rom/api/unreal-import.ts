@@ -5,7 +5,7 @@ import { z } from 'zod'
 import * as storage from '../storage'
 import {
   UNREAL_BRIDGE_UPLUGIN,
-  UNREAL_JOB_VERSION,
+  UNREAL_BRIDGE_VERSION,
   bridgeUpluginJson,
   bridgeVersionFrom,
   dthExportFiles,
@@ -204,9 +204,9 @@ export async function startUnrealImport({ data }: { data: unknown }): Promise<Un
       'The DTH Studio Bridge is not installed in this Unreal project — install it from the project card (Install), then restart the editor once.',
     )
   }
-  if (installedBridge !== UNREAL_JOB_VERSION) {
+  if (installedBridge !== UNREAL_BRIDGE_VERSION) {
     throw new Error(
-      `This project has DTH Studio Bridge version ${installedBridge}; this studio writes version ${UNREAL_JOB_VERSION} jobs — re-install it from the project card, then restart the editor once.`,
+      `This project has DTH Studio Bridge v${installedBridge}; this studio ships v${UNREAL_BRIDGE_VERSION} — re-install it from the project card, then restart the editor once.`,
     )
   }
   await mkdir(paths.jobDir, { recursive: true })

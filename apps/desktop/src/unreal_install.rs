@@ -97,6 +97,15 @@ pub struct UnrealProjectState {
     pub dth_present: bool,
     /// Folder names under the project's `Plugins/`, sorted.
     pub installed_plugins: Vec<String>,
+    /// The `Version` of the installed DTH Studio Bridge, or 0 when the project
+    /// has none (or its `.uplugin` cannot be read — the same answer, since
+    /// neither can run a job).
+    ///
+    /// The studio SHIPS that plugin, so a project can hold an older copy than
+    /// the app that talks to it — a folder keeps whatever was installed the day
+    /// it was installed. This is what the project card's staleness warning and
+    /// the pre-send check both read.
+    pub bridge_version: u32,
 }
 
 /// Every Unreal Engine the Epic launcher has registered, in registry order
@@ -765,7 +774,8 @@ pub fn unreal_project_state(uproject_path: String) -> Result<UnrealProjectState,
         })
         .unwrap_or_default();
     installed_plugins.sort();
-    Ok(UnrealProjectState { engine_association, dth_present, installed_plugins })
+    let bridge_version = bridge_version_at(&dir);
+    Ok(UnrealProjectState { engine_association, dth_present, installed_plugins, bridge_version })
 }
 
 #[derive(Deserialize)]
@@ -1440,6 +1450,11 @@ mod tests {
         let project = root.join("Game");
         fs::create_dir_all(project.join("Content").join("DazToHue")).unwrap();
         fs::create_dir_all(project.join("Plugins").join("DazToUnreal")).unwrap();
+        // The studio's own plugin, one version behind what this app ships —
+        // the shape the project card's staleness warning exists for.
+        let bridge = project.join("Plugins").join("DTHStudioBridge");
+        fs::create_dir_all(&bridge).unwrap();
+        fs::write(bridge.join("DTHStudioBridge.uplugin"), r#"{ "Version": 3 }"#).unwrap();
         let uproject = project.join("Game.uproject");
         fs::write(&uproject, r#"{ "FileVersion": 3, "EngineAssociation": "5.7" }"#).unwrap();
 
@@ -1449,7 +1464,8 @@ mod tests {
             UnrealProjectState {
                 engine_association: "5.7".into(),
                 dth_present: true,
-                installed_plugins: vec!["DazToUnreal".into()],
+                installed_plugins: vec!["DTHStudioBridge".into(), "DazToUnreal".into()],
+                bridge_version: 3,
             }
         );
         // A bare project: no association, nothing installed — still not an error.
@@ -1461,6 +1477,9 @@ mod tests {
         assert_eq!(state.engine_association, "");
         assert!(!state.dth_present);
         assert!(state.installed_plugins.is_empty());
+        // No bridge is 0 — which readers must treat as "not installed", never
+        // as "out of date": different message, different fix.
+        assert_eq!(state.bridge_version, 0);
         let _ = fs::remove_dir_all(&root);
     }
 
@@ -1524,6 +1543,25 @@ mod tests {
             println!("{} -> {}", install.version, install.path);
         }
     }
+}
+
+/// The installed bridge's `Version`, or 0 — one small JSON read.
+///
+/// Tolerant on purpose: a missing plugin, an unreadable file, a manifest that
+/// is not JSON or carries no `Version` all answer 0, and every reader treats
+/// that as "not installed" rather than "out of date". The two need different
+/// words in the UI and have different fixes.
+fn bridge_version_at(project_dir: &Path) -> u32 {
+    let manifest = project_dir
+        .join("Plugins")
+        .join("DTHStudioBridge")
+        .join("DTHStudioBridge.uplugin");
+    std::fs::read_to_string(manifest)
+        .ok()
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+        .and_then(|json| json.get("Version").and_then(serde_json::Value::as_u64))
+        .and_then(|version| u32::try_from(version).ok())
+        .unwrap_or(0)
 }
 
 /// Whether ANY Unreal editor is running on this machine.

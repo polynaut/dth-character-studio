@@ -84,7 +84,9 @@ they are, and unlinking never deletes anything.
   goes into this Unreal project — the linked DTH release's *Unreal Engine
   Content* (into `Content/DazToHue`), the **DTH Studio Bridge** — marked
   **built in**, because it ships inside the app rather than coming from your
-  plugin folders; it is the small Python plugin that makes
+  plugin folders (and carries a version, so a card shows an amber ⚠ when its
+  project holds an older copy than the app ships — re-install and restart the
+  editor once); it is the small Python plugin that makes
   [Send to Unreal](./06-into-houdini.md#send-to-unreal) work, so restart the
   editor once after installing it — plus every plugin build from your
   [Unreal Engine Plugins folders](./02-setup.md#unreal-engine-plugins) that

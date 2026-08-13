@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test'
 
 import { P, UPROJECT, buildSeed, scanStoreEntryKey } from './fixtures.ts'
 import { installTauriMock } from './tauri-mock.ts'
+import { UNREAL_BRIDGE_VERSION } from '../src/lib/rom/unreal-jobs.ts'
 
 /** The commands the fake recorded, newest last — see the twin in
  *  daz-launch-activated.smoke.ts. */
@@ -148,7 +149,10 @@ test('the Unreal leg reports into the run’s own log window', async ({ page }) 
   seed.files[`${EXPORT_ROOT}/KiraDefault/DTH_KiraDefault.dth`] = '{}'
   seed.files[IMPORTED] = 'uasset-fixture'
   seed.files[`${UPROJECT_DIR}/Plugins/DTHStudioBridge/DTHStudioBridge.uplugin`] = JSON.stringify({
-    Version: 4,
+    // From the source of truth, so bumping the bridge can never strand this
+    // fixture into "your bridge is out of date" (the same rule the scan-store
+    // key follows).
+    Version: UNREAL_BRIDGE_VERSION,
   })
   await page.addInitScript(installTauriMock, seed)
   await page.goto('/')
@@ -215,7 +219,10 @@ test('nothing claims the job and no editor is running — the studio opens the p
   seed.files[IMPORTED] = 'uasset-fixture'
   // The bridge is installed and current, or the send refuses before it starts.
   seed.files[`${UPROJECT_DIR}/Plugins/DTHStudioBridge/DTHStudioBridge.uplugin`] = JSON.stringify({
-    Version: 4,
+    // From the source of truth, so bumping the bridge can never strand this
+    // fixture into "your bridge is out of date" (the same rule the scan-store
+    // key follows).
+    Version: UNREAL_BRIDGE_VERSION,
   })
   await page.addInitScript(installTauriMock, seed)
   await page.goto('/')

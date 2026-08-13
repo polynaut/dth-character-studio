@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from '@tanstack/react-router'
-import { ChevronLeft, ChevronRight, ExternalLink, FolderOpen, HardDriveDownload, Plus, Sparkles, X } from 'lucide-react'
+import { AlertTriangle, ChevronLeft, ChevronRight, ExternalLink, FolderOpen, HardDriveDownload, Plus, Sparkles, X } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
@@ -11,7 +11,14 @@ import {
   UnrealInstallDialog,
   uprojectDisplayName,
 } from '#/components/unreal-install-dialog.tsx'
-import { openScene, revealPath, setUnrealProjects, unrealDthContentPresent } from '#/lib/rom/api.ts'
+import {
+  openScene,
+  revealPath,
+  setUnrealProjects,
+  unrealDthContentPresent,
+  unrealProjectState,
+} from '#/lib/rom/api.ts'
+import { bridgeOutdated } from '#/lib/rom/unreal-jobs.ts'
 import { pickUprojectPath } from '#/lib/desktop.ts'
 import { PathCode } from '#/components/path-code.tsx'
 import { browseStart, displayPath, middleTruncatePath, normalizePath, parentDir } from '#/lib/path.ts'
@@ -37,6 +44,7 @@ const UNREAL_SUBFOLDER = 'unreal'
 function UnrealCard({
   uprojectPath,
   dthPresent,
+  bridgeStale,
   disabled,
   onOpen,
   onInstall,
@@ -46,6 +54,10 @@ function UnrealCard({
   /** undefined while the Content/DazToHue probe is still running — the button
    *  stays usable either way; the dialog does its own probing. */
   dthPresent: boolean | undefined
+  /** The project has a DTH Studio Bridge, but not the one this app ships —
+   *  a plugin folder keeps whatever was installed the day it was installed,
+   *  and the studio ships fixes to it. */
+  bridgeStale: boolean
   /** A list write is in flight — the whole bar is single-flight, so the card's
    *  mutating actions (install / unlink) disable alongside the Add button. */
   disabled: boolean
@@ -82,6 +94,19 @@ function UnrealCard({
             {chipText}
           </PathCode>
         </span>
+        {/* The one thing on this card that is WRONG rather than merely absent:
+            an out-of-date bridge imports with an older set of rules, or refuses
+            the job outright. It sits next to Install because Install is the
+            fix. */}
+        {bridgeStale && (
+          <span
+            className="shrink-0 text-amber-500"
+            title="The DTH Studio Bridge in this project is older than the one this app ships — re-install it (and restart the editor once)."
+            aria-label="Bridge plugin out of date"
+          >
+            <AlertTriangle className="size-4" />
+          </span>
+        )}
         {/* Install first, OPEN at the very right — the primary action sits at
             the card's edge. */}
         <button
@@ -160,6 +185,8 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
   // Per-project `Content/DazToHue` presence (undefined = probe in flight) —
   // drives the install button's dim; the install dialog probes for itself.
   const [dthStatus, setDthStatus] = useState<Record<string, boolean | undefined>>({})
+  /** Which linked projects hold a bridge older than the one this app ships. */
+  const [bridgeStale, setBridgeStale] = useState<Record<string, boolean>>({})
   // The card whose install button was clicked — installing runs in a dialog
   // (what to install: DTH content + engine-matched plugins). '' = closed.
   const [installFor, setInstallFor] = useState('')
@@ -205,6 +232,20 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
           // "not installed": the button enables with the default (non-overwrite)
           // install, and a genuinely broken path fails THERE with its own toast.
           if (active) setDthStatus((s) => ({ ...s, [path]: false }))
+        })
+    }
+    // The bridge is the studio's OWN plugin, so a project can hold an older
+    // copy than the app talking to it. One state read per project answers it;
+    // a failed probe says nothing rather than crying wolf.
+    for (const path of project.unrealProjects) {
+      void unrealProjectState({ data: { uprojectPath: path } })
+        .then((state) => {
+          if (active) {
+            setBridgeStale((s) => ({ ...s, [path]: bridgeOutdated(state.bridgeVersion) }))
+          }
+        })
+        .catch(() => {
+          if (active) setBridgeStale((s) => ({ ...s, [path]: false }))
         })
     }
     return () => {
@@ -337,6 +378,7 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
                   key={path}
                   uprojectPath={path}
                   dthPresent={dthStatus[path]}
+                  bridgeStale={bridgeStale[path] === true}
                   disabled={busy}
                   onOpen={(e) => {
                     // Alt+click = the app-wide "show in Explorer" hotkey (same as

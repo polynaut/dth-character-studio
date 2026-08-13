@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  UNREAL_BRIDGE_VERSION,
   UNREAL_JOB_VERSION,
+  bridgeOutdated,
   bridgeUpluginJson,
   bridgeVersionFrom,
   dthExportFiles,
@@ -168,7 +170,21 @@ describe('bridgeVersionFrom', () => {
   it('reads the version the installed bridge declares', () => {
     // Same field `bridgeUpluginJson` stamps — that is the whole point: the
     // studio can tell a stale bridge BEFORE queueing a job it would refuse.
-    expect(bridgeVersionFrom(bridgeUpluginJson())).toBe(UNREAL_JOB_VERSION)
+    // The PLUGIN's version, not the job contract's: a fix to the Python ships
+    // without changing what the two sides must agree on.
+    expect(bridgeVersionFrom(bridgeUpluginJson())).toBe(UNREAL_BRIDGE_VERSION)
+  })
+
+  it('calls a bridge stale only when there IS one', () => {
+    // 0 is "not installed", which needs a different message and a different
+    // fix — crying "out of date" at a project nobody installed into is noise.
+    expect(bridgeOutdated(0)).toBe(false)
+    expect(bridgeOutdated(UNREAL_BRIDGE_VERSION)).toBe(false)
+    // Any other NON-ZERO version is stale — older after a fix ships, and newer
+    // if a project was installed into by a later build of the app. Both mean
+    // "not the copy this app ships", and both are fixed by re-installing.
+    expect(bridgeOutdated(UNREAL_BRIDGE_VERSION + 1)).toBe(true)
+    expect(bridgeOutdated(99)).toBe(true)
   })
 
   it('answers 0 for anything it cannot read — the same as no bridge at all', () => {
