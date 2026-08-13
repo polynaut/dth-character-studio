@@ -258,6 +258,10 @@ alongside DTH content — nothing appears in your `Plugins\` folder that you
 didn't tick. Sending to a project that hasn't got it says so rather than waiting
 for a watcher that will never come.
 
+While the bridge works, Unreal shows its own **progress dialog** — the import
+holds the editor's main thread for minutes, and a frozen editor looks exactly
+like a hung one.
+
 > [!NOTE]
 > **Restart the editor once after installing it.** Unreal loads plugins at
 > startup, so a bridge installed into an open project does nothing until that

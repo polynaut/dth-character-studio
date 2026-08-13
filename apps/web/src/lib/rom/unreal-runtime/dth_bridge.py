@@ -211,6 +211,54 @@ def _existing_destination(files):
     return best[0]
 
 
+class _Progress(object):
+    """Unreal's own modal progress dialog, for as long as a job runs.
+
+    The import blocks the game thread for minutes, and an editor that is simply
+    frozen is indistinguishable from one that has hung. The studio shows a
+    spinner on its side, but the person waiting is usually looking at Unreal —
+    so the run says so where the work is happening.
+
+    Everything is guarded: `ScopedSlowTask` is Unreal's API, not ours, and a
+    progress dialog is never worth failing an import over. An engine that does
+    not have it (or refuses one here) degrades to no dialog, which is exactly
+    the behaviour before this existed.
+
+    Not cancellable: the work is one synchronous Interchange call per set, so a
+    cancel button could not stop anything mid-import, and a button that lies is
+    worse than no button.
+    """
+
+    def __init__(self, total, label):
+        self.task = None
+        try:
+            self.task = unreal.ScopedSlowTask(total, label)
+            self.task.make_dialog(False)
+        except Exception:
+            self.task = None
+            unreal.log_warning(
+                "DTH bridge: no progress dialog (continuing)\n" + traceback.format_exc()
+            )
+
+    def step(self, label):
+        if self.task is None:
+            return
+        try:
+            self.task.enter_progress_frame(1, label)
+        except Exception:
+            # One refusal is enough — stop poking it for the rest of the run.
+            self.task = None
+
+    def close(self):
+        if self.task is None:
+            return
+        try:
+            self.task.__exit__(None, None, None)
+        except Exception:
+            pass
+        self.task = None
+
+
 def _run_one(entry):
     """One export set: find where it already lives, import there, report."""
     dth = entry.get("dth", "")
@@ -282,14 +330,20 @@ def _run(job):
     # two that worked.
     done = []
     errors = []
-    for entry in entries:
-        try:
-            done.append(_run_one(entry))
-        except Exception:
-            detail = traceback.format_exc()
-            unreal.log_error("DTH bridge: import failed for one set\n" + detail)
-            last = detail.strip().splitlines()[-1] if detail.strip() else "import failed"
-            errors.append("%s: %s" % (entry.get("character", "?"), last))
+    progress = _Progress(len(entries), "DTH Character Studio: importing")
+    try:
+        for entry in entries:
+            name = entry.get("character", "?")
+            progress.step("Importing %s" % name)
+            try:
+                done.append(_run_one(entry))
+            except Exception:
+                detail = traceback.format_exc()
+                unreal.log_error("DTH bridge: import failed for one set\n" + detail)
+                last = detail.strip().splitlines()[-1] if detail.strip() else "import failed"
+                errors.append("%s: %s" % (name, last))
+    finally:
+        progress.close()
     return {
         "version": JOB_VERSION,
         "state": "failed" if errors and not done else "done",
