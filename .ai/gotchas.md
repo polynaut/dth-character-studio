@@ -983,6 +983,22 @@ current code before relying on details, but assume the *lesson* still holds.
   stops matching any control the test already hovered/clicked — locate by ROLE
   (accessible name survives the rewrite). Documented in
   `apps/web/smoke/override.smoke.ts`.
+- **A second `EditableTitle` on a page collides with the header's accessible
+  name, and the collision is the DEFAULT, not an edge case.** The button says
+  `Rename — <name>`, so making Houdini project cards renamable put two buttons
+  announcing the identical *"Rename — Kira"* on the character page — because
+  since #809 a generated project takes the CHARACTER's own name. Only position
+  distinguished them: an a11y defect, and a Playwright strict-mode violation in
+  `studio.smoke.ts` (a spec about character rename, nothing to do with the
+  feature). Two lessons. **The fix is the accessible name, not the locator** —
+  `EditableTitle` takes an optional `subject` ("Houdini project") woven into the
+  button, and `LinkedAssetCard` derives it plus its input's label from one
+  `renameSubject`; re-scoping the spec would have left two identical names in
+  the product. And **a new rename affordance means auditing every OTHER editable
+  title on the same screen**, because the names that collide are data-dependent
+  and a unit test on either component alone cannot see the pair. Only the FULL
+  smoke run caught it — a single-spec run passed, since the ambiguity depends on
+  which cards happen to be seeded.
 - **`behavior: 'smooth'` scrolling degrades to an instant jump** when Windows'
   reduced-motion setting is on (WebView2 honors `prefers-reduced-motion`).
   Deliberate glides are rAF-driven instead — `smoothScrollToTop` in the character

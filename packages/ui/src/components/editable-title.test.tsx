@@ -24,6 +24,21 @@ describe('EditableTitle', () => {
     expect(getByRole('heading').textContent).toBe('Aria')
   })
 
+  it('`subject` names WHAT is renamed, so two titles on one page differ', () => {
+    // Measured on the character page: a generated Houdini project takes the
+    // character's own name, so its card title and the page heading were BOTH
+    // "Rename — Kira" — one accessible name for two different actions, with
+    // only position to tell them apart. The subject is what separates them.
+    const { getByRole } = render(
+      <EditableTitle name="Kira" onSave={vi.fn()} subject="Houdini project" as="div" />,
+    )
+    expect(getByRole('button', { name: 'Rename Houdini project — Kira' })).toBeTruthy()
+    // …and the plain form is untouched for a page's single subject.
+    cleanup()
+    const plain = render(<EditableTitle name="Kira" onSave={vi.fn()} />)
+    expect(plain.getByRole('button', { name: 'Rename — Kira' })).toBeTruthy()
+  })
+
   it('Escape reverts to the title without saving', () => {
     const onSave = vi.fn()
     const { getByRole, getByLabelText, queryByLabelText } = render(
