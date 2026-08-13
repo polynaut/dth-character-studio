@@ -5,6 +5,7 @@ import type { ReactNode } from 'react'
 
 import { Button } from './button.tsx'
 import { closeAllInfoPopups } from './info-popup.tsx'
+import { closeTooltip } from './tooltip-host.tsx'
 import { cn } from '../cn.ts'
 import { isRefocusPointerDown } from '../refocus-click.ts'
 
@@ -41,11 +42,16 @@ export function Modal({
   className?: string
   children: ReactNode
 }) {
-  // A dialog opening sweeps every open InfoPopup: the popups portal ABOVE this
-  // z-50 layer (that's what makes them usable inside dialogs), so one left
-  // open under an opening dialog would float over it.
+  // A dialog opening sweeps the floating layers that render ABOVE it: every
+  // open InfoPopup (z-[60]) and any live tooltip (z-[100]). Both portal above
+  // this z-50 layer — which is what makes them usable INSIDE a dialog — so one
+  // left over from the control that opened the dialog would float over it.
+  // The tooltip sweep also cancels a hover delay still counting down, which no
+  // amount of hit-testing at show time can do.
   useEffect(() => {
-    if (open) closeAllInfoPopups()
+    if (!open) return
+    closeAllInfoPopups()
+    closeTooltip()
   }, [open])
   return (
     <Dialog.Root

@@ -14,6 +14,30 @@ const TIP_DEFAULT = `${TIP_BASE} border bg-popover text-popover-foreground`
 // alert-style tooltip: red background, light text.
 const TIP_ERROR = `${TIP_BASE} border border-destructive bg-destructive text-white`
 
+/** The mounted host's `hide`, for {@link closeTooltip}. A Set rather than one
+ *  slot so a second host (a test, a future second shell) can't strand the
+ *  first one's registration. */
+const hosts = new Set<() => void>()
+
+/**
+ * Hide the tooltip that is showing — and cancel one that is counting down to
+ * appear.
+ *
+ * Tooltips are the app's TOP floating layer (`z-[100]`): above the dialogs and
+ * side panels (z-50) and above the InfoPopups (z-[60]). So one still on screen
+ * when an overlay opens floats over the very thing the user just asked for.
+ * {@link TooltipHost}'s own hit-test refuses to paint over a covering overlay,
+ * but that only guards the *moment of showing* — a tooltip already up, or a
+ * hover delay already counting down, is not the overlay's to hit-test.
+ *
+ * Modal and SidePanel call this the moment they open, the same sweep they
+ * already do for InfoPopups. Cheap and safe with no host mounted (an empty
+ * Set), so a caller never has to check.
+ */
+export function closeTooltip() {
+  for (const hide of [...hosts]) hide()
+}
+
 /**
  * App-styled tooltips for EVERY `title` attribute, mounted once in the app
  * shell. Instead of wrapping each call site in a tooltip component, one
@@ -184,17 +208,42 @@ export function TooltipHost() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') hide()
     }
+
+    // Anything that takes focus AWAY from the window strands a tooltip:
+    // launching Daz Studio, Unreal or Houdini, revealing a path in Explorer,
+    // opening a link — or a plain alt-tab. The pointer never moves, so neither
+    // `mouseleave` nor the anchor's `blur` ever fires, and the tooltip stays
+    // painted over the app until the user happens to hover that control again.
+    // One window-level blur covers every such action, including launchers added
+    // later, without each call site having to remember. Deliberately NOT a
+    // `document.hasFocus()` guard inside show(): a missed hide is cosmetic,
+    // while a hasFocus() that reads false in some webview state would suppress
+    // every tooltip in the app.
+    const onWindowBlur = () => hide()
+    // Minimizing (or the OS hiding the webview) strands it the same way, and
+    // does not always come with a blur.
+    const onVisibility = () => {
+      if (document.hidden) hide()
+    }
+
+    // Let the overlay layers sweep this host — see closeTooltip().
+    hosts.add(hide)
     document.addEventListener('mouseover', onEnter, true)
     document.addEventListener('focusin', onEnter, true)
     document.addEventListener('pointerdown', onPointerDown, true)
     document.addEventListener('scroll', hide, true)
     document.addEventListener('keydown', onKey, true)
+    document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('blur', onWindowBlur)
     return () => {
+      hosts.delete(hide)
       document.removeEventListener('mouseover', onEnter, true)
       document.removeEventListener('focusin', onEnter, true)
       document.removeEventListener('pointerdown', onPointerDown, true)
       document.removeEventListener('scroll', hide, true)
       document.removeEventListener('keydown', onKey, true)
+      document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('blur', onWindowBlur)
       observer.disconnect()
       hide()
     }

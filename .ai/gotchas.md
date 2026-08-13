@@ -1125,6 +1125,22 @@ current code before relying on details, but assume the *lesson* still holds.
   the pointerdown — so the identity guard works for both, and a jsdom test must
   fire `pointerDown` **and** `click` to dismiss a Dialog (SidePanel's bare
   `DismissableLayer` dismisses on pointerdown alone).
+- **A floating layer that renders ABOVE the overlays must be SWEPT when one
+  opens — hit-testing at show time is not enough.** The kit stacks dialogs and
+  side panels at z-50, InfoPopups at `z-[60]` and tooltips at `z-[100]`; the two
+  upper layers are deliberately above so they stay usable INSIDE a dialog, which
+  also means anything left over from the control that opened the dialog floats
+  on top of it. Both overlays therefore call `closeAllInfoPopups()` **and**
+  `closeTooltip()` on open. `TooltipHost.show()` does hit-test (`elementFromPoint`
+  at the anchor's centre, skipped on a 0×0 rect so jsdom can't trip it), but that
+  only guards the *moment of showing*: a tooltip already up, or a hover delay
+  still counting down, never re-runs it. Same reason the host hides on window
+  `blur` + `visibilitychange` — launching Daz/Unreal/Houdini or revealing a path
+  in Explorer moves the pointer nowhere, so neither `mouseleave` nor the anchor's
+  `blur` fires and the tooltip stays painted over the app while the other tool is
+  in front. Deliberately NOT a `document.hasFocus()` guard inside `show()`: a
+  missed hide is cosmetic, a `hasFocus()` reading false in some webview state
+  would suppress every tooltip in the app.
 - **floating-ui's `useFocus` must stay enabled while an InfoPopup is pinned**
   (its escape-key handler arms the block-focus guard that stops the
   return-focus from re-peeking the popup) — but that also leaves its reference

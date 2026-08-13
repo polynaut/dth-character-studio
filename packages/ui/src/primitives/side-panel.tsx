@@ -5,6 +5,7 @@ import { DismissableLayer, FocusScope } from 'radix-ui/internal'
 
 import { Button } from './button.tsx'
 import { closeAllInfoPopups } from './info-popup.tsx'
+import { closeTooltip } from './tooltip-host.tsx'
 import { cn } from '../cn.ts'
 import { isRefocusPointerDown } from '../refocus-click.ts'
 
@@ -72,10 +73,13 @@ export function SidePanel({
     return () => window.clearTimeout(timer)
   }, [open])
 
-  // Same sweep as Modal: InfoPopups portal ABOVE this z-50 layer, so one left
-  // open when the drawer slides in would float over it.
+  // Same sweep as Modal: InfoPopups (z-[60]) and tooltips (z-[100]) portal
+  // ABOVE this z-50 layer, so one left over from the control that opened the
+  // drawer would float over it as it slides in.
   useEffect(() => {
-    if (open) closeAllInfoPopups()
+    if (!open) return
+    closeAllInfoPopups()
+    closeTooltip()
   }, [open])
 
   // Lock body scroll while open (the non-modal layer doesn't).

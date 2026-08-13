@@ -28,7 +28,7 @@ export { SidePanel } from './primitives/side-panel.tsx'
 export { Switch } from './primitives/switch.tsx'
 export { Tabs, TabsContent, TabsList, TabsTrigger } from './primitives/tabs.tsx'
 export { Textarea } from './primitives/textarea.tsx'
-export { TooltipHost } from './primitives/tooltip-host.tsx'
+export { TooltipHost, closeTooltip } from './primitives/tooltip-host.tsx'
 export { InfoPopup } from './primitives/info-popup.tsx'
 
 // Components
