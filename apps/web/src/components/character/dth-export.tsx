@@ -326,6 +326,10 @@ function HoudiniProgressButton({
  *  `[]` per render is a new reference every time (and the lint gate says so). */
 const NO_UNREAL_PROJECTS: ReadonlyArray<string> = []
 
+/** The empty checkbox selection, shared so a "nothing selected" render is the
+ *  same object every time (it is set on every ineligible poll). */
+const EMPTY_SELECTION: ReadonlySet<string> = new Set()
+
 export function DthExportAction({
   projectId,
   character,
@@ -367,6 +371,10 @@ export function DthExportAction({
     /** `networks` = the scene stems the project will export (the DazToHue
      *  networks are matched per scene) — the card tooltip names them. */
     houdini: Array<{ path: string; label: string; networks: Array<string> }>
+    /** The Unreal projects the export is handed to when the queue drains —
+     *  the run's third leg, and a card like any other: a leg the user picked
+     *  and cannot see must not be invisible just because it is quick. */
+    unreal: Array<{ path: string; label: string }>
   } | null>(null)
   const [pipeline, setPipeline] = useState<ExportPipelineView | null>(null)
   // Ref mirrors of the two legs' states, for the OTHER leg's poller: the
@@ -611,6 +619,16 @@ export function DthExportAction({
                 ? ('active' as const)
                 : ('waiting' as const),
         })),
+        // Last, because it happens last: the send waits for every Houdini
+        // project to finish. It is a file write, so it is never `active` for
+        // longer than a poll — `waiting` until it has run, `done` after.
+        ...armed.unreal.map((target) => ({
+          id: `ue:${target.path}`,
+          label: target.label,
+          detail: 'Queued for import when the export finishes',
+          kind: 'unreal' as const,
+          status: unrealSentRef.current ? ('done' as const) : ('waiting' as const),
+        })),
       ],
       log,
       bars,
@@ -709,6 +727,9 @@ export function DthExportAction({
    * mid-export still sends when the queue drains.
    */
   const unrealTargetsRef = useRef<Array<string>>([])
+  /** Set once the send has run — the Unreal cards' `done`. (The targets ref is
+   *  emptied by the send itself, so it cannot answer this.) */
+  const unrealSentRef = useRef(false)
 
   /**
    * Hand what the run just exported to the selected Unreal projects, and say so
@@ -724,6 +745,7 @@ export function DthExportAction({
     const targets = unrealTargetsRef.current
     unrealTargetsRef.current = []
     if (targets.length === 0) return []
+    unrealSentRef.current = true
     const lines = await Promise.all(
       targets.map(async (uprojectPath) => {
         const name = stemOf(uprojectPath)
@@ -925,6 +947,7 @@ export function DthExportAction({
               label: stemOf(path),
               networks: run.scenes.map(stemOf),
             })),
+            unreal: run.unrealProjects.map((path) => ({ path, label: stemOf(path) })),
           }
         }
         // Every Daz card drops (the report's daz entry marks the leg done).
@@ -1006,6 +1029,9 @@ export function DthExportAction({
           label: stemOf(path),
           networks: (run.scenes ?? []).map(stemOf),
         })),
+        // A running batch's live progress carries no Unreal plan (only its
+        // FINISHED snapshot does) — this window shows the cards it can name.
+        unreal: [],
       }
     }
     publishPipeline(run, houdiniRef.current)
@@ -1155,6 +1181,7 @@ export function DthExportAction({
             label: stemOf(path),
             networks: plan.sceneScope.map(stemOf),
           })),
+          unreal: plan.unrealProjects.map((path) => ({ path, label: stemOf(path) })),
         }
         // Arm the watch's own poll: `houdini` state drives the interval.
         setHoudini({ state: 'starting', startedAtMs: plan.startedAtMs })
@@ -1345,6 +1372,7 @@ export function DthExportAction({
             // A new run supersedes the previous outcome (see dismissFinishToasts).
             dismissFinishToasts()
             runReportRef.current = null
+            unrealSentRef.current = false
             setPending(true)
             // The header's task cards: the run's selection in run order —
             // the Daz scenes, then the Houdini projects (rom-only continues
@@ -1360,6 +1388,7 @@ export function DthExportAction({
                 label: stemOf(path),
                 networks: run.houdiniScenes.map(stemOf),
               })),
+              unreal: run.unrealProjects.map((path) => ({ path, label: stemOf(path) })),
             }
             publishPipeline(null, houdiniRef.current)
             // Arm the progress view right away (0/n until Daz delivers).
@@ -1370,6 +1399,7 @@ export function DthExportAction({
           onHoudiniQueue={(projects, scenes, unrealTargets) => {
             dismissFinishToasts()
             runReportRef.current = null
+            unrealSentRef.current = false
             pipelineRef.current = {
               daz: [],
               houdini: projects.map((path) => ({
@@ -1377,6 +1407,7 @@ export function DthExportAction({
                 label: stemOf(path),
                 networks: scenes.map(stemOf),
               })),
+              unreal: unrealTargets.map((path) => ({ path, label: stemOf(path) })),
             }
             unrealTargetsRef.current = unrealTargets
             void startHoudiniQueue(projects, scenes)
@@ -1741,13 +1772,17 @@ function UnrealRow({
   uproject,
   checked,
   has,
+  disabled,
   onToggle,
 }: {
   uproject: string
   checked: boolean
-  /** The project already holds this character (`Content/DazToHue/<set>`) —
-   *  why it comes pre-checked. null = the probe hasn't landed. */
+  /** The project already holds this character (an asset named after one of its
+   *  export sets) — why it comes pre-checked. null = the probe hasn't landed. */
   has: boolean | null
+  /** This run produces no export, so there is nothing to send — the row goes
+   *  inert rather than sitting there ticked and lying about what Start does. */
+  disabled: boolean
   onToggle: () => void
 }) {
   const stem = (uproject.split(/[\\/]/).pop() ?? uproject).replace(/\.[^./\\]+$/, '')
@@ -1756,7 +1791,7 @@ function UnrealRow({
   return (
     <div className="group/card relative w-full">
       <div
-        className="unreal-pick-card relative flex items-center gap-3 rounded-lg border p-3 pl-4"
+        className={`unreal-pick-card relative flex items-center gap-3 rounded-lg border p-3 pl-4${disabled ? ' opacity-50' : ''}`}
         data-selected={checked ? 'true' : undefined}
       >
         <input
@@ -1764,6 +1799,7 @@ function UnrealRow({
           className="relative z-10 size-4 shrink-0 accent-unreal-blue"
           aria-label={`Send to ${stem}`}
           checked={checked}
+          disabled={disabled}
           onChange={onToggle}
         />
         <span className="flex aspect-[3/4] h-[56px] shrink-0 items-center justify-center rounded-md bg-[#262626]">
@@ -1776,13 +1812,15 @@ function UnrealRow({
           </p>
         </div>
       </div>
-      <button
-        type="button"
-        aria-hidden
-        tabIndex={-1}
-        onClick={onToggle}
-        className="absolute inset-0 rounded-lg"
-      />
+      {!disabled && (
+        <button
+          type="button"
+          aria-hidden
+          tabIndex={-1}
+          onClick={onToggle}
+          className="absolute inset-0 rounded-lg"
+        />
+      )}
       <div aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-1.5 rounded-l-lg bg-unreal-blue" />
     </div>
   )
@@ -1868,13 +1906,7 @@ function DthExportDialog({
     let active = true
     void fetchUnrealCharacterPresence({ data: { projectId, id: character.id } })
       .then((presence) => {
-        if (!active) return
-        setUnrealHas(presence)
-        // Pre-check the ones that already hold this character: those are the
-        // projects a re-export is FOR. A project that doesn't have it yet is
-        // left to the user — sending a character into a project on its first
-        // run is a decision, not a continuation.
-        setCheckedUnreal(new Set(unrealProjects.filter((path) => presence[path])))
+        if (active) setUnrealHas(presence)
       })
       .catch(() => {
         // Detection is a convenience: with none, the rows simply start
@@ -2002,6 +2034,28 @@ function DthExportDialog({
    */
   const unrealSendable =
     checkedHips.size > 0 && houdiniMode !== 'open' && mode !== 'rom-only'
+
+  /**
+   * The Unreal selection FOLLOWS the Houdini one, the same way the Houdini list
+   * follows the Daz scenes: untick the projects that would export and the send
+   * has nothing to hand over, so it leaves the run with them — and comes back
+   * when they do. Also the reason the probe above only sets `unrealHas`: it
+   * lands after this has run at least once, and a selection seeded there would
+   * survive a run that can no longer send.
+   *
+   * A hand-picked selection is reset by that round trip, exactly as a
+   * hand-picked Houdini project is when its scene goes and returns. The default
+   * IS the answer to "which projects is this export for".
+   */
+  useEffect(() => {
+    if (!unrealSendable || unrealHas === null) {
+      setCheckedUnreal(EMPTY_SELECTION)
+      return
+    }
+    setCheckedUnreal(new Set(unrealProjects.filter((path) => unrealHas[path])))
+    // `unrealProjects` is the prop array, stable per render of the parent.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unrealSendable, unrealHas])
 
   useEffect(() => {
     let active = true
@@ -2386,6 +2440,7 @@ function DthExportDialog({
                 uproject={uproject}
                 checked={checkedUnreal.has(uproject)}
                 has={unrealHas === null ? null : (unrealHas[uproject] ?? false)}
+                disabled={!unrealSendable}
                 onToggle={() =>
                   setCheckedUnreal((current) => {
                     const next = new Set(current)

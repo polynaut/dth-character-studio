@@ -5,8 +5,9 @@ import { cn } from '@dth/ui'
 
 /**
  * The header's live DTH-Export pipeline display: a narrow task-card column
- * (every Daz scene of the selection, then every Houdini project — the
- * chronological order the run works through) beside the tail-mode log window.
+ * (every Daz scene of the selection, then every Houdini project, then every
+ * Unreal project the export is handed to — the chronological order the run
+ * works through) beside the tail-mode log window.
  * The ACTIVE task wears its kind's solid color (the selected-card look),
  * waiting tasks sit grayish with the kind's accent edge — and a finished task
  * drops away toward the bottom right while the ones behind it slide up, a
@@ -21,7 +22,7 @@ export interface ExportTask {
   label: string
   /** Extra tooltip context — e.g. the networks a Houdini project exports. */
   detail?: string
-  kind: 'daz' | 'houdini'
+  kind: 'daz' | 'houdini' | 'unreal'
   status: 'waiting' | 'active' | 'done'
 }
 
@@ -80,7 +81,12 @@ function ExportTaskCard({
   const active = task.status === 'active' || departing
   // The kind's color rides a left BAR and a status dot — the card itself stays
   // a surface, so a queue of them reads as a list instead of a row of paint.
-  const bar = task.kind === 'daz' ? 'bg-emerald-500' : 'bg-orange-500'
+  const bar =
+    task.kind === 'daz'
+      ? 'bg-emerald-500'
+      : task.kind === 'houdini'
+        ? 'bg-orange-500'
+        : 'bg-unreal-blue'
   return (
     <div
       data-task={task.id}
