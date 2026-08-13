@@ -195,7 +195,7 @@ export function sceneDthPath(
   if (!root) return ''
   // NORMALIZE what we were handed. `sceneExportFolderRel`/`sceneExportSubfolders`
   // key by `normalizeSceneKey` (lowercased, forward slashes) — and the caller is
-  // the export dialog, which passes the character's stored paths verbatim. Any
+  // the export panel, which passes the character's stored paths verbatim. Any
   // Windows path has a capital letter in it, so looking up the raw string missed
   // EVERY scene: the job came out empty and "Export too" died on "none of these
   // scenes has an export path" every single time. Accept either spelling here

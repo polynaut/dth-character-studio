@@ -207,7 +207,7 @@ Running the script yourself (above) is one way — the **DTH Export** button in
 the character header does the whole thing for you, Houdini included:
 
 <p align="center">
-  <img width="900" alt="the DTH Export dialog — Daz scenes and Houdini projects, each with their Mode" src="screenshots/dth-export-dialog.png" />
+  <img width="900" alt="the DTH Export panel — Daz scenes and Houdini projects, each with their Mode" src="screenshots/dth-export-panel.png" />
   <br>
   <sub><em>Pick the Daz scenes and their run, then the Houdini projects that carry on with the results.</em></sub>
 </p>
@@ -246,7 +246,7 @@ trip; untick them and the run ends with Daz. Their own **Mode**:
 projects that only import *that* scene leave the run with it; tick it back on
 and they return. The match is the one Houdini itself makes at export time — a
 project belongs in the run when one of its networks imports a selected scene's
-`.dth` file — so what the dialog shows and what the run exports can't disagree.
+`.dth` file — so what the panel shows and what the run exports can't disagree.
 Names are deliberately not consulted: networks and projects get renamed and
 copied around, the import path doesn't. A project only ever *leaves* the run
 when its imports actually name a scene you unticked; one the background scan
@@ -262,7 +262,7 @@ for a Houdini export to pick up — the projects don't pre-select there, and the
 export mode is disabled.
 
 > To just **open** a Houdini project, use the open button on its card — the
-> dialog runs the pipeline, and a mode that ran nothing sat oddly in it. And
+> panel runs the pipeline, and a mode that ran nothing sat oddly in it. And
 > "export every scene" is what checking every scene in the list above means, so
 > that mode is gone too.
 
@@ -304,7 +304,7 @@ delivered CSV, exactly as if you had run the scripts by hand. A closed Daz is
 started **minimized**, since nobody needs to watch it work; a running Daz picks
 the batch up by itself and is left exactly as you had it.
 
-The dialog refuses to start while the Runner plugin is missing or older than
+The panel refuses to start while the Runner plugin is missing or older than
 the one bundled with the app — the notice links straight to Settings to update
 it first. (A skip-Daz run doesn't need the Runner at all.)
 
@@ -406,7 +406,7 @@ What happens:
    works the batch and exits again. No window opens, so there is nothing to wait
    for while a big project loads and nothing of yours to close — the task list
    in the header is where you watch it. Want a project open to work in instead?
-   Open it from its card on the character page; this dialog runs the pipeline.
+   Open it from its card on the character page; this panel runs the pipeline.
 3. Only the networks importing **the scenes you ticked** export. A project
    holding networks for other scenes — or other characters — is left alone.
 4. After the last project, **one report** names every leg — *"Daz: 2/2 scenes

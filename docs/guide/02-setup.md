@@ -67,8 +67,8 @@ like Activate, and only one installation can carry it: turning it on for one
 card turns it off everywhere else.
 
 Two things follow the switch, and have to — the Runner plugin is **installed
-into** whichever installation runs the batch, and the export dialog **checks for
-it there**. A Runner sitting in the other Daz would let the dialog report
+into** whichever installation runs the batch, and the export panel **checks for
+it there**. A Runner sitting in the other Daz would let the panel report
 "ready", then start a Daz with nothing to claim the job, and wait for a batch
 that never begins.
 
@@ -88,7 +88,7 @@ export pointed at a folder that isn't there.
 
 > [!NOTE]
 > Don't confuse this with the **Export only** *mode* inside the
-> [DTH Export dialog](./05-rom-in-daz.md#batch-export--dth-export). That one
+> [DTH Export panel](./05-rom-in-daz.md#batch-export--dth-export). That one
 > decides *what* a batch does (export the saved ROM animations without
 > rebuilding them); this switch decides *which Daz Studio* runs it.
 

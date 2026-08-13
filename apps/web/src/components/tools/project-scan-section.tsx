@@ -378,7 +378,7 @@ export function ProjectScanSection({
                       {character.name}
                     </label>
                     {/* Tiny scene cards — the same Daz-green card language the
-                        export dialog's scene rows use, with the scene's own
+                        export panel's scene rows use, with the scene's own
                         `.tip.png` preview. Picking the right outfit by
                         thumbnail beats reading near-identical stems
                         (Ita_G9_GP vs Ita_G9_GP_Winter). */}

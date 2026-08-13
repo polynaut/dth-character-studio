@@ -54,7 +54,7 @@ describe('sceneDthPath — the match key handed to Houdini', () => {
     // scenes ROOT (which needs the project's dazSubdir, i.e. resolution only
     // the api layer can do). Called without it, the folder falls back to the
     // scene's file stem, so the path names a folder no export ever wrote —
-    // which is exactly how the DTH Export dialog's scene→project matching
+    // which is exactly how the DTH Export panel's scene→project matching
     // silently matched nothing until `fetchSceneDthPaths` resolved it there.
     expect(sceneDthPath(kira(), PRIMARY)).toBe('X:/p/Kira/houdini/daz-export/Kira/Kira.dth')
     expect(sceneDthPath(kira(), PRIMARY)).not.toBe(sceneDthPath(kira(), PRIMARY, ROOT))
@@ -62,7 +62,7 @@ describe('sceneDthPath — the match key handed to Houdini', () => {
 
   it('resolves a RAW stored scene path, not only a normalized key', () => {
     // The regression that made "Export too" fail on every real run: the folder
-    // map is keyed lowercase, but the export dialog passes the character's
+    // map is keyed lowercase, but the export panel passes the character's
     // stored paths verbatim — and every Windows path has a capital in it, so
     // the lookup missed, the job came out with zero scenes, and the run died on
     // "none of these scenes has an export path".
@@ -97,7 +97,7 @@ describe('buildHoudiniJob', () => {
     expect(job.exportDirectory).toBe('X:/unreal/Kira')
   })
 
-  it('accepts the raw stored paths the export dialog actually passes', () => {
+  it('accepts the raw stored paths the export panel actually passes', () => {
     const job = buildHoudiniJob(
       kira(),
       ['X:\\p\\Kira\\daz3d\\primary\\Kira.duf', 'X:\\p\\Kira\\daz3d\\summertide\\KiraSummertide.duf'],

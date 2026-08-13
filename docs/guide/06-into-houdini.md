@@ -229,7 +229,7 @@ pick up changes.
 ## Send to Unreal
 
 Sending happens in **one** place: the
-[DTH Export dialog](./05-rom-in-daz.md#batch-export--dth-export)'s **Unreal
+[DTH Export panel](./05-rom-in-daz.md#batch-export--dth-export)'s **Unreal
 projects** section, so a full **Daz → Houdini → Unreal** run is one Start. To
 send an export you already have without running anything, pick **Skip Daz — use
 last exports** and **Skip Houdini — use last exports**: then the whole run is

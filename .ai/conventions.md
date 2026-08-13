@@ -425,6 +425,15 @@ affirmative/primary action (e.g. `bulk-delete-dialog.tsx`,
 `character/dth-export.tsx`). Inline (non-modal) cancels — path chips, the Tools
 danger-zone confirm strip — keep their own styling.
 
+**In a `SidePanel`, that same row goes in the `footer` PROP, never at the end of
+`children`.** The drawer is full-height, so a footer inside the scrolling body
+gets the worst of both: with short content it floats mid-panel over a tall empty
+area, and with long content it scrolls off the bottom — measured on the DTH
+Export panel, whose three leg lists do both. The prop renders it as its own
+bordered row beside the body, inside the focus trap. Same shape decision as
+Modal vs SidePanel itself: a one-question confirm stays a `Modal`; a working
+surface with lists and several sections is a drawer.
+
 ## Writing conventions
 
 - Generated `.dsa`/CSV output changes must be intentional: the rom tests pin

@@ -6,7 +6,7 @@ import type { RunnerGate } from '#/lib/rom/api.ts'
  * The Runner-plugin gate notice: batches (DTH exports, the Tools genesis-index
  * build) run through the Runner plugin in Daz Studio, so a missing or outdated
  * install blocks the handoff — this box says why and deep-links to Settings →
- * General (where the Runner section lives). Shared by the DTH Export dialog
+ * General (where the Runner section lives). Shared by the DTH Export panel
  * and Tools → Build Genesis Index (`fetchExportRunnerGate` produces the gate).
  */
 export function RunnerGateNotice({

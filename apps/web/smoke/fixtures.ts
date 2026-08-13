@@ -278,7 +278,7 @@ export interface SeedOptions {
   }>
   /** settings.json: the DIM manifests folder (Settings → Project product config). */
   dimManifestsFolder?: string
-  /** settings.json: the Daz Studio install folder. The DTH Export dialog's
+  /** settings.json: the Daz Studio install folder. The DTH Export panel's
    *  Runner check needs one configured; the fake can't read a real install,
    *  and an unreadable Runner state deliberately never blocks the dialog. */
   dazInstallFolder?: string

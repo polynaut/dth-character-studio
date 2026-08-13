@@ -377,7 +377,7 @@ test('a reloaded window ADOPTS the in-flight batch — rows from the job file, s
   // see it.
   await expect(page.locator('[data-progressbar="run"]')).toHaveAttribute('data-percent', '40')
   // …and it does NOT claim to know what the run does to that scene: an adopted
-  // window reads a job file, which never carried the dialog's choice.
+  // window reads a job file, which never carried the panel's choice.
   await expect(page.locator(`[data-task="daz:${P.scene}"]`)).not.toContainText('ROM + Export')
   await expect(page.locator('[data-task^="hou:"]')).toHaveCount(0)
   await expect(page.getByRole('button', { name: /Working/ })).toBeVisible()

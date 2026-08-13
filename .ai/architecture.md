@@ -53,7 +53,7 @@ supplies it in `apps/web/src/routes/__root.tsx`. Single public entry
 | `__root.tsx` | App shell: UiConfigProvider, ConfirmProvider, Toaster, TooltipHost, update-prompt host, native menu wiring, startup effects. |
 | `index.tsx` | Home/launcher: recent `.dcsp` projects, create/open project (each opens its own native window). |
 | `projects.$projectId.index.tsx` | Project overview: character grid/list, create character, attachments + notes tabs, Unreal footer. |
-| `projects.$projectId.characters.$characterId.tsx` | **The character editor** — draft/save/generate. Decomposed: the route (~640 lines) composes `components/character/*` sections (editor-header — which hosts the DTH Export dialog, `dth-export.tsx` — identity, scripts, export-settings, rom-editor, operations-section, rom-run-log-report, scene-footer, frame-zero/preserve/groom fields) + `components/houdini-projects-field.tsx` + `lib/use-scene-selection` / `use-rom-run-log` / `character-paths`. The ROM subtree (`RomSections`/`PoseGroupsEditor`/`GroupCard`) is `React.memo`d with latest-ref, id-routed callbacks — new props into it must keep stable identities or the memo chain silently dies. |
+| `projects.$projectId.characters.$characterId.tsx` | **The character editor** — draft/save/generate. Decomposed: the route (~640 lines) composes `components/character/*` sections (editor-header — which hosts the DTH Export side panel, `dth-export.tsx` — identity, scripts, export-settings, rom-editor, operations-section, rom-run-log-report, scene-footer, frame-zero/preserve/groom fields) + `components/houdini-projects-field.tsx` + `lib/use-scene-selection` / `use-rom-run-log` / `character-paths`. The ROM subtree (`RomSections`/`PoseGroupsEditor`/`GroupCard`) is `React.memo`d with latest-ref, id-routed callbacks — new props into it must keep stable identities or the memo chain silently dies. |
 | `settings.tsx` | Project tab (`.dcsp` manifest) + General (machine tool paths) + App Data. |
 | `tools.tsx` | Three tabs, **Scan & index** first and the default (`ProjectScanSection`, `components/tools/project-scan-section.tsx`; a plain `/tools` lands here, `?tab=install` / `?tab=refresh` address the others), then install (Daz/Houdini content install sections, dedup, danger zone), then Refresh assets. |
 | `about.tsx` | Version, asset staleness summary, links. |
@@ -91,7 +91,7 @@ a plain browser with native features as no-ops):
   2026-08-11) — driven by `api/houdini.ts`
   (`startHoudiniExport` / `fetchHoudiniRunProgress`) and Rust
   `launch_houdini_job`/`houdini_running`. **Live since v0.59** — the DTH Export
-  dialog's Houdini list continues a Daz batch straight into Houdini (sequential
+  panel's Houdini list continues a Daz batch straight into Houdini (sequential
   multi-project queue: `startHoudiniQueue` in `components/character/dth-export.tsx`;
   see `.ai/domain.md` § the Houdini export handoff).
 - `lib/rom/run-log.ts` — pure per-scene run-log parsing/merge (log v2:

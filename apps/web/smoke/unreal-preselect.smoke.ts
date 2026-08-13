@@ -15,7 +15,7 @@ const callsNamed = (page: import('@playwright/test').Page, cmd: string) =>
     cmd,
   )
 
-// The DTH Export dialog's UNREAL pre-selection, end to end through the fake:
+// The DTH Export panel's UNREAL pre-selection, end to end through the fake:
 // stored scan (`exportSets`) → what this run writes → is any of THAT already in
 // the Unreal project → tick.
 //
@@ -379,7 +379,7 @@ test('nothing claims the job and no editor is running — the studio opens the p
   // that visibly does nothing. Opening the project is the rest of that leg: the
   // bridge claims the job on startup.
   //
-  // Driven through the ONE way to send — the DTH Export dialog, with both Daz
+  // Driven through the ONE way to send — the DTH Export panel, with both Daz
   // and Houdini skipped, which is the "just re-import in Unreal" run.
   const seed = buildSeed({
     activeProjectFile: P.dcsp,

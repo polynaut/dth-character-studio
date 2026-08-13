@@ -340,7 +340,7 @@ export async function renameHoudiniProject({ data }: { data: unknown }): Promise
   }
   await rename(hipPath, dest)
   // The scan follows the file. Every reader keys on the path, so without this
-  // a rename silently un-scans the project — measured: the DTH Export dialog
+  // a rename silently un-scans the project — measured: the DTH Export panel
   // stopped pre-selecting Unreal projects and asked for a Rescan nobody had a
   // reason to suspect. Best-effort: a cache that cannot be updated is a rescan
   // later, never a failed rename.
@@ -1088,7 +1088,7 @@ export function dismissHoudiniRun(): Promise<void> {
 
 /**
  * Each linked scene's expected `.dth` path, keyed by {@link normalizeSceneKey}
- * — the identity a DazToHue network carries, and what the DTH Export dialog
+ * — the identity a DazToHue network carries, and what the DTH Export panel
  * matches a project's recorded `imports` against.
  *
  * Lives HERE, not in the dialog, for one measured reason: the export folder of

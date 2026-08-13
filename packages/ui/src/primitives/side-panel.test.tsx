@@ -39,6 +39,20 @@ describe('SidePanel', () => {
     expect(document.activeElement).toBe(second)
   })
 
+  it('renders the footer OUTSIDE the scrolling body, and keeps it in the focus order', () => {
+    const { getByRole, getByText } = render(
+      <SidePanel open title="Panel" onClose={vi.fn()} footer={<button type="button">Start</button>}>
+        <button type="button">First</button>
+      </SidePanel>,
+    )
+    const start = getByText('Start')
+    // Not a descendant of the body that scrolls — that is the whole point: the
+    // action stays on the panel's bottom edge however long the body gets.
+    expect(getByText('First').parentElement?.contains(start)).toBe(false)
+    // …and it is still inside the panel, so the focus trap includes it.
+    expect(getByRole('dialog').contains(start)).toBe(true)
+  })
+
   it('Escape dismisses via onClose', () => {
     const { onClose } = renderPanel()
     fireEvent.keyDown(document, { key: 'Escape' })

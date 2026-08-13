@@ -428,7 +428,7 @@ current code before relying on details, but assume the *lesson* still holds.
   `os.path.normpath` (a stored verdict must not bake one machine's mount
   layout in) and the TS `sceneDthPath` resolves nothing physical at all. Two
   spellings the RUN happily folds together therefore compare unequal in the
-  DTH Export dialog. The rule that reads them (`hipsForSelectedScenes`) only
+  DTH Export panel. The rule that reads them (`hipsForSelectedScenes`) only
   drops a project on a POSITIVE match against a deselected scene; "matches
   nothing" keeps whatever is ticked. The general shape: when a comparison
   crosses a normalization boundary, only a match carries information — a
@@ -1137,7 +1137,7 @@ current code before relying on details, but assume the *lesson* still holds.
   empty/whitespace draft must revert instead (NumberField, test-pinned).
 - **A map keyed by `normalizeSceneKey` must normalize AT THE ACCESSOR — never
   trust callers to.** `sceneDthPath` looked up `sceneExportFolderRel`'s
-  lowercase-keyed map with the caller's raw scene path; the export dialog passes
+  lowercase-keyed map with the caller's raw scene path; the export panel passes
   the character's STORED paths, and every real Windows path has a capital letter
   in it, so every lookup missed — "Export too" built an empty job and died on
   "none of these scenes has an export path" on every real run. The pure tests
@@ -1452,7 +1452,7 @@ current code before relying on details, but assume the *lesson* still holds.
 - **A path-keyed cache is orphaned by a RENAME, and every reader then answers
   "never scanned".** Measured 2026-08-13, right after editable project names
   shipped: renaming a `.hip` left its scan entry under the old path, so the DTH
-  Export dialog stopped pre-selecting Unreal projects — it no longer knew which
+  Export panel stopped pre-selecting Unreal projects — it no longer knew which
   export sets those projects write — and the only cure was a Rescan the user had
   no reason to suspect. `renameScanEntry` (houdini-project-cache.ts) moves the
   entry: map key, the freshness key's first segment, and the project's own

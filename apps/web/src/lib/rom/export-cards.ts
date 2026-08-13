@@ -30,7 +30,7 @@ export interface DazSceneTarget {
  *
  * `mode` is optional because one caller genuinely cannot know it: a run this
  * window merely ADOPTED for display was started elsewhere, and the job file it
- * reads carries rows, not the dialog's choice. Those rows then say what is
+ * reads carries rows, not the panel's choice. Those rows then say what is
  * being worked without claiming what it will do.
  */
 export function dazTaskCards(

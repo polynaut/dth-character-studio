@@ -212,9 +212,14 @@ function RootComponent() {
       {/* Floating-UI tooltips for every title= attribute, app-wide. */}
       <TooltipHost />
       {/* Dev-only: never ship the devtools button to installed/end-user builds.
-          The screenshot suite sets `window.__dthHideDevtools` before the bundle
-          runs so the floating trigger stays out of the doc screenshots (a DOM/CSS
-          hack loses to the widget re-mounting during Playwright's fullPage shot). */}
+          The smoke harness sets `window.__dthHideDevtools` before the bundle runs
+          — `installTauriMock` for every spec, `prime()` for the docs suites — and
+          it earns its keep twice. It keeps the floating trigger out of the doc
+          screenshots (a DOM/CSS hack loses to the widget re-mounting during
+          Playwright's fullPage shot), and it stops the trigger swallowing clicks
+          aimed at anything else anchored BOTTOM-RIGHT — where a SidePanel's
+          pinned footer puts its primary action. CI sees neither problem: a
+          production bundle never renders this. See `.ai/testing.md`. */}
       {import.meta.env.DEV &&
         !(window as unknown as { __dthHideDevtools?: boolean }).__dthHideDevtools && (
         <TanStackDevtools

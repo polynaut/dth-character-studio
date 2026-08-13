@@ -138,8 +138,9 @@ The **real SPA in a real browser** against an in-memory fake of the native layer
   loser, not six broken tests.
   Two caveats worth keeping: the bundle is a PRODUCTION build, so
   `import.meta.env.DEV` is FALSE in CI — anything a spec needs must not sit
-  behind that flag (`__dthToast` is read by nothing, `__dthHideDevtools` guards
-  devtools a prod build never renders). **The `updater.ts` line in that original
+  behind that flag (`__dthToast` is read by nothing; `__dthHideDevtools` guards
+  devtools a prod build never renders — which cuts BOTH ways, see the bullet
+  after this one). **The `updater.ts` line in that original
   audit was wrong and is worth knowing about**: it does NOT early-return here.
   Its guard is `!isTauri() || import.meta.env.DEV`, the mock sets
   `isTauri = true`, and a prod build makes DEV false — so both halves are false
@@ -157,6 +158,20 @@ The **real SPA in a real browser** against an in-memory fake of the native layer
   saving, and that the suite passes prebuilt. Watch the next handful of PR runs
   before calling it closed. Sharding across runners stays the untaken lever, and
   still the maintainer's call because it changes the required check's shape.
+- **The prebuilt/dev split runs the OTHER way too: dev-only UI can eat a click
+  CI never sees.** The bullet above is about DEV-gated code not running in CI.
+  The inverse bit once: the TanStack devtools trigger is `import.meta.env.DEV`
+  only, `position: fixed`, BOTTOM-RIGHT — so under the default local run (the
+  dev server) it floats over anything anchored in that corner, and under CI's
+  prebuilt production bundle it does not exist at all. Measured 2026-08-13 on
+  the DTH Export side panel, whose pinned footer puts **Start** in exactly that
+  corner: two specs failed locally and passed on CI. That pattern reads as
+  flakiness and is not — it is a real overlay present in one of the two worlds.
+  `installTauriMock` therefore sets `__dthHideDevtools` itself (installing the
+  fake IS "an automated browser is driving the app"), not just `prime()` — most
+  specs install the fake directly and never went through `prime`. The general
+  shape: a LOCAL-ONLY smoke failure on a click is a question about what dev mode
+  renders on top before it is a question about the component under test.
 - **Do NOT run the whole smoke suite for every edit — CI is its gate.** Locally,
   run the specs covering what you changed (`pnpm --filter @dth/web smoke
   houdini-export` filters by filename substring). The full run is for CI, for a

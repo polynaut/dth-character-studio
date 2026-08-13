@@ -5,7 +5,7 @@ import { installTauriMock } from './tauri-mock.ts'
 
 import type { Page } from '@playwright/test'
 
-// "Houdini only" end to end — the DTH Export dialog's fourth mode: no Daz run,
+// "Houdini only" end to end — the DTH Export panel's fourth mode: no Daz run,
 // no Runner. The selected scenes' LAST-delivered exports are handed straight to
 // Houdini, which opens the chosen project and runs its DazToHue export nodes.
 // The same Houdini leg "Export too" continues into after its Daz batch — this

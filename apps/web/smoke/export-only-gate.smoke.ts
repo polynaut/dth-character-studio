@@ -6,7 +6,7 @@ import { installTauriMock } from './tauri-mock.ts'
 import type { Page } from '@playwright/test'
 
 // "Export only" runs the exporter over each scene's SAVED ROM animation, so a
-// scene without one has nothing to export. Once the dialog's scene probe has
+// scene without one has nothing to export. Once the panel's scene probe has
 // landed, the row controls keep such scenes out of the selection — so the gate
 // exists for the two windows the controls cannot cover, and that is what these
 // specs demonstrate:
@@ -27,7 +27,7 @@ const romAnimation = (scene: string) => {
   return `${dir}/rom-animations/${stem}_ROM.duf`
 }
 /** The handoff-stamps file the scene probe (fetchExecuteScenes) reads FIRST —
- *  holding it holds the whole probe with the dialog's status un-landed. */
+ *  holding it holds the whole probe with the panel's status un-landed. */
 const STAMPS = `${P.charMeta}/.dth_execute_stamps.json`
 
 const unhandledCommands = (page: Page) =>
@@ -107,7 +107,7 @@ test('start re-verifies the ROM animations — one deleted after the probe refus
   await expect(start).toBeEnabled()
 
   // The ROM animation vanishes AFTER the check (deleted or moved in Daz) — the
-  // dialog's status is now stale under a checked row.
+  // panel's status is now stale under a checked row.
   await page.evaluate((path) => {
     ;((window as any).__tauriMock.files as Map<string, string>).delete(path)
   }, romAnimation(P.scene))

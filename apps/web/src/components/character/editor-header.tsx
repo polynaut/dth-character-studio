@@ -101,7 +101,7 @@ export function EditorHeader({
   hasRunProblems: boolean
   /** “My DAZ 3D Library” is set (DTH Export needs it for the job file + scripts). */
   dazLibraryConfigured: boolean
-  /** The project's linked `.uproject`s — the DTH Export dialog's third leg. */
+  /** The project's linked `.uproject`s — the DTH Export panel's third leg. */
   unrealProjects?: ReadonlyArray<string>
 }) {
   const { character } = draft

@@ -463,7 +463,7 @@ interface ActiveExportRun {
    *  In-memory like the rest of the watch: a reloaded window (display-only
    *  adoption) doesn't know it, and simply shows no time. */
   startedAtMs: number
-  /** The dialog's SELECTED Houdini projects (`.hip`), in list order — what the
+  /** The panel's SELECTED Houdini projects (`.hip`), in list order — what the
    *  finish continuation works through once the batch is done ([] = none). */
   houdiniProjects: Array<string>
   /** What those projects do when their turn comes — the Houdini list's Mode
@@ -627,7 +627,7 @@ export type ExportRunProgress =
       scenes?: Array<string>
       /** What the batch does to each scene (same watches) — the Daz task
        *  cards' subtitle. Absent on a display-only adoption: that window is
-       *  reading a job file, which never carried the dialog's choice. */
+       *  reading a job file, which never carried the panel's choice. */
       mode?: ExportMode
       /** The user asked this run to stop and it hasn't reached a stop point
        *  yet — the button says "Stopping…" instead of offering the interrupt
@@ -1214,11 +1214,11 @@ export async function clearExporterJobFiles(expect?: string): Promise<Array<stri
   return removed
 }
 
-/** One linked scene's state for the DTH Export dialog. */
+/** One linked scene's state for the DTH Export panel. */
 export interface ExecuteSceneStatus {
   scenePath: string
   primary: boolean
-  /** Inputs changed since the last handoff (or never handed off) — the dialog's
+  /** Inputs changed since the last handoff (or never handed off) — the panel's
    *  default check. Always false when the `.duf` is missing. */
   affected: boolean
   /** The `.duf` can't be read — the row can't be exported. */
@@ -1241,7 +1241,7 @@ export interface ExecuteSceneStatus {
 
 /**
  * Every linked scene with its affected-state + saved-ROM state — what the DTH
- * Export dialog pre-checks (per mode). Per-scene tolerant: an unreadable `.duf`
+ * Export panel pre-checks (per mode). Per-scene tolerant: an unreadable `.duf`
  * reports `missing` instead of throwing (the dialog disables that row).
  */
 export async function fetchExecuteScenes({ data }: { data: unknown }): Promise<Array<ExecuteSceneStatus>> {
@@ -1308,10 +1308,10 @@ export async function fetchExecuteScenes({ data }: { data: unknown }): Promise<A
 }
 
 const executeInput = charScopeInput.extend({
-  /** The scenes to enqueue, chosen in the DTH Export dialog — each must be one
+  /** The scenes to enqueue, chosen in the DTH Export panel — each must be one
    *  of the character's linked scenes. */
   scenes: z.array(z.string().min(1)).min(1),
-  /** What the run does — the dialog's first step. Defaults to the full
+  /** What the run does — the panel's first step. Defaults to the full
    *  ROM + export run (see {@link ExportMode}). */
   mode: z.enum(EXPORT_MODES).default('rom-export'),
   /** The Houdini projects selected for the after-batch continuation, in list

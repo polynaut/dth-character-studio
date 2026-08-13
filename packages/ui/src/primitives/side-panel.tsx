@@ -14,7 +14,8 @@ const ANIM_MS = 300
 /**
  * A full-height overlay panel that slides in from the right (a "drawer"). The
  * backdrop fades in; the panel is `75vw` wide (capped at 1000px) and scrolls
- * its own body.
+ * its own body, between a fixed title bar and an optional `footer` bar pinned
+ * to its bottom edge.
  * Esc or a backdrop click closes it. Portaled to <body> so a CSS-contained
  * ancestor can't capture its fixed positioning.
  *
@@ -35,12 +36,24 @@ export function SidePanel({
   title,
   onClose,
   children,
+  footer,
   className,
 }: {
   open: boolean
   title?: ReactNode
   onClose: () => void
   children: ReactNode
+  /**
+   * A bar pinned to the panel's bottom edge, OUTSIDE the scrolling body — for
+   * the drawer's confirm/cancel actions.
+   *
+   * A footer inside the body cannot be both: it sits wherever the content ends
+   * (mid-panel, with a tall empty area under it) until the content is long
+   * enough to scroll, and only then does it reach the bottom. As its own flex
+   * row beside the body it is always at the bottom and never scrolls away —
+   * which is the whole point of putting an action in a full-height drawer.
+   */
+  footer?: ReactNode
   /** Extra classes for the sliding panel (e.g. a different max width). */
   className?: string
 }) {
@@ -154,7 +167,15 @@ export function SidePanel({
                 <X className="size-5" />
               </Button>
             </div>
-            <div className="flex-1 overflow-y-auto p-4">{children}</div>
+            {/* min-h-0 is belt and braces, NOT what pins the footer. A flex
+                item's `min-height: auto` does refuse to shrink below its
+                content — but an item that is its own scroll container already
+                resolves that to 0 (css-flexbox §4.5), so `overflow-y-auto`
+                alone keeps the footer on the bottom edge; measured both ways in
+                Chromium, identical. It stays so the invariant survives someone
+                changing the overflow. */}
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">{children}</div>
+            {footer && <div className="shrink-0 border-t p-4">{footer}</div>}
           </aside>
         </DismissableLayer.Root>
       </FocusScope.Root>

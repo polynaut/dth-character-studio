@@ -387,7 +387,7 @@ export function fetchRunnerStatus(dazInstallFolder: string): Promise<storage.Run
   return storage.runnerStatus(dazInstallFolder)
 }
 
-/** The Runner gate for the DTH Export dialog, resolved from the saved settings:
+/** The Runner gate for the DTH Export panel, resolved from the saved settings:
  *  exports run through the Runner plugin in Daz Studio, so a missing or
  *  outdated install blocks the handoff — the dialog routes the user to Settings
  *  instead of writing a job file the runner would mishandle (or never pick up). */

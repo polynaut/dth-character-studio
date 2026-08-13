@@ -47,7 +47,7 @@ describe('dazTaskCards', () => {
 
   it('leaves the detail OFF when the mode is not known', () => {
     // An adopted run: this window reads a job file, which carries rows and no
-    // trace of the dialog's choice. Saying "ROM + Export" there would be a
+    // trace of the panel's choice. Saying "ROM + Export" there would be a
     // guess dressed as a fact.
     expect(dazTaskCards(scenes, undefined, 0, false, true)[0].detail).toBeUndefined()
   })
