@@ -28,7 +28,7 @@ function scan(over: Record<string, unknown> = {}) {
     nodes: [],
     job: P.charFolder,
     fps: 30,
-    refs: { collapsible: 0, foreign: 0, broken: [], hipRelative: [] },
+    refs: { collapsible: 0, foreign: 0, broken: [], hipRelative: [], missingTextures: [] },
     prefill: { fillable: [], missing: [] },
     ...over,
   }
@@ -123,6 +123,96 @@ function linkOutside(seed: { files: Record<string, string> }) {
   char.houdiniProjects = [P.houdini, OUTSIDE]
   seed.files[charPath] = JSON.stringify(char)
 }
+
+// --- the card spinner -------------------------------------------------------
+//
+// A scan is the one part of this feature the user never asked for and cannot
+// see: it runs on a background sweep, costs tens of seconds per `.hip`, and
+// until it lands the card still shows the PREVIOUS verdict. The spinner is what
+// makes that window honest — so these specs are about WHEN it shows, which the
+// fake's `materialScanDelayMs` is what makes observable at all.
+
+/** A second project INSIDE the character folder — the sweep scans those, so it
+ *  is the only way to have one project cached and one stale in the same view. */
+const SECOND = 'D:/DTH Projects/Demo/Kira/houdini/Kira_Alt.hip'
+
+/** A seed with hython configured — without it the sweep throws and scans
+ *  nothing, which would make a "no spinner" assertion pass for the wrong reason. */
+function seedWithHython(delayMs: number) {
+  const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true, houdiniProject: true })
+  const settingsPath = `${P.appData}/settings.json`
+  seed.files[settingsPath] = JSON.stringify({
+    ...JSON.parse(seed.files[settingsPath] ?? '{}'),
+    houdiniInstallFolder: HOUDINI_INSTALL,
+    houdiniDocsFolder: 'C:/Users/dev/Documents/houdini22.0',
+  })
+  seed.files[`${HOUDINI_INSTALL}/bin/hython.exe`] = 'hython-exe-fixture'
+  seed.materialScan = { [P.houdini]: [node('FreshBox')], [SECOND]: [node('AltBox')] }
+  seed.materialScanDelayMs = delayMs
+  return seed
+}
+
+/** The card body for a project, by its displayed name. */
+const cardFor = (page: Page, name: string) => page.locator('.houdini-card', { hasText: name })
+const spinners = (page: Page) =>
+  page.getByRole('status', { name: /Reading this project in Houdini/ })
+
+test('a card spins while hython has its project open, and stops when the scan lands', async ({
+  page,
+}) => {
+  // No store entry, so the sweep really has to open the file.
+  await page.addInitScript(installTauriMock, seedWithHython(2000))
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await expect(page.getByText(/custom ROM frames/)).toBeVisible()
+
+  await expect(spinners(page)).toHaveCount(1)
+  // And it is not a spinner that never stops — the worst of the three states,
+  // because it reads as "still working" forever.
+  await expect(spinners(page)).toHaveCount(0, { timeout: 20_000 })
+})
+
+test('a project served from the cache never spins — only the one being read does', async ({
+  page,
+}) => {
+  // The decision this pins. A cache hit starts no hython process and answers in
+  // microseconds; spinning its card would flicker on every page load and teach
+  // the eye to ignore the spinner. Two projects, one fresh in the store and one
+  // not, so "which card spins" is answered without timing anything.
+  const seed = seedWithHython(2000)
+  seed.files[SECOND] = 'hip-fixture'
+  const charPath = `${P.charFolder}/Kira.json`
+  const char = JSON.parse(seed.files[charPath] ?? '{}')
+  char.houdiniProjects = [P.houdini, SECOND]
+  seed.files[charPath] = JSON.stringify(char)
+  seed.files[STORE] = JSON.stringify({
+    version: 1,
+    projects: {
+      [SECOND.toLowerCase()]: {
+        key: storeKey(SECOND),
+        scannedAt: '2026-08-07T00:00:00.000Z',
+        project: scan({ hipPath: SECOND }),
+      },
+    },
+  })
+  await page.addInitScript(installTauriMock, seed)
+  await page.addInitScript((storePath: string) => {
+    const mock = (window as any).__tauriMock
+    const raw = mock.files.get(storePath) as string
+    mock.files.set(storePath, raw.split('__MTIME__').join(String(mock.mtimeMs)))
+  }, STORE)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await expect(page.getByText(/custom ROM frames/)).toBeVisible()
+
+  // Exactly one card is being read, and it is not the cached one. The cached
+  // card is asserted to EXIST first — without that, a locator typo would make
+  // the next line pass by matching nothing at all.
+  await expect(spinners(page)).toHaveCount(1)
+  await expect(cardFor(page, 'Kira_Alt')).toHaveCount(1)
+  await expect(cardFor(page, 'Kira_Alt').getByRole('status')).toHaveCount(0)
+  await expect(spinners(page)).toHaveCount(0, { timeout: 20_000 })
+})
 
 test('the drawer scans the project it was opened from when the store cannot answer', async ({
   page,
@@ -256,6 +346,70 @@ test('unresolved imports and blank parms are both named', async ({ page }) => {
   const title = (await badge.getAttribute('title')) ?? ''
   expect(title).toContain('import_character_dtu_file')
   expect(title).toContain('export_directory')
+})
+
+/** A texture the DazToHue material node's bakers point at, uninstalled since. */
+const GONE = 'd:/daz 3d/my daz 3d library/runtime/textures/raiya/rypi5_torso1.jpg'
+
+test('a baker texture whose file is gone is flagged, and the badge says the bake will not', async ({
+  page,
+}) => {
+  // The one problem the card reports that has NO repair, and the reason it is
+  // reported at all: measured on DazToHue 2.5 / Houdini 22.0, baking with a
+  // layer texture pointed at a missing file prints `export finished in 0:00:02`
+  // and raises nothing. Without this badge the first sign is a wrong-looking
+  // character in Unreal.
+  await openWithStore(
+    page,
+    scan({
+      refs: {
+        collapsible: 0,
+        foreign: 0,
+        broken: [],
+        hipRelative: [],
+        missingTextures: [GONE],
+      },
+    }),
+  )
+
+  const badge = page.getByText('Needs attention')
+  await expect(badge).toBeVisible()
+  const title = (await badge.getAttribute('title')) ?? ''
+  // The BASENAME, not the whole path — this lands in a tooltip.
+  expect(title).toContain('rypi5_torso1.jpg')
+  expect(title).not.toContain('my daz 3d library')
+  // Naming the silent success is the point of the wording: without it "missing"
+  // reads as something Houdini would have caught.
+  expect(title).toContain('reports success')
+})
+
+test('the drawer names the missing textures in full, and does not gate the repair on them', async ({
+  page,
+}) => {
+  // Two facts in one state. The row shows the FULL paths (this is the view where
+  // "which product is gone" is answerable) — and Make paths portable stays
+  // pressable, because a missing texture is not work that repath can do. Gating
+  // it would strand the button on a problem the studio cannot fix.
+  await openWithStore(
+    page,
+    scan({
+      refs: {
+        collapsible: 2,
+        foreign: 0,
+        broken: [],
+        hipRelative: [],
+        missingTextures: [GONE],
+      },
+    }),
+  )
+
+  await page.getByRole('button', { name: /^Utils/ }).first().click()
+  const drawer = page.getByRole('dialog')
+  await expect(drawer.getByText('Baker textures')).toBeVisible()
+  await expect(drawer.getByText('1 missing')).toBeVisible()
+  await expect(drawer.getByText(GONE)).toBeVisible()
+  await expect(drawer.getByText(/still reports success/)).toBeVisible()
+  await expect(drawer.getByRole('button', { name: 'Make paths portable' })).toBeEnabled()
 })
 
 test('a badge from a STALE store clears itself once the sweep re-reads the project', async ({

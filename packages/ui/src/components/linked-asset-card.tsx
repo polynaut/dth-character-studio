@@ -1,4 +1,4 @@
-import { Check, ExternalLink, FolderOpen, Trash2, Wrench } from 'lucide-react'
+import { Check, ExternalLink, FolderOpen, Loader2, Trash2, Wrench } from 'lucide-react'
 import type { MouseEvent, ReactNode } from 'react'
 
 import { cn } from '../cn.ts'
@@ -26,6 +26,8 @@ export function LinkedAssetCard({
   media,
   badge,
   extra,
+  busy = false,
+  busyLabel = 'Working…',
   altHeld,
   openTitle,
   accentClass,
@@ -65,6 +67,21 @@ export function LinkedAssetCard({
   badge?: ReactNode
   /** Extra content pinned to the card's bottom-left (e.g. a "primary" tag). */
   extra?: ReactNode
+  /** Something slow is happening TO this asset (the Houdini card's background
+   *  scan) — shows a small spinner over the media's top-right corner.
+   *
+   *  Over the media on purpose: `badge` owns the media's bottom-left, `extra`
+   *  sits under the title and the corner cluster owns bottom-right, so this is
+   *  the one spot that collides with nothing — including the selected check,
+   *  which lives outside the media at the CARD's top-right. It is an indicator,
+   *  not a blocker: the card stays fully interactive, because a scan is
+   *  something the studio started on its own and must never take the user's
+   *  controls away. */
+  busy?: boolean
+  /** What the spinner means, for assistive tech and the hover tooltip. Always
+   *  pass one when `busy` can be true — "something is happening" is not a
+   *  message, and a bare spinner is invisible to a screen reader. */
+  busyLabel?: string
   /** Alt is held → the corner icon previews "show in Explorer". */
   altHeld: boolean
   openTitle: string
@@ -127,6 +144,20 @@ export function LinkedAssetCard({
       <div className="relative shrink-0 self-start">
         {media}
         {badge}
+        {busy && (
+          // `role="status"` + the label makes the spinner announce itself; the
+          // ring matches the selected check's, so a spinner over a dark
+          // thumbnail stays readable. Click-transparent — the card underneath
+          // keeps working while the scan runs.
+          <span
+            role="status"
+            aria-label={busyLabel}
+            title={busyLabel}
+            className="pointer-events-none absolute top-0 right-0 flex size-4 items-center justify-center rounded-full bg-card/90 shadow-sm ring-2 ring-card"
+          >
+            <Loader2 className="size-3 animate-spin text-muted-foreground" />
+          </span>
+        )}
       </div>
       <div className="flex min-w-0 flex-1 flex-col text-xs">
         {/* Top-aligned with the media's upper edge (no push-down). On a

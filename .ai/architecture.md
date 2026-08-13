@@ -341,13 +341,37 @@ Three consequences worth knowing before touching this:
 - **The cache may never fail a scan.** Resolving the store path was once
   unguarded and took the drawer's whole project list down with it. A broken cache
   degrades to "no cache", never to "no scan".
+- **`houdini-scan-progress.ts` is the card spinner's store** — a pure, counted
+  set of the projects hython has open, published from `scanHoudiniMaterials` and
+  read through `useHoudiniScanning` (`useSyncExternalStore`). Two rules make it
+  mean something. It marks the `stale` list ONLY, never the cache hits: a hit
+  starts no process, so marking those would flicker a spinner on every card on
+  every page load and train the eye to ignore it. And it COUNTS holders rather
+  than setting a flag, because the sweep and the drawer's Rescan can hold the
+  same project at once (only identical batches coalesce) and the first to finish
+  would otherwise clear a spinner the other still needs. The mark is released
+  after the result is STORED, not when hython returns — releasing earlier leaves
+  a window where the spinner is gone and the badge still shows the old verdict.
+  On the reading side, `HoudiniProjectsField` re-reads its verdicts on a RELEASE
+  of one of its OWN projects and nothing else: a mark means hython was just
+  started (nothing is written yet), the set is process-wide so it also moves for
+  other characters' sweeps, and a verdict read is not the cheap thing it looks
+  like — `fetchHoudiniProjectStatus` costs the character load, the store, the
+  export root, the un-memoized HDA-library key and a stat per project, and
+  re-renders every card.
 - **`validateHoudiniProject`** (`lib/rom/houdini-validate.ts`) is a pure function
   over the scan the studio already has — `$JOB`, `refs.broken`,
-  `prefill.fillable`. An UNSCANNED project is never a fault (else every page load
-  flashes warnings), and an unreadable one reports only that. It does NOT cover
-  material textures: `refs.broken` is deliberately scoped to the DazToHue import
-  parms, because a healthy project reports several of Houdini's own scratch files
-  as missing.
+  `refs.missingTextures`, `prefill.fillable`. An UNSCANNED project is never a
+  fault (else every page load flashes warnings), and an unreadable one reports
+  only that. Existence checks are always SCOPED to a known parm set, never a
+  whole-scene sweep, because a healthy project reports several of Houdini's own
+  scratch files as missing: `refs.broken` covers the DazToHue import parms,
+  `refs.missingTextures` the material node's baker layer textures (measured 51/51
+  resolving on a real project — zero false positives).
+  `missingTextures` is the one problem here with **no repair** in the drawer, and
+  the one exception to the rule below: the fix is a reinstall, outside the app.
+  It is badged anyway because a DazToHue bake with a missing texture reports
+  SUCCESS (`gotchas.md`), so nothing else in the pipeline would ever say so.
 - **That check is what unlocked COPYING a project** (`copyHoudiniProject`,
   api/houdini.ts). It was refused for years because a copy carries the source's
   `$JOB` and absolute references; it is offered now because the card flags

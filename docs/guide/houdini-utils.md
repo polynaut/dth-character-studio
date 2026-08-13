@@ -319,6 +319,17 @@ anything.
 `$JOB` decides how *future* picks are written down; these two fix what is
 already written.
 
+**Baker textures** is the one row with nothing to press. It lists the material
+baker layer textures whose file is no longer on disk — usually a Daz product
+that was uninstalled or a library that moved. The studio can only tell you;
+putting the file back is a reinstall.
+
+> **Why it's worth a row at all.** This is the one failure in the pipeline that
+> reports itself as success. Baking with a missing texture prints
+> `DazToHue: export finished` in the Houdini console and raises nothing — no
+> error, no warning. Without this row the first sign is a wrong-looking
+> character in Unreal, long after the bake.
+
 **Make paths portable** does two things in one pass:
 
 - Rewrites every absolute reference that sits under `$HIP`, `$JOB` or

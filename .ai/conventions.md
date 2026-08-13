@@ -306,6 +306,18 @@ The persisted `Character` shape is versioned (`CHARACTER_SCHEMA_VERSION` in
   `apps/web/src/lib/rom/api/native-contract.test.ts`.
 - **A new structured return = a zod schema + a `contracts/` fixture + a test case
   on both sides.**
+- **Optionality has to be declared on BOTH parsers, and Rust's runs first.** A
+  structured return is parsed twice — serde deserializes the whole payload into
+  the Rust struct before the command returns, and only then does zod see it. So a
+  `.default([])` in `native-types.ts` cannot rescue a field the serde struct
+  still requires: the command has already failed with `missing field`. Measured
+  on `ProjectRefInfo.hipRelative`, where `material_utils.py`'s failed-load
+  fallback shipped a `refs` block without the key and ONE unreadable `.hip` took
+  the whole scan report — every other project in the sweep — down with it. When a
+  field can legitimately be absent, it needs `#[serde(default)]` **and** a zod
+  `.default(…)`, and the `contracts/` fixture pins only the present-field case —
+  the defaults are not covered by the round-trip, so state them deliberately
+  rather than assuming the fixture proves them.
 - A **primitive** return (a `String`, a `Vec<String>`) needs no fixture — parse it
   with a plain `z.string()` / `z.enum([...])` / `z.array(z.string())` at the call
   site and it is still not a bare cast. `create_houdini_project` (a `"a|b"`

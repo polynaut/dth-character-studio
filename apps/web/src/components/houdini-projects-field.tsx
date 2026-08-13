@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { AlertTriangle, Plus, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -37,6 +37,8 @@ import {
   scanCharacterHoudiniProjects,
 } from '#/lib/rom/api.ts'
 import { DTH_FPS, formatFps, sameFps } from '#/lib/rom/houdini-defaults.ts'
+import { isHoudiniProjectScanning } from '#/lib/rom/houdini-scan-progress.ts'
+import { useHoudiniScanning } from '#/lib/use-houdini-scanning.ts'
 import { pickHipPath } from '#/lib/desktop.ts'
 import { browseStart, displayPath, normalizePath, parentDir } from '#/lib/path.ts'
 import { characterHoudiniDir } from '#/lib/scene-subfolder.ts'
@@ -65,6 +67,10 @@ import type { CharacterLocation } from '#/lib/rom/api.ts'
 import type { PersistCharacterPatch } from '#/lib/use-character-draft.ts'
 import type { Character } from '@dth/rom'
 
+/** The "nothing is being scanned" list — one shared empty array, so the ref that
+ *  remembers the previous one costs no allocation on the common path. */
+const NO_PATHS: ReadonlyArray<string> = []
+
 /** A linked Houdini project: the Houdini logo (no preview image), the filename,
  *  and its folder — the corner icon opens it in Houdini. A Houdini project has no
  *  per-card state to select (unlike a Daz scene), so the rest of the card is
@@ -74,6 +80,7 @@ function HoudiniCard({
   hipPath,
   avatarSrc,
   warning,
+  scanning = false,
   onOpen,
   onRemove,
   onRename,
@@ -82,9 +89,16 @@ function HoudiniCard({
   hipPath: string
   /** Gender-based placeholder avatar (a Houdini project has no thumbnail). */
   avatarSrc: string
+  /** hython has this `.hip` open right now. Only true for a scan that really
+   *  starts a process — a cache hit never sets it (see `houdini-scan-progress`),
+   *  so the spinner means "this is being re-read", not "a sweep ran". */
+  scanning?: boolean
   /** What the last background scan found wrong with this project; '' = healthy,
-   *  or not scanned yet. Everything it can report has a repair in the Utils
-   *  drawer, which is what the badge points at. */
+   *  or not scanned yet. Nearly everything it can report has a repair in the
+   *  Utils drawer, which is what the badge points at — the exception is a
+   *  missing baker texture, which the drawer can only NAME (the fix is a
+   *  reinstall, outside the studio). The badge still opens the drawer for it,
+   *  because that is where the full paths are. */
   warning?: string
   onOpen: (e: React.MouseEvent) => void
   /** When set, a hover ✕ unlinks the project from the character. */
@@ -103,6 +117,10 @@ function HoudiniCard({
   return (
     <LinkedAssetCard
       title={displayName}
+      busy={scanning}
+      // Named, not just "Working…": this card can be busy for tens of seconds
+      // (hython opens the whole scene), and the honest reason is worth the room.
+      busyLabel="Reading this project in Houdini…"
       media={
         <Portrait
           src={avatarSrc}
@@ -122,18 +140,19 @@ function HoudiniCard({
       }
       // The scan verdict, pinned bottom-left: a project that will fail when it
       // opens should say so here, not the first time an import comes up empty
-      // in Houdini. Everything it reports is repairable in the Utils drawer —
-      // and the badge opens it: it is the card's only always-visible signal,
-      // so it must also be a way in (the wrench alone is hover-only). The card
-      // renders `extra` above its cover button precisely so it can be
-      // interactive.
+      // in Houdini. The badge opens the Utils drawer: it is the card's only
+      // always-visible signal, so it must also be a way in (the wrench alone is
+      // hover-only). The card renders `extra` above its cover button precisely
+      // so it can be interactive. Most of what it reports is repairable there;
+      // missing baker textures are only listed, so the label says "see it in
+      // Utils" rather than promising a repair that isn't offered.
       extra={
         warning ? (
           <button
             type="button"
             className="flex items-center gap-1 rounded-sm text-xs text-amber-500 outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
             title={warning}
-            aria-label={`Needs attention: ${warning} — open the repairs in Utils`}
+            aria-label={`Needs attention: ${warning} — see it in Utils`}
             onClick={onUtils}
           >
             <AlertTriangle className="size-3.5 shrink-0" />
@@ -230,16 +249,58 @@ export function HoudiniProjectsField({
   // read is instant and needs no Houdini; the sweep fills the store for next
   // time, which is why a first-ever open shows no badges and a later one does.
   const [warnings, setWarnings] = useState<ReadonlyMap<string, string>>(new Map())
-  /** Read the STORED verdicts. Instant and needs no Houdini — the sweep is what
-   *  fills the store. */
+  /** Last-ISSUED wins, not last to resolve. Three paths read concurrently — the
+   *  landing effect below and the focus refetch's before/after pair — and a read
+   *  issued against the PRE-scan store must never overwrite one issued after it
+   *  landed. That is exactly the stale "Needs attention" over a healthy project
+   *  this field already had to fix once (see the focus refetch). */
+  const warningsSeq = useRef(0)
+  /** Read the STORED verdicts — no hython and no process, but not free either:
+   *  the character definition, the scan store, the export root, the installed
+   *  HDA libraries (deliberately un-memoized — a readDir plus a stat each) and a
+   *  stat per linked project. Worth a thought before adding a caller. */
   const readWarnings = useCallback(async () => {
+    const seq = ++warningsSeq.current
     const status = await fetchHoudiniProjectStatus({ data: { projectId, id: character.id } })
+    if (seq !== warningsSeq.current) return
     setWarnings(
       new Map(
         status.filter((s) => !s.ok).map((s) => [normalizePath(s.hipPath).toLowerCase(), s.summary]),
       ),
     )
   }, [projectId, character.id])
+
+  // Which of these projects hython has open right now — the card spinner. Fed
+  // by the api layer's scan funnel, so it covers BOTH triggers: this page's
+  // background sweep and the drawer's Rescan.
+  const scanning = useHoudiniScanning()
+  // Narrowed to the projects THIS field renders. The store is process-wide, so
+  // it also moves for another character's still-running sweep, the drawer's
+  // cached-first open and a transfer — none of which changes what these cards
+  // show.
+  const scanningKey = projects
+    .filter((hip) => isHoudiniProjectScanning(scanning, hip))
+    .map((hip) => normalizePath(hip).toLowerCase())
+    .sort()
+    .join('|')
+  // Re-read the stored verdicts as each project LANDS. Without this the sweep's
+  // own read is the only one and it runs after the LAST project finishes — so a
+  // card would stop spinning while still showing the verdict from before its
+  // scan.
+  //
+  // On a RELEASE only, and never on the first run. A project ENTERING the set is
+  // hython being started: nothing has been written for it yet, so that read can
+  // only return what the card already shows. And the first run would duplicate
+  // the immediate read of the focus refetch just below. Both matter because a
+  // read is not free (see `readWarnings`) and each one re-renders every card.
+  const held = useRef<ReadonlyArray<string>>(NO_PATHS)
+  useEffect(() => {
+    const before = held.current
+    const now = scanningKey === '' ? NO_PATHS : scanningKey.split('|')
+    held.current = now
+    if (!before.some((key) => !now.includes(key))) return
+    void readWarnings().catch(() => {})
+  }, [scanningKey, readWarnings])
 
   useRefetchOnFocus(
     () => {
@@ -569,6 +630,7 @@ export function HoudiniProjectsField({
                 hipPath={hip}
                 avatarSrc={placeholderSrc}
                 warning={warnings.get(normalizePath(hip).toLowerCase()) ?? ''}
+                scanning={isHoudiniProjectScanning(scanning, hip)}
                 onOpen={(e) => void onOpen(hip, e)}
                 onRemove={() => askRemove(hip)}
                 onRename={
