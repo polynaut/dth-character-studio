@@ -20,21 +20,38 @@
 //   node scripts/lint-budget.mjs           check against the baseline
 //   node scripts/lint-budget.mjs --update  rewrite the baseline from reality
 
-import { execSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
 import { readFileSync, writeFileSync } from 'node:fs'
 
 const BASELINE = new URL('../.lint-baseline.json', import.meta.url)
 
 /** `warning eslint(no-await-in-loop): …` → `eslint/no-await-in-loop`. */
 function countByRule() {
-  let out = ''
-  try {
-    // oxlint exits non-zero when it reports errors; warnings alone exit 0. We
-    // want its output either way, so failures are captured rather than thrown.
-    out = execSync('pnpm -s lint', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
-  } catch (error) {
-    out = `${error.stdout ?? ''}${error.stderr ?? ''}`
-  }
+  // BOTH streams, unconditionally, whatever the exit code.
+  //
+  // This used to take `execSync`'s RETURN VALUE — which is stdout only — and
+  // merge stderr in only from the `catch`. oxlint exits 0 when it reports
+  // nothing but warnings, so the catch never ran, and on any platform where
+  // oxlint writes its diagnostics to stderr the capture was EMPTY. Empty parse
+  // → every rule counts 0 → 0 is under every baseline → the ratchet passed.
+  //
+  // Measured 2026-08-13, from one CI job's own log:
+  //     Found 223 warnings and 0 errors.        <- the `pnpm lint` step
+  //     oxc/no-map-spread: 0 (baseline 9)       <- this script, same job
+  //     eslint/no-await-in-loop: 0 (baseline 155)
+  // The gate had never been capable of failing since it was added in #694, which
+  // is why the baseline sat untouched from 2026-08-10 while warnings accumulated
+  // and every PR stayed green. It worked locally (Windows: stdout), which is the
+  // worst version of this bug — the one place it reported honestly was the one
+  // place nobody was gating on it.
+  // One command STRING, not command+args, because `shell: true` with an args
+  // array is Node DEP0190 (the args are concatenated, not escaped) and prints a
+  // deprecation into every CI log. There is nothing to escape here — the
+  // command is a constant — so the string form is both quieter and honest about
+  // what it does. `shell` itself is required: on Windows `pnpm` is a `.cmd`
+  // shim, which cannot be spawned directly.
+  const run = spawnSync('pnpm -s lint', { encoding: 'utf8', shell: true })
+  const out = `${run.stdout ?? ''}${run.stderr ?? ''}`
   const counts = {}
   for (const line of out.split('\n')) {
     const match = /warning\s+([\w-]+)\(([\w-]+)\)/.exec(line)
@@ -42,6 +59,24 @@ function countByRule() {
       const rule = `${match[1]}/${match[2]}`
       counts[rule] = (counts[rule] ?? 0) + 1
     }
+  }
+  // A ratchet that parsed NOTHING must never report "under budget". That is
+  // precisely the failure above, and from the outside it is indistinguishable
+  // from a clean tree. This repo carries hundreds of advisory warnings BY
+  // DESIGN (see .oxlintrc.json), so zero means the measurement broke — the
+  // output format moved, the lint script moved, oxlint failed to start — and
+  // never that there is nothing to count. Fail loud instead of green.
+  if (Object.keys(counts).length === 0) {
+    console.error('lint-budget parsed NO warnings out of `pnpm -s lint`.\n')
+    console.error('That is a broken ratchet, not a clean tree: this repo carries hundreds')
+    console.error('of advisory warnings on purpose. Check that the lint script still runs')
+    console.error('and that its output format still matches the parser in this file.\n')
+    console.error(
+      `  exit=${run.status} signal=${run.signal} ` +
+        `stdout=${(run.stdout ?? '').length}b stderr=${(run.stderr ?? '').length}b`,
+    )
+    if (run.error) console.error(`  spawn error: ${run.error.message}`)
+    process.exit(1)
   }
   return counts
 }
