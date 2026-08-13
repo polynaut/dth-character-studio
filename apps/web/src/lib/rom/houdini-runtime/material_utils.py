@@ -276,6 +276,18 @@ DTH_IMPORT_FILE_PARMS = (
     ("import_character_alembic_file", ".abc"),
 )
 
+# The DazToHueMaterial baker LAYER texture parms, by name prefix:
+# `material_texture_baker_layer_texture<baker>_<layer>`. A prefix rather than a
+# multiparm walk on purpose — the indices are 0-based here and reading them
+# wrong is the documented trap, and this needs none of them.
+#
+# This is the SECOND scoped existence check, and it is scoped for the same
+# reason `DTH_IMPORT_FILE_PARMS` is: a whole-scene sweep flags four of Houdini's
+# own scratch files on a healthy project. Measured on a real one (Kira, 11
+# bakers / 43 layers, 2026-08-13): 86 FileReference parms on the material node,
+# of which 51 are these, and ALL 51 resolve — zero false positives.
+DTH_TEXTURE_PARM_PREFIX = "material_texture_baker_layer_texture"
+
 
 def _norm_path(value):
     return value.replace("\\", "/").rstrip("/")
@@ -1118,7 +1130,18 @@ def op_scan(request):
             "job": "",
             "fps": 0.0,
             "imports": [],
-            "refs": {"collapsible": 0, "foreign": 0, "broken": []},
+            # Every key `projectRefInfoSchema` names, because this dict is what a
+            # project that FAILS to load ships with. `hipRelative` was missing
+            # here and is not defaulted on the zod side, so one unreadable `.hip`
+            # failed the parse of the WHOLE report — every other project in the
+            # sweep with it.
+            "refs": {
+                "collapsible": 0,
+                "foreign": 0,
+                "broken": [],
+                "hipRelative": [],
+                "missingTextures": [],
+            },
             "prefill": {"fillable": [], "missing": []},
         }
         try:
@@ -1299,6 +1322,61 @@ def _file_ref_parms(node):
             continue
         if raw:
             out.append((parm, raw))
+    return out
+
+
+def _missing_texture_refs(node):
+    """Baker LAYER textures on this node whose file is not there.
+
+    Returns absolute paths, not `<node> <parm>` labels like `broken` does: a
+    missing texture is a missing FILE, and one uninstalled product takes out the
+    same file from a dozen layers at once. The caller de-duplicates, so the count
+    the badge shows is "how many textures are gone", not "how many parms mention
+    one".
+
+    Why this is worth reporting at all, measured 2026-08-13 on DazToHue 2.5 /
+    Houdini 22.0: pointing a baker's layer texture at a file that does not exist
+    and baking prints `DazToHue: export started` / `baking material textures` /
+    `export finished in 0:00:02` and raises NOTHING — no dialog, no node error.
+    The HDA is black-boxed so the cook itself cannot be read, but its bake path
+    can: `do_bake_material_textures` is a bare `cook(force=True)`, and the whole
+    material PythonModule contains ONE `os.path.exists`, in the texture
+    browser's drag-and-drop handler. There is no check to inherit, so the studio
+    is the only thing in the pipeline that can say the file is gone.
+
+    Blank is not missing: an unset layer texture is a layer driven by its colour
+    parms, which is a normal setup and not a fault.
+    """
+    out = []
+    try:
+        # Exactly how `_dth_nodes` picks the same node — an equality test against
+        # MATERIAL_TYPE, not a substring of a literal. The drawer's node list and
+        # this check have to agree about what a material node IS, or a renamed
+        # type would silently stop the texture check while the drawer went on
+        # listing the node as scanned.
+        if node.type().name() != MATERIAL_TYPE:
+            return out
+    except Exception:
+        return out
+    for parm, _raw in _file_ref_parms(node):
+        try:
+            if not parm.name().startswith(DTH_TEXTURE_PARM_PREFIX):
+                continue
+            value = parm.eval()
+        except Exception:
+            continue
+        if not value:
+            continue
+        # Absolute only — `eval()` has already expanded `$DAZ3D_LIB` and friends,
+        # so anything still relative would be stat'd against hython's CWD, which
+        # has nothing to do with the scene: every such parm would report missing.
+        # A feature whose whole claim is zero false positives under-reports here
+        # rather than guess an anchor, and it keeps the promise the wire contract
+        # makes (`missingTextures` is documented as absolute paths).
+        if not _looks_absolute(value):
+            continue
+        if not os.path.exists(value):
+            out.append(_norm_path(value))
     return out
 
 
@@ -1713,10 +1791,12 @@ def _project_ref_info(export_dir=""):
     donor can make and the studio disables the button on the strength of it.
     """
     roots = _ref_roots()
-    info = {"collapsible": 0, "foreign": 0, "broken": [], "hipRelative": []}
+    info = {"collapsible": 0, "foreign": 0, "broken": [], "hipRelative": [], "missingTextures": []}
+    missing_textures = set()
     for node in hou.node("/").allSubChildren():
         for label, _old, _new in _repair_import_refs(node, roots, True, export_dir):
             info["broken"].append(label)
+        missing_textures.update(_missing_texture_refs(node))
         for parm, raw in _file_ref_parms(node):
             if _rehome_hip_ref(raw, roots) is not None:
                 # Pre-v63 `$HIP/../…` — a path that LEAVES the houdini folder.
@@ -1729,6 +1809,9 @@ def _project_ref_info(export_dir=""):
                 info["collapsible"] += 1
             elif raw and not raw.startswith("$") and _looks_absolute(raw):
                 info["foreign"] += 1
+    # Sorted so the badge's wording is stable between two scans of an unchanged
+    # project — `allSubChildren()` order is not a promise.
+    info["missingTextures"] = sorted(missing_textures)
     return info
 
 

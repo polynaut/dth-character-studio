@@ -17,7 +17,10 @@
         "collapsible": 131,
         "foreign": 0,
         "broken": [],
-        "hipRelative": ["/obj/DazToHue/DazToHueImport import_character_fbx_file"]
+        "hipRelative": ["/obj/DazToHue/DazToHueImport import_character_fbx_file"],
+        "missingTextures": [
+          "d:/daz 3d/my daz 3d library/runtime/textures/raiya/perfectly_imperfect_5_g9/rypi5_torso1_d_1002.jpg"
+        ]
       },
       "prefill": {
         "fillable": ["/obj/DazToHue/DazToHueImport import_character_rom_fbx_file"],
@@ -86,7 +89,13 @@
       "job": "",
       "fps": 0.0,
       "imports": [],
-      "refs": { "collapsible": 0, "foreign": 0, "broken": [], "hipRelative": [] },
+      "refs": {
+        "collapsible": 0,
+        "foreign": 0,
+        "broken": [],
+        "hipRelative": [],
+        "missingTextures": []
+      },
       "prefill": { "fillable": [], "missing": [] },
       "nodes": []
     }
