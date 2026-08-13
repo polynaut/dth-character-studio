@@ -957,6 +957,30 @@ older runtimes as stale.
   folders survive, failed deletes stay recorded for retry. Clearing
   `exportPath` deletes nothing (those are the user's last exports), it only
   drops the record.
+- **The Unreal-side `.dth` is a JSON manifest naming its own outputs**
+  (MEASURED on three real exports, `dth_version` 2.5): keys `character_name`,
+  `skinning_method`, `source_skeleton`/`target_skeleton`, and the collections
+  `skeletal_meshes` (each `{file, materials, name}` — `file` is the ABSOLUTE
+  path of `<export>/<Character>/Skeletal Meshes/SKM_<Character>.fbx`),
+  `animation_curves` (`{file, type}`, `.txt`), plus `cloth_panels`,
+  `cloth_panel_proxies`, `detached_props`, `collision_proxy` and `pose_assets`
+  — all EMPTY in every export seen here, so their shapes are unknown.
+  `dthExportFiles` (unreal-jobs.ts) therefore walks the whole manifest for
+  strings ending in `.fbx` instead of reading `skeletal_meshes`: it costs
+  nothing and covers the sections nobody has measured. Not to be confused with
+  the Daz-side `.dth` under `daz-export/`, which names the Daz→Houdini
+  intermediates the HDA READS.
+- **The Unreal bridge re-imports where the assets ALREADY are.** The job
+  (`UNREAL_JOB_VERSION` 2) carries that FBX list; `dth_bridge.py` searches the
+  asset registry under `/Game` for assets whose `AssetImportData` tag names one
+  of them (absolute or by basename — a `RelativeFilename` is relative to the
+  asset's package), and the folder with the most matches becomes the import
+  destination, reported back as `mode: 'reimport'`. No match = a fresh import
+  at `/Game/DazToHue/<Character>`. It always imports the **`.dth`**, never the
+  FBX files directly — the `.dth` is what triggers mrpdean's pipeline
+  (materials, curves, post-process ABP); the file list is for FINDING assets,
+  not for importing. UNVERIFIED against a live editor: the registry-tag shape
+  is Unreal's, and every failure path degrades to the fresh import.
 - **Housekeeping's orphan GCs** (app launch + "Clean up now",
   api/maintenance.ts): per-project `.dcsmeta` character dirs + avatars, and —
   since the deferred-findings pass — per-character SCRIPT dirs in the Daz

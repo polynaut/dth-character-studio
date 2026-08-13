@@ -57,8 +57,12 @@ export function UnrealImportField({
       watching.current = ''
       if (state.error) toast.error(`Unreal import failed — ${state.error}`, { duration: Infinity })
       else {
+        // Which of the two happened is worth saying: a re-import landed on the
+        // assets that were already there (possibly somewhere the studio never
+        // chose), a plain import created a set at the destination it asked for.
+        const what = state.mode === 'reimport' ? 'Re-imported in Unreal' : 'Imported into Unreal'
         toast.success(
-          `Imported into Unreal — ${state.assets} asset${state.assets === 1 ? '' : 's'}.`,
+          `${what} — ${state.assets} asset${state.assets === 1 ? '' : 's'} in ${state.destination}.`,
           { duration: Infinity },
         )
       }
@@ -83,6 +87,9 @@ export function UnrealImportField({
       })
       watching.current = target
       setRun({ state: 'waiting' })
+      // `destination` is where a FRESH import goes; if the project already has
+      // these files the bridge re-imports where they are, and the finish toast
+      // says so. Hence "into" here and the real path on the way out.
       toast.info(
         started.replacedPending
           ? `Queued for Unreal — replaced a job the editor had not picked up yet. Importing into ${started.destination}.`

@@ -5,7 +5,10 @@ import { z } from 'zod'
 import * as storage from '../storage'
 import {
   UNREAL_BRIDGE_UPLUGIN,
+  UNREAL_JOB_VERSION,
   bridgeUpluginJson,
+  bridgeVersionFrom,
+  dthExportFiles,
   parseUnrealResult,
   unrealDestinationFor,
   unrealImportStateFrom,
@@ -70,8 +73,12 @@ const importInput = charScopeInput.extend({
 export interface UnrealImportStarted {
   /** The `.dth` handed over. */
   dth: string
-  /** The Unreal content path it imports into. */
+  /** The Unreal content path a FRESH import goes to. A re-import lands where
+   *  the existing assets already are — the bridge decides that, and reports it
+   *  back in the result. */
   destination: string
+  /** The FBX files the manifest declares — what the bridge matches on. */
+  files: Array<string>
   /** True when a previous job was still sitting unclaimed — the editor was not
    *  watching, and this run replaced it rather than queueing behind it. */
   replacedPending: boolean
@@ -93,6 +100,18 @@ async function houdiniDthFor(exportRoot: string, characterName: string): Promise
   const candidate = joinPath(exportRoot, characterName, `DTH_${characterName}.dth`)
   if (await exists(candidate)) return candidate
   return ''
+}
+
+/** The installed bridge's contract version, or 0 when there is no bridge (or
+ *  an unreadable one — the same answer, since neither can run a job). */
+async function readBridgeVersion(bridgeDir: string): Promise<number> {
+  const uplugin = `${bridgeDir}/${UNREAL_BRIDGE_UPLUGIN}`
+  try {
+    if (!(await exists(uplugin))) return 0
+    return bridgeVersionFrom(await readTextFile(uplugin))
+  } catch {
+    return 0
+  }
 }
 
 /**
@@ -130,10 +149,18 @@ export async function startUnrealImport({ data }: { data: unknown }): Promise<Un
   // Nothing is installed from here — the bridge is an install-dialog item like
   // every other plugin. Without it there is no watcher, so the job would sit
   // unclaimed forever and the panel would blame a slow editor start; say what
-  // is actually missing instead.
-  if (!(await exists(`${paths.bridgeDir}/${UNREAL_BRIDGE_UPLUGIN}`))) {
+  // is actually missing instead. The VERSION is checked in the same breath: an
+  // old bridge refuses a job it cannot read, and being told that here beats
+  // queueing one and reading the refusal back out of Unreal.
+  const installedBridge = await readBridgeVersion(paths.bridgeDir)
+  if (installedBridge === 0) {
     throw new Error(
       'The DTH Studio Bridge is not installed in this Unreal project — install it from the project card (Install), then restart the editor once.',
+    )
+  }
+  if (installedBridge !== UNREAL_JOB_VERSION) {
+    throw new Error(
+      `This project has DTH Studio Bridge version ${installedBridge}; this studio writes version ${UNREAL_JOB_VERSION} jobs — re-install it from the project card, then restart the editor once.`,
     )
   }
   await mkdir(paths.jobDir, { recursive: true })
@@ -149,11 +176,16 @@ export async function startUnrealImport({ data }: { data: unknown }): Promise<Un
   const replacedPending = await exists(paths.jobFile).catch(() => false)
 
   const destination = unrealDestinationFor(character.name)
+  // The manifest names its own outputs, so the job can say WHICH files this
+  // export produced. The bridge uses them to find where they are already
+  // imported — an unreadable manifest just means no matching, never a refusal
+  // to send (the importer will report it far better than a path check here).
+  const files = dthExportFiles(await readTextFile(dth).catch(() => ''))
   await storage.writeTextFileAtomic(
     paths.jobFile,
-    unrealJobJson({ dth, destination, character: character.name }),
+    unrealJobJson({ dth, destination, character: character.name, files }),
   )
-  return { dth, destination, replacedPending }
+  return { dth, destination, files, replacedPending }
 }
 
 /**

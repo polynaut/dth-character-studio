@@ -222,6 +222,14 @@ imports read. What imports it is **mrpdean's DazToHue importer plugin**, whose
 own pipeline does the work: meshes, textures, materials, animation curves and
 the post-process animation blueprint.
 
+**A second send re-imports what you already have.** The job also carries the
+FBX files the export produced (the `.dth` names them), and the bridge looks for
+them in the open project first. If those files are already imported — anywhere,
+including a folder you chose yourself — the import runs **there**, on top of the
+existing assets, instead of creating a second set under
+`/Game/DazToHue/<Character>`. The finish toast says which happened and where:
+*Re-imported in Unreal — 6 assets in /Game/Characters/Lara*.
+
 **The studio does not start Unreal.** An editor takes minutes to come up and
 holds its project open, so the job is *queued* instead: the **DTH Studio
 Bridge** plugin (`Plugins\DTHStudioBridge`, pure Python) watches for the job and

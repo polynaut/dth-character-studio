@@ -8,6 +8,12 @@ claims it by RENAME, works, and writes a result file the studio polls:
     Saved/DTHStudio/running_job.json  <- this side renames it (the claim)
     Saved/DTHStudio/result.json       <- this side writes this, the studio polls
 
+The job also names the FBX files the export produced. They are not imported
+directly — importing them would bypass the DazToHue pipeline that builds the
+materials, curves and anim blueprint — they are used to FIND those assets in
+this project, so a second send refreshes what the user already has, wherever
+they put it, instead of importing a duplicate set into a folder of our choosing.
+
 Why a watcher inside a live editor rather than a `-run=pythonscript`
 commandlet: an editor holds its project. A commandlet writing into `Content/`
 behind a running editor produces assets the editor does not know about, or two
@@ -39,7 +45,9 @@ RESULT_FILE = "result.json"
 #: The contract version the studio writes. A job naming anything else is
 #: refused rather than guessed at — a mismatched bridge is a stale install, and
 #: silently doing the old thing is how a "successful" import imports nothing.
-JOB_VERSION = 1
+#: (The studio checks this before writing a job, by reading the `Version` out of
+#: the installed `.uplugin`, so a stale bridge is normally caught there.)
+JOB_VERSION = 2
 
 #: Seconds between directory checks. The tick fires every frame; a stat per
 #: frame on a network project folder is not free, and nobody needs sub-second
@@ -109,6 +117,96 @@ def _import_dth(source_file, destination_path):
     return manager.import_asset(destination_path, source_data, params)
 
 
+# --- where is this export already imported? -----------------------------------
+
+
+def _source_files(asset_data):
+    """Every source file one asset was imported from, absolute where it can be
+    resolved and lowercased for comparison.
+
+    Read from the asset registry's `AssetImportData` TAG rather than by loading
+    the asset: a project can hold tens of thousands of assets and loading them
+    to ask one question would stall the editor for minutes. The tag is the same
+    JSON the Content Browser's "source file" column reads.
+
+    UNVERIFIED against a live editor — the tag name and its shape are Unreal's,
+    not ours, and this has never run against a real project. It is written to
+    answer "nothing found" on anything it does not recognise, which degrades to
+    the plain import the studio did before.
+    """
+    try:
+        raw = asset_data.get_tag_value("AssetImportData")
+    except Exception:
+        return []
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(str(raw))
+    except Exception:
+        return []
+    entries = parsed.get("SourceFiles") if isinstance(parsed, dict) else None
+    if not isinstance(entries, list):
+        return []
+    out = []
+    for entry in entries:
+        name = entry.get("RelativeFilename", "") if isinstance(entry, dict) else ""
+        if not name:
+            continue
+        # RelativeFilename is relative to the asset's own package file when it
+        # is relative at all; both forms occur, so keep the basename too — the
+        # match below is happy with either.
+        out.append(name.replace("\\", "/").lower())
+    return out
+
+
+def _existing_destination(files):
+    """The content folder where these exported files are ALREADY imported, or
+    None.
+
+    The point of the file list: a second send must refresh the assets the user
+    already has — wherever they put them — instead of importing a duplicate set
+    into the studio's guessed `/Game/DazToHue/<Character>`. The folder holding
+    the most matches wins; ties go to the first, which is stable because the
+    registry returns package paths in a fixed order.
+    """
+    wanted = set()
+    for path in files:
+        clean = str(path).replace("\\", "/").lower()
+        wanted.add(clean)
+        wanted.add(clean.rsplit("/", 1)[-1])
+    if not wanted:
+        return None
+    try:
+        registry = unreal.AssetRegistryHelpers.get_asset_registry()
+        # A job claimed during editor startup would otherwise search a registry
+        # that is still scanning, and "not imported yet" is exactly the wrong
+        # answer to give from an incomplete list. The import blocks the game
+        # thread for minutes anyway; waiting for the scan is noise beside it.
+        registry.wait_for_completion()
+        assets = registry.get_assets_by_path("/Game", recursive=True)
+    except Exception:
+        unreal.log_warning("DTH bridge: could not read the asset registry\n" + traceback.format_exc())
+        return None
+
+    counts = {}
+    for asset_data in assets:
+        for source in _source_files(asset_data):
+            if source in wanted or source.rsplit("/", 1)[-1] in wanted:
+                try:
+                    folder = str(asset_data.package_path)
+                except Exception:
+                    continue
+                counts[folder] = counts.get(folder, 0) + 1
+                break
+    if not counts:
+        return None
+    best = max(counts.items(), key=lambda item: item[1])
+    unreal.log(
+        "DTH bridge: %d of these files are already imported under %s" % (best[1], best[0])
+    )
+    return best[0]
+
+
 def _run(job):
     dth = job.get("dth", "")
     destination = job.get("destination", "") or "/Game/DazToHue"
@@ -116,7 +214,7 @@ def _run(job):
         return {
             "version": JOB_VERSION,
             "state": "failed",
-            "error": "This job was written by a different studio version — reinstall the bridge.",
+            "error": "This job was written by a different studio version — re-install the bridge from the project card.",
             "assets": [],
         }
     if not dth or not os.path.isfile(dth):
@@ -127,7 +225,19 @@ def _run(job):
             "assets": [],
         }
 
-    unreal.log("DTH bridge: importing %s into %s" % (dth, destination))
+    # Re-import in place when this project already has these files; a fresh
+    # import at the job's destination when it doesn't. Either way the import
+    # itself is the same call — the DazToHue pipeline off the `.dth`, with
+    # `replace_existing`, which is what makes landing on top of the existing
+    # assets a REFRESH rather than a second copy. Importing the FBX files
+    # directly would bypass that pipeline and lose everything it builds.
+    existing = _existing_destination(job.get("files") or [])
+    mode = "import"
+    if existing:
+        destination = existing
+        mode = "reimport"
+
+    unreal.log("DTH bridge: %s %s into %s" % (mode, dth, destination))
     assets = _import_dth(dth, destination) or []
     names = []
     for asset in assets:
@@ -143,6 +253,7 @@ def _run(job):
         "error": "",
         "character": job.get("character", ""),
         "destination": destination,
+        "mode": mode,
         "assets": names,
     }
 

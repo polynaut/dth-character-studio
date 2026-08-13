@@ -31,6 +31,21 @@ still. The job is queued instead: an open editor picks it up within about a
 second, and one opened later claims it on startup, exactly like a Daz that was
 closed when a batch was queued.
 
+**A second send re-imports what the project already has.** The job carries the
+FBX files the export produced — the `.dth` names them — and the bridge looks for
+them in the open project before importing anything. Found, wherever they are:
+the import runs in **that** folder, on top of the existing assets, instead of
+building a second set under `/Game/DazToHue/<Character>` and leaving you to
+reconcile them. Not found: a fresh import at the studio's destination, exactly
+as before. The finish toast says which happened and where.
+
+It still imports the `.dth`, never the FBX files directly — the `.dth` is what
+triggers the DazToHue pipeline, and importing the meshes on their own would lose
+the materials, curves and anim blueprint it builds. The file list is for finding
+assets, not for importing them.
+
 Every Install rewrites the bridge, so a re-install refreshes it; and it lives in
 its own plugin rather than inside the DazToHue one, which is beta and iterating
-— nothing here forks or edits mrpdean's files.
+— nothing here forks or edits mrpdean's files. The studio reads the installed
+bridge's version before sending, so an out-of-date one is named up front instead
+of refusing the job from inside Unreal.

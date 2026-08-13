@@ -36,11 +36,20 @@ export const UNREAL_BRIDGE_UPLUGIN = `${UNREAL_BRIDGE_NAME}.uplugin`
 /**
  * Bumped whenever the job or result shape changes. The bridge REFUSES a job
  * whose version it does not know rather than guessing, because the failure
- * mode of guessing is an import that reports success and imports nothing —
- * and the bridge is rewritten on every run (below), so a mismatch can only
- * mean a stale editor session, which is exactly worth saying out loud.
+ * mode of guessing is an import that reports success and imports nothing.
+ *
+ * The bridge is INSTALLED (not rewritten per run), so a mismatch is a real
+ * possibility now — the studio therefore checks the installed `.uplugin`'s
+ * `Version` before writing a job ({@link bridgeVersionFrom}) and says
+ * "re-install it" up front, rather than queueing a job that comes back refused.
+ *
+ * History:
+ * - 1 — `.dth` + destination.
+ * - 2 — `files`: the export's own FBX list, so the bridge can find where those
+ *   files are ALREADY imported and re-import there instead of duplicating them
+ *   at the studio's guessed destination.
  */
-export const UNREAL_JOB_VERSION = 1
+export const UNREAL_JOB_VERSION = 2
 
 /**
  * The bridge's own `.uplugin`.
@@ -116,6 +125,8 @@ export function unrealJobJson(job: {
   dth: string
   destination: string
   character: string
+  /** The export's own FBX files — see {@link dthExportFiles}. */
+  files: ReadonlyArray<string>
 }): string {
   return `${JSON.stringify(
     {
@@ -123,10 +134,76 @@ export function unrealJobJson(job: {
       dth: job.dth.replace(/\\/g, '/'),
       destination: job.destination,
       character: job.character,
+      files: job.files.map((file) => file.replace(/\\/g, '/')),
     },
     null,
     2,
   )}\n`
+}
+
+/**
+ * Every FBX the export declares, out of the `.dth` manifest itself.
+ *
+ * The manifest is JSON and names its outputs by ABSOLUTE path — measured on
+ * three real exports (DTH 2.5): `skeletal_meshes[].file` →
+ * `…/<Character>/Skeletal Meshes/SKM_<Character>.fbx`, beside sections for
+ * cloth panels, cloth-panel proxies, detached props, a collision proxy and pose
+ * assets that were all empty there. So this does NOT read `skeletal_meshes`:
+ * it walks the whole manifest and takes every string that ends in `.fbx`,
+ * which picks up the sections this machine has never seen filled without
+ * having to guess their shape — and picks up new ones a future DTH adds.
+ *
+ * Why the manifest rather than a directory listing: it is written BY the export
+ * run, so it names what this export produced, not whatever else is lying in the
+ * folder. Normalized to forward slashes, deduped case-insensitively (Windows),
+ * sorted for a stable job file.
+ */
+export function dthExportFiles(text: string): Array<string> {
+  let manifest: unknown
+  try {
+    manifest = JSON.parse(text)
+  } catch {
+    // A `.dth` that isn't JSON is the importer's problem to report, not a
+    // reason to fail the send: no list simply means no re-import matching.
+    return []
+  }
+  const found = new Map<string, string>()
+  const walk = (node: unknown, depth: number): void => {
+    if (depth > 12) return
+    if (typeof node === 'string') {
+      if (node.toLowerCase().endsWith('.fbx')) {
+        const path = node.replace(/\\/g, '/')
+        const key = path.toLowerCase()
+        if (!found.has(key)) found.set(key, path)
+      }
+      return
+    }
+    if (Array.isArray(node)) {
+      for (const item of node) walk(item, depth + 1)
+      return
+    }
+    if (node !== null && typeof node === 'object') {
+      for (const value of Object.values(node)) walk(value, depth + 1)
+    }
+  }
+  walk(manifest, 0)
+  return [...found.values()].sort((a, b) => a.localeCompare(b))
+}
+
+/**
+ * The `Version` an installed bridge's `.uplugin` declares — the same number
+ * {@link UNREAL_JOB_VERSION} writes into it. 0 = no bridge, unreadable, or a
+ * manifest without the field, which the caller treats as "not installed".
+ */
+export function bridgeVersionFrom(uplugin: string): number {
+  try {
+    const parsed: unknown = JSON.parse(uplugin)
+    if (parsed === null || typeof parsed !== 'object') return 0
+    const version = (parsed as { Version?: unknown }).Version
+    return typeof version === 'number' && Number.isFinite(version) ? version : 0
+  } catch {
+    return 0
+  }
 }
 
 const resultSchema = z.object({
@@ -135,7 +212,13 @@ const resultSchema = z.object({
   error: z.string().default(''),
   assets: z.array(z.string()).default([]),
   character: z.string().default(''),
+  /** Where it actually landed — the job's destination for a fresh import, the
+   *  folder the existing assets live in for a re-import. */
   destination: z.string().default(''),
+  /** `reimport` = the bridge found these files already imported and refreshed
+   *  those assets in place; `import` = a fresh import at the job's destination.
+   *  Defaulted, so a version-1 bridge's result still parses. */
+  mode: z.enum(['import', 'reimport']).default('import'),
 })
 
 export type UnrealImportResult = z.infer<typeof resultSchema>
@@ -156,7 +239,16 @@ export type UnrealImportState =
    *  the user is most likely to see first. */
   | { state: 'waiting' }
   | { state: 'running' }
-  | { state: 'finished'; assets: number; error: string }
+  | {
+      state: 'finished'
+      assets: number
+      error: string
+      /** What the bridge did — see the result schema's `mode`. */
+      mode: 'import' | 'reimport'
+      /** The content path it landed in, which for a re-import is where the
+       *  assets already were, not what the job asked for. */
+      destination: string
+    }
 
 /**
  * What the studio should show, from the two files it can see.
@@ -177,5 +269,7 @@ export function unrealImportStateFrom(
     state: 'finished',
     assets: result.assets.length,
     error: result.state === 'failed' ? result.error || 'the import failed in Unreal' : '',
+    mode: result.mode,
+    destination: result.destination,
   }
 }
