@@ -982,9 +982,12 @@ current code before relying on details, but assume the *lesson* still holds.
   nowhere, and a ticked project with no ticked set held Start. The list made
   its own reason for existing — a FIRST import into an Unreal project —
   impossible. The fix is not a better list but a different question: the dialog
-  now STATES what the run puts in play (the checked Houdini projects' scanned
+  now WORKS OUT what the run puts in play (the checked Houdini projects' scanned
   `exportSets`, or the folder's contents under *Skip Houdini*, which is not a
-  prediction) and where each lands. Generalises: when a control's options come
+  prediction) and asks nothing — the run's task cards name each set and whether
+  it is a re-import once Start is pressed. A read-only version of the same list
+  was built first and dropped on the same report: the clutter was the list, not
+  only its checkboxes. Generalises: when a control's options come
   from a past run's artifacts, it cannot express the thing that has not
   happened yet — and forward-looking work is usually the point. Watch for the
   tell: an empty selection that is BOTH the default and a blocker.

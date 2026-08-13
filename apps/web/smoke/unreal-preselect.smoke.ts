@@ -25,13 +25,12 @@ const callsNamed = (page: import('@playwright/test').Page, cmd: string) =>
 // "has what this run makes", and the two are only distinguishable once the scan
 // reports each project's export-set names.
 //
-// The same run also owns the list UNDER the projects, which is a statement and
-// not a choice: this run's own sets, each with the content folder it lands in.
-// It was a tick list once, built from the export folder — i.e. from what a
-// PREVIOUS run wrote — so the sets a run was about to make were not in it at
-// all, and a ticked project with no ticked set held Start. That made the one
-// thing it existed for (putting a NEW character into an Unreal project)
-// impossible; hence the "new" rows below.
+// Nothing sits UNDER the project rows any more. There was a second tick list
+// there, built from the export folder — i.e. from what a PREVIOUS run wrote —
+// so the sets a run was about to make were not in it at all, and a ticked
+// project with no ticked set held Start. That made the one thing it existed for
+// (putting a NEW character into an Unreal project) impossible. Which sets go is
+// the studio's own answer now, and the run's task cards say it per set.
 
 const STORE = `${P.project}/.dcsmeta/characters/Kira/houdini-scan.json`
 const HOUDINI_2 = 'D:/DTH Projects/Demo/Kira/houdini/KiraSummertide.hip'
@@ -119,13 +118,9 @@ test('the Unreal project ticks for a run that refreshes what it already holds', 
   await dialog.getByRole('checkbox', { name: 'Run in Kira', exact: true }).check()
   await dialog.getByRole('checkbox', { name: 'Run in KiraSummertide' }).uncheck()
   await expect(dialog.getByRole('checkbox', { name: 'Send to DemoGame' })).toBeChecked()
-  // …and the list says WHAT goes, and into which folder it lands. The set this
-  // run does NOT write is not in it at all — a list of "what goes" may not name
-  // something this run never touches.
-  await expect(dialog.locator('[data-send-set]')).toHaveCount(1)
-  await expect(dialog.locator('[data-send-set="KiraDefault"]')).toContainText(
-    '/Game/Characters/Kira',
-  )
+  // The row says WHY it is ticked — this project already holds what this run
+  // refreshes — and that is the whole of what the section asks and answers.
+  await expect(dialog.getByText('Already has this character')).toBeVisible()
 })
 
 test('…and does NOT tick for a run whose variant that project has never seen', async ({ page }) => {
@@ -137,15 +132,12 @@ test('…and does NOT tick for a run whose variant that project has never seen',
   await dialog.getByRole('checkbox', { name: 'Run in KiraSummertide' }).check()
   await dialog.getByRole('checkbox', { name: 'Run in Kira', exact: true }).uncheck()
   await expect(dialog.getByRole('checkbox', { name: 'Send to DemoGame' })).not.toBeChecked()
-  // But the run still SAYS what it would send and where it would go — a new
-  // character in that project, named with the folder it will create. That is
-  // the case the old tick list could not express: the set is not on disk yet,
-  // so nothing listed it and nothing could send it.
-  await expect(dialog.locator('[data-send-set]')).toHaveCount(1)
-  await expect(dialog.locator('[data-send-set="KiraSummertide"]')).toContainText(
-    '/Game/DazToHue/KiraSummertide',
-  )
-  // …and ticking the project is all it takes — no second tick list to satisfy.
+  // …and the row doesn't claim otherwise: this project holds a DIFFERENT
+  // variant, which is not "has what this run makes".
+  await expect(dialog.getByText('Already has this character')).toHaveCount(0)
+  // Ticking it is all it takes — the tick list that used to sit under here
+  // could not offer a set that isn't on disk yet, so it made the first import
+  // of a new variant impossible.
   await dialog.getByRole('checkbox', { name: 'Send to DemoGame' }).check()
   await expect(dialog.getByRole('checkbox', { name: 'Send to DemoGame' })).toBeChecked()
 })
@@ -184,10 +176,9 @@ test('ONE task row per re-import — two sets into one project are two jobs', as
   await page.getByRole('option', { name: /Skip Daz/ }).click()
   await dialog.locator('#houdini-mode').click()
   await page.getByRole('option', { name: /Skip Houdini/ }).click()
+  // "Use last exports" hands over what is ON DISK — both sets, worked out
+  // rather than picked.
   await dialog.getByRole('checkbox', { name: 'Send to DemoGame' }).check()
-  // "Use last exports" hands over what is ON DISK — both sets, named before
-  // Start rather than picked.
-  await expect(dialog.locator('[data-send-set]')).toHaveCount(2)
   await dialog.getByRole('button', { name: 'Start' }).click()
 
   // TWO rows for the ONE project, each named by the export set it carries —

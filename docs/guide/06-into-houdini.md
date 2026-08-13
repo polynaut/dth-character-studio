@@ -250,9 +250,9 @@ What it sends is **what the run makes**: the export sets the Houdini projects in
 the run write, or — under *Skip Houdini — use last exports* — the ones already in
 the character's `export/` folder. Each is a folder there named by the HDA's
 *character name* and holding a `DTH_<name>.dth`, so one character can have
-several (outfit variants, for instance). The dialog lists them under the
-projects with the content folder each one lands in, so you can see before Start
-which are refreshed in place and which are new. They travel in one job and
+several (outfit variants, for instance). Nothing is picked: ticking the Unreal
+project is the whole decision, and the run's task list names each set and
+whether it is a re-import or a first import. They travel in one job and
 import into one content folder each. This is the end of the
 pipeline, not the `daz-export` intermediate the Houdini imports read. What imports it is **mrpdean's DazToHue importer plugin**, whose
 own pipeline does the work: meshes, textures, materials, animation curves and

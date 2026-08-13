@@ -273,19 +273,20 @@ one job. Nothing waits on Unreal: the job is a file, and the project's
 [DTH Character Studio Runner](./06-into-houdini.md#send-to-unreal) picks it up whenever
 that editor is next open.
 
-Under the projects it lists **what this run sends** — the export sets the
-checked Houdini projects write (their export nodes name them, read when the
-project is scanned), or, under *Skip Houdini*, the exports already on disk. Each
-row names where it lands: the folder the ticked project already keeps it in, or
-`/Game/DazToHue/<Set>` where a set that project has never seen would be created.
-It is a statement of what Start does, not a second list to tick — a variant this
-project has never had **is** sent when you tick the project, which is how a new
-character gets into Unreal in the first place.
+**The project is the only thing you tick.** Which export sets go is worked out,
+not asked: the ones the checked Houdini projects write (their export nodes name
+them, read when the project is scanned), or — under *Skip Houdini* — the exports
+already on disk. Whether each one is a refresh of what that project has or a new
+character in it is worked out too, from the project's own `Content/`, and the
+run's task list names every set with the project it lands in once you press
+Start.
 
 Like the other two lists, it **pre-selects what the run is for**: a project that
 already holds one of the sets this run makes starts ticked (it is a refresh), a
 project that would get something new stays for you to decide — putting a
 character into an Unreal project the first time is a choice, not a continuation.
+Tick it and the new one is sent; that is how a character gets into an Unreal
+project in the first place.
 
 A Houdini project the background scan hasn't reached yet says nothing about what
 it writes, so nothing is pre-ticked and the section says so: send it anyway and

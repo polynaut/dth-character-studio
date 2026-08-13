@@ -78,7 +78,6 @@ import type {
 } from '#/components/character/export-pipeline-panel.tsx'
 import { HOUDINI_CONSOLE_FILE } from '#/lib/rom/houdini-jobs.ts'
 import type { HoudiniRunState } from '#/lib/rom/houdini-jobs.ts'
-import { unrealDestinationFor } from '#/lib/rom/unreal-jobs.ts'
 import type { UnrealImportState } from '#/lib/rom/unreal-jobs.ts'
 import type { ExportMode, HoudiniRunMode, RunChoice } from '#/lib/rom/execute-jobs.ts'
 import type { Character } from '@dth/rom'
@@ -2300,12 +2299,13 @@ function DthExportDialog({
    * for: putting a new character into an Unreal project. A choice that can only
    * re-pick the past is not a choice.
    *
-   * So the run names its own sets. Under `skip` ("use last exports") those ARE
-   * the folder's contents, which is not a prediction; under an export run they
-   * are what the checked Houdini projects declare they write (the stored scan),
-   * and an unscanned project makes the answer null rather than a guess. The
-   * names are shown, so a stale scan is visible before Start rather than a
-   * surprise afterwards.
+   * So the run names its own sets, and nothing is asked. Under `skip` ("use
+   * last exports") those ARE the folder's contents, which is not a prediction;
+   * under an export run they are what the checked Houdini projects declare they
+   * write (the stored scan), and an unscanned project makes the answer null
+   * rather than a guess. Nothing renders them — which of the character's sets
+   * this run makes, and whether each is a re-import, is the studio's own answer
+   * and the run's task cards say it per set once Start is pressed.
    */
   const sendSets: Array<string> | null =
     houdiniMode === 'skip'
@@ -2334,6 +2334,22 @@ function DthExportDialog({
    * export while believing this run writes none.
    */
   const nothingToSend = sendSets !== null && sendSets.length === 0
+
+  /** Why this section can't do anything — '' when it can, which is when it says
+   *  nothing at all. */
+  const unrealNote = !unrealSendable
+    ? mode === 'rom-only'
+      ? // Naming the Houdini pick here would be advice the user cannot take:
+        //  rom-only cleared that list and runs no Houdini at all.
+        'ROM only writes no export — nothing to send. Run “ROM + Export”, or send the last export with “Skip Daz”.'
+      : 'Needs somewhere to send from: tick a Houdini project, or pick “Skip Houdini”.'
+    : nothingToSend
+      ? houdiniMode === 'skip'
+        ? // "Use last exports" with no last export: the mode hands over what is
+          //  on disk, and the export folder is empty.
+          'Nothing in the export folder yet — there is no last export to send. Run the Houdini export instead.'
+        : 'These Houdini projects write no export set, so this run produces nothing to send.'
+      : ''
 
   /**
    * The Unreal selection FOLLOWS the Houdini one, the same way the Houdini list
@@ -2795,39 +2811,13 @@ function DthExportDialog({
               />
             ))}
           </div>
-          {/* WHAT goes, not WHICH to pick: this run's own export sets and where
-              each one lands. A set the ticked project has is refreshed in
-              place; one it hasn't is a new character in that project, named
-              with the folder it will create — the case the old tick list could
-              not express at all, since it only ever listed what a previous run
-              had already written. */}
-          {unrealSendable && sendSets !== null && sendSets.length > 0 && (
-            <ul className="mt-2 space-y-1">
-              {sendSets.map((name) => {
-                // Where it would land: in the first TICKED project that has it,
-                // or — when nothing is ticked yet — in any linked project that
-                // does. Reading only the ticked ones made every row say "not in
-                // this project" the moment the pre-selection ticked nothing,
-                // which is exactly when the user needs the truth to decide.
-                const lookIn = checkedUnreal.size > 0 ? [...checkedUnreal] : unrealProjects
-                const at = lookIn
-                  .map((path) => sendPlan?.located[path]?.[name])
-                  .find((found) => found !== undefined)
-                return (
-                  <li key={name} data-send-set={name} className="flex items-center gap-2 text-sm">
-                    <span className="font-mono">{name}</span>
-                    {at !== undefined ? (
-                      <span className="text-xs text-muted-foreground">{at}</span>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">
-                        new — <span className="font-mono">{unrealDestinationFor(name)}</span>
-                      </span>
-                    )}
-                  </li>
-                )
-              })}
-            </ul>
-          )}
+          {/* Nothing under the rows. WHICH export sets go is the studio's own
+              answer (see `sendSets`) and WHERE each lands is the project's —
+              both worked out from disk, neither a question for the user, and
+              the run's task cards name every set with the project it goes into
+              once it starts. The tick list that used to sit here could only
+              re-pick what a PREVIOUS run had written; a read-only version of
+              the same list is the same clutter without the lie. */}
           {unrealSendable && sendSets === null && houdiniMode !== 'skip' && (
             <p className="mt-1.5 flex items-start gap-1.5 text-xs text-amber-500">
               <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
@@ -2839,21 +2829,13 @@ function DthExportDialog({
               </span>
             </p>
           )}
-          <p className="mt-1.5 text-xs text-muted-foreground">
-            {!unrealSendable
-              ? mode === 'rom-only'
-                ? // Naming the Houdini pick here would be advice the user cannot
-                  //  take: rom-only cleared that list and runs no Houdini at all.
-                  'ROM only writes no export — nothing to send. Run “ROM + Export”, or send the last export with “Skip Daz”.'
-                : 'Needs somewhere to send from: tick a Houdini project, or pick “Skip Houdini”.'
-              : nothingToSend
-                ? houdiniMode === 'skip'
-                  ? // "Use last exports" with no last export: the mode hands
-                    //  over what is on disk, and the export folder is empty.
-                    'Nothing in the export folder yet — there is no last export to send. Run the Houdini export instead.'
-                  : 'These Houdini projects write no export set, so this run produces nothing to send.'
-                : 'Queued for import when the whole export finishes — the editor picks it up when it is next open.'}
-          </p>
+          {/* Only ever a REASON the send can't happen. The line that used to sit
+              here in the normal case ("Queued for import when the whole export
+              finishes…") described the feature to somebody who had just ticked
+              a box to use it — permanent text, read once. */}
+          {unrealNote !== '' && (
+            <p className="mt-1.5 text-xs text-muted-foreground">{unrealNote}</p>
+          )}
         </div>
       )}
       {/* The Runner gate is the DAZ plugin's — a skip-Daz run never goes
