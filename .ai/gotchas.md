@@ -398,7 +398,7 @@ current code before relying on details, but assume the *lesson* still holds.
   to date on a root it never moved off. **Ask two questions, not one:** does the
   bump make the sweep visit this character (version), and does the sweep contain
   code that performs the migration (wiring)? They are answered in different files
-  — `RUNTIME_VERSION` in `packages/rom/types.ts`, the wiring in `refreshAllAssets`
+  — `RUNTIME_VERSION` in `packages/rom/src/types.ts`, the wiring in `refreshAllAssets`
   — and the second is the one that gets forgotten. A migration that only hangs
   off the character SAVE reaches the characters the user happens to open.
 - **A cache key must cover everything the cached ANSWER depends on, not just the
