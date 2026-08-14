@@ -128,10 +128,13 @@ test('houdini only: hands the scenes straight to Houdini — no Daz job at all',
   expect(await unhandledCommands(page)).toEqual([])
 })
 
-test('the live Houdini button is inert — Interrupt is the way out', async ({ page }) => {
-  // A plain click on the working button is deliberately ignored: a stray one
-  // used to silently drop the watch AND every project queued behind it. The
-  // deliberate way out sits beside it, unmodified and unmodifiered.
+test('the live Houdini button is the interrupt — a click stops the run, not the watch', async ({
+  page,
+}) => {
+  // A plain click used to be deliberately ignored (a stray one once silently
+  // dropped the watch AND every project queued behind it), with Interrupt as a
+  // second button beside it. The working button now IS the interrupt: a click
+  // asks the RUN to stop at its next node, loudly — never merely the watch.
   //
   // (Until v0.77 the way out was Ctrl → **Stop watching**, which let go of the
   // run rather than stopping it — the leg is headless, so there wasn't even a
@@ -147,18 +150,14 @@ test('the live Houdini button is inert — Interrupt is the way out', async ({ p
   await page.getByRole('button', { name: 'Start' }).click()
   await expect(page.getByRole('button', { name: /Working/ })).toBeVisible({ timeout: 15_000 })
 
-  // A plain click changes nothing — no modifier makes it do anything either.
+  // No second button — one run, one control.
+  await expect(page.getByRole('button', { name: 'Interrupt' })).toHaveCount(0)
   await page.getByRole('button', { name: /Working/ }).click()
-  await expect(page.getByRole('button', { name: /Working/ })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Interrupt' })).toBeVisible()
-
-  await page.getByRole('button', { name: 'Interrupt' }).click()
 
   // The flag is down and the leg says so; the run is NOT torn down here — the
   // watch stays until 456.py reports that it stopped, which is the difference
   // from the old "stop watching".
   await expect(page.getByText(/Stopping the export at the next safe point/)).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Stopping…' })).toBeDisabled()
   await expect(page.getByRole('button', { name: /Houdini Stopping/ })).toBeVisible()
 
   // Nothing was deleted under Houdini — its job file is still there for the

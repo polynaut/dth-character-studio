@@ -10,11 +10,13 @@ import unrealLogo from '#/assets/unreal-logo.svg'
  * The header's live DTH-Export display: **one task list** for the whole run,
  * with **one progress bar** under it carrying the run's latest status message.
  *
- * The list is every unit of work the run comprises, in the order it happens —
- * each selected Daz scene, then every DazToHue network of every Houdini
- * project, then every export set going into every Unreal project. One row per
- * JOB, deliberately: two characters re-imported into one Unreal project are two
- * rows, because they are two imports.
+ * The list is every unit of work the run comprises — each selected Daz scene,
+ * then every DazToHue network of every Houdini project, then every export set
+ * going into every Unreal project. One row per JOB, deliberately: two
+ * characters re-imported into one Unreal project are two rows, because they
+ * are two imports. It RENDERS bottom-up, like a log: the first job at the
+ * bottom, later ones stacked above, so the latest work always sits at the
+ * bottom edge, right above the bar.
  *
  * It replaced three separate readouts (a narrow card column, a tail-mode log
  * window and a two-level meter row) that between them said the same thing three
@@ -88,9 +90,10 @@ function ExportTaskCard({ task, ordinal }: { task: ExportTask; ordinal: number }
   const failed = task.status === 'failed'
   const done = task.status === 'done'
   const accent = ACCENT[task.kind]
-  // The subtitle is "what · where" — either half can be absent (a Daz scene has
-  // no elsewhere; a run that cannot name the work leaves the detail off rather
-  // than inventing one).
+  // "what · where" — either half can be absent (a Daz scene has no elsewhere; a
+  // run that cannot name the work leaves the detail off rather than inventing
+  // one). It rides the label's OWN line: one line per row, so the list stays a
+  // compact queue readout rather than a card column.
   const sub = [task.detail, task.context].filter(Boolean).join(' · ')
   return (
     <li
@@ -137,10 +140,9 @@ function ExportTaskCard({ task, ordinal }: { task: ExportTask; ordinal: number }
           <span aria-hidden className={cn('size-1.5 rounded-full opacity-50', accent)} />
         )}
       </span>
-      <span className="min-w-0 flex-1">
+      <span className="min-w-0 flex-1 truncate text-xs">
         <span
           className={cn(
-            'block truncate text-xs',
             active ? 'font-semibold' : 'font-medium',
             // A failed row keeps its label plain: struck through, it would read
             // as one more thing crossed off the list.
@@ -149,7 +151,7 @@ function ExportTaskCard({ task, ordinal }: { task: ExportTask; ordinal: number }
         >
           {task.label}
         </span>
-        {sub && <span className="block truncate text-[11px] opacity-60">{sub}</span>}
+        {sub && <span className="text-[11px] opacity-60"> · {sub}</span>}
       </span>
       <img
         src={LOGO[task.kind]}
@@ -163,12 +165,36 @@ function ExportTaskCard({ task, ordinal }: { task: ExportTask; ordinal: number }
 
 export function ExportTaskList({ tasks }: { tasks: Array<ExportTask> }) {
   const boxRef = useRef<HTMLOListElement>(null)
-  // Keep the row being worked in view: the list is chronological and a long run
-  // scrolls past the top of the box, so without this the interesting row walks
-  // off the bottom. `nearest` so a list that already fits never jumps.
+  const pinnedRef = useRef(false)
+  // The list runs BOTTOM-UP — the first job at the bottom, later ones stacked
+  // above — so the freshest row (the one being worked) sits at the bottom
+  // edge, right above the bar, with the queue readable above it and finished
+  // rows sliding below the fold. This effect pins that edge: scrollTop
+  // arithmetic rather than scrollIntoView, because only the LIST may move —
+  // scrollIntoView walks every scrollable ancestor and can drag the page.
   useEffect(() => {
-    const active = boxRef.current?.querySelector('[data-task-status="active"]')
-    active?.scrollIntoView({ block: 'nearest' })
+    const box = boxRef.current
+    if (!box) return
+    // The run's front: the active row, else the freshest finished one (the
+    // legs' baton passes leave short stretches with nothing active).
+    const front =
+      box.querySelector<HTMLElement>('[data-task-status="active"]') ??
+      box.querySelector<HTMLElement>('[data-task-status="done"], [data-task-status="failed"]')
+    if (!front) {
+      // Nothing worked yet (a handoff waiting to be claimed): start the view
+      // at the bottom — the run's beginning — then leave the user's own
+      // scrolling alone.
+      if (!pinnedRef.current) box.scrollTop = box.scrollHeight
+      pinnedRef.current = true
+      return
+    }
+    pinnedRef.current = true
+    const boxRect = box.getBoundingClientRect()
+    const rect = front.getBoundingClientRect()
+    // Re-pin only when the front row has LEFT the box (the old `nearest`
+    // courtesy): a 2.5s poll must not yank a user reading the queue.
+    if (rect.top >= boxRect.top && rect.bottom <= boxRect.bottom + 1) return
+    box.scrollTop += rect.bottom - boxRect.bottom
   }, [tasks])
   return (
     <ol
@@ -176,12 +202,18 @@ export function ExportTaskList({ tasks }: { tasks: Array<ExportTask> }) {
       ref={boxRef}
       // A BOUNDED height, deliberately: the header sizes itself to its content,
       // so a list that grew with the run would inflate the whole page header
-      // (and jump per row). Four rows of two lines, then it scrolls.
-      className="flex max-h-[10.5rem] min-h-0 flex-col gap-1 overflow-y-auto text-left"
+      // (and jump per row). Five one-line rows, then it scrolls.
+      className="flex max-h-[9.75rem] min-h-0 flex-col gap-1 overflow-y-auto text-left"
     >
-      {tasks.map((task, index) => (
-        <ExportTaskCard key={task.id} task={task} ordinal={index + 1} />
-      ))}
+      {/* Rendered in REVERSE run order — the latest work at the bottom, like a
+          log — while the ordinal keeps counting in RUN order, so the bottom row
+          is "1." and the numbers climb up the queue. */}
+      {tasks
+        .map((task, index) => ({ task, ordinal: index + 1 }))
+        .reverse()
+        .map(({ task, ordinal }) => (
+          <ExportTaskCard key={task.id} task={task} ordinal={ordinal} />
+        ))}
     </ol>
   )
 }
@@ -232,16 +264,16 @@ function RunProgressBar({
 export function ExportPipelinePanel({ view }: { view: ExportPipelineView }) {
   if (view.tasks.length === 0 && !view.status) return null
   return (
-    // Spans the header's whole button-cluster grid (the buttons keep the second
-    // column below), so the list and the bar are EXACTLY as wide as the whole
-    // button row — a panel narrower than the buttons it sits on reads as a
-    // floating box. The min-width is what a short button row is widened to, so
-    // a run starting cannot make the header narrower than the list needs.
-    // `justify-end` pins the list to the bottom, right above the bar and the
-    // buttons. The panel does NOT dock: `pipeline-scroll` fades it out on the
-    // header-collapse scroll timeline (styles.css) — it is a working view for
-    // the top of the page.
-    <div className="pipeline-scroll col-span-2 row-start-1 flex min-h-0 w-full min-w-[26rem] flex-col justify-end gap-2">
+    // Anchored ABOVE the header's button row (absolute against that row, which
+    // is `relative`), so the list and the bar are EXACTLY as wide as the
+    // buttons — never wider. It used to bring its own min-width and could
+    // out-grow the button row, which read as a floating box. Out of flow, so a
+    // run starting never resizes the header; the list's bounded height keeps
+    // the panel's own growth in check (every row truncates, so narrow is
+    // fine). The panel does NOT dock: `pipeline-scroll` fades and collapses it
+    // on the header-collapse scroll timeline (styles.css) — it is a working
+    // view for the top of the page.
+    <div className="pipeline-scroll absolute inset-x-0 bottom-full mb-5 flex flex-col gap-2">
       {view.tasks.length > 0 && <ExportTaskList tasks={view.tasks} />}
       <RunProgressBar percent={view.percent} status={view.status} kind={view.kind} />
     </div>

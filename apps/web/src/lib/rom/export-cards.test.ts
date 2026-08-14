@@ -207,20 +207,37 @@ describe('unrealTaskCards', () => {
     expect(new Set(cards.map((c) => c.id)).size).toBe(2)
   })
 
-  it('says re-import, first import, or neither — never a guess', () => {
-    const detail = (existing?: boolean) =>
+  it('says re-import or a plain Import — and DROPS a set the project never held', () => {
+    const cards = (existing?: boolean) =>
       unrealTaskCards(
         { path: UPROJECT, label: 'workflow3d', sets: [{ name: 'Lara', existing }] },
         'waiting',
-      )[0].detail
+      )
     // The studio located those assets in that project: the bridge imports on
     // top of them.
-    expect(detail(true)).toBe('Re-import')
-    // It looked and found none.
-    expect(detail(false)).toBe('First import')
+    expect(cards(true)[0].detail).toBe('Re-import')
+    // It looked and found none — and the send is RE-import only (a first
+    // import is the user's own act inside Unreal), so the set is out of the
+    // run: no row, rather than a "First import" promise the send won't keep.
+    expect(cards(false)).toEqual([])
     // Nobody looked (a run restored after a reload carries the set names, not
-    // the probe) — so the row claims neither.
-    expect(detail(undefined)).toBe('Import')
+    // the probe) — the row stays and claims neither; the send decides.
+    expect(cards(undefined)[0].detail).toBe('Import')
+  })
+
+  it('keeps the located sets of a mixed pair and drops the absent one', () => {
+    const cards = unrealTaskCards(
+      {
+        path: UPROJECT,
+        label: 'workflow3d',
+        sets: [
+          { name: 'LaraClassic', existing: true },
+          { name: 'LaraClassic_Thick', existing: false },
+        ],
+      },
+      'waiting',
+    )
+    expect(cards.map((c) => [c.label, c.detail])).toEqual([['LaraClassic', 'Re-import']])
   })
 
   it('falls back to the project when the sets are unknown', () => {

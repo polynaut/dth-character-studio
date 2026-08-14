@@ -117,13 +117,12 @@ import type { Character } from '@dth/rom'
  * Runner owns the file's `progress` + per-job statuses, the studio just polls
  * the file (api/execute.ts). At 100% the studio deletes the file and toasts
  * the outcome (including per-scene failures); a run whose Daz exited early
- * toasts a failure instead. A plain click on the working button is IGNORED
- * (a stray click must not reset the run's watch) — the way out is
- * **Interrupt** beside it ({@link InterruptButton}), on both legs: it drops
- * the studio's interrupt flag, which the generated Daz scripts, the DTH
- * runtime and 456.py all poll, so the run stops at its next safe point and is
- * reported as interrupted. Status refreshes on window focus and polls lightly
- * while pending/running.
+ * toasts a failure instead. The working button IS the interrupt ({@link
+ * WorkingButton}, both legs): hovering swaps its spinner for a stop mark and
+ * a click drops the studio's interrupt flag, which the generated Daz scripts,
+ * the DTH runtime and 456.py all poll, so the run stops at its next safe
+ * point and is reported as interrupted. Status refreshes on window focus and
+ * polls lightly while pending/running.
  *
  * History: both legs used to hide a modifier-revealed escape hatch here —
  * **Ctrl** turned the Daz button into **Abort** (delete the claimed job file)
@@ -183,177 +182,167 @@ function ElapsedSince({ since }: { since?: number }) {
 }
 
 /**
- * **Interrupt** — the one button that stops the RUN rather than the studio's
- * view of it, and the reason it sits beside every live progress button instead
- * of hiding behind a modifier: "stop this" is a thing users need, not an
- * expert escape hatch.
+ * The live **Working** button — the run's one control, on both legs. At rest
+ * it shows the leg's spinner, the mark of the app doing the work and the
+ * elapsed clock; HOVERING it swaps the spinner for a stop mark and the tooltip
+ * leads with what a click now does: **interrupt** the run at its next safe
+ * point.
  *
- * It is the run's ONLY action button. The first shape of this feature kept the
- * older modifier-revealed Abort / Stop watching beside it, and that was worse
- * than either alone: two stop-flavoured buttons with nothing on them to say
- * which stopped the run and which only stopped the studio watching it.
+ * What a click promises is exactly what the runtimes can deliver, so the
+ * tooltip says it in full: the flag is dropped, and the generated Daz scripts
+ * + the DTH runtime + 456.py stop at their next checkpoint. The step running
+ * at that moment finishes first — a Daz content load, one `doExport`, one
+ * Houdini node are synchronous calls inside someone else's plugin, and the
+ * alternative to waiting for them is killing a process mid-write.
  *
- * What it promises is exactly what the runtimes can deliver, so the tooltip
- * says it in full: the flag is dropped, and the generated Daz scripts + the
- * DTH runtime + 456.py stop at their next checkpoint. The step running at that
- * moment finishes first — a Daz content load, one `doExport`, one Houdini node
- * are synchronous calls inside someone else's plugin, and the alternative to
- * waiting for them is killing a process mid-write.
+ * History: the interrupt was a separate button beside an INERT Working button
+ * (and before that, a modifier-revealed Abort / Stop watching that could only
+ * stop the studio's watch, never the run). Two buttons for one run out-grew
+ * the panel above them; folding the stop into the button people already watch
+ * removed the pair. The stray-click worry that made Working inert (a plain
+ * click used to reset the WATCH mid-run, reading as "the export vanished") no
+ * longer applies: a click asks the RUN to stop, safely and loudly, which is
+ * the one thing a click on a live export button can mean.
  *
- * Once pressed it does not offer itself again (`pending`): the flag is on
- * disk, pressing it twice changes nothing, and a button that still says
- * "Interrupt" after the user interrupted reads as "that didn't work".
+ * Once pressed it stops offering itself (`interrupting`): the flag is on
+ * disk, pressing twice changes nothing, and a button still promising "Click
+ * to interrupt" after the click reads as "that didn't work". The one thing
+ * the old Abort could do that Interrupt cannot — clear a job file nothing
+ * will ever finish (a Daz stuck on a modal reads no flag) — lives where
+ * housekeeping belongs: **Settings → App Data**.
  */
-function InterruptButton({ pending, onClick }: { pending: boolean; onClick: () => void }) {
+function WorkingButton({
+  percent,
+  barColor,
+  appLogo,
+  appName,
+  status,
+  interrupting,
+  onInterrupt,
+  since,
+}: {
+  /** The mini bar (::after, appears only in the collapsed header —
+   *  styles.css) mirrors the pipeline's CURRENT meter. */
+  percent: number
+  barColor: string
+  appLogo: string
+  appName: string
+  /** The leg's newest word — the tooltip's first line. */
+  status: string
+  /** The interrupt has been requested — the run is draining to its next stop
+   *  point (either this window asked, or the restored watch says it did). */
+  interrupting: boolean
+  onInterrupt: () => void
+  since?: number
+}) {
   return (
     <Button
-      variant="outline-destructive"
-      className="px-3"
-      disabled={pending}
-      onClick={onClick}
+      variant="outline"
+      className={`export-button-progress group px-3${interrupting ? ' cursor-wait' : ''}`}
+      style={
+        {
+          '--export-progress': `${percent}%`,
+          '--export-progress-color': barColor,
+        } as CSSProperties
+      }
+      // Inert once the interrupt is on disk — the wait-cursor says "draining,
+      // nothing more to click".
+      onClick={interrupting ? undefined : onInterrupt}
       title={
-        pending
+        interrupting
           ? 'Stopping at the next safe point — whatever is running right now (a scene load, one export call, one Houdini node) has to finish first.'
-          : 'Interrupt: stop this export at the next point where stopping is safe. The ROM build stops between blocks, the export that would have followed is skipped, and every scene and Houdini project still queued is dropped. Everything already written stays.'
+          : `${status}\n\nClick to interrupt: stop this export at the next point where stopping is safe. The ROM build stops between blocks, the export that would have followed is skipped, and every scene and Houdini project still queued is dropped. Everything already written stays.`
       }
     >
-      <CircleStop /> {pending ? 'Stopping…' : 'Interrupt'}
+      {/* Just "Working" — the counts and percents live in the pipeline panel
+          above (and this button's tooltip); a constant label plus the
+          reserved-width clock keeps the button from resizing every tick. The
+          app mark names who is busy — the run happens outside the studio, and
+          the two legs are told apart by their marks. The spinner is the hover
+          swap's other half: pointer on = the stop mark, because the button's
+          click IS the interrupt. */}
+      {interrupting ? (
+        <Loader2 className="animate-spin" />
+      ) : (
+        <>
+          <Loader2 className="animate-spin group-hover:hidden" />
+          <CircleStop className="hidden text-destructive group-hover:block" />
+        </>
+      )}
+      <img src={appLogo} alt={appName} className="size-5 shrink-0 object-contain" />
+      {interrupting ? 'Stopping' : 'Working'}
+      <ElapsedSince since={since} />
     </Button>
   )
 }
 
-/**
- * The live **Working** button — inert to plain clicks — with
- * {@link InterruptButton} beside it as the run's one action.
- *
- * There used to be a second, modifier-revealed action here: **Ctrl** turned this
- * button into **Abort**, which deleted the claimed job file and reset the watch.
- * It was the only way out of a run that would never end, back when the studio
- * could not stop a run at all. Interrupt replaces it: it stops the actual work
- * instead of only the studio's view of it, and it needs no modifier to find.
- *
- * The one thing Abort could do that Interrupt cannot — clear a job file nothing
- * will ever finish (a Daz stuck on a modal reads no flag) — is not lost, it just
- * isn't on this button: **Settings → App Data** clears a stuck handoff, which is
- * where housekeeping belongs. Two stop-flavoured buttons on one run, one of them
- * hidden behind a key, was worse than the rare case it served.
- */
+/** The Daz leg's {@link WorkingButton}: the per-scene progress-log percent
+ *  (falling back to row counts under an old Runner) on the emerald mini bar.
+ *  The Runner renamed the job file and owns its progress — the studio just
+ *  polls the file; the click interrupts the run itself. */
 function ExportProgressButton({
   progress,
   interrupting,
   onInterrupt,
 }: {
   progress: Extract<ExportRunProgress, { state: 'running' }>
-  /** The interrupt has been requested — the run is draining to its next stop
-   *  point (either this window asked, or the restored watch says it did). */
   interrupting: boolean
   onInterrupt: () => void
 }) {
-  // The Runner renamed the job file and owns its progress — the studio just
-  // polls the file. A plain click is IGNORED: a stray click must never reset
-  // the watch mid-run (measured: it did, and read as "the export vanished").
-  // Interrupt beside it is the deliberate way out; the wait-cursor says
-  // "busy, not clickable" on hover.
-  // The mini bar (::after, appears only in the collapsed header — styles.css)
-  // mirrors the pipeline's CURRENT meter: the per-scene progress-log percent,
-  // falling back to row counts under an old Runner.
   const percent =
     progress.step?.percent ??
     (progress.total > 0 ? Math.round((progress.processed / progress.total) * 100) : 0)
   return (
-    <>
-      <Button
-        variant="outline"
-        className="export-button-progress cursor-wait px-3"
-        style={
-          {
-            '--export-progress': `${percent}%`,
-            '--export-progress-color': 'var(--color-emerald-600)',
-          } as CSSProperties
-        }
-        // Just the latest status — the counts live in the panel.
-        title={capitalizeStatus(progress.step?.message || 'working…')}
-      >
-        {/* Just "Working" — the counts and percents live in the pipeline
-            panel above (and this button's tooltip); a constant label plus the
-            reserved-width clock keeps the button from resizing every tick. The
-            DAZ mark names which app is doing the work — the run happens
-            outside the studio, and this button is where the user looks to
-            know who is busy (the Houdini leg below wears its own mark). */}
-        <Loader2 className="animate-spin" />
-        <img src={dazLogo} alt="Daz Studio" className="size-5 shrink-0 object-contain" />
-        {interrupting ? 'Stopping' : 'Working'}
-        <ElapsedSince since={progress.startedAtMs} />
-      </Button>
-      <InterruptButton pending={interrupting} onClick={onInterrupt} />
-    </>
+    <WorkingButton
+      percent={percent}
+      barColor="var(--color-emerald-600)"
+      appLogo={dazLogo}
+      appName="Daz Studio"
+      status={capitalizeStatus(progress.step?.message || 'working…')}
+      interrupting={interrupting}
+      onInterrupt={onInterrupt}
+      since={progress.startedAtMs}
+    />
   )
 }
 
-/**
- * The Houdini leg's twin of {@link ExportProgressButton}: a live **Working**
- * button, inert to plain clicks, with **Interrupt** beside it.
- *
- * This leg also lost a Ctrl affordance to Interrupt — **Stop watching**, which
- * dropped the watch and the project queue while the export ran on to its end
- * inside hython. It existed because there was nothing better: the leg is
- * headless, so there isn't even a window to close. Interrupt does the thing it
- * only approximated — 456.py stops between nodes and closes its own Houdini,
- * and the queued projects never start.
- */
+/** The Houdini leg's {@link WorkingButton}: the Daz batch is done and
+ *  reported; Houdini is working (or opening the project). The orange mini bar
+ *  mirrors the panel's stepwise Houdini scale (1 open-project step + 1 per
+ *  network); the click interrupts — 456.py stops between nodes, closes its
+ *  own Houdini, and the queued projects never start. A watch whose Houdini
+ *  actually dies ends itself (liveness detection). */
 function HoudiniProgressButton({
   houdini,
   interrupting,
   onInterrupt,
 }: {
   houdini: HoudiniRunState
-  /** The interrupt has been requested — 456.py stops at its next node. */
   interrupting: boolean
   onInterrupt: () => void
 }) {
-  // The Daz batch is done and reported; Houdini is working (or opening the
-  // project). Like the Daz leg's button, a plain click is IGNORED — a stray
-  // click didn't just stop the watch, it silently stopped the orchestration of
-  // every queued project. A watch whose Houdini actually dies ends itself
-  // (liveness detection). The mini bar mirrors the panel's stepwise Houdini
-  // scale (1 open-project step + 1 per network).
   const percent =
     houdini.state === 'running' && houdini.total > 0
       ? Math.round(((1 + houdini.done) / (1 + houdini.total)) * 100)
       : 0
   return (
-    <>
-      <Button
-        variant="outline"
-        className="export-button-progress cursor-wait px-3"
-        style={
-          {
-            '--export-progress': `${percent}%`,
-            '--export-progress-color': 'var(--color-orange-600)',
-          } as CSSProperties
-        }
-        // Just the latest status, like the Daz leg's button.
-        title={capitalizeStatus(
-          (houdini.state === 'running' && houdini.activity?.lines.at(-1)) ||
-            (houdini.state === 'running' ? 'exporting…' : 'opening project…'),
-        )}
-      >
-        {/* Same constant "Working" as the Daz leg — the node counts live in
-            the pipeline panel's meters and this tooltip; the Houdini mark is
-            what tells the legs apart. */}
-        <Loader2 className="animate-spin" />
-        <img src={houdiniLogo} alt="Houdini" className="size-5 shrink-0 object-contain" />
-        {interrupting ? 'Stopping' : 'Working'}
-        <ElapsedSince
-          since={
-            houdini.state === 'starting' || houdini.state === 'running'
-              ? houdini.startedAtMs
-              : undefined
-          }
-        />
-      </Button>
-      <InterruptButton pending={interrupting} onClick={onInterrupt} />
-    </>
+    <WorkingButton
+      percent={percent}
+      barColor="var(--color-orange-600)"
+      appLogo={houdiniLogo}
+      appName="Houdini"
+      status={capitalizeStatus(
+        (houdini.state === 'running' && houdini.activity?.lines.at(-1)) ||
+          (houdini.state === 'running' ? 'exporting…' : 'opening project…'),
+      )}
+      interrupting={interrupting}
+      onInterrupt={onInterrupt}
+      since={
+        houdini.state === 'starting' || houdini.state === 'running'
+          ? houdini.startedAtMs
+          : undefined
+      }
+    />
   )
 }
 
@@ -457,11 +446,12 @@ export function DthExportAction({
    * sets it is getting — one import job, and therefore one row, apiece.
    *
    * `located` is the panel's probe (which project already holds which set),
-   * which is what turns a row into "Re-import" or "First import". It is absent
-   * for a run RESTORED after a reload — the plan carries the set names, not the
-   * probe — and those rows then say a plain "Import" rather than picking one of
-   * the two answers on no evidence. The send fills it in for real
-   * ({@link sendToUnreal}).
+   * which is what turns a row into "Re-import" — and what DROPS a set the
+   * project has never held, because the send is re-import only
+   * (`unrealTaskCards` filters `existing === false`). It is absent for a run
+   * RESTORED after a reload — the plan carries the set names, not the probe —
+   * and those rows then say a plain "Import" rather than claiming either way
+   * on no evidence. The send fills it in for real ({@link sendToUnreal}).
    */
   function unrealTargetsFrom(
     paths: ReadonlyArray<string>,
@@ -800,8 +790,10 @@ export function DthExportAction({
           const sets = started.sets.map((set) => set.name).join(', ')
           // The send is the moment the studio KNOWS which of these sets that
           // project already holds — it located them itself to write the job's
-          // destinations. So the rows stop guessing and say re-import or first
-          // import for real, each against the project it is going into.
+          // destinations. So the rows stop guessing: what the send kept is a
+          // re-import for real, and a set the project has never held DROPPED
+          // out of the run there (the send is re-import only), so its row
+          // goes with it rather than sitting forever "waiting".
           const armed = pipelineRef.current
           const target = armed?.unreal.find((one) => one.path === uprojectPath)
           if (target) {
@@ -821,7 +813,12 @@ export function DthExportAction({
           // rows name the rest.
           if (!unrealWatchRef.current) unrealWatchRef.current = uprojectPath
           setUnrealState({ state: 'waiting' })
-          return `Unreal: queued for ${name} — ${sets}`
+          // A skipped set is said, never swallowed: the run would otherwise
+          // read as "everything reached Unreal" about a set that was dropped
+          // because that project has never held it (re-import only).
+          return started.skipped.length > 0
+            ? `Unreal: queued for ${name} — ${sets} (not in that project yet, so not sent: ${started.skipped.join(', ')} — make the first import in Unreal itself)`
+            : `Unreal: queued for ${name} — ${sets}`
         } catch (error) {
           // A refusal here (no bridge, no export) must not read as an export
           // failure: the Houdini leg is done and its output is on disk.
@@ -1962,11 +1959,15 @@ function UnrealRow({
   checked: boolean
   /** The project already holds at least one export set THIS RUN is sending it
    *  (assets named after it) — a re-import, and why the row comes pre-checked.
-   *  null = the probe hasn't landed. */
+   *  `false` = the probe landed and found none, and since the send is
+   *  RE-import only (a first import is the user's own act inside Unreal), the
+   *  row is inert with the subtitle saying why. null = the probe hasn't
+   *  landed (tickable — the send re-probes at handover). */
   has: boolean | null
-  /** There is nothing for this run to send — it produces no export, or the
-   *  export folder it would hand over is empty. The row goes inert rather than
-   *  sitting there ticked and lying about what Start does. */
+  /** There is nothing for this run to send — it produces no export, the
+   *  export folder it would hand over is empty, or (`has === false`) nothing
+   *  this run makes is in that project to re-import. The row goes inert
+   *  rather than sitting there ticked and lying about what Start does. */
   disabled: boolean
   onToggle: () => void
 }) {
@@ -1996,8 +1997,14 @@ function UnrealRow({
             {/* Not "already has this character": the whole point of the
                 pre-tick is that holding SOME variant is not holding the one
                 this run makes, and this line is where the user reads which
-                question was asked. */}
-            {has === true ? 'Already has what this run sends' : shortPath}
+                question was asked. The `false` line names the manual step,
+                because the studio deliberately doesn't do it: a character's
+                FIRST import into a project is made in Unreal itself. */}
+            {has === true
+              ? 'Already has what this run sends'
+              : has === false
+                ? 'Nothing here to re-import — make the first import in Unreal itself'
+                : shortPath}
           </p>
         </div>
       </div>
@@ -2043,8 +2050,10 @@ function DthExportPanel({
     /** The export sets to hand over — the user's own tick list. */
     unrealSets: Array<string>
     /** Which of those sets each project ALREADY holds (the send plan's probe) —
-     *  what lets the run's Unreal rows say "Re-import" instead of guessing. */
-    unrealLocated: Record<string, Record<string, string>>
+     *  what lets the run's Unreal rows say "Re-import" instead of guessing.
+     *  undefined when the probe never landed: the rows then claim a plain
+     *  "Import" and the send decides (it re-probes for real). */
+    unrealLocated: Record<string, Record<string, string>> | undefined
     /** What the batch does to each scene — the Daz rows' subtitle. */
     mode: ExportMode
     /** The handoff started Daz itself (vs. handing to a running one). */
@@ -2057,14 +2066,14 @@ function DthExportPanel({
     scenes: Array<string>,
     unrealProjects: Array<string>,
     unrealSets: Array<string>,
-    unrealLocated: Record<string, Record<string, string>>,
+    unrealLocated: Record<string, Record<string, string>> | undefined,
   ) => void
   /** Neither Daz nor Houdini runs — the whole run is the Unreal send, off the
    *  exports already on disk. */
   onUnrealOnly: (
     unrealProjects: Array<string>,
     unrealSets: Array<string>,
-    unrealLocated: Record<string, Record<string, string>>,
+    unrealLocated: Record<string, Record<string, string>> | undefined,
   ) => void
   /** The handoff went to a Daz that is still shutting down — the caller shows
    *  the wait-and-relaunch modal (see WaitForDazCloseModal). */
@@ -2584,8 +2593,14 @@ function DthExportPanel({
       // made before the mode changed under it.
       const unrealTargets = nothingToSend ? [] : chosenUnreal
       // The probe behind the pre-selection, handed up so the run's Unreal rows
-      // can say re-import vs first import per project ({@link UnrealSendPlan}).
-      const located = sendPlan?.located ?? {}
+      // can say "Re-import" — or drop a set the project never held — per
+      // project ({@link UnrealSendPlan}). undefined when the probe never
+      // landed (still in flight, or failed — the rows stay tickable then):
+      // coercing to `{}` here would read as "probed and found NOTHING", which
+      // under re-import-only dropped every Unreal row from the run display.
+      // Nobody looked, so the rows claim a plain "Import" and the send
+      // decides — it re-probes for real.
+      const located = sendPlan?.located
       // Skip Daz: the Houdini selection IS the run — the same machinery the
       // after-batch continuation drives, minus the batch.
       if (mode === 'houdini-only') {
@@ -2912,23 +2927,30 @@ function DthExportPanel({
           <div>
             <Label className="mb-1.5">Unreal projects</Label>
             <div className="space-y-2">
-              {unrealProjects.map((uproject) => (
-                <UnrealRow
-                  key={uproject}
-                  uproject={uproject}
-                  checked={checkedUnreal.has(uproject)}
-                  has={sendPlan === null ? null : holdsSendSet(uproject)}
-                  disabled={!unrealSendable || nothingToSend}
-                  onToggle={() =>
-                    setCheckedUnreal((current) => {
-                      const next = new Set(current)
-                      if (next.has(uproject)) next.delete(uproject)
-                      else next.add(uproject)
-                      return next
-                    })
-                  }
-                />
-              ))}
+              {unrealProjects.map((uproject) => {
+                const has = sendPlan === null ? null : holdsSendSet(uproject)
+                return (
+                  <UnrealRow
+                    key={uproject}
+                    uproject={uproject}
+                    checked={checkedUnreal.has(uproject)}
+                    has={has}
+                    // `has === false` is a landed probe saying there is nothing
+                    // of this run's in there — and the send is RE-import only,
+                    // so the row can do nothing. A null probe stays tickable:
+                    // ignorance must not refuse (the send re-probes for real).
+                    disabled={!unrealSendable || nothingToSend || has === false}
+                    onToggle={() =>
+                      setCheckedUnreal((current) => {
+                        const next = new Set(current)
+                        if (next.has(uproject)) next.delete(uproject)
+                        else next.add(uproject)
+                        return next
+                      })
+                    }
+                  />
+                )
+              })}
             </div>
             {/* Nothing under the rows. WHICH export sets go is the studio's own
                 answer (see `sendSets`) and WHERE each lands is the project's —
@@ -2943,8 +2965,8 @@ function DthExportPanel({
                 <span>
                   The studio doesn&apos;t know yet which export sets these Houdini projects write,
                   so nothing is pre-selected and <strong>everything</strong> in the export folder
-                  would be sent. <strong>Rescan</strong> them (Utils drawer) and it will send only
-                  what this run makes.
+                  that a ticked project already holds would be re-imported. <strong>Rescan</strong>{' '}
+                  them (Utils drawer) and it will send only what this run makes.
                 </span>
               </p>
             )}

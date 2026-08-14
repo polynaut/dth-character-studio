@@ -282,16 +282,19 @@ run's task list names every set with the project it lands in once you press
 Start.
 
 Like the other two lists, it **pre-selects what the run is for**: a project that
-already holds one of the sets this run makes starts ticked (it is a refresh), a
-project that would get something new stays for you to decide — putting a
-character into an Unreal project the first time is a choice, not a continuation.
-Tick it and the new one is sent; that is how a character gets into an Unreal
-project in the first place.
+already holds one of the sets this run makes starts ticked (it is a refresh).
+The send is **re-import only** — it lands an updated export on assets that are
+already in the project. A project that holds nothing this run makes has nothing
+to re-import, so its row goes inert and says so: a character's **first import**
+into an Unreal project is made in Unreal itself (open the project and import the
+DazToHue `.dth` once — that is where you decide where in the project the
+character lives). From then on, runs re-import it in place, wherever you put it.
 
 A Houdini project the background scan hasn't reached yet says nothing about what
 it writes, so nothing is pre-ticked and the section says so: send it anyway and
-**everything** in the export folder goes. **Rescan** those projects (Utils
-drawer) and the run sends only what it makes.
+**everything** in the export folder that the project already holds is
+re-imported. **Rescan** those projects (Utils drawer) and the run sends only
+what it makes.
 
 The section needs somewhere to send from: tick a Houdini project to export
 first, or pick **Skip Houdini — use last exports** to send the exports already
@@ -318,8 +321,11 @@ The character header becomes the run's own display for as long as it lasts:
   <sub><em>The live pipeline: one list of what the run does, and how far through it is.</em></sub>
 </p>
 
-- **One task list**, numbered in run order — **one row per job**, which is what
-  makes it worth reading:
+- **One task list**, numbered in run order and stacked **bottom-up** like a
+  log — the first job sits at the bottom, later ones pile above it, and the
+  row being worked stays at the bottom edge right above the bar while finished
+  rows slide below the fold. **One row per job**, which is what makes it worth
+  reading:
   - every selected **Daz scene**, saying what the run does to it (*ROM +
     Export*, *Export only*, …);
   - every **DazToHue network**, not merely every `.hip` — a project holding two
@@ -327,7 +333,9 @@ The character header becomes the run's own display for as long as it lasts:
     it;
   - every **export set going into an Unreal project** — two characters
     re-imported into the same project are two imports, so they are two rows,
-    each saying *Re-import* or *First import* and which project it lands in.
+    each saying *Re-import* and which project it lands in. A set the project
+    has never held is not sent (and gets no row): the report names it instead,
+    since its first import is made in Unreal itself.
 
   The row being worked spins; a finished one is ticked off and stays, so the
   list reads as the whole run rather than only what is left. The mark on the
@@ -348,9 +356,10 @@ live in the display. Nothing is announced mid-run: **one report** at the very
 end covers both legs, with any per-scene failures and the total time, and stays
 on screen until you close it (or start a new run).
 
-**Interrupt** stops the run itself. It sits beside the working button through
-both legs, and it is the one control that reaches into the work rather than into
-the studio's view of it:
+**The working button is also the interrupt.** Hover it while a run is live and
+its spinner becomes a stop mark — *Click to interrupt* — through both legs. It
+is the one control that reaches into the work rather than into the studio's
+view of it:
 
 - The **ROM build stops** where it happens to be — between two ROM blocks, or
   between two custom frames.
@@ -364,15 +373,15 @@ the studio's view of it:
   one that was skipped, so it doesn't guess. The character's ROM run log names
   the scene that was cut off mid-build.
 
-What is already written stays. And what Interrupt cannot do is cut a *synchronous
-call inside someone else's plugin* short: a Daz scene load, one DTH Exporter
-export, one DazToHue node. Whichever of those is running finishes first — that
-wait is the price of stopping cleanly instead of killing a process mid-write, so
-on a long node the button can sit at **Stopping…** for a while.
+What is already written stays. And what the interrupt cannot do is cut a
+*synchronous call inside someone else's plugin* short: a Daz scene load, one DTH
+Exporter export, one DazToHue node. Whichever of those is running finishes first
+— that wait is the price of stopping cleanly instead of killing a process
+mid-write, so on a long node the button can sit at **Stopping** for a while.
 
-A plain click on the working button still does nothing — a stray one used to
-drop the watch, which reads as *"the export vanished"*. Interrupt is the only
-control a live run has, and it needs no modifier to find.
+A click never merely drops the studio's *watch* on the run (a stray one used to,
+which read as *"the export vanished"*): the one thing the button does while a
+run is live is ask the run itself to stop, and it says so before you click.
 
 > **If a run is stuck rather than running** — Daz sitting on a dialog, or a
 > batch this window is only *showing* and can never finish — nothing is left to

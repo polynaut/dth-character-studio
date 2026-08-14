@@ -108,8 +108,8 @@ export function EditorHeader({
   const [imageDialogOpen, setImageDialogOpen] = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
   // The live DTH-Export pipeline view, reported up by DthExportAction —
-  // rendered as the task cards + tail-log window above the whole button
-  // cluster (which spans more than that component's own buttons). Null = no run.
+  // rendered as the task list + progress bar anchored above the whole button
+  // row (which spans more than that component's own buttons). Null = no run.
   const [exportPipeline, setExportPipeline] = useState<ExportPipelineView | null>(null)
   const swallowNavRef = useRef(false)
   const headerRef = useRef<HTMLElement>(null)
@@ -298,33 +298,28 @@ export function EditorHeader({
             </div>
           )}
         </div>
-        {/* Bottom-right in the header, on the path-chip's baseline (mb-6 lifts the
-            box so the scale below anchors on that line). They ride the sticky
-            header, so they stay reachable as the form scrolls. A GRID, not a
-            flex column: the buttons keep the second column of the bottom row,
-            and the run's task list spans the whole top row above them (it sets
-            its own width, so a run starting cannot resize the header). The area
-            SELF-STRETCHES to the header's full height so the list can fill
-            everything above the buttons. The panel does NOT dock:
-            `pipeline-scroll` fades it out on the header-collapse scroll
-            timeline (styles.css), so the docked sticky header shows only the
-            buttons — the panel is a working view for the top of the page. */}
-        {/* gap-y-5: the pipeline area needs room to breathe above the button
-            row — a tight gap read as one crowded block. */}
-        <div className="mb-6 ml-auto grid shrink-0 grid-cols-[auto_auto] grid-rows-[minmax(0,1fr)_auto] justify-end gap-x-2 gap-y-5 self-stretch">
+        {/* Bottom-right in the header, on the path-chip's baseline (mb-6 lifts
+            the box so the scale below anchors on that line). They ride the
+            sticky header, so they stay reachable as the form scrolls. The run's
+            task list + bar anchor ABOVE this row (absolute against it — see
+            ExportPipelinePanel) and inherit its exact width, so the buttons
+            alone size the header and a run starting cannot resize it. The
+            panel does NOT dock: `pipeline-scroll` fades it out on the
+            header-collapse scroll timeline (styles.css), so the docked sticky
+            header shows only the buttons — the panel is a working view for the
+            top of the page. */}
+        <div className="actions-scroll relative mb-6 ml-auto flex shrink-0 justify-end gap-2">
           {exportPipeline && <ExportPipelinePanel view={exportPipeline} />}
-          <div className="actions-scroll col-start-2 row-start-2 flex justify-end gap-2">
-            <DthExportAction
-              projectId={projectId}
-              character={character}
-              saving={draft.saving}
-              dirty={draft.dirty}
-              dazLibraryConfigured={dazLibraryConfigured}
-              unrealProjects={unrealProjects}
-              onPipeline={setExportPipeline}
-            />
-            <HeaderActions draft={draft} />
-          </div>
+          <DthExportAction
+            projectId={projectId}
+            character={character}
+            saving={draft.saving}
+            dirty={draft.dirty}
+            dazLibraryConfigured={dazLibraryConfigured}
+            unrealProjects={unrealProjects}
+            onPipeline={setExportPipeline}
+          />
+          <HeaderActions draft={draft} />
         </div>
       </header>
 

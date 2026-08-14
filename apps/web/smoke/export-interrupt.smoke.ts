@@ -93,40 +93,42 @@ async function startAndClaim(page: Page) {
   await expect(page.getByRole('button', { name: /Working/ })).toBeVisible({ timeout: 15_000 })
 }
 
-test('a plain click on the working button is ignored — Interrupt is the way out', async ({
+test('the working button IS the interrupt — it says so, and a click drops the flag', async ({
   page,
 }) => {
-  // Inherited from the retired export-abort-running spec, which also covered
-  // the Ctrl → Abort reveal this feature replaced. The inertness is the part
-  // that survives, and it is load-bearing: a stray click used to reset the
-  // watch, which reads as "the export vanished".
+  // The interrupt used to be a second button beside an inert Working button;
+  // now the working button itself is the run's one control: hovering swaps
+  // its spinner for a stop mark and the tooltip leads with what a click does.
   await startAndClaim(page)
 
-  await page.getByRole('button', { name: /Working/ }).click()
-  await expect(page.getByRole('button', { name: /Working/ })).toBeVisible()
-  expect(await fileExists(page, RUNNING_JOB)).toBe(true)
-  expect(await fileExists(page, CANCEL_FLAG)).toBe(false)
-  // No modifier hides anything anymore: the only action is the visible one.
-  await expect(page.getByRole('button', { name: 'Interrupt' })).toBeVisible()
-})
+  // The tooltip may live in `title` OR `data-tooltip` — TooltipHost steals a
+  // hovered control's title (see override.smoke.ts), and a Playwright click
+  // hovers. Read whichever holds it.
+  const tooltip = (name: RegExp) =>
+    page
+      .getByRole('button', { name })
+      .evaluate((el) => el.getAttribute('title') ?? el.getAttribute('data-tooltip') ?? '')
 
-test('Interrupt drops the flag and the button admits it is stopping', async ({ page }) => {
-  await startAndClaim(page)
+  const working = page.getByRole('button', { name: /Working/ })
+  expect(await tooltip(/Working/)).toMatch(/Click to interrupt/)
+  // The old second button is gone — one run, one control.
+  await expect(page.getByRole('button', { name: 'Interrupt' })).toHaveCount(0)
 
-  // No modifier: unlike Abort, this is a first-class button — "stop this" is
-  // something users need, not an expert escape hatch.
   expect(await fileExists(page, CANCEL_FLAG)).toBe(false)
-  await page.getByRole('button', { name: 'Interrupt' }).click()
+  await working.click()
 
   // The flag is what the runtimes obey; everything else is reporting.
   await expect.poll(() => fileExists(page, CANCEL_FLAG)).toBe(true)
   await expect(page.getByText(/Stopping the export at the next safe point/)).toBeVisible()
-  // Pressed once, and it does not offer itself again — the flag is on disk.
-  await expect(page.getByRole('button', { name: 'Stopping…' })).toBeDisabled()
   // …and the live progress button stops claiming to be plain "Working".
   await expect(page.getByRole('button', { name: /Daz Studio Stopping/ })).toBeVisible()
+  // Pressed once, it stops offering itself — the flag is on disk, and a
+  // button still promising "Click to interrupt" would read as "that didn't
+  // work". A second click changes nothing.
+  await expect.poll(() => tooltip(/Stopping/)).not.toMatch(/Click to interrupt/)
+  await page.getByRole('button', { name: /Stopping/ }).click()
   // The run is NOT killed: the claimed job file is still there and Daz keeps
-  // working through it (this is the whole difference from Abort).
+  // working through it (this is the whole difference from the old Abort).
   expect(await fileExists(page, RUNNING_JOB)).toBe(true)
   expect(await unhandledCommands(page)).toEqual([])
 })
@@ -135,7 +137,7 @@ test('an interrupted batch reports as interrupted and never continues into Houdi
   page,
 }) => {
   await startAndClaim(page)
-  await page.getByRole('button', { name: 'Interrupt' }).click()
+  await page.getByRole('button', { name: /Working/ }).click()
   await expect.poll(() => fileExists(page, CANCEL_FLAG)).toBe(true)
 
   await runnerFinishesBatch(page)
