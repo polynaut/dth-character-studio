@@ -68,19 +68,24 @@ export function LinkedAssetCard({
   /** Extra content pinned to the card's bottom-left (e.g. a "primary" tag). */
   extra?: ReactNode
   /** Something slow is happening TO this asset (the Houdini card's background
-   *  scan) — shows a small spinner over the media's top-right corner.
+   *  scan) — the accent bar becomes the indicator: a brighter segment sweeps
+   *  vertically through the brand stripe (`.busy-bar-sweep`, host CSS — a
+   *  white sheen, so it brightens whatever color `barClass` painted).
    *
-   *  Over the media on purpose: `badge` owns the media's bottom-left, `extra`
-   *  sits under the title and the corner cluster owns bottom-right, so this is
-   *  the one spot that collides with nothing — including the selected check,
-   *  which lives outside the media at the CARD's top-right. It is an indicator,
-   *  not a blocker: the card stays fully interactive, because a scan is
-   *  something the studio started on its own and must never take the user's
-   *  controls away. */
+   *  The bar on purpose: it is the one element the card shell already owns
+   *  edge to edge, and lighting it up adds NO overlay to a card whose every
+   *  corner is spoken for (`badge` bottom-left, `extra` under the title, the
+   *  control cluster bottom-right, the selected check top-right). A card
+   *  without a `barClass` falls back to a small spinner over the media's
+   *  top-right corner — `busy` must never be silently invisible. Either way it
+   *  is an indicator, not a blocker: the card stays fully interactive, because
+   *  a scan is something the studio started on its own and must never take the
+   *  user's controls away. */
   busy?: boolean
-  /** What the spinner means, for assistive tech and the hover tooltip. Always
-   *  pass one when `busy` can be true — "something is happening" is not a
-   *  message, and a bare spinner is invisible to a screen reader. */
+  /** What the busy indicator means, for assistive tech (the bar/spinner turns
+   *  `role="status"` with this as its name). Always pass one when `busy` can
+   *  be true — "something is happening" is not a message, and a bare animation
+   *  is invisible to a screen reader. */
   busyLabel?: string
   /** Alt is held → the corner icon previews "show in Explorer". */
   altHeld: boolean
@@ -144,15 +149,16 @@ export function LinkedAssetCard({
       <div className="relative shrink-0 self-start">
         {media}
         {badge}
-        {busy && (
-          // `role="status"` + the label makes the spinner announce itself; the
-          // ring matches the selected check's, so a spinner over a dark
-          // thumbnail stays readable. Click-transparent — the card underneath
-          // keeps working while the scan runs.
+        {busy && !barClass && (
+          // Fallback for a card WITHOUT an accent bar (the bar is the primary
+          // busy indicator — see the accent-bar element): `role="status"` + the
+          // label makes the spinner announce itself; the ring matches the
+          // selected check's, so a spinner over a dark thumbnail stays
+          // readable. Click-transparent — the card underneath keeps working
+          // while the scan runs.
           <span
             role="status"
             aria-label={busyLabel}
-            title={busyLabel}
             className="pointer-events-none absolute top-0 right-0 flex size-4 items-center justify-center rounded-full bg-card/90 shadow-sm ring-2 ring-card"
           >
             <Loader2 className="size-3 animate-spin text-muted-foreground" />
@@ -222,15 +228,24 @@ export function LinkedAssetCard({
       )}
 
       {/* Left accent bar — painted over the card's left edge (after the button so
-          it sits on top), rounded to follow the card corners. */}
+          it sits on top), rounded to follow the card corners. While `busy` it IS
+          the busy indicator: it turns `role="status"` (named by `busyLabel` — the
+          animation alone is invisible to a screen reader) and a brighter segment
+          sweeps through it (`.busy-bar-sweep`, host CSS; `overflow-hidden` clips
+          the segment to the stripe). Still click-transparent either way — the
+          card underneath keeps working while the scan runs. */}
       {barClass && (
         <div
-          aria-hidden
+          role={busy ? 'status' : undefined}
+          aria-label={busy ? busyLabel : undefined}
+          aria-hidden={busy ? undefined : true}
           className={cn(
-            'pointer-events-none absolute inset-y-0 left-0 w-1.5 rounded-l-lg',
+            'pointer-events-none absolute inset-y-0 left-0 w-1.5 overflow-hidden rounded-l-lg',
             barClass,
           )}
-        />
+        >
+          {busy && <span aria-hidden className="busy-bar-sweep absolute top-0 left-0 h-1/2 w-full" />}
+        </div>
       )}
 
       {/* Selected corner check (selectable cards only). Click-transparent so

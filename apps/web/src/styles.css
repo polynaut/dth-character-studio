@@ -747,6 +747,35 @@ a {
   }
 }
 
+/* The linked-asset card's BUSY indicator (LinkedAssetCard `busy`): the brand
+   accent bar itself lights up — this class is the brighter segment that sweeps
+   top-to-bottom through the stripe while e.g. hython re-reads a Houdini
+   project. A white sheen rather than a hardcoded brand tone, so the same class
+   brightens whatever color the host's `barClass` painted (Houdini orange, Daz
+   green). The segment is half the bar tall (`h-1/2`, set by the card) and the
+   keyframes move it BY ITS OWN height: -100% (fully above the bar's clip) to
+   200% (fully below), so each pass enters and leaves cleanly. Reduced-motion
+   holds a uniformly lit bar instead of animating, like `.refresh-pulse`. */
+@keyframes dth-busy-bar-sweep {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(200%);
+  }
+}
+.busy-bar-sweep {
+  background: linear-gradient(to bottom, transparent, rgb(255 255 255 / 0.85), transparent);
+  animation: dth-busy-bar-sweep 1.4s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .busy-bar-sweep {
+    animation: none;
+    height: 100%;
+    background: rgb(255 255 255 / 0.35);
+  }
+}
+
 /* SceneFooter pill reordering (see scene-footer.tsx): selecting a rail pill swaps
    it into the prominent slot and the rest shift to fill in. Each pill carries a
    stable `view-transition-name` + the `scene-pill` class, so the browser morphs

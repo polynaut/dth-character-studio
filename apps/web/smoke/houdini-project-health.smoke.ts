@@ -124,13 +124,14 @@ function linkOutside(seed: { files: Record<string, string> }) {
   seed.files[charPath] = JSON.stringify(char)
 }
 
-// --- the card spinner -------------------------------------------------------
+// --- the card's busy bar ----------------------------------------------------
 //
 // A scan is the one part of this feature the user never asked for and cannot
 // see: it runs on a background sweep, costs tens of seconds per `.hip`, and
-// until it lands the card still shows the PREVIOUS verdict. The spinner is what
-// makes that window honest — so these specs are about WHEN it shows, which the
-// fake's `materialScanDelayMs` is what makes observable at all.
+// until it lands the card still shows the PREVIOUS verdict. The busy bar (the
+// card's orange accent bar lit up, `LinkedAssetCard` busy) is what makes that
+// window honest — so these specs are about WHEN it shows, which the fake's
+// `materialScanDelayMs` is what makes observable at all.
 
 /** A second project INSIDE the character folder — the sweep scans those, so it
  *  is the only way to have one project cached and one stale in the same view. */
@@ -152,12 +153,16 @@ function seedWithHython(delayMs: number) {
   return seed
 }
 
-/** The card body for a project, by its displayed name. */
-const cardFor = (page: Page, name: string) => page.locator('.houdini-card', { hasText: name })
-const spinners = (page: Page) =>
+/** The card WRAPPER for a project, by its displayed name — the element holding
+ *  both the `.houdini-card` body and its SIBLING accent bar. The busy status
+ *  lives on the bar, so a body-scoped (`.houdini-card`) query would count 0
+ *  status roles even while scanning and assert nothing at all. */
+const cardFor = (page: Page, name: string) =>
+  page.locator('.group\\/card', { has: page.locator('.houdini-card'), hasText: name })
+const busyBars = (page: Page) =>
   page.getByRole('status', { name: /Reading this project in Houdini/ })
 
-test('a card spins while hython has its project open, and stops when the scan lands', async ({
+test("a card's bar lights while hython has its project open, and stops when the scan lands", async ({
   page,
 }) => {
   // No store entry, so the sweep really has to open the file.
@@ -166,19 +171,19 @@ test('a card spins while hython has its project open, and stops when the scan la
   await page.getByRole('link', { name: /Kira/ }).click()
   await expect(page.getByText(/custom ROM frames/)).toBeVisible()
 
-  await expect(spinners(page)).toHaveCount(1)
-  // And it is not a spinner that never stops — the worst of the three states,
-  // because it reads as "still working" forever.
-  await expect(spinners(page)).toHaveCount(0, { timeout: 20_000 })
+  await expect(busyBars(page)).toHaveCount(1)
+  // And it is not an indicator that never stops — the worst of the three
+  // states, because it reads as "still working" forever.
+  await expect(busyBars(page)).toHaveCount(0, { timeout: 20_000 })
 })
 
-test('a project served from the cache never spins — only the one being read does', async ({
+test('a project served from the cache never lights its bar — only the one being read does', async ({
   page,
 }) => {
   // The decision this pins. A cache hit starts no hython process and answers in
-  // microseconds; spinning its card would flicker on every page load and teach
-  // the eye to ignore the spinner. Two projects, one fresh in the store and one
-  // not, so "which card spins" is answered without timing anything.
+  // microseconds; lighting its card would flicker on every page load and teach
+  // the eye to ignore the indicator. Two projects, one fresh in the store and
+  // one not, so "which card lights up" is answered without timing anything.
   const seed = seedWithHython(2000)
   seed.files[SECOND] = 'hip-fixture'
   const charPath = `${P.charFolder}/Kira.json`
@@ -208,10 +213,10 @@ test('a project served from the cache never spins — only the one being read do
   // Exactly one card is being read, and it is not the cached one. The cached
   // card is asserted to EXIST first — without that, a locator typo would make
   // the next line pass by matching nothing at all.
-  await expect(spinners(page)).toHaveCount(1)
+  await expect(busyBars(page)).toHaveCount(1)
   await expect(cardFor(page, 'Kira_Alt')).toHaveCount(1)
   await expect(cardFor(page, 'Kira_Alt').getByRole('status')).toHaveCount(0)
-  await expect(spinners(page)).toHaveCount(0, { timeout: 20_000 })
+  await expect(busyBars(page)).toHaveCount(0, { timeout: 20_000 })
 })
 
 test('the drawer scans the project it was opened from when the store cannot answer', async ({

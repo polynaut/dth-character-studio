@@ -91,7 +91,7 @@ function HoudiniCard({
   avatarSrc: string
   /** hython has this `.hip` open right now. Only true for a scan that really
    *  starts a process — a cache hit never sets it (see `houdini-scan-progress`),
-   *  so the spinner means "this is being re-read", not "a sweep ran". */
+   *  so the lit accent bar means "this is being re-read", not "a sweep ran". */
   scanning?: boolean
   /** What the last background scan found wrong with this project; '' = healthy,
    *  or not scanned yet. Nearly everything it can report has a repair in the
@@ -270,8 +270,8 @@ export function HoudiniProjectsField({
     )
   }, [projectId, character.id])
 
-  // Which of these projects hython has open right now — the card spinner. Fed
-  // by the api layer's scan funnel, so it covers BOTH triggers: this page's
+  // Which of these projects hython has open right now — the card's busy bar.
+  // Fed by the api layer's scan funnel, so it covers BOTH triggers: this page's
   // background sweep and the drawer's Rescan.
   const scanning = useHoudiniScanning()
   // Narrowed to the projects THIS field renders. The store is process-wide, so
