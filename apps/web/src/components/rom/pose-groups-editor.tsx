@@ -48,6 +48,7 @@ export const PoseGroupsEditor = memo(function PoseGroupsEditor({
   gender,
   startFrames,
   failedFrames,
+  nameErrors,
   removable,
   override,
   locked = false,
@@ -58,6 +59,8 @@ export const PoseGroupsEditor = memo(function PoseGroupsEditor({
   gender: Gender
   startFrames: Map<string, number>
   failedFrames?: Set<number>
+  /** Save-time name errors by pose id — see PoseTableMeta.nameErrors. */
+  nameErrors?: ReadonlyMap<string, { message: string; name: string }>
   removable: boolean
   override?: SectionOverrideCtl
   /** Non-primary scene, ROM override OFF: keep the Override column shown-but-disabled. */
@@ -253,6 +256,7 @@ export const PoseGroupsEditor = memo(function PoseGroupsEditor({
             gender={gender}
             startFrame={startFrames.get(group.id) ?? 1}
             failedFrames={failedFrames}
+            nameErrors={nameErrors}
             removable={removable}
             expandedIds={expandedIds}
             onToggleExpanded={toggleExpanded}
