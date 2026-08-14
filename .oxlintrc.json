@@ -43,12 +43,20 @@
     "import/no-unassigned-import": ["warn", { "allow": ["**/*.css"] }],
 
     // Named, not baselined. Every dangling-underscore hit in this repo was one
-    // of five globals the code does not get to rename — two are Tauri's own,
-    // three are the deliberate test/debug contract between the app and the
+    // of six globals the code does not get to rename — two are Tauri's own,
+    // four are the deliberate test/debug contract between the app and the
     // Playwright fake — so the rule was reporting vocabulary it hadn't been
     // told, not a style problem. Listing them puts the judgement here (where a
-    // SIXTH name still has to argue for itself) instead of in a baseline count
+    // SEVENTH name still has to argue for itself) instead of in a baseline count
     // that silently absorbs the next one.
+    //
+    // `__sawHome` (#797) is the sixth, and it went unnoticed for three days
+    // because the ratchet meant to catch it was inert on CI (see
+    // scripts/lint-budget.mjs). It argues for itself:
+    // `project-window-boot.smoke.ts` asserts that a project window never renders
+    // Home first, which needs a flag set from inside the page the instant that
+    // route mounts — nothing on the Playwright side can observe a frame that
+    // must not exist. Same app-to-fake contract as the three above it.
     "no-underscore-dangle": [
       "warn",
       {
@@ -57,7 +65,8 @@
           "__TAURI_EVENT_PLUGIN_INTERNALS__",
           "__tauriMock",
           "__dthHideDevtools",
-          "__dthToast"
+          "__dthToast",
+          "__sawHome"
         ]
       }
     ]
