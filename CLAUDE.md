@@ -167,7 +167,7 @@ Two scopes now:
 - **Character-schema changes:** the persisted `Character` shape is versioned by
   `CHARACTER_SCHEMA_VERSION` (`packages/rom/src/types.ts`); old JSONs are migrated on read by
   `migrateCharacterData` (`packages/rom/src/migrate.ts`). To change the shape: edit `characterSchema`,
-  bump the constant + add a History line, add a `migrate.test.ts` case. Add a `characterMigrations[N]`
+  bump the constant + add its entry to `.ai/schema-history.md`, add a `migrate.test.ts` case. Add a `characterMigrations[N]`
   **step** ONLY for a rename/restructure or a **computed** value — an additive field with a zod default
   and a removed field need no step (zod fills/strips them); a value needing host context (settings, fs,
   active DTH release) resolves in web `parseCharacter` like `canonicalImage`, never in the pure core.
