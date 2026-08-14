@@ -831,6 +831,9 @@ export function DthExportAction({
       // run that produced NOTHING reports "1 scene exported", which is the one
       // thing a finish report must never do.
       const failedTotal = Math.min(run.total, run.failed + run.scriptFailures.length)
+      // Composed RAW: the stashed report tidies when it renders, and the toast
+      // below tidies its own copy — one cap over the whole list either way,
+      // rather than one per half (which would count the elided tail twice).
       const errors = [...run.errors, ...scriptFailureLines(run.scriptFailures)]
       const continuing =
         !interrupted &&
@@ -902,10 +905,11 @@ export function DthExportAction({
         return
       }
       if (failedTotal > 0) {
+        const shown = tidyRunErrors(errors)
         toast.warning(`DTH Export finished — ${failedTotal} of ${scenes} failed${took}.`, {
           id: EXPORT_TOAST_ID,
           duration: Infinity,
-          description: errors.length ? errors.join('\n') : undefined,
+          description: shown.length ? shown.join('\n') : undefined,
         })
       } else {
         exportFinishToast('success', `DTH Export finished — ${scenes} exported${took}.`)

@@ -969,18 +969,20 @@ export function parseExecuteStamps(text: string): ExecuteStamps {
  * failure that carries no scene still reports: a script generated before
  * runtime v75 logged its failure untagged whenever the studio had already
  * ingested the previous run, and an unattributed problem is still a problem.
+ *
+ * RAW on purpose — labelling only, no dedup and no cap. These lines are
+ * concatenated with the Runner's own before display, and {@link tidyRunErrors}
+ * runs ONCE over the whole list at each render site. Capping here as well would
+ * turn this half's "…and 2 more" into an ordinary line that the outer cap could
+ * then truncate again, counting the same tail twice.
  */
 export function scriptFailureLines(
   failures: ReadonlyArray<{ scene: string; sceneName: string; errors: ReadonlyArray<string> }>,
-  max = 4,
 ): Array<string> {
-  return tidyRunErrors(
-    failures.flatMap((f) => {
-      const label = f.sceneName || f.scene.split(/[\\/]/).pop() || ''
-      return f.errors.map((e) => (label ? `${label}: ${e}` : e))
-    }),
-    max,
-  )
+  return failures.flatMap((f) => {
+    const label = f.sceneName || f.scene.split(/[\\/]/).pop() || ''
+    return f.errors.map((e) => (label ? `${label}: ${e}` : e))
+  })
 }
 
 export function tidyRunErrors(errors: ReadonlyArray<string>, max = 4): Array<string> {

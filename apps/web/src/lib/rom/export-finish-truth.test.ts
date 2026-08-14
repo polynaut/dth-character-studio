@@ -113,7 +113,7 @@ vi.mock('@tauri-apps/plugin-fs', () => ({
 import { CHARACTER_SCHEMA_VERSION, characterSchema, defaultSections, ROM_RUN_LOG_FILE } from '@dth/rom'
 import * as storage from './storage'
 import { dismissExportRun, executeCharacterJobs, fetchExportRunProgress } from './api/execute'
-import { EXPORTER_JOB_FILE, RUNNING_JOB_FILE, scriptFailureLines } from './execute-jobs'
+import { EXPORTER_JOB_FILE, RUNNING_JOB_FILE, scriptFailureLines, tidyRunErrors } from './execute-jobs'
 import { LAST_ROM_RUN_FILE } from './character-internals.ts'
 
 const PROJECT = '/games/P'
@@ -180,7 +180,13 @@ function batchFinished(rows: Array<{ scene: string; status?: 'done' | 'failed'; 
 
 /** One scene's entry in a ROM run log, `at` ms from now (negative = before
  *  this run started). */
-function sceneRun(scene: string, ok: boolean, at: number, errors: Array<string> = []) {
+function sceneRun(
+  scene: string,
+  ok: boolean,
+  at: number,
+  errors: Array<string> = [],
+  failedMorphs: Array<{ frame: number; node: string; prop: string; reason: string }> = [],
+) {
   return {
     scene,
     sceneName: scene.split('/').pop()?.replace(/\.duf$/i, '') ?? '',
@@ -188,7 +194,7 @@ function sceneRun(scene: string, ok: boolean, at: number, errors: Array<string> 
     finishedAtMs: Date.now() + at,
     ok,
     errors,
-    failedMorphs: [],
+    failedMorphs,
   }
 }
 
@@ -277,6 +283,54 @@ describe('a finished batch reports what the SCRIPTS did, not just what the Runne
     expect(run.failed + run.scriptFailures.length).toBe(2)
   })
 
+  it('a morph that would not apply is NOT a failed export', async () => {
+    await armRun()
+    batchFinished([{ scene: SCENE }])
+    // The runtime writes `ok: bFinished && errors + failedMorphs === 0`, so a
+    // single unappliable dial makes an otherwise perfect run `ok: false`. But a
+    // failed morph is a per-dial partial the product treats as routine — its
+    // frame stays in the ROM (empty), the export runs, the character page lists
+    // it for repair. Counting it here would report a clean export as "1 of 1
+    // scene failed" AND, because both continuations gate on `failed < total`,
+    // silently drop the Houdini and Unreal legs of a run that worked.
+    writeRunLog(ROM_RUN_LOG_FILE, [
+      sceneRun(SCENE, false, 500, [], [{ frame: 12, node: 'Genesis9', prop: 'Nope', reason: 'not found' }]),
+    ])
+
+    const run = await fetchExportRunProgress('c1')
+
+    if (run?.state !== 'finished') throw new Error('not finished')
+    expect(run.scriptFailures).toEqual([])
+  })
+
+  it('a scene that failed AND lost morphs still counts once, as a failure', async () => {
+    await armRun()
+    batchFinished([{ scene: SCENE }])
+    // The exclusion above is about failed morphs ALONE — an error means the
+    // scene produced nothing, whatever else it also recorded.
+    writeRunLog(ROM_RUN_LOG_FILE, [
+      sceneRun(SCENE, false, 500, [RUNTIME_GONE], [{ frame: 3, node: 'G9', prop: 'X', reason: 'gone' }]),
+    ])
+
+    const run = await fetchExportRunProgress('c1')
+
+    if (run?.state !== 'finished') throw new Error('not finished')
+    expect(run.scriptFailures).toHaveLength(1)
+  })
+
+  it('a run that bailed with NOTHING to say is still a failure', async () => {
+    await armRun()
+    batchFinished([{ scene: SCENE }])
+    // ApplyDTHWorkflow has `return false` paths that log nothing. A silent bail
+    // is a failure whose message got lost — not a success.
+    writeRunLog(ROM_RUN_LOG_FILE, [sceneRun(SCENE, false, 500)])
+
+    const run = await fetchExportRunProgress('c1')
+
+    if (run?.state !== 'finished') throw new Error('not finished')
+    expect(run.scriptFailures).toHaveLength(1)
+  })
+
   it('an unreadable run log is not evidence of success — nor of failure', async () => {
     await armRun()
     batchFinished([{ scene: SCENE }])
@@ -309,5 +363,26 @@ describe('scriptFailureLines', () => {
     expect(
       scriptFailureLines([{ scene: 'D:\\games\\P\\Ita\\Ita.duf', sceneName: '', errors: ['boom'] }]),
     ).toEqual(['Ita.duf: boom'])
+  })
+
+  it('does not cap or dedup — one tidy runs over the WHOLE list at the call site', () => {
+    // These lines are concatenated with the Runner's own before display. Capping
+    // here too would turn this half's "…and N more" into an ordinary line that
+    // the outer tidy could truncate again, counting the same tail twice.
+    const many = Array.from({ length: 6 }, (_, i) => ({
+      scene: `/p/S${i}.duf`,
+      sceneName: `S${i}`,
+      errors: ['boom'],
+    }))
+    expect(scriptFailureLines(many)).toHaveLength(6)
+    expect(scriptFailureLines(many).some((l) => l.includes('more'))).toBe(false)
+    // The composed list is what gets capped, once.
+    expect(tidyRunErrors(['runner said no', ...scriptFailureLines(many)])).toEqual([
+      'runner said no',
+      'S0: boom',
+      'S1: boom',
+      'S2: boom',
+      '…and 3 more',
+    ])
   })
 })

@@ -668,8 +668,8 @@ function getInstalledProducts(dimManifestPath) {
     print("ERROR: no DIM manifest folder configured.");
     MessageBox.information(
       "No DAZ Install Manager manifests folder is configured.\n\nSet it in DTH " +
-        "Character Studio: Settings → General → “DAZ Install Manager " +
-        "manifests folder”, then regenerate this character's scripts.\n\nThe " +
+        "Character Studio: Settings > General > 'DAZ Install Manager " +
+        "manifests folder', then regenerate this character's scripts.\n\nThe " +
         "scan will run, but every asset will be reported as unmatched.",
       "DIM Manifests Folder Not Set",
       "&OK"
@@ -683,8 +683,8 @@ function getInstalledProducts(dimManifestPath) {
     MessageBox.information(
       "DIM manifest directory not found:\n" +
         dimManifestPath +
-        "\n\nFix the path in DTH Character Studio: Settings → General → " +
-        "“DAZ Install Manager manifests folder”, then regenerate this " +
+        "\n\nFix the path in DTH Character Studio: Settings > General > " +
+        "'DAZ Install Manager manifests folder', then regenerate this " +
         "character's scripts.",
       "Directory Not Found",
       "&OK"
@@ -1902,7 +1902,7 @@ function writeUnmatchedDiagnostic(diagPath, matchResults, usedAssets) {
     }
 
     var lines = [];
-    lines.push("DTH Product Scan — unmatched-node diagnostics");
+    lines.push("DTH Product Scan - unmatched-node diagnostics");
     lines.push("Asset-level matches in scene: " + matchResults.matches.length);
     lines.push("");
     var count = 0;
@@ -1992,7 +1992,7 @@ function DthScanProducts(config) {
   }
   var outputCsvPath =
     String(config.outputDir).replace(/\\/g, "/").replace(/\/+$/g, "") + "/" + sceneSlug(sceneName) + ".csv";
-  print("Scene: " + (sceneName || "(unsaved)") + " → " + outputCsvPath);
+  print("Scene: " + (sceneName || "(unsaved)") + " -> " + outputCsvPath);
 
   var usedAssets = getUsedAssets();
   if (!usedAssets || usedAssets.length === 0) {
@@ -2063,7 +2063,7 @@ function DthScanProducts(config) {
     MessageBox.information(
       "Product scan complete for " +
         config.characterName +
-        (sceneName ? " — scene “" + sceneName + "”" : "") +
+        (sceneName ? " - scene '" + sceneName + "'" : "") +
         ".\n\nReturn to DTH Character Studio and open this character to review " +
         "and store the found products.",
       "DTH Product Scan",

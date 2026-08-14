@@ -811,8 +811,8 @@ v74 — `preserveMorphs` / `frameZeroMorphs` rows honour an optional `node`
       base preset load every later block re-keyed over it (the G8.1 Physics
       block keys the breast dials to 100%: a 60% hold showed 100%), while a
       base-less ROM never ran it at all.
-v75 — Truthful failure reporting from the generated carriers. Three changes,
-      all in the SCRIPTS (the runtime .dsa files are untouched).
+v75 — Truthful failure reporting from the generated carriers, plus the ASCII
+      sweep across both .dsa surfaces.
       `dthWriteFailureLog` now ALWAYS writes a log-v2 record: the v1 fallback
       it replaced carried no `scene` field, and since the studio DELETES the
       transport log when it ingests one, the common case — a second run after
@@ -825,6 +825,11 @@ v75 — Truthful failure reporting from the generated carriers. Three changes,
       evidence such a run leaves behind. And every string the scripts write
       or display is ASCII now (bullet, em dash and the → arrow all
       became - / >): Daz's file writer cannot carry non-ASCII, so they
-      reached the run log as ? and the Daz log as mojibake.
+      reached the run log as ? and the Daz log as mojibake. The same sweep
+      covers the BUNDLED RUNTIME (DthProducts.dsa, DthScanMorphs.dsa — 13
+      literals, one of them a diagnostics heading written straight to a
+      file), so this bump also carries a runtime-file change and its
+      EXPECTED_RUNTIME_HASH update. One scanner
+      (`@dth/rom`'s `nonAsciiStringLiterals`) now guards both surfaces.
 ```
 

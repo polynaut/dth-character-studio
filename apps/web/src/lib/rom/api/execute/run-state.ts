@@ -26,6 +26,7 @@ import {
 import { cancelFlagPath, ROM_RUN_LOG_FILE } from '@dth/rom'
 import { LAST_ROM_RUN_FILE } from '../../character-internals.ts'
 import { parseRomRunLogText } from '../../run-log.ts'
+import type { RomRunSceneRun } from '../../run-log.ts'
 import { charScopeInput, dirname, joinPath } from '../core'
 import type {
   ExporterJob,
@@ -265,7 +266,9 @@ export type ExportRunProgress =
        *  (measured 2026-08-14). Read out of the character's ROM run log,
        *  restricted to entries written since the handoff, and with any scene
        *  already counted in `failed` removed — so `failed + scriptFailures
-       *  .length` is the run's true failure count. */
+       *  .length` is the run's true failure count. A scene whose only problem
+       *  was an unappliable MORPH is NOT in here ({@link producedNothing}):
+       *  its ROM built and its export ran. */
       scriptFailures: Array<{ scene: string; sceneName: string; errors: Array<string> }>
       /** Handoff → finish, for the toast's "in 12m 34s". */
       elapsedMs?: number
@@ -346,6 +349,34 @@ export async function readExportProgressState(
 }
 
 /**
+ * Did this scene's script FAIL, as opposed to merely having something to report?
+ *
+ * Not `!ok`. The runtime writes `ok: bFinished && errors + failedMorphs === 0`
+ * (`DthWorkflow.dsa`), which folds two very different outcomes into one flag:
+ *
+ *  - an **error** means the scene produced nothing — the ROM aborted, the
+ *    runtime was missing, the scene was refused, the export never ran;
+ *  - a **failed morph** is a per-dial partial the product treats as routine:
+ *    the frame slot stays (empty), the rest of the ROM is unaffected, the
+ *    export runs, and the character page lists the morph for repair. Its own
+ *    words: "their frames stay in the ROM (empty), so the rest of the
+ *    character is unaffected" (`rom-run-log-report.tsx`).
+ *
+ * Believing `ok` alone would report a clean one-scene export that missed a
+ * single dial as "1 of 1 scene failed" AND — because both continuations gate
+ * on `failed < total` — silently drop the Houdini and Unreal legs of a run that
+ * exported perfectly well. That is the same class of lie as the one this whole
+ * file exists to fix, only pointing the other way.
+ *
+ * A run that is `!ok` with NOTHING to say still counts: `ApplyDTHWorkflow` has
+ * `return false` paths that log nothing, and a silent bail is a failure whose
+ * message got lost, not a success.
+ */
+function producedNothing(run: RomRunSceneRun): boolean {
+  return !run.ok && (run.errors.length > 0 || run.failedMorphs.length === 0)
+}
+
+/**
  * What the generated scripts themselves reported during this run — the half of
  * the outcome the job file cannot carry.
  *
@@ -393,7 +424,7 @@ async function scriptRunFailures(
       }
     }),
   )
-  const newest = new Map<string, { scene: string; sceneName: string; errors: Array<string>; ok: boolean; finishedAtMs: number }>()
+  const newest = new Map<string, RomRunSceneRun>()
   for (const entry of logs.flat()) {
     const key = normalizeSceneKey(entry.scene)
     const held = newest.get(key)
@@ -401,7 +432,12 @@ async function scriptRunFailures(
   }
   const alreadyFailed = new Set(failedRowScenes.map(normalizeSceneKey))
   return [...newest.values()]
-    .filter((r) => !r.ok && r.finishedAtMs >= startedAtMs && !alreadyFailed.has(normalizeSceneKey(r.scene)))
+    .filter(
+      (r) =>
+        producedNothing(r) &&
+        r.finishedAtMs >= startedAtMs &&
+        !alreadyFailed.has(normalizeSceneKey(r.scene)),
+    )
     .map((r) => ({ scene: r.scene, sceneName: r.sceneName, errors: r.errors }))
 }
 
