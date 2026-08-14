@@ -11,12 +11,12 @@ documentation, not archaeology.
 |---|---|
 | [philosophy.md](philosophy.md) | **always — it is injected into every session** (with the Working rules) by `.claude/hooks/inject-agent-context.mjs`. Epistemic honesty over perceived helpfulness: what to do when the rules below don't cover the case. Model-agnostic. |
 | [architecture.md](architecture.md) | you need the lay of the land: packages, routes, the lib/ native boundary, the FFI surface, the projects model. |
-| [domain.md](domain.md) | you touch generation, frames, sections, the PoseAsset CSV, the DTH runtime, or anything Daz/Houdini-semantic. |
+| [domain.md](domain.md) | you touch anything Daz/Houdini-semantic — it routes to [domain-rom.md](domain-rom.md) (frames, sections, artifacts, CSV eras, hard rules) and [domain-exporter.md](domain-exporter.md) (the measured DTH exporter contract). |
 | [conventions.md](conventions.md) | you change the character schema, the FFI surface, settings, versioning — the rituals live here. Opens with the **Working rules** (hook-injected into every session's context) and the stacked-PR setup. |
 | [testing.md](testing.md) | you write or run tests: the four layers, what pins what, the screenshot suite. |
 | [docs-site.md](docs-site.md) | you touch "the docs page": the public Pages site — `site/`, `docs/guide/`, the guide build/deploy, previews, guide search. |
 | [release.md](release.md) | you ship: the release train, the signing gate, publish troubleshooting. |
-| [gotchas.md](gotchas.md) | before debugging anything weird — measured Daz/Tauri/build facts that code alone won't tell you. |
+| [gotchas.md](gotchas.md) | before debugging anything weird — it routes to the `gotchas-*.md` area files (core, daz, desktop, web, releases): measured facts that code alone won't tell you. |
 
 Ground rules for editing these docs:
 
@@ -32,4 +32,4 @@ Ground rules for editing these docs:
   footgun, measures a platform behavior, or establishes a new ritual folds it
   into the matching file right away — a lesson that only lives in a PR
   description or chat log is lost to the next session. New features update
-  `domain.md`/`architecture.md` in the same PR too.
+  the `domain-*.md` files/`architecture.md` in the same PR too.

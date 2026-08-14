@@ -16,9 +16,9 @@
  * ## Coverage — read this before trusting silence
  *
  * Swept in full — every line read, the ACTION-TIED facts pulled out (the rest
- * are semantic and stay doc-only): `.ai/gotchas.md` (1575 lines, ~90 measured
- * facts), `.ai/domain.md`, `.ai/architecture.md`, `.ai/release.md`,
- * `.ai/docs-site.md`.
+ * are semantic and stay doc-only): the `gotchas-*.md` set (~90 measured facts;
+ * `gotchas.md` is now the index), the `domain-*.md` pair (`domain.md` likewise),
+ * `.ai/architecture.md`, `.ai/release.md`, `.ai/docs-site.md`.
  * Swept partially: `.ai/conventions.md` (Repo mechanics), `.ai/testing.md`
  * (the SMOKE_PORT collision and the mock's `stat` contract only), `CLAUDE.md`
  * (the character-schema ritual only — it is the short version of the five
@@ -44,10 +44,15 @@
  * @property {string} [note]      literal text, for a fact in no doc
  */
 
-const GOTCHAS = '.ai/gotchas.md'
+const GOTCHAS_CORE = '.ai/gotchas-core.md'
+const GOTCHAS_DAZ = '.ai/gotchas-daz.md'
+const GOTCHAS_DESKTOP = '.ai/gotchas-desktop.md'
+const GOTCHAS_WEB = '.ai/gotchas-web.md'
+const GOTCHAS_RELEASES = '.ai/gotchas-releases.md'
 const CONVENTIONS = '.ai/conventions.md'
 const TESTING = '.ai/testing.md'
-const DOMAIN = '.ai/domain.md'
+const DOMAIN_ROM = '.ai/domain-rom.md'
+const DOMAIN_EXPORTER = '.ai/domain-exporter.md'
 const ARCH = '.ai/architecture.md'
 const RELEASE = '.ai/release.md'
 const DOCSSITE = '.ai/docs-site.md'
@@ -81,19 +86,19 @@ export const TRIGGERS = [
   {
     id: 'releases-immutable',
     command: /gh\s+release\s+(create|edit|delete|upload)/,
-    doc: GOTCHAS,
+    doc: GOTCHAS_RELEASES,
     anchor: 'GitHub releases are immutable',
   },
   {
     id: 'release-pat',
     command: /gh\s+release\s+create|gh\s+workflow\s+run\s+\S*release/i,
-    doc: GOTCHAS,
+    doc: GOTCHAS_RELEASES,
     anchor: 'cannot create releases on this repo',
   },
   {
     id: 'version-pr-checks',
     command: /gh\s+run\s+(rerun|watch|list)|gh\s+pr\s+checks/,
-    doc: GOTCHAS,
+    doc: GOTCHAS_RELEASES,
     anchor: "The version PR's checks sat `action_required`",
   },
 
@@ -117,25 +122,25 @@ export const TRIGGERS = [
   {
     id: 'smoke-mock-mtime',
     path: /apps\/web\/smoke\/(tauri-mock|fixtures)\.ts$/,
-    doc: GOTCHAS,
+    doc: GOTCHAS_WEB,
     anchor: "`tauri-mock`'s `stat` must return a **`Date`**",
   },
   {
     id: 'lint-decisions',
     command: /pnpm\s+lint|oxlint/,
-    doc: GOTCHAS,
+    doc: GOTCHAS_DESKTOP,
     anchor: "The repo's ~250 lint warnings are DECISIONS",
   },
   {
     id: 'cargo-fmt',
     command: /cargo\s+fmt/,
-    doc: GOTCHAS,
+    doc: GOTCHAS_DESKTOP,
     anchor: 'There is NO `cargo fmt` gate',
   },
   {
     id: 'cargo-pins',
     command: /cargo\s+update/,
-    doc: GOTCHAS,
+    doc: GOTCHAS_DESKTOP,
     anchor: '`Cargo.lock` pins `alloc-stdlib = 0.2.2`',
   },
 
@@ -153,25 +158,25 @@ export const TRIGGERS = [
   {
     id: 'byte-identical-output',
     path: /packages\/rom\/src\/(generate|dsa|frames)\.ts$|packages\/rom\/src\/templates\//,
-    doc: GOTCHAS,
+    doc: GOTCHAS_CORE,
     anchor: 'Byte-identical output tests are the contract',
   },
   {
     id: 'generator-emit',
     path: /packages\/rom\/src\/(dsa|generate|frames)\.ts$/,
-    doc: GOTCHAS,
+    doc: GOTCHAS_DESKTOP,
     anchor: 'A version bump makes a refresh RUN; it does not make a migration HAPPEN',
   },
   {
     id: 'runtime-dsa',
     path: /apps\/web\/src\/lib\/rom\/runtime\//,
-    doc: GOTCHAS,
+    doc: GOTCHAS_DAZ,
     anchor: '**Fast runtime test loop:**',
   },
   {
     id: 'runtime-include',
     path: /apps\/web\/src\/lib\/rom\/runtime\/.*\.dsa$/,
-    doc: GOTCHAS,
+    doc: GOTCHAS_DAZ,
     anchor: 'A hidden runtime `.dsa` must never `include()` a sibling runtime by name',
   },
 
@@ -179,37 +184,37 @@ export const TRIGGERS = [
   {
     id: 'rust-command',
     path: /apps\/desktop\/src\/.*\.rs$/,
-    doc: GOTCHAS,
+    doc: GOTCHAS_DESKTOP,
     anchor: 'Never create a webview window from a synchronous',
   },
   {
     id: 'rust-io-async',
     path: /apps\/desktop\/src\/.*\.rs$/,
-    doc: GOTCHAS,
+    doc: GOTCHAS_DESKTOP,
     anchor: 'I/O-heavy commands must be `#[tauri::command(async)]`',
   },
   {
     id: 'ntfs-case',
     path: /apps\/desktop\/src\/(fsutil|dedup|install|junction|unreal_install)\.rs$/,
-    doc: GOTCHAS,
+    doc: GOTCHAS_DESKTOP,
     anchor: 'NTFS is case-insensitive; byte-exact rel-path keys never converge',
   },
   {
     id: 'window-lock-io',
     path: /apps\/desktop\/src\/windows\.rs$/,
-    doc: GOTCHAS,
+    doc: GOTCHAS_DESKTOP,
     anchor: 'Never do filesystem I/O (especially `fs::canonicalize`) while holding',
   },
   {
     id: 'plugin-fs-acl',
     path: /apps\/desktop\/capabilities\/|tauri\.conf\.json$/,
-    doc: GOTCHAS,
+    doc: GOTCHAS_DESKTOP,
     anchor: 'Every `@tauri-apps/plugin-fs` call needs its OWN',
   },
   {
     id: 'ffi-mirror',
     path: /apps\/web\/src\/lib\/rom\/api\/native-types\.ts$|contracts\//,
-    doc: GOTCHAS,
+    doc: GOTCHAS_DESKTOP,
     anchor: 'A JS mirror of a Rust decision must be pinned by the SAME test cases',
   },
 
@@ -217,61 +222,61 @@ export const TRIGGERS = [
   {
     id: 'route-file',
     path: /apps\/web\/src\/routes\/.*\.tsx$/,
-    doc: GOTCHAS,
+    doc: GOTCHAS_WEB,
     anchor: '`routeTree.gen.ts` is generated',
   },
   {
     id: 'settings-field',
     path: /apps\/web\/src\/(routes\/settings|lib\/rom\/storage\/settings)\.tsx?$/,
-    doc: GOTCHAS,
+    doc: GOTCHAS_WEB,
     anchor: 'Settings saves merge by baseline',
   },
   {
     id: 'react-table-stable',
     path: /apps\/web\/src\/components\/character\/(group-card|rom-sections)\.tsx$/,
-    doc: GOTCHAS,
+    doc: GOTCHAS_WEB,
     anchor: "`useReactTable`'s `data` must be referentially stable",
   },
   {
     id: 'overlay-primitives',
     path: /packages\/ui\/src\/primitives\/(modal|side-panel|overlay-sweep|tooltip)/,
-    doc: GOTCHAS,
+    doc: GOTCHAS_WEB,
     anchor: "Radix's modal `Dialog` sets `pointer-events: none`",
   },
   {
     id: 'overlay-sweep',
     path: /packages\/ui\/src\/primitives\/|apps\/web\/src\/components\/update-prompt\.tsx$/,
-    doc: GOTCHAS,
+    doc: GOTCHAS_WEB,
     anchor: 'A floating layer that renders ABOVE the overlays must be SWEPT',
   },
   {
     id: 'smoke-tooltip-title',
     path: /apps\/web\/smoke\/.*\.smoke\.ts$/,
-    doc: GOTCHAS,
+    doc: GOTCHAS_WEB,
     anchor: "The ui kit's TooltipHost rewrites a hovered control's `title`",
   },
   {
     id: 'persist-patch',
     path: /apps\/web\/src\/lib\/use-character-draft|apps\/web\/src\/components\/character\//,
-    doc: GOTCHAS,
+    doc: GOTCHAS_WEB,
     anchor: 'Immediate-persist flows go through `useCharacterDraft.persistPatch`',
   },
   {
     id: 'scene-key-normalize',
     path: /apps\/web\/src\/lib\/rom\/(houdini-jobs|execute-jobs)\.ts$/,
-    doc: GOTCHAS,
+    doc: GOTCHAS_WEB,
     anchor: 'A map keyed by `normalizeSceneKey` must normalize AT THE ACCESSOR',
   },
   {
     id: 'project-id-is-path',
     path: /apps\/web\/src\/lib\/rom\/storage\/projects\.ts$|apps\/web\/src\/routes\/projects/,
-    doc: GOTCHAS,
+    doc: GOTCHAS_WEB,
     anchor: '`projectId` is the project FOLDER PATH everywhere',
   },
   {
     id: 'redos',
     path: /apps\/web\/src\/lib\/path-trim\.ts$|packages\/rom\/src\/dsa\.ts$/,
-    doc: GOTCHAS,
+    doc: GOTCHAS_RELEASES,
     anchor: 'is a HIGH-severity CodeQL alert',
   },
 
@@ -279,37 +284,37 @@ export const TRIGGERS = [
   {
     id: 'scan-cache-key',
     path: /apps\/web\/src\/lib\/rom\/houdini-project-cache\.ts$/,
-    doc: GOTCHAS,
+    doc: GOTCHAS_DESKTOP,
     anchor: 'A cache key must cover everything the cached ANSWER depends on',
   },
   {
     id: 'scan-answer-version',
     path: /apps\/web\/src\/lib\/rom\/houdini-project-cache\.ts$/,
-    doc: GOTCHAS,
+    doc: GOTCHAS_DESKTOP,
     anchor: '…and the QUESTION belongs in the key too',
   },
   {
     id: 'path-cache-rename',
     path: /apps\/web\/src\/lib\/rom\/houdini-project-cache\.ts$/,
-    doc: GOTCHAS,
+    doc: GOTCHAS_RELEASES,
     anchor: 'A path-keyed cache is orphaned by a RENAME',
   },
   {
     id: 'job-file-claim',
     path: /apps\/web\/src\/lib\/rom\/api\/execute\.ts$/,
-    doc: GOTCHAS,
+    doc: GOTCHAS_DAZ,
     anchor: 'A CLOSING Daz can still claim the export job file',
   },
   {
     id: 'job-file-sweep',
     path: /apps\/web\/src\/lib\/rom\/api\/(execute|houdini|daz-scan)\.ts$/,
-    doc: GOTCHAS,
+    doc: GOTCHAS_DAZ,
     anchor: 'A `bulk-export` handoff leaves its claimed `running_…json` behind',
   },
   {
     id: 'daz-exe-identity',
     path: /apps\/desktop\/src\/daz\.rs$|apps\/web\/src\/lib\/rom\/storage\/settings\.ts$/,
-    doc: GOTCHAS,
+    doc: GOTCHAS_DESKTOP,
     anchor: 'Every Daz Studio major ships an executable called `DAZStudio.exe`',
   },
 
@@ -317,25 +322,25 @@ export const TRIGGERS = [
   {
     id: 'multiparm-0based',
     path: /material_utils\.py$|houdini.*\.py$/,
-    doc: GOTCHAS,
+    doc: GOTCHAS_DESKTOP,
     anchor: 'DazToHue HDA multiparms are 0-BASED',
   },
   {
     id: 'multiparm-remove-order',
     path: /material_utils\.py$/,
-    doc: GOTCHAS,
+    doc: GOTCHAS_DESKTOP,
     anchor: '`removeMultiParmInstance(i)` takes the instance index',
   },
   {
     id: 'hython-run',
     command: /hython/,
-    doc: GOTCHAS,
+    doc: GOTCHAS_DESKTOP,
     anchor: 'A DazToHue bake with a MISSING layer texture reports SUCCESS',
   },
   {
     id: 'job-env-leak',
     path: /material_utils\.py$|headless_export\.py$/,
-    doc: GOTCHAS,
+    doc: GOTCHAS_DESKTOP,
     anchor: '`$JOB` is SCENE state saved inside the `.hip`',
   },
 
@@ -343,13 +348,13 @@ export const TRIGGERS = [
   {
     id: 'unreal-buildid',
     path: /apps\/web\/src\/lib\/unreal-install\.ts$|apps\/desktop\/src\/unreal_install\.rs$/,
-    doc: GOTCHAS,
+    doc: GOTCHAS_RELEASES,
     anchor: 'Unreal decides a plugin fits by `BuildId` EQUALITY',
   },
   {
     id: 'unreal-engine-registry',
     path: /apps\/desktop\/src\/unreal_install\.rs$/,
-    doc: GOTCHAS,
+    doc: GOTCHAS_RELEASES,
     anchor: 'can be MISSING an installed\n  engine',
   },
 
@@ -364,7 +369,7 @@ export const TRIGGERS = [
   {
     id: 'unicode-line-terminators',
     path: /packages\/rom\/src\/dsa\.ts$|apps\/web\/src\/lib\/rom\/runtime\//,
-    doc: GOTCHAS,
+    doc: GOTCHAS_WEB,
     anchor: 'Literal-char footgun when scripting edits',
   },
 
@@ -372,61 +377,61 @@ export const TRIGGERS = [
   {
     id: 'frame-math-invariant',
     path: /packages\/rom\/src\/frames\.ts$/,
-    doc: DOMAIN,
+    doc: DOMAIN_ROM,
     anchor: 'Frame numbers are never stored.',
   },
   {
     id: 'fps-30',
     path: /apps\/web\/src\/lib\/rom\/houdini-defaults\.ts$|apps\/desktop\/src\/poses\.rs$/,
-    doc: DOMAIN,
+    doc: DOMAIN_ROM,
     anchor: 'A frame number is only a pose at ONE rate.',
   },
   {
     id: 'runtime-version-owned',
     path: /packages\/rom\/src\/types\.ts$/,
-    doc: DOMAIN,
+    doc: DOMAIN_ROM,
     anchor: 'The `.dsa` runtime (versioned by',
   },
   {
     id: 'export-dir-derived',
     path: /apps\/web\/src\/lib\/scene-subfolder\.ts$/,
-    doc: DOMAIN,
+    doc: DOMAIN_EXPORTER,
     anchor: 'The **export directory is DERIVED**',
   },
   {
     id: 'export-root-relocation',
     path: /apps\/desktop\/src\/exports\.rs$|apps\/web\/src\/lib\/rom\/api\/characters\.ts$/,
-    doc: DOMAIN,
+    doc: DOMAIN_EXPORTER,
     anchor: 'A relocation MOVES the already-exported files',
   },
   {
     id: 'relocation-needs-refresh',
     path: /apps\/web\/src\/lib\/rom\/api\/(characters|generate)\.ts$/,
-    doc: DOMAIN,
+    doc: DOMAIN_EXPORTER,
     anchor: 'A relocation reaches a LIBRARY through Tools',
   },
   {
     id: 'seed-character-folders',
     path: /apps\/web\/src\/lib\/rom\/storage\/characters\.ts$/,
-    doc: DOMAIN,
+    doc: DOMAIN_EXPORTER,
     anchor: 'THREE folders are seeded into every new character',
   },
   {
     id: 'character-zip',
     path: /apps\/web\/src\/lib\/rom\/character-zip\.ts$/,
-    doc: DOMAIN,
+    doc: DOMAIN_ROM,
     anchor: 'One character as one self-contained archive',
   },
   {
     id: 'houdini-project-generate',
     path: /apps\/desktop\/src\/houdini\.rs$|apps\/web\/src\/lib\/rom\/api\/houdini\.ts$/,
-    doc: DOMAIN,
+    doc: DOMAIN_EXPORTER,
     anchor: '**Generate Houdini project**',
   },
   {
     id: 'export-interrupt',
     path: /apps\/web\/src\/lib\/rom\/api\/execute\.ts$|packages\/rom\/src\/dsa\.ts$/,
-    doc: DOMAIN,
+    doc: DOMAIN_ROM,
     anchor: 'The flag is `EXPORT_CANCEL_FILE`',
   },
 

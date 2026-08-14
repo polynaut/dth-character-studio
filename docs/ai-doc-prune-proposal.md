@@ -3,6 +3,12 @@
 **Status: proposal. Nothing has been deleted.** This exists to make the decision
 a ten-minute read instead of a 4,700-line audit. Delete this file once decided.
 
+> **Filenames have since split (2026-08-14):** `gotchas.md` → the
+> `gotchas-*.md` area files, `domain.md` → `domain-rom.md` +
+> `domain-exporter.md` (the old names remain as routing indexes). Per-file line
+> numbers below refer to the pre-split files; the bullet-level analysis and the
+> cut rules apply unchanged to the part files.
+
 ## What changed the calculus
 
 `.ai/*` used to be retrieved one way: an agent greps for what it already

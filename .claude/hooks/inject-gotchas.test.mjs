@@ -92,7 +92,7 @@ const contains = (name, got, want) => {
 }
 contains('extracts real doc text', sample, 'alloc-no-stdlib')
 contains('carries the coverage caveat', sample, 'SILENCE IS NOT EVIDENCE')
-contains('points at the source doc', sample, '.ai/gotchas.md')
+contains('points at the source doc', sample, '.ai/gotchas-desktop.md')
 
 /* Heading-anchored facts: the ones the section walk can overshoot. */
 contains('heading-anchored fact survives the cut', edit('D:\\dth\\apps\\desktop\\src\\windows.rs', 'x2'), 'native title')

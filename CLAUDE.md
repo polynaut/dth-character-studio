@@ -238,13 +238,15 @@ repo.
   topic instead. The docs:
   `philosophy.md` (how to work here at all — injected every session),
   `architecture.md` (packages, routes, lib/ boundary, FFI surface),
-  `domain.md` (ROM/frame-math/CSV/runtime semantics), `conventions.md` (schema/FFI/
+  `domain.md` → `domain-rom.md`/`domain-exporter.md` (ROM/frame-math/CSV/runtime
+  semantics; the measured exporter contract), `conventions.md` (schema/FFI/
   versioning rituals), `testing.md` (the four test layers), `release.md` (the
-  release train), `gotchas.md` (measured Daz/Tauri/build facts), `docs-site.md`
+  release train), `gotchas.md` → `gotchas-{core,daz,desktop,web,releases}.md`
+  (measured Daz/Tauri/build facts), `docs-site.md`
   (the public GitHub Pages docs site: landing page + guide build/deploy/search).
   Index: `.ai/README.md`.
   **Important learnings always land there, in the same PR that earned them** — a
-  debugged footgun goes to `gotchas.md`, a new ritual to `conventions.md`, changed
+  debugged footgun goes to its `gotchas-*.md` area file, a new ritual to `conventions.md`, changed
   architecture/domain facts to their files. CLAUDE.md stays the short version.
 - `docs/development.md` — run/build/architecture
 - `docs/devops.md` — release pipeline, signing keys, branch policy
