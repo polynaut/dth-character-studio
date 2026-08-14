@@ -1205,6 +1205,24 @@ current code before relying on details, but assume the *lesson* still holds.
   in front. Deliberately NOT a `document.hasFocus()` guard inside `show()`: a
   missed hide is cosmetic, a `hasFocus()` reading false in some webview state
   would suppress every tooltip in the app.
+  **A sweep closes what is OPEN; the thing that bites is what is about to be.**
+  `closeAllInfoPopups` registered from an effect guarded on `open`, so a hover
+  peek still on its 90 ms `delay.open` was invisible to it: the overlay swept
+  nothing, the timer fired, and the popup painted at `z-[60]` over the fresh
+  z-50 dialog. A tooltip there is cosmetic (`pointer-events-none`, hit-testing
+  skips it); an InfoPopup is INTERACTIVE and swallows the clicks aimed at the
+  dialog underneath — a `locator.click` that never becomes actionable. Fixed by
+  registering EVERY mounted popup and having the sweep mark a pending open
+  stale. **Any floating layer with an open DELAY needs both halves**: close the
+  open ones, and cancel the ones counting down.
+  **And scope that cancellation to the hover reason.** The sweep marks every
+  mounted popup stale, and the flag is cleared by `mouseenter` or a click —
+  neither of which a keyboard user performs. Refusing every reason therefore
+  left every "i" on the page unopenable by Tab after the session's first dialog
+  (`useFocus` opens with reason `'focus'`), which is a permanent a11y
+  regression traded for a transient cosmetic one. There is nothing to cancel
+  there anyway: only a DELAYED open can outlive a sweep, and focus opens
+  synchronously. Caught by a fail-then-pass test, not by review.
 - **floating-ui's `useFocus` must stay enabled while an InfoPopup is pinned**
   (its escape-key handler arms the block-focus guard that stops the
   return-focus from re-peeking the popup) — but that also leaves its reference

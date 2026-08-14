@@ -36,7 +36,13 @@ const openPopups = new Set<() => void>()
  * sits ABOVE the modal layers (`z-[60]` vs the dialogs' z-50 — that is what
  * makes an InfoPopup INSIDE a dialog work), so an overlay opening under a
  * still-open popup must sweep it first or the stale popup would float over the
- * new layer. Modal and SidePanel call this the moment they open.
+ * new layer. Reached through `closeFloatingLayers()` (overlay-sweep.ts), which
+ * Modal and SidePanel call on open — and `update-prompt.tsx` too, the one
+ * overlay that appears with no user gesture at all.
+ *
+ * "Currently-open" undersells what this does now: EVERY mounted popup is
+ * registered, so the sweep also cancels a peek still counting down. See
+ * `sweptRef`.
  */
 export function closeAllInfoPopups() {
   for (const close of [...openPopups]) close()
@@ -102,9 +108,39 @@ export function InfoPopup({
   const [open, setOpen] = React.useState(false)
   const [pinned, setPinned] = React.useState(false)
   const arrowRef = React.useRef<SVGSVGElement>(null)
+  /**
+   * Set when the overlay sweep ran while this popup was NOT yet open — i.e.
+   * with a hover peek still counting down (`delay.open` below).
+   *
+   * `openPopups` can only ever close what is already open, so that pending peek
+   * is invisible to the sweep: it fires afterwards and paints at `z-[60]` OVER
+   * the z-50 dialog that just opened. And unlike a tooltip (pointer-events-none,
+   * so it can never take a click) this popup is interactive — it does not just
+   * look wrong, it SWALLOWS clicks aimed at the dialog underneath.
+   *
+   * TooltipHost has always guarded the same case on its side ("cancel one that
+   * is counting down to appear"). This is that rule for the other layer: the
+   * pending HOVER open becomes a no-op until the pointer leaves and comes back,
+   * or the user deliberately clicks the "i". A focus open is never refused —
+   * see handleOpenChange for why that scoping is not optional.
+   */
+  const sweptRef = React.useRef(false)
   const { onNavigate, onOpenExternal } = useUiConfig()
 
   function handleOpenChange(next: boolean, _event?: Event, reason?: string) {
+    // A peek whose delay outlived the sweep. Refuse it — re-armed by the next
+    // mouseenter or a click on the trigger, so this only ever eats the ONE
+    // stale open, never the user's next genuine hover.
+    //
+    // ONLY reason 'hover', and that is load-bearing rather than tidy. The
+    // sweep marks EVERY mounted popup stale, and the flag is cleared only by
+    // `mouseenter` or a click — neither of which a keyboard user performs. So
+    // refusing every reason left every popup on the page permanently
+    // unopenable by Tab after the session's first dialog, since `useFocus`
+    // opens with reason 'focus'. There is nothing to refuse there anyway: a
+    // focus open is synchronous, so it cannot be a pending open that outlived
+    // the sweep. The 90ms `delay.open` below is the only one that can.
+    if (next && sweptRef.current && reason === 'hover') return
     // useFocus stays subscribed while pinned (its escape-key block-focus guard
     // must arm — see the useFocus call below), which also leaves its reference
     // blur-close live: Shift+Tabbing from the pinned dialog back over the "i"
@@ -153,9 +189,14 @@ export function InfoPopup({
   // While open, register with the overlay sweep: an opening Modal/SidePanel
   // closes every popup so none floats over the new layer (the popup portal
   // renders above those layers — see closeAllInfoPopups).
+  // Registered for EVERY mounted popup, not only open ones. Guarding this on
+  // `open` was the bug: a peek still on its open delay had nothing in
+  // `openPopups`, so the sweep passed over it and the popup landed on top of
+  // the overlay a moment later. Always registering also lets the sweep set
+  // `sweptRef`, which is what actually cancels that pending open.
   React.useEffect(() => {
-    if (!open) return
     const close = () => {
+      sweptRef.current = true
       setOpen(false)
       setPinned(false)
     }
@@ -163,13 +204,15 @@ export function InfoPopup({
     return () => {
       openPopups.delete(close)
     }
-  }, [open])
+  }, [])
 
   // Opacity-only fade — the floating element's positioning already owns its
   // `transform`, so the transition must not also animate transform.
   const { isMounted, styles: transitionStyles } = useTransitionStyles(context, { duration: 150 })
 
   function onTriggerClick() {
+    // A deliberate click always wins over a sweep that refused a peek.
+    sweptRef.current = false
     if (pinned) {
       setPinned(false)
       setOpen(false)
@@ -227,7 +270,15 @@ export function InfoPopup({
           TRIGGER_SIZE[size],
           className,
         )}
-        {...getReferenceProps({ onClick: onTriggerClick })}
+        // `onMouseEnter` re-arms after a sweep: the enter that started the
+        // doomed timer fired BEFORE the sweep, so clearing here can only ever
+        // affect the next, deliberate hover.
+        {...getReferenceProps({
+          onClick: onTriggerClick,
+          onMouseEnter: () => {
+            sweptRef.current = false
+          },
+        })}
       >
         <span
           aria-hidden="true"
