@@ -118,6 +118,51 @@ jobs:
         run: pnpm --filter @dth/web exec playwright install chromium --with-deps
       - name: Browser smoke (Playwright)
         run: pnpm --filter @dth/web smoke
+      # THE EVIDENCE. `trace: 'retain-on-failure'` (playwright.config.ts) writes
+      # a full trace for every failed test — DOM snapshot per action, the
+      # actionability log, console, network, screenshots — and without this step
+      # it is deleted with the runner. Eight-plus smoke failures have now been
+      # diagnosed purely by INFERENCE ("a different spec each run, green on
+      # rerun, instant locally, therefore contention") because the one artifact
+      # that could confirm or refute it never left CI.
+      #
+      # That inference has a hole worth naming: a `locator.click` timing out at
+      # 60s is a 45x outlier against a ~1.3s average, and Playwright's click
+      # waits for ACTIONABILITY (visible, stable, unobscured, enabled) — so a
+      # stall that long is at least as consistent with the element being covered
+      # by a floating layer, or the page being wedged in a render loop (both are
+      # measured, documented behaviours in this app: see .ai/gotchas.md on
+      # overlay sweeping and on useReactTable identity), as with a busy box.
+      # The trace's actionability log says which — it records what Playwright
+      # was waiting for and what was on top of the target.
+      #
+      # NOT `failure()` — that would discard the exact case this step is for.
+      # `retries: 1` (playwright.config.ts) means a starved spec passes on
+      # attempt two, Playwright reports it `flaky`, and the run EXITS 0. The
+      # job is green, `failure()` never fires, and the trace of the failed
+      # attempt is deleted with the runner — leaving traces only for tests that
+      # fail BOTH attempts, i.e. the reproducible ones that need a trace least.
+      #
+      # Measured 2026-08-14 on this repo's Playwright, one flaky test:
+      #   flaky run → exit 0, `test-results/…/trace.zip` PRESENT
+      #   green run → exit 0, no trace files at all
+      # So `retain-on-failure` already makes a clean run free, and
+      # `if-no-files-found: ignore` absorbs the empty directory.
+      #
+      # It also turns the artifact into the flake SIGNAL: a `playwright-traces-*`
+      # artifact on a GREEN run means a retry was spent, which is otherwise
+      # buried in the log of a run nobody opens.
+      #
+      # The run_attempt suffix keeps a rerun's artifact from colliding with the
+      # original's.
+      - name: Upload Playwright traces (flake + failure evidence)
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: playwright-traces-attempt-${{ github.run_attempt }}
+          path: apps/web/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
 
   # Every feature PR must ship a changeset (the four packages — web, desktop,
   # rom, ui — are a fixed group, so this is what actually bumps the product
