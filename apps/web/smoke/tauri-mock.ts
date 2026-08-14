@@ -90,7 +90,7 @@ export interface TauriMockSeed {
   /** Absolute paths whose fs commands are HELD — the invoke neither resolves
    *  nor rejects until the spec calls `__tauriMock.releaseHeld()` (which also
    *  stops holding future calls). Lets a spec freeze an async probe mid-flight
-   *  — e.g. hold the execute-stamps file to keep the DTH Export dialog's scene
+   *  — e.g. hold the execute-stamps file to keep the DTH Export panel's scene
    *  probe from landing. Default: nothing held. */
   holdPaths?: Array<string>
   /** What `houdini_running` answers — the "Export too" liveness probe. Default
@@ -183,6 +183,18 @@ export interface TauriMockState {
 }
 
 export function installTauriMock(seed: TauriMockSeed): void {
+  // Installing this fake IS "an automated browser is driving the app", so the
+  // dev-only TanStack devtools trigger goes with it. It is `position: fixed`
+  // in the BOTTOM-RIGHT corner, and in dev mode (the default local smoke run —
+  // CI serves a prebuilt production bundle, which never renders it) it happily
+  // swallows clicks aimed at anything anchored there: measured on the DTH
+  // Export side panel's pinned footer, where Start sits in exactly that corner.
+  // Drop this line and 12 specs across 7 files (daz-launch-activated ×2,
+  // export-interrupt ×3, export-only-gate, houdini-export ×2, houdini-only ×2,
+  // unreal-preselect ×2) fail LOCALLY on a 30s click retry while CI stays
+  // green. `prime()` sets the same flag for the screenshot suite; most specs
+  // install the fake directly and never went through it.
+  ;(window as unknown as { __dthHideDevtools?: boolean }).__dthHideDevtools = true
   const files = new Map(Object.entries(seed.files))
   /**
    * Every file's mtime in the fake world — see `stat`.

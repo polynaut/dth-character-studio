@@ -323,7 +323,7 @@ export function openSceneJobFileJson(scenePath: string): string {
 export { romAnimationPath }
 
 /**
- * What a DTH Export run does, chosen in the dialog's first step:
+ * What a DTH Export run does, chosen in the panel's first step:
  *
  * - `rom-export` — build a fresh ROM, save the ROM animation, export
  *   everything (skeletal mesh + hair). The default, and the only mode that
@@ -339,7 +339,7 @@ export type ExportMode = (typeof EXPORT_MODES)[number]
 
 /**
  * What each Daz mode is CALLED, in the user's words — one spelling for the
- * dialog's Mode dropdown and for the run's Daz task cards, which say what the
+ * panel's Mode dropdown and for the run's Daz task cards, which say what the
  * run is about to do to each scene. Two spellings of "ROM + Export" would be
  * two things to keep in step, and the card is read while the dropdown that
  * chose it is long closed.
@@ -351,7 +351,7 @@ export const EXPORT_MODE_LABELS: Record<ExportMode, string> = {
 }
 
 /**
- * Everything the dialog's Daz **Mode** dropdown can pick: the three Daz-side
+ * Everything the panel's Daz **Mode** dropdown can pick: the three Daz-side
  * {@link ExportMode}s plus `houdini-only` ("Skip Daz — use last exports"),
  * which never reaches `executeCharacterJobs` at all — no Daz run, no Runner.
  * It takes each selected scene's LAST-DELIVERED Daz export (the `.dth` at
@@ -376,7 +376,7 @@ export type RunChoice = ExportMode | 'houdini-only'
  * Two modes that used to sit here are gone (v0.77):
  * - `open` — opened one project and ran nothing. The Houdini project cards open
  *   a project on their own, so this was a second way to do the same thing
- *   inside a dialog whose job is running a pipeline.
+ *   inside a panel whose job is running a pipeline.
  * - `export-all` — exported every LINKED scene instead of the checked ones. The
  *   scene list is right above it: "export all" is what checking every scene
  *   means, and two ways to say one thing invite picking the wrong one.
@@ -482,15 +482,15 @@ export function jobScriptForMode(mode: ExportMode): string {
  * and therefore nothing for an export-only run to export.
  *
  * Pure so it is testable without a browser, and shared by BOTH places the
- * dialog applies it: the Start gate (non-empty ⇒ Start is disabled and the
+ * panel applies it: the Start gate (non-empty ⇒ Start is disabled and the
  * scenes are named) and the pre-handoff re-check in `onExport`, which re-probes
- * the scenes at the decision point — the dialog's status is a snapshot from
+ * the scenes at the decision point — the panel's status is a snapshot from
  * when it opened, and a ROM animation deleted since then would otherwise ride
  * the stale go-ahead into Daz.
  *
  * Empty for every other mode, and empty while `scenes` is null — nothing is
  * known before the probe lands, and "unknown" must not read as "missing" (the
- * dialog's Start separately waits out that window as "Checking scenes…").
+ * panel's Start separately waits out that window as "Checking scenes…").
  */
 export function scenesMissingRomAnimation<T extends { scenePath: string; romExists: boolean }>(
   mode: RunChoice,
@@ -506,7 +506,7 @@ export function scenesMissingRomAnimation<T extends { scenePath: string; romExis
  * SELECTED scenes whose last Daz export is not on disk (`exportExists` — the
  * `.dth` the Houdini network imports), so there is nothing to rely on. Same two
  * call sites and the same null-tolerance: the Start gate, and the pre-handoff
- * re-probe that catches an export deleted while the dialog sat open.
+ * re-probe that catches an export deleted while the panel sat open.
  */
 export function scenesMissingExport<T extends { scenePath: string; exportExists: boolean }>(
   mode: RunChoice,
@@ -518,11 +518,11 @@ export function scenesMissingExport<T extends { scenePath: string; exportExists:
 }
 
 /**
- * Which scenes a mode PRE-CHECKS in the DTH Export dialog: the ones whose work
+ * Which scenes a mode PRE-CHECKS in the DTH Export panel: the ones whose work
  * is outstanding for THAT run — changed inputs for the ROM-building modes, an
  * unexported saved ROM animation for the export-only pass. A scene whose
  * `.duf` is missing is never pre-checked by a Daz mode: its row cannot run
- * (the dialog disables it), and a saved ROM animation can well survive a
+ * (the panel disables it), and a saved ROM animation can well survive a
  * deleted scene — pre-checking it would arm a selection whose handoff can only
  * fail.
  *

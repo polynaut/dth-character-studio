@@ -628,7 +628,7 @@ export function runnerInstalledNewer(status: RunnerStatus): boolean {
 }
 
 /** Whether (and why) a DTH Export handoff is blocked on the Runner plugin's
- *  state — the export dialog's gate. A missing runner would take the job file
+ *  state — the export panel's gate. A missing runner would take the job file
  *  nowhere; an outdated one would run it with stale behaviour.
  *  `no-install-folder` is produced by the api layer (which resolves settings),
  *  never by {@link runnerGate} itself. */

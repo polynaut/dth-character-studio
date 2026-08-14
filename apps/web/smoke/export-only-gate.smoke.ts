@@ -6,7 +6,7 @@ import { installTauriMock } from './tauri-mock.ts'
 import type { Page } from '@playwright/test'
 
 // "Export only" runs the exporter over each scene's SAVED ROM animation, so a
-// scene without one has nothing to export. Once the dialog's scene probe has
+// scene without one has nothing to export. Once the panel's scene probe has
 // landed, the row controls keep such scenes out of the selection — so the gate
 // exists for the two windows the controls cannot cover, and that is what these
 // specs demonstrate:
@@ -15,7 +15,7 @@ import type { Page } from '@playwright/test'
 //    Start waits as a disabled "Checking scenes…" until the probe lands.
 // 2. The landed status has gone STALE under the selection (the ROM animation
 //    deleted after the check): Start re-verifies at the decision point and
-//    refuses IN the dialog — fresh row states, the notice naming the scene,
+//    refuses IN the panel — fresh row states, the notice naming the scene,
 //    and no handoff written.
 
 const DAZ_INSTALL = 'C:/Program Files/DAZ 3D/DAZStudio4'
@@ -27,7 +27,7 @@ const romAnimation = (scene: string) => {
   return `${dir}/rom-animations/${stem}_ROM.duf`
 }
 /** The handoff-stamps file the scene probe (fetchExecuteScenes) reads FIRST —
- *  holding it holds the whole probe with the dialog's status un-landed. */
+ *  holding it holds the whole probe with the panel's status un-landed. */
 const STAMPS = `${P.charMeta}/.dth_execute_stamps.json`
 
 const unhandledCommands = (page: Page) =>
@@ -85,7 +85,7 @@ test('start waits out the scene probe — a row checked mid-flight cannot slip t
   expect(await unhandledCommands(page)).toEqual([])
 })
 
-test('start re-verifies the ROM animations — one deleted after the probe refuses in the dialog', async ({
+test('start re-verifies the ROM animations — one deleted after the probe refuses in the panel', async ({
   page,
 }) => {
   const seed = buildSeed({
@@ -107,12 +107,12 @@ test('start re-verifies the ROM animations — one deleted after the probe refus
   await expect(start).toBeEnabled()
 
   // The ROM animation vanishes AFTER the check (deleted or moved in Daz) — the
-  // dialog's status is now stale under a checked row.
+  // panel's status is now stale under a checked row.
   await page.evaluate((path) => {
     ;((window as any).__tauriMock.files as Map<string, string>).delete(path)
   }, romAnimation(P.scene))
 
-  // Start re-probes at the decision point and refuses IN the dialog: fresh row
+  // Start re-probes at the decision point and refuses IN the panel: fresh row
   // states, the gate's notice naming the scene, Start off — and no handoff.
   await start.click()
   await expect(page.getByText(/No saved ROM animation for KiraDefault/)).toBeVisible()

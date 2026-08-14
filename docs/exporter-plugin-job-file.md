@@ -283,8 +283,8 @@ build; the shapes below are the known-good mechanisms.
 ## What the studio writes when (implemented)
 
 The **DTH Export** button (top-right in the character editor) opens a
-scene-picker dialog; it requires a saved (non-dirty) character, a linked
-primary scene, an export directory and a configured Daz library. The dialog
+scene-picker side panel; it requires a saved (non-dirty) character, a linked
+primary scene, an export directory and a configured Daz library. The panel
 lists every linked scene with a checkbox — pre-checked when the scene is
 **affected**: its `.duf` (mtime+size) or its definition signature changed
 since the last handoff. Confirming writes the job file — **one row per checked

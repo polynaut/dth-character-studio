@@ -719,7 +719,7 @@ the interrupt is a **flag file** that the code the studio DOES own polls.
   `.dth` it imports (`import_character_dtu_file`) — the studio wrote that file
   at a path it computes (`sceneDthPath`), so it names the Daz scene exactly,
   unlike a node or network-box name the user renames freely. 456.py matches on
-  it at export time; the DTH Export dialog matches on the same FIELD without
+  it at export time; the DTH Export panel matches on the same FIELD without
   opening a `.hip` because the background scan records every project's imports
   (`materialScanProject.imports`, hython `_scene_dth_imports`, stored per
   character in `houdini-scan.json`). `hipsForSelectedScenes` (pure) turns
@@ -739,9 +739,11 @@ the interrupt is a **flag file** that the code the studio DOES own polls.
   run the user asked for.
 - **The Houdini export handoff — "Export too" (COMPLETE).** After a Daz bulk
   export, the DazToHue export nodes in a Houdini project run for the scenes the
-  user ticked. The toggle sits beside the dialog's Houdini project select,
-  appears only once a project is picked, and is off by default (it drives the
-  user's own Houdini). Pieces: `lib/rom/houdini-jobs.ts` (job/result contract,
+  user ticked. No longer the "Export too" TOGGLE the name remembers: the panel
+  lists the character's linked projects as checkboxes with their own **Mode**
+  dropdown (`HOUDINI_MODE_OPTIONS` in `dth-export.tsx` — just `export-selected`
+  and `skip`; "export every scene" is what ticking every scene already means, so
+  that mode went away). Pieces: `lib/rom/houdini-jobs.ts` (job/result contract,
   `houdiniRunStateFrom`),
   `lib/rom/houdini-runtime/456.py` + `headless_export.py` (Houdini's half),
   `api/houdini.ts` (`startHoudiniExport`/`fetchHoudiniRunProgress`) and Rust
@@ -793,7 +795,7 @@ the interrupt is a **flag file** that the code the studio DOES own polls.
     full output lives on disk (Runner progress log, `.dth_houdini_console.log`,
     the Unreal editor log), which is where a post-mortem was read anyway.
   Honesty rules the rows keep: a Daz row shows no mode when the window only
-  ADOPTED the run (a job file carries rows, never the dialog's choice — hence
+  ADOPTED the run (a job file carries rows, never the panel's choice — hence
   `ExportRunProgress.mode`, restored from the sidecar for the owner); an Unreal
   row says "Re-import"/"First import" only from the send plan's own probe
   (`UnrealSendPlan.located`, refined by `startUnrealImport`'s per-set
@@ -991,7 +993,7 @@ the interrupt is a **flag file** that the code the studio DOES own polls.
   to build it again (a Daz run of many minutes) with the file sitting there.
   `exists` is the separate field for "there is one", and it is the one that
   decides whether an action is offered at all.
-- **DTH Export runs in one of three Daz MODES** (the dialog's first step; the
+- **DTH Export runs in one of three Daz MODES** (the panel's first step; the
   `ExportMode` union in `execute-jobs.ts` owns the mapping):
   `rom-export` → `.Bulk_ROM_Export.dsa` on the source scene (fresh ROM, saved
   ROM animation, full export — the default, and the ONLY mode that writes
@@ -1010,7 +1012,9 @@ the interrupt is a **flag file** that the code the studio DOES own polls.
   on disk); the `.duf` is NOT consulted (Houdini reads the export, not the
   scene, so a missing `.duf` doesn't disable the row there), and the Runner
   gate doesn't apply (no Daz plugin in the path).
-- **The DTH Export dialog is ONE page**: two card lists — "Daz scenes" and
+- **The DTH Export panel is ONE page, in the app's `SidePanel` drawer** (it was
+  a centered `Modal`; at `max-w-xl`/`85vh` the third leg lived below the fold —
+  Start rides the drawer's `footer` prop): two card lists — "Daz scenes" and
   "Houdini projects" (multi-select) — each with its own **Mode** dropdown.
   Houdini modes (`HoudiniRunMode`, execute-jobs.ts): `open` (single-project
   only — `houdiniModeForSelection` flips to `export-selected` when a second
@@ -1086,13 +1090,13 @@ the interrupt is a **flag file** that the code the studio DOES own polls.
   concatenates onto `export_directory`). Read in the scan pass beside
   `imports`, because opening a `.hip` is the expensive part and it is already
   open. Empty = NOT KNOWN (an unscanned project, or a scan entry stored before
-  the field existed) — never "writes nothing", and the dialog's `runSets`
+  the field existed) — never "writes nothing", and the panel's `runSets`
   collapses to `null` on one unknown project so every rule falls back instead
   of concluding the run produces nothing. Without it "does this Unreal project
   have what THIS RUN makes?" was unanswerable and the pre-selection asked "does
   it have ANY set of this character?" — which ticked a project for a run about
   to export a variant it had never seen.
-- **The DTH Export dialog's third leg** (`unrealProjects`): selected Unreal
+- **The DTH Export panel's third leg** (`unrealProjects`): selected Unreal
   projects ride the Daz run record AND the Houdini run plan — the send fires
   when the whole Houdini queue drains, minutes later, possibly in a reloaded
   window, so both sidecars carry it or a reload drops it silently. Pre-selection
@@ -1262,11 +1266,11 @@ the interrupt is a **flag file** that the code the studio DOES own polls.
   polling) is taken back — file deleted, watch dropped, error reported — never
   left pending forever; while a handoff waits un-renamed the Tools panel
   offers Abort (`abortProjectScanRun` — no stamps to roll back), and the
-  panel gates on `fetchExportRunnerGate` exactly like the export dialog. It
+  panel gates on `fetchExportRunnerGate` exactly like the export panel. It
   also writes its sidecar BEFORE the job file: the Runner can claim the batch
   the moment the job file appears, and a row that beat its own config would
   fail for nothing.
-- **Runner gate**: the export dialog blocks Start while the installed Runner
+- **Runner gate**: the export panel blocks Start while the installed Runner
   DLL is missing or OLDER than the bundled one (`runnerGate` in
   storage/releases.ts, `fetchExportRunnerGate`), deep-linking to Settings →
   General (`/settings?tab=general`). The installed version is read from the
@@ -1284,7 +1288,7 @@ the interrupt is a **flag file** that the code the studio DOES own polls.
   (api/execute.ts) writes the job, watches ~10s for the rename, and on
   non-pickup takes the file back and falls back to the old "Daz is already
   open" dialog. Deliberately NOT gated on the installed version the way the
-  export dialog is (`runnerGate`, above): the handshake already self-describes,
+  export panel is (`runnerGate`, above): the handshake already self-describes,
   and an open that quietly degrades to the previous behaviour beats one blocked
   behind an update prompt. One global job file + one batch at a time, so an
   open-scene request is REFUSED while an export batch is pending or genuinely

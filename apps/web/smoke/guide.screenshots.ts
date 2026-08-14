@@ -631,19 +631,19 @@ test('houdini-utils-recent-sources', async ({ page }) => {
   await shoot(page, join(OUT, 'houdini-utils-recent-sources.png'), source)
 })
 
-test('dth-export-dialog', async ({ page }) => {
-  // A configured Daz install folder lets the dialog's Runner-update check
+test('dth-export-panel', async ({ page }) => {
+  // A configured Daz install folder lets the panel's Runner-update check
   // settle open (the fake holds no readable install, and an unreadable Runner
   // state deliberately never blocks exporting).
   await openCharacter(page, { dazInstallFolder: 'C:/Program Files/DAZ 3D/DAZStudio6' })
   await page.getByRole('button', { name: 'DTH Export' }).click()
-  const dialog = page.getByRole('dialog')
+  const panel = page.getByRole('dialog')
   // One page now: Daz scenes + their Mode, Houdini projects + theirs. Wait for
   // the affected-detection to settle — the never-exported scene reads
   // "changed", which is what the full run pre-checks (and what auto-selects
   // the Houdini projects).
-  await dialog.getByText('Changed since the last export').waitFor()
-  await shoot(page, join(OUT, 'dth-export-dialog.png'), dialog)
+  await panel.getByText('Changed since the last export').waitFor()
+  await shoot(page, join(OUT, 'dth-export-panel.png'), panel)
 })
 
 test('dth-export-running', async ({ page }) => {

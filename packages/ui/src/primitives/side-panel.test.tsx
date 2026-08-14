@@ -39,10 +39,41 @@ describe('SidePanel', () => {
     expect(document.activeElement).toBe(second)
   })
 
+  it('renders the footer OUTSIDE the scrolling body, and keeps it in the focus order', () => {
+    const { getByRole, getByText } = render(
+      <SidePanel open title="Panel" onClose={vi.fn()} footer={<button type="button">Start</button>}>
+        <button type="button">First</button>
+      </SidePanel>,
+    )
+    const start = getByText('Start')
+    // Not a descendant of the body that scrolls — that is the whole point: the
+    // action stays on the panel's bottom edge however long the body gets.
+    expect(getByText('First').parentElement?.contains(start)).toBe(false)
+    // …and it is still inside the panel, so the focus trap includes it.
+    expect(getByRole('dialog').contains(start)).toBe(true)
+  })
+
   it('Escape dismisses via onClose', () => {
     const { onClose } = renderPanel()
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('not dismissible: Escape and the backdrop are ignored, and the ✕ SAYS so', async () => {
+    const onClose = vi.fn()
+    const { getByRole } = render(
+      <SidePanel open title="Panel" onClose={onClose} dismissible={false}>
+        <button type="button">First</button>
+      </SidePanel>,
+    )
+    fireEvent.keyDown(document, { key: 'Escape' })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    fireEvent.pointerDown(document.body)
+    fireEvent.pointerDown(document.body)
+    expect(onClose).not.toHaveBeenCalled()
+    // Disabled, not merely inert: a live-looking ✕ that does nothing is the
+    // thing this prop exists to prevent (the caller's Cancel greys out too).
+    expect((getByRole('button', { name: 'Close' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('swallows the backdrop click that re-focuses the window; the next one dismisses', async () => {

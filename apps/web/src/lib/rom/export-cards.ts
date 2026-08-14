@@ -30,7 +30,7 @@ export interface DazSceneTarget {
  *
  * `mode` is optional because one caller genuinely cannot know it: a run this
  * window merely ADOPTED for display was started elsewhere, and the job file it
- * reads carries rows, not the dialog's choice. Those rows then say what is
+ * reads carries rows, not the panel's choice. Those rows then say what is
  * being worked without claiming what it will do.
  */
 export function dazTaskCards(
@@ -140,7 +140,7 @@ export interface UnrealTarget {
   label: string
   /** The export sets handed to THIS project — one import job each. Empty means
    *  the names are not known here (a run restored into a window that never saw
-   *  the dialog), not "nothing is sent". */
+   *  the panel), not "nothing is sent". */
   sets: Array<UnrealTargetSet>
 }
 

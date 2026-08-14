@@ -50,7 +50,7 @@ import type { HoudiniInstallScan } from '#/lib/houdini-install.ts'
 export const Route = createFileRoute('/settings')({
   // Settings is reachable from several places; an optional `from` label lets the
   // entry point name the back link (the navigation itself just pops history).
-  // `tab` deep-links a specific tab (e.g. the export dialog's Runner-update
+  // `tab` deep-links a specific tab (e.g. the export panel's Runner-update
   // notice lands on General, not a project window's default Project tab).
   validateSearch: (search: Record<string, unknown>): { from?: string; tab?: SettingsTab } => ({
     from: typeof search.from === 'string' ? search.from : undefined,

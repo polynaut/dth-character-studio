@@ -118,7 +118,11 @@ export default defineConfig({
   // The bundle is a PRODUCTION build, so `import.meta.env.DEV` is false in it.
   // Nothing the suite needs lives behind that flag: `__dthToast` (__root.tsx)
   // is set for ad-hoc harness use and read by nothing, and `__dthHideDevtools`
-  // guards devtools a production build never renders.
+  // guards devtools a production build never renders. That last one cuts BOTH
+  // ways and the local direction is the one that bites: the trigger DOES exist
+  // under the dev server, fixed in the bottom-right corner, over anything
+  // anchored there (a SidePanel's pinned footer). `installTauriMock` sets the
+  // flag for that reason — see `.ai/testing.md`.
   //
   // `updater.ts` is the one that does NOT simply fall away, and the reason
   // matters. Its guard is `!isTauri() || import.meta.env.DEV`, and the mock

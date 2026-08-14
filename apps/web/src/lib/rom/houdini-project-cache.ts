@@ -122,7 +122,7 @@ export function scanCacheKey(
  * every stored entry then stops matching and the sweep re-earns it. Measured
  * the hard way: `imports` (which `.dth` each network imports, v2) shipped
  * without a bump, so every existing entry stayed "fresh" while answering the
- * new question with an empty list, and the dialog that reads it correctly
+ * new question with an empty list, and the panel that reads it correctly
  * concluded "not known" — for good, since nothing about the `.hip`, the export
  * root or the HDAs had changed. A field is not free: it is a new question, and
  * the key has to know the question changed.
@@ -145,7 +145,7 @@ export function scanCacheKey(
  *     the HDA writes under the character's `export/`. THIRD time this trap was
  *     paid for, and this one bit within the hour: an older entry has no such
  *     field, zod defaults it to `[]`, and `[]` is indistinguishable from "this
- *     project has no export nodes" — so the DTH Export dialog read every
+ *     project has no export nodes" — so the DTH Export panel read every
  *     already-scanned project as writing nothing at all. Bumping is what makes
  *     an old entry say "ask me again" instead of answering a question it was
  *     never asked.
@@ -198,7 +198,7 @@ export function freshScan(
  * A store entry is keyed by path — map key, the freshness `key`'s first
  * segment, and the project's own `hipPath` — so renaming a `.hip` orphans its
  * scan and every reader answers "never scanned". Measured on a real rename: the
- * DTH Export dialog stopped pre-selecting Unreal projects, because it no longer
+ * DTH Export panel stopped pre-selecting Unreal projects, because it no longer
  * knew which export sets those projects write, and the fix was a Rescan the
  * user had no reason to suspect they needed.
  *

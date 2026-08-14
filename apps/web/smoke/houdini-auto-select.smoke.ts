@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test'
 import { P, buildSeed, scanStoreEntryKey } from './fixtures.ts'
 import { installTauriMock } from './tauri-mock.ts'
 
-// The DTH Export dialog's Houdini list FOLLOWS the scene selection.
+// The DTH Export panel's Houdini list FOLLOWS the scene selection.
 //
 // A project belongs in the run when one of its networks imports a selected
 // scene's `.dth` — the same key 456.py matches nodes on at export time, read

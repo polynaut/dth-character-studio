@@ -1342,9 +1342,12 @@ export function HoudiniUtilsPanel({
     <>
       <SidePanel
         open={open}
+        // A util mid-run holds the drawer: Escape / the backdrop / the ✕ are
+        // refused (and the ✕ greys out) until it lands.
+        dismissible={!busy}
         // Not `onClose` directly: a session that wrote backups is asked about
         // them on the way out (see `requestClose`).
-        onClose={busy ? () => {} : requestClose}
+        onClose={requestClose}
         // Names the KIND of thing being worked on, not just the character: the
         // drawer acts on Houdini projects, and "Utils — Ita" gave no clue which
         // of the character's many facets it touches.

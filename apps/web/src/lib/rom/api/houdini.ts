@@ -340,7 +340,7 @@ export async function renameHoudiniProject({ data }: { data: unknown }): Promise
   }
   await rename(hipPath, dest)
   // The scan follows the file. Every reader keys on the path, so without this
-  // a rename silently un-scans the project — measured: the DTH Export dialog
+  // a rename silently un-scans the project — measured: the DTH Export panel
   // stopped pre-selecting Unreal projects and asked for a Rescan nobody had a
   // reason to suspect. Best-effort: a cache that cannot be updated is a rescan
   // later, never a failed rename.
@@ -1088,14 +1088,14 @@ export function dismissHoudiniRun(): Promise<void> {
 
 /**
  * Each linked scene's expected `.dth` path, keyed by {@link normalizeSceneKey}
- * — the identity a DazToHue network carries, and what the DTH Export dialog
+ * — the identity a DazToHue network carries, and what the DTH Export panel
  * matches a project's recorded `imports` against.
  *
- * Lives HERE, not in the dialog, for one measured reason: the export folder of
+ * Lives HERE, not in the panel, for one measured reason: the export folder of
  * a scene inside a subfolder (`daz3d/primary/…`) is that subfolder, and
  * deriving it needs the character's scenes ROOT — which needs the project's
  * `dazSubdir`, i.e. the resolution this layer does and a component cannot.
- * Computed in the dialog without it, every scene fell back to its file STEM
+ * Computed in the panel without it, every scene fell back to its file STEM
  * (`.../daz-export/LaraCroft_G8_1_SLIM/…`) and matched no real import
  * (`.../daz-export/primary/…`), so the auto-selection quietly never fired.
  * The SAME `buildHoudiniJob` uses, so the dialog and the run agree by

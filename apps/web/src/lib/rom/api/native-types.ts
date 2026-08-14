@@ -465,7 +465,7 @@ export const materialScanProjectSchema = z.object({
   fps: z.number().default(0),
   /** Every `.dth` this project's networks import (normalized, lowercased) —
    *  the same key the export run matches nodes on, read in the same pass. The
-   *  DTH Export dialog uses it to tell which projects a scene selection
+   *  DTH Export panel uses it to tell which projects a scene selection
    *  involves without opening a `.hip` (tens of seconds each). Defaulted: an
    *  entry stored before this field existed is legitimate, and empty means
    *  "not known" there — never "imports nothing". */
