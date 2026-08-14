@@ -413,9 +413,10 @@ const sendPlanInput = charScopeInput.extend({
  *
  * Filesystem only — the studio cannot read an editor's asset registry from out
  * here — so this is {@link locateSets}'s filename search, with all the honesty
- * that implies: a project whose assets were renamed reads as "not here", which
- * offers an unticked row the user can tick rather than ticking one they didn't
- * mean.
+ * that implies: a project whose assets were RENAMED reads as "not here", so its
+ * sets are skipped (and named) like any other never-held set — rename the
+ * assets back, or reimport them from inside Unreal. The safe direction: a
+ * guessed destination would import ON TOP of something else.
  *
  * `sets` is the export folder; `located` answers for those AND for `extraSets`,
  * because "where does this land" has to be answerable about a set the run has

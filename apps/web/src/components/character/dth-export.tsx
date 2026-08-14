@@ -2050,8 +2050,10 @@ function DthExportPanel({
     /** The export sets to hand over — the user's own tick list. */
     unrealSets: Array<string>
     /** Which of those sets each project ALREADY holds (the send plan's probe) —
-     *  what lets the run's Unreal rows say "Re-import" instead of guessing. */
-    unrealLocated: Record<string, Record<string, string>>
+     *  what lets the run's Unreal rows say "Re-import" instead of guessing.
+     *  undefined when the probe never landed: the rows then claim a plain
+     *  "Import" and the send decides (it re-probes for real). */
+    unrealLocated: Record<string, Record<string, string>> | undefined
     /** What the batch does to each scene — the Daz rows' subtitle. */
     mode: ExportMode
     /** The handoff started Daz itself (vs. handing to a running one). */
@@ -2064,14 +2066,14 @@ function DthExportPanel({
     scenes: Array<string>,
     unrealProjects: Array<string>,
     unrealSets: Array<string>,
-    unrealLocated: Record<string, Record<string, string>>,
+    unrealLocated: Record<string, Record<string, string>> | undefined,
   ) => void
   /** Neither Daz nor Houdini runs — the whole run is the Unreal send, off the
    *  exports already on disk. */
   onUnrealOnly: (
     unrealProjects: Array<string>,
     unrealSets: Array<string>,
-    unrealLocated: Record<string, Record<string, string>>,
+    unrealLocated: Record<string, Record<string, string>> | undefined,
   ) => void
   /** The handoff went to a Daz that is still shutting down — the caller shows
    *  the wait-and-relaunch modal (see WaitForDazCloseModal). */
@@ -2591,8 +2593,14 @@ function DthExportPanel({
       // made before the mode changed under it.
       const unrealTargets = nothingToSend ? [] : chosenUnreal
       // The probe behind the pre-selection, handed up so the run's Unreal rows
-      // can say re-import vs first import per project ({@link UnrealSendPlan}).
-      const located = sendPlan?.located ?? {}
+      // can say "Re-import" — or drop a set the project never held — per
+      // project ({@link UnrealSendPlan}). undefined when the probe never
+      // landed (still in flight, or failed — the rows stay tickable then):
+      // coercing to `{}` here would read as "probed and found NOTHING", which
+      // under re-import-only dropped every Unreal row from the run display.
+      // Nobody looked, so the rows claim a plain "Import" and the send
+      // decides — it re-probes for real.
+      const located = sendPlan?.located
       // Skip Daz: the Houdini selection IS the run — the same machinery the
       // after-batch continuation drives, minus the batch.
       if (mode === 'houdini-only') {
