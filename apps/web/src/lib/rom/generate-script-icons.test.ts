@@ -245,21 +245,46 @@ describe('generated script artwork', () => {
     expect(png('ROM_Kira_G9.png')).toBeDefined()
   })
 
-  it('writes no artwork for a script that has none — the product scan', async () => {
-    await setup()
-    const c = seedCharacter({ exportPath: 'D:/exports' })
-    // A DIM manifests folder is what arms the product scan (since v0.68 — the
-    // per-project toggle only decides whether the tab is shown), so setting it
-    // is what makes the per-character scan script get emitted.
+  /** A DIM manifests folder is what arms the product scan (since v0.68 — the
+   *  per-project toggle only decides whether the tab is shown), so setting it
+   *  is what makes the per-character scan script get emitted. */
+  async function armProductScan(): Promise<void> {
     await storage.saveSettings({
       ...(await storage.getSettings()),
       dimManifestsFolder: 'D:/DAZ 3D/Install Manager/ManifestFiles',
     })
+  }
+
+  it('writes the tile + tip beside the product-scan script (runtime v76)', async () => {
+    await setup()
+    const c = seedCharacter({ exportPath: 'D:/exports' })
+    await armProductScan()
 
     await generateCharacterFiles({ data: { projectId: LIB, id: c.id } })
 
-    const scan = [...files.keys()].find((k) => k.includes('Scan_Products_'))
-    expect(scan).toBeDefined()
-    expect(files.has(`${SCRIPTS}/Scan_Products_Kira.png`)).toBe(false)
+    // Named for the character alone — no genesis suffix, unlike ROM_/Export_.
+    expect(files.has(`${SCRIPTS}/Scan_Products_Kira.dsa`)).toBe(true)
+    for (const name of ['Scan_Products_Kira.png', 'Scan_Products_Kira.tip.png']) {
+      expect([...(png(name) ?? [])].slice(0, 8), name).toEqual(PNG_SIGNATURE)
+    }
+  })
+
+  it('retires the scan script’s artwork when the product scan is disarmed', async () => {
+    await setup()
+    const c = seedCharacter({ exportPath: 'D:/exports' })
+    await armProductScan()
+    await generateCharacterFiles({ data: { projectId: LIB, id: c.id } })
+    expect(png('Scan_Products_Kira.png')).toBeDefined()
+
+    // Clearing the manifests folder retires the script — and its tiles have to
+    // go with it, or the Content Library keeps a tile pointing at nothing.
+    await storage.saveSettings({ ...(await storage.getSettings()), dimManifestsFolder: '' })
+    await generateCharacterFiles({ data: { projectId: LIB, id: c.id } })
+
+    expect(files.has(`${SCRIPTS}/Scan_Products_Kira.dsa`)).toBe(false)
+    expect(png('Scan_Products_Kira.png')).toBeUndefined()
+    expect(png('Scan_Products_Kira.tip.png')).toBeUndefined()
+    // The ROM script's own artwork survived that same sweep.
+    expect(png('ROM_Kira_G9.png')).toBeDefined()
   })
 })

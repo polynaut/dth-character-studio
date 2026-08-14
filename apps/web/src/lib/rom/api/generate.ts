@@ -541,6 +541,12 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
         `ROM_${dazBase}.dsa`,
         `Export_${dazBase}.dsa`,
         `Export_Hair_${dazBase}.dsa`,
+        // Slug only, no genesis suffix — the scan script is named for the
+        // character alone. It belongs HERE rather than in the plain candidate
+        // list below precisely because it carries artwork: turning Daz Products
+        // off has to retire its tiles with it, or a script that no longer exists
+        // keeps a Content Library tile pointing at nothing.
+        `Scan_Products_${characterSlug(character)}.dsa`,
       ]
       const writtenDaz = [...dazFiles.map((file) => file.fileName), ...writtenIcons]
       await storage.removeFilesFromFolder(
@@ -558,7 +564,6 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
             // always swept from a character folder that still has the old script.
             `Export_Groom_${dazBase}.dsa`,
             `Open_Scene_${dazBase}.dsa`,
-            `Scan_Products_${characterSlug(character)}.dsa`,
             ...overrideScriptNames(character.name),
             ...iconBearing.flatMap((name) => storage.scriptIconNames(name)),
           ],

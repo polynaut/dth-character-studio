@@ -749,15 +749,15 @@ describe('generateAll', () => {
       ])
     })
 
-    it('leaves the product-scan script untagged — it has no artwork of its own', () => {
+    it('tags the product-scan script `scan-products` (runtime v76)', () => {
       const files = generateAll(makeCharacter(), {}, FRAMES, undefined, undefined, {
         dimManifestPath: 'E:/DIM/ManifestFiles',
         outputDir: 'C:/data/product-scans/proj/char',
         dazLibraryFolder: 'D:/DAZ 3D/My DAZ 3D Library',
       })
       const scan = files.find((f) => f.fileName.startsWith('Scan_Products_'))
-      expect(scan?.icon).toBeUndefined()
-      // …and the CSV, which isn't a Daz script at all.
+      expect(scan?.icon).toBe('scan-products')
+      // …but NOT the CSV, which isn't a Daz script at all.
       expect(files.find((f) => f.target === 'houdini')?.icon).toBeUndefined()
     })
   })
