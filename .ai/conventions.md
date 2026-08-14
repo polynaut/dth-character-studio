@@ -324,8 +324,11 @@ The persisted `Character` shape is versioned (`CHARACTER_SCHEMA_VERSION` in
    downgraded and a save then destroyed the newer data). Hosts catch it and say
    "update the app" — the web scan surfaces it via the character-scan problems
    channel and never re-saves the file.
-1. Always: edit `characterSchema` → bump the constant + add a History line → add a
-   `migrate.test.ts` case.
+1. Always: edit `characterSchema` → bump the constant + add its entry to
+   [schema-history.md](schema-history.md) → add a `migrate.test.ts` case. The
+   per-version log lives in that doc, not in `types.ts` — it is a lookup table
+   ("what shape is `schemaVersion: 14`, and why no step?"), which is why it is
+   kept rather than left to `git log`.
 2. Add a `characterMigrations[N]` **step** only for a rename/restructure or a
    value **computed** from the character's own data. Additive fields with a zod
    default and removed fields need **no step** (zod fills/strips).
@@ -338,7 +341,7 @@ The persisted `Character` shape is versioned (`CHARACTER_SCHEMA_VERSION` in
    morph and deliberately added no step), and a data-loss bug when you don't
    (v20 flipped `sceneOverride.enabled` and added a step to preserve the old
    meaning of an omitted key). Decide which one you are doing and say so in the
-   History line. When the new default should also hold for freshly minted
+   history entry. When the new default should also hold for freshly minted
    objects, prefer `.default()` over `.optional()`: it makes the field REQUIRED
    on the parsed type, so `tsc` names every creation site instead of leaving
    them to be remembered. Pair it with ONE mint helper (`newMorph` in
