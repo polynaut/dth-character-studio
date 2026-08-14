@@ -1,4 +1,8 @@
 ---
+# bump: patch is deliberate — `awaitBatchPickup()` is not new behaviour. It is
+# the claim wait that `executeCharacterJobs` already performed, exported so the
+# run watch can own it instead of the panel blocking on it. Nothing became
+# possible that wasn't before; a ten-second freeze stopped happening.
 '@dth/web': patch
 ---
 
