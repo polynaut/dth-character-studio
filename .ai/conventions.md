@@ -111,9 +111,18 @@ hooks in `.claude/settings.json` move these the same way:
   means asking whether it ties to a recognisable action, and giving it a trigger
   if it does — a fact with no trigger is only found by someone who already
   guessed it was there. And after any doc rewrite, run
-  `node .claude/hooks/inject-gotchas.mjs --audit`, which fails on an anchor whose
-  text has moved; `node .claude/hooks/inject-gotchas.test.mjs` covers the
-  matching itself (both run on a fresh clone with no install).
+  `node .claude/hooks/inject-gotchas.mjs --audit`;
+  `node .claude/hooks/inject-gotchas.test.mjs` covers the matching itself (both
+  run on a fresh clone with no install).
+  **The audit checks three ways an anchor dies, because only the first is
+  visible.** STALE (the text moved, nothing extracts) is the obvious one.
+  AMBIGUOUS is the phrase now matching twice, where `indexOf` hands back the
+  wrong bullet confidently. TRUNCATED is the one that shipped: an anchor in
+  prose under a `##` extracted the whole 8 KB section, `MAX_NOTE` cut it, and
+  three triggers injected 1400 characters of real doc text that did not contain
+  the fact they fired for — green to a check that stops at "the anchor
+  resolves". The general lesson for any extract-at-runtime mechanism: assert on
+  what the reader RECEIVES, never on whether something was produced.
   **The table is deliberately not exhaustive, and says so in what it injects.**
   `gotchas.md` holds ~90 measured facts and only the action-tied ones have
   triggers, so silence from this hook means "no trigger matched", never "nothing

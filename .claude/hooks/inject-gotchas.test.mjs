@@ -75,10 +75,39 @@ check(
    say that silence proves nothing — a table that reads as exhaustive teaches
    the next session that no warning means nothing to know. */
 const sample = bash('cargo update', 'x1')
+
+/* Firing is not delivering. Every check above asks only whether SOMETHING was
+   injected, and that is how three triggers shipped injecting 1400 characters of
+   real doc text that did not contain the fact they fired for: their anchors sat
+   in prose under a `##`, the extraction ran the whole 8 KB section, and the
+   truncation cut the fact off. So assert on the CONTENT, not the pulse.
+   `--audit` now fails on the same thing across the whole table. */
+const contains = (name, got, want) => {
+  const ok = (got ?? '').includes(want)
+  ok ? pass++ : fail++
+  console.log(`${ok ? 'ok  ' : 'FAIL'}  ${name.padEnd(46)} ${ok ? '' : `missing: ${want}`}`)
+}
+contains('extracts real doc text', sample, 'alloc-no-stdlib')
+contains('carries the coverage caveat', sample, 'SILENCE IS NOT EVIDENCE')
+contains('points at the source doc', sample, '.ai/gotchas.md')
+
+/* Heading-anchored facts: the ones the section walk can overshoot. */
+contains('heading-anchored fact survives the cut', edit('D:\\dth\\apps\\desktop\\src\\windows.rs', 'x2'), 'native title')
+contains('…and the one 5 KB into its section', edit('D:\\dth\\apps\\desktop\\src\\daz.rs', 'x3'), 'launch_daz_studio')
+contains('…and the frame-math invariant', edit('D:\\dth\\packages\\rom\\src\\frames.ts', 'x4'), 'Frame numbers are never stored')
+
+/* Both literal `note` copies became anchors — assert the text is the doc's. */
+contains('smoke note comes from testing.md', bash('pnpm smoke', 'x5'), 'reuseExistingServer')
+contains('…and points there', bash('pnpm smoke', 'x6'), '.ai/testing.md')
+contains('schema ritual comes from CLAUDE.md', edit('packages/rom/src/types.ts', 'x7'), 'CHARACTER_SCHEMA_VERSION')
+
+/* `main` as a whole ref, not as a substring of a branch name. */
+check('push to a branch merely NAMED …main…', bash('git push origin HEAD:fix/main-menu', 'x8'), 'fires') // token-push
+const mainish = bash('git push origin HEAD:fix/main-menu', 'x9')
+const realMain = bash('git push origin main', 'xa')
 for (const [n, v] of [
-  ['extracts real doc text', sample?.includes('alloc-no-stdlib') ?? false],
-  ['carries the coverage caveat', sample?.includes('SILENCE IS NOT EVIDENCE') ?? false],
-  ['points at the source doc', sample?.includes('.ai/gotchas.md') ?? false],
+  ['…does not fire the PR-only rule', !(mainish ?? '').includes('PR-only')],
+  ['…while a real push to main does', (realMain ?? '').includes('PR-only')],
 ]) {
   v ? pass++ : fail++
   console.log(`${v ? 'ok  ' : 'FAIL'}  ${n}`)

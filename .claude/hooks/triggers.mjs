@@ -20,10 +20,10 @@
  * facts), `.ai/domain.md`, `.ai/architecture.md`, `.ai/release.md`,
  * `.ai/docs-site.md`.
  * Swept partially: `.ai/conventions.md` (Repo mechanics), `.ai/testing.md`
- * (the SMOKE_PORT collision and the mock's `stat` contract only).
- * NOT swept: `CLAUDE.md` — deliberately, for now: it is the short version of
- * the five above, so triggering off it would mostly duplicate them. The gap
- * worth closing is anything CLAUDE.md states that no `.ai/` page does.
+ * (the SMOKE_PORT collision and the mock's `stat` contract only), `CLAUDE.md`
+ * (the character-schema ritual only — it is the short version of the five
+ * above, so triggering off the rest of it would mostly duplicate them; what is
+ * worth taking is anything it states that no `.ai/` page does).
  *
  * So a silent tool call means "no trigger matched", NEVER "nothing is known
  * about this". The injected text says so too, on purpose: a half-populated
@@ -46,6 +46,7 @@
 
 const GOTCHAS = '.ai/gotchas.md'
 const CONVENTIONS = '.ai/conventions.md'
+const TESTING = '.ai/testing.md'
 const DOMAIN = '.ai/domain.md'
 const ARCH = '.ai/architecture.md'
 const RELEASE = '.ai/release.md'
@@ -70,7 +71,10 @@ export const TRIGGERS = [
   },
   {
     id: 'main-pr-only',
-    command: /(?:^|[;&|(\n])\s*git(?:\s+\S+)*\s+push\b[^;&|\n]*\bmain\b/,
+    /* `main` as a whole REF, not as a substring of one: `HEAD:fix/main-menu`
+       must not match. A false positive is not free here — it burns the
+       once-per-session slot, so the real `git push … main` later goes silent. */
+    command: /(?:^|[;&|(\n])\s*git(?:\s+\S+)*\s+push\b[^;&|\n]*[\s:]main(?:\s|$)/,
     doc: CONVENTIONS,
     anchor: '**`main` is PR-only**',
   },
@@ -98,11 +102,8 @@ export const TRIGGERS = [
     id: 'smoke-port',
     command: /\bsmoke\b|playwright\s+test/,
     unless: /SMOKE_PORT/,
-    note:
-      'A local smoke run binds 4331 by default and the SECOND checkout\n' +
-      '(`dth-character-studio_two`) collides with it — a green run can silently have tested THAT\n' +
-      'tree. Pass `SMOKE_PORT=<free port>`; treat a surprising pass OR failure as this until\n' +
-      'ruled out. See the PORT constant in apps/web/playwright.config.ts.',
+    doc: TESTING,
+    anchor: '**A local smoke result can be a LIE if another checkout holds the port.**',
   },
   {
     id: 'smoke-mock-mtime',
@@ -132,17 +133,13 @@ export const TRIGGERS = [
   /* ---- the pure core ------------------------------------------------------ */
   {
     id: 'character-schema',
+    // The one fact anchored in CLAUDE.md: the ritual lives there and in
+    // migrate.ts's own header, nowhere under `.ai/`. Extracting it beats a
+    // `note` copy — that copy existed, and was already a paraphrase drifting
+    // from the bullet it came from.
     path: /packages\/rom\/src\/(types|migrate)\.ts$/,
-    // Lives in migrate.ts's own header + CLAUDE.md, not in gotchas.md — so this
-    // one carries its text, and points at the file that holds the full tree.
-    note:
-      'The persisted `Character` shape is VERSIONED. Changing it = edit `characterSchema`, bump\n' +
-      '`CHARACTER_SCHEMA_VERSION`, add a History line, add a `migrate.test.ts` case. A\n' +
-      '`characterMigrations[N]` STEP is only for a rename/restructure or a COMPUTED value — an\n' +
-      'additive field with a zod default and a removed field need none (zod fills/strips them).\n' +
-      'Steps are pre-zod, idempotent, and guard on `=== undefined`. A value needing host context\n' +
-      '(settings, fs, active DTH release) resolves in web `parseCharacter`, never in the pure core.\n' +
-      'Full decision tree + copy-paste templates: the top of packages/rom/src/migrate.ts.',
+    doc: 'CLAUDE.md',
+    anchor: '**Character-schema changes:**',
   },
   {
     id: 'byte-identical-output',

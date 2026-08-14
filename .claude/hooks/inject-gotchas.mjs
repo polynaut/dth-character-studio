@@ -81,15 +81,38 @@ function bullet(text, anchor) {
   let start = startLine
   while (start > 0 && !/^(- |#{1,6} )/.test(all[start])) start--
   const fromHeading = /^#{1,6} /.test(all[start])
-  if (fromHeading) start++ // the heading names it, the prose IS it
-  // A bullet ends at the next bullet; a SECTION runs to the next heading, so it
-  // carries its own bullets with it — the frame-math invariant is a paragraph
-  // whose actionable half (`presetEndFrame` returning -1, never clamp it) lives
-  // in the list underneath. `MAX_NOTE` is what bounds the result either way.
+  if (fromHeading) {
+    // NOT from the heading down — from the anchor's own PARAGRAPH. A section
+    // under a `##` can run to 8 KB, and `MAX_NOTE` then cuts the anchored fact
+    // clean out of the note built to deliver it: measured on this table, three
+    // `architecture.md` triggers injected 1400 characters of module list that
+    // did not contain the fact they fired for. Neither `--audit` nor the tests
+    // could see it — both stopped at "the anchor resolves". They check it now.
+    // (No top-level bullet can sit between the heading and the anchor; the walk
+    // above would have stopped on it. So blank line or heading is the bound.)
+    start = startLine
+    while (start > 0 && all[start - 1].trim() !== '' && !/^#{1,6} /.test(all[start - 1])) start--
+  }
+  // A bullet ends at the next bullet; a heading-anchored fact runs to the next
+  // heading, so it carries the list underneath it — the frame-math invariant is
+  // a paragraph whose actionable half (`presetEndFrame` returning -1, never
+  // clamp it) lives in that list. The anchor is now always at the FRONT of what
+  // `MAX_NOTE` bounds, so truncation costs the tail, never the fact.
   const stop = fromHeading ? /^#{1,6} / : /^(- |#{1,6} )/
   let end = start + 1
   while (end < all.length && !stop.test(all[end])) end++
   return all.slice(start, end).join('\n').trim()
+}
+
+/** Shared by the audit and the injection, so the audit judges the REAL payload. */
+function truncate(text) {
+  return text.length > MAX_NOTE ? `${text.slice(0, MAX_NOTE)}\n  […]` : text
+}
+
+function occurrences(text, needle) {
+  let n = 0
+  for (let i = text.indexOf(needle); i !== -1; i = text.indexOf(needle, i + 1)) n++
+  return n
 }
 
 function stdinJson() {
@@ -100,18 +123,42 @@ function stdinJson() {
   }
 }
 
-/* ---- audit mode: every anchor still resolves? ------------------------------ */
+/* ---- audit mode ------------------------------------------------------------
+ * Three ways a trigger dies quietly, all of them "green" to a check that only
+ * asks whether the anchor resolves:
+ *   STALE      — the text moved, nothing is extracted (the obvious one);
+ *   AMBIGUOUS  — the phrase now matches twice, so `indexOf` may hand back the
+ *                WRONG bullet, confidently;
+ *   TRUNCATED  — the extraction is longer than `MAX_NOTE` and the cut lands
+ *                BEFORE the anchor, so the note delivered is real doc text that
+ *                does not contain the fact it fired for.
+ * The third is not hypothetical: it was true of three triggers in this table.
+ */
 if (process.argv.includes('--audit')) {
   let bad = 0
+  const fail = (kind, t, detail) => {
+    bad++
+    console.error(`${kind.padEnd(10)} ${t.id}: ${detail}`)
+  }
   for (const t of TRIGGERS) {
     if (!t.anchor) continue
-    const found = bullet(doc(t.doc), t.anchor)
+    const text = doc(t.doc)
+    const found = bullet(text, t.anchor)
     if (!found) {
-      bad++
-      console.error(`STALE  ${t.id}: anchor not found in ${t.doc}\n       ${t.anchor}`)
+      fail('STALE', t, `anchor not found in ${t.doc}\n           ${t.anchor}`)
+      continue
     }
+    const hits = occurrences(text, t.anchor)
+    if (hits > 1) fail('AMBIGUOUS', t, `anchor matches ${hits}× in ${t.doc} — extraction takes the first`)
+    if (!truncate(found).includes(t.anchor))
+      fail(
+        'TRUNCATED',
+        t,
+        `${found.length} chars extracted from ${t.doc}, anchor at ${found.indexOf(t.anchor)} — ` +
+          `past the ${MAX_NOTE}-char cut, so the note would not contain the fact`,
+      )
   }
-  console.log(`${TRIGGERS.length} triggers, ${bad} stale`)
+  console.log(`${TRIGGERS.length} triggers, ${bad} broken`)
   process.exit(bad ? 1 : 0)
 }
 
@@ -166,7 +213,7 @@ const notes = fresh
   .map((t) => {
     const text = t.note ?? bullet(doc(t.doc), t.anchor)
     if (!text) return '' // anchor went stale — say nothing rather than lie
-    const cut = text.length > MAX_NOTE ? `${text.slice(0, MAX_NOTE)}\n  […]` : text
+    const cut = truncate(text)
     return t.doc ? `${cut}\n  ↳ ${t.doc}` : cut
   })
   .filter(Boolean)
