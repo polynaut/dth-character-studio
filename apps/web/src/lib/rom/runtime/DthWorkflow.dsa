@@ -28,7 +28,7 @@ include (dir_self.filePath ("DthScanFrames.dsa")); // keyframe scanning (debug/s
 function dthStopHere(sWhere){
 	if(!dthStopRequested()) return false;
 	print("DTH Character Studio: ROM build stopped (" + sWhere + ") - interrupted from the studio.");
-	acceptUndo("DTH Workflow (interrupted)");
+	acceptUndo("Generating ROM (interrupted)");
 	return true;
 }
 
@@ -255,7 +255,7 @@ function ApplyDTHWorkflow(options){
 	}
 	if( oNode ) Scene.setPrimarySelection(oNode);
 
-	acceptUndo("DTH Workflow");
+	acceptUndo("Generating ROM");
 }
 
 
