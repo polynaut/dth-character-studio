@@ -24,7 +24,12 @@ const changed = sh(`git diff --name-only ${base}...HEAD`).split('\n').filter(Boo
 // Shipped code — what a user receives. Deliberately NOT tests, docs, workflows
 // or the .ai/ notes: those genuinely have nothing to release.
 const SHIP = /^(apps\/(web|desktop)\/src\/|packages\/[^/]+\/src\/|apps\/desktop\/(Cargo\.toml|Cargo\.lock)$)/
-const isTest = (f) => /\.(test|spec)\.[cm]?[jt]sx?$|\/__tests__\//.test(f)
+// Snapshot/golden directories count as test material too: they sit next to the
+// spec that records them, under `src/`, and are checked in only so a generated
+// artifact changing shows up as a reviewable diff. Nothing in them reaches a
+// user, so they must not force a version bump.
+const isTest = (f) =>
+  /\.(test|spec)\.[cm]?[jt]sx?$|\/(__tests__|__snapshots__|__golden__)\//.test(f)
 const shipped = changed.filter((f) => SHIP.test(f) && !isTest(f))
 
 if (shipped.length === 0) {
