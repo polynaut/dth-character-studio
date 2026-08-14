@@ -2,7 +2,7 @@ import { cn, Input, KeyedListEditor, Label, NumberField, OverrideMark, overrideL
 import { MorphNodeInfo } from '#/components/character/morph-node-info.tsx'
 import { MorphIndexProvider } from '#/components/rom/morph-index-provider.tsx'
 import { MorphNameCell } from '#/components/rom/morph-name-cell.tsx'
-import { preserveMorphsKey, preserveNodesKey } from '#/lib/preserve-diff.ts'
+import { morphRowKey, preserveMorphsKey, preserveNodesKey } from '#/lib/preserve-diff.ts'
 
 import type { Character, SceneOverride } from '@dth/rom'
 import type { MorphIndexEntry } from '#/lib/rom/api.ts'
@@ -71,13 +71,12 @@ export function PreserveFields({
   // Rows are matched to the base by their natural key (morph name + item scope /
   // node label); a row differs from the base when it's new/renamed/rescoped or
   // its hold value changed.
-  const rowKey = (m: { name: string; node?: string }) => JSON.stringify([m.name, m.node ?? ''])
-  const baseMorphValue = new Map(character.preserveMorphs.map((m) => [rowKey(m), m.keepValue]))
+  const baseMorphValue = new Map(character.preserveMorphs.map((m) => [morphRowKey(m), m.keepValue]))
   const baseNodeLabels = new Set(character.preserveNodeTransforms.map((n) => n.nodeLabel))
   const morphOverridden = (i: number) => {
     if (!ov) return false
     const m = morphs[i]
-    return !baseMorphValue.has(rowKey(m)) || baseMorphValue.get(rowKey(m)) !== m.keepValue
+    return !baseMorphValue.has(morphRowKey(m)) || baseMorphValue.get(morphRowKey(m)) !== m.keepValue
   }
   const nodeOverridden = (i: number) => !!ov && !baseNodeLabels.has(nodes[i].nodeLabel)
   // The override is per LIST, not per row: one control in the label (like the other

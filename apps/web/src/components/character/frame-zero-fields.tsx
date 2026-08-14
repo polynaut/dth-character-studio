@@ -2,7 +2,7 @@ import { cn, KeyedListEditor, Label, NumberField, OverrideMark, overrideLabelCla
 import { MorphNodeInfo } from '#/components/character/morph-node-info.tsx'
 import { MorphIndexProvider } from '#/components/rom/morph-index-provider.tsx'
 import { MorphNameCell } from '#/components/rom/morph-name-cell.tsx'
-import { frameZeroMorphsKey } from '#/lib/preserve-diff.ts'
+import { frameZeroMorphsKey, morphRowKey } from '#/lib/preserve-diff.ts'
 
 import type { Character, SceneOverride } from '@dth/rom'
 import type { MorphIndexEntry } from '#/lib/rom/api.ts'
@@ -63,12 +63,11 @@ export function FrameZeroFields({
 
   // Rows are matched to the base by their natural key (morph name + item scope);
   // a row differs from the base when it's new/renamed/rescoped or its value changed.
-  const rowKey = (m: { name: string; node?: string }) => JSON.stringify([m.name, m.node ?? ''])
-  const baseValue = new Map(character.frameZeroMorphs.map((m) => [rowKey(m), m.value]))
+  const baseValue = new Map(character.frameZeroMorphs.map((m) => [morphRowKey(m), m.value]))
   const morphOverridden = (i: number) => {
     if (!ov) return false
     const m = morphs[i]
-    return !baseValue.has(rowKey(m)) || baseValue.get(rowKey(m)) !== m.value
+    return !baseValue.has(morphRowKey(m)) || baseValue.get(morphRowKey(m)) !== m.value
   }
   // Whole-list divergence as a MULTISET (shared key with writeFrameZero), so the
   // reset handle shows exactly when the override is armed — including a deleted

@@ -21,6 +21,13 @@ export function preserveMorphsKey(
   return JSON.stringify(list.map((m) => JSON.stringify([m.name, m.keepValue, m.node ?? ''])).sort())
 }
 
+/** Natural key of ONE morph row (name + item scope) — how the preserve/frame-0
+ *  editors match a row to its base counterpart for the per-row override mark.
+ *  `node` normalized to '' like the list keys above, and for the same reason. */
+export function morphRowKey(m: { name: string; node?: string }): string {
+  return JSON.stringify([m.name, m.node ?? ''])
+}
+
 /** Canonical multiset key for a preserve-node-transform list (node label). */
 export function preserveNodesKey(list: ReadonlyArray<{ nodeLabel: string }>): string {
   return JSON.stringify(list.map((n) => n.nodeLabel).sort())
