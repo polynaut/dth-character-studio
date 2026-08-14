@@ -25,34 +25,39 @@ import { readFileSync, writeFileSync } from 'node:fs'
 
 const BASELINE = new URL('../.lint-baseline.json', import.meta.url)
 
-/** `warning eslint(no-await-in-loop): …` → `eslint/no-await-in-loop`. */
+/** oxlint `--format=json` diagnostic codes → `{ 'eslint/no-await-in-loop': n }`. */
 function countByRule() {
-  // BOTH streams, unconditionally, whatever the exit code.
-  //
-  // This used to take `execSync`'s RETURN VALUE — which is stdout only — and
-  // merge stderr in only from the `catch`. oxlint exits 0 when it reports
-  // nothing but warnings, so the catch never ran, and on any platform where
-  // oxlint writes its diagnostics to stderr the capture was EMPTY. Empty parse
-  // → every rule counts 0 → 0 is under every baseline → the ratchet passed.
-  //
   // Measured 2026-08-13, from one CI job's own log:
   //     Found 223 warnings and 0 errors.        <- the `pnpm lint` step
   //     oxc/no-map-spread: 0 (baseline 9)       <- this script, same job
   //     eslint/no-await-in-loop: 0 (baseline 155)
-  // The gate had never been capable of failing since it was added in #694, which
-  // is why the baseline sat untouched from 2026-08-10 while warnings accumulated
-  // and every PR stayed green. It worked locally (Windows: stdout), which is the
-  // worst version of this bug — the one place it reported honestly was the one
-  // place nobody was gating on it.
-  // `--format=json`, NOT the human output. The human format is not stable
-  // across environments and this script parsed it for months: the same 223
-  // warnings rendered as 60,354 bytes locally (Windows) and 47,019 bytes on
-  // ubuntu CI — measured 2026-08-13 from the runner's own
-  // `stdout=47019b stderr=0b` against a local run. Whatever the rendering
-  // difference is (it is NOT the stream, NOT ANSI colour, and NOT `CI` /
-  // `GITHUB_ACTIONS` — all three were tested and ruled out), a text format
-  // meant for humans is simply the wrong contract for a gate. JSON is the
-  // machine one: `{"diagnostics":[{"code":"oxc(no-map-spread)","severity":…}]}`.
+  // 223 warnings found, 0 counted. The gate had never been capable of failing
+  // since it was added in #694, which is why the baseline sat untouched from
+  // 2026-08-10 while warnings accumulated and every PR stayed green. It worked
+  // locally (Windows), which is the worst version of this bug — the one place
+  // it reported honestly was the one place nobody was gating on it.
+  //
+  // WHAT IS AND IS NOT KNOWN about the cause, because the tempting explanation
+  // is wrong: it was NOT that the capture came back empty. CI reported
+  // `stdout=47019b stderr=0b` — the output was there, on stdout, and the
+  // human-format regex simply did not match how CI rendered it. The stream
+  // theory, ANSI colour and `CI`/`GITHUB_ACTIONS` detection were each tested
+  // and RULED OUT; the actual rendering difference (60,354 bytes locally vs
+  // 47,019 on CI for the same 223 warnings) remains unidentified. It stops
+  // mattering rather than being solved, which is the point below.
+  //
+  // Both streams are captured now regardless of exit code — not as the fix,
+  // just so a future move of the diagnostics between streams cannot resurrect
+  // this. `execSync`'s return value is stdout only, and oxlint exits 0 on
+  // warnings alone, so the old code's `catch` (its only path to stderr) never
+  // ran.
+  //
+  // `--format=json`, NOT the human output — the actual fix. That format is not
+  // stable across environments and this script parsed it for months: the same
+  // 223 warnings rendered as 60,354 bytes locally against 47,019 on ubuntu CI.
+  // A text format meant for humans is simply the wrong contract for a gate; the
+  // machine one carries the rule in a field:
+  // `{"diagnostics":[{"code":"oxc(no-map-spread)","severity":"warning",…}]}`.
   //
   // One command STRING, not command+args: `shell: true` with an args array is
   // Node DEP0190 and prints a deprecation into every CI log. `shell` itself is
@@ -121,10 +126,21 @@ try {
 
 const over = []
 const under = []
+// A baselined rule reporting EXACTLY zero. Same argument as the zero-parse
+// guard above, one level down: this repo's baselined rules are documented
+// deliberate patterns with dozens of instances each, so "all 183 gone" is far
+// more likely to be the rule vanishing from the OUTPUT than from the code —
+// renamed upstream, dropped from a category, or muted by an `allow` entry in
+// `.oxlintrc.json`. That last one is not hypothetical: adding `__sawHome` to
+// the allow list took `no-underscore-dangle` from 3 to 0 in this very commit.
+// Left as an `under`, it prints "tighten it" and EXITS 0 — the measurement
+// breaking, reported as an improvement.
+const vanished = []
 for (const rule of new Set([...Object.keys(baseline), ...Object.keys(actual)])) {
   const allowed = baseline[rule] ?? 0
   const now = actual[rule] ?? 0
   if (now > allowed) over.push(`  ${rule}: ${now} (baseline ${allowed}, +${now - allowed})`)
+  else if (now === 0 && allowed > 0) vanished.push(`  ${rule}: 0 (baseline ${allowed}) — every instance at once`)
   else if (now < allowed) under.push(`  ${rule}: ${now} (baseline ${allowed})`)
 }
 
@@ -132,6 +148,18 @@ if (under.length > 0) {
   console.log('Fewer warnings than the baseline — tighten it:')
   console.log(under.join('\n'))
   console.log('  node scripts/lint-budget.mjs --update\n')
+}
+
+if (vanished.length > 0) {
+  console.error('A baselined rule reports ZERO warnings:\n')
+  console.error(vanished.join('\n'))
+  console.error(
+    '\nThat is usually the rule leaving the OUTPUT, not the instances leaving the' +
+      '\ncode — renamed upstream, dropped from a category, or muted by an `allow`' +
+      '\nentry in .oxlintrc.json. Check that first. If the cleanup is real, say so' +
+      '\nin the commit and run:' +
+      '\n  node scripts/lint-budget.mjs --update',
+  )
 }
 
 if (over.length > 0) {
@@ -142,7 +170,8 @@ if (over.length > 0) {
       '\n  node scripts/lint-budget.mjs --update' +
       '\nOtherwise fix it — that is the point of the ratchet.',
   )
-  process.exit(1)
 }
+
+if (over.length > 0 || vanished.length > 0) process.exit(1)
 
 console.log('lint warnings within baseline')

@@ -31,8 +31,23 @@ was verified clean after every one.
 | `changeset` bump-type | new route file + a patch-only changeset | ✅ exit 1, naming the signal |
 | `changeset` bump-type escape hatch | the same, plus `# bump:` in the frontmatter | ✅ exit 0, *"patch is marked deliberate — accepted"* |
 | `lint:budget` | — | ❌ **was inert**; fixed, see `scripts/lint-budget.mjs` |
+| `lint:budget` zero-parse | stubbed the lint command to emit nothing | ✅ exit 1, naming the byte counts |
+| `lint:budget` vanished rule | set a baselined rule to `"off"` in `.oxlintrc.json` | ✅ exit 1 (it printed *"tighten it"* and exited **0** before) |
 
-Ten gates verified to fail when they should. One was rotten.
+Ten gates verified to fail when they should. One was rotten — and once fixed it
+was put through the same treatment as the rest.
+
+**The rotten one had a second layer, worth generalising.** Fixing the parse
+stopped the ratchet counting zero for EVERY rule. It did not stop it counting
+zero for ONE: a baselined rule dropping from 183 to 0 took the "fewer warnings
+than the baseline — tighten it" path and exited 0, so a rule renamed upstream,
+dropped from a category, or muted by an `allow` entry in `.oxlintrc.json` read
+as an improvement. That is the same failure the top-level guard was added for,
+one level down, and it was reachable by an ordinary edit — this repo's own
+`__sawHome` allow entry took `no-underscore-dangle` from 3 to 0 in the commit
+that fixed the parse. **When you guard a measurement against reading zero, guard
+every level it can read zero at**: the total, and each thing the total is made
+of.
 
 The bump-type probe is worth keeping in mind if you ever touch that script: a
 comment-only change answers *"no new-capability signals"* and exits 0, which
