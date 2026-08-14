@@ -748,33 +748,54 @@ a {
 }
 
 /* The linked-asset card's BUSY indicator (LinkedAssetCard `busy`): the brand
-   accent bar itself lights up — this class is the brighter segment that sweeps
-   top-to-bottom through the stripe while e.g. hython re-reads a Houdini
-   project. A white sheen rather than a hardcoded brand tone, so the same class
-   brightens whatever color the host's `barClass` painted (Houdini orange, Daz
-   green). The segment is half the bar tall (`h-1/2`, set by the card) and the
-   keyframes move it BY ITS OWN height: -100% (fully above the bar's clip) to
-   200% (fully below), so each pass enters and leaves cleanly. Reduced-motion
-   holds a uniformly lit bar instead of animating, like `.refresh-pulse`. */
-@keyframes dth-busy-bar-sweep {
+   accent bar itself animates while e.g. hython re-reads a Houdini project —
+   the barber-pole from the classic CSS-Tricks progress bar
+   (https://css-tricks.com/css3-progress-bars/): a -45° repeating stripe
+   gradient over the bar, moved ONE TILE per cycle so it loops seamlessly.
+   Tile scaled 50px → 10px because the bar is 6px wide; at 50px a single
+   stripe would be wider than the whole bar and read as a flat wash.
+
+   Chosen over a single travelling glint, which had two problems: most of
+   every cycle the bar looked idle (the glint was off-screen), and at 6px the
+   moving edge was too subtle to register as motion at all. Stripes fill the
+   whole bar, so SOMETHING is always moving.
+
+   A white overlay rather than a hardcoded brand tone, so the same class works
+   on whatever color `barClass` painted (Houdini orange, Daz green) — kept at
+   the article's low alpha, since a bright white streak overpowered the orange.
+
+   Reduced-motion SLOWS the stripes, it does not stop them. A busy indicator is
+   the essential-motion case: stopping it leaves a static striped bar that reads
+   as decoration, and the only signal that work is happening is gone — measured
+   here, not theorised (`animation: none` shipped for one commit and the bar sat
+   frozen on a machine whose Windows "Animation effects" toggle is off; see
+   `.ai/gotchas-web.md`). A third of the speed is well under the vestibular
+   threshold for a 6px stripe while still obviously alive. */
+@keyframes dth-busy-bar-stripes {
   from {
-    transform: translateY(-100%);
+    background-position: 0 0;
   }
   to {
-    transform: translateY(200%);
+    background-position: 10px 10px;
   }
 }
 .busy-bar-sweep {
-  /* Peak WELL below full white: the glint should read as a brighter shade of
-     the bar's own color, not as a white streak (0.85 did — too bright). */
-  background: linear-gradient(to bottom, transparent, rgb(255 255 255 / 0.45), transparent);
-  animation: dth-busy-bar-sweep 1.4s linear infinite;
+  background-image: linear-gradient(
+    -45deg,
+    rgb(255 255 255 / 0.28) 25%,
+    transparent 25%,
+    transparent 50%,
+    rgb(255 255 255 / 0.28) 50%,
+    rgb(255 255 255 / 0.28) 75%,
+    transparent 75%,
+    transparent
+  );
+  background-size: 10px 10px;
+  animation: dth-busy-bar-stripes 0.7s linear infinite;
 }
 @media (prefers-reduced-motion: reduce) {
   .busy-bar-sweep {
-    animation: none;
-    height: 100%;
-    background: rgb(255 255 255 / 0.2);
+    animation-duration: 2.1s;
   }
 }
 

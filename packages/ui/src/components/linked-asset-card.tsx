@@ -68,9 +68,9 @@ export function LinkedAssetCard({
   /** Extra content pinned to the card's bottom-left (e.g. a "primary" tag). */
   extra?: ReactNode
   /** Something slow is happening TO this asset (the Houdini card's background
-   *  scan) — the accent bar becomes the indicator: a brighter segment sweeps
-   *  vertically through the brand stripe (`.busy-bar-sweep`, host CSS — a
-   *  white sheen, so it brightens whatever color `barClass` painted).
+   *  scan) — the accent bar becomes the indicator: moving diagonal stripes
+   *  travel down the brand stripe (`.busy-bar-sweep`, host CSS — a white
+   *  overlay, so it works over whatever color `barClass` painted).
    *
    *  The bar on purpose: it is the one element the card shell already owns
    *  edge to edge, and lighting it up adds NO overlay to a card whose every
@@ -230,9 +230,9 @@ export function LinkedAssetCard({
       {/* Left accent bar — painted over the card's left edge (after the button so
           it sits on top), rounded to follow the card corners. While `busy` it IS
           the busy indicator: it turns `role="status"` (named by `busyLabel` — the
-          animation alone is invisible to a screen reader) and a brighter segment
-          sweeps through it (`.busy-bar-sweep`, host CSS; `overflow-hidden` clips
-          the segment to the stripe). Still click-transparent either way — the
+          animation alone is invisible to a screen reader) and moving diagonal
+          stripes run down it (`.busy-bar-sweep`, host CSS; `overflow-hidden`
+          keeps the pattern inside the stripe). Still click-transparent — the
           card underneath keeps working while the scan runs. */}
       {barClass && (
         <div
@@ -244,7 +244,7 @@ export function LinkedAssetCard({
             barClass,
           )}
         >
-          {busy && <span aria-hidden className="busy-bar-sweep absolute top-0 left-0 h-1/2 w-full" />}
+          {busy && <span aria-hidden className="busy-bar-sweep absolute inset-0" />}
         </div>
       )}
 
