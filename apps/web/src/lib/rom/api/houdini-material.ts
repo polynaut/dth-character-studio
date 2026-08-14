@@ -24,6 +24,8 @@ import {
 } from '../houdini-project-cache.ts'
 import type { HoudiniScanStore } from '../houdini-project-cache.ts'
 import { DTH_FPS } from '../houdini-defaults.ts'
+import { MATERIAL_GROUPINGS, buildMaterialPlan } from '../material-plan.ts'
+import type { MaterialPlanProject, ScannedProjectView } from '../material-plan.ts'
 import { markHoudiniScanning } from '../houdini-scan-progress.ts'
 import { validateHoudiniProject } from '../houdini-validate.ts'
 import { charsRoot, locateCharacter, resolveProject } from './core'
@@ -695,6 +697,106 @@ export async function fetchCachedHoudiniScans({
     return hits.filter((p): p is MaterialScanProject => p !== null)
   } catch {
     return []
+  }
+}
+
+const materialPlanInput = characterScopeInput.extend({
+  grouping: z.enum(MATERIAL_GROUPINGS).default('merged'),
+})
+
+/**
+ * What each of a character's Houdini projects would look like set up from its
+ * own export — and where the setup it HAS disagrees with that export.
+ *
+ * Reads only: the stored scan (no hython — the same cached-first source the
+ * drawer opens on) plus the `.dth` each project imports, which is a plain JSON
+ * file the studio's own pipeline wrote. Nothing is proposed to Houdini and
+ * nothing is written; the rules live in the pure `material-plan.ts` and this
+ * supplies them their two inputs.
+ *
+ * The `.dth` is taken from the scan's `imports` rather than derived from the
+ * character's scenes: that field is what the NETWORK actually imports, so a
+ * project wired to a scene by hand is judged against the file it really reads
+ * instead of the one the studio would have picked.
+ *
+ * Exports are read ONCE per path — several projects routinely import the same
+ * scene, and these files run to hundreds of KB.
+ */
+export async function fetchMaterialPlan({
+  data,
+}: {
+  data: unknown
+}): Promise<Array<MaterialPlanProject>> {
+  const { projectId, id, grouping } = materialPlanInput.parse(data)
+  if (!isTauri()) return []
+  const scans = await fetchCachedHoudiniScans({ data: { projectId, id } })
+  const views: Array<ScannedProjectView> = scans
+    .filter((project) => project.ok)
+    .map((project) => ({
+      hipPath: project.hipPath,
+      imports: project.imports,
+      nodes: project.nodes
+        .filter((node) => node.nodeType === 'material')
+        .map((node) => ({
+          nodePath: node.path,
+          label: node.networkBox || node.name,
+          slots: node.slots,
+          bakers: node.bakers,
+          bakerGroups: node.bakerGroups,
+        })),
+    }))
+
+  // The scan stores import paths NORMALIZED AND LOWERCASED — they exist to be
+  // compared, not opened (`_scene_dth_imports`). Reading one back relies on the
+  // filesystem to fold case, which NTFS does and nothing promises. So each
+  // import is matched against the paths the studio itself WROTE
+  // (`sceneDthPath`, the same key `op_prefill` matches a network on) and the
+  // studio's own spelling is what gets opened. An import the studio did not
+  // write — a network wired to something by hand — is still tried as stored,
+  // because that path is the truth of what the network reads.
+  const spellings = await studioDthSpellings({ projectId, id })
+  const dthByPath = new Map<string, unknown>()
+  await Promise.all(
+    [...new Set(views.flatMap((view) => view.imports))].map(async (stored) => {
+      const path = spellings.get(stored) ?? stored
+      try {
+        // `null` is "looked, not there" — distinct from the key being absent,
+        // which the pure side reports differently.
+        dthByPath.set(stored, (await exists(path)) ? JSON.parse(await readTextFile(path)) : null)
+      } catch {
+        // Unreadable or not JSON. Same answer as absent: there is no export to
+        // plan from, and the reason a user can act on is the same one.
+        dthByPath.set(stored, null)
+      }
+    }),
+  )
+  return buildMaterialPlan(views, dthByPath, grouping)
+}
+
+/**
+ * The `.dth` paths this character's scenes export to, keyed by the normalized
+ * lowercase spelling a scan would store them under.
+ *
+ * Lets a stored import be opened at the case the studio actually wrote, rather
+ * than at the lowercase one it is compared by. Best-effort: an unresolvable
+ * character yields an empty map, and every import then falls back to its stored
+ * spelling — which is the pre-existing behaviour, not a new failure.
+ */
+async function studioDthSpellings(scope: {
+  projectId: string
+  id: string
+}): Promise<Map<string, string>> {
+  try {
+    const { character, scenesRootAbs } = await prefillContext(scope)
+    const out = new Map<string, string>()
+    for (const scene of [character.scenePath, ...character.extraScenes]) {
+      if (!scene.trim()) continue
+      const dth = sceneDthPath(character, scene, scenesRootAbs)
+      if (dth) out.set(normalizePath(dth).toLowerCase(), dth)
+    }
+    return out
+  } catch {
+    return new Map()
   }
 }
 

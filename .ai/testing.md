@@ -373,6 +373,16 @@ The **real SPA in a real browser** against an in-memory fake of the native layer
   question before a code question — surprising PASS included, which is the
   direction that gets trusted. The default is the `PORT` constant in
   `apps/web/playwright.config.ts`.
+- **The tauri mock's filesystem is CASE-SENSITIVE where Windows is not**, and
+  that is a feature. `files` is a `Map` keyed by the normalized path, so
+  `exists()`/`readTextFile()` are exact-match — while NTFS, which every real run
+  of this app sits on, folds case. Measured 2026-08-14: `fetchMaterialPlan` read
+  a `.dth` at the LOWERCASED path the scan store keeps for comparison
+  (`_scene_dth_imports` normalizes + lowercases), which works on Windows and
+  nowhere else; the fake failed it immediately and the fix was to open the
+  studio's own spelling instead. Treat a fake-only path failure as a real
+  latent assumption before you treat it as a fixture bug — the fake is the only
+  thing in the stack that will ever tell you.
 - **This layer is where browser-only bugs reproduce.** A window-freezing React
   render loop passed every jsdom test and only showed here — when a UI
   interaction "works in tests" but misbehaves in the app, write the repro as a

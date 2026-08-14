@@ -314,6 +314,22 @@ export const materialNodeInfoSchema = z.object({
   /** Total baker layers — how much hand-work the setup represents. */
   layers: z.number(),
   bakerNames: z.array(z.string()),
+  /** The geometry groups this node's baker LAYERS name, deduped and sorted —
+   *  raw claim tokens (`@fbx_material_name=Body`), the same vocabulary
+   *  `slots[].surfaces` uses.
+   *
+   *  The other half of a stale setup. A slot claiming a surface the scene no
+   *  longer exports is visible in `slots`; a baker LAYER naming that group is
+   *  not, and it is the half that silently bakes nothing — measured on DazToHue
+   *  2.5, a layer whose group matches no geometry raises nothing and finishes
+   *  normally, exactly like the missing-texture case beside it.
+   *
+   *  Defaulted for the wire (an unreadable `.hip` falls back to a blank node
+   *  record), but the STORED scan cannot lean on that: `[]` is a legitimate
+   *  answer for a node with no bakers, so an entry predating the field would
+   *  read as "nothing stale" forever. `SCAN_ANSWER_VERSION` 7 is what retires
+   *  those entries — see the ladder there, this is the fourth time. */
+  bakerGroups: z.array(z.string()).default([]),
   /** Slot names with AND without the node's prefix, so a baker's material
    *  (`MI_Skin`) can be matched however the target spells it. */
   materialNames: z.array(z.string()),

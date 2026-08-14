@@ -42,12 +42,14 @@ import {
   restoreHoudiniBackup,
   fetchCachedHoudiniScans,
   fetchHoudiniSourceRecents,
+  fetchMaterialPlan,
   forgetHoudiniSource,
   rememberHoudiniSource,
   scanCharacterHoudiniProjects,
   scanHoudiniMaterials,
   transferHoudiniMaterials,
 } from '#/lib/rom/api.ts'
+import type { MaterialGrouping, MaterialPlanProject } from '#/lib/rom/material-plan.ts'
 import {
   DTH_FPS,
   planRepath,
@@ -99,6 +101,7 @@ import type {
 } from './houdini-utils/shared.ts'
 import {
   DefaultsReport,
+  ExportCheckTab,
   GeneralTab,
   MergePreview,
   NodePicker,
@@ -189,7 +192,17 @@ export function HoudiniUtilsPanel({
   /** Which drawer tab is open. `general` acts on the project FILES themselves
    *  and has no node list; every other tab picks a NODE KIND to transfer. */
   const [tab, setTab] = useState<DrawerTab>('general')
-  const kind: NodeKind = tab === 'general' ? 'material' : tab
+  // The two action-less tabs pick no node kind; `material` is the harmless
+  // stand-in so every kind-derived value below stays defined.
+  const kind: NodeKind = tab === 'general' || tab === 'exportCheck' ? 'material' : tab
+  /** How the Export check tab groups wardrobe into slots. Both shapes exist in
+   *  real hand-built projects, so it is a preference the user flips. */
+  const [grouping, setGrouping] = useState<MaterialGrouping>('merged')
+  const [planState, setPlanState] = useState<{
+    loading: boolean
+    error: string
+    plan: MaterialPlanProject | null
+  }>({ loading: false, error: '', plan: null })
   /** The folder kinds' selections, per kind — they are structurally identical
    *  (whole subtrees, no picker, no append), so one map beats one state each.
    *  Everything starts fully ticked, like the material tab. */
@@ -402,6 +415,38 @@ export function HoudiniUtilsPanel({
       )
       .catch(() => setOthers([]))
   }, [open, character.id])
+
+  /**
+   * The Export check tab's data — loaded LAZILY, only while that tab is open.
+   *
+   * It reads the character's stored scans plus a `.dth` that runs to hundreds of
+   * KB, and the drawer opens on General; paying for it on every open would tax
+   * the common path for a tab the user may never visit. Re-runs on `grouping`
+   * because the proposal is derived from it — the diff half is unaffected, but
+   * one read of an already-parsed file is cheaper than splitting the state.
+   */
+  useEffect(() => {
+    if (!open || tab !== 'exportCheck' || !projectId) return
+    let cancelled = false
+    setPlanState({ loading: true, error: '', plan: null })
+    void fetchMaterialPlan({ data: { projectId, id: character.id, grouping } })
+      .then((projects) => {
+        if (cancelled) return
+        // The api answers for every project of the character; this drawer acts
+        // on ONE `.hip`, so it narrows the same way the target scan does.
+        const wanted = normalizePath(targetHip).toLowerCase()
+        const plan = projects.find((p) => normalizePath(p.hipPath).toLowerCase() === wanted) ?? null
+        setPlanState({ loading: false, error: '', plan })
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return
+        const message = error instanceof Error ? error.message : String(error)
+        setPlanState({ loading: false, error: message, plan: null })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [open, tab, projectId, character.id, grouping, targetHip])
 
   // Reset everything when the drawer closes, so the next open starts clean.
   useEffect(() => {
@@ -1115,6 +1160,7 @@ export function HoudiniUtilsPanel({
         >
           <TabsList>
             <TabsTrigger value="general">General</TabsTrigger>
+            <TabsTrigger value="exportCheck">Export check</TabsTrigger>
             <TabsTrigger value="material">Material</TabsTrigger>
             {FOLDER_KINDS.map((folderKind) => (
               <TabsTrigger key={folderKind} value={folderKind}>
@@ -1131,6 +1177,16 @@ export function HoudiniUtilsPanel({
               repathReason={repath.reason}
               restore={restore}
               onRescan={() => void scanTargets(true)}
+            />
+          </TabsContent>
+
+          <TabsContent value="exportCheck" className="space-y-6">
+            <ExportCheckTab
+              plan={planState.plan}
+              loading={planState.loading}
+              error={planState.error}
+              grouping={grouping}
+              onGrouping={setGrouping}
             />
           </TabsContent>
 

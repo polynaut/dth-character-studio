@@ -20,6 +20,11 @@ import type {
 import { DTH_FPS, defaultsRowsFor, formatFps } from '#/lib/rom/houdini-defaults.ts'
 import { mergeTouchCount, surfaceLabel } from '#/lib/rom/houdini-material-merge.ts'
 import type { SurfaceMergePlan } from '#/lib/rom/houdini-material-merge.ts'
+import type {
+  MaterialGrouping,
+  MaterialPlanNode,
+  MaterialPlanProject,
+} from '#/lib/rom/material-plan.ts'
 import { displayPath } from '#/lib/path.ts'
 import houdiniLogo from '#/assets/houdini-logo.svg'
 
@@ -195,6 +200,240 @@ export function CheckRow({
         )}
       </div>
       {children ? <div className="mt-0.5 space-y-0.5 text-muted-foreground">{children}</div> : null}
+    </li>
+  )
+}
+
+/**
+ * The Export check tab: what this project's material setup says, measured
+ * against the export it actually imports.
+ *
+ * READ ONLY, deliberately. Everything here is derived from two files already on
+ * disk — the stored scan and the `.dth` — so it costs no hython and changes
+ * nothing. Generating the proposed setup into a node is a separate step with its
+ * own dry run and backup; this is the half that can ship without being able to
+ * damage anything.
+ *
+ * The three findings are NOT equal, and the tab is built around that:
+ *
+ *  - **dead claims** and **dead baker groups** are unambiguous. The claim names
+ *    a surface this export does not contain, so it binds to nothing — measured,
+ *    a baker layer in that state bakes nothing and raises nothing.
+ *  - **unclaimed surfaces** are a QUESTION. A "naked" variant node correctly
+ *    leaves every wardrobe surface unclaimed; the same node leaving the eye
+ *    stack unclaimed is a gap. Only the Daz content type makes the two legible,
+ *    which is why they are grouped by it rather than listed flat and badged.
+ */
+export function ExportCheckTab({
+  plan,
+  loading,
+  error,
+  grouping,
+  onGrouping,
+}: {
+  plan: MaterialPlanProject | null
+  loading: boolean
+  error: string
+  grouping: MaterialGrouping
+  onGrouping: (next: MaterialGrouping) => void
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <Label className="flex w-fit items-center gap-1 text-base font-semibold">
+          Export check
+          <InfoPopup label="Export check — more information">
+            <div className="space-y-2">
+              <p>
+                Every DTH Export writes a <code>.dth</code> beside the FBX, and it lists each Daz
+                surface the scene exported — with the asset that owns it and the Daz content type.
+                This compares that list against what this project&rsquo;s material nodes claim.
+              </p>
+              <p>
+                A claim naming a surface the export does not contain binds to nothing. Measured on
+                DazToHue 2.5, a texture baker in that state finishes normally and bakes nothing, so
+                nothing else in the pipeline reports it.
+              </p>
+              <p>
+                Nothing here is written. The proposed setup is what the export alone implies — a
+                partial setup by construction, since a baker built from a constant rather than a
+                texture cannot be derived from an export.
+              </p>
+            </div>
+          </InfoPopup>
+        </Label>
+      </div>
+
+      {loading ? (
+        <p className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Loader2 className="size-3 animate-spin" /> Reading the export…
+        </p>
+      ) : error ? (
+        <p className="text-xs text-amber-500">{error}</p>
+      ) : !plan ? (
+        <p className="text-xs text-muted-foreground">This project has not been scanned yet.</p>
+      ) : plan.blocked ? (
+        // A missing input, not a finding — said plainly, with what to do about it.
+        <p className="text-xs text-muted-foreground">{plan.blocked}</p>
+      ) : (
+        <div className="space-y-4">
+          <p className="text-xs text-muted-foreground">
+            {plan.surfaces} surfaces in <code>{fileName(plan.dthPath)}</code>
+          </p>
+
+          <ul className="space-y-3">
+            {plan.nodes.map((node) => (
+              <ExportCheckNode key={node.nodePath} node={node} />
+            ))}
+            {plan.nodes.length === 0 ? (
+              <li className="text-xs text-muted-foreground">
+                No DazToHue material node in this project.
+              </li>
+            ) : null}
+          </ul>
+
+          <div className="border-t pt-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Label className="text-sm font-semibold">Setup the export implies</Label>
+              {/* Both shapes exist in real hand-built projects, so this is a
+                  preference and not a right answer — one texture budget for the
+                  whole outfit, or one per garment. */}
+              <div className="flex gap-1">
+                {(
+                  [
+                    ['merged', 'One clothing slot'],
+                    ['perGarment', 'One slot per garment'],
+                  ] as const
+                ).map(([value, label]) => (
+                  <Button
+                    key={value}
+                    size="sm"
+                    variant={grouping === value ? 'default' : 'outline'}
+                    onClick={() => onGrouping(value)}
+                  >
+                    {label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <ul className="mt-2 space-y-2">
+              {plan.proposal.map((slot) => (
+                <li key={slot.name} className="text-xs">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="font-medium">MI_{slot.name}</span>
+                    <span className="shrink-0 text-muted-foreground">
+                      {slot.surfaces.length} surface{slot.surfaces.length === 1 ? '' : 's'} ·{' '}
+                      {slot.bakers.length} baker{slot.bakers.length === 1 ? '' : 's'}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 truncate text-muted-foreground" title={slot.surfaces.map(surfaceLabel).join(', ')}>
+                    {slot.surfaces.map(surfaceLabel).join(', ')}
+                  </p>
+                  {slot.bakers.length > 0 ? (
+                    <p className="text-muted-foreground">
+                      {slot.bakers
+                        .map((baker) => `${baker.name} (${baker.textures.length})`)
+                        .join(' · ')}
+                    </p>
+                  ) : (
+                    <p className="text-muted-foreground">
+                      No textured channel — no baker can be derived.
+                    </p>
+                  )}
+                  {/* Shown, never dropped: "there is a texture here we do not
+                      know where to put" is information. */}
+                  {slot.unmappedChannels.length > 0 ? (
+                    <p className="text-amber-500">
+                      Unmapped channels: {slot.unmappedChannels.join(', ')}
+                    </p>
+                  ) : null}
+                  {slot.shaders.length > 1 ? (
+                    <p className="text-amber-500">
+                      Mixes {slot.shaders.join(' and ')} — these will not bake as one material.
+                    </p>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** One material node's verdict against the export. */
+function ExportCheckNode({ node }: { node: MaterialPlanNode }) {
+  // Grouped by content type so intent stays legible — see the tab's doc comment.
+  const byType = new Map<string, Array<string>>()
+  for (const surface of node.diff.unclaimed) {
+    const list = byType.get(surface.contentType) ?? []
+    list.push(surface.surface)
+    byType.set(surface.contentType, list)
+  }
+  return (
+    <li className="rounded-md border p-2">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-sm font-medium">{node.label}</span>
+        <span className="shrink-0 text-xs text-muted-foreground">
+          {node.slots} slot{node.slots === 1 ? '' : 's'} · {node.bakers} baker
+          {node.bakers === 1 ? '' : 's'}
+        </span>
+      </div>
+      <ul className="mt-1 space-y-1">
+        <CheckRow
+          label="Claims backed by the export"
+          warn={false}
+          verdict={`${node.diff.matched} matched`}
+        />
+        <CheckRow
+          label="Claims the export does not back"
+          warn={node.diff.dead.length > 0}
+          verdict={node.diff.dead.length === 0 ? 'none' : `${node.diff.dead.length} dead`}
+        >
+          {node.diff.dead.map((entry) => (
+            <p key={`${entry.slot} ${entry.claim}`} className="truncate">
+              <code>{surfaceLabel(entry.claim)}</code> in {entry.slot}
+            </p>
+          ))}
+        </CheckRow>
+        <CheckRow
+          label="Baker layer groups the export does not back"
+          warn={node.deadGroups.length > 0}
+          verdict={node.deadGroups.length === 0 ? 'none' : `${node.deadGroups.length} dead`}
+        >
+          {node.deadGroups.map((token) => (
+            <p key={token} className="truncate">
+              <code>{surfaceLabel(token)}</code> — this layer bakes nothing
+            </p>
+          ))}
+          {/* The geoshell group field rides the same list and its vocabulary has
+              never been measured, so it is reported as unjudged rather than
+              counted either way. */}
+          {node.unjudgedGroups.length > 0 ? (
+            <p className="truncate" title={node.unjudgedGroups.join(', ')}>
+              {node.unjudgedGroups.length} group
+              {node.unjudgedGroups.length === 1 ? '' : 's'} not judged (not a surface claim)
+            </p>
+          ) : null}
+        </CheckRow>
+        {/* Never amber: whether this is a defect depends on intent, and a
+            "naked" variant is SUPPOSED to leave its wardrobe unclaimed. */}
+        <CheckRow
+          label="Surfaces with no material"
+          warn={false}
+          verdict={
+            node.diff.unclaimed.length === 0 ? 'none' : `${node.diff.unclaimed.length} unclaimed`
+          }
+        >
+          {[...byType].map(([type, surfaces]) => (
+            <p key={type} className="truncate" title={surfaces.join(', ')}>
+              <span className="text-foreground">{type || 'no content type'}</span>:{' '}
+              {surfaces.join(', ')}
+            </p>
+          ))}
+        </CheckRow>
+      </ul>
     </li>
   )
 }
