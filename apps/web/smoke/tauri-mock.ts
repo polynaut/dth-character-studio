@@ -188,10 +188,12 @@ export function installTauriMock(seed: TauriMockSeed): void {
   // in the BOTTOM-RIGHT corner, and in dev mode (the default local smoke run —
   // CI serves a prebuilt production bundle, which never renders it) it happily
   // swallows clicks aimed at anything anchored there: measured on the DTH
-  // Export side panel's pinned footer, where Start sits in exactly that corner
-  // and two specs failed locally while passing on CI. `prime()` sets the same
-  // flag for the screenshot suite; most specs install the fake directly and
-  // never went through it.
+  // Export side panel's pinned footer, where Start sits in exactly that corner.
+  // Drop this line and 12 specs across 7 files (daz-launch-activated ×2,
+  // export-interrupt ×3, export-only-gate, houdini-export ×2, houdini-only ×2,
+  // unreal-preselect ×2) fail LOCALLY on a 30s click retry while CI stays
+  // green. `prime()` sets the same flag for the screenshot suite; most specs
+  // install the fake directly and never went through it.
   ;(window as unknown as { __dthHideDevtools?: boolean }).__dthHideDevtools = true
   const files = new Map(Object.entries(seed.files))
   /**

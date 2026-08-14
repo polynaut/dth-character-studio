@@ -376,7 +376,7 @@ export type RunChoice = ExportMode | 'houdini-only'
  * Two modes that used to sit here are gone (v0.77):
  * - `open` — opened one project and ran nothing. The Houdini project cards open
  *   a project on their own, so this was a second way to do the same thing
- *   inside a dialog whose job is running a pipeline.
+ *   inside a panel whose job is running a pipeline.
  * - `export-all` — exported every LINKED scene instead of the checked ones. The
  *   scene list is right above it: "export all" is what checking every scene
  *   means, and two ways to say one thing invite picking the wrong one.
@@ -506,7 +506,7 @@ export function scenesMissingRomAnimation<T extends { scenePath: string; romExis
  * SELECTED scenes whose last Daz export is not on disk (`exportExists` — the
  * `.dth` the Houdini network imports), so there is nothing to rely on. Same two
  * call sites and the same null-tolerance: the Start gate, and the pre-handoff
- * re-probe that catches an export deleted while the dialog sat open.
+ * re-probe that catches an export deleted while the panel sat open.
  */
 export function scenesMissingExport<T extends { scenePath: string; exportExists: boolean }>(
   mode: RunChoice,
@@ -522,7 +522,7 @@ export function scenesMissingExport<T extends { scenePath: string; exportExists:
  * is outstanding for THAT run — changed inputs for the ROM-building modes, an
  * unexported saved ROM animation for the export-only pass. A scene whose
  * `.duf` is missing is never pre-checked by a Daz mode: its row cannot run
- * (the dialog disables it), and a saved ROM animation can well survive a
+ * (the panel disables it), and a saved ROM animation can well survive a
  * deleted scene — pre-checking it would arm a selection whose handoff can only
  * fail.
  *

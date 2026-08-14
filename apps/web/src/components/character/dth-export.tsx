@@ -2189,7 +2189,9 @@ function DthExportPanel({
     return () => {
       active = false
     }
-    // Mount-only, like the scene probe — the list can't change while modal.
+    // Mount-only, for the scene probe's reason (below): a refetch mid-pick
+    // would rebuild `hipMissing` under the user's selection. NOT because the
+    // drawer is modal — it isn't, see there.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -2470,10 +2472,15 @@ function DthExportPanel({
     return () => {
       active = false
     }
-    // Mount-only ON PURPOSE (the panel is modal — the scene list can't change
-    // while it's open): re-running on a draft-identity change (the focus-driven
-    // avatar sync patches the draft when tabbing back from Daz) would refetch
-    // and wipe the user's checkbox choices mid-pick.
+    // Mount-only ON PURPOSE: re-running on a draft-identity change (the
+    // focus-driven avatar sync patches the draft when tabbing back from Daz)
+    // would refetch and wipe the user's checkbox choices mid-pick. THAT is the
+    // whole reason — the drawer being "modal" is not, and used to be claimed
+    // here: a SidePanel deliberately leaves the page behind it hit-testable
+    // (see its own doc comment, and `.ai/gotchas.md`), so a file dropped on the
+    // dimmed editor CAN link a scene while this list sits open. The list then
+    // lags by one scene until the panel is reopened, which is the accepted
+    // trade — a refetch that discards a half-made selection is worse.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, character.id])
 
@@ -2690,10 +2697,13 @@ function DthExportPanel({
       // in on mount and closing unmounts it — the same shape as the Houdini
       // utils drawer.
       open
-      // The Modal's `dismissible={!busy}` in drawer form: while the handoff is
-      // being written, Escape / the backdrop / the ✕ are all no-ops, and the
-      // panel goes away when `onExport` says so.
-      onClose={busy ? () => {} : onClose}
+      // While the handoff is being written, Escape / the backdrop / the ✕ are
+      // all refused, and the panel goes away when `onExport` says so. The prop
+      // (not a no-op `onClose`) because it also greys the ✕ out — the handoff
+      // waits ~10s for the Runner to claim the job file, which is a long time
+      // to offer a button that does nothing.
+      dismissible={!busy}
+      onClose={onClose}
       title={
         <span className="flex items-center gap-2">
           {/* Same shape as the Houdini utils drawer's title: the mark first,

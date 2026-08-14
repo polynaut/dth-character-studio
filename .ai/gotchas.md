@@ -1572,3 +1572,20 @@ and the Unreal install button. If a spec has to hold a modifier:
   pattern that caught it: hython `alembicTimeRange` + a two-frame
   `pointFloatAttribValues('P')` compare (set the Alembic SOP's `frame` parm
   explicitly — `hou.setFrame` alone does not re-cook the packed prims).
+- **Modal → SidePanel un-blocks the page BEHIND the overlay: file drops land on
+  it again.** Measured 2026-08-14 while moving the DTH Export picker off `Modal`
+  onto the drawer. `Modal` is Radix Dialog, whose `disableOutsidePointerEvents`
+  puts `pointer-events: none` on `<body>`; `SidePanel` deliberately is NOT that
+  Dialog (the app's file-drop hit-testing must keep working through a drawer's
+  backdrop — see its doc comment). Same probe, same spot (`elementsFromPoint` at
+  8% viewport width, mid-height, the app's own `zoneIdAt` walk from
+  `lib/file-drop.ts`), overlay open: under `Modal` the stack is `[DIV, HTML]`
+  and no zone is found; under `SidePanel` it returns the character route's
+  `data-filedrop-id`. So with the export drawer open a `.duf`/`.hip`/`.dcsc.zip`
+  dropped on the dimmed editor links a scene, links a project, or opens the
+  overwrite-import wizard — all inert while it was a `Modal`. Nothing about the
+  drawer says this, and the two mount-only probes in `dth-export.tsx` had
+  "the panel is modal" written up as their REASON. The general shape: swapping
+  overlay primitives silently changes what the page underneath can still
+  receive, and any comment that leans on modality has to be re-read, not just
+  the visible layout.

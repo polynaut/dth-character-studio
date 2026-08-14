@@ -59,6 +59,23 @@ describe('SidePanel', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
+  it('not dismissible: Escape and the backdrop are ignored, and the ✕ SAYS so', async () => {
+    const onClose = vi.fn()
+    const { getByRole } = render(
+      <SidePanel open title="Panel" onClose={onClose} dismissible={false}>
+        <button type="button">First</button>
+      </SidePanel>,
+    )
+    fireEvent.keyDown(document, { key: 'Escape' })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    fireEvent.pointerDown(document.body)
+    fireEvent.pointerDown(document.body)
+    expect(onClose).not.toHaveBeenCalled()
+    // Disabled, not merely inert: a live-looking ✕ that does nothing is the
+    // thing this prop exists to prevent (the caller's Cancel greys out too).
+    expect((getByRole('button', { name: 'Close' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
   it('swallows the backdrop click that re-focuses the window; the next one dismisses', async () => {
     const { onClose } = renderPanel()
     // Radix arms its outside-pointerdown listener a tick after mount.

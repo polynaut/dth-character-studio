@@ -1242,7 +1242,7 @@ export interface ExecuteSceneStatus {
 /**
  * Every linked scene with its affected-state + saved-ROM state — what the DTH
  * Export panel pre-checks (per mode). Per-scene tolerant: an unreadable `.duf`
- * reports `missing` instead of throwing (the dialog disables that row).
+ * reports `missing` instead of throwing (the panel disables that row).
  */
 export async function fetchExecuteScenes({ data }: { data: unknown }): Promise<Array<ExecuteSceneStatus>> {
   const { projectId, id } = charScopeInput.parse(data)

@@ -1,7 +1,5 @@
 ---
-'@dth/desktop': minor
 '@dth/web': minor
-'@dth/rom': minor
 '@dth/ui': minor
 ---
 
@@ -16,3 +14,10 @@ scroll out of reach.
 
 Nothing about the run itself changed — the same scenes, modes, pre-selection,
 Runner gate and Interrupt, in a panel that fits them.
+
+One side effect worth knowing: a drawer, unlike the old dialog, leaves the page
+behind it live, so a file dropped on the dimmed editor while the panel is open
+now lands there (linking a scene, linking a project) instead of being ignored.
+The panel's own scene list still only reads disk when it opens, so a scene
+linked that way shows up the next time you open it. While a run is being handed
+off, Escape, the backdrop and ✕ are all refused, as before.

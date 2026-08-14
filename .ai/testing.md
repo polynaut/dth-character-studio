@@ -163,10 +163,13 @@ The **real SPA in a real browser** against an in-memory fake of the native layer
   The inverse bit once: the TanStack devtools trigger is `import.meta.env.DEV`
   only, `position: fixed`, BOTTOM-RIGHT — so under the default local run (the
   dev server) it floats over anything anchored in that corner, and under CI's
-  prebuilt production bundle it does not exist at all. Measured 2026-08-13 on
+  prebuilt production bundle it does not exist at all. Measured 2026-08-14 on
   the DTH Export side panel, whose pinned footer puts **Start** in exactly that
-  corner: two specs failed locally and passed on CI. That pattern reads as
-  flakiness and is not — it is a real overlay present in one of the two worlds.
+  corner: with the flag removed, **12 specs across 7 files** (daz-launch-activated
+  ×2, export-interrupt ×3, export-only-gate, houdini-export ×2, houdini-only ×2,
+  unreal-preselect ×2) fail locally on a 30s click retry while the same commit is
+  green on CI — 143/155 vs 155/155. That pattern reads as flakiness and is not —
+  it is a real overlay present in one of the two worlds.
   `installTauriMock` therefore sets `__dthHideDevtools` itself (installing the
   fake IS "an automated browser is driving the app"), not just `prime()` — most
   specs install the fake directly and never went through `prime`. The general

@@ -280,7 +280,7 @@ export interface SeedOptions {
   dimManifestsFolder?: string
   /** settings.json: the Daz Studio install folder. The DTH Export panel's
    *  Runner check needs one configured; the fake can't read a real install,
-   *  and an unreadable Runner state deliberately never blocks the dialog. */
+   *  and an unreadable Runner state deliberately never blocks the panel. */
   dazInstallFolder?: string
   /** What the native picker returns — a path to simulate a pick, else cancelled. */
   dialogPath?: string

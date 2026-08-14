@@ -37,6 +37,7 @@ export function SidePanel({
   onClose,
   children,
   footer,
+  dismissible = true,
   className,
 }: {
   open: boolean
@@ -54,6 +55,16 @@ export function SidePanel({
    * which is the whole point of putting an action in a full-height drawer.
    */
   footer?: ReactNode
+  /**
+   * false = Escape / the backdrop / the ✕ won't close it (e.g. while a handoff
+   * is being written) — {@link Modal}'s prop of the same name, same meaning.
+   *
+   * It DISABLES the ✕ rather than only ignoring it. Passing a no-op `onClose`
+   * achieves the ignoring half and leaves a button that looks live and does
+   * nothing — beside a Cancel the caller greyed out properly, which is the
+   * shape this prop exists to prevent.
+   */
+  dismissible?: boolean
   /** Extra classes for the sliding panel (e.g. a different max width). */
   className?: string
 }) {
@@ -138,7 +149,11 @@ export function SidePanel({
           // Focus leaving must not dismiss (mirrors Radix Dialog's modal
           // content) — the trap above snaps focus back anyway.
           onFocusOutside={(e) => e.preventDefault()}
-          onDismiss={onClose}
+          // Radix only ASKS to dismiss (Escape, outside pointer down) — while
+          // not dismissible the request is dropped and the drawer stays.
+          onDismiss={() => {
+            if (dismissible) onClose()
+          }}
         >
           <aside
             ref={panelRef}
@@ -161,6 +176,7 @@ export function SidePanel({
                 size="icon-sm"
                 title="Close"
                 aria-label="Close"
+                disabled={!dismissible}
                 className="shrink-0 text-muted-foreground hover:text-foreground"
                 onClick={onClose}
               >

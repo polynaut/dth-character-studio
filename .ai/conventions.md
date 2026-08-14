@@ -434,6 +434,13 @@ bordered row beside the body, inside the focus trap. Same shape decision as
 Modal vs SidePanel itself: a one-question confirm stays a `Modal`; a working
 surface with lists and several sections is a drawer.
 
+**Hold a drawer open with `dismissible={false}`, never with a no-op `onClose`.**
+Both refuse Escape and the backdrop, but only the prop also greys the ✕ out —
+`SidePanel` always renders one (unlike `Modal`, whose ✕ is opt-in via
+`showClose`), and a live-looking ✕ that does nothing sits right beside a Cancel
+the caller disabled properly. Both drawers that hold themselves open while
+working (`dth-export.tsx`, `houdini-utils-panel.tsx`) pass `dismissible={!busy}`.
+
 ## Writing conventions
 
 - Generated `.dsa`/CSV output changes must be intentional: the rom tests pin

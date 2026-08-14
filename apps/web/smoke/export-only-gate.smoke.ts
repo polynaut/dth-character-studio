@@ -15,7 +15,7 @@ import type { Page } from '@playwright/test'
 //    Start waits as a disabled "Checking scenes…" until the probe lands.
 // 2. The landed status has gone STALE under the selection (the ROM animation
 //    deleted after the check): Start re-verifies at the decision point and
-//    refuses IN the dialog — fresh row states, the notice naming the scene,
+//    refuses IN the panel — fresh row states, the notice naming the scene,
 //    and no handoff written.
 
 const DAZ_INSTALL = 'C:/Program Files/DAZ 3D/DAZStudio4'
@@ -85,7 +85,7 @@ test('start waits out the scene probe — a row checked mid-flight cannot slip t
   expect(await unhandledCommands(page)).toEqual([])
 })
 
-test('start re-verifies the ROM animations — one deleted after the probe refuses in the dialog', async ({
+test('start re-verifies the ROM animations — one deleted after the probe refuses in the panel', async ({
   page,
 }) => {
   const seed = buildSeed({
@@ -112,7 +112,7 @@ test('start re-verifies the ROM animations — one deleted after the probe refus
     ;((window as any).__tauriMock.files as Map<string, string>).delete(path)
   }, romAnimation(P.scene))
 
-  // Start re-probes at the decision point and refuses IN the dialog: fresh row
+  // Start re-probes at the decision point and refuses IN the panel: fresh row
   // states, the gate's notice naming the scene, Start off — and no handoff.
   await start.click()
   await expect(page.getByText(/No saved ROM animation for KiraDefault/)).toBeVisible()

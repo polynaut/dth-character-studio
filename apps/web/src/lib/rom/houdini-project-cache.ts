@@ -122,7 +122,7 @@ export function scanCacheKey(
  * every stored entry then stops matching and the sweep re-earns it. Measured
  * the hard way: `imports` (which `.dth` each network imports, v2) shipped
  * without a bump, so every existing entry stayed "fresh" while answering the
- * new question with an empty list, and the dialog that reads it correctly
+ * new question with an empty list, and the panel that reads it correctly
  * concluded "not known" — for good, since nothing about the `.hip`, the export
  * root or the HDAs had changed. A field is not free: it is a new question, and
  * the key has to know the question changed.

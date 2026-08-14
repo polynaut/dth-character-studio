@@ -140,7 +140,7 @@ export interface UnrealTarget {
   label: string
   /** The export sets handed to THIS project — one import job each. Empty means
    *  the names are not known here (a run restored into a window that never saw
-   *  the dialog), not "nothing is sent". */
+   *  the panel), not "nothing is sent". */
   sets: Array<UnrealTargetSet>
 }
 
