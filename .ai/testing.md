@@ -6,6 +6,63 @@ lint → typecheck → per-package tests → web build → `pnpm build:guide` (t
 guide-site guards fail the PR), plus `smoke`, `rust` (clippy `-D warnings` +
 `cargo test`) and `changeset` as separate jobs — all four are required checks.
 
+## 0. Do the gates actually gate? (audited 2026-08-13)
+
+A required check that cannot fail is worse than no check, because it also stops
+anyone looking. `pnpm lint:budget` was exactly that from #694 until it was fixed:
+it parsed oxlint's human output, counted 0 on CI, and 0 is under every baseline.
+Nobody noticed for months — the baseline simply stopped moving.
+
+So every other gate was then tested the only way that settles it: **break it on
+purpose and confirm it goes red.** Each probe was reverted immediately; the tree
+was verified clean after every one.
+
+| Gate | Probe | Result |
+|---|---|---|
+| `build:guide` hash links | added `href` to a non-existent anchor | ✅ exit 1 |
+| `build:guide` NAV | added a guide page not listed in `NAV` | ✅ exit 1 |
+| `build:guide` assets | referenced a missing screenshot | ✅ exit 1 |
+| FFI contract (Rust) | renamed a key in `contracts/pose-asset-frames.json` | ✅ panics, *"missing field `path`"* |
+| FFI contract (zod) | renamed a key in `contracts/dedup-report.json` | ✅ 1 of 12 fails |
+| `cargo clippy -D warnings` | added a `clone()` on a `u32` | ✅ 3 errors, build fails |
+| smoke `unhandled == []` | disabled `scan_files_by_ext` in the mock | ✅ 5 specs fail |
+| `changeset` status | code change, no changeset | ✅ exit 1 |
+| `changeset` require-real | code change + an EMPTY changeset | ✅ exit 1 (the interesting one — empty does not buy off shipped code) |
+| `changeset` bump-type | new route file + a patch-only changeset | ✅ exit 1, naming the signal |
+| `changeset` bump-type escape hatch | the same, plus `# bump:` in the frontmatter | ✅ exit 0, *"patch is marked deliberate — accepted"* |
+| `lint:budget` | — | ❌ **was inert**; fixed, see `scripts/lint-budget.mjs` |
+| `lint:budget` zero-parse | stubbed the lint command to emit nothing | ✅ exit 1, naming the byte counts |
+| `lint:budget` vanished rule | set a baselined rule to `"off"` in `.oxlintrc.json` | ✅ exit 1 (it printed *"tighten it"* and exited **0** before) |
+
+Ten gates verified to fail when they should. One was rotten — and once fixed it
+was put through the same treatment as the rest.
+
+**The rotten one had a second layer, worth generalising.** Fixing the parse
+stopped the ratchet counting zero for EVERY rule. It did not stop it counting
+zero for ONE: a baselined rule dropping from 183 to 0 took the "fewer warnings
+than the baseline — tighten it" path and exited 0, so a rule renamed upstream,
+dropped from a category, or muted by an `allow` entry in `.oxlintrc.json` read
+as an improvement. That is the same failure the top-level guard was added for,
+one level down, and it was reachable by an ordinary edit — this repo's own
+`__sawHome` allow entry took `no-underscore-dangle` from 3 to 0 in the commit
+that fixed the parse. **When you guard a measurement against reading zero, guard
+every level it can read zero at**: the total, and each thing the total is made
+of.
+
+The bump-type probe is worth keeping in mind if you ever touch that script: a
+comment-only change answers *"no new-capability signals"* and exits 0, which
+looks like a pass and proves nothing. Only a probe carrying a real signal — a
+new `apps/web/src/routes/*.tsx`, a new value export from the api barrel, or a
+new `#[tauri::command]` — exercises it. That is the general trap in auditing
+gates: an input the gate is INDIFFERENT to produces the same green as an input
+it approves.
+
+**Two rules out of it.** When you add a gate, prove it FAILS before trusting it —
+"it passed" is not evidence a gate works, it is the only output a broken gate can
+produce. And when a gate parses another tool's output, parse the MACHINE format
+(`--format=json`), never the human one: the same 223 warnings render as 60,354
+bytes locally and 47,019 on CI, which is what made this one silently useless.
+
 ## 1. Unit tests (vitest, per package)
 
 - **`packages/rom`** — the heavyweight suite. `generate.test.ts` pins generated
@@ -108,8 +165,10 @@ The **real SPA in a real browser** against an in-memory fake of the native layer
   different houdini-* specs across five PR runs failed as timeouts on
   interactions that are instant locally, a different spec each run, one past
   a doubled 60 s budget; main stayed green only by scheduling luck. CI runs 2
-  workers + a 60 s per-test budget now (`retries: 0` stays — a retry would
-  hide exactly this class of nondeterminism). Consequences: adding workers on
+  workers + a 60 s per-test budget now (`retries: 0` stayed here — a retry
+  would hide exactly this class of nondeterminism; **reversed to `retries: 1`
+  on CI once the class was understood, see the retry bullet below**).
+  Consequences: adding workers on
   the 4-vCPU runner is a net loss; trimming specs WOULD
   cut wall time (it is linear when CPU-bound) but trades real coverage for
   ~2 minutes on an unwatched gate.
@@ -152,12 +211,111 @@ The **real SPA in a real browser** against an in-memory fake of the native layer
   deleting it as unused would fail every `unhandled == []` assertion, in CI
   only. The general lesson: under the prebuilt bundle, a DEV-gated path that
   "obviously no-ops" may be running for real, and the smoke mock is what
-  absorbs it. And whether this actually ends the
-  flakes is NOT yet proven — the failure needs a saturated 4-vCPU box to
-  reproduce and a dev machine is not one; what is proven is the mechanism, the
-  saving, and that the suite passes prebuilt. Watch the next handful of PR runs
-  before calling it closed. Sharding across runners stays the untaken lever, and
-  still the maintainer's call because it changes the required check's shape.
+  absorbs it. **Whether this ends the flakes was left open — "watch the next
+  handful of PR runs before calling it closed". ANSWERED 2026-08-13, same day,
+  and the answer is NO.** PR #827's validation ran the prebuilt suite twice
+  within half an hour and failed both times, on a DIFFERENT spec each time —
+  `unlink-dialogs.smoke.ts:96`, then `scan-scene-import.smoke.ts:80` — both
+  `locator.click: Test timeout of 60000ms exceeded`, i.e. the same starvation
+  signature the bundle was pulled to remove, and `unlink-dialogs` was already
+  on the victim list above. The same commit passes **155/155 against the same
+  production bundle** on an 8-core dev box (`SMOKE_PREBUILT=1`, `SMOKE_PORT`
+  set) in 49s, against CI's 3.4m — so the code is not the variable, the box is.
+  The honest reading of the measurement: the build removes ~28% of the wall
+  clock without removing the CONTENTION. Two Chromium workers saturate a 4-vCPU
+  runner on their own; `vite dev`'s transforms were only ever part of what
+  filled it, so taking them out moved the suite further from the cliff without
+  stepping back off it. Sharding across runners is therefore no longer the
+  merely-untaken lever — it is the only one left, and still the maintainer's
+  call because it changes the required check's shape.
+  Until then, read a CI smoke failure exactly as before: a different spec each
+  run, instant locally, green on rerun. **Do not "fix" the spec it lands on.**
+  Two reruns cost minutes; a day spent debugging a healthy test costs a day,
+  and this one nearly took one — the first failure was read as a real break
+  introduced by the PR, and only the SECOND failure landing on an unrelated
+  spec proved otherwise. One rerun before any diagnosis is the cheap move.
+- **`retries: 1` on CI — and a retry is not a skip.** With the flake class
+  measured rather than mysterious, the manual rerun above is a human doing by
+  hand what Playwright does in seconds, so CI retries once (locally still 0 — a
+  dev box is not starved, and a retry there really would hide something).
+  The distinction that makes this the right instrument, and the reason the
+  obvious alternative is wrong: **a starved test passes on attempt two; a
+  genuinely broken one fails BOTH and the check still goes red.** Skipping the
+  spec that failed — what a red gate tempts you into — deletes real coverage AND
+  does not work, because the flake is not a property of any spec. Contention
+  picks a different loser every run (seven named victims so far), so skipping
+  them one at a time ends with the suite gone and the gate still red.
+  Playwright reports `flaky` separately from `passed`, so the rate stays
+  VISIBLE — that number is the health signal now. If it climbs, the box is the
+  problem again and sharding is the next lever.
+  **A retry silently changes what "failure" means to everything downstream.**
+  A flaky run exits **0**: the job is green, and every `if: failure()` step in
+  the workflow is skipped. That is why the trace upload runs on `!cancelled()`
+  instead — measured 2026-08-14, a flaky run exits 0 and still leaves
+  `test-results/…/trace.zip` on disk, while a clean run leaves no trace files
+  at all, so uploading unconditionally costs a green run nothing and is the
+  ONLY way the starved attempt's evidence survives. Side effect worth having:
+  a `playwright-traces-*` artifact on a GREEN run is now the visible mark that
+  a retry was spent, which beats a number in a log nobody opens. Anything else
+  added later that should react to a smoke failure has the same trap —
+  `failure()` will not fire for the class this suite actually suffers from.
+- **The starvation explanation did NOT survive its first direct test — don't
+  treat it as settled.** Attempted 2026-08-13 on a 16-core Windows box under
+  CI's own settings (`CI=1` → 2 workers, 60 s budget, prebuilt bundle;
+  `SMOKE_PORT` set), with the CPU deliberately oversubscribed by spinner
+  processes:
+
+  | Condition | Result |
+  |---|---|
+  | idle | 155/155, 1.6m |
+  | 12 spinners / 16 cores | 155/155, 1.7m |
+  | ~36 spinners / 16 cores (2.2x oversubscribed) | 155/155, **2.8m** |
+  | the overlay-heavy victims, `--repeat-each=6`, under load | 48/48 |
+
+  Contention worse than CI's own ratio made the suite **75% slower across the
+  board and broke nothing**. That is the shape starvation actually has: every
+  test gets proportionally slower. The CI failure is not that shape — a
+  `locator.click` dying at 60 s is a ~45x outlier against a 1.3s average, i.e.
+  a STALL, something waiting forever until the budget expires. Uniform slowdown
+  does not produce one.
+  **What the test did NOT replicate, and why a local repro may be impossible:**
+  CI is `ubuntu-latest` with 4 slow vCPUs; this was Windows with 16 fast cores
+  oversubscribed. Oversubscription is not SCARCITY — 2 Chromium workers on 4
+  cores have no headroom at all, where 16 cores always have some — and it is a
+  different Chromium build, kernel scheduler and filesystem. So this weakens the
+  theory without refuting it.
+  **The consequence for whoever picks this up: stop reasoning and read the
+  trace.** Playwright's actionability log records what it was waiting for and
+  what was on top of the target at each retry, which separates "the box was
+  busy" from "an overlay covered the button" in one look. The traces exist on
+  every failure (`trace: 'retain-on-failure'`) and were being deleted with the
+  runner until the upload step in `validate-pull-request.yml`. The next CI
+  flake is the first one that will be diagnosable rather than inferable — and
+  under `retries: 1` it will arrive on a GREEN run, as an artifact rather than
+  as a red check (see the retry bullet).
+  One pattern to check first when it lands: the victim list is **entirely**
+  OVERLAY-driven specs — `unlink-dialogs`, `houdini-occlusion-tabs`,
+  `houdini-utils-backups` x2, `houdini-refresh-assets`, `scan-scene-import`,
+  `jcm-bone-autocomplete`, `houdini-project-health` (the last two added
+  2026-08-13, the drawer spec observed live) — **eight failures across seven
+  distinct specs**, not one of which lacks a dialog or a drawer.
+  **And the mechanism was then found and fixed.** `closeAllInfoPopups` only ever
+  registered popups that were ALREADY open, so a hover peek on its 90ms
+  `useHover` open-delay was invisible to the sweep: it fired after the overlay
+  mounted and painted at `z-[60]`, over the dialog's z-50. A tooltip there is
+  harmless (`pointer-events-none`, hit-testing skips it) but an InfoPopup is
+  INTERACTIVE — it swallows clicks aimed at whatever is underneath, which is
+  exactly a click that never becomes actionable. Fixed in `info-popup.tsx` with
+  a fail-then-pass unit test.
+  **That is a matching signature, NOT yet a proven cause.** What would prove it
+  is one trace naming an InfoPopup portal as the element on top. Until then the
+  honest statement is: a real defect with this fingerprint existed and is gone;
+  whether it was THE flake is unconfirmed.
+  **Practical trap worth knowing: the trace upload only exists on the branch
+  that adds it.** A `pull_request` run uses the workflow from the MERGE ref, so
+  every other open PR still discards its traces — #830 flaked twice and produced
+  no artifact for exactly that reason. The instrument has to land on `main`
+  before it can catch anything anywhere else.
 - **The prebuilt/dev split runs the OTHER way too: dev-only UI can eat a click
   CI never sees.** The bullet above is about DEV-gated code not running in CI.
   The inverse bit once: the TanStack devtools trigger is `import.meta.env.DEV`
@@ -192,7 +350,9 @@ The **real SPA in a real browser** against an in-memory fake of the native layer
   Measured 2026-08-13 — a review "proved" main was red across three runs, all
   three serving a sibling checkout's tree. Set `SMOKE_PORT=<free port>` when two
   checkouts are live, and treat a surprising local smoke result as a port
-  question before a code question.
+  question before a code question — surprising PASS included, which is the
+  direction that gets trusted. The default is the `PORT` constant in
+  `apps/web/playwright.config.ts`.
 - **This layer is where browser-only bugs reproduce.** A window-freezing React
   render loop passed every jsdom test and only showed here — when a UI
   interaction "works in tests" but misbehaves in the app, write the repro as a

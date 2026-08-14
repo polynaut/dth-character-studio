@@ -20,28 +20,89 @@
 //   node scripts/lint-budget.mjs           check against the baseline
 //   node scripts/lint-budget.mjs --update  rewrite the baseline from reality
 
-import { execSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
 import { readFileSync, writeFileSync } from 'node:fs'
 
 const BASELINE = new URL('../.lint-baseline.json', import.meta.url)
 
-/** `warning eslint(no-await-in-loop): …` → `eslint/no-await-in-loop`. */
+/** oxlint `--format=json` diagnostic codes → `{ 'eslint/no-await-in-loop': n }`. */
 function countByRule() {
-  let out = ''
-  try {
-    // oxlint exits non-zero when it reports errors; warnings alone exit 0. We
-    // want its output either way, so failures are captured rather than thrown.
-    out = execSync('pnpm -s lint', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
-  } catch (error) {
-    out = `${error.stdout ?? ''}${error.stderr ?? ''}`
-  }
+  // Measured 2026-08-13, from one CI job's own log:
+  //     Found 223 warnings and 0 errors.        <- the `pnpm lint` step
+  //     oxc/no-map-spread: 0 (baseline 9)       <- this script, same job
+  //     eslint/no-await-in-loop: 0 (baseline 155)
+  // 223 warnings found, 0 counted. The gate had never been capable of failing
+  // since it was added in #694, which is why the baseline sat untouched from
+  // 2026-08-10 while warnings accumulated and every PR stayed green. It worked
+  // locally (Windows), which is the worst version of this bug — the one place
+  // it reported honestly was the one place nobody was gating on it.
+  //
+  // WHAT IS AND IS NOT KNOWN about the cause, because the tempting explanation
+  // is wrong: it was NOT that the capture came back empty. CI reported
+  // `stdout=47019b stderr=0b` — the output was there, on stdout, and the
+  // human-format regex simply did not match how CI rendered it. The stream
+  // theory, ANSI colour and `CI`/`GITHUB_ACTIONS` detection were each tested
+  // and RULED OUT; the actual rendering difference (60,354 bytes locally vs
+  // 47,019 on CI for the same 223 warnings) remains unidentified. It stops
+  // mattering rather than being solved, which is the point below.
+  //
+  // Both streams are captured now regardless of exit code — not as the fix,
+  // just so a future move of the diagnostics between streams cannot resurrect
+  // this. `execSync`'s return value is stdout only, and oxlint exits 0 on
+  // warnings alone, so the old code's `catch` (its only path to stderr) never
+  // ran.
+  //
+  // `--format=json`, NOT the human output — the actual fix. That format is not
+  // stable across environments and this script parsed it for months: the same
+  // 223 warnings rendered as 60,354 bytes locally against 47,019 on ubuntu CI.
+  // A text format meant for humans is simply the wrong contract for a gate; the
+  // machine one carries the rule in a field:
+  // `{"diagnostics":[{"code":"oxc(no-map-spread)","severity":"warning",…}]}`.
+  //
+  // One command STRING, not command+args: `shell: true` with an args array is
+  // Node DEP0190 and prints a deprecation into every CI log. `shell` itself is
+  // required — on Windows `pnpm` is a `.cmd` shim that cannot be spawned
+  // directly. `maxBuffer` is raised because the JSON of a few hundred
+  // diagnostics comfortably exceeds Node's 1 MB default, and an overflow would
+  // truncate the capture into exactly the silent under-count this whole change
+  // exists to prevent.
+  const run = spawnSync('pnpm -s lint --format=json', {
+    encoding: 'utf8',
+    shell: true,
+    maxBuffer: 64 * 1024 * 1024,
+  })
+  const out = `${run.stdout ?? ''}${run.stderr ?? ''}`
   const counts = {}
-  for (const line of out.split('\n')) {
-    const match = /warning\s+([\w-]+)\(([\w-]+)\)/.exec(line)
-    if (match) {
-      const rule = `${match[1]}/${match[2]}`
+  try {
+    // Slice from the first `{` so a stray banner line can't break the parse.
+    const parsed = JSON.parse(out.slice(out.indexOf('{')))
+    for (const d of parsed.diagnostics ?? []) {
+      if (d.severity !== 'warning') continue
+      const m = /^([\w-]+)\(([\w-]+)\)/.exec(d.code ?? '')
+      if (!m) continue
+      const rule = `${m[1]}/${m[2]}`
       counts[rule] = (counts[rule] ?? 0) + 1
     }
+  } catch {
+    // Fall through to the zero-parse guard below, which reports properly.
+  }
+  // A ratchet that parsed NOTHING must never report "under budget". That is
+  // precisely the failure above, and from the outside it is indistinguishable
+  // from a clean tree. This repo carries hundreds of advisory warnings BY
+  // DESIGN (see .oxlintrc.json), so zero means the measurement broke — the
+  // output format moved, the lint script moved, oxlint failed to start — and
+  // never that there is nothing to count. Fail loud instead of green.
+  if (Object.keys(counts).length === 0) {
+    console.error('lint-budget parsed NO warnings out of `pnpm -s lint`.\n')
+    console.error('That is a broken ratchet, not a clean tree: this repo carries hundreds')
+    console.error('of advisory warnings on purpose. Check that the lint script still runs')
+    console.error('and that its output format still matches the parser in this file.\n')
+    console.error(
+      `  exit=${run.status} signal=${run.signal} ` +
+        `stdout=${(run.stdout ?? '').length}b stderr=${(run.stderr ?? '').length}b`,
+    )
+    if (run.error) console.error(`  spawn error: ${run.error.message}`)
+    process.exit(1)
   }
   return counts
 }
@@ -65,10 +126,21 @@ try {
 
 const over = []
 const under = []
+// A baselined rule reporting EXACTLY zero. Same argument as the zero-parse
+// guard above, one level down: this repo's baselined rules are documented
+// deliberate patterns with dozens of instances each, so "all 183 gone" is far
+// more likely to be the rule vanishing from the OUTPUT than from the code —
+// renamed upstream, dropped from a category, or muted by an `allow` entry in
+// `.oxlintrc.json`. That last one is not hypothetical: adding `__sawHome` to
+// the allow list took `no-underscore-dangle` from 3 to 0 in this very commit.
+// Left as an `under`, it prints "tighten it" and EXITS 0 — the measurement
+// breaking, reported as an improvement.
+const vanished = []
 for (const rule of new Set([...Object.keys(baseline), ...Object.keys(actual)])) {
   const allowed = baseline[rule] ?? 0
   const now = actual[rule] ?? 0
   if (now > allowed) over.push(`  ${rule}: ${now} (baseline ${allowed}, +${now - allowed})`)
+  else if (now === 0 && allowed > 0) vanished.push(`  ${rule}: 0 (baseline ${allowed}) — every instance at once`)
   else if (now < allowed) under.push(`  ${rule}: ${now} (baseline ${allowed})`)
 }
 
@@ -76,6 +148,18 @@ if (under.length > 0) {
   console.log('Fewer warnings than the baseline — tighten it:')
   console.log(under.join('\n'))
   console.log('  node scripts/lint-budget.mjs --update\n')
+}
+
+if (vanished.length > 0) {
+  console.error('A baselined rule reports ZERO warnings:\n')
+  console.error(vanished.join('\n'))
+  console.error(
+    '\nThat is usually the rule leaving the OUTPUT, not the instances leaving the' +
+      '\ncode — renamed upstream, dropped from a category, or muted by an `allow`' +
+      '\nentry in .oxlintrc.json. Check that first. If the cleanup is real, say so' +
+      '\nin the commit and run:' +
+      '\n  node scripts/lint-budget.mjs --update',
+  )
 }
 
 if (over.length > 0) {
@@ -86,7 +170,8 @@ if (over.length > 0) {
       '\n  node scripts/lint-budget.mjs --update' +
       '\nOtherwise fix it — that is the point of the ratchet.',
   )
-  process.exit(1)
 }
+
+if (over.length > 0 || vanished.length > 0) process.exit(1)
 
 console.log('lint warnings within baseline')
