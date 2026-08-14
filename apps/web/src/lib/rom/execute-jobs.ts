@@ -949,3 +949,32 @@ export function parseExecuteStamps(text: string): ExecuteStamps {
   }
   return { version: 1, scenes: {} }
 }
+
+/**
+ * Collapse the raw Daz-side error lines into something a toast can carry.
+ *
+ * The Runner reports whatever Daz said, verbatim and ONCE PER SCENE — so one
+ * modal that fired on two scenes arrives as the same paragraph twice, its
+ * trailing question included. "Continue anyway?" in a finish report reads as a
+ * prompt the user has to answer; it was already answered, by the script, minutes
+ * before they read it. And a run with a problem on every scene should not push
+ * its own result off the screen, so the tail is counted rather than printed.
+ */
+export function tidyRunErrors(errors: ReadonlyArray<string>, max = 4): Array<string> {
+  const seen = new Set<string>()
+  const out: Array<string> = []
+  for (const raw of errors) {
+    const line = raw
+      // The Runner's own line breaks are not the toast's — it joins with them.
+      .replace(/\s+/g, ' ')
+      .replace(/\s*Continue anyway\?\s*$/i, '')
+      .trim()
+    if (!line) continue
+    const key = line.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(line)
+  }
+  if (out.length <= max) return out
+  return [...out.slice(0, max), `…and ${out.length - max} more`]
+}

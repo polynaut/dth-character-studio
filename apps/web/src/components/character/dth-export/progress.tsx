@@ -43,6 +43,34 @@ export function dismissFinishToasts() {
   toast.dismiss(HOUDINI_TOAST_ID)
 }
 
+/**
+ * The ONE way to raise the export run's finish report.
+ *
+ * Five paths end a run, all writing the same sticky toast id — and sonner
+ * UPDATES a toast that already exists rather than replacing it, merging the new
+ * fields over the old. A path that passed no `description` therefore inherited
+ * the PREVIOUS report's body, which is how a run that exported one scene in 45s
+ * ended up titled exactly that over a description of an earlier run's two
+ * scenes in 7m 50s and 25m 32s: two different runs, welded into one toast that
+ * contradicted itself.
+ *
+ * The cure is that `description` is ALWAYS passed, even when there is none:
+ * sonner merges an update as `{ ...toast, ...data }`, so a key that is present
+ * and `undefined` clears the old body, while a key that is absent inherits it.
+ * The title and the body therefore always describe the same run.
+ *
+ * Deliberately NOT `toast.dismiss()` first: dismissing starts a removal, and a
+ * toast re-created under the same id in the same tick is removed with it — the
+ * finish report then never appears at all (caught by the houdini-only smoke).
+ */
+export function exportFinishToast(
+  kind: 'success' | 'warning' | 'info' | 'error',
+  title: string,
+  description?: string,
+): void {
+  toast[kind](title, { id: EXPORT_TOAST_ID, duration: Infinity, description })
+}
+
 /** Status texts arrive lowercase from the logs — tooltips lead with a capital. */
 export function capitalizeStatus(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1)
