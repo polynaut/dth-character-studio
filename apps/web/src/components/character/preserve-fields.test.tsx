@@ -150,30 +150,38 @@ describe('PreserveFields per-scene override', () => {
 
   it('picking a suggestion fills the Item scope with the node the dial lives on', () => {
     // The index KNOWS the node; before v32 the pick dropped it and the runtime
-    // searched the figure root — where a clothing dial never exists.
+    // searched the figure root — where a clothing dial never exists. The scope
+    // is a read-only chip: the pick is its ONLY setter.
     render(
       <Harness
         initial={makeCharacter()}
         morphIndex={[{ node: 'Boots', nodeLabel: 'Boots', label: 'Expand All', name: 'ExpandAll' }]}
       />,
     )
+    // The unscoped row reads as the fallback, not as an editable field.
+    expect(screen.getByText('Figure')).not.toBeNull()
+
     const name = screen.getByDisplayValue('body_ctrl_BreastsUp-Down') as HTMLInputElement
     fireEvent.focus(name)
     fireEvent.change(name, { target: { value: 'expandall' } })
     fireEvent.mouseDown(screen.getByRole('option'))
 
     expect(screen.getByDisplayValue('ExpandAll')).not.toBeNull()
-    expect(screen.getByDisplayValue('Boots')).not.toBeNull()
+    expect(screen.getByText('Boots')).not.toBeNull()
   })
 
-  it('rescoping a row (Item field) on a non-primary scene arms the list override', () => {
-    render(<Harness initial={makeCharacter()} />)
+  it('clearing the Item scope (chip ✕) on a non-primary scene arms the list override', () => {
+    const initial = makeCharacter({
+      preserveMorphs: [{ name: 'body_ctrl_BreastsUp-Down', keepValue: 0.6, node: 'Boots' }],
+    })
+    render(<Harness initial={initial} />)
     fireEvent.click(screen.getByText('select-beach'))
     expect(screen.queryByTitle(RESET)).toBeNull()
 
-    // The only preserve-morph row's Item input (placeholder "Figure" = root scope).
-    const item = screen.getByPlaceholderText('Figure') as HTMLInputElement
-    fireEvent.change(item, { target: { value: 'Boots' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Clear the item scope' }))
+    // The scope dropped back to the figure root…
+    expect(screen.getByText('Figure')).not.toBeNull()
+    // …and the row now differs from the base, so the override armed.
     expect(screen.queryByTitle(RESET)).not.toBeNull()
   })
 

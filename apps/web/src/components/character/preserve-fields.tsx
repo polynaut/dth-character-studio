@@ -1,4 +1,5 @@
 import { cn, Input, KeyedListEditor, Label, NumberField, OverrideMark, overrideLabelClass } from '@dth/ui'
+import { MorphNodeChip } from '#/components/character/morph-node-chip.tsx'
 import { MorphIndexProvider } from '#/components/rom/morph-index-provider.tsx'
 import { MorphNameCell } from '#/components/rom/morph-name-cell.tsx'
 import { preserveMorphsKey, preserveNodesKey } from '#/lib/preserve-diff.ts'
@@ -16,11 +17,13 @@ const MORPH_FIELD_CLASS =
  * The two "preserve across the ROM load" list editors from the character editor's
  * Advanced options — morphs (name + optional item scope + hold value) and node
  * transforms (node label). Both are homogeneous add/remove lists
- * (`KeyedListEditor`). A preserve morph's Item field scopes the runtime's
- * lookup to that scene node (matched by internal name or label) — empty keeps
- * the pre-v32 reach, the figure root, which is why its placeholder says
+ * (`KeyedListEditor`). A preserve morph's Item scope points the runtime's
+ * lookup at that scene node (matched by internal name or label) — empty keeps
+ * the pre-v32 reach, the figure root, which is why the empty scope reads
  * "Figure": a clothing morph picked from the index NEEDS the scope or the
- * runtime never finds it. Picking a suggestion fills both fields.
+ * runtime never finds it. The scope is READ-ONLY (see {@link MorphNodeChip}):
+ * picking a suggestion sets both the name and the node, the chip's ✕ returns
+ * the lookup to the figure.
  *
  * Per-scene overrides are IMPLICIT and PER-LIST (no toggle). On a non-primary Daz
  * scene the lists start inherited from the base and are editable inline; the moment
@@ -146,13 +149,13 @@ export function PreserveFields({
                         onPick={(entry) => set({ ...item, name: entry.name, node: entry.node })}
                       />
                     </div>
-                    <Input
-                      value={item.node}
-                      overridden={isOv}
-                      placeholder="Figure"
-                      title="Scene item (node) this morph lives on — empty looks it up on the figure itself. Filled automatically when a suggestion is picked."
-                      className={cn('w-36 shrink-0', inheritedRow(isOv) && 'text-muted-foreground')}
-                      onChange={(e) => set({ ...item, node: e.target.value })}
+                    <MorphNodeChip
+                      node={item.node}
+                      fallback="Figure"
+                      fallbackTitle="Looked up on the figure itself — pick a suggestion to point it at the item the morph lives on"
+                      scopedTitle={`Looked up on "${item.node}" (set by the picked suggestion)`}
+                      muted={inheritedRow(isOv)}
+                      onClear={() => set({ ...item, node: '' })}
                     />
                     <NumberField
                       className={cn(

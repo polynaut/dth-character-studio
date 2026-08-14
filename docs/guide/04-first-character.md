@@ -154,9 +154,9 @@ row lands on *every* node that carries the morph — the figure and every fitted
 item — so one row like a clothing **Expand All** reaches whichever outfit
 pieces the open scene wears. Auto-follow puts the same dial on every conformed
 item, though, so a fit value meant for one backpack would deform the boots and
-gloves too: name the **Item** (picking a suggestion fills it in) to apply the
-row on that one node only. A scene without the morph — or the item — simply
-skips it. Overridable
+gloves too: picking a suggestion scopes the row to the item its dial lives on
+— shown as a small label on the row, whose ✕ returns it to every item. A scene
+without the morph — or the item — simply skips it. Overridable
 [per Daz scene](./advanced.md#per-scene-overrides--edit-to-override).
 
 </td></tr></table>
@@ -179,9 +179,9 @@ it is needed for a working ROM:
   any morph you list here is restored to the value you set afterwards. Use it
   for body-shaping controls (breast or muscle morphs, say) that should hold
   across the whole ROM. Enter the morph's **property name** and its **hold
-  value**; the **Item** field names the scene item the morph lives on (empty =
-  the figure itself, and picking a suggestion fills it in — a clothing morph
-  needs it, since it never lives on the figure).
+  value**; the **Item** label shows which scene item the morph is looked up on
+  (empty = the figure itself), set by picking a suggestion — a clothing morph
+  needs that, since it never lives on the figure.
 - **Preserve node transforms** — the listed node's transform is memorized
   before the ROM loads and restored after, so posed nodes (the eyes, say) keep
   their orientation instead of being reset. Enter the **node's label** as it
