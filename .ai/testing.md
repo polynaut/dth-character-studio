@@ -17,6 +17,9 @@ cannot skip. Scope by what was touched:
 | a UI flow                           | the covering specs only: `pnpm --filter @dth/web smoke <substr>` |
 | `docs/guide` / guide assets         | `pnpm build:guide`                                               |
 | a route FILE added/removed          | `pnpm generate-routes`                                           |
+| `contracts/` / `api/native-types.ts`| BOTH sides: `cargo test` + `pnpm --filter @dth/web test native-contract` |
+| `.ai/*.md`                          | `node .claude/hooks/inject-gotchas.mjs --audit` (trigger anchors resolve) |
+| `.claude/hooks/*`                   | `node .claude/hooks/inject-gotchas.test.mjs` + the `--audit` above       |
 
 A TS-only change never needs cargo; a `packages/rom` change never needs smoke.
 The FULL local gate (`pnpm -r typecheck` + `pnpm lint` + `pnpm -r test` + smoke

@@ -232,7 +232,10 @@ repo.
 
 ## Key docs
 
-- **`.ai/` — agent deep-dive docs. Read the relevant one BEFORE scanning source:**
+- **`.ai/` — agent deep-dive docs. Read the relevant one BEFORE scanning source**
+  — effort-scaled (Working rules, `conventions.md`): whole-read when the task
+  lives in that doc's domain; for a small, well-scoped prompt, grep it for the
+  topic instead. The docs:
   `philosophy.md` (how to work here at all — injected every session),
   `architecture.md` (packages, routes, lib/ boundary, FFI surface),
   `domain.md` (ROM/frame-math/CSV/runtime semantics), `conventions.md` (schema/FFI/

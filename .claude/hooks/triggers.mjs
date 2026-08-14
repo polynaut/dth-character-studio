@@ -99,6 +99,15 @@ export const TRIGGERS = [
 
   /* ---- running the gates -------------------------------------------------- */
   {
+    // The effort down-ratchet, at the moment it is about to be violated: a
+    // full-suite run mid-session is exactly what the scoped-gate table exists
+    // to replace. Fires once, never blocks — the pre-PR full gate is legit.
+    id: 'scoped-gates',
+    command: /pnpm\s+-r\s+(?:test|typecheck)\b/,
+    doc: TESTING,
+    anchor: 'The FULL local gate',
+  },
+  {
     id: 'smoke-port',
     command: /\bsmoke\b|playwright\s+test/,
     unless: /SMOKE_PORT/,
