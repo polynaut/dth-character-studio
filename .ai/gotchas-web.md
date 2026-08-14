@@ -395,6 +395,39 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   static side-by-side shows the browser downsample ≈ a hand pass, the defect is
   aliasing (missing low-pass), not the resample quality.
 
+## `prefers-reduced-motion: reduce` is ON for this dev machine — and it is NOT `MinAnimate` (measured 2026-08-14)
+
+**A busy/loading indicator must never `animation: none` under reduced motion.**
+Shipped exactly that on the Houdini card's busy accent bar and the reporter saw
+a bar with stripes that never moved — the pattern rendered (it is a
+`background-image`) while the only thing carrying the MEANING, the motion, was
+switched off by our own accessibility rule. A stopped indicator does not read as
+"reduced motion", it reads as decoration, and the signal that work is happening
+is gone. Slow it instead (the bar runs 0.7s → 2.1s); reserve `animation: none`
+for decorative motion, or pair it with a state that is still visibly distinct
+from idle the way `.refresh-pulse` holds a lit fill.
+
+**Diagnosing it is the trap.** Windows exposes two different animation flags and
+Chromium reads the one you probably didn't check:
+
+- `HKCU:\Control Panel\Desktop\WindowMetrics\MinAnimate` — window
+  minimize/maximize animations. **Not what Chromium reads.** It was `1` on the
+  machine that showed the frozen bar, which is why the first check cleared the
+  media query wrongly.
+- **`SPI_GETCLIENTAREAANIMATION` (`0x1042`)** — Settings → Accessibility →
+  Visual effects → **Animation effects**. THIS is what Chromium maps
+  `prefers-reduced-motion` from, and it was `False`.
+
+```powershell
+Add-Type '…[DllImport("user32.dll")] public static extern bool SystemParametersInfo(uint a,uint b,ref bool c,uint d);'
+$anim = $true; [void][SPI]::SystemParametersInfo(0x1042, 0, [ref]$anim, 0)   # False => reduce
+```
+
+Consequence for verification: **Playwright's default context is
+`reducedMotion: 'no-preference'`**, so a spec proves nothing about the branch
+the developer's own machine takes. Assert the reduced path explicitly with
+`test.use({ reducedMotion: 'reduce' })` whenever an indicator has one.
+
 ## The smoke fake's `stat` mtime (measured 2026-08-07)
 
 `tauri-mock`'s `stat` must return a **`Date`**, stamped **once when the fake is

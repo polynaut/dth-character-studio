@@ -147,11 +147,12 @@ nothing waits on Houdini and a project you haven't touched since costs nothing t
 re-check. Projects linked from **outside** the character folder are left alone —
 those are yours, and the studio has no `$JOB` expectation for them.
 
-While a project is actually being read, a small **spinner** sits on the corner of
-its thumbnail — reading one means opening the whole scene in Houdini, which takes
-a while. Only the projects being re-read show it: a project that hasn't changed
-is answered from the cache without starting Houdini at all, so a quiet card means
-"nothing to do", not "not checked yet". The card stays usable throughout.
+While a project is actually being read, the card's **orange left bar lights
+up** — a brighter glint sweeps down the stripe — because reading one means
+opening the whole scene in Houdini, which takes a while. Only the projects
+being re-read show it: a project that hasn't changed is answered from the cache
+without starting Houdini at all, so a still bar means "nothing to do", not "not
+checked yet". The card stays usable throughout.
 
 A project that needs attention gets a **Needs attention** marker on its card,
 with the reason in the tooltip:

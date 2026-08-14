@@ -26,3 +26,7 @@ apps/desktop/resources/dth-runner/
 
 # Python bytecode (a stray py_compile of 456.py)
 __pycache__/
+
+# Dev-server output when `pnpm dev:desktop` is redirected to a file (detached
+# runs need a log somewhere, and the repo root is the convenient place).
+*.log

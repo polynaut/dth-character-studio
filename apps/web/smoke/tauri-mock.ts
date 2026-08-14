@@ -111,10 +111,10 @@ export interface TauriMockSeed {
    *
    *  The fake answers instantly, which is right for every spec about what a
    *  scan SAYS — but wrong for the ones about what the UI does WHILE one runs.
-   *  A real scan is a whole hython start plus seconds per `.hip`, and the card
-   *  spinner exists for exactly that window; without a delay it opens and closes
-   *  inside one frame and no spec could ever see it. Scans only: the other ops
-   *  have no such window. */
+   *  A real scan is a whole hython start plus seconds per `.hip`, and the
+   *  card's busy bar exists for exactly that window; without a delay it opens
+   *  and closes inside one frame and no spec could ever see it. Scans only: the
+   *  other ops have no such window. */
   materialScanDelayMs?: number
   /** The `$JOB` a scanned project reports — the General tab's input. Omit and
    *  the project reads as unreadable, which the tab reports and never repairs. */
@@ -707,7 +707,7 @@ export function installTauriMock(seed: TauriMockSeed): void {
           replace: request.replace ?? false,
         }
         if (request.op === 'scan') {
-          // See `materialScanDelayMs` — the window the card spinner lives in.
+          // See `materialScanDelayMs` — the window the card's busy bar lives in.
           if (seed.materialScanDelayMs) {
             await new Promise((resolve) => setTimeout(resolve, seed.materialScanDelayMs))
           }

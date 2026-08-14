@@ -21,25 +21,40 @@ function renderCard(props: Partial<Parameters<typeof LinkedAssetCard>[0]> = {}) 
 }
 
 describe('LinkedAssetCard busy', () => {
-  it('shows no spinner at rest', () => {
-    renderCard()
+  it('shows no busy indicator at rest', () => {
+    const { container } = renderCard({ barClass: 'bg-houdini-orange' })
     expect(screen.queryByRole('status')).toBeNull()
+    expect(container.querySelector('.busy-bar-sweep')).toBeNull()
   })
 
-  it('gives the spinner its label as an accessible name, not a bare icon', () => {
-    // A spinner with no accessible name is invisible to a screen reader — the
+  it('the accent bar becomes the labelled indicator, carrying the sweep segment', () => {
+    // No extra spinner: the brand bar the card already owns lights up. An
+    // indicator with no accessible name is invisible to a screen reader — the
     // card would simply say nothing about a scan that takes tens of seconds.
     // Queried BY that name, so the assertion IS the accessible name — whether a
     // real screen reader announces a live region that arrives with its content
     // already in it is a separate question, and not one jsdom can answer.
-    renderCard({ busy: true, busyLabel: 'Reading this project in Houdini…' })
-    expect(screen.getByRole('status', { name: 'Reading this project in Houdini…' })).toBeTruthy()
+    renderCard({
+      busy: true,
+      busyLabel: 'Reading this project in Houdini…',
+      barClass: 'bg-houdini-orange',
+    })
+    const bar = screen.getByRole('status', { name: 'Reading this project in Houdini…' })
+    expect(bar.querySelector('.busy-bar-sweep')).not.toBeNull()
+  })
+
+  it('falls back to the corner spinner on a card without an accent bar', () => {
+    // `busy` must never be silently invisible — a barless card keeps the old
+    // spinner over the media corner, with the same labelled status role.
+    renderCard({ busy: true, busyLabel: 'Working…' })
+    const status = screen.getByRole('status', { name: 'Working…' })
+    expect(status.querySelector('.busy-bar-sweep')).toBeNull()
   })
 
   it('leaves the card fully usable while busy', () => {
     // The scan is something the studio starts on its own; taking the user's
-    // controls away for it would be a worse bug than showing no spinner.
-    renderCard({ busy: true, onRemove: vi.fn(), onUtils: vi.fn() })
+    // controls away for it would be a worse bug than showing no indicator.
+    renderCard({ busy: true, barClass: 'bg-houdini-orange', onRemove: vi.fn(), onUtils: vi.fn() })
     for (const name of ['Open in Houdini', 'Remove', 'Utils']) {
       const button = screen.getByRole('button', { name }) as HTMLButtonElement
       expect(button.disabled).toBe(false)
@@ -47,8 +62,9 @@ describe('LinkedAssetCard busy', () => {
   })
 
   it('does not swallow clicks aimed at the card underneath', () => {
-    // The spinner overlays the media, so it has to be click-transparent.
-    renderCard({ busy: true })
+    // The lit bar overlays the card's left edge, so it has to stay
+    // click-transparent — busy is an indicator, never a blocker.
+    renderCard({ busy: true, barClass: 'bg-houdini-orange' })
     expect(screen.getByRole('status').className).toContain('pointer-events-none')
   })
 })
