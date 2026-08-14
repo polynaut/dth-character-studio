@@ -91,6 +91,8 @@ export function ScanCsvPickerDialog({
   /** Ticks while a run is out, so the wait can say more the longer it lasts. */
   const [waitedMs, setWaitedMs] = useState(0)
   const [scanError, setScanError] = useState('')
+  /** Between the click and the handoff being claimed — see onStartScan. */
+  const [starting, setStarting] = useState(false)
   const rows = sceneScanRows(sceneScan, character)
   const blocked = sceneCompatFailed(rows) && !force
 
@@ -135,6 +137,12 @@ export function ScanCsvPickerDialog({
   async function onStartScan() {
     setScanError('')
     setWaitedMs(0)
+    // `startSceneScan` does not return quickly: on a Daz that is ALREADY up it
+    // waits for the Runner to claim the handoff, polling for up to 10s before
+    // it either resolves or takes the job back. `run` is only set after that,
+    // so without this flag the button sits there enabled and unchanged for the
+    // whole wait — pressed, and apparently dead.
+    setStarting(true)
     try {
       const started = await startSceneScan({
         data: { scenePath, genesis: character.genesis },
@@ -142,6 +150,8 @@ export function ScanCsvPickerDialog({
       setRun(started)
     } catch (error) {
       setScanError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setStarting(false)
     }
   }
 
@@ -260,11 +270,17 @@ export function ScanCsvPickerDialog({
             <div className="mt-2 flex justify-end">
               <Button
                 size="sm"
-                disabled={checking || blocked}
+                disabled={checking || blocked || starting}
                 title={blocked ? 'The scene failed a check above' : undefined}
                 onClick={() => void onStartScan()}
               >
-                Start scan
+                {starting ? (
+                  <>
+                    <Loader2 className="animate-spin" /> Handing it to Daz…
+                  </>
+                ) : (
+                  'Start scan'
+                )}
               </Button>
             </div>
           )
