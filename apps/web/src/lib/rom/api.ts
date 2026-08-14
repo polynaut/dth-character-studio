@@ -174,6 +174,7 @@ export type { UnrealExportSet, UnrealImportStarted, UnrealSendPlan } from './api
 export {
   PROJECT_SCAN_RUN,
   abortExporterJobs,
+  awaitBatchPickup,
   abortProjectScanRun,
   clearExporterJobFiles,
   dismissExportRun,
