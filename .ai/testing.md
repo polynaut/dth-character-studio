@@ -174,7 +174,9 @@ The **real SPA in a real browser** against an in-memory fake of the native layer
   Measured 2026-08-13 — a review "proved" main was red across three runs, all
   three serving a sibling checkout's tree. Set `SMOKE_PORT=<free port>` when two
   checkouts are live, and treat a surprising local smoke result as a port
-  question before a code question.
+  question before a code question — surprising PASS included, which is the
+  direction that gets trusted. The default is the `PORT` constant in
+  `apps/web/playwright.config.ts`.
 - **This layer is where browser-only bugs reproduce.** A window-freezing React
   render loop passed every jsdom test and only showed here — when a UI
   interaction "works in tests" but misbehaves in the app, write the repro as a

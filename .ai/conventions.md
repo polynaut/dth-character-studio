@@ -82,7 +82,7 @@ doing it.
 
 **These are enforced where they can be, not trusted.** The rules that have never
 been broken in this repo are the machine-checked ones (the changeset gate, lint,
-the byte-identical rom output) — compliance simply isn't left to judgement. Two
+the byte-identical rom output) — compliance simply isn't left to judgement. Three
 hooks in `.claude/settings.json` move these the same way:
 
 - `.claude/hooks/inject-agent-context.mjs` (**SessionStart**) prints
@@ -97,8 +97,39 @@ hooks in `.claude/settings.json` move these the same way:
   first, then set tracking (the full rule lives in Repo mechanics below).
   Documented as non-negotiable, skipped twice in one day — so it is a check now,
   not a reminder.
+- `.claude/hooks/inject-gotchas.mjs` (**PreToolUse**) prints the measured fact
+  that applies to the action ABOUT to run — the token-push recipe before a
+  `git push`, the `SMOKE_PORT` collision before a smoke run, the schema ritual
+  before an edit to `types.ts`. Same reasoning one step further out: `.ai/*` is
+  retrieved by GREP, so a fact only ever helps when the agent already suspected
+  it existed, and everything else in those files is invisible by default. It
+  never blocks (context, not a gate) and each fact fires once per session.
+  The table is `.claude/hooks/triggers.mjs`; the TEXT is not copied there — each
+  entry names a doc + an anchor phrase and the bullet is extracted at run time,
+  so `.ai/*` stays the single source.
+  **Two rituals that keep it honest.** Adding a measured fact to `gotchas.md`
+  means asking whether it ties to a recognisable action, and giving it a trigger
+  if it does — a fact with no trigger is only found by someone who already
+  guessed it was there. And after any doc rewrite, run
+  `node .claude/hooks/inject-gotchas.mjs --audit`;
+  `node .claude/hooks/inject-gotchas.test.mjs` covers the matching itself (both
+  run on a fresh clone with no install).
+  **The audit checks three ways an anchor dies, because only the first is
+  visible.** STALE (the text moved, nothing extracts) is the obvious one.
+  AMBIGUOUS is the phrase now matching twice, where `indexOf` hands back the
+  wrong bullet confidently. TRUNCATED is the one that shipped: an anchor in
+  prose under a `##` extracted the whole 8 KB section, `MAX_NOTE` cut it, and
+  three triggers injected 1400 characters of real doc text that did not contain
+  the fact they fired for — green to a check that stops at "the anchor
+  resolves". The general lesson for any extract-at-runtime mechanism: assert on
+  what the reader RECEIVES, never on whether something was produced.
+  **The table is deliberately not exhaustive, and says so in what it injects.**
+  `gotchas.md` holds ~90 measured facts and only the action-tied ones have
+  triggers, so silence from this hook means "no trigger matched", never "nothing
+  is known". A partial table that reads as complete would be worse than none —
+  it teaches the reader that no warning is evidence of safety.
 
-Both hook commands in `.claude/settings.json` are repo-root-relative
+All three hook commands in `.claude/settings.json` are repo-root-relative
 (`node .claude/hooks/…`) — start sessions at the repo root (a worktree's root
 counts; it has its own checkout of `.claude/`), or the hooks fail MODULE_NOT_FOUND.
 
