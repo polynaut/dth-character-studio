@@ -3,8 +3,12 @@
  * root, the handoff stamps, the Daz-process probes and launch, and the job-file
  * paths every leg of the feature is written against.
  *
- * The bottom layer of `api/execute/` — it imports from no sibling, and the
- * three layers above it (run-state → jobs → scans) all bottom out here.
+ * The bottom layer of `api/execute/` — it imports from no sibling, and every
+ * module above it bottoms out here: `run-state.ts` sits directly on it, and
+ * `jobs.ts` + `scans.ts` sit on `run-state` as PEERS. Three levels, not four —
+ * the two top modules are independent of each other (measured, not assumed:
+ * `scans` never imports `jobs`), so either can be read or changed without the
+ * other.
  */
 import { exists, mkdir, readTextFile, remove, stat } from '@tauri-apps/plugin-fs'
 import { invoke, isTauri } from '@tauri-apps/api/core'

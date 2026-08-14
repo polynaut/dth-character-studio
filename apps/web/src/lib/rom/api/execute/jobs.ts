@@ -3,7 +3,9 @@
  * scenes are affected, launching Daz for a pending batch, and generating a ROM
  * animation.
  *
- * Layer 3 of `api/execute/` — imports `primitives.ts` and `run-state.ts`.
+ * Top of `api/execute/` alongside `scans.ts` — imports `primitives.ts` and
+ * `run-state.ts`, and nothing imports this but the barrel. `scans.ts` is its
+ * PEER, not its consumer: the two never reference each other.
  */
 import { exists, readTextFile, remove, rename, stat } from '@tauri-apps/plugin-fs'
 import { isTauri } from '@tauri-apps/api/core'

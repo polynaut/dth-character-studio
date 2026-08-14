@@ -11,8 +11,8 @@
 // DIALOG's (the studio pre-checks the affected scenes via
 // fetchExecuteScenes); this module takes the chosen list verbatim.
 //
-// THE IMPLEMENTATION LIVES IN `execute/`, in four layers that only ever import
-// downward — so working on one leg no longer means opening all of them:
+// THE IMPLEMENTATION LIVES IN `execute/`, which only ever imports downward — so
+// working on one leg no longer means opening all of them:
 //
 //   primitives.ts  the character + its scenes root, the handoff stamps, the
 //                  Daz-process probes and launch, the job-file paths
@@ -22,6 +22,9 @@
 //                  Daz for a pending batch, generating a ROM animation
 //   scans.ts       the scan runs riding the same handoff — whole-project,
 //                  per-scene, and the ROM animations they produce
+//
+// THREE levels, not four: `jobs` and `scans` both sit on `run-state` as PEERS
+// and never reference each other, so either can be read or changed on its own.
 //
 // This file stays the module's front door: everything the app imported from
 // `api/execute` before the split is still exported here, unchanged.

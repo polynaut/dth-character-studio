@@ -2,7 +2,10 @@
  * The scan runs that ride the same Runner handoff: the whole-project scan, the
  * per-scene scan, and the ROM animations they produce.
  *
- * Layer 4 of `api/execute/` — the top; nothing imports it but the barrel.
+ * Top of `api/execute/` alongside `jobs.ts` — imports `primitives.ts` and
+ * `run-state.ts`, and nothing imports this but the barrel. `jobs.ts` is its
+ * PEER, not something it builds on: these scans ride the same handoff, but
+ * they reach it through `run-state`, never through `jobs`.
  */
 import { exists, mkdir, readTextFile, remove, stat } from '@tauri-apps/plugin-fs'
 import { isTauri } from '@tauri-apps/api/core'
