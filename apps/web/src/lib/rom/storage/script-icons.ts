@@ -14,6 +14,8 @@ import exportIcon from '../script-icons/export.png?inline'
 import exportTip from '../script-icons/export.tip.png?inline'
 import exportHairIcon from '../script-icons/export-hair.png?inline'
 import exportHairTip from '../script-icons/export-hair.tip.png?inline'
+import scanProductsIcon from '../script-icons/scan-products.png?inline'
+import scanProductsTip from '../script-icons/scan-products.tip.png?inline'
 
 import { dataUrlBytes, join } from './fs'
 
@@ -33,6 +35,7 @@ const SCRIPT_ICONS: Record<ScriptIcon, { tile: string; tip: string }> = {
   'rom-export': { tile: romExportIcon, tip: romExportTip },
   export: { tile: exportIcon, tip: exportTip },
   'export-hair': { tile: exportHairIcon, tip: exportHairTip },
+  'scan-products': { tile: scanProductsIcon, tip: scanProductsTip },
 }
 
 /** The artwork file names for a script file (`ROM_X.dsa` → `ROM_X.png`,

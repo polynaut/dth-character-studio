@@ -70,6 +70,8 @@ export type ScriptIcon =
   | 'export'
   /** The standalone `Export_Hair_…` groom (.abc) script. */
   | 'export-hair'
+  /** The per-character `Scan_Products_…` product scan. */
+  | 'scan-products'
 
 export interface GeneratedFile {
   fileName: string

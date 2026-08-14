@@ -2063,7 +2063,12 @@ if (dthSceneLinkErr) {
     DthScanProducts(${dazJson(config, 2)});
 }
 `
-  return { fileName: `Scan_Products_${characterSlug(character)}.dsa`, content, target: 'daz' }
+  return {
+    fileName: `Scan_Products_${characterSlug(character)}.dsa`,
+    content,
+    target: 'daz',
+    icon: 'scan-products',
+  }
 }
 
 /**

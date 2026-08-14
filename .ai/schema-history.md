@@ -831,5 +831,12 @@ v75 — Truthful failure reporting from the generated carriers, plus the ASCII
       file), so this bump also carries a runtime-file change and its
       EXPECTED_RUNTIME_HASH update. One scanner
       (`@dth/rom`'s `nonAsciiStringLiterals`) now guards both surfaces.
+v76 — the generated `Scan_Products_<Name>.dsa` carries Content Library artwork
+      (`icon: 'scan-products'`), the last per-character script that had none.
+      Script CONTENT is unchanged — same reasoning as v39, which introduced the
+      artwork mechanism: the tiles land only on a (re)generate, and this bump is
+      what makes Refresh assets do it. Its artwork also joins the removal
+      sweep's `iconBearing` list, so turning Daz Products off retires the tiles
+      with the script instead of leaving a tile pointing at nothing.
 ```
 
