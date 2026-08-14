@@ -421,12 +421,23 @@ Part of the domain reference — `.ai/domain.md` is the index.
   readouts saying the same thing three ways):
   - **ONE ROW PER JOB**, built by the pure `lib/rom/export-cards.ts`
     (`dazTaskCards`/`houdiniTaskCards`/`unrealTaskCards`): a selected Daz scene
-    (subtitle = `EXPORT_MODE_LABELS[mode]`, "ROM + Export"…), a DazToHue
+    (`EXPORT_MODE_LABELS[mode]`, "ROM + Export"…), a DazToHue
     NETWORK (not a `.hip`), an export set going into ONE Unreal project — two
     sets into one project are two imports, so two rows. Rows carry
     `label` (the unit's own name), `detail` (what will happen to it) and
-    `context` (where — the `.hip`, the `.uproject`). Finished rows STAY, ticked
-    off; the list is the whole run, not what's left.
+    `context` (where — the `.hip`, the `.uproject`), all on ONE line per row
+    (label + "detail · context" inline, truncating — the two-line card read
+    as a card column again). Finished rows STAY, ticked
+    off; the list is the whole run, not what's left. The list renders
+    BOTTOM-UP (Remo, 2026-08-14 — "the latest task at the bottom"): first job
+    at the bottom, later ones stacked above, ordinals still counting in RUN
+    order, and the scroll pins the run's front row (active, else freshest
+    finished) to the bottom edge — queue above, history below the fold — via
+    scrollTop arithmetic, never scrollIntoView (which walks every scrollable
+    ancestor and can drag the page). The whole panel is ABSOLUTE, anchored
+    above the header's button row and `inset-x-0` to it, so it is exactly as
+    wide as the buttons (it used to bring its own `min-w` and out-grow them)
+    and a run starting can never resize the header.
   - **ONE bar**, `runPercent(tasks, activeFraction)`: finished rows plus the
     active one's own share (Daz = the progress-log percent; Houdini = the HDA's
     phase-line count over ~9, measured on a full node run, capped at 95%;
@@ -444,17 +455,24 @@ Part of the domain reference — `.ai/domain.md` is the index.
   Honesty rules the rows keep: a Daz row shows no mode when the window only
   ADOPTED the run (a job file carries rows, never the panel's choice — hence
   `ExportRunProgress.mode`, restored from the sidecar for the owner); an Unreal
-  row says "Re-import"/"First import" only from the send plan's own probe
+  row says "Re-import" only from the send plan's own probe
   (`UnrealSendPlan.located`, refined by `startUnrealImport`'s per-set
-  `existing`), and a plain "Import" when nobody looked.
+  `existing`), a plain "Import" when nobody looked — and a set the probe says
+  the project has NEVER held gets no row at all, because the send drops it
+  (re-import only; see the third-leg bullet).
   The scripts log step START markers too ("generating ROM", …) at the
   already-reached percent. No mid-run toasts: the one report fires at the very
   end.
-  Both live buttons are INERT to a plain click (a stray one used to drop the
-  watch, reading as "the export vanished"); the way out sits beside them as
-  **Interrupt** (see "Interrupting a run" below), which stops the run itself
-  and drops the queued Houdini projects with it (the leftover-file hatch lives
-  in Settings → App Data — see the claimed-batch bullet below).
+  The live **Working** button IS the interrupt (both legs, `WorkingButton` in
+  dth-export.tsx): hover swaps the spinner for a stop mark and the tooltip
+  leads with "Click to interrupt"; the click stops the run itself at its next
+  safe point and drops the queued Houdini projects with it. It replaced a
+  separate Interrupt button beside an INERT Working button (the pair
+  out-grew the panel above it), which had itself replaced the modifier-hidden
+  Abort/Stop-watching. The stray-click worry that made Working inert (a click
+  used to drop the WATCH, reading as "the export vanished") no longer
+  applies — a click now stops the RUN, loudly and safely (the leftover-file
+  hatch lives in Settings → App Data — see the claimed-batch bullet below).
   RELOAD SURVIVAL: every character handoff writes its plan to the app-data
   sidecar `export-run.json` (characterId, startedAtMs, houdiniProjects/mode,
   scenes, the Daz `mode`, the Unreal targets/sets; deleted on every run end).
@@ -755,6 +773,20 @@ Part of the domain reference — `.ai/domain.md` is the index.
   The studio cannot read an editor's asset registry from out here, so a set
   whose assets were RENAMED reads as absent — un-ticking a row the user can
   tick, never ticking one they didn't mean.
+  **The send is RE-import ONLY** (Remo, 2026-08-14 — a run had "First import"
+  rows for a variant nobody had ever put in that project): a character's FIRST
+  import into an Unreal project is made in Unreal itself, a placement decision
+  the user owns, never a batch continuation. Three layers enforce it, each
+  honest about ignorance: `startUnrealImport` filters the job to sets
+  `locateSets` finds in that project, returns the dropped names as `skipped`
+  (the report SAYS them — a silent drop reads as "everything reached Unreal")
+  and refuses outright when nothing is there to re-import; the panel's project
+  row goes INERT (with "make the first import in Unreal itself") when the
+  probe LANDED and found nothing of the run's — a null probe stays tickable,
+  because ignorance must not refuse and the send re-probes for real; and
+  `unrealTaskCards` drops `existing === false` sets from the rows ("First
+  import" is gone) while `existing === undefined` (restored run, nobody
+  looked) keeps its plain "Import" row for the send to decide.
   Two rules the dialog enforces on top, both earned: a **rom-only** run is not
   sendable at all (it writes no export, so the send could only hand over the
   previous one while the run reads as this ROM reaching Unreal), and a ticked

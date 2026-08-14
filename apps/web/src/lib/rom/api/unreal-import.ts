@@ -83,11 +83,17 @@ const importInput = charScopeInput.extend({
 })
 
 export interface UnrealImportStarted {
-  /** The export sets handed over, in job order. */
+  /** The export sets handed over, in job order — every one a re-import
+   *  (`existing` is always true now; the field stays because the panel's rows
+   *  read it, and a future contract change should not have to re-invent it). */
   sets: Array<{ name: string; destination: string; existing: boolean; files: number }>
-  /** The Unreal content path a FRESH import goes to, for a single set (''
-   *  for several). A re-import lands where the existing assets already are —
-   *  the bridge decides that, and reports it back in the result. */
+  /** Sets this run produced that the project has never held — DROPPED from
+   *  the job, because the send is re-import only (a first import is the
+   *  user's own act inside Unreal). Named so the caller can say it out loud;
+   *  a silent drop would read as "everything reached Unreal". */
+  skipped: Array<string>
+  /** The content path of the one import ('' for several) — where the existing
+   *  assets already are, re-located by this send. */
   destination: string
   /** True when a previous job was still sitting unclaimed — the editor was not
    *  watching, and this run replaced it rather than queueing behind it. */
@@ -155,7 +161,12 @@ async function readBridgeVersion(bridgeDir: string): Promise<number> {
 }
 
 /**
- * Hand a character's Houdini output to a watching Unreal editor.
+ * Hand a character's Houdini output to a watching Unreal editor — as a
+ * RE-import, only ever onto assets the project already holds. A set the
+ * project has never seen is skipped (named in the return) or, when nothing at
+ * all is there to re-import, refused: the first import of a character into a
+ * project is a placement decision the user makes inside Unreal, not something
+ * a batch run may do on their behalf.
  *
  * Returns as soon as the job file is written — the editor claims it on its next
  * tick (about a second), and the caller polls {@link fetchUnrealImportProgress}.
@@ -235,10 +246,6 @@ export async function startUnrealImport({ data }: { data: unknown }): Promise<Un
   }
   const replacedPending = await exists(paths.jobFile).catch(() => false)
 
-  // The manifest names its own outputs, so the job can say WHICH files this
-  // export produced. The bridge uses them to find where they are already
-  // imported — an unreadable manifest just means no matching, never a refusal
-  // to send (the importer will report it far better than a path check here).
   // Where these sets already live in THIS project, worked out from disk — the
   // job then names the destination instead of the bridge hunting for it (see
   // `locateSets`: the hunt from inside Unreal was measured coming back empty).
@@ -246,14 +253,39 @@ export async function startUnrealImport({ data }: { data: unknown }): Promise<Un
     paths.projectDir,
     wanted.map((set) => set.name),
   ).catch(() => ({}))
+  // RE-import only: a set this project has never held is NOT sent. The first
+  // import of a character is the user's own act inside Unreal (it decides
+  // where in the project the character lives); the studio's leg exists to
+  // land an updated export on assets that are already there. The skipped
+  // names ride the return, so the drop is said rather than silent.
+  const sendable = wanted.filter((set) => located[set.name] !== undefined)
+  const skipped = wanted
+    .filter((set) => located[set.name] === undefined)
+    .map((set) => set.name)
+  if (sendable.length === 0) {
+    const projectName = (input.uprojectPath.split(/[\\/]/).pop() ?? input.uprojectPath).replace(
+      /\.uproject$/i,
+      '',
+    )
+    throw new Error(
+      `${projectName} doesn't hold ${skipped.join(', ')} yet, and the studio only re-imports — make the first import in Unreal itself (open the project and import the DazToHue .dth once); after that, runs re-import it in place.`,
+    )
+  }
+  // The manifest names its own outputs, so the job can say WHICH files this
+  // export produced. The bridge uses them to find where they are already
+  // imported — an unreadable manifest just means no matching, never a refusal
+  // to send (the importer will report it far better than a path check here).
   const imports = await Promise.all(
-    wanted.map(async (set) => ({
+    sendable.map(async (set) => ({
       dth: set.dth,
-      // Where the set ALREADY is, else the default — named after the EXPORT
-      // SET, not the character: the set's name is the HDA's `character_name`,
-      // which is what separates three outfit variants of one character.
+      // Where the set ALREADY is — named after the EXPORT SET, not the
+      // character: the set's name is the HDA's `character_name`, which is
+      // what separates three outfit variants of one character. (The
+      // `unrealDestinationFor` default is unreachable behind the re-import
+      // filter above; it stays as the typed fallback rather than an
+      // assertion.)
       destination: located[set.name] ?? unrealDestinationFor(set.name),
-      existing: located[set.name] !== undefined,
+      existing: true,
       character: set.name,
       files: dthExportFiles(await readTextFile(set.dth).catch(() => '')),
     })),
@@ -266,6 +298,7 @@ export async function startUnrealImport({ data }: { data: unknown }): Promise<Un
       existing: one.existing,
       files: one.files.length,
     })),
+    skipped,
     destination: imports.length === 1 ? imports[0].destination : '',
     replacedPending,
   }
@@ -370,12 +403,13 @@ const sendPlanInput = charScopeInput.extend({
  * The send plan for one character: what could be sent, and what each linked
  * project already has.
  *
- * Both send surfaces pre-tick from this, and they pre-tick the same way: a set
- * the project ALREADY holds is a re-import (ticked), a set it doesn't is a
- * first import (offered, unticked). Putting a character into a project the
- * first time is a decision, not a continuation — the same rule the project rows
- * themselves use, applied one level down, after a send imported an outfit
- * variant nobody had asked for.
+ * The DTH Export panel pre-ticks from this: a project holding a set THIS RUN
+ * writes is a re-import (ticked); one holding none of them has nothing this
+ * leg can do — the send is re-import ONLY, so its row goes inert and the
+ * first import stays the user's own act inside Unreal. Putting a character
+ * into a project the first time is a decision, not a continuation — the rule
+ * that started as "offered, unticked" and hardened to "not offered at all"
+ * after a send imported an outfit variant nobody had asked for.
  *
  * Filesystem only — the studio cannot read an editor's asset registry from out
  * here — so this is {@link locateSets}'s filename search, with all the honesty

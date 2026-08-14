@@ -149,8 +149,10 @@ export interface UnrealTargetSet {
    *  asset folder in Unreal is called. The "final character", in other words. */
   name: string
   /** The studio found this set's assets already in that project, so the import
-   *  lands on top of them — a re-import. `undefined` = not probed (a restored
-   *  run), which must not be reported either way. */
+   *  lands on top of them — a re-import. `false` = probed and NOT found, and
+   *  since the send is re-import only that set is dropped from the run (and
+   *  from the rows). `undefined` = not probed (a restored run), which must not
+   *  be reported either way. */
   existing?: boolean
 }
 
@@ -159,10 +161,14 @@ export interface UnrealTargetSet {
  * one import job each. One project taking two characters shows two rows, both
  * naming that project.
  *
- * The `detail` is the honest three-way answer to "what will this do": a
- * re-import when the studio located those assets in that project, a first
- * import when it looked and found none, and a plain "Import" when nobody
- * looked (a run restored after a reload carries the set names, not the probe).
+ * Only sets the probe LOCATED in that project become rows: the send is a
+ * RE-import by contract — a character's FIRST import into a project is the
+ * user's own act inside Unreal — so a set the project has never held is
+ * dropped from the run, not listed as work about to happen. `existing ===
+ * undefined` (nobody looked: a run restored after a reload carries the set
+ * names, not the probe) keeps its row with a plain "Import" — the send
+ * decides at handover, and a row that may happen beats a dropped one claiming
+ * it won't.
  */
 export function unrealTaskCards(
   target: UnrealTarget,
@@ -179,14 +185,16 @@ export function unrealTaskCards(
       },
     ]
   }
-  return target.sets.map((set) => ({
-    id: `ue:${target.path}#${set.name}`,
-    label: set.name,
-    detail: set.existing === true ? 'Re-import' : set.existing === false ? 'First import' : 'Import',
-    context: target.label,
-    kind: 'unreal',
-    status,
-  }))
+  return target.sets
+    .filter((set) => set.existing !== false)
+    .map((set) => ({
+      id: `ue:${target.path}#${set.name}`,
+      label: set.name,
+      detail: set.existing === true ? 'Re-import' : 'Import',
+      context: target.label,
+      kind: 'unreal',
+      status,
+    }))
 }
 
 /**

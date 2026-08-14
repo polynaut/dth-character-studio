@@ -243,17 +243,18 @@ until it does.
 
 It gets **one row per import job**, not per project: sending two export sets to
 one Unreal project is two imports, so the list shows two rows, each naming the
-set (the character as Unreal will know it), whether it is a *Re-import* or a
-*First import*, and the project it lands in.
+set (the character as Unreal will know it) and the project it lands in. Every
+row is a **re-import** — a set the project has never held is dropped from the
+job and named in the report instead, because its first import is made in
+Unreal itself.
 
 What it sends is **what the run makes**: the export sets the Houdini projects in
 the run write, or — under *Skip Houdini — use last exports* — the ones already in
 the character's `export/` folder. Each is a folder there named by the HDA's
 *character name* and holding a `DTH_<name>.dth`, so one character can have
 several (outfit variants, for instance). Nothing is picked: ticking the Unreal
-project is the whole decision, and the run's task list names each set and
-whether it is a re-import or a first import. They travel in one job and
-import into one content folder each. This is the end of the
+project is the whole decision, and the run's task list names each set it
+re-imports. They travel in one job and import into one content folder each. This is the end of the
 pipeline, not the `daz-export` intermediate the Houdini imports read. What imports it is **mrpdean's DazToHue importer plugin**, whose
 own pipeline does the work: meshes, textures, materials, animation curves and
 the post-process animation blueprint.
@@ -268,7 +269,8 @@ lands. The finish toast says which happened and where: *Re-imported in Unreal �
 6 assets in /Game/Characters/Lara*.
 
 Renamed assets are the one thing it cannot follow: those read as "not here", and
-the send falls back to a fresh import at the default location.
+since the send only ever re-imports, that set is skipped and named in the
+report — rename the assets back, or reimport them from inside Unreal.
 
 **What a re-import does, exactly.** It runs Unreal's own **Reimport** on the
 assets already there — the same action as right-click → *Reimport* in the

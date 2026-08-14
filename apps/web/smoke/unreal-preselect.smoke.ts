@@ -28,9 +28,13 @@ const callsNamed = (page: import('@playwright/test').Page, cmd: string) =>
 // Nothing sits UNDER the project rows any more. There was a second tick list
 // there, built from the export folder — i.e. from what a PREVIOUS run wrote —
 // so the sets a run was about to make were not in it at all, and a ticked
-// project with no ticked set held Start. That made the one thing it existed for
-// (putting a NEW character into an Unreal project) impossible. Which sets go is
-// the studio's own answer now, and the run's task cards say it per set.
+// project with no ticked set held Start. Which sets go is the studio's own
+// answer now, and the run's task cards say it per set.
+//
+// And the send is RE-import only: a project holding nothing this run makes has
+// an inert row, and a set the project never held is dropped from the job (and
+// said out loud). The first import of a character into an Unreal project is
+// made in Unreal itself — a placement decision, not a batch continuation.
 
 const STORE = `${P.project}/.dcsmeta/characters/Kira/houdini-scan.json`
 const HOUDINI_2 = 'D:/DTH Projects/Demo/Kira/houdini/KiraSummertide.hip'
@@ -164,23 +168,22 @@ test('the Unreal project ticks for a run that refreshes what it already holds', 
   await expect(dialog.getByText('Already has what this run sends')).toBeVisible()
 })
 
-test('…and does NOT tick for a run whose variant that project has never seen', async ({ page }) => {
+test('…and goes INERT for a run whose variant that project has never seen', async ({ page }) => {
   const dialog = await openDialog(page)
 
   // The other project: it writes KiraSummertide, which DemoGame has no assets
-  // for. Nothing to refresh — so nothing is pre-selected, and a first import
-  // stays the user's own decision.
+  // for. Nothing to re-import — and the send is re-import ONLY, so the row is
+  // not merely unticked but inert, and it says where the first import is made
+  // instead.
   await dialog.getByRole('checkbox', { name: 'Run in KiraSummertide' }).check()
   await dialog.getByRole('checkbox', { name: 'Run in Kira', exact: true }).uncheck()
-  await expect(dialog.getByRole('checkbox', { name: 'Send to DemoGame' })).not.toBeChecked()
+  const send = dialog.getByRole('checkbox', { name: 'Send to DemoGame' })
+  await expect(send).not.toBeChecked()
+  await expect(send).toBeDisabled()
   // …and the row doesn't claim otherwise: this project holds a DIFFERENT
   // variant, which is not "has what this run makes".
   await expect(dialog.getByText('Already has what this run sends')).toHaveCount(0)
-  // Ticking it is all it takes — and under the old tick list this was
-  // unreachable: a ticked project with no ticked set held Start, and the only
-  // sets on offer were what a previous run had left on disk.
-  await dialog.getByRole('checkbox', { name: 'Send to DemoGame' }).check()
-  await expect(dialog.getByRole('checkbox', { name: 'Send to DemoGame' })).toBeChecked()
+  await expect(dialog.getByText(/make the first import in Unreal/)).toBeVisible()
 })
 
 // The set this run WRITES is not in the export folder yet — the actual reported
@@ -210,7 +213,7 @@ test('a set this run CREATES is looked for in Unreal, not assumed missing', asyn
   await expect(dialog.getByText('Already has what this run sends')).toBeVisible()
 })
 
-test('…and one that is genuinely nowhere stays the user’s decision', async ({ page }) => {
+test('…and one that is genuinely nowhere cannot be sent at all', async ({ page }) => {
   const dialog = await openDialogWith(page, {
     onDisk: ['KiraDefault'],
     scans: [
@@ -225,7 +228,11 @@ test('…and one that is genuinely nowhere stays the user’s decision', async (
 
   await dialog.getByRole('checkbox', { name: 'Run in KiraSummertide' }).check()
   await dialog.getByRole('checkbox', { name: 'Run in Kira', exact: true }).uncheck()
-  await expect(dialog.getByRole('checkbox', { name: 'Send to DemoGame' })).not.toBeChecked()
+  const send = dialog.getByRole('checkbox', { name: 'Send to DemoGame' })
+  await expect(send).not.toBeChecked()
+  // Re-import only: nothing of this run's is in there, so there is nothing
+  // this leg could do — the first import is made in Unreal itself.
+  await expect(send).toBeDisabled()
   await expect(dialog.getByText('Already has what this run sends')).toHaveCount(0)
 })
 
@@ -292,12 +299,14 @@ test('an unscanned Houdini project pre-selects nothing and says what sending any
   await expect(send).toBeChecked()
 })
 
-test('ONE task row per re-import — two sets into one project are two jobs', async ({ page }) => {
+test('ONE task row per re-import — and a set the project never held is dropped, and said', async ({
+  page,
+}) => {
   // The third leg speaks where the other two do: the run's own task list and
-  // its one status line. And it says so per JOB — two export sets going into
-  // one Unreal project are two imports, so they are two rows, both naming the
-  // project they land in. One row per PROJECT read as "one thing is happening"
-  // about work that is two.
+  // its one status line. One row per JOB — an export set going into a project
+  // is one import. And the send is RE-import only: a set that project has
+  // never held is dropped from the job and NAMED in the report, never rows'd
+  // as work about to happen (its first import is made in Unreal itself).
   const seed = buildSeed({
     activeProjectFile: P.dcsp,
     demo: true,
@@ -331,13 +340,17 @@ test('ONE task row per re-import — two sets into one project are two jobs', as
   await dialog.getByRole('checkbox', { name: 'Send to DemoGame' }).check()
   await dialog.getByRole('button', { name: 'Start' }).click()
 
-  // TWO rows for the ONE project, each named by the export set it carries —
-  // the "final character" that lands in Unreal — and each saying which of the
-  // two things it is about to do.
+  // ONE row: KiraDefault is a re-import. KiraSummertide is on disk but has
+  // never been in DemoGame, so it is NOT part of the run — no row promising an
+  // import the send refuses to make.
   const rows = page.locator('[data-task^="ue:"]')
-  await expect(rows).toHaveCount(2, { timeout: 15_000 })
+  await expect(rows).toHaveCount(1, { timeout: 15_000 })
   await expect(rows.filter({ hasText: 'KiraDefault' })).toContainText('Re-import · DemoGame')
-  await expect(rows.filter({ hasText: 'KiraSummertide' })).toContainText('First import · DemoGame')
+  await expect(rows.filter({ hasText: 'KiraSummertide' })).toHaveCount(0)
+
+  // The drop is SAID — silently skipping a set would read as "everything
+  // reached Unreal".
+  await expect(page.getByText(/not sent: KiraSummertide/)).toBeVisible({ timeout: 15_000 })
 
   // The status line carries the leg's newest word — one line, not a transcript.
   await expect(page.locator('[data-export-status]')).toContainText(
