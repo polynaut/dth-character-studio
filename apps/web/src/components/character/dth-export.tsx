@@ -25,7 +25,7 @@ import {
   runPercent,
   unrealTaskCards,
 } from '#/lib/rom/export-cards.ts'
-import { formatElapsed } from '#/lib/rom/execute-jobs.ts'
+import { formatElapsed, tidyRunErrors } from '#/lib/rom/execute-jobs.ts'
 
 import type { ExportRunProgress } from '#/lib/rom/api.ts'
 import type { UnrealTarget } from '#/lib/rom/export-cards.ts'
@@ -44,6 +44,7 @@ import {
   DthLogo,
   EXPORT_TOAST_ID,
   ExportProgressButton,
+  exportFinishToast,
   HOUDINI_TOAST_ID,
   HoudiniProgressButton,
   NO_UNREAL_PROJECTS,
@@ -660,7 +661,7 @@ export function DthExportAction({
       lines.push(
         `Daz: ${scenes} exported${d.elapsedMs !== undefined ? ` in ${formatElapsed(d.elapsedMs)}` : ''}`,
       )
-      lines.push(...d.errors)
+      lines.push(...tidyRunErrors(d.errors))
       if (d.elapsedMs === undefined) totalKnown = false
       else totalMs += d.elapsedMs
     }
@@ -682,14 +683,10 @@ export function DthExportAction({
     if (interrupted) {
       lines.push('Stopped on request — anything not listed above did not run.')
     }
-    const options = {
-      id: EXPORT_TOAST_ID,
-      duration: Infinity,
-      description: lines.join('\n') || undefined,
-    }
-    if (interrupted) toast.info(title, options)
-    else if (anyFailed) toast.warning(title, options)
-    else toast.success(title, options)
+    const body = lines.join('\n') || undefined
+    if (interrupted) exportFinishToast('info', title, body)
+    else if (anyFailed) exportFinishToast('warning', title, body)
+    else exportFinishToast('success', title, body)
   }
 
   /** Start the next Houdini export run and park the rest in the queue. */
@@ -884,12 +881,11 @@ export function DthExportAction({
         // Runner exported from one whose script saw the flag and returned —
         // both come back `done`. What it knows for certain is that the user
         // stopped it, and where to look for what actually happened.
-        toast.info(`DTH Export interrupted${run.elapsedMs !== undefined ? ` after ${formatElapsed(run.elapsedMs)}` : ''}.`, {
-          id: EXPORT_TOAST_ID,
-          duration: Infinity,
-          description:
-            'Stopped on request. Scenes that had not started were skipped; the ROM run log shows which scene was interrupted mid-build.',
-        })
+        exportFinishToast(
+          'info',
+          `DTH Export interrupted${run.elapsedMs !== undefined ? ` after ${formatElapsed(run.elapsedMs)}` : ''}.`,
+          'Stopped on request. Scenes that had not started were skipped; the ROM run log shows which scene was interrupted mid-build.',
+        )
         interruptedRef.current = false
         // The run ends HERE — an accumulated report belongs to a process that
         // no longer has an end, and would otherwise fire on a later, unrelated
@@ -905,10 +901,7 @@ export function DthExportAction({
           description: run.errors.length ? run.errors.join('\n') : undefined,
         })
       } else {
-        toast.success(`DTH Export finished — ${scenes} exported${took}.`, {
-          id: EXPORT_TOAST_ID,
-          duration: Infinity,
-        })
+        exportFinishToast('success', `DTH Export finished — ${scenes} exported${took}.`)
       }
       // No Houdini continuation — the run ends here, and its cards with it.
       // A SKIP run still has its third leg: no Houdini means the send happens
@@ -928,9 +921,9 @@ export function DthExportAction({
       clearPipeline()
       // As sticky as the finish: a run dying while the user is away must not
       // evaporate before they return.
-      toast.error(
+      exportFinishToast(
+        'error',
         'DTH Export did not finish — Daz Studio is no longer running (or the job file disappeared).',
-        { id: EXPORT_TOAST_ID, duration: Infinity },
       )
       return
     }
