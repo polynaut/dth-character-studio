@@ -1,5 +1,103 @@
 # @dth/web
 
+## 0.78.0
+
+### Minor Changes
+
+- [#827](https://github.com/polynaut/dth-character-studio/pull/827) [`0935f74`](https://github.com/polynaut/dth-character-studio/commit/0935f7407feb333e8a31fa0c9080c3cc09748b4a) Thanks [@polynaut](https://github.com/polynaut)! - DTH Export opens in a side panel instead of a centered dialog
+
+  The run has three stacked legs — Daz scenes, Houdini projects, Unreal projects
+  — and the old dialog gave them a 576px column inside 85% of the window height,
+  so the third one lived below the fold behind a scroll. It is now the same
+  drawer the Houdini project utils use: full height, the lists at their natural
+  width, and **Start** pinned to the panel's bottom edge where it can no longer
+  scroll out of reach.
+
+  Nothing about the run itself changed — the same scenes, modes, pre-selection,
+  Runner gate and Interrupt, in a panel that fits them.
+
+  One side effect worth knowing: a drawer, unlike the old dialog, leaves the page
+  behind it live, so a file dropped on the dimmed editor while the panel is open
+  now lands there (linking a scene, linking a project) instead of being ignored.
+  The panel's own scene list still only reads disk when it opens, so a scene
+  linked that way shows up the next time you open it. While a run is being handed
+  off, Escape, the backdrop and ✕ are all refused, as before.
+
+- [#825](https://github.com/polynaut/dth-character-studio/pull/825) [`938c693`](https://github.com/polynaut/dth-character-studio/commit/938c69334df44c8c6d0d9a95f7953ffed166b183) Thanks [@polynaut](https://github.com/polynaut)! - **A saved ROM animation can be opened whenever it exists — stale or not.**
+
+  A scene card's open menu offered **Open ROM Animation** only while the saved
+  `rom-animations/<scene>_ROM.duf` was _current_, and swapped it for **Open and
+  Generate ROM Animation** the moment it wasn't. That threshold is far lower than
+  it sounds: freshness is dated against the generated ROM script, which every
+  character save rewrites, so editing anything at all makes every saved animation
+  of that character stale. A primary scene whose ROM had been built and exported
+  was therefore offered nothing but a rebuild — a Daz run of many minutes — with
+  no way to open the file sitting right there.
+
+  Both entries now stand on their own. The file is on disk, so it opens; when it
+  predates the current definition the row says so (_From an earlier run — the
+  scene or the definition changed since_) and opens it anyway, because stale is
+  not wrong, it is "not from what the character says now" — the user's call. The
+  rebuild sits under it whenever it is worth offering: no saved animation, a stale
+  one, or Ctrl held to force a fresh build of a current one.
+
+  **Open Original** is now **Open scene** — it opens the scene, and "original"
+  only meant anything next to the entry it used to replace.
+
+  While a rebuild is running, the open entry is disabled rather than merely the
+  rebuild: the build overwrites the very file that entry points at, and opening it
+  would hand the running Daz a scene switch mid-build. It comes back by itself
+  when the freshly built animation opens.
+
+- [#824](https://github.com/polynaut/dth-character-studio/pull/824) [`9357832`](https://github.com/polynaut/dth-character-studio/commit/9357832ead49971a89f997673efdaabf92193ef9) Thanks [@polynaut](https://github.com/polynaut)! - **The DTH Export dialog's Unreal section is one tick per project again — the
+  export-set list is gone.**
+
+  Under the Unreal projects there was a second tick list, one row per export set,
+  built from the character's `export/` folder — i.e. from what an EARLIER run had
+  produced. On a THICK variant whose Houdini project writes `LaraClassic_THICK`
+  and `LaraNaked_THICK` it offered `LaraClassic` and `LaraNaked`, because those
+  were the folders on disk. The sets the run was about to make were not in the
+  list at all, and since a ticked project with no ticked set held Start, the one
+  thing the list made impossible was the thing it existed for: putting a **new**
+  character into an Unreal project. It could only ever re-pick the past.
+
+  Nothing to pick now. What goes is the export sets this run puts in play — named
+  by the checked Houdini projects' own scan, or, under _Skip Houdini — use last
+  exports_, the exports already on disk. Whether each one refreshes what that
+  project has or arrives as a new character is worked out from the project's
+  `Content/`, as it always was, and the run's task list names every set with the
+  project it lands in. Ticking the project is the whole decision.
+
+  The project rows still pre-tick on "does it already hold what this run makes",
+  which is what keeps a variant from landing in Unreal unasked — but the answer is
+  now actionable either way. A Houdini project the background scan has never
+  reached still names nothing, so nothing pre-ticks and the section says plainly
+  that sending anyway hands over the whole export folder; one **Rescan** (Utils
+  drawer) narrows it back to what the run makes.
+
+  The standing line under the section — _"Queued for import when the whole export
+  finishes…"_ — is gone with it. It described the feature to somebody who had just
+  ticked a box to use it. The section now says something only when it cannot send:
+  no export to send from, an empty export folder, Houdini projects that write no
+  set at all.
+
+  And the pre-tick is looked up for real. The studio checks each linked Unreal
+  project for the sets **this run writes**, not only for the ones a previous run
+  left in the export folder — so a variant you are exporting for the first time
+  from this studio project, but which that Unreal project already holds, is
+  correctly ticked as the refresh it is. It used to read as a first import,
+  because the check had only ever asked about sets that were already on disk.
+
+  A send whose set names no longer match what Houdini wrote now says so — naming
+  both lists and pointing at **Rescan** — instead of reporting "no Houdini export
+  found, run the Houdini export first" straight after one succeeded.
+
+### Patch Changes
+
+- Updated dependencies [[`0935f74`](https://github.com/polynaut/dth-character-studio/commit/0935f7407feb333e8a31fa0c9080c3cc09748b4a), [`a4ec3da`](https://github.com/polynaut/dth-character-studio/commit/a4ec3da38ff82d45c646168925b26da342b0c95e)]:
+  - @dth/ui@0.78.0
+  - @dth/rom@0.78.0
+
 ## 0.77.0
 
 ### Minor Changes
