@@ -304,7 +304,7 @@ describe('mergeImportedCharacter', () => {
       choices: { ...baseChoices, extras: { ...baseChoices.extras, preserveMorphs: false } },
       keptHoudini: [],
     })
-    expect(merged.preserveMorphs).toEqual([{ name: 'targetMorph', keepValue: 0.5 }])
+    expect(merged.preserveMorphs).toEqual([{ name: 'targetMorph', keepValue: 0.5, node: '' }])
   })
 
   it('deselected scenes drop their files’ refs, per-scene records and the avatar-source link', () => {

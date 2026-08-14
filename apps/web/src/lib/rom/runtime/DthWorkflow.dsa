@@ -28,7 +28,7 @@ include (dir_self.filePath ("DthScanFrames.dsa")); // keyframe scanning (debug/s
 function dthStopHere(sWhere){
 	if(!dthStopRequested()) return false;
 	print("DTH Character Studio: ROM build stopped (" + sWhere + ") - interrupted from the studio.");
-	acceptUndo("DTH Workflow (interrupted)");
+	acceptUndo("Generating ROM (interrupted)");
 	return true;
 }
 
@@ -98,6 +98,15 @@ function ApplyDTHWorkflow(options){
 	print("Applying initial values... ");
 	ApplyInitialValues(options, oNodeRoot)
 
+	// "Add morphs on frame 0" — FIRST, before any preset block loads (v74):
+	// these rows define the base state the whole ROM builds on (a clothing fit
+	// like "Expand All" must shape the outfit before anything is keyed), and
+	// the two passes that READ scene state — memorizeBaseMorphs' close-out
+	// baseline and resolveAutoBaseValues' sawtooth floors — must both see
+	// them. Until v74 this ran after the preset blocks, so those reads never
+	// saw the values at all.
+	applyFrameZeroMorphs(oNodeRoot, options.frameZeroMorphs);
+
 	// Memorize node transforms before any ROM loading overwrites them
 	memorizeNodeTransforms(oNodeRoot, options.preserveNodeTransforms);
 
@@ -112,9 +121,6 @@ function ApplyDTHWorkflow(options){
 		print("Applying default ROMs...");
 		if(!ApplyDefaultROMs(options, oNodeRoot, oNodeMouth))
 			return false;
-
-		// Restore any morphs that should be preserved after ROM loading
-		restorePreservedMorphs(oNodeRoot, options.preserveMorphs);
 
 		// Apply JCM morph modifications based on bone rotation keyframes
 		applyJcmMorphMods(oNodeRoot, options.jcmMorphMods);
@@ -175,11 +181,6 @@ function ApplyDTHWorkflow(options){
 	// Restore node transforms that were overwritten by ROM loading (JCM, DK, GP, Physics)
 	restoreNodeTransforms(oNodeRoot, options.preserveNodeTransforms);
 
-	// "Add morphs on frame 0" — set + key each listed morph at frame 0 across the
-	// whole figure tree (clothing fit morphs like "Expand All"; with no other
-	// keys the value holds across the whole ROM, so the export sees it everywhere).
-	applyFrameZeroMorphs(oNodeRoot, options.frameZeroMorphs);
-
 	if(dthStopHere("before the custom frames")) return false;
 
 	/** ****************************************************************/
@@ -212,6 +213,17 @@ function ApplyDTHWorkflow(options){
 	// COMPLETE ROM, so an interrupted one ends here instead.
 	if(dthStopHere("during the custom frames")) return false;
 
+	/** ****************************************************************/
+	// Restore preserved morphs LAST, after every key-laying stage (v74). The
+	// pass FLATTENS each listed morph's whole animation to keepValue, so it
+	// must outlast the last stage that can key one — it used to run right
+	// after the base preset load, and any later block re-keyed over the
+	// preserved value (the G8.1 Physics block keys the breast dials to 100%,
+	// which is exactly the report that moved it: a 60% hold showing 100%).
+	// It also ran only inside the JCM branch, so a base-less ROM never
+	// preserved anything at all.
+	restorePreservedMorphs(oNodeRoot, options.preserveMorphs);
+
 	if( options["bWriteDebugCSV"] ){
 		printCSV(successFrameDatas, options["successCSV"]);
 		printCSV(failedFrameDatas, options["failCSV"]);
@@ -243,7 +255,7 @@ function ApplyDTHWorkflow(options){
 	}
 	if( oNode ) Scene.setPrimarySelection(oNode);
 
-	acceptUndo("DTH Workflow");
+	acceptUndo("Generating ROM");
 }
 
 

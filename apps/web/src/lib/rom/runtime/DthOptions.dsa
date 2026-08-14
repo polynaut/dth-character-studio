@@ -32,13 +32,16 @@ var options = {
 	gpRomPath: null,
 	dkRomPath: null,
 	physRomPath: null,
-	// Morphs to preserve after ROM loading. Example: [{ name: "body_ctrl_BreastsUp-Down", keepValue: 1 }]
+	// Morphs to preserve after ROM loading; an optional `node` scopes the lookup
+	// to that scene node ('' / absent = figure root, runtime v74).
+	// Example: [{ name: "body_ctrl_BreastsUp-Down", keepValue: 1, node: "" }]
 	preserveMorphs: [],
 	// Node transforms to preserve after ROM loading. Example: [{ nodeLabel: "Left Eye" }]
 	preserveNodeTransforms: [],
 	jcmMorphMods: [],
 	// Morphs set + keyed at frame 0, on every figure-tree node that carries the
-	// name (clothing fit morphs). Example: [{ name: "Expand All", value: 1 }]
+	// name (clothing fit morphs) — or, with an optional `node`, only on that
+	// node (runtime v74). Example: [{ name: "Expand All", value: 1, node: "" }]
 	frameZeroMorphs: []
 };
 

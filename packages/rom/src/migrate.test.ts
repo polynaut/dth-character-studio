@@ -1049,9 +1049,51 @@ describe('characterSchema — v28 frameZeroMorphs (additive)', () => {
         { scenePath: 'X:/p/daz3d/Armor/Armor.duf' },
       ],
     })
-    expect(parsed.frameZeroMorphs).toEqual([{ name: 'Expand All', value: 1 }])
+    expect(parsed.frameZeroMorphs).toEqual([{ name: 'Expand All', value: 1, node: '' }])
     expect(parsed.sceneOverrides[0].frameZero).toEqual([]) // armed: add nothing here
     expect(parsed.sceneOverrides[1].frameZero).toBeUndefined() // shares the base
+  })
+})
+
+// v32 added `node` to the preserve-morph + frame-0 morph rows — additive with a
+// '' default (= the pre-v32 reach: broadcast for frame-0, figure root for
+// preserve), so there is no migrate step.
+describe('characterSchema — v32 morph-row node scope (additive)', () => {
+  const base = { id: 'c1', name: 'Electra', createdAt: '2026-01-01', updatedAt: '2026-01-01' }
+
+  it("fills node with '' on v31-shaped preserve + frame-0 rows", () => {
+    const parsed = characterSchema.parse({
+      ...base,
+      schemaVersion: 31,
+      preserveMorphs: [{ name: 'body_ctrl_BreastsUp-Down', keepValue: 0.6 }],
+      frameZeroMorphs: [{ name: 'FBMExpandAll', value: -1 }],
+    })
+    expect(parsed.preserveMorphs).toEqual([
+      { name: 'body_ctrl_BreastsUp-Down', keepValue: 0.6, node: '' },
+    ])
+    expect(parsed.frameZeroMorphs).toEqual([{ name: 'FBMExpandAll', value: -1, node: '' }])
+  })
+
+  it('round-trips a stored node scope, including inside the per-scene blocks', () => {
+    const parsed = characterSchema.parse({
+      ...base,
+      frameZeroMorphs: [{ name: 'FBMExpandAll', value: -1, node: 'Bags' }],
+      preserveMorphs: [{ name: 'ExpandAll', keepValue: 1, node: 'Boots' }],
+      sceneOverrides: [
+        {
+          scenePath: 'X:/p/daz3d/Beach/Beach.duf',
+          frameZero: [{ name: 'FBMExpandAll', value: -0.5, node: 'Backpack' }],
+          preserve: {
+            morphs: [{ name: 'ExpandAll', keepValue: 0, node: 'Gloves' }],
+            nodeTransforms: [],
+          },
+        },
+      ],
+    })
+    expect(parsed.frameZeroMorphs[0].node).toBe('Bags')
+    expect(parsed.preserveMorphs[0].node).toBe('Boots')
+    expect(parsed.sceneOverrides[0].frameZero?.[0].node).toBe('Backpack')
+    expect(parsed.sceneOverrides[0].preserve?.morphs[0].node).toBe('Gloves')
   })
 })
 

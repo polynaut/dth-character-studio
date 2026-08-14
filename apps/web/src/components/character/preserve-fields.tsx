@@ -1,7 +1,8 @@
 import { cn, Input, KeyedListEditor, Label, NumberField, OverrideMark, overrideLabelClass } from '@dth/ui'
+import { MorphNodeInfo } from '#/components/character/morph-node-info.tsx'
 import { MorphIndexProvider } from '#/components/rom/morph-index-provider.tsx'
 import { MorphNameCell } from '#/components/rom/morph-name-cell.tsx'
-import { preserveMorphsKey, preserveNodesKey } from '#/lib/preserve-diff.ts'
+import { morphRowKey, preserveMorphsKey, preserveNodesKey } from '#/lib/preserve-diff.ts'
 
 import type { Character, SceneOverride } from '@dth/rom'
 import type { MorphIndexEntry } from '#/lib/rom/api.ts'
@@ -14,8 +15,16 @@ const MORPH_FIELD_CLASS =
 
 /**
  * The two "preserve across the ROM load" list editors from the character editor's
- * Advanced options — morphs (name + hold value) and node transforms (node label).
- * Both are homogeneous add/remove lists (`KeyedListEditor`).
+ * Advanced options — morphs (name + optional item scope + hold value) and node
+ * transforms (node label). Both are homogeneous add/remove lists
+ * (`KeyedListEditor`). A preserve morph's Item scope points the runtime's
+ * lookup at that scene node (matched by internal name or label) — empty keeps
+ * the pre-v32 reach, the figure root, which is why the empty scope reads
+ * "Figure": a clothing morph picked from the index NEEDS the scope or the
+ * runtime never finds it. The scope is READ-ONLY and shown as the small-label
+ * info row UNDER the name field (see {@link MorphNodeInfo} — the same facts
+ * the picked suggestion showed): picking a suggestion sets both the name and
+ * the node, the badge's ✕ returns the lookup to the figure.
  *
  * Per-scene overrides are IMPLICIT and PER-LIST (no toggle). On a non-primary Daz
  * scene the lists start inherited from the base and are editable inline; the moment
@@ -59,14 +68,15 @@ export function PreserveFields({
   const setNodes = (next: Character['preserveNodeTransforms']) =>
     overrideEligible ? writePreserve({ nodeTransforms: next }) : patch({ preserveNodeTransforms: next })
 
-  // Rows are matched to the base by their natural key (morph name / node label); a
-  // row differs from the base when it's new/renamed or its hold value changed.
-  const baseMorphValue = new Map(character.preserveMorphs.map((m) => [m.name, m.keepValue]))
+  // Rows are matched to the base by their natural key (morph name + item scope /
+  // node label); a row differs from the base when it's new/renamed/rescoped or
+  // its hold value changed.
+  const baseMorphValue = new Map(character.preserveMorphs.map((m) => [morphRowKey(m), m.keepValue]))
   const baseNodeLabels = new Set(character.preserveNodeTransforms.map((n) => n.nodeLabel))
   const morphOverridden = (i: number) => {
     if (!ov) return false
     const m = morphs[i]
-    return !baseMorphValue.has(m.name) || baseMorphValue.get(m.name) !== m.keepValue
+    return !baseMorphValue.has(morphRowKey(m)) || baseMorphValue.get(morphRowKey(m)) !== m.keepValue
   }
   const nodeOverridden = (i: number) => !!ov && !baseNodeLabels.has(nodes[i].nodeLabel)
   // The override is per LIST, not per row: one control in the label (like the other
@@ -92,7 +102,9 @@ export function PreserveFields({
   // as overridden, so the LABEL goes white + green handle on its own.
   const inheritedRow = (isOv: boolean) => overrideEligible && !isOv
 
-  const rowClass = 'mb-2 flex items-center gap-2'
+  // items-start: the info row under a morph-name field makes the left column
+  // two lines tall — the value + remove stay on the input line.
+  const rowClass = 'mb-2 flex items-start gap-2'
 
   return (
     <MorphIndexProvider morphIndex={morphIndex} scenePath={scenePath}>
@@ -114,7 +126,7 @@ export function PreserveFields({
             <KeyedListEditor
               items={morphs}
               onChange={setMorphs}
-              newItem={() => ({ name: '', keepValue: 1 })}
+              newItem={() => ({ name: '', keepValue: 1, node: '' })}
               addLabel="Add morph"
               rowClassName={rowClass}
               emptyHint="No morphs to preserve yet."
@@ -133,9 +145,19 @@ export function PreserveFields({
                             'border-daz-green focus:border-daz-green focus-visible:ring-daz-green/50',
                         )}
                         onCommit={(name) => set({ ...item, name })}
-                        // Preserve morphs store only a name (no node), so a pick just
-                        // takes the internal name.
-                        onPick={(entry) => set({ ...item, name: entry.name })}
+                        // A pick takes the node along with the internal name — a
+                        // clothing morph is only ever found under its own item,
+                        // never on the figure root the empty scope searches.
+                        onPick={(entry) => set({ ...item, name: entry.name, node: entry.node })}
+                      />
+                      <MorphNodeInfo
+                        name={item.name}
+                        node={item.node}
+                        fallback="Figure"
+                        fallbackTitle="Looked up on the figure itself — pick a suggestion to point it at the item the morph lives on"
+                        scopedTitle={`Looked up on "${item.node}" (set by the picked suggestion)`}
+                        muted={inheritedRow(isOv)}
+                        onClear={() => set({ ...item, node: '' })}
                       />
                     </div>
                     <NumberField

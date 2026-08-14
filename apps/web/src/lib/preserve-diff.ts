@@ -11,10 +11,21 @@
  * `[Head, Head]`), wrongly disarming the override and reverting the edit.
  */
 
-/** Canonical multiset key for a preserve-morph list (name + hold value). Each row
- *  is JSON-encoded first, so a plain string sort orders them unambiguously. */
-export function preserveMorphsKey(list: ReadonlyArray<{ name: string; keepValue: number }>): string {
-  return JSON.stringify(list.map((m) => JSON.stringify([m.name, m.keepValue])).sort())
+/** Canonical multiset key for a preserve-morph list (name + hold value + node
+ *  scope). Each row is JSON-encoded first, so a plain string sort orders them
+ *  unambiguously. `node` is normalized to '' so a pre-v32 row compares equal to
+ *  its re-saved self. */
+export function preserveMorphsKey(
+  list: ReadonlyArray<{ name: string; keepValue: number; node?: string }>,
+): string {
+  return JSON.stringify(list.map((m) => JSON.stringify([m.name, m.keepValue, m.node ?? ''])).sort())
+}
+
+/** Natural key of ONE morph row (name + item scope) — how the preserve/frame-0
+ *  editors match a row to its base counterpart for the per-row override mark.
+ *  `node` normalized to '' like the list keys above, and for the same reason. */
+export function morphRowKey(m: { name: string; node?: string }): string {
+  return JSON.stringify([m.name, m.node ?? ''])
 }
 
 /** Canonical multiset key for a preserve-node-transform list (node label). */
@@ -22,11 +33,13 @@ export function preserveNodesKey(list: ReadonlyArray<{ nodeLabel: string }>): st
   return JSON.stringify(list.map((n) => n.nodeLabel).sort())
 }
 
-/** Canonical multiset key for a frame-0 morph list (name + value) — same
- *  arm/reset agreement contract as the preserve keys, for the "Add morphs on
- *  frame 0" panel. */
-export function frameZeroMorphsKey(list: ReadonlyArray<{ name: string; value: number }>): string {
-  return JSON.stringify(list.map((m) => JSON.stringify([m.name, m.value])).sort())
+/** Canonical multiset key for a frame-0 morph list (name + value + node scope)
+ *  — same arm/reset agreement contract as the preserve keys, for the "Add
+ *  morphs on frame 0" panel. */
+export function frameZeroMorphsKey(
+  list: ReadonlyArray<{ name: string; value: number; node?: string }>,
+): string {
+  return JSON.stringify(list.map((m) => JSON.stringify([m.name, m.value, m.node ?? ''])).sort())
 }
 
 /** Canonical multiset key for a bare label list (per-scene hair items). */
