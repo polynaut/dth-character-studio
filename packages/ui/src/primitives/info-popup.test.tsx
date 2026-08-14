@@ -179,6 +179,33 @@ describe('InfoPopup', () => {
     expect(trigger.getAttribute('aria-expanded')).toBe('false')
   })
 
+  it('a keyboard user can still open the "i" after a dialog has swept it', async () => {
+    // The sweep marks EVERY mounted popup stale, and the stale flag is only
+    // re-armed by `mouseenter` or a click on the trigger. A keyboard user has
+    // neither: they Tab to the "i", and `useFocus` opens with reason 'focus'.
+    // So a guard that refuses every open would leave every popup on the page
+    // permanently unopenable-by-keyboard after the first dialog of the session
+    // — and there is nothing to refuse in the first place, because a focus open
+    // is synchronous. Only the 90ms HOVER delay can outlive a sweep.
+    focusVisible = true // keyboard modality
+    const ui = (withModal: boolean) => (
+      <UiConfigProvider value={{}}>
+        <InfoPopup>Keyboard help</InfoPopup>
+        {withModal && (
+          <Modal open onClose={() => {}} title="Busy work">
+            body
+          </Modal>
+        )}
+      </UiConfigProvider>
+    )
+    const { getByRole, rerender } = render(ui(false))
+    const trigger = getByRole('button', { name: 'More information' })
+    rerender(ui(true)) // a dialog opens and sweeps every mounted popup
+    rerender(ui(false)) // …and is dismissed again
+    fireEvent.focus(trigger) // Tab to the "i"
+    await waitFor(() => expect(trigger.getAttribute('aria-expanded')).toBe('true'))
+  })
+
   it('eats a relative href instead of letting it replace the webview', async () => {
     const onNavigate = vi.fn()
     const onOpenExternal = vi.fn()

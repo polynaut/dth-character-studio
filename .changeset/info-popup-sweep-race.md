@@ -8,6 +8,6 @@ The overlay sweep (`closeAllInfoPopups`, called by `Modal`/`SidePanel` on open) 
 
 Unlike a tooltip — which is `pointer-events-none` and can never take a click — the popup is interactive, so it did not merely look wrong: it intercepted clicks aimed at whatever sat beneath it.
 
-Every mounted popup now registers with the sweep, and the sweep marks a pending open as stale so it becomes a no-op. Re-armed by the next `mouseenter` or a deliberate click on the trigger, so it only ever eats the one stale open. `TooltipHost` has always guarded the same case on its own layer ("cancel one that is counting down to appear"); this is that rule for the other one.
+Every mounted popup now registers with the sweep, and the sweep marks a pending hover open as stale so it becomes a no-op. Re-armed by the next `mouseenter` or a deliberate click on the trigger, so it only ever eats the one stale peek — and only a peek: opening the "i" with the keyboard is never refused. `TooltipHost` has always guarded the same case on its own layer ("cancel one that is counting down to appear"); this is that rule for the other one.
 
 Pinned by a fail-then-pass regression test.
