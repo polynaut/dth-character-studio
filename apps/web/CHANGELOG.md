@@ -1,5 +1,107 @@
 # @dth/web
 
+## 0.79.0
+
+### Minor Changes
+
+- [#837](https://github.com/polynaut/dth-character-studio/pull/837) [`61d969e`](https://github.com/polynaut/dth-character-studio/commit/61d969ea1429fd97769b0e57c72a634de6207383) Thanks [@polynaut](https://github.com/polynaut)! - Frame-0 and preserve morphs can be scoped to one scene item
+
+  The morph autocomplete always knew which item a suggested dial lives on — the
+  node badge on every suggestion — but picking one only kept the name. "Add
+  morphs on frame 0" then applied the row on **every** node carrying that name,
+  and auto-follow puts a figure morph's twin dial on every conformed item: a
+  `FBMExpandAll -100%` meant for a backpack deformed the boots, gloves and
+  holster too. "Preserve morphs" had the opposite failure — it only ever searched
+  the figure root, so a clothing morph listed there silently did nothing.
+
+  Both lists now carry an **Item** scope (schema v32, runtime v74). Picking a
+  suggestion sets it — the index knows which item a dial lives on — and the row
+  shows it as small labels under the name field, mirroring the suggestion that
+  was picked (node badge, "this scene", the Daz UI name), with an ✕ that clears
+  the scope. Empty keeps each list's old reach — every carrier for frame-0
+  rows, the figure root for preserve rows — so existing characters generate
+  unchanged. A scoped item
+  that isn't in the open scene logs a Daz-log warning naming it, never a run-log
+  failure, matching the lists' deliberately unvalidated design.
+
+### Patch Changes
+
+- [#841](https://github.com/polynaut/dth-character-studio/pull/841) [`c384999`](https://github.com/polynaut/dth-character-studio/commit/c384999b2ffee81556e166d2adb14663e4765539) Thanks [@polynaut](https://github.com/polynaut)! - Internal: the DTH Export API is four layered modules instead of one 2,400-line file
+
+  No behaviour changes. `api/execute.ts` is now the front door — every symbol it
+  exported before is still exported from it — and the implementation lives in
+  `api/execute/`, in layers that only import downward: `primitives` (the
+  character, the handoff stamps, the Daz probes and launch), `run-state` (the run
+  sidecar, progress log, interrupt/abort), `jobs` (the handoff itself) and
+  `scans` (the project and scene scans riding it).
+
+  One deliberate change came with the split: the shared "which run does this
+  window own" slot was a module-level `let`, which cannot be assigned across a
+  module boundary, so it is now a holder object (`runOwner.current`). Same single
+  slot, same semantics.
+
+- [#836](https://github.com/polynaut/dth-character-studio/pull/836) [`f6bb3d7`](https://github.com/polynaut/dth-character-studio/commit/f6bb3d7f3549cbcc54f251e7161c001397de5872) Thanks [@polynaut](https://github.com/polynaut)! - DTH Export run display polish, and the Unreal leg becomes re-import only
+
+  The run's task list now stacks bottom-up like a log — the first job at the
+  bottom, the row being worked always right above the progress bar — with one
+  line per row instead of two, and the whole panel is exactly as wide as the
+  header's button row instead of out-growing it.
+
+  The separate **Interrupt** button is gone: the **Working** button is the
+  interrupt now. Hover it and the spinner becomes a stop mark (_Click to
+  interrupt_); a click stops the run at its next safe point, exactly as before.
+
+  And the Unreal leg only ever **re-imports**: a set the target project has never
+  held is dropped from the send and named in the report, and a project holding
+  nothing the run makes goes inert in the panel. A character's first import into
+  an Unreal project is made in Unreal itself — from then on, runs re-import it in
+  place.
+
+- [#837](https://github.com/polynaut/dth-character-studio/pull/837) [`61d969e`](https://github.com/polynaut/dth-character-studio/commit/61d969ea1429fd97769b0e57c72a634de6207383) Thanks [@polynaut](https://github.com/polynaut)! - Preserve morphs now hold across the WHOLE ROM; frame-0 morphs apply first
+
+  Two ordering fixes in the ROM build. "Preserve morphs after ROM loading" ran
+  right after the base ROM preset — before the DK/GP/Physics blocks and the
+  custom frames, so anything those later stages keyed won over the preserved
+  value: the G8.1 Physics block keys the breast dials to 100%, and a 60% hold
+  showed 100% on those frames. The restore now runs after every key-laying
+  stage and flattens the listed morphs across the whole timeline — and it no
+  longer sits inside the JCM branch, so a ROM without the base block preserves
+  too (it previously skipped the restore entirely).
+
+  "Add morphs on frame 0" applied after the preset blocks; it now applies at
+  the very beginning of the build, so the frame-0 fit is the base state
+  everything else builds on — including the passes that read scene values (the
+  close-out baseline and the Auto sawtooth floors, which never saw frame-0
+  morphs before).
+
+- [#837](https://github.com/polynaut/dth-character-studio/pull/837) [`61d969e`](https://github.com/polynaut/dth-character-studio/commit/61d969ea1429fd97769b0e57c72a634de6207383) Thanks [@polynaut](https://github.com/polynaut)! - The scene card's open menu slims down: "Open last ROM" / "Generate new ROM"
+
+  The stale hint under the second entry ("From an earlier run — the scene or the
+  definition changed since") set the whole menu's width; it now lives in the
+  row's tooltip instead. The two ROM entries are renamed — "Open ROM Animation"
+  → **Open last ROM**, "Open and Generate ROM Animation" → **Generate new ROM**
+  — so the menu is as wide as its labels. What each entry does, and when the
+  rebuild is offered, is unchanged.
+
+- [#839](https://github.com/polynaut/dth-character-studio/pull/839) [`e71c5eb`](https://github.com/polynaut/dth-character-studio/commit/e71c5ebc81afac4f33df37bbcf77349098bedfb5) Thanks [@polynaut](https://github.com/polynaut)! - Internal: the three largest source files are split into focused modules
+
+  No behaviour changes — this is pure code motion, verified line by line. The
+  Houdini utils drawer and the DTH Export panel each became a small set of
+  modules along the seams they already had (the drawer's reports and rows hold no
+  drawer state; the export button owns the run while the panel owns what is
+  shown), and the character schema's append-only version log moved out of
+  `packages/rom/src/types.ts` into `.ai/schema-history.md`, where a version-number
+  lookup belongs. Working on any one of these no longer means loading all of it.
+
+- [#837](https://github.com/polynaut/dth-character-studio/pull/837) [`61d969e`](https://github.com/polynaut/dth-character-studio/commit/61d969ea1429fd97769b0e57c72a634de6207383) Thanks [@polynaut](https://github.com/polynaut)! - Daz's undo entry for a ROM build reads "Undo Generating ROM"
+
+  The ROM script's undo block was still labeled "DTH Workflow" — a leftover
+  from the pre-studio script era that meant nothing in Daz's Edit menu.
+
+- Updated dependencies [[`61d969e`](https://github.com/polynaut/dth-character-studio/commit/61d969ea1429fd97769b0e57c72a634de6207383), [`e71c5eb`](https://github.com/polynaut/dth-character-studio/commit/e71c5ebc81afac4f33df37bbcf77349098bedfb5)]:
+  - @dth/rom@0.79.0
+  - @dth/ui@0.79.0
+
 ## 0.78.0
 
 ### Minor Changes
