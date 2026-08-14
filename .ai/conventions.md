@@ -55,6 +55,15 @@ doing it.
   that describe it. When scope is genuinely ambiguous, take the WIDER reading
   and say so: under-delivering costs him a round trip, over-delivering costs him
   a glance.
+- **Effort scales with the prompt, and the wider reading stops at its
+  clauses.** It resolves ambiguity WITHIN what was asked — it never adds
+  adjacent work the prompt didn't name. A one-line fix is a one-line fix: no
+  doc capture, no guide pass, no invented neighbours. Verification scales the
+  same way: run the gates the CHANGE needs (the table atop `.ai/testing.md`);
+  the full set runs ONCE, before the PR. *Earned by:* "every single prompt, no
+  matter how easy it is, uses at least 20min of claude's compute time"
+  (2026-08-14) — each rule above ratchets effort up, and their sum put a
+  20-minute floor under trivial work. This is the rule that ratchets down.
 - **Never watch CI.** Don't run `gh pr checks --watch`, don't poll a workflow,
   don't block on a run. He watches CI himself, deliberately, because it is his
   cue to go do something else. "write pr" means: open the PR, set the
