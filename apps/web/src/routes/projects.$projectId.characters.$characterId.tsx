@@ -579,6 +579,7 @@ function CharacterPage({ onImportRemount }: { onImportRemount: () => void }) {
                   selectedScene={sceneSel.effectiveScene}
                   onSelectScene={sceneSel.selectScene}
                   dockActionsRef={sceneDockActions}
+                  onScenesRemoved={detect.answerFor}
                 />
                 <SceneLock locked={!sceneLinked}>
                   <HoudiniProjectsField
