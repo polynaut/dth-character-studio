@@ -1,10 +1,30 @@
 # Testing
 
-Four layers, cheapest first. Run everything: `pnpm -r test && pnpm -r typecheck
-&& pnpm lint` (lint from the repo root). CI (`validate-pull-request.yml`) runs
-lint → typecheck → per-package tests → web build → `pnpm build:guide` (the
-guide-site guards fail the PR), plus `smoke`, `rust` (clippy `-D warnings` +
-`cargo test`) and `changeset` as separate jobs — all four are required checks.
+Four layers, cheapest first — and **run the gates the CHANGE needs, not the
+repo's full set.** CI (`validate-pull-request.yml`) runs the whole matrix on
+every PR anyway (lint → typecheck → per-package tests → web build →
+`pnpm build:guide` with the guide-site guards, plus `smoke`, `rust` (clippy
+`-D warnings` + `cargo test`) and `changeset` as separate jobs — all four are
+required checks), so a local full pass per edit duplicates a gate the PR
+cannot skip. Scope by what was touched:
+
+| Touched…                            | Run                                                              |
+| ----------------------------------- | ---------------------------------------------------------------- |
+| one TS package                      | `pnpm --filter <pkg> test` + `pnpm --filter <pkg> typecheck`     |
+| a shared type / several TS packages | the touched packages' tests + `pnpm -r typecheck`                |
+| anything at all                     | `pnpm lint` (repo root; fast, type-aware)                        |
+| `apps/desktop` Rust                 | `cargo check` + `cargo test` (clippy before the PR)              |
+| a UI flow                           | the covering specs only: `pnpm --filter @dth/web smoke <substr>` |
+| `docs/guide` / guide assets         | `pnpm build:guide`                                               |
+| a route FILE added/removed          | `pnpm generate-routes`                                           |
+| `contracts/` / `api/native-types.ts`| BOTH sides: `cargo test` + `pnpm --filter @dth/web test native-contract` |
+| `.ai/*.md`                          | `node .claude/hooks/inject-gotchas.mjs --audit` (trigger anchors resolve) |
+| `.claude/hooks/*`                   | `node .claude/hooks/inject-gotchas.test.mjs` + the `--audit` above       |
+
+A TS-only change never needs cargo; a `packages/rom` change never needs smoke.
+The FULL local gate (`pnpm -r typecheck` + `pnpm lint` + `pnpm -r test` + smoke
++ cargo) runs ONCE — before opening the PR, or after changing a shared
+primitive whose blast radius really is the whole app — never per edit.
 
 ## 0. Do the gates actually gate? (audited 2026-08-13)
 

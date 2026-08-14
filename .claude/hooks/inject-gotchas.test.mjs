@@ -60,6 +60,9 @@ check('git push WITH token (unless)', bash('AUTH=$(printf x-access-token:x); git
 check('smoke without SMOKE_PORT', bash('pnpm --filter @dth/web smoke', 'c3'), 'fires')
 check('smoke WITH SMOKE_PORT (unless)', bash('SMOKE_PORT=4399 pnpm smoke', 'c4'), 'silent')
 check('cargo update', bash('cargo update -p brotli', 'c5'), 'fires')
+check('full-suite test mid-session', bash('pnpm -r test', 'c6'), 'fires')
+check('full-suite typecheck mid-session', bash('pnpm -r typecheck', 'c7'), 'fires')
+check('scoped per-package test', bash('pnpm --filter @dth/rom test daz-csv', 'c8'), 'silent')
 
 check('harmless ls', bash('ls -la', 'n1'), 'silent')
 check('quoted "git push" in a grep', bash('rg "git push" docs/', 'n2'), 'silent')
