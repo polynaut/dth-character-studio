@@ -50,6 +50,7 @@ export {
 export type { ExporterJobFileState, ExportRunProgress } from './execute/run-state.ts'
 
 export {
+  awaitBatchPickup,
   executeCharacterJobs,
   fetchExecuteScenes,
   generateRomAnimation,

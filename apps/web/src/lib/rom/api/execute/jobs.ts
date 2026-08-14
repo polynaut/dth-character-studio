@@ -407,32 +407,52 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
 
   // Start Daz scene-less when it isn't running; a running instance needs
   // nothing — the plugin polls for the job file and picks it up in place.
+  //
+  // VISIBLE, not minimized: an unattended launch used to minimize itself
+  // (`minimize_app_window`, fire-and-forget), which never actually worked and
+  // made a SUCCESSFUL launch indistinguishable from a failed one — the studio
+  // says "Opening Daz Studio" and no window is ever seen. A run the user is
+  // watching the progress of is not unattended.
   const dazWasRunning = await dazStudioRunningNative(false, 'export')
   let dazLaunched = false
-  let dazClosing = false
   if (!dazWasRunning) {
-    await launchDazSceneless('minimized')
+    await launchDazSceneless('visible')
     dazLaunched = true
-  } else {
-    // A "running" Daz may actually be SHUTTING DOWN — the process lingers a
-    // while after close, its Runner poller is already gone, and a fresh launch
-    // now would just die against the dying single instance. A live Runner
-    // claims (renames) the file within one poll interval; when the claim never
-    // comes, report the batch as unclaimed so the UI can wait for the process
-    // to exit and start Daz itself (the job file stays pending — and stays
-    // abortable — until then).
-    const deadline = Date.now() + OPEN_SCENE_PICKUP_TIMEOUT_MS
-    let pickedUp = false
-    while (Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, OPEN_SCENE_POLL_MS))
-      if (!(await exists(jobFile).catch(() => true))) {
-        pickedUp = true
-        break
-      }
-    }
-    dazClosing = !pickedUp
   }
-  return { jobFile, scenes, dazLaunched, dazWasRunning, dazClosing }
+  // NOT waited on here. Confirming the claim takes up to
+  // OPEN_SCENE_PICKUP_TIMEOUT_MS, and this call is what the export panel awaits
+  // before it closes — so waiting here froze the panel on "Starting…" for ten
+  // seconds and then made the run watch wait all over again. The handoff is
+  // complete once the job file is on disk; whether a live Runner claims it is
+  // the WATCH's question ({@link awaitBatchPickup}).
+  return { jobFile, scenes, dazLaunched, dazWasRunning }
+}
+
+/**
+ * Did a running Daz's Runner actually claim the batch we just handed off?
+ *
+ * A "running" Daz may in fact be SHUTTING DOWN — the process lingers a while
+ * after close, its Runner poller already gone, and a fresh launch would only
+ * die against the dying single instance. A live Runner claims (renames) the
+ * file within one poll interval; when the claim never comes the caller should
+ * wait for the process to exit and start Daz itself. The job file stays
+ * pending — and stays abortable — until then.
+ *
+ * Only meaningful when Daz was ALREADY running at handoff: a launch we made
+ * ourselves has its own startup to get through and is not late by being slow.
+ */
+export async function awaitBatchPickup(): Promise<boolean> {
+  if (!isTauri()) return true
+  const paths = await exporterJobFilePaths()
+  if (!paths) return true
+  const deadline = Date.now() + OPEN_SCENE_PICKUP_TIMEOUT_MS
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, OPEN_SCENE_POLL_MS))
+    // Gone from the pending name = renamed = claimed. A read error counts as
+    // "still there" so a blip never reports a false claim.
+    if (!(await exists(paths.pending).catch(() => true))) return true
+  }
+  return false
 }
 
 /**
@@ -455,7 +475,9 @@ export async function launchDazForPendingJobs(): Promise<boolean> {
     if (!(await reclaimOrphanedBatch(paths))) return false
   }
   if (await dazStudioRunningNative(false, 'export')) return true
-  await launchDazSceneless('minimized')
+  // Visible for the same reason as the handoff launch above: a Daz nobody can
+  // see reads as a Daz that never started.
+  await launchDazSceneless('visible')
   return true
 }
 

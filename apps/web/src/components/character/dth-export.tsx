@@ -6,6 +6,7 @@ import { Button, useRefetchOnFocus } from '@dth/ui'
 import {
   abortExporterJobs,
   adoptHoudiniRun,
+  awaitBatchPickup,
   exporterJobsPending,
   fetchExportRunProgress,
   dismissUnrealImport,
@@ -273,7 +274,12 @@ export function DthExportAction({
         // its own until it flips to done.
         const step = progressNow.step
         return {
-          status: capitalizeStatus(step?.message || dazOpeningLine),
+          // NOT `dazOpeningLine`: this batch has been CLAIMED (the rename is
+          // the claim), so "waiting for Daz Studio to pick the batch up" is
+          // simply false here — it read that way for every second between the
+          // claim and the Runner's first progress line, which on a cold scene
+          // open is a long time to be told nothing is happening.
+          status: capitalizeStatus(step?.message || 'Daz Studio is working on the batch'),
           fraction: (step?.percent ?? 0) / 100,
           kind: 'daz',
         }
@@ -1299,6 +1305,22 @@ export function DthExportAction({
             publishPipeline(null, houdiniRef.current)
             // Arm the progress view right away (0/n until Daz delivers).
             void refreshStatus()
+            // The claim wait, which used to block the panel's Start for up to
+            // ten seconds before it would close. It belongs here: the run is
+            // already on screen and abortable, so the waiting costs the user
+            // nothing and the panel is gone the moment they click.
+            //
+            // Only for a Daz that was ALREADY up — one we launched ourselves has
+            // its own startup to get through and is not late by being slow.
+            if (run.dazWasRunning) {
+              void awaitBatchPickup().then((claimed) => {
+                // Never claimed: that "running" Daz is most likely shutting
+                // down. The modal waits for the process to go and starts a
+                // fresh one; the job file stayed pending, so it is still
+                // abortable and the new Daz's Runner can claim it.
+                if (!claimed) setDazClosing(true)
+              })
+            }
           }}
           // A skip-Daz run hands its selection straight to the Houdini queue —
           // the same machinery the after-batch continuation drives.
@@ -1350,7 +1372,6 @@ export function DthExportAction({
               }
             })
           }}
-          onDazClosing={() => setDazClosing(true)}
         />
       )}
       {dazClosing && (

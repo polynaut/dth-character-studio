@@ -64,7 +64,6 @@ export function DthExportPanel({
   onExported,
   onHoudiniQueue,
   onUnrealOnly,
-  onDazClosing,
 }: {
   projectId: string
   character: Character
@@ -92,6 +91,10 @@ export function DthExportPanel({
     mode: ExportMode
     /** The handoff started Daz itself (vs. handing to a running one). */
     dazLaunched: boolean
+    /** Daz was ALREADY up, so it owes the batch a claim — the run watch waits
+     *  for it and falls back to the wait-for-close modal. Never waited on here:
+     *  that is what kept Start on "Starting..." for ten seconds. */
+    dazWasRunning: boolean
   }) => void
   /** A skip-Daz run handed its selection straight to Houdini (no Daz batch) —
    *  the caller starts the sequential project queue on these scenes. */
@@ -109,9 +112,6 @@ export function DthExportPanel({
     unrealSets: Array<string>,
     unrealLocated: Record<string, Record<string, string>> | undefined,
   ) => void
-  /** The handoff went to a Daz that is still shutting down — the caller shows
-   *  the wait-and-relaunch modal (see WaitForDazCloseModal). */
-  onDazClosing: () => void
 }) {
   // Rows render immediately from the linked scenes; the affected-detection
   // (one stat + signature per scene) fills in and pre-checks the changed ones.
@@ -716,13 +716,12 @@ export function DthExportPanel({
         // Whether the handoff STARTED Daz — the status line's opening word
         // says "opening Daz Studio" only when that is what is happening.
         dazLaunched: result.dazLaunched,
+        // A Daz that was already up owes us a claim; the run watch waits for it
+        // (see the action's onExported). The panel does NOT — waiting here is
+        // what made Start sit on "Starting…" for ten seconds before closing.
+        dazWasRunning: result.dazWasRunning,
       })
       onClose()
-      if (result.dazClosing) {
-        // No toast — the wait modal explains what happens next.
-        onDazClosing()
-        return
-      }
       const count = `${result.scenes.length} scene${result.scenes.length === 1 ? '' : 's'}`
       const what = mode === 'rom-only' ? 'queued for a ROM build' : 'queued for export'
       toast.success(
