@@ -811,5 +811,20 @@ v74 — `preserveMorphs` / `frameZeroMorphs` rows honour an optional `node`
       base preset load every later block re-keyed over it (the G8.1 Physics
       block keys the breast dials to 100%: a 60% hold showed 100%), while a
       base-less ROM never ran it at all.
+v75 — Truthful failure reporting from the generated carriers. Three changes,
+      all in the SCRIPTS (the runtime .dsa files are untouched).
+      `dthWriteFailureLog` now ALWAYS writes a log-v2 record: the v1 fallback
+      it replaced carried no `scene` field, and since the studio DELETES the
+      transport log when it ingests one, the common case — a second run after
+      the studio had read the first — wrote its failure UNTAGGED, and the run
+      report showed a problem it could attribute to no scene (measured
+      2026-08-14 on a real run). The runtime-missing branch now PROBES for
+      .DthWorkflow.dsa and reports what it found: missing gets the reinstall
+      advice, present gets "Daz failed to load it, run the export again" —
+      a failed include() logs NOTHING in Daz, so this probe is the only
+      evidence such a run leaves behind. And every string the scripts write
+      or display is ASCII now (bullet, em dash and the → arrow all
+      became - / >): Daz's file writer cannot carry non-ASCII, so they
+      reached the run log as ? and the Daz log as mojibake.
 ```
 

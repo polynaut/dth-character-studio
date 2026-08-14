@@ -25,7 +25,7 @@ import {
   runPercent,
   unrealTaskCards,
 } from '#/lib/rom/export-cards.ts'
-import { formatElapsed, tidyRunErrors } from '#/lib/rom/execute-jobs.ts'
+import { formatElapsed, scriptFailureLines, tidyRunErrors } from '#/lib/rom/execute-jobs.ts'
 
 import type { ExportRunProgress } from '#/lib/rom/api.ts'
 import type { UnrealTarget } from '#/lib/rom/export-cards.ts'
@@ -825,10 +825,17 @@ export function DthExportAction({
       // own memory covers the poll that lands before the flag is written back.
       const interrupted = run.interrupted || interruptedRef.current
       if (interrupted) interruptedRef.current = true
+      // The Runner's rows are only half the outcome: a script that bailed
+      // still returns, so its row comes back `done`. The other half is what
+      // the scripts wrote about themselves (`scriptFailures`) — without it a
+      // run that produced NOTHING reports "1 scene exported", which is the one
+      // thing a finish report must never do.
+      const failedTotal = Math.min(run.total, run.failed + run.scriptFailures.length)
+      const errors = [...run.errors, ...scriptFailureLines(run.scriptFailures)]
       const continuing =
         !interrupted &&
         run.houdiniProjects.length > 0 &&
-        run.failed < run.total &&
+        failedTotal < run.total &&
         // `skip` means no Houdini leg at all — the projects may still be
         // CHECKED in the panel (the list goes inert, it doesn't clear).
         run.houdiniMode !== 'skip'
@@ -836,8 +843,8 @@ export function DthExportAction({
         runReportRef.current = {
           daz: {
             total: run.total,
-            failed: run.failed,
-            errors: run.errors,
+            failed: failedTotal,
+            errors,
             elapsedMs: run.elapsedMs,
           },
           houdini: [],
@@ -894,11 +901,11 @@ export function DthExportAction({
         clearPipeline()
         return
       }
-      if (run.failed > 0) {
-        toast.warning(`DTH Export finished — ${run.failed} of ${scenes} failed${took}.`, {
+      if (failedTotal > 0) {
+        toast.warning(`DTH Export finished — ${failedTotal} of ${scenes} failed${took}.`, {
           id: EXPORT_TOAST_ID,
           duration: Infinity,
-          description: run.errors.length ? run.errors.join('\n') : undefined,
+          description: errors.length ? errors.join('\n') : undefined,
         })
       } else {
         exportFinishToast('success', `DTH Export finished — ${scenes} exported${took}.`)
@@ -907,7 +914,7 @@ export function DthExportAction({
       // A SKIP run still has its third leg: no Houdini means the send happens
       // now, off the exports already on disk, instead of after a queue.
       clearPipeline()
-      if (run.unrealProjects.length > 0 && run.failed < run.total) {
+      if (run.unrealProjects.length > 0 && failedTotal < run.total) {
         unrealTargetsRef.current = run.unrealProjects
         unrealSetsRef.current = run.unrealSets
         void sendToUnreal().then((lines) => {

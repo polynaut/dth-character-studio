@@ -1693,6 +1693,32 @@ describe('exporter integration', () => {
     expect(content).toContain('dthKeepRuns.push(dthOldRun);')
   })
 
+  it('the catastrophic-failure log ALWAYS tags its scene — there is no untagged shape left', () => {
+    // The v1 fallback this replaced fired whenever there was no previous log to
+    // merge — which is the COMMON case, because the studio deletes the transport
+    // as it ingests: a second run after the first had been read wrote its
+    // failure with no `scene` at all, and the run report then showed a problem
+    // it could attribute to no scene (measured 2026-08-14 on a real run).
+    const content = toCharacterScriptDsa(withReferencePose(), {}, FRAMES, 'C:/meta').content
+    expect(content).toContain('scene: dthFailScene')
+    expect(content).toContain('logVersion: 2')
+    expect(content).not.toContain('logVersion: 1')
+  })
+
+  it('the runtime-missing report says whether the runtime is actually THERE', () => {
+    // The two causes need opposite advice, and a failed include() logs nothing
+    // in Daz — so this probe is the only evidence such a run leaves behind.
+    // Telling a user to reinstall an install that was never broken is how the
+    // one measured occurrence (2026-08-14) sent its reader the wrong way.
+    const content = toCharacterScriptDsa(withReferencePose(), {}, FRAMES, 'C:/meta').content
+    expect(content).toContain('function dthRuntimeMissingError')
+    expect(content).toContain('bThere = new DzFile(sPath).exists();')
+    expect(content).toContain('dthWriteFailureLog(dthRuntimeMissingError());')
+    // Present → a retry, absent → a reinstall.
+    expect(content).toContain('Nothing is broken on disk: run the export again.')
+    expect(content).toContain('Reinstall it from DTH Character Studio')
+  })
+
   it('scene-suffixes the doExport figure name at run time (runtime v40)', () => {
     const character = withReferencePose({
       name: 'Kira',

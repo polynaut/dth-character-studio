@@ -144,4 +144,26 @@ describe('generated artifacts (golden)', () => {
       await expect(file.content).toMatchFileSnapshot(`./__golden__/${file.fileName}`)
     })
   }
+
+  // Daz cannot carry non-ASCII out of a script: a `→` written into the run log
+  // reached the studio as `?`, and an em dash printed to the Daz log arrived as
+  // mojibake (measured 2026-08-14 on both). So every string the scripts WRITE
+  // or DISPLAY has to be ASCII — which is a rule nobody remembers while typing
+  // prose into a template, hence this check. Comments are exempt: they are for
+  // whoever opens the `.dsa`, and Daz only ever parses them.
+  //
+  // Deliberately string literals only, not "the file is ASCII": stripping
+  // comments to check the rest would false-PASS on any literal it mistook for
+  // a comment, and the literals are the whole surface that matters. (The
+  // golden character is ASCII throughout; a user with an accented character
+  // name legitimately produces non-ASCII data, which is not this rule.)
+  for (const file of files.filter((f) => f.fileName.endsWith('.dsa'))) {
+    it(`emits only ASCII string literals in ${file.fileName}`, () => {
+      // No newline inside the class: a DzScript literal cannot span lines, and
+      // allowing it let the match run from a quote in one COMMENT line to a
+      // quote in the next and swallow the prose between them.
+      const literals = file.content.match(/"(?:[^"\\\n]|\\.)*"/g) ?? []
+      expect(literals.filter((literal) => /[^\x20-\x7E]/.test(literal))).toEqual([])
+    })
+  }
 })
