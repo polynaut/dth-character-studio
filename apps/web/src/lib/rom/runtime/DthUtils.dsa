@@ -1284,8 +1284,23 @@ function getTransformKeyframes(oNode) {
     return frames;
 }
 
+// Resolves a node under (or being) oNodeRoot by internal name OR label — the
+// same match applyKeyData uses for a ROM pose morph's stored node. Returns
+// null when nothing in the tree answers to the name.
+function findNodeByNameOrLabel(oNodeRoot, sNode) {
+    if (oNodeRoot.getName() == sNode || oNodeRoot.getLabel() == sNode)
+        return oNodeRoot;
+    var oNode = oNodeRoot.findNodeChild(sNode, true);
+    if (!oNode)
+        oNode = oNodeRoot.findNodeChildByLabel(sNode, true);
+    return oNode;
+}
+
 // Restores morphs specified in options.preserveMorphs to their keepValue
-// preserveMorphs format: [{ name: "body_ctrl_BreastsUp-Down", keepValue: 1 }, ...]
+// preserveMorphs format: [{ name: "body_ctrl_BreastsUp-Down", keepValue: 1, node: "" }, ...]
+// A row's `node` (runtime v74) scopes the lookup to that scene node (matched by
+// internal name or label); '' / absent searches the figure root — the only
+// place this function ever looked before the field existed.
 function restorePreservedMorphs(oNodeRoot, preserveMorphs) {
     if (!preserveMorphs || preserveMorphs.length === 0) {
         return;
@@ -1295,12 +1310,21 @@ function restorePreservedMorphs(oNodeRoot, preserveMorphs) {
         var config = preserveMorphs[i];
         if (!config.name) continue;
 
-        var oProp = oNodeRoot.findProperty(config.name);
+        var oNode = oNodeRoot;
+        if (config.node) {
+            oNode = findNodeByNameOrLabel(oNodeRoot, config.node);
+            if (!oNode) {
+                print("WARNING: preserved morph node not found:", config.node, "(morph:", config.name + ")");
+                continue;
+            }
+        }
+
+        var oProp = oNode.findProperty(config.name);
         if (!oProp) {
-            oProp = oNodeRoot.findPropertyByLabel(config.name);
+            oProp = oNode.findPropertyByLabel(config.name);
         }
         if (!oProp) {
-            oProp = getMorphPropFromNode(oNodeRoot, config.name);
+            oProp = getMorphPropFromNode(oNode, config.name);
         }
 
         if (oProp) {
@@ -1321,14 +1345,18 @@ function restorePreservedMorphs(oNodeRoot, preserveMorphs) {
     }
 }
 
-// Applies options.frameZeroMorphs — [{ name: "Expand All", value: 1 }, ...] —
-// at frame 0, on EVERY node of the figure tree that carries the morph: the
-// figure root plus each descendant (geografts, add-ons, fitted clothing all
-// carry dials of their own, and one name like "Expand All" may exist on
-// several items at once — each gets the value). With no other keys on the
-// property the value holds across the whole ROM. A name no node carries is a
-// Daz-log warning only, never a run-log failure: a scene without that clothing
-// is an expected state (a per-scene override in the studio can clear the list).
+// Applies options.frameZeroMorphs — [{ name: "Expand All", value: 1, node: "" }, ...] —
+// at frame 0. Without a `node` the row reaches EVERY node of the figure tree
+// that carries the morph: the figure root plus each descendant (geografts,
+// add-ons, fitted clothing all carry dials of their own, and one name like
+// "Expand All" may exist on several items at once — each gets the value). A
+// row's `node` (runtime v74) narrows it to the node(s) matching that name or
+// label — auto-follow puts a figure morph's twin dial on every conformed item,
+// so a fit value meant for one bag would otherwise deform the whole outfit.
+// With no other keys on the property the value holds across the whole ROM. A
+// name (or scoped node) nothing carries is a Daz-log warning only, never a
+// run-log failure: a scene without that clothing is an expected state (a
+// per-scene override in the studio can clear the list).
 function applyFrameZeroMorphs(oNodeRoot, frameZeroMorphs) {
     if (!frameZeroMorphs || frameZeroMorphs.length === 0) {
         return;
@@ -1344,6 +1372,9 @@ function applyFrameZeroMorphs(oNodeRoot, frameZeroMorphs) {
         var iHits = 0;
         for (var n = 0; n < aNodes.length; n++) {
             var oNode = aNodes[n];
+            // Scoped row: only the node(s) answering to the stored name/label.
+            if (config.node && oNode.getName() != config.node && oNode.getLabel() != config.node)
+                continue;
             // Morph modifiers first (most reliable for morphs — see applyKeyData),
             // then plain/controller properties by name and by UI label.
             var oProp = getMorphPropFromNode(oNode, config.name);
@@ -1364,7 +1395,10 @@ function applyFrameZeroMorphs(oNodeRoot, frameZeroMorphs) {
             print("Frame-0 morph:", config.name, "=", fValue, "on", oNode.getLabel());
         }
         if (iHits === 0) {
-            print("WARNING: frame-0 morph not found on any node:", config.name);
+            if (config.node)
+                print("WARNING: frame-0 morph", config.name, "not found on node:", config.node);
+            else
+                print("WARNING: frame-0 morph not found on any node:", config.name);
         }
     }
 }

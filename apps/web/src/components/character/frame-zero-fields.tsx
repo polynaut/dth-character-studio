@@ -1,4 +1,4 @@
-import { cn, KeyedListEditor, Label, NumberField, OverrideMark, overrideLabelClass } from '@dth/ui'
+import { cn, Input, KeyedListEditor, Label, NumberField, OverrideMark, overrideLabelClass } from '@dth/ui'
 import { MorphIndexProvider } from '#/components/rom/morph-index-provider.tsx'
 import { MorphNameCell } from '#/components/rom/morph-name-cell.tsx'
 import { frameZeroMorphsKey } from '#/lib/preserve-diff.ts'
@@ -12,11 +12,16 @@ const MORPH_FIELD_CLASS =
   'h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs outline-none transition-[color,box-shadow] focus:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50 md:text-sm dark:bg-input/30'
 
 /**
- * The "Add morphs on frame 0" list editor — morph name + the value it is set
- * (and keyed) to at frame 0 of the ROM. The generated script applies each row
- * on EVERY node of the figure tree that carries the morph, so one row like a
- * clothing "Expand All" reaches whichever outfit pieces the open scene wears;
- * a scene without the morph just skips it (Daz-log warning, deliberately no
+ * The "Add morphs on frame 0" list editor — morph name + an optional item
+ * scope + the value it is set (and keyed) to at frame 0 of the ROM. With the
+ * Item column empty the generated script applies the row on EVERY node of the
+ * figure tree that carries the morph, so one row like a clothing "Expand All"
+ * reaches whichever outfit pieces the open scene wears; naming an item narrows
+ * it to that node (matched by internal name or label) — auto-follow puts a
+ * figure morph's twin dial on every conformed item, so a fit value meant for
+ * one bag would otherwise deform the whole outfit. Picking a suggestion fills
+ * BOTH fields from the index entry (like the ROM pose grid); a scene without
+ * the morph or the item just skips it (Daz-log warning, deliberately no
  * studio-side validation).
  *
  * Per-scene overrides follow the PreserveFields model exactly: IMPLICIT and per
@@ -53,13 +58,14 @@ export function FrameZeroFields({
   const setMorphs = (next: Character['frameZeroMorphs']) =>
     overrideEligible ? writeFrameZero(next) : patch({ frameZeroMorphs: next })
 
-  // Rows are matched to the base by their natural key (morph name); a row differs
-  // from the base when it's new/renamed or its value changed.
-  const baseValue = new Map(character.frameZeroMorphs.map((m) => [m.name, m.value]))
+  // Rows are matched to the base by their natural key (morph name + item scope);
+  // a row differs from the base when it's new/renamed/rescoped or its value changed.
+  const rowKey = (m: { name: string; node?: string }) => JSON.stringify([m.name, m.node ?? ''])
+  const baseValue = new Map(character.frameZeroMorphs.map((m) => [rowKey(m), m.value]))
   const morphOverridden = (i: number) => {
     if (!ov) return false
     const m = morphs[i]
-    return !baseValue.has(m.name) || baseValue.get(m.name) !== m.value
+    return !baseValue.has(rowKey(m)) || baseValue.get(rowKey(m)) !== m.value
   }
   // Whole-list divergence as a MULTISET (shared key with writeFrameZero), so the
   // reset handle shows exactly when the override is armed — including a deleted
@@ -89,7 +95,7 @@ export function FrameZeroFields({
           <KeyedListEditor
             items={morphs}
             onChange={setMorphs}
-            newItem={() => ({ name: '', value: 1 })}
+            newItem={() => ({ name: '', value: 1, node: '' })}
             addLabel="Add morph"
             rowClassName="mb-2 flex items-center gap-2"
             emptyHint="No morphs on frame 0 yet."
@@ -108,12 +114,20 @@ export function FrameZeroFields({
                           'border-daz-green focus:border-daz-green focus-visible:ring-daz-green/50',
                       )}
                       onCommit={(name) => set({ ...item, name })}
-                      // Frame-0 morphs store only a name (the script applies it on
-                      // every node that carries it), so a pick just takes the
-                      // internal name.
-                      onPick={(entry) => set({ ...item, name: entry.name })}
+                      // A pick takes the node along with the internal name (the
+                      // suggestion knows which item the dial lives on) — clear
+                      // the Item field to go back to "every item carrying it".
+                      onPick={(entry) => set({ ...item, name: entry.name, node: entry.node })}
                     />
                   </div>
+                  <Input
+                    value={item.node}
+                    overridden={isOv}
+                    placeholder="All items"
+                    title="Scene item (node) this morph is applied on — empty applies it on every item carrying the morph. Filled automatically when a suggestion is picked."
+                    className={cn('w-36 shrink-0', inheritedRow(isOv) && 'text-muted-foreground')}
+                    onChange={(e) => set({ ...item, node: e.target.value })}
+                  />
                   <NumberField
                     className={cn(
                       'w-24 pr-6 text-right tabular-nums',

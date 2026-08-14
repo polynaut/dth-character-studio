@@ -9,6 +9,7 @@ import { PreserveFields } from './preserve-fields'
 import { useSceneSelection } from '#/lib/use-scene-selection.ts'
 import { characterSchema, defaultSections } from '@dth/rom'
 import type { Character } from '@dth/rom'
+import type { MorphIndexEntry } from '#/lib/rom/api.ts'
 
 const PRIMARY = 'D:\\s\\Primary.duf'
 const BEACH = 'D:\\s\\Beach.duf'
@@ -31,7 +32,15 @@ function makeCharacter(overrides: Partial<Character> = {}): Character {
 
 /** Wires PreserveFields to the real useSceneSelection so an edit round-trips the
  *  implicit-override writer exactly as the character route does. */
-function Harness({ initial }: { initial: Character }) {
+const NO_INDEX: Array<MorphIndexEntry> = []
+
+function Harness({
+  initial,
+  morphIndex = NO_INDEX,
+}: {
+  initial: Character
+  morphIndex?: Array<MorphIndexEntry>
+}) {
   const [character, setCharacter] = useState(initial)
   const patch = (p: Partial<Character>) => setCharacter((c) => ({ ...c, ...p }))
   const sceneSel = useSceneSelection(character, patch)
@@ -45,7 +54,7 @@ function Harness({ initial }: { initial: Character }) {
         overrideEligible={sceneSel.overrideEligible}
         sceneOverride={sceneSel.sceneOverride}
         writePreserve={sceneSel.writePreserve}
-        morphIndex={[]}
+        morphIndex={morphIndex}
       />
     </div>
   )
@@ -136,6 +145,35 @@ describe('PreserveFields per-scene override', () => {
     const input = screen.getByDisplayValue('60') as HTMLInputElement
     fireEvent.change(input, { target: { value: '70' } })
     fireEvent.blur(input)
+    expect(screen.queryByTitle(RESET)).not.toBeNull()
+  })
+
+  it('picking a suggestion fills the Item scope with the node the dial lives on', () => {
+    // The index KNOWS the node; before v32 the pick dropped it and the runtime
+    // searched the figure root — where a clothing dial never exists.
+    render(
+      <Harness
+        initial={makeCharacter()}
+        morphIndex={[{ node: 'Boots', nodeLabel: 'Boots', label: 'Expand All', name: 'ExpandAll' }]}
+      />,
+    )
+    const name = screen.getByDisplayValue('body_ctrl_BreastsUp-Down') as HTMLInputElement
+    fireEvent.focus(name)
+    fireEvent.change(name, { target: { value: 'expandall' } })
+    fireEvent.mouseDown(screen.getByRole('option'))
+
+    expect(screen.getByDisplayValue('ExpandAll')).not.toBeNull()
+    expect(screen.getByDisplayValue('Boots')).not.toBeNull()
+  })
+
+  it('rescoping a row (Item field) on a non-primary scene arms the list override', () => {
+    render(<Harness initial={makeCharacter()} />)
+    fireEvent.click(screen.getByText('select-beach'))
+    expect(screen.queryByTitle(RESET)).toBeNull()
+
+    // The only preserve-morph row's Item input (placeholder "Figure" = root scope).
+    const item = screen.getByPlaceholderText('Figure') as HTMLInputElement
+    fireEvent.change(item, { target: { value: 'Boots' } })
     expect(screen.queryByTitle(RESET)).not.toBeNull()
   })
 

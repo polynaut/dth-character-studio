@@ -14,8 +14,13 @@ const MORPH_FIELD_CLASS =
 
 /**
  * The two "preserve across the ROM load" list editors from the character editor's
- * Advanced options — morphs (name + hold value) and node transforms (node label).
- * Both are homogeneous add/remove lists (`KeyedListEditor`).
+ * Advanced options — morphs (name + optional item scope + hold value) and node
+ * transforms (node label). Both are homogeneous add/remove lists
+ * (`KeyedListEditor`). A preserve morph's Item field scopes the runtime's
+ * lookup to that scene node (matched by internal name or label) — empty keeps
+ * the pre-v32 reach, the figure root, which is why its placeholder says
+ * "Figure": a clothing morph picked from the index NEEDS the scope or the
+ * runtime never finds it. Picking a suggestion fills both fields.
  *
  * Per-scene overrides are IMPLICIT and PER-LIST (no toggle). On a non-primary Daz
  * scene the lists start inherited from the base and are editable inline; the moment
@@ -59,14 +64,16 @@ export function PreserveFields({
   const setNodes = (next: Character['preserveNodeTransforms']) =>
     overrideEligible ? writePreserve({ nodeTransforms: next }) : patch({ preserveNodeTransforms: next })
 
-  // Rows are matched to the base by their natural key (morph name / node label); a
-  // row differs from the base when it's new/renamed or its hold value changed.
-  const baseMorphValue = new Map(character.preserveMorphs.map((m) => [m.name, m.keepValue]))
+  // Rows are matched to the base by their natural key (morph name + item scope /
+  // node label); a row differs from the base when it's new/renamed/rescoped or
+  // its hold value changed.
+  const rowKey = (m: { name: string; node?: string }) => JSON.stringify([m.name, m.node ?? ''])
+  const baseMorphValue = new Map(character.preserveMorphs.map((m) => [rowKey(m), m.keepValue]))
   const baseNodeLabels = new Set(character.preserveNodeTransforms.map((n) => n.nodeLabel))
   const morphOverridden = (i: number) => {
     if (!ov) return false
     const m = morphs[i]
-    return !baseMorphValue.has(m.name) || baseMorphValue.get(m.name) !== m.keepValue
+    return !baseMorphValue.has(rowKey(m)) || baseMorphValue.get(rowKey(m)) !== m.keepValue
   }
   const nodeOverridden = (i: number) => !!ov && !baseNodeLabels.has(nodes[i].nodeLabel)
   // The override is per LIST, not per row: one control in the label (like the other
@@ -114,7 +121,7 @@ export function PreserveFields({
             <KeyedListEditor
               items={morphs}
               onChange={setMorphs}
-              newItem={() => ({ name: '', keepValue: 1 })}
+              newItem={() => ({ name: '', keepValue: 1, node: '' })}
               addLabel="Add morph"
               rowClassName={rowClass}
               emptyHint="No morphs to preserve yet."
@@ -133,11 +140,20 @@ export function PreserveFields({
                             'border-daz-green focus:border-daz-green focus-visible:ring-daz-green/50',
                         )}
                         onCommit={(name) => set({ ...item, name })}
-                        // Preserve morphs store only a name (no node), so a pick just
-                        // takes the internal name.
-                        onPick={(entry) => set({ ...item, name: entry.name })}
+                        // A pick takes the node along with the internal name — a
+                        // clothing morph is only ever found under its own item,
+                        // never on the figure root the empty scope searches.
+                        onPick={(entry) => set({ ...item, name: entry.name, node: entry.node })}
                       />
                     </div>
+                    <Input
+                      value={item.node}
+                      overridden={isOv}
+                      placeholder="Figure"
+                      title="Scene item (node) this morph lives on — empty looks it up on the figure itself. Filled automatically when a suggestion is picked."
+                      className={cn('w-36 shrink-0', inheritedRow(isOv) && 'text-muted-foreground')}
+                      onChange={(e) => set({ ...item, node: e.target.value })}
+                    />
                     <NumberField
                       className={cn(
                         'w-24 pr-6 text-right tabular-nums',

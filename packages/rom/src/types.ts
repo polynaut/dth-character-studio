@@ -443,23 +443,32 @@ export function flatSectionGroupId(section: RomSection): string {
   return `flat-${section}`
 }
 
-/** A morph value held (restored) after the ROM load — name + the value to keep. */
+/** A morph value held (restored) after the ROM load — name + the value to keep.
+ *  `node` (schema v32) scopes the lookup to one scene node (matched by internal
+ *  name or label, like a ROM pose morph's `node`); `''` = the figure root, the
+ *  only place the runtime ever searched before the field existed. */
 export const preserveMorphSchema = z.object({
   name: z.string().max(MAX_NAME_LENGTH),
   keepValue: z.number(),
+  node: z.string().max(MAX_NAME_LENGTH).default(''),
 })
 export type PreserveMorph = z.infer<typeof preserveMorphSchema>
 
 /**
- * A morph set + keyed at FRAME 0 of the ROM — name + the value to set. The
- * runtime applies it on EVERY node of the figure tree that carries the name
- * (the figure and each fitted item), so one row like a clothing "Expand All"
- * reaches whichever outfit pieces the open scene wears — deliberately
- * unvalidated: a scene without the morph just skips it (Daz-log warning only).
+ * A morph set + keyed at FRAME 0 of the ROM — name + the value to set. With
+ * `node` empty the runtime applies it on EVERY node of the figure tree that
+ * carries the name (the figure and each fitted item), so one row like a
+ * clothing "Expand All" reaches whichever outfit pieces the open scene wears.
+ * `node` (schema v32) scopes the row to ONE scene node (matched by internal
+ * name or label) — a fit dial that exists on every conformed item under the
+ * same name (auto-follow twins) would otherwise hit them all. Deliberately
+ * unvalidated either way: a scene without the morph (or the node) just skips
+ * it (Daz-log warning only).
  */
 export const frameZeroMorphSchema = z.object({
   name: z.string().max(MAX_NAME_LENGTH),
   value: z.number(),
+  node: z.string().max(MAX_NAME_LENGTH).default(''),
 })
 export type FrameZeroMorph = z.infer<typeof frameZeroMorphSchema>
 
@@ -981,8 +990,17 @@ export function jcmMorphModForRuntime(mod: JcmMorphMod): {
  *       at frame 0 and behaves exactly as before. `.default` (not `.optional`)
  *       also makes the field REQUIRED on the parsed type, so every
  *       morph-creation site has to state its intent — see `newMorph`.
+ *  32 — added `node` to `preserveMorphSchema` + `frameZeroMorphSchema` (and so
+ *       to the per-scene `preserve.morphs` / `frameZero` replacement lists that
+ *       embed them): the morph autocomplete always KNEW which node a suggestion
+ *       lives on but the pick discarded it, so a frame-0 row broadcast to every
+ *       node carrying the name (auto-follow twins put a fit dial like
+ *       "FBMExpandAll" on EVERY conformed item) and a preserve row for a
+ *       clothing morph silently missed (the runtime only searched the figure
+ *       root). `''` keeps each list's old reach — broadcast for frame-0,
+ *       figure root for preserve. Additive with defaults — no migration step.
  */
-export const CHARACTER_SCHEMA_VERSION = 31
+export const CHARACTER_SCHEMA_VERSION = 32
 
 /**
  * Version of the generated **script runtime** — the bundled DTH `.dsa` runtime
@@ -1600,8 +1618,17 @@ export const CHARACTER_SCHEMA_VERSION = 31
  *       shown — an interrupt only ever happens in an unattended batch, where
  *       a modal would block every row behind it. A script generated without a
  *       meta folder bakes '' and can never be interrupted, exactly as before.
+ * v74 — `preserveMorphs` / `frameZeroMorphs` rows honour an optional `node`
+ *       (schema v32): `applyFrameZeroMorphs` applies a scoped row only on the
+ *       node(s) matching it by internal name or label instead of on every
+ *       carrier of the morph name, and `restorePreservedMorphs` resolves a
+ *       scoped row's node anywhere in the figure tree (same name-or-label
+ *       match as `applyKeyData`) instead of searching the figure root alone.
+ *       A row without `node` behaves exactly as before (broadcast / figure
+ *       root), so pre-v74 configs are unchanged; a scoped node that is not in
+ *       the scene logs a Daz-log warning naming it, never a run-log failure.
  */
-export const RUNTIME_VERSION = 73
+export const RUNTIME_VERSION = 74
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a
@@ -1789,14 +1816,16 @@ export const characterSchema = z.object({
    *  ROM build, so DTH's Lacrimal Fluid material lines up without the manual
    *  Surfaces-tab step. No-op on non-G9 figures (no UE5 tear UV ships for them). */
   applyUE5TearUV: z.boolean().default(false),
-  /** Morph values restored after ROM loading (e.g. breast position). */
+  /** Morph values restored after ROM loading (e.g. breast position). A row's
+   *  `node` (v32) scopes the lookup to one scene node; '' = figure root. */
   preserveMorphs: z.array(preserveMorphSchema).default([]),
   /** Node transforms memorized before and restored after ROM loading (e.g. eyes). */
   preserveNodeTransforms: z.array(preserveNodeTransformSchema).default([]),
   /** Morphs set + keyed at frame 0 of the ROM (schema v28) — applied on every
    *  node of the figure tree that carries the name, so clothing fit morphs
-   *  (e.g. "Expand All") reach whatever the open scene wears. A scene override
-   *  record can replace the list per scene ({@link sceneOverrideSchema}). */
+   *  (e.g. "Expand All") reach whatever the open scene wears; a row's `node`
+   *  (v32) narrows it to one item instead. A scene override record can replace
+   *  the list per scene ({@link sceneOverrideSchema}). */
   frameZeroMorphs: z.array(frameZeroMorphSchema).default([]),
   jcmMorphMods: z.array(jcmMorphModSchema).default([]),
   // Function form: a value default would hand every parsed character THE SAME

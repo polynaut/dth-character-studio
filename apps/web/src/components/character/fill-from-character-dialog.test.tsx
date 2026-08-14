@@ -34,7 +34,7 @@ function sourceCharacter(): CharacterWithProject {
     },
   ]
   c.jcmMorphMods = [{ id: 'r1', boneLabel: 'Left Thigh Bend', axis: 'XRotate', drives: [] }]
-  c.preserveMorphs = [{ name: 'BreastsGone', keepValue: 1 }]
+  c.preserveMorphs = [{ name: 'BreastsGone', keepValue: 1, node: '' }]
   c.facsDetailStrength = 0.8
   return { ...c, projectId: 'X:/projects/default', projectName: 'Default' }
 }
@@ -80,7 +80,7 @@ describe('FillFromCharacterDialog', () => {
     expect(patch!.sections.EXP.groups[0].poses[0].name).toBe('Smile')
     expect(patch!.jcmMorphMods).toHaveLength(1)
     expect(patch!.facsDetailStrength).toBeUndefined()
-    expect(patch!.preserveMorphs).toEqual([{ name: 'BreastsGone', keepValue: 1 }])
+    expect(patch!.preserveMorphs).toEqual([{ name: 'BreastsGone', keepValue: 1, node: '' }])
     expect(patch!.preserveNodeTransforms).toBeUndefined()
     // RET/JCM/FAC are enabled preset sections in the stock defaults, so the
     // source offers them as filled alongside its custom EXP.

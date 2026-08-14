@@ -169,8 +169,8 @@ function SceneCard({
  * The menu under a scene card's Open button: "Open scene" (the scene itself)
  * plus what the saved `rom-animations/<stem>_ROM.duf` allows.
  *
- * **A saved ROM animation is offered whenever the FILE is there**, current or
- * not. It used to be swapped for "Open and Generate ROM Animation" the moment
+ * **A saved ROM animation is offered whenever the FILE is there** ("Open last
+ * ROM"), current or not. It used to be swapped for the rebuild entry the moment
  * it read stale, which hid a perfectly openable file — and staleness here is
  * cheap to earn: the freshness test dates the generated ROM script, which every
  * character save rewrites, so editing anything at all makes every saved
@@ -179,10 +179,11 @@ function SceneCard({
  * Daz run of many minutes) with no way to open what was already on disk.
  *
  * Stale does not mean wrong, it means "not from the current definition" — which
- * is the user's call, not the studio's, so the row says so and opens anyway.
- * "Open and Generate ROM Animation" then sits under it: shown when the file is
- * missing or stale, and on Ctrl (force a rebuild of a current one — the save
- * overwrites). Closes on outside click / Escape.
+ * is the user's call, not the studio's, so the row opens anyway and its TOOLTIP
+ * says so (it was an inline hint line once, dropped for making the menu wide).
+ * "Generate new ROM" then sits under it: shown when the file is missing or
+ * stale, and on Ctrl (force a rebuild of a current one — the save overwrites).
+ * Closes on outside click / Escape.
  *
  * `generating` disables BOTH rom rows, not just the rebuild: a build in flight
  * OVERWRITES the very file the open row points at, and opening it would hand
@@ -255,12 +256,7 @@ function SceneOpenMenu({
           }
           onClick={onOpenRom}
         >
-          Open ROM Animation
-          {romStale && (
-            <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
-              From an earlier run — the scene or the definition changed since
-            </span>
-          )}
+          Open last ROM
         </button>
       )}
       {(!romExists || romStale || forceGenerate) && (
@@ -271,7 +267,7 @@ function SceneOpenMenu({
           title="Opens the scene in Daz Studio, builds the ROM and saves it as the reopenable ROM animation"
           onClick={onGenerateRom}
         >
-          {generating ? 'Generating ROM Animation…' : 'Open and Generate ROM Animation'}
+          {generating ? 'Generating ROM…' : 'Generate new ROM'}
         </button>
       )}
     </div>

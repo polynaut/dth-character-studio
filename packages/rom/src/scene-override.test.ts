@@ -668,7 +668,8 @@ describe('generateAll — scene overrides folded into the one script', () => {
     const preserveOverride = makeOverride({
       scenePath: scene,
       preserve: {
-        morphs: [{ name: 'body_ctrl_BreastsUp-Down', keepValue: 0.6 }],
+        // One row scoped to a scene node (v32) — the scope must reach the wire.
+        morphs: [{ name: 'body_ctrl_BreastsUp-Down', keepValue: 0.6, node: 'Boots' }],
         nodeTransforms: [],
       },
     })
@@ -676,7 +677,7 @@ describe('generateAll — scene overrides folded into the one script', () => {
       makeCharacter({
         extraScenes: [scene],
         sceneOverrides: [preserveOverride],
-        preserveMorphs: [{ name: 'base_morph', keepValue: 1 }],
+        preserveMorphs: [{ name: 'base_morph', keepValue: 1, node: '' }],
         preserveNodeTransforms: [{ nodeLabel: 'Left Eye' }],
       }),
       {},
@@ -689,7 +690,9 @@ describe('generateAll — scene overrides folded into the one script', () => {
       'ElectraG9_pose_asset.csv',
     ])
     const delta = grabObject(files[0].content, 'dthSceneOverrides')[sceneKey]
-    expect(delta.preserveMorphs).toEqual([{ name: 'body_ctrl_BreastsUp-Down', keepValue: 0.6 }])
+    expect(delta.preserveMorphs).toEqual([
+      { name: 'body_ctrl_BreastsUp-Down', keepValue: 0.6, node: 'Boots' },
+    ])
     // The empty list is emitted so it OVERRIDES the base's [Left Eye] (delete-all).
     expect(delta.preserveNodeTransforms).toEqual([])
     expect(delta.extraFrames).toBeUndefined()
@@ -699,11 +702,12 @@ describe('generateAll — scene overrides folded into the one script', () => {
   it('a frame-0-only override full-replaces the base list (empty overrides too), NO scene CSV', () => {
     const base = {
       extraScenes: [scene],
-      frameZeroMorphs: [{ name: 'base_expand', value: 1 }],
+      frameZeroMorphs: [{ name: 'base_expand', value: 1, node: '' }],
     }
     const frameZeroOverride = makeOverride({
       scenePath: scene,
-      frameZero: [{ name: 'Expand All', value: 0.8 }],
+      // Scoped to one item (v32); the base row below stays a broadcast ('').
+      frameZero: [{ name: 'Expand All', value: 0.8, node: 'Bags' }],
     })
     const files = generateAll(
       makeCharacter({ ...base, sceneOverrides: [frameZeroOverride] }),
@@ -718,10 +722,10 @@ describe('generateAll — scene overrides folded into the one script', () => {
     ])
     // The base list rides dthCharacterConfig; the scene's replacement rides the delta.
     expect(grabObject(files[0].content, 'dthCharacterConfig').frameZeroMorphs).toEqual([
-      { name: 'base_expand', value: 1 },
+      { name: 'base_expand', value: 1, node: '' },
     ])
     const delta = grabObject(files[0].content, 'dthSceneOverrides')[sceneKey]
-    expect(delta.frameZeroMorphs).toEqual([{ name: 'Expand All', value: 0.8 }])
+    expect(delta.frameZeroMorphs).toEqual([{ name: 'Expand All', value: 0.8, node: 'Bags' }])
     expect(sceneOverrideBuildsRom(makeCharacter(), frameZeroOverride)).toBe(false)
 
     // An armed-but-EMPTY list still emits, so it overrides the base (delete-all).

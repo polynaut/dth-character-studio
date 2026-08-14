@@ -61,12 +61,17 @@ async function openCharacter(page: Page, { stale }: { stale: boolean }) {
 test('a STALE ROM animation is still offered — with the rebuild under it', async ({ page }) => {
   await openCharacter(page, { stale: true })
 
-  const open = page.getByRole('button', { name: /Open ROM Animation/ })
+  const open = page.getByRole('button', { name: /Open last ROM/ })
   await expect(open).toBeVisible()
-  // …and says why it might not be what you want, rather than hiding itself.
-  await expect(open).toContainText('From an earlier run')
+  // …and its tooltip says why it might not be what you want, rather than the
+  // row hiding itself (an inline hint line once — dropped, it made the menu
+  // wide). Read title OR data-tooltip: TooltipHost rewrites a hovered
+  // control's title into data-tooltip (see override.smoke.ts).
+  await expect
+    .poll(async () => (await open.getAttribute('title')) ?? (await open.getAttribute('data-tooltip')))
+    .toMatch(/earlier run/)
   // The rebuild is the other entry now, not a replacement for this one.
-  await expect(page.getByRole('button', { name: /Open and Generate ROM Animation/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Generate new ROM/ })).toBeVisible()
 
   // Opening it opens THAT file — the ROM animation, not the source scene.
   await open.click()
@@ -78,20 +83,22 @@ test('a STALE ROM animation is still offered — with the rebuild under it', asy
 test('a CURRENT one opens without offering a pointless rebuild', async ({ page }) => {
   await openCharacter(page, { stale: false })
 
-  await expect(page.getByRole('button', { name: /Open ROM Animation/ })).toBeVisible()
-  await expect(page.getByRole('button', { name: /Open ROM Animation/ })).not.toContainText(
-    'From an earlier run',
-  )
+  const open = page.getByRole('button', { name: /Open last ROM/ })
+  await expect(open).toBeVisible()
+  // title OR data-tooltip — same TooltipHost caveat as the stale test above.
+  await expect
+    .poll(async () => `${await open.getAttribute('title')}${await open.getAttribute('data-tooltip')}`)
+    .not.toMatch(/earlier run/)
   // Nothing to refresh, so the multi-minute Daz run is not offered (Ctrl still
   // reveals it — the test below).
-  await expect(page.getByRole('button', { name: /Open and Generate ROM Animation/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /Generate new ROM/ })).toHaveCount(0)
 })
 
 test('Ctrl adds a rebuild of a CURRENT one — it no longer takes the open entry away', async ({
   page,
 }) => {
   await openCharacter(page, { stale: false })
-  await expect(page.getByRole('button', { name: /Open ROM Animation/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Open last ROM/ })).toBeVisible()
 
   // Ctrl used to REPLACE the open entry (`romReady = has && !ctrlHeld`), so a
   // forced rebuild cost the ability to open what was already built. It only
@@ -99,13 +106,13 @@ test('Ctrl adds a rebuild of a CURRENT one — it no longer takes the open entry
   // not a choice between them.
   await page.keyboard.down('Control')
   try {
-    await expect(page.getByRole('button', { name: /Open and Generate ROM Animation/ })).toBeVisible()
-    await expect(page.getByRole('button', { name: /Open ROM Animation/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Generate new ROM/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Open last ROM/ })).toBeVisible()
   } finally {
     await page.keyboard.up('Control')
   }
   // …and releasing it puts the menu back — the rebuild is offered only while held.
-  await expect(page.getByRole('button', { name: /Open and Generate ROM Animation/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /Generate new ROM/ })).toHaveCount(0)
 })
 
 test('no saved animation at all — only the scene and the build', async ({ page }) => {
@@ -117,6 +124,6 @@ test('no saved animation at all — only the scene and the build', async ({ page
   await page.getByRole('button', { name: /Open in Daz/ }).first().click()
 
   await expect(page.getByRole('button', { name: /Open scene/ })).toBeVisible()
-  await expect(page.getByRole('button', { name: /Open ROM Animation/ })).toHaveCount(0)
-  await expect(page.getByRole('button', { name: /Open and Generate ROM Animation/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Open last ROM/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /Generate new ROM/ })).toBeVisible()
 })
