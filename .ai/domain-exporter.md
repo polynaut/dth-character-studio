@@ -41,12 +41,9 @@ Part of the domain reference — `.ai/domain.md` is the index.
   reopens these files — the `.dth`/`.fbx`/`.abc` exist to be imported by
   Houdini — so they belong one hop from the `.hip` that reads them, and the name
   says whose output it is rather than which tool wrote it.
-  That also deleted a rule: while the root lived inside the Daz folder it had to
-  follow a per-character scenes-folder RENAME, so it derived from the character's
-  own primary scene (`scenesRootRelOf`, now gone — a plain `dazSubdir` spelling
-  made the rename half-undo itself, the save pointing `exportPath` back at the
-  vanished `daz3d/dth-exports`). The Houdini folder has no per-character rename,
-  so the manifest value is the whole answer.
+  The Houdini folder has no per-character rename, so the manifest value is the
+  whole answer (the old in-Daz location had to derive from the primary scene to
+  survive a scenes-folder rename; that rule went with it).
   Created at character creation (`seedCharacterFolders`)
   and re-resolved on EVERY save, which is how pre-v29 characters migrate off
   their hand-picked path; it needs host context so it resolves in the web
@@ -172,11 +169,9 @@ Part of the domain reference — `.ai/domain.md` is the index.
   layout. What that does NOT cover is everything around it — `parm.eval()`,
   `unexpandedString()`, the save — so the end-to-end repair is still worth a
   **Dry run** on one real pre-move project before it is trusted.
-- Schema v27's **Houdini project folder** is GONE (v29), and with it the
-  `<folder>/dth-export/` nesting, `houdiniProjectResolution`, the per-scene
-  override and the run-time `dthExportProj` block. The export directory owes
-  nothing to Houdini now — the dependency runs the other way: a `.hip` reaches
-  the exports by plain relative navigation (`$JOB/…`, below).
+- The export directory owes nothing to Houdini (schema v27's per-character
+  Houdini project folder went in v29) — the dependency runs the other way: a
+  `.hip` reaches the exports by plain relative navigation (`$JOB/…`, below).
 - **Generate Houdini project**: `generateHoudiniProject` (api/houdini.ts) →
   Rust `create_houdini_project` (houdini.rs) runs
   `<houdiniInstallFolder>/bin/hython.exe -c` to start a FRESH scene, build
@@ -262,8 +257,7 @@ Part of the domain reference — `.ai/domain.md` is the index.
     beside the houdini folder rather than under it, so `$HIP` cannot reach it
     without the `..` v63 removed. Houdini's own picker agrees: it writes
     `$JOB/export/` here even when `$HIP` is the preferred variable (measured).
-    Until v0.68 it carried the export ROOT,
-    quietly aiming Houdini's output into the throwaway tree. The Skin node's clothing-vs-body shape lists are NOT
+    The Skin node's clothing-vs-body shape lists are NOT
   prefilled: they are black-boxed multiparms, the export files may not exist
   at generation time, and the node ships its own "Auto-Populate Skinned
   Shapes" button for exactly that job. Applied parms come back as the
@@ -273,8 +267,8 @@ Part of the domain reference — `.ai/domain.md` is the index.
   copy: DTH content (`install_unreal_dth` — the release's
   `Unreal Engine Content/DazToHue` → `Content/DazToHue`) plus every configured
   plugin build matching the project's engine version, all pre-checked, each
-  installed with overwrite (a checked item IS the explicit intent the retired
-  Ctrl+click used to carry; installs copy over, never delete first). The
+  installed with overwrite (a checked item is explicit intent; installs copy
+  over, never delete first). The
   engine version is read from the `.uproject`'s `EngineAssociation` at
   dialog-open (`unreal_project_state`) and NEVER stored — a project can be
   retargeted in Unreal any time; a GUID association (source build) lists every
@@ -368,10 +362,6 @@ Part of the domain reference — `.ai/domain.md` is the index.
   (`sweptJunctions` on the generate result). The junction-CREATION code
   survives only as a test helper: the sweep's test builds one to prove
   removal never eats the target.
-- **The first-Generate-project intro** (#664) was REMOVED together with the
-  junction feature in v0.63 — with nothing to decide up front, the dialog is
-  just the scene name again; `houdiniPathStyle` is edited in Settings →
-  Project, and the machine-local `houdini-intro.json` flag is retired.
 - **Which projects a scene selection involves.** A network's identity is the
   `.dth` it imports (`import_character_dtu_file`) — the studio wrote that file
   at a path it computes (`sceneDthPath`), so it names the Daz scene exactly,
@@ -396,7 +386,7 @@ Part of the domain reference — `.ai/domain.md` is the index.
   run the user asked for.
 - **The Houdini export handoff — "Export too" (COMPLETE).** After a Daz bulk
   export, the DazToHue export nodes in a Houdini project run for the scenes the
-  user ticked. No longer the "Export too" TOGGLE the name remembers: the panel
+  user ticked. The panel
   lists the character's linked projects as checkboxes with their own **Mode**
   dropdown (`HOUDINI_MODE_OPTIONS` in `dth-export.tsx` — just `export-selected`
   and `skip`; "export every scene" is what ticking every scene already means, so
@@ -463,10 +453,8 @@ Part of the domain reference — `.ai/domain.md` is the index.
   Both live buttons are INERT to a plain click (a stray one used to drop the
   watch, reading as "the export vanished"); the way out sits beside them as
   **Interrupt** (see "Interrupting a run" below), which stops the run itself
-  and drops the queued Houdini projects with it. Until v0.77 each button hid a
-  modifier-revealed hatch instead — Ctrl → Abort / Stop watching — that stopped
-  the STUDIO and let the run carry on; both went when a real stop existed, and
-  the leftover-file case they also served lives in Settings → App Data.
+  and drops the queued Houdini projects with it (the leftover-file hatch lives
+  in Settings → App Data — see the claimed-batch bullet below).
   RELOAD SURVIVAL: every character handoff writes its plan to the app-data
   sidecar `export-run.json` (characterId, startedAtMs, houdiniProjects/mode,
   scenes, the Daz `mode`, the Unreal targets/sets; deleted on every run end).
@@ -515,11 +503,14 @@ Part of the domain reference — `.ai/domain.md` is the index.
   MEASURED on the first live run (2026-08-03): 456.py fires BEFORE the main
   window paints, and inline work there holds the window back — the whole batch
   ran against a blank screen and Houdini "opened" only after the last node.
-  The batch is therefore DEFERRED to the first event-loop idle
-  (`hdefereval.executeDeferred`, 456.py's `launch()`) plus a Qt single-shot
-  breather (`STARTUP_BREATHER_MS`) so the viewport finishes its first cook —
-  textures included — before `do_export` hogs the main thread. Sessions
-  without the module (hython) run inline — no window to wait for.
+  And the deferral alone does not fix it (retested 2026-08-11: startup pumps
+  the event loop, so a deferred callback still fired pre-paint). The batch
+  therefore waits until `hou.qt.mainWindow().isVisible()` reports the window
+  actually up (polled via `hdefereval`, #785), plus a breather
+  (`STARTUP_BREATHER_MS`) so the viewport finishes its first cook — textures
+  included — before `do_export` hogs the main thread; an on-screen retest of
+  that wait is still pending. Sessions without the module (hython) run inline —
+  no window to wait for.
   Chosen shape was **visible GUI + a startup script reading a job file** (not
   `hrpyc` remote control), mirroring the Daz Runner handoff — **flipped to
   HEADLESS hython 2026-08-11** (Remo's call, reversing his earlier

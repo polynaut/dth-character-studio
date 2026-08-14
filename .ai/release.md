@@ -112,7 +112,7 @@ DELETE /releases/assets/<id>
 422 Validation Failed — "Cannot delete asset from an immutable release"
 ```
 
-This repo's releases are **immutable** (see the note in `.ai/gotchas.md` — a
+This repo's releases are **immutable** (see the note in `.ai/gotchas-releases.md` — a
 published release and its `latest.json` cannot be edited afterward), and that
 covers their assets too. So every run failed on the first asset it tried to
 delete, having deleted nothing. A daily red cron that is impossible by
@@ -121,5 +121,5 @@ construction is worse than no cron.
 Consequence, deliberately accepted: every release keeps its installers forever.
 If storage ever needs reclaiming, the only lever is deleting whole RELEASES —
 and that is the one thing this repo must be careful with, because a deleted
-release permanently burns its tag name (`.ai/gotchas.md`, the v0.44.7–v0.50.0
+release permanently burns its tag name (`.ai/gotchas-releases.md`, the v0.44.7–v0.50.0
 episode).
