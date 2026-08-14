@@ -25,9 +25,17 @@
  */
 
 /**
- * Source with `//` and block comments removed, tracking string state so a quote
- * inside a comment cannot open a literal and a `//` inside a literal cannot open
- * a comment.
+ * Every string literal in a `.dsa`, comments skipped.
+ *
+ * A hand-written single pass rather than a regex, for two reasons. Comments
+ * have to be skipped in the SAME walk — a quote inside a comment must not open
+ * a literal, and a `//` inside a literal must not open a comment — which a
+ * regex cannot do on its own. And the obvious literal regex
+ * (`/"(?:[^"\\\n]|\\.)*"/`) is a polynomial-ReDoS shape: on a source with an
+ * unterminated quote the engine rescans to end-of-input from every quote
+ * position, O(n²) in the file size. Caller input here is a repo file, but this
+ * is exported from a library and a linear scanner costs nothing (flagged by
+ * CodeQL `js/polynomial-redos` on the regex version).
  *
  * Regex literals are NOT modelled — `/` outside a string is only treated as a
  * comment when the next character is `/` or `*`, which no realistic DzScript
@@ -35,32 +43,11 @@
  * direction is a missed violation, never a false alarm, which is the right way
  * for a ratchet to be wrong.
  */
-function stripComments(source: string): string {
-  let out = ''
+function stringLiterals(source: string): Array<string> {
+  const literals: Array<string> = []
   let i = 0
   while (i < source.length) {
     const char = source[i]
-    if (char === '"' || char === "'") {
-      const quote = char
-      out += char
-      i++
-      while (i < source.length) {
-        if (source[i] === '\\') {
-          out += source[i] + (source[i + 1] ?? '')
-          i += 2
-          continue
-        }
-        out += source[i]
-        // A newline ends an unterminated literal too — DzScript has no
-        // multi-line string, so running past one would swallow real code.
-        if (source[i] === quote || source[i] === '\n') {
-          i++
-          break
-        }
-        i++
-      }
-      continue
-    }
     if (char === '/' && source[i + 1] === '/') {
       while (i < source.length && source[i] !== '\n') i++
       continue
@@ -71,16 +58,38 @@ function stripComments(source: string): string {
       i += 2
       continue
     }
-    out += char
+    if (char !== '"' && char !== "'") {
+      i++
+      continue
+    }
+    const start = i
+    let closed = false
     i++
+    while (i < source.length) {
+      const c = source[i]
+      // A DzScript literal cannot span lines, so a newline before the closing
+      // quote means this was never a literal at all (an apostrophe in prose,
+      // most likely). Dropping it keeps the scan from swallowing real code.
+      if (c === '\n') break
+      if (c === '\\') {
+        if (source[i + 1] === '\n') break
+        i += 2
+        continue
+      }
+      i++
+      if (c === char) {
+        closed = true
+        break
+      }
+    }
+    if (closed) literals.push(source.slice(start, i))
   }
-  return out
+  return literals
 }
 
 /** Every string literal in a `.dsa` holding a character outside printable
  *  ASCII — empty for a compliant file. The literals are returned (not just a
  *  count) so a failing test names the offending text. */
 export function nonAsciiStringLiterals(source: string): Array<string> {
-  const literals = stripComments(source).match(/"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'/g) ?? []
-  return literals.filter((literal) => /[^\x20-\x7E]/.test(literal))
+  return stringLiterals(source).filter((literal) => /[^\x20-\x7E]/.test(literal))
 }
