@@ -1,5 +1,5 @@
 import { cn, Input, KeyedListEditor, Label, NumberField, OverrideMark, overrideLabelClass } from '@dth/ui'
-import { MorphNodeChip } from '#/components/character/morph-node-chip.tsx'
+import { MorphNodeInfo } from '#/components/character/morph-node-info.tsx'
 import { MorphIndexProvider } from '#/components/rom/morph-index-provider.tsx'
 import { MorphNameCell } from '#/components/rom/morph-name-cell.tsx'
 import { preserveMorphsKey, preserveNodesKey } from '#/lib/preserve-diff.ts'
@@ -21,9 +21,10 @@ const MORPH_FIELD_CLASS =
  * lookup at that scene node (matched by internal name or label) — empty keeps
  * the pre-v32 reach, the figure root, which is why the empty scope reads
  * "Figure": a clothing morph picked from the index NEEDS the scope or the
- * runtime never finds it. The scope is READ-ONLY (see {@link MorphNodeChip}):
- * picking a suggestion sets both the name and the node, the chip's ✕ returns
- * the lookup to the figure.
+ * runtime never finds it. The scope is READ-ONLY and shown as the small-label
+ * info row UNDER the name field (see {@link MorphNodeInfo} — the same facts
+ * the picked suggestion showed): picking a suggestion sets both the name and
+ * the node, the badge's ✕ returns the lookup to the figure.
  *
  * Per-scene overrides are IMPLICIT and PER-LIST (no toggle). On a non-primary Daz
  * scene the lists start inherited from the base and are editable inline; the moment
@@ -102,7 +103,9 @@ export function PreserveFields({
   // as overridden, so the LABEL goes white + green handle on its own.
   const inheritedRow = (isOv: boolean) => overrideEligible && !isOv
 
-  const rowClass = 'mb-2 flex items-center gap-2'
+  // items-start: the info row under a morph-name field makes the left column
+  // two lines tall — the value + remove stay on the input line.
+  const rowClass = 'mb-2 flex items-start gap-2'
 
   return (
     <MorphIndexProvider morphIndex={morphIndex} scenePath={scenePath}>
@@ -148,15 +151,16 @@ export function PreserveFields({
                         // never on the figure root the empty scope searches.
                         onPick={(entry) => set({ ...item, name: entry.name, node: entry.node })}
                       />
+                      <MorphNodeInfo
+                        name={item.name}
+                        node={item.node}
+                        fallback="Figure"
+                        fallbackTitle="Looked up on the figure itself — pick a suggestion to point it at the item the morph lives on"
+                        scopedTitle={`Looked up on "${item.node}" (set by the picked suggestion)`}
+                        muted={inheritedRow(isOv)}
+                        onClear={() => set({ ...item, node: '' })}
+                      />
                     </div>
-                    <MorphNodeChip
-                      node={item.node}
-                      fallback="Figure"
-                      fallbackTitle="Looked up on the figure itself — pick a suggestion to point it at the item the morph lives on"
-                      scopedTitle={`Looked up on "${item.node}" (set by the picked suggestion)`}
-                      muted={inheritedRow(isOv)}
-                      onClear={() => set({ ...item, node: '' })}
-                    />
                     <NumberField
                       className={cn(
                         'w-24 pr-6 text-right tabular-nums',

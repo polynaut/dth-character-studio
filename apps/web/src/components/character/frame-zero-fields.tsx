@@ -1,5 +1,5 @@
 import { cn, KeyedListEditor, Label, NumberField, OverrideMark, overrideLabelClass } from '@dth/ui'
-import { MorphNodeChip } from '#/components/character/morph-node-chip.tsx'
+import { MorphNodeInfo } from '#/components/character/morph-node-info.tsx'
 import { MorphIndexProvider } from '#/components/rom/morph-index-provider.tsx'
 import { MorphNameCell } from '#/components/rom/morph-name-cell.tsx'
 import { frameZeroMorphsKey } from '#/lib/preserve-diff.ts'
@@ -20,11 +20,12 @@ const MORPH_FIELD_CLASS =
  * whichever outfit pieces the open scene wears; a scoped row lands only on
  * that node (matched by internal name or label) — auto-follow puts a figure
  * morph's twin dial on every conformed item, so a fit value meant for one bag
- * would otherwise deform the whole outfit. The scope is READ-ONLY (see
- * {@link MorphNodeChip}): picking a suggestion sets both the name and the node
- * it lives on, the chip's ✕ goes back to "All items". A scene without the
- * morph or the item just skips it (Daz-log warning, deliberately no
- * studio-side validation).
+ * would otherwise deform the whole outfit. The scope is READ-ONLY and shown as
+ * the small-label info row UNDER the name field (see {@link MorphNodeInfo} —
+ * the same facts the picked suggestion showed): picking a suggestion sets both
+ * the name and the node it lives on, the badge's ✕ goes back to "All items".
+ * A scene without the morph or the item just skips it (Daz-log warning,
+ * deliberately no studio-side validation).
  *
  * Per-scene overrides follow the PreserveFields model exactly: IMPLICIT and per
  * LIST — on a non-primary Daz scene the list starts inherited from the base and
@@ -99,7 +100,9 @@ export function FrameZeroFields({
             onChange={setMorphs}
             newItem={() => ({ name: '', value: 1, node: '' })}
             addLabel="Add morph"
-            rowClassName="mb-2 flex items-center gap-2"
+            // items-start: the info row under the name field makes the left
+            // column two lines tall — the value + remove stay on the input line.
+            rowClassName="mb-2 flex items-start gap-2"
             emptyHint="No morphs on frame 0 yet."
           >
             {(item, set, index) => {
@@ -117,19 +120,20 @@ export function FrameZeroFields({
                       )}
                       onCommit={(name) => set({ ...item, name })}
                       // A pick takes the node along with the internal name (the
-                      // suggestion knows which item the dial lives on) — clear
-                      // the Item field to go back to "every item carrying it".
+                      // suggestion knows which item the dial lives on) — the ✕
+                      // on the info row goes back to "every item carrying it".
                       onPick={(entry) => set({ ...item, name: entry.name, node: entry.node })}
                     />
+                    <MorphNodeInfo
+                      name={item.name}
+                      node={item.node}
+                      fallback="All items"
+                      fallbackTitle="Applied on every item carrying the morph — pick a suggestion to scope it to one item"
+                      scopedTitle={`Applied only on "${item.node}" (set by the picked suggestion)`}
+                      muted={inheritedRow(isOv)}
+                      onClear={() => set({ ...item, node: '' })}
+                    />
                   </div>
-                  <MorphNodeChip
-                    node={item.node}
-                    fallback="All items"
-                    fallbackTitle="Applied on every item carrying the morph — pick a suggestion to scope it to one item"
-                    scopedTitle={`Applied only on "${item.node}" (set by the picked suggestion)`}
-                    muted={inheritedRow(isOv)}
-                    onClear={() => set({ ...item, node: '' })}
-                  />
                   <NumberField
                     className={cn(
                       'w-24 pr-6 text-right tabular-nums',

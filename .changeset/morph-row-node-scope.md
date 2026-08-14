@@ -15,8 +15,10 @@ the figure root, so a clothing morph listed there silently did nothing.
 
 Both lists now carry an **Item** scope (schema v32, runtime v74). Picking a
 suggestion sets it — the index knows which item a dial lives on — and the row
-shows it as a read-only label whose ✕ clears the scope. Empty keeps each
-list's old reach — every carrier for frame-0 rows, the figure root for
-preserve rows — so existing characters generate unchanged. A scoped item
+shows it as small labels under the name field, mirroring the suggestion that
+was picked (node badge, "this scene", the Daz UI name), with an ✕ that clears
+the scope. Empty keeps each list's old reach — every carrier for frame-0
+rows, the figure root for preserve rows — so existing characters generate
+unchanged. A scoped item
 that isn't in the open scene logs a Daz-log warning naming it, never a run-log
 failure, matching the lists' deliberately unvalidated design.

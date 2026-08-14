@@ -167,7 +167,10 @@ describe('PreserveFields per-scene override', () => {
     fireEvent.mouseDown(screen.getByRole('option'))
 
     expect(screen.getByDisplayValue('ExpandAll')).not.toBeNull()
+    // The info row under the field mirrors the picked suggestion: the node
+    // badge plus the Daz UI name (re-looked-up in the index, not stored).
     expect(screen.getByText('Boots')).not.toBeNull()
+    expect(screen.getByText(/Daz UI name: Expand All/)).not.toBeNull()
   })
 
   it('clearing the Item scope (chip ✕) on a non-primary scene arms the list override', () => {
