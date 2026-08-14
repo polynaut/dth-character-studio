@@ -80,6 +80,8 @@ interface RomSectionsProps {
   /** Absolute frames whose morphs failed in the last ROM run (from the run log) —
    *  matching pose rows are marked red. */
   failedFrames?: Set<number>
+  /** Save-time name errors by pose id — see PoseTableMeta.nameErrors. */
+  nameErrors?: ReadonlyMap<string, { message: string; name: string }>
   /** Set (with a fresh nonce) to open the section holding `frame` and scroll its
    *  pose row into view — driven by clicking a failed morph in the run report. */
   revealFrame?: { frame: number; nonce: number } | null
@@ -157,6 +159,7 @@ export const RomSections = memo(function RomSections({
   catalog,
   presetFrames,
   failedFrames,
+  nameErrors,
   revealFrame,
   revealPose,
   morphIndex,
@@ -1041,6 +1044,7 @@ export const RomSections = memo(function RomSections({
                       gender={gender}
                       startFrames={startFrames}
                       failedFrames={failedFrames}
+                      nameErrors={nameErrors}
                       removable={false}
                       override={editorOverride}
                       locked={locked}
@@ -1072,6 +1076,7 @@ export const RomSections = memo(function RomSections({
                       gender={gender}
                       startFrames={startFrames}
                       failedFrames={failedFrames}
+                      nameErrors={nameErrors}
                       removable
                       override={editorOverride}
                       locked={locked}

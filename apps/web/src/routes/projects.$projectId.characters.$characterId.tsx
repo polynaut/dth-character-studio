@@ -47,7 +47,7 @@ import { useDetectedFiles } from '#/lib/use-detected-files.ts'
 import { useFolderMove } from '#/lib/use-folder-move.tsx'
 import { useRomRunLog } from '#/lib/use-rom-run-log.ts'
 import { useSceneSelection } from '#/lib/use-scene-selection.ts'
-import { presetFramesSignature } from '@dth/rom'
+import { presetFramesSignature, walkCustomPoses } from '@dth/rom'
 
 import type { BoneIndexEntry, MorphIndexEntry } from '#/lib/rom/api.ts'
 import type { Character, PresetFrames, RomSection } from '@dth/rom'
@@ -201,6 +201,11 @@ function CharacterPage({ onImportRemount }: { onImportRemount: () => void }) {
   } = Route.useLoaderData()
   // A blocked-save validation error, sent to the ROM editor to open its section,
   // scroll the offending pose row in and focus its first empty field.
+  /** Name errors from the last blocked save, by pose id — the grid paints the
+   *  offending fields (see PoseTableMeta.nameErrors). */
+  const [nameErrors, setNameErrors] = useState<
+    ReadonlyMap<string, { message: string; name: string }>
+  >(new Map())
   const [revealPose, setRevealPose] = useState<{
     section: RomSection
     poseId: string
@@ -219,6 +224,26 @@ function CharacterPage({ onImportRemount }: { onImportRemount: () => void }) {
         poseId: first.poseId,
         nonce: (prev?.nonce ?? 0) + 1,
       }))
+      // Scrolling the row into view is only half of it: the field itself has to
+      // SAY it is the problem. The per-cell validator can judge one value (it
+      // catches illegal characters) but a duplicate is a fact about two rows, so
+      // the whole-character verdict is threaded back to the grid. Reported: the
+      // toast named a frame, the page jumped to it, and every field there looked
+      // fine.
+      //
+      // Keyed by pose id, carrying the value that FAILED so the mark clears the
+      // moment that row is edited — and only that row.
+      const wanted = new Map(
+        errors.filter((e) => e.field === 'name' && e.poseId).map((e) => [e.poseId, e.message]),
+      )
+      const byId = new Map<string, { message: string; name: string }>()
+      // The same walk the validator used, so "the pose this error is about" is
+      // resolved by the one iterator rather than a second idea of the shape.
+      for (const { pose } of walkCustomPoses(draft.character.sections)) {
+        const message = wanted.get(pose.id)
+        if (message) byId.set(pose.id, { message, name: pose.name })
+      }
+      setNameErrors(byId)
     },
   })
   const { character, patch } = draft
@@ -579,6 +604,7 @@ function CharacterPage({ onImportRemount }: { onImportRemount: () => void }) {
                   selectedScene={sceneSel.effectiveScene}
                   onSelectScene={sceneSel.selectScene}
                   dockActionsRef={sceneDockActions}
+                  onScenesRemoved={detect.answerFor}
                 />
                 <SceneLock locked={!sceneLinked}>
                   <HoudiniProjectsField
@@ -643,6 +669,7 @@ function CharacterPage({ onImportRemount }: { onImportRemount: () => void }) {
         catalog={catalog}
         presetFrames={presetFrames}
         failedFrames={runLog.failedFrames}
+        nameErrors={nameErrors}
         revealFrame={runLog.revealFrame}
         revealPose={revealPose}
         morphIndex={morphIndex}

@@ -79,6 +79,7 @@ export const GroupCard = memo(function GroupCard({
   gender,
   startFrame,
   failedFrames,
+  nameErrors,
   removable = true,
   expandedIds,
   onToggleExpanded,
@@ -93,6 +94,8 @@ export const GroupCard = memo(function GroupCard({
   gender: Gender
   startFrame: number
   failedFrames?: Set<number>
+  /** Save-time name errors by pose id — see PoseTableMeta.nameErrors. */
+  nameErrors?: ReadonlyMap<string, { message: string; name: string }>
   removable?: boolean
   expandedIds: Set<string>
   onToggleExpanded: (poseId: string) => void
@@ -170,6 +173,7 @@ export const GroupCard = memo(function GroupCard({
   const meta: PoseTableMeta = {
     startFrame,
     failedFrames,
+    nameErrors,
     showBoneScale,
     locked,
     expandedIds,

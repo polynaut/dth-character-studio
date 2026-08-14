@@ -5,14 +5,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 // The studio starts Daz for two very different reasons, and they go through the
 // same `launch_daz_studio` command:
 //
-//   - UNATTENDED work — an export batch, a project or scene scan, the restart of
-//     a pending handoff. The Runner drives a Daz nobody is watching (every script
-//     handed to it is dialog-free by construction for exactly that reason), so it
-//     has no business jumping in front of what the user is doing. These ask the
-//     native watch to minimize Daz once its main window appears.
+//   - UNATTENDED SCANS — a project or scene scan. The Runner drives a Daz nobody
+//     is watching (every script handed to it is dialog-free by construction for
+//     exactly that reason), so it has no business jumping in front of what the
+//     user is doing. These ask the native watch to minimize Daz once its main
+//     window appears.
 //   - The user asking for a SCENE — "Open and Generate ROM Animation" on a scene
 //     card leaves the built ROM on the timeline to look at. Minimizing that would
 //     hide the thing that was asked for.
+//   - An EXPORT handoff — also visible. It used to minimize (#799), but the
+//     minimize is fire-and-forget and never actually worked, so a successful
+//     launch produced no window: identical, from the user's chair, to a launch
+//     that failed, while the studio insisted it was "Opening Daz Studio". A run
+//     whose progress the user is sitting and watching is not unattended.
 //
 // The split is one argument (`DazLaunchVisibility`) at five call sites, so it is
 // exactly the kind of thing a later "simplification" collapses to one behaviour.
@@ -186,7 +191,7 @@ async function seedCharacter(): Promise<void> {
   addFile(`${storage.studioCharScriptsDir(DAZ_LIB, 'Nova', 'Kira')}/.Build_ROM_Animation.dsa`)
 }
 
-describe('unattended launches start Daz minimized', () => {
+describe('unattended SCAN launches start Daz minimized', () => {
   it('a scene scan asks for the Daz window to be minimized', async () => {
     await startSceneScan({ data: { scenePath: SCENE, genesis: 'G9' } })
 
@@ -210,17 +215,21 @@ describe('unattended launches start Daz minimized', () => {
     expect(minimizes[0].exePaths).toEqual([LAUNCHED_EXE])
   })
 
-  it('restarting Daz for a pending export handoff minimizes it too', async () => {
+  it('an EXPORT handoff launches Daz visible — the user is watching this one', async () => {
     addFile(PENDING, JSON.stringify({ version: 2, progress: 0, jobs: [] }))
 
     await expect(launchDazForPendingJobs()).resolves.toBe(true)
 
     expect(launches).toHaveLength(1)
-    expect(minimizes).toHaveLength(1)
-    expect(minimizes[0].exePaths).toEqual([LAUNCHED_EXE])
+    // Deliberately NOT minimized (this used to be, via #799). The minimize is
+    // fire-and-forget and never actually worked, so a SUCCESSFUL launch left no
+    // window to see — indistinguishable from a launch that failed, while the
+    // studio said "Opening Daz Studio". An export whose progress the user is
+    // sitting and watching is not an unattended run.
+    expect(minimizes).toHaveLength(0)
   })
 
-  it('does NOT touch a Daz that was already running — we only minimize what we start', async () => {
+  it('does NOT launch at all when Daz is already running', async () => {
     addFile(PENDING, JSON.stringify({ version: 2, progress: 0, jobs: [] }))
     dazRunning = true
 

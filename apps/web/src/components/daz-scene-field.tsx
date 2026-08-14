@@ -294,6 +294,7 @@ export function DazSceneField({
   onSelectScene,
   cardsRef,
   dockActionsRef,
+  onScenesRemoved,
 }: {
   projectId: string
   character: Character
@@ -320,6 +321,11 @@ export function DazSceneField({
   /** Populated with this field's add/unlink flows so the docked scene bar
    *  (SceneFooter) can drive them without duplicating the modals. */
   dockActionsRef?: MutableRefObject<SceneDockActions | null>
+  /** Scenes the user just removed from the character, so folder detection stops
+   *  offering them straight back (see `useDetectedFiles.answerFor`). Called for
+   *  a plain unlink as well as a delete — in both the user has just said what
+   *  that file is to this character. */
+  onScenesRemoved?: (paths: Array<string>) => void
 }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -969,6 +975,11 @@ export function DazSceneField({
     )
     if (saved) {
       setPendingRemove('')
+      // Before the delete below, and before anything awaits: persisting the
+      // unlink is itself what re-runs folder detection, so the scene has to be
+      // answered for by the time that scan lands or it comes straight back as a
+      // "new file" — the file is still on disk either way at this point.
+      onScenesRemoved?.([scene])
       if (removeDeleteFile) {
         try {
           const noDuf = scene.replace(/\.duf$/i, '')

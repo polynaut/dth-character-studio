@@ -13,6 +13,7 @@ documentation, not archaeology.
 | [architecture.md](architecture.md) | you need the lay of the land: packages, routes, the lib/ native boundary, the FFI surface, the projects model. |
 | [domain.md](domain.md) | you touch anything Daz/Houdini-semantic — it routes to [domain-rom.md](domain-rom.md) (frames, sections, artifacts, CSV eras, hard rules) and [domain-exporter.md](domain-exporter.md) (the measured DTH exporter contract). |
 | [conventions.md](conventions.md) | you change the character schema, the FFI surface, settings, versioning — the rituals live here. Opens with the **Working rules** (hook-injected into every session's context) and the stacked-PR setup. |
+| [schema-history.md](schema-history.md) | you need to know what a specific `schemaVersion` / `RUNTIME_VERSION` number *means* — the per-version lookup table the migration code is written against. Bumping either constant means adding its entry here. |
 | [testing.md](testing.md) | you write or run tests: the four layers, what pins what, the screenshot suite. |
 | [docs-site.md](docs-site.md) | you touch "the docs page": the public Pages site — `site/`, `docs/guide/`, the guide build/deploy, previews, guide search. |
 | [release.md](release.md) | you ship: the release train, the signing gate, publish troubleshooting. |

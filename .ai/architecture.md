@@ -75,7 +75,15 @@ a plain browser with native features as no-ops):
   (CRUD/imports/run-log), `projects.ts` (`.dcsp` lifecycle), `generate.ts`
   (artifact generation + `resolvePresetFrames` + staleness sweep), `execute.ts`
   (the DTH Exporter job-file handoff + Daz launch — pure parts in
-  `lib/rom/execute-jobs.ts`, contract in `docs/exporter-plugin-job-file.md`),
+  `lib/rom/execute-jobs.ts`, contract in `docs/exporter-plugin-job-file.md`;
+  itself a **barrel** over `api/execute/`, which imports only downward:
+  `primitives.ts` (character + scenes root, handoff stamps, Daz probes/launch,
+  job-file paths) → `run-state.ts` (the run sidecar = which window owns a run,
+  the progress log, interrupt/abort, the polled job-file state) → `jobs.ts`
+  (the handoff) and `scans.ts` (the project/scene scans riding it) as PEERS on
+  top. The one slot they share is `runOwner.current` in `run-state.ts` — a
+  holder object, because an imported `let` binding cannot be assigned across a
+  module boundary),
   `houdini.ts` (Generate project via hython + the leftover-junction sweep),
   `install.ts`, `maintenance.ts`, `avatars.ts`, `attachments.ts`, `notes.ts`,
   `products.ts`, `move.ts` (the shared folder-move lock gate: `assertMovable`

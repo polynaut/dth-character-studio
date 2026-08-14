@@ -193,7 +193,13 @@ function RootComponent() {
             toast:
               '!items-center !gap-3 !rounded-lg !border !border-border !border-l-4 !bg-card !pr-10 !text-foreground !shadow-[0_10px_30px_rgb(0_0_0/0.45),-4px_0_14px_-6px_var(--glow,transparent)]',
             title: '!text-[0.95rem] !font-semibold',
-            description: '!text-[0.85rem] !text-muted-foreground',
+            // `whitespace-pre-line` because descriptions are BUILT as lines —
+            // the export finish report is one per leg. Sonner renders the
+            // description as plain text, so without it every newline collapsed
+            // and a six-line report arrived as one run-on paragraph: the Daz
+            // line, the warnings and the Unreal line welded together
+            // mid-sentence.
+            description: '!text-[0.85rem] !text-muted-foreground whitespace-pre-line',
             // No `default` key: sonner applies it to EVERY toast, so it would
             // fight the per-type accent/glow below. Plain toast() stays neutral.
             success: '!border-l-emerald-500 [--glow:#10b981]',

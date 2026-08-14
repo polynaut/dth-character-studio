@@ -7,6 +7,7 @@ import {
   RUNNING_JOB_FILE,
   executeSceneSignature,
   exportProgressStateFrom,
+  tidyRunErrors,
   jobSceneForMode,
   jobScriptForMode,
   jobStepsForMode,
@@ -793,5 +794,35 @@ describe('scanConfigJson', () => {
 
   it('ends with a newline like every other handoff file', () => {
     expect(scanConfigJson([])).toBe('{\n  "version": 1,\n  "scenes": {}\n}\n')
+  })
+})
+
+
+describe('tidyRunErrors', () => {
+  const DAZ = 'The following problems were detected and could lead to errors during the export process: - Undefined shapes found Continue anyway?'
+
+  it('reports one Daz problem once, however many scenes hit it', () => {
+    // Measured on a real run: the same modal fired on two scenes and the finish
+    // toast carried the identical paragraph twice, back to back.
+    expect(tidyRunErrors([DAZ, DAZ])).toHaveLength(1)
+  })
+
+  it('drops the trailing question — it was answered minutes ago, by the script', () => {
+    const [line] = tidyRunErrors([DAZ])
+    expect(line).not.toMatch(/Continue anyway/i)
+    expect(line).toContain('Undefined shapes found')
+  })
+
+  it('flattens embedded newlines so one problem stays one line', () => {
+    expect(tidyRunErrors(['broke\n  badly'])).toEqual(['broke badly'])
+  })
+
+  it('counts the tail instead of printing it', () => {
+    const many = ['a', 'b', 'c', 'd', 'e', 'f']
+    expect(tidyRunErrors(many, 4)).toEqual(['a', 'b', 'c', 'd', '…and 2 more'])
+  })
+
+  it('drops blank lines rather than emitting empty rows', () => {
+    expect(tidyRunErrors(['', '   ', 'real'])).toEqual(['real'])
   })
 })
