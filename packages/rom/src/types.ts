@@ -1627,6 +1627,18 @@ export const CHARACTER_SCHEMA_VERSION = 32
  *       A row without `node` behaves exactly as before (broadcast / figure
  *       root), so pre-v74 configs are unchanged; a scoped node that is not in
  *       the scene logs a Daz-log warning naming it, never a run-log failure.
+ *       Same bump (v74 never shipped between them), two ORDER fixes in
+ *       ApplyDTHWorkflow: `applyFrameZeroMorphs` moved to the very START of
+ *       the build (after ApplyInitialValues, before every preset block) —
+ *       frame-0 rows define the base state the ROM builds on, and the passes
+ *       that READ scene state (memorizeBaseMorphs' close-out baseline,
+ *       resolveAutoBaseValues' sawtooth floors) must see them; and
+ *       `restorePreservedMorphs` moved to the very END (after the custom
+ *       frames) and OUT of the JCM branch — the pass flattens each listed
+ *       morph's animation to keepValue, and from its old spot right after the
+ *       base preset load every later block re-keyed over it (the G8.1 Physics
+ *       block keys the breast dials to 100%: a 60% hold showed 100%), while a
+ *       base-less ROM never ran it at all.
  */
 export const RUNTIME_VERSION = 74
 
