@@ -149,14 +149,15 @@ Houdini, so they sit next to the `.hip` that reads them (`$HIP/daz-export/…`)
 <summary><strong>Add morphs on frame 0</strong></summary>
 <table><tr><td>
 
-Morphs dialed once at **frame 0** of the ROM. With the **Item** field empty a
-row lands on *every* node that carries the morph — the figure and every fitted
-item — so one row like a clothing **Expand All** reaches whichever outfit
-pieces the open scene wears. Auto-follow puts the same dial on every conformed
-item, though, so a fit value meant for one backpack would deform the boots and
-gloves too: picking a suggestion scopes the row to the item its dial lives on
-— shown as small labels under the field, mirroring the suggestion you picked,
-with an ✕ that returns the row to every item. A scene without the morph — or
+Morphs dialed once at **frame 0** of the ROM. With no item scope — the small
+labels under the field reading **All items** — a row lands on *every* node
+that carries the morph, the figure and every fitted item, so one row like a
+clothing **Expand All** reaches whichever outfit pieces the open scene wears.
+Auto-follow puts the same dial on every conformed item, though, so a fit value
+meant for one backpack would deform the boots and gloves too: picking a
+suggestion scopes the row to the item its dial lives on — shown as those same
+small labels, mirroring the suggestion you picked, with an ✕ that returns the
+row to every item. A scene without the morph — or
 the item — simply skips it. Overridable
 [per Daz scene](./advanced.md#per-scene-overrides--edit-to-override).
 
