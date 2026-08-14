@@ -116,7 +116,8 @@ hooks in `.claude/settings.json` move these the same way:
   The table is `.claude/hooks/triggers.mjs`; the TEXT is not copied there — each
   entry names a doc + an anchor phrase and the bullet is extracted at run time,
   so `.ai/*` stays the single source.
-  **Two rituals that keep it honest.** Adding a measured fact to `gotchas.md`
+  **Two rituals that keep it honest.** Adding a measured fact to the gotchas
+  set (`gotchas-*.md`)
   means asking whether it ties to a recognisable action, and giving it a trigger
   if it does — a fact with no trigger is only found by someone who already
   guessed it was there. And after any doc rewrite, run
@@ -133,7 +134,7 @@ hooks in `.claude/settings.json` move these the same way:
   resolves". The general lesson for any extract-at-runtime mechanism: assert on
   what the reader RECEIVES, never on whether something was produced.
   **The table is deliberately not exhaustive, and says so in what it injects.**
-  `gotchas.md` holds ~90 measured facts and only the action-tied ones have
+  the `gotchas-*.md` files hold ~90 measured facts and only the action-tied ones have
   triggers, so silence from this hook means "no trigger matched", never "nothing
   is known". A partial table that reads as complete would be worse than none —
   it teaches the reader that no warning is evidence of safety.

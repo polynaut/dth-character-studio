@@ -6,8 +6,8 @@
  * The problem this solves is not that the docs are wrong — it is that `.ai/*` is
  * retrieved by GREP, so a fact only ever helps when the agent already suspected
  * it existed. Everything else in those files is invisible by default: a lesson
- * on line 800 of `gotchas.md` is worth nothing to a session that never guessed
- * the keyword. The repo already made this call once, for branch tracking
+ * on line 800 of a `gotchas-*.md` file is worth nothing to a session that never
+ * guessed the keyword. The repo already made this call once, for branch tracking
  * (`.ai/conventions.md`): "documented as non-negotiable, skipped twice in one
  * day — so it is a check now, not a reminder." This is that principle applied to
  * the rest of them.
@@ -15,8 +15,8 @@
  * **The note text is NOT stored here.** Each trigger names a doc + an anchor
  * phrase, and the bullet is extracted from the doc AT RUNTIME — the same
  * single-source shape as `inject-agent-context.mjs`. Copying ~90 measured facts
- * into a second file would have created two truths that drift; edit
- * `.ai/gotchas.md` and this hook follows. A trigger whose anchor no longer
+ * into a second file would have created two truths that drift; edit the `.ai/`
+ * doc and this hook follows. A trigger whose anchor no longer
  * resolves reports itself (see `--audit`) rather than going quietly dead.
  *
  * Deliberately NEVER blocks. `check-branch-upstream.mjs` is a gate because an
@@ -75,7 +75,7 @@ function bullet(text, anchor) {
   const startLine = text.slice(0, hit).split('\n').length - 1
   // Walk back to whichever comes first: the bullet's own `- ` (the anchor may
   // sit mid-bullet), or the heading opening the section — because not every
-  // fact is a list item. `domain.md` writes its most important one, the
+  // fact is a list item. `domain-rom.md` writes its most important one, the
   // never-store-frame-numbers invariant, as prose under a `##`; anchoring only
   // on `- ` would walk past it and return an unrelated bullet from further up.
   let start = startLine
@@ -228,7 +228,7 @@ process.stdout.write(
         `(once per session each):\n\n${notes.join('\n\n')}\n\n` +
         `NOTE ON COVERAGE — this fires from a hand-built trigger table, not from the whole ` +
         `of .ai/*. SILENCE IS NOT EVIDENCE that nothing is known about what you are doing: ` +
-        `.ai/gotchas.md alone holds ~90 measured facts and only the action-tied ones have ` +
+        `the .ai/gotchas-*.md files alone hold ~90 measured facts and only the action-tied ones have ` +
         `triggers. Still read the docs for anything non-obvious.`,
     },
   })}\n`,
