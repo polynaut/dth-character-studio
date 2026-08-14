@@ -765,14 +765,16 @@ a {
   }
 }
 .busy-bar-sweep {
-  background: linear-gradient(to bottom, transparent, rgb(255 255 255 / 0.85), transparent);
+  /* Peak WELL below full white: the glint should read as a brighter shade of
+     the bar's own color, not as a white streak (0.85 did — too bright). */
+  background: linear-gradient(to bottom, transparent, rgb(255 255 255 / 0.45), transparent);
   animation: dth-busy-bar-sweep 1.4s linear infinite;
 }
 @media (prefers-reduced-motion: reduce) {
   .busy-bar-sweep {
     animation: none;
     height: 100%;
-    background: rgb(255 255 255 / 0.35);
+    background: rgb(255 255 255 / 0.2);
   }
 }
 
