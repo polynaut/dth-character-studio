@@ -1119,7 +1119,7 @@ function DthScanSceneMorphs(config){
 		// declared generation is not, so it is what the fallback uses.
 		sGenesis = dthKnownGenesis(config["genesis"]);
 		if(sGenesis){
-			print("DTH: no figure identity readable in this scene — filing its morphs " +
+			print("DTH: no figure identity readable in this scene - filing its morphs " +
 				"under the character's generation (" + sGenesis + ").");
 		}
 	}
@@ -1142,9 +1142,9 @@ function DthScanSceneMorphs(config){
 	// base index exists files it correctly.
 	if(!dthHasBaseIndex(sOutDir, sGenesis)){
 		var sNoBase = "There is no " + dthGenesisLabel(sGenesis) + " base morph index on " +
-			"this machine, so there is nothing to compare this scene against — every " +
+			"this machine, so there is nothing to compare this scene against - every " +
 			"stock figure dial would be filed as something this scene adds.\n\n" +
-			"Run Tools → Scan & index → Base morphs first. This scene is then scanned " +
+			"Run Tools > Scan & index > Base morphs first. This scene is then scanned " +
 			"automatically by its next ROM or export run.";
 		if(bBulk) throw new Error(sNoBase);
 		MessageBox.information(sNoBase, "DTH Character Studio", "&OK");
@@ -1168,7 +1168,7 @@ function DthScanSceneMorphs(config){
 
 	var bOk = dthWriteSceneIndex(sOutDir, sGenesis, aNew, sScenePath, sSceneName);
 	var sMsg = bOk
-		? "Scanned “" + sSceneName + "”: " + aNew.length + " morph(s) this scene adds on " +
+		? "Scanned '" + sSceneName + "': " + aNew.length + " morph(s) this scene adds on " +
 			"top of the " + dthGenesisLabel(sGenesis) + " base index.\n\nThe Morph name " +
 			"autocomplete offers them while this scene is selected."
 		: "Could not write the scene morph index (" + sOutDir + ").";

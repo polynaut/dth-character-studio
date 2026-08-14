@@ -526,7 +526,7 @@ ${refDirBlock}
         // Unusual but historically tolerated (a hand-cleaned .dcsmeta) — logged
         // so the studio's report shows it, no modal: the export itself succeeded
         // and DTH Export's delivered-CSV freshness check also flags it.
-        print("PoseAsset CSV not found in " + ${dazJson(metaDirAbs.replace(/\\/g, '/'))} + " — nothing to copy.");
+        print("PoseAsset CSV not found in " + ${dazJson(metaDirAbs.replace(/\\/g, '/'))} + " - nothing to copy.");
         dthExportLogProblem("The PoseAsset CSV " + dthCsvName + " was not found in the studio's data folder - save the character in DTH Character Studio to regenerate it, then re-run the export.");
     }
 `
@@ -775,9 +775,9 @@ if (!dthExportAction) {
 if (dthExportAction && typeof dthExportAction.doExport == "function") {
     var dthExportDir = ${dazJson(exportDir.replace(/\\/g, '/'))};
 ${sceneSubfolderBlock}${exportBody}} else if (dthExportAction) {
-    dthExportAlert("The ROM was built, but the export did NOT run.\\n\\nThe DazToHue Exporter is installed here, but this build exposes no scripted export, so the studio cannot drive it. Being callable from Daz script is a feature of the Daz Studio 6 exporter plugin (1.8.1+).\\n\\nRun the ROM script from Daz Studio 6, or export by hand from the DazToHue Exporter dialog.\\n\\nThe ROM on the timeline is fine — only the export was skipped.");
+    dthExportAlert("The ROM was built, but the export did NOT run.\\n\\nThe DazToHue Exporter is installed here, but this build exposes no scripted export, so the studio cannot drive it. Being callable from Daz script is a feature of the Daz Studio 6 exporter plugin (1.8.1+).\\n\\nRun the ROM script from Daz Studio 6, or export by hand from the DazToHue Exporter dialog.\\n\\nThe ROM on the timeline is fine - only the export was skipped.");
 } else {
-    dthExportAlert("The ROM was built, but the export did NOT run.\\n\\nNo DazToHue Exporter is registered in Daz Studio " + App.version + ".\\n\\nInstall the DTH Exporter Plugin for this Daz version and restart Daz, then run the script again.\\n\\nThe ROM on the timeline is fine — only the export was skipped.");
+    dthExportAlert("The ROM was built, but the export did NOT run.\\n\\nNo DazToHue Exporter is registered in Daz Studio " + App.version + ".\\n\\nInstall the DTH Exporter Plugin for this Daz version and restart Daz, then run the script again.\\n\\nThe ROM on the timeline is fine - only the export was skipped.");
 }
 `
 }
@@ -1536,51 +1536,44 @@ function dthWriteFailureLog(sError) {
             try { dthFailSceneName = String(new DzFileInfo(dthFailScene).completeBaseName()); } catch (eSn) {}
         }
         var dthNow = new Date();
-        var dthOutRec;
+        // ALWAYS log v2, previous log or not. The v1 fallback this replaced
+        // carried no "scene" field, and the studio DELETES the transport log
+        // when it ingests one — so the common case (a second run after the
+        // studio has read the first) wrote its failure untagged, and the run
+        // report showed a problem it could not attribute to any scene.
+        var dthFailKey = dthFailScene.split("\\\\").join("/").toLowerCase();
+        var dthKeepRuns = [];
         if (dthPrevLog && dthPrevLog.runs && dthPrevLog.runs.length) {
-            // v2: replace THIS scene's entry, keep every other scene's — the
-            // same rule as the runtime's writeRunLog.
-            var dthFailKey = dthFailScene.split("\\\\").join("/").toLowerCase();
-            var dthKeepRuns = [];
+            // Replace THIS scene's entry, keep every other scene's — the same
+            // rule as the runtime's writeRunLog. In a batch, scene B's failure
+            // must never truncate away what scene A already recorded.
             for (var dthKi = 0; dthKi < dthPrevLog.runs.length; dthKi++) {
                 var dthOldRun = dthPrevLog.runs[dthKi];
                 if (!dthOldRun) continue;
                 if (String(dthOldRun.scene ? dthOldRun.scene : "").split("\\\\").join("/").toLowerCase() == dthFailKey) continue;
                 dthKeepRuns.push(dthOldRun);
             }
-            dthKeepRuns.push({
-                character: dthCharacterConfig.characterName,
-                runtimeVersion: dthCharacterConfig.runtimeVersion,
-                studioVersion: dthCharacterConfig.studioVersion,
-                finishedAt: dthNow.toString(),
-                finishedAtMs: dthNow.getTime(),
-                ok: false,
-                errors: [String(sError)],
-                failedMorphs: [],
-                scene: dthFailScene,
-                sceneName: dthFailSceneName
-            });
-            dthOutRec = {
-                logVersion: 2,
-                ok: false,
-                finishedAt: dthNow.toString(),
-                finishedAtMs: dthNow.getTime(),
-                character: dthCharacterConfig.characterName,
-                runs: dthKeepRuns
-            };
-        } else {
-            dthOutRec = {
-                logVersion: 1,
-                character: dthCharacterConfig.characterName,
-                runtimeVersion: dthCharacterConfig.runtimeVersion,
-                studioVersion: dthCharacterConfig.studioVersion,
-                finishedAt: dthNow.toString(),
-                finishedAtMs: dthNow.getTime(),
-                ok: false,
-                errors: [String(sError)],
-                failedMorphs: []
-            };
         }
+        dthKeepRuns.push({
+            character: dthCharacterConfig.characterName,
+            runtimeVersion: dthCharacterConfig.runtimeVersion,
+            studioVersion: dthCharacterConfig.studioVersion,
+            finishedAt: dthNow.toString(),
+            finishedAtMs: dthNow.getTime(),
+            ok: false,
+            errors: [String(sError)],
+            failedMorphs: [],
+            scene: dthFailScene,
+            sceneName: dthFailSceneName
+        });
+        var dthOutRec = {
+            logVersion: 2,
+            ok: false,
+            finishedAt: dthNow.toString(),
+            finishedAtMs: dthNow.getTime(),
+            character: dthCharacterConfig.characterName,
+            runs: dthKeepRuns
+        };
         var dthLogFile = new DzFile(dthCharacterConfig.runLogPath);
         // One ORed mode arg — a second open() argument warns on DS6.
         if (dthLogFile.open(dthLogFile.WriteOnly | dthLogFile.Truncate)) {
@@ -1630,6 +1623,27 @@ include(dir_self.filePath("../../.DthWorkflow.dsa"));${indexSync?.morphIndexDir 
 include(dir_self.filePath("../../.DthScanMorphs.dsa"));` : ''}${indexSync?.products ? `
 include(dir_self.filePath("../../.DthProducts.dsa"));` : ''}
 
+// What to report when the include above left us without a runtime. The two
+// causes need OPPOSITE advice, and only a probe can tell them apart: a file
+// that isn't there wants a reinstall, while a file that IS there means Daz
+// failed to load it — a retry, not a repair. Guessing "reinstall" for both
+// sends the user to rebuild an install that was never broken.
+function dthRuntimeMissingError() {
+    var sPath = "";
+    var bThere = false;
+    try {
+        sPath = String(dir_self.filePath("../../.DthWorkflow.dsa"));
+        bThere = new DzFile(sPath).exists();
+        // Tidy the '../../' out of the path before showing it - best effort,
+        // the raw form is already correct.
+        try { sPath = String(new DzFileInfo(sPath).absoluteFilePath()); } catch (dthAbsErr) {}
+    } catch (dthRtErr) { /* couldn't even resolve it - the advice below still holds */ }
+    if (bThere) {
+        return "The DTH runtime could not be loaded, so the ROM was NOT built - nothing in this scene was changed.\\n\\nThe runtime file is where it belongs (" + sPath + "), so Daz failed to load it rather than to find it. Nothing is broken on disk: run the export again.";
+    }
+    return "The DTH runtime (.DthWorkflow.dsa) is missing, so the ROM was NOT built - nothing in this scene was changed.\\n\\nExpected it at: " + (sPath ? sPath : "the DTH-Character-Studio scripts folder") + "\\n\\nReinstall it from DTH Character Studio: save the character, or Tools > Refresh assets.";
+}
+
 var dthSceneLinkErr = dthSceneLinkError();
 if (dthSceneLinkErr) {
     // Wrong (or unsaved) scene open — refuse before touching anything, and log
@@ -1645,8 +1659,12 @@ if (dthSceneLinkErr) {
     print("DTH Character Studio: the export was interrupted - this scene was skipped.");
     dthProgressLog(100, "skipped - the export was interrupted");
 } else if (typeof ApplyDTHCharacter != "function") {
-    // Runtime not loaded (moved/deleted library?) — report instead of crashing.
-    dthWriteFailureLog("The DTH runtime (.DthWorkflow.dsa) could not be loaded. Reinstall it from DTH Character Studio: save the character, or Tools \\u2192 Refresh assets.");
+    // Runtime not loaded — report instead of crashing. WHY it isn't loaded
+    // decides what the user should do, and only this script can tell: a failed
+    // include() logs NOTHING in Daz, so without the probe below a one-off
+    // failure leaves no evidence at all and the report can only guess
+    // "reinstall" — advice that is simply wrong when the file is right there.
+    dthWriteFailureLog(dthRuntimeMissingError());
     dthFailureDialog();
 } else {
     try {
@@ -1717,7 +1735,7 @@ ${bulk ? `        // The Runner just loaded this scene — give Daz a beat befor
                 if (dthRomSaved) {
                     print("ROM scene saved: " + dthRomSavePath);
                 } else {
-                    print("Could not save the ROM scene to " + dthRomSavePath + " — the file on disk is unchanged, so it still holds the PREVIOUS run's ROM.");
+                    print("Could not save the ROM scene to " + dthRomSavePath + " - the file on disk is unchanged, so it still holds the PREVIOUS run's ROM.");
                 }
             } catch (dthSaveErr) {
                 print("ROM-scene save failed: " + dthSaveErr);

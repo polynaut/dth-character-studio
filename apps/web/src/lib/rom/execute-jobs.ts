@@ -960,6 +960,31 @@ export function parseExecuteStamps(text: string): ExecuteStamps {
  * before they read it. And a run with a problem on every scene should not push
  * its own result off the screen, so the tail is counted rather than printed.
  */
+/**
+ * The generated scripts' OWN failures, as finish-report lines.
+ *
+ * These arrive attributed to a scene (the run log is per-scene), which the
+ * Runner's error lines never are — so the scene leads the line, and the reader
+ * can tell which of a batch's scenes is the one that produced nothing. A
+ * failure that carries no scene still reports: a script generated before
+ * runtime v75 logged its failure untagged whenever the studio had already
+ * ingested the previous run, and an unattributed problem is still a problem.
+ *
+ * RAW on purpose — labelling only, no dedup and no cap. These lines are
+ * concatenated with the Runner's own before display, and {@link tidyRunErrors}
+ * runs ONCE over the whole list at each render site. Capping here as well would
+ * turn this half's "…and 2 more" into an ordinary line that the outer cap could
+ * then truncate again, counting the same tail twice.
+ */
+export function scriptFailureLines(
+  failures: ReadonlyArray<{ scene: string; sceneName: string; errors: ReadonlyArray<string> }>,
+): Array<string> {
+  return failures.flatMap((f) => {
+    const label = f.sceneName || f.scene.split(/[\\/]/).pop() || ''
+    return f.errors.map((e) => (label ? `${label}: ${e}` : e))
+  })
+}
+
 export function tidyRunErrors(errors: ReadonlyArray<string>, max = 4): Array<string> {
   const seen = new Set<string>()
   const out: Array<string> = []

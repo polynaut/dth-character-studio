@@ -219,7 +219,7 @@ function dthSceneLinkError() {
         if (dthLinkedScenes[dthLsI] == dthOpenPath) return "";
     }
     var dthOpenName = dthOpenPath ? String(dthOpenPath.split("/").pop()) : "(unsaved scene)";
-    return "The open Daz scene is not linked to " + ${dazJson(character.name)} + " - nothing was applied.\\n\\nOpen scene: " + dthOpenName + "\\n\\nThis script runs only on:\\n" + ${dazJson(names.map((n) => `• ${n}`).join('\n'))};
+    return "The open Daz scene is not linked to " + ${dazJson(character.name)} + " - nothing was applied.\\n\\nOpen scene: " + dthOpenName + "\\n\\nThis script runs only on:\\n" + ${dazJson(names.map((n) => `- ${n}`).join('\n'))};
 }
 `
 }

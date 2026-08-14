@@ -53,9 +53,48 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   (July 2026). Keys are LINEAR everywhere again, and the runtime no longer
   version-detects DS6 for interpolation.
 - **A failed script `include()`/load logs nothing** in Daz Studio. Diagnose with a
-  minimal probe `.dsa` that logs before/after the suspect statement.
+  minimal probe `.dsa` that logs before/after the suspect statement. It can also
+  fail TRANSIENTLY: on 2026-08-14 a `.Bulk_ROM_Export.dsa` that had run five
+  times that afternoon from the same path came back with no `ApplyDTHCharacter`
+  2 ms in, and the identical run straight after was fine — the runtime files
+  were present and intact throughout. Cause unknown and not reproduced; what
+  makes it survivable is that the generated carriers now PROBE for
+  `.DthWorkflow.dsa` before advising (`dthRuntimeMissingError`, runtime v75), so
+  a repeat says whether the file was there rather than guessing "reinstall".
 - **`include()` must be top-level** in DS6 — a legacy include inside a function
   throws `URIError: Legacy Include` (regression-guarded in `generate.test.ts`).
+- **Daz cannot carry non-ASCII out of a script** (measured 2026-08-14, DS4
+  4.24): `"Tools → Refresh assets"` written to the run log via `DzFile.write`
+  reached the studio as `Tools ? Refresh assets`, and an em dash `print`ed to the
+  Daz log arrived as mojibake (`—` → `â`). So every string a generated script
+  WRITES or DISPLAYS must be ASCII — bullets, em dashes and arrows all get
+  spelled `-` / `>`. Comments are exempt (Daz only parses them). The rule holds
+  for BOTH `.dsa` surfaces the studio owns — the generated carriers AND the
+  bundled runtime in `apps/web/src/lib/rom/runtime/`, which ships as source and
+  installs verbatim — so one scanner (`nonAsciiStringLiterals`, `@dth/rom`)
+  guards both: `generate-golden.test.ts` over the goldens,
+  `apps/web/src/lib/rom/runtime.test.ts` over the runtime. Guarding only the
+  generated half is how the runtime kept 13 violations (a `DthProducts.dsa`
+  diagnostics heading written straight to a file among them) while the rule read
+  as enforced. Prose typed into a template is exactly where a stray `—` gets in.
+- **The Runner marks a row `done` when the script it started RETURNS** — success
+  or not. A script that refused the scene, bailed for want of a runtime, or
+  failed mid-ROM is byte-identical to one that exported, as far as the job file
+  is concerned. The scripts' own channel is the character's ROM run log, so any
+  outcome the studio REPORTS has to consult it (`scriptRunFailures` in
+  `api/execute/run-state.ts` feeds the finish toast). Believing the rows alone
+  shipped "1 scene exported" for a run that wrote nothing at all.
+- **A run log's `ok` flag is NOT "the export worked".** The runtime writes
+  `ok: bFinished && errors.length + failedMorphs.length === 0`
+  (`DthWorkflow.dsa`), which folds two unlike outcomes into one flag: an
+  **error** means the scene produced nothing, while a **failed morph** is a
+  per-dial partial the product treats as routine — its frame stays in the ROM
+  (empty), the export still runs, and the character page lists it for repair.
+  Anything deciding "did this scene fail" must read `errors`, not `ok`
+  (`producedNothing`, `run-state.ts`); a run that is `!ok` with neither is a
+  silent `return false` bail and does count. Trusting `ok` would report a clean
+  one-scene export that missed a single dial as "1 of 1 scene failed" AND drop
+  the Houdini + Unreal continuations, which both gate on `failed < total`.
 - **`App.openFile(path, false)` replaces the current scene without a save
   prompt** — relied on by both open-in-running-Daz paths: the forwarded one-shot
   `.dsa` bridge (`api/attachments.ts` `openSceneInRunningDaz`) and the Runner's

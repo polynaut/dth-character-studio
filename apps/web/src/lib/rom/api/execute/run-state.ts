@@ -23,8 +23,11 @@ import {
   parseExportProgressLog,
   parseJobFileJson,
 } from '../../execute-jobs'
-import { cancelFlagPath } from '@dth/rom'
-import { charScopeInput, dirname } from '../core'
+import { cancelFlagPath, ROM_RUN_LOG_FILE } from '@dth/rom'
+import { LAST_ROM_RUN_FILE } from '../../character-internals.ts'
+import { parseRomRunLogText } from '../../run-log.ts'
+import type { RomRunSceneRun } from '../../run-log.ts'
+import { charScopeInput, dirname, joinPath } from '../core'
 import type {
   ExporterJob,
   ExporterJobType,
@@ -254,6 +257,19 @@ export type ExportRunProgress =
        *  back `done`, so an interrupted batch must never be reported as
        *  "n scenes exported" — and must not continue into `houdiniProjects`. */
       interrupted: boolean
+      /** Scenes whose generated script reported a FAILURE of its own during
+       *  this run — the outcome `failed` above cannot see. The Runner marks a
+       *  row `done` when the script it started returns, success or not: a
+       *  script that refuses (wrong scene), or bails (no runtime), or fails
+       *  mid-ROM comes back exactly like one that exported, so believing the
+       *  rows alone reports a run that wrote nothing as "1 scene exported"
+       *  (measured 2026-08-14). Read out of the character's ROM run log,
+       *  restricted to entries written since the handoff, and with any scene
+       *  already counted in `failed` removed — so `failed + scriptFailures
+       *  .length` is the run's true failure count. A scene whose only problem
+       *  was an unappliable MORPH is NOT in here ({@link producedNothing}):
+       *  its ROM built and its export ran. */
+      scriptFailures: Array<{ scene: string; sceneName: string; errors: Array<string> }>
       /** Handoff → finish, for the toast's "in 12m 34s". */
       elapsedMs?: number
     }
@@ -330,6 +346,99 @@ export async function readExportProgressState(
   } catch {
     return null
   }
+}
+
+/**
+ * Did this scene's script FAIL, as opposed to merely having something to report?
+ *
+ * Not `!ok`. The runtime writes `ok: bFinished && errors + failedMorphs === 0`
+ * (`DthWorkflow.dsa`), which folds two very different outcomes into one flag:
+ *
+ *  - an **error** means the scene produced nothing — the ROM aborted, the
+ *    runtime was missing, the scene was refused, the export never ran;
+ *  - a **failed morph** is a per-dial partial the product treats as routine:
+ *    the frame slot stays (empty), the rest of the ROM is unaffected, the
+ *    export runs, and the character page lists the morph for repair. Its own
+ *    words: "their frames stay in the ROM (empty), so the rest of the
+ *    character is unaffected" (`rom-run-log-report.tsx`).
+ *
+ * Believing `ok` alone would report a clean one-scene export that missed a
+ * single dial as "1 of 1 scene failed" AND — because both continuations gate
+ * on `failed < total` — silently drop the Houdini and Unreal legs of a run that
+ * exported perfectly well. That is the same class of lie as the one this whole
+ * file exists to fix, only pointing the other way.
+ *
+ * A run that is `!ok` with NOTHING to say still counts: `ApplyDTHWorkflow` has
+ * `return false` paths that log nothing, and a silent bail is a failure whose
+ * message got lost, not a success.
+ */
+function producedNothing(run: RomRunSceneRun): boolean {
+  return !run.ok && (run.errors.length > 0 || run.failedMorphs.length === 0)
+}
+
+/**
+ * What the generated scripts themselves reported during this run — the half of
+ * the outcome the job file cannot carry.
+ *
+ * The Runner's contract ends at "the script I started returned": a row whose
+ * script refused the scene, bailed for want of a runtime, or failed mid-ROM
+ * comes back `done`, indistinguishable from one that exported. The scripts say
+ * so in their own channel, the character's ROM run log — so that is where the
+ * truth for the finish report lives.
+ *
+ * Read-only on purpose. `fetchRomRunLog` (the character page) INGESTS: it
+ * merges the Daz-written transport into the stored copy and deletes it. Which
+ * of the two files holds this run's entry therefore depends on whether the
+ * user happened to tab back mid-batch, so both are read and the newest write
+ * per scene wins. Ingesting here as well would race that path and could delete
+ * a log before the page ever showed it.
+ *
+ * Scoped by TIME (entries written since the handoff) so a failure the user has
+ * already seen and moved on from can't resurface as this run's, and by SCENE
+ * (rows the Runner itself failed are dropped) so one scene cannot be counted
+ * twice.
+ */
+async function scriptRunFailures(
+  /** The run's interrupt-flag path — its folder IS the character's meta
+   *  folder, which is where both run-log files live. '' for a character
+   *  without one: no meta folder, no run log, nothing to read. */
+  cancelPath: string,
+  startedAtMs: number,
+  failedRowScenes: ReadonlyArray<string>,
+): Promise<Array<{ scene: string; sceneName: string; errors: Array<string> }>> {
+  if (!cancelPath) return []
+  const metaDir = dirname(cancelPath)
+  // Both files, in parallel: they are independent reads, and which one holds
+  // this run's entry is not something to serialize on.
+  const logs = await Promise.all(
+    [LAST_ROM_RUN_FILE, ROM_RUN_LOG_FILE].map(async (name) => {
+      try {
+        const path = joinPath(metaDir, name)
+        return (await exists(path)) ? parseRomRunLogText(await readTextFile(path)).runs : []
+      } catch {
+        // Missing, torn mid-write, or corrupt — the other file may still carry
+        // this run's entry. A run log we cannot read is not evidence of
+        // success, but it is not evidence of failure either: report what IS
+        // readable and let the character page's own report surface the rest.
+        return []
+      }
+    }),
+  )
+  const newest = new Map<string, RomRunSceneRun>()
+  for (const entry of logs.flat()) {
+    const key = normalizeSceneKey(entry.scene)
+    const held = newest.get(key)
+    if (!held || entry.finishedAtMs >= held.finishedAtMs) newest.set(key, entry)
+  }
+  const alreadyFailed = new Set(failedRowScenes.map(normalizeSceneKey))
+  return [...newest.values()]
+    .filter(
+      (r) =>
+        producedNothing(r) &&
+        r.finishedAtMs >= startedAtMs &&
+        !alreadyFailed.has(normalizeSceneKey(r.scene)),
+    )
+    .map((r) => ({ scene: r.scene, sceneName: r.sceneName, errors: r.errors }))
 }
 
 export async function fetchExportRunProgress(watcher?: string): Promise<ExportRunProgress | null> {
@@ -439,6 +548,11 @@ export async function fetchExportRunProgress(watcher?: string): Promise<ExportRu
           interrupted: run.interrupted === true,
           elapsedMs: Date.now() - run.startedAtMs,
           failed,
+          scriptFailures: await scriptRunFailures(
+            run.cancelPath,
+            run.startedAtMs,
+            parsed.jobs.filter((j) => j.status === 'failed').map((j) => j.scenePath),
+          ),
           errors: parsed.jobs
             .filter((j) => j.error)
             // An empty scenePath (the contract's "new empty scene" row, e.g.

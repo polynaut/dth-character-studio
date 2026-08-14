@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { nonAsciiStringLiterals } from './dsa-ascii'
 import { generateAll } from './generate'
 import { characterSchema, defaultSections } from './types'
 import type { PresetFrames } from './frames'
@@ -142,6 +143,23 @@ describe('generated artifacts (golden)', () => {
   for (const file of files) {
     it(`pins ${file.fileName}`, async () => {
       await expect(file.content).toMatchFileSnapshot(`./__golden__/${file.fileName}`)
+    })
+  }
+
+  // Daz cannot carry non-ASCII out of a script: a `→` written into the run log
+  // reached the studio as `?`, and an em dash printed to the Daz log arrived as
+  // mojibake (measured 2026-08-14 on both). So every string the scripts WRITE
+  // or DISPLAY has to be ASCII — which is a rule nobody remembers while typing
+  // prose into a template, hence this check. The rule and the scanner live in
+  // `dsa-ascii.ts`; the studio's OTHER `.dsa` surface, the bundled runtime, is
+  // held to the same rule by the same scanner in `apps/web`'s runtime.test.ts.
+  //
+  // The golden character is ASCII throughout, so anything this finds came from
+  // a template. (A user with an accented character name legitimately produces
+  // non-ASCII DATA, which is a different problem and not this rule.)
+  for (const file of files.filter((f) => f.fileName.endsWith('.dsa'))) {
+    it(`emits only ASCII string literals in ${file.fileName}`, () => {
+      expect(nonAsciiStringLiterals(file.content)).toEqual([])
     })
   }
 })

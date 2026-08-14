@@ -1,4 +1,5 @@
 export * from './daz-csv'
+export * from './dsa-ascii'
 export { dazJson } from './dz-snippets'
 export * from './frames'
 export * from './generate'

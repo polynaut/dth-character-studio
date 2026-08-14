@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { runInNewContext } from 'node:vm'
 
-import { RUNTIME_VERSION } from '@dth/rom'
+import { RUNTIME_VERSION, nonAsciiStringLiterals } from '@dth/rom'
 import { describe, expect, it } from 'vitest'
 
 // The DTH Daz runtime (.dsa) is bundled + installed by the studio; it descends
@@ -55,7 +55,7 @@ const RUNTIME_ASSETS = [
 // Bump this together with RUNTIME_VERSION whenever a runtime file legitimately
 // changes (this run prints the new value in the failure message).
 const EXPECTED_RUNTIME_HASH =
-  'a6144bdd1b8be04eabdb1c5e3cd130154e5cf96914f3513667717571cc8fb5d7'
+  'fbe5505f5a094677f6e0fcdfc83a9924866ad326dbb95ec6d13c8be3b89aad71'
 
 function runtimeHash(): string {
   const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
@@ -96,6 +96,23 @@ describe('bundled DTH runtime (.dsa)', () => {
       expect(workflow).toContain(`getPresetFrameCount(options, "${key}")`)
     }
   })
+
+  // Daz cannot carry non-ASCII out of a script (measured 2026-08-14, DS4 4.24:
+  // an arrow written to the run log through DzFile.write reached the studio as
+  // `?`, an em dash printed to the Daz log as mojibake). The GENERATED carriers
+  // are held to this by generate-golden.test.ts; these files are the studio's
+  // other .dsa surface — shipped as source and installed verbatim — and were
+  // carrying 13 violations while that guard read as covering the rule, among
+  // them a diagnostics heading written straight to a file.
+  //
+  // Same scanner as the golden test (@dth/rom's dsa-ascii), so the two halves
+  // cannot drift apart on what the rule means.
+  for (const file of RUNTIME_FILES) {
+    it(`holds only ASCII string literals in ${file}`, () => {
+      const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
+      expect(nonAsciiStringLiterals(readFileSync(join(dir, file), 'utf8'))).toEqual([])
+    })
+  }
 })
 
 /**
