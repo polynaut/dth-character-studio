@@ -60,13 +60,21 @@ export default defineConfig({
   // starves whichever spec happens to be mid-interaction, a different one every
   // run — `jcm-bone-autocomplete`, `houdini-utils-backups` ×2,
   // `houdini-occlusion-tabs`, `unlink-dialogs`, `houdini-refresh-assets`,
-  // `scan-scene-import`. There is nothing left for a retry to hide.
+  // `scan-scene-import`, `houdini-project-health`: eight failures across seven
+  // distinct specs. There is nothing left for a retry to hide.
   //
   // A retry is NOT a skip, which is the reason it is the right instrument: a
   // starved test passes on the second attempt, a genuinely broken one fails
   // BOTH and the check still goes red. Skipping the spec that lost — the
   // obvious-looking response to a red gate — deletes real coverage and does not
   // even work, because next run the loser is a different file.
+  //
+  // ONE CONSEQUENCE TO CARRY: a flaky run EXITS 0 (measured 2026-08-14), so
+  // the job is green and every `if: failure()` step in the workflow is skipped
+  // — which is why the trace upload in `validate-pull-request.yml` runs on
+  // `!cancelled()`. Anything added later that must react to a smoke failure
+  // has to reckon with the same thing: `failure()` does not fire for the class
+  // this suite actually suffers from.
   //
   // Locally it stays 0: a dev box is not starved, so a retry there really would
   // be hiding something. And `flaky` is reported distinctly from `passed`, so

@@ -136,10 +136,27 @@ jobs:
       # The trace's actionability log says which — it records what Playwright
       # was waiting for and what was on top of the target.
       #
-      # `failure()` only, so a green run costs nothing; the run_attempt suffix
-      # keeps a rerun's artifact from colliding with the original's.
-      - name: Upload Playwright traces (failure evidence)
-        if: failure()
+      # NOT `failure()` — that would discard the exact case this step is for.
+      # `retries: 1` (playwright.config.ts) means a starved spec passes on
+      # attempt two, Playwright reports it `flaky`, and the run EXITS 0. The
+      # job is green, `failure()` never fires, and the trace of the failed
+      # attempt is deleted with the runner — leaving traces only for tests that
+      # fail BOTH attempts, i.e. the reproducible ones that need a trace least.
+      #
+      # Measured 2026-08-14 on this repo's Playwright, one flaky test:
+      #   flaky run → exit 0, `test-results/…/trace.zip` PRESENT
+      #   green run → exit 0, no trace files at all
+      # So `retain-on-failure` already makes a clean run free, and
+      # `if-no-files-found: ignore` absorbs the empty directory.
+      #
+      # It also turns the artifact into the flake SIGNAL: a `playwright-traces-*`
+      # artifact on a GREEN run means a retry was spent, which is otherwise
+      # buried in the log of a run nobody opens.
+      #
+      # The run_attempt suffix keeps a rerun's artifact from colliding with the
+      # original's.
+      - name: Upload Playwright traces (flake + failure evidence)
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: playwright-traces-attempt-${{ github.run_attempt }}

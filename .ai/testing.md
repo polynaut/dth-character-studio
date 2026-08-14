@@ -190,6 +190,17 @@ The **real SPA in a real browser** against an in-memory fake of the native layer
   Playwright reports `flaky` separately from `passed`, so the rate stays
   VISIBLE — that number is the health signal now. If it climbs, the box is the
   problem again and sharding is the next lever.
+  **A retry silently changes what "failure" means to everything downstream.**
+  A flaky run exits **0**: the job is green, and every `if: failure()` step in
+  the workflow is skipped. That is why the trace upload runs on `!cancelled()`
+  instead — measured 2026-08-14, a flaky run exits 0 and still leaves
+  `test-results/…/trace.zip` on disk, while a clean run leaves no trace files
+  at all, so uploading unconditionally costs a green run nothing and is the
+  ONLY way the starved attempt's evidence survives. Side effect worth having:
+  a `playwright-traces-*` artifact on a GREEN run is now the visible mark that
+  a retry was spent, which beats a number in a log nobody opens. Anything else
+  added later that should react to a smoke failure has the same trap —
+  `failure()` will not fire for the class this suite actually suffers from.
 - **The starvation explanation did NOT survive its first direct test — don't
   treat it as settled.** Attempted 2026-08-13 on a 16-core Windows box under
   CI's own settings (`CI=1` → 2 workers, 60 s budget, prebuilt bundle;
@@ -221,13 +232,15 @@ The **real SPA in a real browser** against an in-memory fake of the native layer
   busy" from "an overlay covered the button" in one look. The traces exist on
   every failure (`trace: 'retain-on-failure'`) and were being deleted with the
   runner until the upload step in `validate-pull-request.yml`. The next CI
-  failure is the first one that will be diagnosable rather than inferable.
+  flake is the first one that will be diagnosable rather than inferable — and
+  under `retries: 1` it will arrive on a GREEN run, as an artifact rather than
+  as a red check (see the retry bullet).
   One pattern to check first when it lands: the victim list is **entirely**
   OVERLAY-driven specs — `unlink-dialogs`, `houdini-occlusion-tabs`,
   `houdini-utils-backups` x2, `houdini-refresh-assets`, `scan-scene-import`,
   `jcm-bone-autocomplete`, `houdini-project-health` (the last two added
-  2026-08-13, the drawer spec observed live) — eight distinct specs, not one of
-  which lacks a dialog or a drawer.
+  2026-08-13, the drawer spec observed live) — **eight failures across seven
+  distinct specs**, not one of which lacks a dialog or a drawer.
   **And the mechanism was then found and fixed.** `closeAllInfoPopups` only ever
   registered popups that were ALREADY open, so a hover peek on its 90ms
   `useHover` open-delay was invisible to the sweep: it fired after the overlay
