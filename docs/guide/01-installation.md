@@ -34,7 +34,7 @@ Download the `…_aarch64.dmg` and drag the app to Applications.
 > Windows registry:
 >
 > - Everything that **drives Daz Studio** for you — the
->   [DTH Export batch](./05-rom-in-daz.md#batch-export--dth-export),
+>   [DTH Export batch](./dth-export.md),
 >   [Tools → Scan & index](./tools.md#tab-1--scan-amp-index), opening a scene in
 >   a running Daz, and the bundled
 >   [Runner plugin](./02-setup.md#daz-studio-plugins).
@@ -43,7 +43,7 @@ Download the `…_aarch64.dmg` and drag the app to Applications.
 >   the [bone-scale reference skeletons](./custom-morphs.md) that depend on it.
 > - Everything that **drives Houdini** through `hython` —
 >   [Generate project](./06-into-houdini.md#generate-the-houdini-project-automatically),
->   [Fill network](./houdini-utils.md#the-general-tab), and the whole
+>   [Fill network](./houdini-project-checks.md#the-general-tab), and the whole
 >   [Utils drawer](./houdini-utils.md).
 > - The **installation cards** in Settings, which read DIM's and SideFX's
 >   Windows registration — on macOS you fill the folder paths in yourself.

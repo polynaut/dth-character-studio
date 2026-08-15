@@ -98,10 +98,37 @@ custom-JCM path, frames and groups, plus the **Modify JCM frames** grid. There
 is no override switch — on a non-primary scene you just **edit the field, and a
 value that differs from the primary becomes that scene's override.**
 
-While a non-primary scene is selected, each overridable field — and each ROM
-**section title** — carries a small **cube glyph**: plain = can be overridden,
-green dot + green field = overridden. Hover the cube for a **reset** button
-back to the primary's value. On the primary scene the cubes don't show at all.
+**Select the scene first.** While a non-primary scene is selected, each
+overridable field — and each ROM **section title** — carries a small **cube
+glyph**. On the primary scene they don't show at all: there is nothing to
+override against.
+
+<p align="center">
+  <img width="900" alt="selecting the outfit scene makes the cube glyphs appear beside the per-scene fields" src="clips/scene-override-cubes.webp" />
+  <br>
+  <sub><em>Click the outfit scene's card: it takes the selection, its own hair list comes up — and the cubes appear.</em></sub>
+</p>
+
+**Then edit.** A value that differs from the primary turns that field and its
+label green and puts a dot on its cube. Only that field: its neighbours are
+untouched and go on tracking the primary.
+
+<p align="center">
+  <img width="468" alt="typing a new FACS detail strength turns the field green while the neighbouring field stays inherited" src="clips/scene-override-edit.webp" />
+  <br>
+  <sub><em>No override switch — the edit <em>is</em> the override. Flexion beside it never moved, so it still follows the primary.</em></sub>
+</p>
+
+**The green cube is also the way back.** Hover it and it becomes a **reset** to
+the primary's value; take the last override off a scene and the scene is simply
+back on the base.
+
+<p align="center">
+  <img width="468" alt="hovering the green cube swaps it for a reset button that restores the primary's value" src="clips/scene-override-reset.webp" />
+  <br>
+  <sub><em>Hovering the green cube swaps it for ↺ — one click and the field is back on the primary's value.</em></sub>
+</p>
+
 The one thing no scene can override is the **GEN section's on/off state** — it
 follows the primary scene's geograft everywhere (its *content*, art direction
 included, overrides like any other section's).
