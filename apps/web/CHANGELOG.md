@@ -1,5 +1,140 @@
 # @dth/web
 
+## 0.79.1
+
+### Patch Changes
+
+- [#840](https://github.com/polynaut/dth-character-studio/pull/840) [`3b7dc64`](https://github.com/polynaut/dth-character-studio/commit/3b7dc64bf51ba948aa8d5fbecc400867674b1ab8) Thanks [@polynaut](https://github.com/polynaut)! - The busy accent bar animates with moving stripes — and keeps moving under reduced motion
+
+  The single travelling glint was the wrong shape for a 6px bar: most of each
+  cycle the bar looked idle (the glint was off-screen) and the moving edge was
+  too subtle to register. It is the barber-pole from the classic CSS-Tricks
+  progress bar instead — a 45° stripe pattern shifted one tile per cycle — so
+  something is always moving.
+
+  More importantly, the bar no longer switches its animation OFF under
+  `prefers-reduced-motion: reduce`; it slows down. The stripes are a background
+  image, so stopping them left a static striped bar that read as decoration while
+  the "this project is being re-read" signal was silently gone — which is what
+  happened on a Windows machine with Accessibility → Visual effects → Animation
+  effects turned off. A loading indicator is the essential-motion case.
+
+- [#846](https://github.com/polynaut/dth-character-studio/pull/846) [`e9d4ace`](https://github.com/polynaut/dth-character-studio/commit/e9d4aced08ac9545313deb378b84e67b8dda49a6) Thanks [@polynaut](https://github.com/polynaut)! - The DTH Export finish toast stops contradicting itself
+
+  A run that exported one scene in 45s was titled exactly that, above a
+  description of an earlier run's two scenes in 7m 50s and 25m 32s — the same Daz
+  warning printed twice, a green tick over an Unreal failure, and every line
+  welded into one paragraph.
+
+  Five paths end a run and all write the same sticky toast. Sonner merges an
+  update over the existing one, so a path that passed no description inherited the
+  previous report's body; every path now passes it explicitly. The per-leg lines
+  render as lines again (the newlines were collapsing), and the Daz problems are
+  deduplicated, stripped of their "Continue anyway?" — a question the script
+  answered minutes before anyone reads it — and capped, with the tail counted.
+
+- [#843](https://github.com/polynaut/dth-character-studio/pull/843) [`04504b4`](https://github.com/polynaut/dth-character-studio/commit/04504b4c7d1337d0f13db47cbd8bbbff3b3eee92) Thanks [@polynaut](https://github.com/polynaut)! - DTH Export: Start closes the panel at once, and Daz opens where you can see it
+
+  Three fixes to one flow:
+
+  - **The wait was paid twice.** The panel awaited `executeCharacterJobs`, which
+    blocked for up to 10s polling for the Runner to claim the batch — so Start sat
+    on "Starting…" before the panel would close, and the run watch then waited all
+    over again. The claim wait now belongs to the watch, where the run is already
+    on screen and abortable; the panel closes the moment you click.
+  - **An export no longer launches Daz minimized.** The minimize is
+    fire-and-forget and never worked, so a successful launch left no window to
+    see — indistinguishable from a launch that failed, while the studio said
+    "Opening Daz Studio". Scans still minimize; a run you are watching does not.
+  - **A claimed batch stops claiming to be unclaimed.** Between the claim and the
+    Runner's first progress line, the status read "Waiting for Daz Studio to pick
+    the batch up" at 0% — for the whole of a cold scene open.
+
+- [#840](https://github.com/polynaut/dth-character-studio/pull/840) [`3b7dc64`](https://github.com/polynaut/dth-character-studio/commit/3b7dc64bf51ba948aa8d5fbecc400867674b1ab8) Thanks [@polynaut](https://github.com/polynaut)! - The Houdini card's rescan indicator is the orange bar itself, not a spinner
+
+  While hython re-reads a project, the card's Houdini-orange left accent bar now
+  lights up — a brighter glint sweeps down the stripe — instead of a small
+  spinner appearing over the thumbnail. Same meaning ("this project is being
+  re-read", cache hits never show it) and the same announcement to assistive
+  tech; reduced-motion setups get a steadily lit bar instead of the sweep. The
+  card stays fully usable throughout, exactly as before.
+
+- [#844](https://github.com/polynaut/dth-character-studio/pull/844) [`8fdabb0`](https://github.com/polynaut/dth-character-studio/commit/8fdabb03f0de1122c32a46c92e687fd68bb3f576) Thanks [@polynaut](https://github.com/polynaut)! - Unlinking or deleting a Daz scene no longer re-offers it as a "new file"
+
+  Removing a scene made it a discovery by definition — unlinked, still in the
+  folder — so the banner announced it the moment the unlink saved. For a DELETE it
+  was worse: the unlink persists before the file is removed (deliberately, so a
+  failed save never points the character at deleted files), and persisting is what
+  re-runs the folder scan, so the scan raced the delete and left a banner
+  advertising a file that no longer existed until the next window focus. Removal
+  now answers for the file in both cases.
+
+- [#849](https://github.com/polynaut/dth-character-studio/pull/849) [`cfd063e`](https://github.com/polynaut/dth-character-studio/commit/cfd063e6527d8c1335cf41aa66089d308fc7804d) Thanks [@polynaut](https://github.com/polynaut)! - The per-character product-scan script gets a Content Library tile.
+
+  `Scan_Products_<Name>.dsa` was the last generated script installed without
+  artwork, so it showed up in Daz's Content Library as a broken-image placeholder
+  next to the ROM and Export scripts that have had tiles since v0.68. It now
+  carries its own, in both sizes Daz reads by name (the 91×91 tile and the 256×256
+  hover preview).
+
+  Turning Daz Products off retires the tiles along with the script, rather than
+  leaving artwork behind pointing at a script that no longer exists.
+
+  The scripts themselves are unchanged — but artwork only lands when a character
+  regenerates, so this ships as a runtime-version bump: existing characters pick
+  the tile up on their next save, or all at once via **Tools → Refresh assets**.
+
+- [#847](https://github.com/polynaut/dth-character-studio/pull/847) [`397366f`](https://github.com/polynaut/dth-character-studio/commit/397366ffff5905c6ad490d6746d48f1cb5b94019) Thanks [@polynaut](https://github.com/polynaut)! - Start scan says it is working, and a blocked save paints the field that blocked it
+
+  Two fixes that were written on 2026-08-10 and never opened as a PR:
+
+  - **Start scan looked dead.** `startSceneScan` does not return quickly — on a
+    Daz that is already up it waits for the Runner to claim the handoff, polling
+    for up to 10s before it either resolves or takes the job back. The button sat
+    there enabled and unchanged for that whole time, so the click read as ignored.
+    It now shows that it is working.
+  - **A blocked save only toasted.** A pose name Houdini will reject fails the
+    save, but the offending row looked exactly like every other one — the user had
+    to hunt for it. The failing field is now painted with the reason.
+
+- [#848](https://github.com/polynaut/dth-character-studio/pull/848) [`0480f19`](https://github.com/polynaut/dth-character-studio/commit/0480f19155ceb3fd11b180464b515484d57dc65d) Thanks [@polynaut](https://github.com/polynaut)! - DTH Export can no longer report a run that produced nothing as a success.
+
+  The Runner's contract ends at "the script I started returned", so a row whose
+  generated script refused the scene, bailed for want of a runtime, or failed
+  mid-ROM came back `done` — indistinguishable from one that exported. The finish
+  report believed those rows, and a run that wrote no files toasted "1 scene
+  exported" while the character page's own run report showed the failure right
+  underneath it. It now reads the scripts' own channel (the ROM run log,
+  restricted to entries written since the handoff and de-duplicated against rows
+  the Runner already failed), counts those scenes as failures, names them in the
+  report, and holds back the Houdini/Unreal continuation when nothing survived.
+
+  A morph that could not be applied is deliberately not counted: its frame stays
+  in the ROM (empty) and the export runs, so a scene whose only problem was a
+  missing dial is still a scene that exported.
+
+  Three fixes on the Daz side of the same story:
+
+  - A catastrophic-failure log always tags its scene now. The old fallback shape
+    had no `scene` field and fired whenever there was no previous log to merge —
+    the common case, since the studio deletes the transport log as it ingests one
+    — so a failure could reach the report attributed to no scene at all.
+  - The "runtime could not be loaded" report probes for the runtime file and says
+    what it found: missing gets the reinstall advice, present gets "Daz failed to
+    load it — run the export again". A failed `include()` logs nothing in Daz, so
+    this is the only evidence such a run leaves behind, and the blanket reinstall
+    advice sent users to rebuild an install that was never broken.
+  - Every string a DTH script writes or displays is ASCII — the generated
+    carriers and the bundled runtime alike. Daz's file writer cannot carry
+    anything else: the arrow in "Tools → Refresh assets" reached the run report as
+    "Tools ? Refresh assets", and em dashes printed to the Daz log arrived as
+    mojibake. The runtime's product- and morph-scan messages were carrying 13 of
+    these, one of them a diagnostics heading written straight to a file.
+
+- Updated dependencies [[`3b7dc64`](https://github.com/polynaut/dth-character-studio/commit/3b7dc64bf51ba948aa8d5fbecc400867674b1ab8), [`3b7dc64`](https://github.com/polynaut/dth-character-studio/commit/3b7dc64bf51ba948aa8d5fbecc400867674b1ab8), [`cfd063e`](https://github.com/polynaut/dth-character-studio/commit/cfd063e6527d8c1335cf41aa66089d308fc7804d), [`0480f19`](https://github.com/polynaut/dth-character-studio/commit/0480f19155ceb3fd11b180464b515484d57dc65d)]:
+  - @dth/ui@0.79.1
+  - @dth/rom@0.79.1
+
 ## 0.79.0
 
 ### Minor Changes
