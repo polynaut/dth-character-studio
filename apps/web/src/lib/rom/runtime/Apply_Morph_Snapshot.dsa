@@ -1,0 +1,105 @@
+// DAZ Studio version 4.0.0+ filetype DAZ Script
+
+// DTH Character Studio - replay the last snapshot written by
+// Save_Morph_Snapshot onto a figure of the same Genesis generation.
+//
+// Two ways to run it:
+//
+//   * with a figure SELECTED - the dials go onto that figure (this is the "I
+//     just created a fresh Genesis 9 and want my character's shape on it"
+//     route), or
+//   * with nothing selected - it loads the stock figure of the snapshot's
+//     generation into the scene itself and applies the dials to that.
+//
+// It never clears the scene: a loaded figure merges in beside whatever is open.
+// It does not save the scene either - that stays your decision.
+//
+// It shows you which snapshot it found (and when it was taken) and asks before
+// touching anything. Dials the target figure does not carry - clothing, hair or
+// a geograft the original was wearing - are named in the report rather than
+// counted away: those are the difference between the same character and a
+// near-miss, and only you can judge them.
+
+var sSelfDir = new DzFileInfo(getScriptFileName()).path();
+var dir_self = new DzDir(sSelfDir);
+include(dir_self.filePath(".DthUtils.dsa"));
+include(dir_self.filePath(".DthScanMorphs.dsa"));
+include(dir_self.filePath(".DthMorphSnapshot.dsa"));
+
+(function(){
+	var sOutDir = "__DTH_APPDATA_DIR__/morph-snapshots";
+
+	// Look before asking: without a readable snapshot there is no question to
+	// put, and the answer names what to do instead.
+	var oLatest = dthMorphSnapLatest(sOutDir);
+	if (!oLatest) {
+		MessageBox.information(
+			"No morph snapshot to apply.\n\n"
+			+ "Open the scene of the character you want to copy, select its figure, and "
+			+ "run Save Morph Snapshot first.\n\n"
+			+ "Snapshots are kept in:\n" + sOutDir,
+			"Apply morph snapshot", "&OK");
+		return;
+	}
+	var oData = oLatest.data;
+	var sGenesis = String(oData.genesis || "");
+	var aRows = oData.morphs || [];
+	var sFrom = oData.figure && oData.figure.label ? String(oData.figure.label) : oLatest.name;
+
+	// A selected figure is the target; anything else selected (a prop, a light,
+	// nothing at all) means "build one for me".
+	var oTarget = null;
+	var oSelected = Scene.getPrimarySelection();
+	if (oSelected) {
+		var oRoot = getNodeRoot(oSelected);
+		if (oRoot && (oRoot.inherits("DzFigure") || oRoot.inherits("DzSkeleton"))) oTarget = oRoot;
+	}
+	// Wrong generation is the one failure worth stopping for: a Genesis 8 dial
+	// list on a Genesis 9 figure resolves almost nothing, and the report would
+	// read as "your snapshot is broken" instead of "wrong figure selected".
+	if (oTarget && sGenesis != "" && !dthIsGenerationFigure(oTarget, sGenesis)) {
+		MessageBox.information(
+			"The selected figure (" + oTarget.getLabel() + ") is not a " + sGenesis
+			+ " figure, and this snapshot came from one.\n\n"
+			+ "Select a " + sGenesis + " figure - or deselect everything and run this "
+			+ "again, and the stock " + sGenesis + " figure will be loaded for you.",
+			"Apply morph snapshot", "&OK");
+		return;
+	}
+
+	var sWhere = oTarget
+		? "onto the selected figure: " + oTarget.getLabel()
+		: "onto a fresh " + (sGenesis == "" ? "figure" : sGenesis + " figure")
+			+ ", which will be loaded into this scene";
+	var sAsk = "Apply " + aRows.length + " dial" + (aRows.length == 1 ? "" : "s")
+		+ " " + sWhere + "?\n\n"
+		+ "Snapshot: " + oLatest.name + "\n"
+		+ "From: " + sFrom + (sGenesis == "" ? "" : " (" + sGenesis + ")") + "\n"
+		+ "Taken: " + String(oData.savedAt || "unknown") + "\n\n"
+		+ "Nothing else in the scene is touched, and the scene is not saved.";
+	if (!oTarget && sGenesis == "") {
+		// No generation recorded AND nothing selected: there is no figure to build.
+		// Say so here rather than letting the apply fail after the confirm.
+		MessageBox.information(
+			"This snapshot does not record which Genesis generation it came from, so no "
+			+ "figure can be built for it.\n\n"
+			+ "Add the figure to the scene yourself, select it, and run this again.",
+			"Apply morph snapshot", "&OK");
+		return;
+	}
+	if (MessageBox.question(sAsk, "Apply morph snapshot", "&Apply", "&Cancel") != 0) return;
+
+	var oReport = DthApplyMorphSnapshot({
+		snapshot: oLatest,
+		target: oTarget,
+		scriptDir: String(sSelfDir)
+	});
+
+	if (!oReport.ok) {
+		MessageBox.information(oReport.error, "Apply morph snapshot", "&OK");
+		return;
+	}
+	var sMsg = dthMorphSnapApplySummary(oReport);
+	if (oReport.created && oReport.asset != "") sMsg += "\n\nLoaded from:\n" + oReport.asset;
+	MessageBox.information(sMsg, "Apply morph snapshot", "&OK");
+})();

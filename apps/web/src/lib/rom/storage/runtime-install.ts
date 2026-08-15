@@ -17,12 +17,15 @@ import dthScanMorphsRuntime from '../runtime/DthScanMorphs.dsa?raw'
 import dthScanFramesRuntime from '../runtime/DthScanFrames.dsa?raw'
 import dthShellSurfacesRuntime from '../runtime/DthShellSurfaces.dsa?raw'
 import dthKillAnimationRuntime from '../runtime/DthKillAnimation.dsa?raw'
+import dthMorphSnapshotRuntime from '../runtime/DthMorphSnapshot.dsa?raw'
 import buildGenesisIndexScript from '../runtime/Build_Genesis_Index.dsa?raw'
 import buildGenesisIndexBulkScript from '../runtime/Build_Genesis_Index_Bulk.dsa?raw'
 import scanSceneBulkScript from '../runtime/Scan_Scene_Bulk.dsa?raw'
 import scanFramesScript from '../runtime/Scan_Frames.dsa?raw'
 import fixGraftShellSurfacesScript from '../runtime/Fix_Graft_Shell_Surfaces.dsa?raw'
 import killAnimationScript from '../runtime/Kill_Animation.dsa?raw'
+import saveMorphSnapshotScript from '../runtime/Save_Morph_Snapshot.dsa?raw'
+import applyMorphSnapshotScript from '../runtime/Apply_Morph_Snapshot.dsa?raw'
 // Content Library artwork for the visible scripts (Daz's own convention:
 // `<name>.png` at 91×91 is the thumbnail, `<name>.tip.png` at 256×256 the hover
 // preview — verified against the stock Genesis 9 assets). `?inline` bundles them
@@ -36,6 +39,10 @@ import fixGraftShellSurfacesIcon from '../runtime/Fix_Graft_Shell_Surfaces.png?i
 import fixGraftShellSurfacesTip from '../runtime/Fix_Graft_Shell_Surfaces.tip.png?inline'
 import killAnimationIcon from '../runtime/Kill_Animation.png?inline'
 import killAnimationTip from '../runtime/Kill_Animation.tip.png?inline'
+import saveMorphSnapshotIcon from '../runtime/Save_Morph_Snapshot.png?inline'
+import saveMorphSnapshotTip from '../runtime/Save_Morph_Snapshot.tip.png?inline'
+import applyMorphSnapshotIcon from '../runtime/Apply_Morph_Snapshot.png?inline'
+import applyMorphSnapshotTip from '../runtime/Apply_Morph_Snapshot.tip.png?inline'
 
 import { dataUrlBytes, join } from './fs'
 import { dataDir } from './app-data'
@@ -71,6 +78,11 @@ const RUNTIME_FILES: Record<string, string> = {
   // every key off a scene and puts the range back to a default 0-30, which is
   // what turns an old ROM-animation scene back into an addable character scene.
   'DthKillAnimation.dsa': dthKillAnimationRuntime,
+  // Morph snapshots — included by the visible Save_/Apply_Morph_Snapshot.dsa
+  // pair below. Records which dials a figure actually has SET at frame 0 (raw
+  // values only, so a replay can't apply an ERC driver's contribution twice)
+  // and replays them onto another figure of the same generation.
+  'DthMorphSnapshot.dsa': dthMorphSnapshotRuntime,
 }
 
 /**
@@ -108,6 +120,13 @@ const VISIBLE_SCAN_SCRIPTS: Record<string, string> = {
   // scene (the studio requires an empty timeline). Asks first, saves nothing,
   // bakes in no path.
   'Kill_Animation.dsa': killAnimationScript,
+  // The morph-snapshot pair: Save writes the selected figure's set dials into a
+  // JSON in the studio's app-data folder (path baked in below) + a `_last.json`
+  // pointer; Apply reads that pointer and replays the dials onto the selected
+  // figure, or onto a stock figure of the snapshot's generation it loads itself.
+  // Neither saves the scene.
+  'Save_Morph_Snapshot.dsa': saveMorphSnapshotScript,
+  'Apply_Morph_Snapshot.dsa': applyMorphSnapshotScript,
 }
 
 /** Root-level scripts installed like the visible ones (as-is + app-data path
@@ -142,6 +161,10 @@ const VISIBLE_SCRIPT_ICONS: Record<string, string> = {
   'Fix_Graft_Shell_Surfaces.tip.png': fixGraftShellSurfacesTip,
   'Kill_Animation.png': killAnimationIcon,
   'Kill_Animation.tip.png': killAnimationTip,
+  'Save_Morph_Snapshot.png': saveMorphSnapshotIcon,
+  'Save_Morph_Snapshot.tip.png': saveMorphSnapshotTip,
+  'Apply_Morph_Snapshot.png': applyMorphSnapshotIcon,
+  'Apply_Morph_Snapshot.tip.png': applyMorphSnapshotTip,
 }
 
 

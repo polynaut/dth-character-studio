@@ -1,0 +1,63 @@
+// DAZ Studio version 4.0.0+ filetype DAZ Script
+
+// DTH Character Studio - write down which morph dials a figure actually has SET
+// at frame 0, as a JSON file you can replay onto a fresh figure later with
+// Apply_Morph_Snapshot.
+//
+// Select your character's root node and run this (with only one figure in the
+// scene there is nothing to select - it takes that one).
+//
+// What it records: every dial whose own value differs from its default, on the
+// figure AND on everything fitted to it (geografts, clothing, hair). Dials that
+// only MOVE because another dial drives them are counted and deliberately not
+// recorded - they follow their driver on their own, and writing them back would
+// apply that driver's contribution twice. Pose is not a morph, so bone rotations
+// are not part of a snapshot.
+//
+// It changes nothing in the scene (it moves the playhead to frame 0 to read, and
+// puts it back), and saves nothing. The JSON lands in the studio's app-data
+// folder - the path is baked in by the studio when it installs this script - and
+// the run tells you exactly where.
+
+var sSelfDir = new DzFileInfo(getScriptFileName()).path();
+var dir_self = new DzDir(sSelfDir);
+include(dir_self.filePath(".DthUtils.dsa"));
+include(dir_self.filePath(".DthScanMorphs.dsa"));
+include(dir_self.filePath(".DthMorphSnapshot.dsa"));
+
+(function(){
+	var oReport = DthSaveMorphSnapshot({
+		outDir: "__DTH_APPDATA_DIR__/morph-snapshots"
+	});
+
+	if (oReport.error != "") {
+		MessageBox.information(oReport.error, "Save morph snapshot", "&OK");
+		return;
+	}
+
+	// A figure with nothing set is a real answer, not a failure - but it is not a
+	// saved snapshot either, and saying "saved" would leave the next Apply run
+	// rebuilding a stock figure and calling it the character.
+	if (oReport.morphs == 0) {
+		MessageBox.information(
+			dthMorphSnapSaveSummary(oReport) + "\n\n"
+			+ "Either this is the stock figure, or its shape comes from somewhere a "
+			+ "dial value cannot be read back (a baked morph, a saved geometry).",
+			"Save morph snapshot", "&OK");
+		return;
+	}
+
+	var sMsg = dthMorphSnapSaveSummary(oReport) + "\n\n" + oReport.path;
+	// The assumed-default fallback is the one way this scan can be INCOMPLETE, so
+	// it is reported rather than left in the Daz log (see DthMorphSnapshot's
+	// header): without getDefaultValue() a dial turned DOWN to a non-zero default
+	// reads as untouched.
+	if (oReport.assumedDefault > 0) {
+		sMsg += "\n\nNote: this Daz build does not report default values for "
+			+ oReport.assumedDefault + " of the " + oReport.scanned + " dials scanned, "
+			+ "so 0 was assumed for those. A dial whose default is not 0 and was set "
+			+ "back TO its default is not in this snapshot.";
+	}
+	sMsg += "\n\nRun Apply Morph Snapshot to rebuild these dials on a fresh figure.";
+	MessageBox.information(sMsg, "Save morph snapshot", "&OK");
+})();

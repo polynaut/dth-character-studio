@@ -87,9 +87,22 @@ backup first.
   (`VISIBLE_SCAN_SCRIPTS`, same file):
   **`Build_Genesis_Index.dsa`** (builds the stock figures of every generation and
   scans them into the per-generation morph + bone index behind the autocompletes),
-  **`Scan_Frames.dsa`** (open scene's keyed frames → CSV for Import from CSV) and
+  **`Scan_Frames.dsa`** (open scene's keyed frames → CSV for Import from CSV),
   **`Fix_Graft_Shell_Surfaces.dsa`** (switches off the surfaces a foreign geograft
-  added — switched ON — to an existing GP/DK geoshell; module `DthShellSurfaces.dsa`).
+  added — switched ON — to an existing GP/DK geoshell; module `DthShellSurfaces.dsa`),
+  **`Kill_Animation.dsa`** (strips a scene's keys so an old ROM-animation scene can
+  be added as a character scene; module `DthKillAnimation.dsa`) and the
+  **`Save_Morph_Snapshot.dsa` / `Apply_Morph_Snapshot.dsa`** pair (runtime v77;
+  module `DthMorphSnapshot.dsa`) — Save writes the dials a figure actually HAS SET
+  at frame 0 into `<app-data>/morph-snapshots/` plus a `_last.json` pointer, Apply
+  replays that snapshot onto the selected figure or onto a stock figure of the
+  recorded generation it loads itself. **It stores RAW values only**
+  (`getRawValue`), never the evaluated ones: a shape control drives its morphs
+  again on the target figure, so replaying the evaluated values would apply every
+  driver's contribution twice. A dial is "set" when its raw value differs from its
+  DEFAULT (not from zero — FACS Detail Strength defaults to 1); where
+  `getDefaultValue()` is unavailable the default is assumed to be 0 and the run
+  says so.
   Two HIDDEN automation twins sit beside them for the Runner:
   `.Build_Genesis_Index_Bulk.dsa` and — runtime v53 — `.Scan_Scene_Bulk.dsa`,
   the per-scene worker of Tools → **Scan project**.

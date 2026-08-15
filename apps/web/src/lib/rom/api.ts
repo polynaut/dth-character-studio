@@ -345,6 +345,7 @@ export {
   housekeepingSweep,
   isElevatedSession,
   relaunchDeelevated,
+  MORPH_SNAPSHOT_RETENTION_DAYS,
   NOTE_MEDIA_RETENTION_DAYS,
   PRODUCT_SCAN_RETENTION_DAYS,
   SCAN_FRAMES_RETENTION_DAYS,

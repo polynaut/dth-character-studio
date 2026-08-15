@@ -24,6 +24,7 @@
 export {
   dataDir,
   dataPath,
+  morphSnapshotDir,
   productScanDir,
   scanFramesDir,
   studioVersion,

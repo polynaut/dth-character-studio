@@ -838,5 +838,15 @@ v76 — the generated `Scan_Products_<Name>.dsa` carries Content Library artwork
       what makes Refresh assets do it. Its artwork also joins the removal
       sweep's `iconBearing` list, so turning Daz Products off retires the tiles
       with the script instead of leaving a tile pointing at nothing.
+v77 — two new VISIBLE scripts join the Content Library: `Save_Morph_Snapshot.dsa`
+      and `Apply_Morph_Snapshot.dsa` (+ their `DthMorphSnapshot.dsa` runtime and
+      four artwork files). Save writes the dials a figure actually HAS SET at
+      frame 0 into `<app-data>/morph-snapshots/<scene>_<figure>.json` plus a
+      `_last.json` pointer; Apply replays that snapshot onto a selected figure,
+      or onto a stock figure of the recorded generation it loads itself. Nothing
+      the generated per-character scripts emit changed — the bump is what
+      INSTALLS the new scripts, exactly as v62 did for `Kill_Animation.dsa`:
+      `copyRuntimeFiles` skips the whole install while the marker matches, so
+      without it no existing library would ever see the files.
 ```
 

@@ -532,4 +532,64 @@ rather than reporting a clean run over a scene that still has animation in it.
 
 &nbsp;
 
+---
+
+## Copying a character shape onto a fresh figure
+
+Sometimes a character's *shape* is the only part worth keeping: the scene has
+gone wrong, the figure has an old geograft on it, a product update broke
+something — and you want the same face and body on a clean Genesis figure.
+
+Two bundled scripts do that, and they work as a pair:
+
+1. **`Save_Morph_Snapshot`** — open the character's scene, select its figure
+   (with only one figure in the scene there is nothing to select), and run it.
+   It writes every dial the figure actually has **set** at frame 0 into a JSON
+   file, and tells you where.
+2. **`Apply_Morph_Snapshot`** — run it to replay that snapshot. With a figure
+   **selected** the dials go onto that figure; with **nothing selected** it
+   loads the stock figure of the snapshot's generation into the scene and
+   applies them there. It shows you which snapshot it found and when it was
+   taken, and asks before touching anything.
+
+Both live in **Scripts › DTH-Character-Studio** in the Content Library.
+
+### What "set" means
+
+Only dials whose **own** value differs from their default. A shape product like
+a character preset is one control dial driving a hundred underlying morphs — the
+snapshot records the *control*, not the hundred, because on the new figure that
+control drives them all over again. Recording the driven values too would apply
+each driver's contribution **twice**, and you would get a distorted copy rather
+than the same character.
+
+Pose is not a morph, so bone rotations are not part of a snapshot. Materials,
+clothing and hair are not either — this is dials only.
+
+### What a snapshot is not
+
+It is not a character preset and not a backup. Two limits are worth knowing
+before you rely on it:
+
+- **Dials the target figure does not carry are reported, not applied.** A
+  snapshot taken from a dressed figure includes its clothing's and geograft's
+  own dials; a bare Genesis 9 has nowhere to put them. The run **names** every
+  one it could not place, so you can see exactly how far the copy got.
+- **A shape that is baked into geometry cannot be read back as a dial**, so it
+  cannot be replayed either. If `Save_Morph_Snapshot` reports that nothing is
+  set, that is what happened — not a failure of the scan.
+
+Neither script saves the scene, and `Apply_Morph_Snapshot` never clears it: a
+figure it loads merges in beside whatever is already open. Use **File ▸ Save
+As** when you are happy with the result.
+
+> [!NOTE]
+> Snapshots live in the studio's app-data folder and are **aged out after 30
+> days** along with the other scan files (Settings ▸ *Storage & housekeeping*).
+> They are cheap to reproduce — re-run `Save_Morph_Snapshot` on the source
+> scene. `Apply_Morph_Snapshot` always replays the **most recently written**
+> one.
+
+&nbsp;
+
 [← Your first character](./04-first-character.md) · [Next: Into Houdini →](./06-into-houdini.md)

@@ -179,6 +179,12 @@ export const TRIGGERS = [
     doc: GOTCHAS_DAZ,
     anchor: 'A hidden runtime `.dsa` must never `include()` a sibling runtime by name',
   },
+  {
+    id: 'morph-raw-value',
+    path: /apps\/web\/src\/lib\/rom\/runtime\/.*\.dsa$/,
+    doc: GOTCHAS_DAZ,
+    anchor: 'Reading a morph value back to REPLAY it means',
+  },
 
   /* ---- the native boundary ------------------------------------------------ */
   {

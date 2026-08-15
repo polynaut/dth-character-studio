@@ -17,7 +17,8 @@ export type { HousekeepingResult, RemapResult }
 // --- Housekeeping: keep app-generated data from filling the disk -------------
 // Product-scan CSVs (one per Daz scene, app-data) age out after
 // PRODUCT_SCAN_RETENTION_DAYS; the Scan_Frames keyframe CSVs (also one per Daz
-// scene) after SCAN_FRAMES_RETENTION_DAYS; unreferenced note media ages out
+// scene) after SCAN_FRAMES_RETENTION_DAYS; the Save_Morph_Snapshot JSONs (one
+// per scanned figure) after MORPH_SNAPSHOT_RETENTION_DAYS; unreferenced note media ages out
 // after NOTE_MEDIA_RETENTION_DAYS (the save-time GC usually gets there first);
 // the dedup quarantine (large, reversible backup) is only ever emptied on the
 // user's explicit request. deleteCharacter also prunes a character's scan
@@ -34,6 +35,13 @@ export const PRODUCT_SCAN_RETENTION_DAYS = 30
 /** Days a Scan_Frames keyframe CSV is kept before the sweep ages it out —
  *  scans are cheap to reproduce (re-run the script on the scene). */
 export const SCAN_FRAMES_RETENTION_DAYS = 30
+
+/** Days a Save_Morph_Snapshot JSON is kept before the sweep ages it out — same
+ *  reasoning as the keyframe CSVs: re-run the script on the source scene. The
+ *  `_last.json` pointer is rewritten by every save, so it always outlives the
+ *  snapshot it names; `dthMorphSnapLatest` treats a pointer whose file is gone
+ *  as "no snapshot" rather than as an error. */
+export const MORPH_SNAPSHOT_RETENTION_DAYS = 30
 
 /** Days an unreferenced note-media file is kept before the sweep removes it. */
 export const NOTE_MEDIA_RETENTION_DAYS = 7
@@ -291,7 +299,8 @@ async function sweepOrphanScriptDirs(): Promise<HousekeepingResult> {
 
 /**
  * Age-out stale app-data scan files (not modified within their retention
- * windows) — the `product-scans` root and the `scan-frames` keyframe CSVs —
+ * windows) — the `product-scans` root, the `scan-frames` keyframe CSVs and the
+ * `morph-snapshots` JSONs —
  * pruning folders they empty, plus the note-media sweep and the orphaned
  * character-meta/avatar/script-dir passes across all known projects. Runs on
  * app launch and from the "Clean up now" button. No-op in the plain web build
@@ -318,23 +327,36 @@ export async function housekeepingSweep(): Promise<HousekeepingResult> {
       },
     }),
   )
+  // …and for the morph snapshots, which nothing else in the app ever collects:
+  // the Daz scripts write them and read them, the studio only bounds them.
+  const snapshots = housekeepingResultSchema.parse(
+    await invoke('housekeeping_sweep', {
+      request: {
+        productScansDir: await storage.morphSnapshotDir(),
+        maxAgeDays: MORPH_SNAPSHOT_RETENTION_DAYS,
+      },
+    }),
+  )
   return {
     filesDeleted:
       scans.filesDeleted +
       frames.filesDeleted +
+      snapshots.filesDeleted +
       media.filesDeleted +
       orphans.filesDeleted +
       scriptOrphans.filesDeleted,
     bytesFreed:
       scans.bytesFreed +
       frames.bytesFreed +
+      snapshots.bytesFreed +
       media.bytesFreed +
       orphans.bytesFreed +
       scriptOrphans.bytesFreed,
     // Locked/readonly files past the cutoff that could NOT be deleted — summed
-    // across both native sweeps so "0 files freed" is distinguishable from
+    // across every native sweep so "0 files freed" is distinguishable from
     // "every delete failed" (the note-media and orphan GCs report no failures).
-    filesFailed: (scans.filesFailed ?? 0) + (frames.filesFailed ?? 0),
+    filesFailed:
+      (scans.filesFailed ?? 0) + (frames.filesFailed ?? 0) + (snapshots.filesFailed ?? 0),
   }
 }
 

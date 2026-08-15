@@ -9,6 +9,7 @@ import {
   exporterJobFilesSignature,
   fetchExporterJobFiles,
   housekeepingSweep,
+  MORPH_SNAPSHOT_RETENTION_DAYS,
   NOTE_MEDIA_RETENTION_DAYS,
   PRODUCT_SCAN_RETENTION_DAYS,
   SCAN_FRAMES_RETENTION_DAYS,
@@ -179,8 +180,10 @@ export function HousekeepingSection() {
             they're older than <strong>{PRODUCT_SCAN_RETENTION_DAYS} days</strong> (also on
             every launch); deleting a character removes its scan data right away.{' '}
             <strong>Scan_Frames</strong> keyframe CSVs age out after{' '}
-            <strong>{SCAN_FRAMES_RETENTION_DAYS} days</strong> (re-run the script to
-            reproduce one). Dropped <strong>note media</strong> no notes reference anymore
+            <strong>{SCAN_FRAMES_RETENTION_DAYS} days</strong> and{' '}
+            <strong>Save_Morph_Snapshot</strong> snapshots after{' '}
+            <strong>{MORPH_SNAPSHOT_RETENTION_DAYS} days</strong> (re-run the script to
+            reproduce either). Dropped <strong>note media</strong> no notes reference anymore
             is removed after <strong>{NOTE_MEDIA_RETENTION_DAYS} days</strong> (saving notes
             already cleans up after an hour).
           </InfoPopup>

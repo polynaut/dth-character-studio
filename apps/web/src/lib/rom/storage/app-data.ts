@@ -47,6 +47,19 @@ export async function scanFramesDir(): Promise<string> {
   return dataPath('scan-frames')
 }
 
+/**
+ * The FOLDER the installed `Save_Morph_Snapshot.dsa` writes its morph snapshots
+ * into (one JSON per scanned figure, plus the `_last.json` pointer naming the
+ * most recent one), under app-local-data: `morph-snapshots/`. The script gets
+ * the path baked in at install time (copyRuntimeFiles) and
+ * `Apply_Morph_Snapshot.dsa` reads it back from the same place — the studio
+ * itself only bounds the folder's growth (`housekeepingSweep`). Resolved here so
+ * the three sides cannot disagree about where snapshots live.
+ */
+export async function morphSnapshotDir(): Promise<string> {
+  return dataPath('morph-snapshots')
+}
+
 let versionPromise: Promise<string> | null = null
 /** The DTH Character Studio app version, cached; '' when unavailable (e.g. the
  *  web-only build with no native layer). Stamped onto saved characters and the

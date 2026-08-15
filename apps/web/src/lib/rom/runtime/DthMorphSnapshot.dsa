@@ -1,0 +1,706 @@
+// DAZ Studio version 4.22.0.16 filetype DAZ Script
+
+// DTH Character Studio — morph SNAPSHOT: write down which dials a figure has
+// actually SET at frame 0, and rebuild them later on a fresh figure of the same
+// Genesis generation.
+//
+// Included by the two visible scripts installed next to this file —
+// Save_Morph_Snapshot and Apply_Morph_Snapshot — which also include the DTH
+// utils runtime and the morph-index runtime FIRST. This file calls into both
+// (node asset identity, generation detection, the stock-figure build plan and
+// its content resolution) and must NOT include either itself: the install-time
+// rewrite would repoint the include two folders up, where a root-level script
+// cannot follow it.
+//
+// ## Raw value vs evaluated value — the whole reason a snapshot is replayable
+//
+// A property's `getValue()` is what it evaluates to once every ERC link feeding
+// it has contributed; `getRawValue()` is what the DIAL itself holds. They differ
+// exactly when the property is DRIVEN — one shape control at 1 drives a hundred
+// underlying morphs whose own raw value never leaves 0.
+//
+// So the snapshot records RAW values only. Writing evaluated values back would
+// apply each driver's contribution a second time (the driver still drives on the
+// target figure), and the rebuilt figure would be a distorted copy of the
+// original rather than the same character. The driven morphs are counted for the
+// report and deliberately not stored.
+//
+// ## What counts as "set"
+//
+// Raw value differs from the property's DEFAULT value. Not "differs from zero":
+// a dial that defaults to 1 (FACS Detail Strength) is not set just by being 1.
+// Where `getDefaultValue()` is not exposed the default is assumed to be 0, which
+// is right for every delta morph and wrong only for a dial the user has turned
+// DOWN to its non-zero default — that one is missed, and the header of the
+// written file says so rather than the snapshot claiming to be complete.
+
+/** Snapshot file-format version. Bump when the shape below changes; the apply
+ *  side refuses anything it does not know rather than half-reading it. */
+var DTH_MORPHSNAP_VERSION = 1;
+
+/** The pointer file beside the snapshots, naming the most recently written one.
+ *  Apply reads THIS, so "the last snapshot" never depends on directory listing
+ *  order or on a file-modification time the script would have to trust. */
+var DTH_MORPHSNAP_POINTER = "_last.json";
+
+/** Float comparison tolerance — the runtime's EPSILON, kept local so this file
+ *  stays loadable (and unit-testable) on its own. */
+var DTH_MORPHSNAP_EPS = 0.0001;
+
+// Node-property groups that are rig/scene plumbing rather than morph dials:
+// transforms (that is POSE, not shape), display toggles, simulation weights,
+// smoothing iterations. Same list the morph index skips, for the same reason.
+var DTH_MORPHSNAP_SKIP_GROUP = /^(General|Transforms|Display|Simulation|Smoothing|Mesh Smoothing|Line Tessellation|Rigid Follow|Instances)($|\/)/;
+
+/**********************************************************************
+ * Pure helpers — no Daz API, so they are unit-tested directly (runtime.test.ts
+ * loads this file in a bare sandbox).
+ */
+
+function dthMorphSnapApproxEq(fA, fB){
+	return Math.abs(fA - fB) < DTH_MORPHSNAP_EPS;
+}
+
+/** A number that is safe to write into JSON ('' / null / NaN / Infinity -> 0),
+ *  so one unreadable dial cannot produce a snapshot file nothing can parse. */
+function dthMorphSnapNum(fValue){
+	var f = Number(fValue);
+	if(isNaN(f) || !isFinite(f)) return 0;
+	return f;
+}
+
+/** File-name-safe form of a scene or figure name. Everything Windows and Daz
+ *  disagree about becomes '_'; an empty result falls back to a fixed name so a
+ *  figure labelled only with punctuation still writes a file. */
+function dthMorphSnapSlug(sName){
+	var s = String(sName == undefined ? "" : sName);
+	s = s.replace(/[\\\/:*?"<>|]/g, "_");
+	s = s.replace(/\s+/g, " ");
+	s = s.replace(/^[\s._]+/, "").replace(/[\s._]+$/, "");
+	if(s.length > 64) s = s.substring(0, 64);
+	if(s == "") return "snapshot";
+	return s;
+}
+
+/** Normalise a folder path the way every other runtime writer does: forward
+ *  slashes, no trailing separator (DzFile wants '/'). */
+function dthMorphSnapDir(sOutDir){
+	return String(sOutDir == undefined ? "" : sOutDir).replace(/\\/g, "/").replace(/\/+$/, "");
+}
+
+function dthMorphSnapPointerPath(sOutDir){
+	return dthMorphSnapDir(sOutDir) + "/" + DTH_MORPHSNAP_POINTER;
+}
+
+/**
+ * Which stock figure of a generation a snapshot came from, read off the source
+ * figure's ASSET file name (genesis8female.dsf -> 'female'). Genesis 9 is one
+ * gender-neutral figure, so it answers '' — and so does anything unreadable,
+ * which the caller treats as "take the generation's first figure".
+ */
+function dthMorphSnapGender(sAssetPath){
+	var s = String(sAssetPath == undefined ? "" : sAssetPath).toLowerCase();
+	if(s.indexOf("female") >= 0) return "female";
+	// Checked second and anchored on the file name: 'female' contains 'male'.
+	if(/male/.test(s)) return "male";
+	return "";
+}
+
+/**
+ * The build-plan entry to load when rebuilding a snapshot's figure: the stock
+ * figure of `sGenesis` matching `sGender`, with any geograft dropped — a
+ * snapshot is a set of dials, and fitting Golden Palace to carry them would add
+ * a product the user did not ask for. Null when the generation is not in the
+ * plan (an unknown/unreadable generation), which is what stops the apply from
+ * silently building the wrong figure.
+ */
+function dthMorphSnapFigureSpec(aPlan, sGenesis, sGender){
+	if(!aPlan) return null;
+	for(var g = 0; g < aPlan.length; g++){
+		if(aPlan[g].genesis != sGenesis) continue;
+		var aFigures = aPlan[g].figures || [];
+		if(aFigures.length == 0) return null;
+		var oPick = aFigures[0];
+		if(sGender){
+			// Anchored on word boundaries, NOT indexOf: 'female' contains 'male',
+			// so a substring test hands every male snapshot the female figure.
+			var rxGender = new RegExp("(^|[^a-z])" + sGender + "([^a-z]|$)", "i");
+			for(var f = 0; f < aFigures.length; f++){
+				if(String(aFigures[f].short).toLowerCase() == sGender
+					|| rxGender.test(String(aFigures[f].label))){
+					oPick = aFigures[f];
+					break;
+				}
+			}
+		}
+		// A shallow copy without `graft`: the same spec object is shared by both
+		// Genesis 9 entries of the plan, so mutating it would poison the caller's
+		// plan for anything else reading it in the same run.
+		return {
+			label: oPick.label,
+			short: oPick.short,
+			rel: oPick.rel,
+			searchDirs: oPick.searchDirs,
+			searchRx: oPick.searchRx,
+			searchExclude: oPick.searchExclude
+		};
+	}
+	return null;
+}
+
+/**
+ * One float property's frame-0 state. Every probe is feature-detected, so a Daz
+ * build missing one degrades to the next instead of taking the scan down.
+ *
+ * - `raw`     what the dial holds (the value a snapshot stores and replays),
+ * - `value`   what it evaluates to with every ERC contribution folded in,
+ * - `def`     its default; `hasDefault` false means 0 was ASSUMED (see header),
+ * - `active`  raw differs from the default: the user set this one,
+ * - `driven`  raw differs from the evaluated value: something else moves it.
+ */
+function dthMorphSnapState(oProp){
+	var oState = { raw: 0, value: 0, def: 0, hasDefault: false, alias: false, active: false, driven: false };
+	if(!oProp) return oState;
+	try {
+		// An alias is a second name for a property scanned elsewhere; recording it
+		// would replay the same dial twice.
+		if(typeof oProp.isAlias == "function" && oProp.isAlias()){
+			oState.alias = true;
+			return oState;
+		}
+	} catch(e0){ /* not an alias as far as anything can tell */ }
+	try {
+		if(typeof oProp.getValue == "function") oState.value = dthMorphSnapNum(oProp.getValue(0));
+	} catch(e1){ /* unreadable — stays 0 */ }
+	// No getRawValue (an older/other build): the evaluated value is the only
+	// answer available. It is right for every UNDRIVEN dial, which is all a
+	// snapshot stores anyway.
+	oState.raw = oState.value;
+	try {
+		if(typeof oProp.getRawValue == "function") oState.raw = dthMorphSnapNum(oProp.getRawValue(0));
+	} catch(e2){ /* keep the evaluated value */ }
+	try {
+		if(typeof oProp.getDefaultValue == "function"){
+			oState.def = dthMorphSnapNum(oProp.getDefaultValue());
+			oState.hasDefault = true;
+		}
+	} catch(e3){ /* assume 0 — see the header */ }
+	oState.active = !dthMorphSnapApproxEq(oState.raw, oState.def);
+	oState.driven = !dthMorphSnapApproxEq(oState.raw, oState.value);
+	return oState;
+}
+
+/** What the save dialog says it wrote. The counts are the receipt, so a run
+ *  that found nothing says so instead of reporting a successful save of an
+ *  empty list. */
+function dthMorphSnapSaveSummary(oReport){
+	var iCount = oReport.morphs || 0;
+	if(iCount == 0){
+		return "No dials are set on " + oReport.figure + " at frame 0 - "
+			+ "nothing was written.";
+	}
+	var sMsg = "Saved " + iCount + " set dial" + (iCount == 1 ? "" : "s")
+		+ " from " + oReport.figure;
+	if(oReport.genesis) sMsg += " (" + oReport.genesis + ")";
+	sMsg += ".";
+	if(oReport.driven > 0){
+		sMsg += "\n" + oReport.driven + " further dial" + (oReport.driven == 1 ? " is" : "s are")
+			+ " driven by those and will follow on their own.";
+	}
+	if(oReport.nodes > 1){
+		sMsg += "\nAcross " + oReport.nodes + " nodes (the figure plus fitted items).";
+	}
+	return sMsg;
+}
+
+/** What the apply dialog says it did. Names the misses rather than counting
+ *  them away: a dial the target figure does not carry is the difference between
+ *  the same character and a near-miss, and only the user can judge it. */
+function dthMorphSnapApplySummary(oReport){
+	var iApplied = oReport.applied || 0;
+	var sMsg = "Applied " + iApplied + " dial" + (iApplied == 1 ? "" : "s")
+		+ " to " + oReport.figure + ".";
+	if(oReport.created) sMsg = "Loaded " + oReport.figure + " and applied "
+		+ iApplied + " dial" + (iApplied == 1 ? "" : "s") + ".";
+	var aMissed = oReport.missed || [];
+	var aFailed = oReport.failed || [];
+	if(aMissed.length > 0){
+		sMsg += "\n\n" + aMissed.length + " dial" + (aMissed.length == 1 ? " is" : "s are")
+			+ " not on this figure - most likely from clothing, hair or a geograft "
+			+ "the snapshot's figure was wearing:";
+		for(var i = 0; i < aMissed.length && i < 12; i++) sMsg += "\n  " + aMissed[i];
+		if(aMissed.length > 12) sMsg += "\n  ... and " + (aMissed.length - 12) + " more (see the Daz log).";
+	}
+	if(aFailed.length > 0){
+		sMsg += "\n\n" + aFailed.length + " dial" + (aFailed.length == 1 ? "" : "s")
+			+ " would not take the value (limits?):";
+		for(var f = 0; f < aFailed.length && f < 12; f++) sMsg += "\n  " + aFailed[f];
+		if(aFailed.length > 12) sMsg += "\n  ... and " + (aFailed.length - 12) + " more (see the Daz log).";
+	}
+	if(aMissed.length == 0 && aFailed.length == 0 && iApplied > 0){
+		sMsg += "\n\nEvery dial in the snapshot took. The scene is not saved - "
+			+ "use File > Save As.";
+	}
+	return sMsg;
+}
+
+/**********************************************************************
+ * File I/O — DzFile only, so the same functions run against a fake file layer
+ * in the tests.
+ */
+
+/** Parse a JSON file; null when it is missing, unreadable or not valid JSON.
+ *  A truncated snapshot must read as "no snapshot", never as an empty one. */
+function dthMorphSnapReadJson(sPath){
+	try {
+		var oFile = new DzFile(sPath);
+		if(!oFile.open(DzFile.ReadOnly)) return null;
+		var sText = String(oFile.read());
+		oFile.close();
+		if(sText == "") return null;
+		return JSON.parse(sText);
+	} catch(e){
+		print("Could not read:", sPath, e);
+		return null;
+	}
+}
+
+/** Write `oData` as JSON. Returns whether it landed — the caller reports a
+ *  failed write rather than announcing a snapshot nobody can read back. */
+function dthMorphSnapWriteJson(sPath, oData){
+	try {
+		var oFile = new DzFile(sPath);
+		// One ORed mode arg - a second open() argument warns on DS6.
+		if(!oFile.open(oFile.WriteOnly | oFile.Truncate)){
+			print("Could not write:", sPath);
+			return false;
+		}
+		oFile.write(JSON.stringify(oData, null, 1));
+		oFile.close();
+		return true;
+	} catch(e){
+		print("Could not write:", sPath, e);
+		return false;
+	}
+}
+
+/** Make sure the snapshot folder exists (it is a subfolder of the studio's
+ *  app-data dir, so on a fresh install nothing has created it yet). */
+function dthMorphSnapEnsureDir(sOutDir){
+	try {
+		var oDir = new DzDir(sOutDir);
+		if(!oDir.exists()) oDir.mkpath(sOutDir);
+		return new DzDir(sOutDir).exists();
+	} catch(e){
+		print("Could not create the snapshot folder:", sOutDir, e);
+		return false;
+	}
+}
+
+/**
+ * The most recently written snapshot: `{ path, name, data }`, or null when the
+ * pointer is missing, names a file that is no longer there (the studio's
+ * housekeeping ages snapshots out), or the file does not parse.
+ *
+ * Deliberately NOT a directory scan for the newest file — a snapshot's
+ * modification time is one `File > Save As` away from lying, and the pointer is
+ * written by the same run that wrote the snapshot.
+ */
+function dthMorphSnapLatest(sOutDir){
+	var sDir = dthMorphSnapDir(sOutDir);
+	var oPointer = dthMorphSnapReadJson(dthMorphSnapPointerPath(sDir));
+	if(!oPointer || !oPointer.file) return null;
+	var sPath = sDir + "/" + String(oPointer.file);
+	var oData = dthMorphSnapReadJson(sPath);
+	if(!oData) return null;
+	return { path: sPath, name: String(oPointer.file), data: oData };
+}
+
+/**********************************************************************
+ * Scanning
+ */
+
+/** Record one property on `oAcc` when its dial is set. `oSeen` dedups within
+ *  the node: a controller dial can surface both as a morph modifier and as a
+ *  float property on the node, and replaying it twice is not harmless when the
+ *  second write lands on a different property of the same name. */
+function dthMorphSnapTake(oAcc, oSeen, oEntry, oProp){
+	oAcc.scanned++;
+	var sKey = oEntry.node + "|" + oEntry.name;
+	if(oSeen[sKey]) return;
+	oSeen[sKey] = true;
+	var oState = dthMorphSnapState(oProp);
+	if(oState.alias){
+		oAcc.aliases++;
+		return;
+	}
+	if(!oState.hasDefault) oAcc.assumedDefault++;
+	if(!oState.active){
+		// Driven-but-not-set is the ERC case the header describes: the dial that
+		// DOES carry it is somewhere else in this same list.
+		if(oState.driven) oAcc.driven++;
+		return;
+	}
+	oAcc.morphs.push({
+		node: oEntry.node,
+		nodeLabel: oEntry.nodeLabel,
+		root: oEntry.root,
+		name: oEntry.name,
+		label: oEntry.label,
+		value: oState.raw,
+		evaluated: oState.value,
+		driven: oState.driven,
+		source: oEntry.source
+	});
+}
+
+/**
+ * Every set dial on `oFigure` and its descendants at frame 0.
+ *
+ * Two passes per node, the same two the ROM runtime resolves a morph name
+ * through: DzMorph modifiers on the node's object (classic delta morphs), then
+ * float properties on the node itself (controller dials without deltas of their
+ * own — ERC shape products live here and would otherwise be invisible). Bones
+ * carry no morph dials, so pass 2 skips them; cameras and lights parented into
+ * the figure are scene furniture and are skipped whole.
+ */
+function dthMorphSnapCollect(oFigure){
+	var oAcc = { morphs: [], driven: 0, aliases: 0, assumedDefault: 0, nodes: 0, scanned: 0 };
+	var aNodes = [oFigure].concat(oFigure.getNodeChildren(true));
+	for(var n = 0; n < aNodes.length; n++){
+		var oNode = aNodes[n];
+		if(oNode.inherits("DzCamera") || oNode.inherits("DzLight")) continue;
+		var oEntryBase = {
+			node: String(oNode.getName()),
+			nodeLabel: String(oNode.getLabel()),
+			root: (n == 0)
+		};
+		var oSeen = {};
+		var iBefore = oAcc.morphs.length;
+
+		var oObj = oNode.getObject();
+		if(oObj){
+			for(var i = 0; i < oObj.getNumModifiers(); i++){
+				var oMod = oObj.getModifier(i);
+				if(!oMod || !oMod.inherits("DzMorph")) continue;
+				var oProp = oMod.getValueControl();
+				if(!oProp) continue;
+				var sName = String(oMod.getName());
+				dthMorphSnapTake(oAcc, oSeen, {
+					node: oEntryBase.node,
+					nodeLabel: oEntryBase.nodeLabel,
+					root: oEntryBase.root,
+					name: sName,
+					label: String(oProp.getLabel()),
+					source: "modifier"
+				}, oProp);
+			}
+		}
+
+		if(!oNode.inherits("DzBone")){
+			for(var p = 0; p < oNode.getNumProperties(); p++){
+				var oNProp = oNode.getProperty(p);
+				if(!oNProp || !oNProp.inherits("DzFloatProperty")) continue;
+				if(DTH_MORPHSNAP_SKIP_GROUP.test(String(oNProp.getPath()).replace(/^\//, ""))) continue;
+				dthMorphSnapTake(oAcc, oSeen, {
+					node: oEntryBase.node,
+					nodeLabel: oEntryBase.nodeLabel,
+					root: oEntryBase.root,
+					name: String(oNProp.getName()),
+					label: String(oNProp.getLabel()),
+					source: "property"
+				}, oNProp);
+			}
+		}
+
+		if(oAcc.morphs.length > iBefore) oAcc.nodes++;
+	}
+	return oAcc;
+}
+
+/** The figure a save should scan: the selected figure root, else the only
+ *  figure root in the scene. Returns `{ figure, reason }` — `figure` null with
+ *  a `reason` the caller can put in front of the user. */
+function dthMorphSnapSourceFigure(){
+	var oSelected = null;
+	try { oSelected = Scene.getPrimarySelection(); } catch(e){ /* no selection API answer */ }
+	if(oSelected){
+		var oRoot = getNodeRoot(oSelected);
+		if(oRoot && (oRoot.inherits("DzFigure") || oRoot.inherits("DzSkeleton")))
+			return { figure: oRoot, reason: "" };
+	}
+	var aFigures = dthSceneFigureRoots();
+	if(aFigures.length == 1) return { figure: aFigures[0], reason: "" };
+	if(aFigures.length == 0)
+		return { figure: null, reason: "There is no figure in this scene to scan." };
+	var aNames = [];
+	for(var i = 0; i < aFigures.length && i < 12; i++) aNames.push(String(aFigures[i].getLabel()));
+	return {
+		figure: null,
+		reason: "This scene holds " + aFigures.length + " figures - select the one to scan "
+			+ "first, then run this again:\n  " + aNames.join("\n  ")
+	};
+}
+
+/**********************************************************************
+ * Entry point 1: SAVE
+ */
+
+/**
+ * Scan the selected (or only) figure's set dials at frame 0 and write them as a
+ * JSON snapshot into `config.outDir` (the studio's app-data folder, baked in at
+ * install time), plus the pointer file the apply side reads.
+ *
+ * Read-only as far as the scene is concerned: it moves the playhead to frame 0
+ * to scan and puts it back, and changes nothing else. Returns a report the
+ * wrapper turns into the dialog.
+ */
+function DthSaveMorphSnapshot(config){
+	var oReport = {
+		ok: false, error: "", path: "", file: "",
+		figure: "", genesis: "", gender: "",
+		morphs: 0, driven: 0, nodes: 0, scanned: 0, assumedDefault: 0
+	};
+	var oFound = dthMorphSnapSourceFigure();
+	if(!oFound.figure){
+		oReport.error = oFound.reason;
+		return oReport;
+	}
+	var oFigure = oFound.figure;
+	oReport.figure = String(oFigure.getLabel());
+
+	var sAsset = dthNodeAssetPath(oFigure);
+	var sGenesis = dthDetectGenesis(oFigure);
+	oReport.genesis = sGenesis ? sGenesis : "";
+	oReport.gender = dthMorphSnapGender(sAsset);
+
+	// Frame 0 is the frame being snapshotted, and a scene parked at frame 250
+	// evaluates its dials there. The reads below name their time explicitly, so
+	// this is belt AND braces - and the playhead goes back either way, because a
+	// read-only tool has no business moving it.
+	var tPrev = null;
+	try { tPrev = Scene.getTime(); Scene.setTime(0); } catch(e1){ tPrev = null; }
+
+	var oAcc;
+	try {
+		oAcc = dthMorphSnapCollect(oFigure);
+	} finally {
+		try { if(tPrev !== null) Scene.setTime(tPrev); } catch(e2){ /* left at frame 0 */ }
+	}
+
+	oReport.morphs = oAcc.morphs.length;
+	oReport.driven = oAcc.driven;
+	oReport.nodes = oAcc.nodes;
+	oReport.scanned = oAcc.scanned;
+	oReport.assumedDefault = oAcc.assumedDefault;
+	print("Snapshot: scanned", oAcc.scanned, "dials,", oAcc.morphs.length, "set,",
+		oAcc.driven, "driven,", oAcc.aliases, "aliases");
+	if(oAcc.morphs.length == 0){
+		// Nothing to replay: writing an empty snapshot would only make the NEXT
+		// apply rebuild a stock figure and call it the character.
+		oReport.ok = true;
+		return oReport;
+	}
+
+	var sOutDir = dthMorphSnapDir(config && config.outDir);
+	if(sOutDir == "" || !dthMorphSnapEnsureDir(sOutDir)){
+		oReport.error = "Could not create the snapshot folder:\n" + sOutDir;
+		return oReport;
+	}
+
+	var sScene = "";
+	try {
+		var sSceneFile = Scene.getFilename();
+		if(sSceneFile != "") sScene = String(new DzFileInfo(sSceneFile).completeBaseName());
+	} catch(e3){ /* unsaved scene — the figure label names the file */ }
+	var sFigureSlug = dthMorphSnapSlug(oReport.figure);
+	var sBase = sScene == "" ? sFigureSlug : dthMorphSnapSlug(sScene) + "_" + sFigureSlug;
+	var sFile = sBase + ".json";
+	var sPath = sOutDir + "/" + sFile;
+
+	var sSavedAt = new Date().toString();
+	var oData = {
+		version: DTH_MORPHSNAP_VERSION,
+		savedAt: sSavedAt,
+		genesis: oReport.genesis,
+		gender: oReport.gender,
+		figure: { name: String(oFigure.getName()), label: oReport.figure, asset: sAsset },
+		scene: sScene == "" ? "" : String(Scene.getFilename()),
+		counts: {
+			scanned: oAcc.scanned,
+			set: oAcc.morphs.length,
+			driven: oAcc.driven,
+			aliases: oAcc.aliases,
+			assumedDefault: oAcc.assumedDefault
+		},
+		morphs: oAcc.morphs
+	};
+	if(!dthMorphSnapWriteJson(sPath, oData)){
+		oReport.error = "Could not write the snapshot:\n" + sPath;
+		return oReport;
+	}
+	// The pointer LAST, and only once the snapshot is on disk: it is what the
+	// apply side trusts, so it may never name a file that failed to write.
+	if(!dthMorphSnapWriteJson(dthMorphSnapPointerPath(sOutDir), {
+		version: DTH_MORPHSNAP_VERSION,
+		file: sFile,
+		savedAt: sSavedAt,
+		genesis: oReport.genesis,
+		figure: oReport.figure,
+		morphs: oAcc.morphs.length
+	})){
+		oReport.error = "The snapshot was written, but the pointer file was not:\n"
+			+ dthMorphSnapPointerPath(sOutDir)
+			+ "\n\nApply Morph Snapshot will not find it.";
+		return oReport;
+	}
+	oReport.ok = true;
+	oReport.path = sPath;
+	oReport.file = sFile;
+	print("Snapshot written:", sPath);
+	return oReport;
+}
+
+/**********************************************************************
+ * Entry point 2: APPLY
+ */
+
+/** Resolve one snapshot row to a property on the target figure tree, by the
+ *  node it was recorded on. Root rows go to the figure root; everything else
+ *  has to find its node again (fitted clothing, a geograft) or it is a miss —
+ *  guessing at any node carrying the same dial name is how one bag's fit morph
+ *  deforms a whole outfit. */
+function dthMorphSnapFindProp(oFigureRoot, oRow){
+	var oNode = oFigureRoot;
+	if(!oRow.root && oRow.node){
+		oNode = findNodeByNameOrLabel(oFigureRoot, oRow.node);
+		if(!oNode && oRow.nodeLabel) oNode = findNodeByNameOrLabel(oFigureRoot, oRow.nodeLabel);
+		if(!oNode) return null;
+	}
+	// Morph modifiers first (most reliable for morphs), then plain/controller
+	// properties by name and by UI label - the resolution order the ROM runtime
+	// uses, so a name that works in a ROM definition works here.
+	var oProp = getMorphPropFromNode(oNode, oRow.name);
+	if(!oProp) oProp = oNode.findProperty(oRow.name);
+	if(!oProp && oRow.label) oProp = oNode.findPropertyByLabel(oRow.label);
+	return oProp;
+}
+
+/** Set one dial and verify it took. setValue reports nothing useful (it returns
+ *  false for a value that was ALREADY right), so success is a read-back. */
+function dthMorphSnapSetProp(oProp, fValue){
+	try {
+		// DAZ Studio 6 pops a "keep limits?" dialog when a value exceeds the
+		// property's min/max - disable clamping first (guarded, same dance the
+		// ROM runtime does).
+		if(typeof oProp.setIsClamped == "function") oProp.setIsClamped(false);
+	} catch(e0){ /* clamped as it was */ }
+	try {
+		var bKeyed = false;
+		if(typeof oProp.getNumKeys == "function") bKeyed = oProp.getNumKeys() > 0;
+		// A fresh figure has no keys, so the plain setter is the normal path: it
+		// sets the value without putting a key on the timeline. A property that
+		// already carries keys needs the frame-0 one written instead.
+		if(bKeyed) oProp.setValue(0, fValue);
+		else oProp.setValue(fValue);
+	} catch(e1){
+		print("Could not set", oProp.getName(), e1);
+		return false;
+	}
+	var oState = dthMorphSnapState(oProp);
+	return dthMorphSnapApproxEq(oState.raw, fValue);
+}
+
+/**
+ * Rebuild the last saved snapshot's dials.
+ *
+ * Target figure, in order:
+ *   1. `config.target` — a figure the caller resolved (the wrapper passes the
+ *      user's selection, so "apply to the figure I just made" works), or
+ *   2. a stock figure of the snapshot's generation, LOADED into the scene.
+ *
+ * Never clears the scene: the new figure merges in beside whatever is open, and
+ * the caller is told which figure was used. Saves nothing.
+ */
+function DthApplyMorphSnapshot(config){
+	var oReport = {
+		ok: false, error: "", figure: "", created: false, asset: "",
+		genesis: "", snapshot: "", savedAt: "",
+		applied: 0, missed: [], failed: [], total: 0
+	};
+	var oLatest = config && config.snapshot ? config.snapshot : null;
+	if(!oLatest){
+		oReport.error = "No snapshot has been saved yet - run Save Morph Snapshot on a "
+			+ "figure first.";
+		return oReport;
+	}
+	var oData = oLatest.data;
+	if(!oData || Number(oData.version) != DTH_MORPHSNAP_VERSION){
+		oReport.error = "The last snapshot was written by a different version of this "
+			+ "script and cannot be read. Save a new one.";
+		return oReport;
+	}
+	var aRows = oData.morphs || [];
+	oReport.total = aRows.length;
+	oReport.snapshot = oLatest.name;
+	oReport.savedAt = String(oData.savedAt || "");
+	oReport.genesis = String(oData.genesis || "");
+	if(aRows.length == 0){
+		oReport.error = "The last snapshot holds no dials.";
+		return oReport;
+	}
+
+	var oFigure = config.target ? config.target : null;
+	if(!oFigure){
+		if(!oReport.genesis){
+			oReport.error = "The snapshot does not say which Genesis generation it came "
+				+ "from, so no figure can be built for it. Select the figure to apply it "
+				+ "to, then run this again.";
+			return oReport;
+		}
+		var sSpecPath = "";
+		var oSpec = dthMorphSnapFigureSpec(dthGenesisBuildPlan(), oReport.genesis, String(oData.gender || ""));
+		if(oSpec) sSpecPath = dthResolveAsset(dthContentRoots(config.scriptDir), oSpec);
+		if(!sSpecPath){
+			oReport.error = "Could not find the stock " + oReport.genesis + " figure in your "
+				+ "Daz library, so there is nothing to apply the snapshot to. Add the figure "
+				+ "to the scene yourself, select it, and run this again.";
+			return oReport;
+		}
+		oReport.asset = sSpecPath;
+		oFigure = dthLoadFigure(sSpecPath);
+		if(!oFigure){
+			oReport.error = "The figure did not load:\n" + sSpecPath;
+			return oReport;
+		}
+		oReport.created = true;
+	}
+	oReport.figure = String(oFigure.getLabel());
+
+	// Frame 0 for the same reason the save scans there - and this one WRITES, so
+	// a scene parked elsewhere would otherwise bake the values in at that frame.
+	var tPrev = null;
+	try { tPrev = Scene.getTime(); Scene.setTime(0); } catch(e1){ tPrev = null; }
+	try {
+		for(var i = 0; i < aRows.length; i++){
+			var oRow = aRows[i];
+			if(!oRow || !oRow.name) continue;
+			var oProp = dthMorphSnapFindProp(oFigure, oRow);
+			if(!oProp){
+				oReport.missed.push(String(oRow.label || oRow.name)
+					+ (oRow.root ? "" : "  (" + String(oRow.nodeLabel || oRow.node) + ")"));
+				continue;
+			}
+			if(dthMorphSnapSetProp(oProp, dthMorphSnapNum(oRow.value))){
+				oReport.applied++;
+			} else {
+				oReport.failed.push(String(oRow.label || oRow.name));
+			}
+		}
+	} finally {
+		try { if(tPrev !== null) Scene.setTime(tPrev); } catch(e2){ /* left at frame 0 */ }
+	}
+	print("Snapshot applied:", oReport.applied, "of", aRows.length, "dials on", oReport.figure);
+	oReport.ok = true;
+	return oReport;
+}

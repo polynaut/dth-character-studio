@@ -29,12 +29,15 @@ const RUNTIME_FILES = [
   'DthScanFrames.dsa',
   'DthShellSurfaces.dsa',
   'DthKillAnimation.dsa',
+  'DthMorphSnapshot.dsa',
   'Build_Genesis_Index.dsa',
   'Build_Genesis_Index_Bulk.dsa',
   'Scan_Scene_Bulk.dsa',
   'Scan_Frames.dsa',
   'Fix_Graft_Shell_Surfaces.dsa',
   'Kill_Animation.dsa',
+  'Save_Morph_Snapshot.dsa',
+  'Apply_Morph_Snapshot.dsa',
 ]
 
 // The visible scripts' Content Library artwork, installed beside them. Hashed as
@@ -50,12 +53,16 @@ const RUNTIME_ASSETS = [
   'Fix_Graft_Shell_Surfaces.tip.png',
   'Kill_Animation.png',
   'Kill_Animation.tip.png',
+  'Save_Morph_Snapshot.png',
+  'Save_Morph_Snapshot.tip.png',
+  'Apply_Morph_Snapshot.png',
+  'Apply_Morph_Snapshot.tip.png',
 ]
 
 // Bump this together with RUNTIME_VERSION whenever a runtime file legitimately
 // changes (this run prints the new value in the failure message).
 const EXPECTED_RUNTIME_HASH =
-  'fbe5505f5a094677f6e0fcdfc83a9924866ad326dbb95ec6d13c8be3b89aad71'
+  '08abdd1ac13bad70d6a5b63b25b78f2bc9527d074c2c29893802fcb0c4125561'
 
 function runtimeHash(): string {
   const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
@@ -976,5 +983,339 @@ describe('kill animation (DthKillAnimation.dsa)', () => {
     expect(kill.dthKillAnimSummary({ cleared: 812, keys: 9431, frames: 617 })).toBe(
       'Removed 9431 keys from 812 properties (617 frames of animation).',
     )
+  })
+})
+
+/**
+ * Morph snapshots (DthMorphSnapshot.dsa) — the pure half of the
+ * Save_/Apply_Morph_Snapshot pair.
+ *
+ * The Daz half (walking a figure, loading an asset) can't run here. What CAN,
+ * and what the whole feature rests on, is the rule that decides which dials a
+ * snapshot stores: a property's RAW value is what the dial itself holds, its
+ * evaluated value folds in every ERC contribution, and storing the evaluated one
+ * would apply each driver twice on replay. So the state reader is driven here
+ * against duck-typed properties, and the file layer against a fake DzFile.
+ */
+interface SnapProp {
+  raw: number
+  value: number
+  def: number
+  hasDefault: boolean
+  alias: boolean
+  active: boolean
+  driven: boolean
+}
+interface SnapFigureSpec {
+  label: string
+  short: string
+  rel: Array<string>
+  graft?: unknown
+}
+interface SnapshotModule {
+  dthMorphSnapSlug: (name: unknown) => string
+  dthMorphSnapDir: (dir: unknown) => string
+  dthMorphSnapPointerPath: (dir: string) => string
+  dthMorphSnapGender: (assetPath: unknown) => string
+  dthMorphSnapFigureSpec: (
+    plan: Array<{ genesis: string; figures: Array<SnapFigureSpec> }>,
+    genesis: string,
+    gender: string,
+  ) => SnapFigureSpec | null
+  dthMorphSnapState: (prop: unknown) => SnapProp
+  dthMorphSnapSaveSummary: (report: Record<string, unknown>) => string
+  dthMorphSnapApplySummary: (report: Record<string, unknown>) => string
+  dthMorphSnapLatest: (outDir: string) => { path: string; name: string; data: unknown } | null
+  dthMorphSnapWriteJson: (path: string, data: unknown) => boolean
+}
+
+const SNAPSHOT_EXPORTS =
+  'dthMorphSnapSlug, dthMorphSnapDir, dthMorphSnapPointerPath, dthMorphSnapGender, ' +
+  'dthMorphSnapFigureSpec, dthMorphSnapState, dthMorphSnapSaveSummary, ' +
+  'dthMorphSnapApplySummary, dthMorphSnapLatest, dthMorphSnapWriteJson'
+
+/** Load the snapshot runtime over an in-memory filesystem. Same canary as the
+ *  other loaders: only `print` plus the fakes, so a Daz API touched at LOAD time
+ *  throws here rather than failing silently inside Daz. */
+function loadSnapshot(files: Map<string, string> = new Map()): SnapshotModule {
+  const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
+  const src = readFileSync(join(dir, 'DthMorphSnapshot.dsa'), 'utf8')
+  class DzFile {
+    static ReadOnly = 1
+    static WriteOnly = 2
+    static Truncate = 4
+    ReadOnly = 1
+    WriteOnly = 2
+    Truncate = 4
+    path: string
+    constructor(path: string) {
+      this.path = path
+    }
+    open(mode: number) {
+      if ((mode & 2) !== 0) return true
+      return files.has(this.path)
+    }
+    read() {
+      return files.get(this.path) ?? ''
+    }
+    write(text: string) {
+      files.set(this.path, text)
+    }
+    close() {}
+  }
+  return runInNewContext(`${src}\n;({ ${SNAPSHOT_EXPORTS} })`, {
+    print: () => {},
+    DzFile,
+    JSON,
+    Math,
+    Number,
+    Date,
+    isNaN,
+    isFinite,
+  }) as SnapshotModule
+}
+
+/** A duck-typed DzFloatProperty: only the four probes the reader makes. */
+function fakeProp(over: {
+  raw?: number
+  value?: number
+  def?: number
+  noDefault?: boolean
+  alias?: boolean
+}): Record<string, unknown> {
+  const prop: Record<string, unknown> = {
+    isAlias: () => over.alias === true,
+    getValue: () => over.value ?? over.raw ?? 0,
+    getRawValue: () => over.raw ?? over.value ?? 0,
+  }
+  if (!over.noDefault) prop.getDefaultValue = () => over.def ?? 0
+  return prop
+}
+
+describe('morph snapshot (DthMorphSnapshot.dsa)', () => {
+  const snap = loadSnapshot()
+
+  describe('which dials count as SET', () => {
+    it('takes a dial the user moved off its default', () => {
+      const state = snap.dthMorphSnapState(fakeProp({ raw: 0.85 }))
+      expect(state.active).toBe(true)
+      expect(state.raw).toBe(0.85)
+    })
+
+    it('stores the RAW value, never the evaluated one', () => {
+      // The trap the whole design exists for: a driver at 1 also evaluates its
+      // driven morphs to non-zero. Recording 0.9 for a dial whose own value is
+      // 1 would replay the driver's contribution a second time.
+      const state = snap.dthMorphSnapState(fakeProp({ raw: 1, value: 1.9 }))
+      expect(state.raw).toBe(1)
+      expect(state.driven).toBe(true)
+      expect(state.active).toBe(true)
+    })
+
+    it('skips a purely DRIVEN morph — its driver is already in the list', () => {
+      const state = snap.dthMorphSnapState(fakeProp({ raw: 0, value: 0.87 }))
+      expect(state.active).toBe(false)
+      expect(state.driven).toBe(true)
+    })
+
+    it('is not fooled by a dial whose default is not zero', () => {
+      // FACS Detail Strength sits at 1 untouched; "differs from zero" would
+      // record it on every figure in the world.
+      expect(snap.dthMorphSnapState(fakeProp({ raw: 1, def: 1 })).active).toBe(false)
+      expect(snap.dthMorphSnapState(fakeProp({ raw: 0, def: 1 })).active).toBe(true)
+    })
+
+    it('assumes a default of 0 when the build will not report one, and says it did', () => {
+      const state = snap.dthMorphSnapState(fakeProp({ raw: 0.4, noDefault: true }))
+      expect(state.hasDefault).toBe(false)
+      expect(state.active).toBe(true)
+    })
+
+    it('reads an alias as nothing at all — it is a second name for a dial scanned elsewhere', () => {
+      const state = snap.dthMorphSnapState(fakeProp({ raw: 1, alias: true }))
+      expect(state.alias).toBe(true)
+      expect(state.active).toBe(false)
+    })
+
+    it('falls back to the evaluated value where getRawValue is missing', () => {
+      const state = snap.dthMorphSnapState({
+        isAlias: () => false,
+        getValue: () => 0.5,
+        getDefaultValue: () => 0,
+      })
+      expect(state.raw).toBe(0.5)
+      expect(state.active).toBe(true)
+    })
+
+    it('treats an unreadable value as 0 rather than writing NaN into the file', () => {
+      const state = snap.dthMorphSnapState({
+        isAlias: () => false,
+        getValue: () => Number.NaN,
+        getRawValue: () => Number.NaN,
+        getDefaultValue: () => 0,
+      })
+      expect(state.raw).toBe(0)
+      expect(state.active).toBe(false)
+    })
+
+    it('survives a property that answers nothing', () => {
+      expect(snap.dthMorphSnapState({}).active).toBe(false)
+      expect(snap.dthMorphSnapState(null).active).toBe(false)
+    })
+  })
+
+  describe('file naming', () => {
+    it('strips what Windows and Daz disagree about', () => {
+      expect(snap.dthMorphSnapSlug('Kira: "Hero" <v2>')).toBe('Kira_ _Hero_ _v2')
+      expect(snap.dthMorphSnapSlug('D:/Chars\\Kira')).toBe('D__Chars_Kira')
+    })
+
+    it('never yields an empty file name', () => {
+      expect(snap.dthMorphSnapSlug('   ')).toBe('snapshot')
+      expect(snap.dthMorphSnapSlug('')).toBe('snapshot')
+      expect(snap.dthMorphSnapSlug(undefined)).toBe('snapshot')
+    })
+
+    it('normalises the output folder the way every runtime writer does', () => {
+      expect(snap.dthMorphSnapDir('C:\\appdata\\morph-snapshots\\')).toBe(
+        'C:/appdata/morph-snapshots',
+      )
+      expect(snap.dthMorphSnapPointerPath('C:/appdata/morph-snapshots/')).toBe(
+        'C:/appdata/morph-snapshots/_last.json',
+      )
+    })
+  })
+
+  describe('which figure a snapshot rebuilds on', () => {
+    const PLAN = [
+      {
+        genesis: 'G8',
+        figures: [
+          { label: 'Genesis 8 Female', short: 'Female', rel: ['f.duf'] },
+          { label: 'Genesis 8 Male', short: 'Male', rel: ['m.duf'] },
+        ],
+      },
+      {
+        genesis: 'G9',
+        figures: [
+          { label: 'Genesis 9 + Golden Palace', short: 'with Golden Palace', rel: ['g9.duf'], graft: {} },
+          { label: 'Genesis 9 + Dicktator', short: 'with Dicktator', rel: ['g9.duf'], graft: {} },
+        ],
+      },
+    ]
+
+    it('reads the gender off the source figure’s asset file name', () => {
+      expect(snap.dthMorphSnapGender('d:/lib/data/.../genesis8female.dsf')).toBe('female')
+      expect(snap.dthMorphSnapGender('d:/lib/data/.../genesis8male.dsf')).toBe('male')
+      // Genesis 9 is gender-neutral, and an unreadable asset answers the same.
+      expect(snap.dthMorphSnapGender('d:/lib/data/.../genesis9.dsf')).toBe('')
+      expect(snap.dthMorphSnapGender('')).toBe('')
+    })
+
+    it('rebuilds a G8 snapshot on the matching gender', () => {
+      // 'female' CONTAINS 'male', so a substring match hands every male snapshot
+      // the female figure — the pick is word-anchored for exactly this.
+      expect(snap.dthMorphSnapFigureSpec(PLAN, 'G8', 'male')?.label).toBe('Genesis 8 Male')
+      expect(snap.dthMorphSnapFigureSpec(PLAN, 'G8', 'female')?.label).toBe('Genesis 8 Female')
+      // No gender recorded: the generation's first figure, never nothing.
+      expect(snap.dthMorphSnapFigureSpec(PLAN, 'G8', '')?.label).toBe('Genesis 8 Female')
+    })
+
+    it('drops the geograft — a snapshot is a set of dials, not a product list', () => {
+      const spec = snap.dthMorphSnapFigureSpec(PLAN, 'G9', '')
+      expect(spec?.rel).toEqual(['g9.duf'])
+      expect(spec?.graft).toBeUndefined()
+    })
+
+    it('answers null for a generation the plan does not carry, so nothing wrong gets built', () => {
+      expect(snap.dthMorphSnapFigureSpec(PLAN, 'G3', '')).toBeNull()
+      expect(snap.dthMorphSnapFigureSpec(PLAN, '', '')).toBeNull()
+    })
+  })
+
+  describe('the pointer to the last snapshot', () => {
+    const OUT_DIR = 'C:/appdata/morph-snapshots'
+
+    function seeded(): Map<string, string> {
+      return new Map([
+        [`${OUT_DIR}/_last.json`, JSON.stringify({ version: 1, file: 'Kira_Genesis9.json' })],
+        [
+          `${OUT_DIR}/Kira_Genesis9.json`,
+          JSON.stringify({ version: 1, genesis: 'G9', morphs: [{ name: 'body_bs_BodyTone' }] }),
+        ],
+      ])
+    }
+
+    it('resolves the pointer to the snapshot it names', () => {
+      const latest = loadSnapshot(seeded()).dthMorphSnapLatest(OUT_DIR)
+      expect(latest?.name).toBe('Kira_Genesis9.json')
+      expect(latest?.path).toBe(`${OUT_DIR}/Kira_Genesis9.json`)
+    })
+
+    it('reports NO snapshot when the pointer names a file housekeeping aged out', () => {
+      // The pointer is rewritten on every save, so it outlives the file it names
+      // — the apply side has to survive that rather than throw at the user.
+      const files = seeded()
+      files.delete(`${OUT_DIR}/Kira_Genesis9.json`)
+      expect(loadSnapshot(files).dthMorphSnapLatest(OUT_DIR)).toBeNull()
+    })
+
+    it('reports NO snapshot for a truncated file, never a half-read one', () => {
+      const files = seeded()
+      files.set(`${OUT_DIR}/Kira_Genesis9.json`, '{ "version": 1, "morphs": [')
+      expect(loadSnapshot(files).dthMorphSnapLatest(OUT_DIR)).toBeNull()
+    })
+
+    it('reports NO snapshot on a fresh install (no pointer at all)', () => {
+      expect(loadSnapshot(new Map()).dthMorphSnapLatest(OUT_DIR)).toBeNull()
+    })
+  })
+
+  describe('the reports the dialogs put in front of the user', () => {
+    it('says "nothing was written" instead of reporting a successful save of nothing', () => {
+      expect(snap.dthMorphSnapSaveSummary({ figure: 'Genesis 9', morphs: 0 })).toContain(
+        'nothing was written',
+      )
+    })
+
+    it('singularises, because the count is the whole receipt', () => {
+      expect(
+        snap.dthMorphSnapSaveSummary({ figure: 'Kira', genesis: 'G9', morphs: 1, driven: 0 }),
+      ).toBe('Saved 1 set dial from Kira (G9).')
+      expect(
+        snap.dthMorphSnapSaveSummary({ figure: 'Kira', genesis: 'G9', morphs: 128, driven: 902 }),
+      ).toContain('Saved 128 set dials from Kira (G9).')
+    })
+
+    it('NAMES the dials the target figure did not have, rather than counting them away', () => {
+      const summary = snap.dthMorphSnapApplySummary({
+        figure: 'Genesis 9',
+        applied: 120,
+        missed: ['Expand All  (Jacket)', 'Widen  (Boots)'],
+        failed: [],
+      })
+      expect(summary).toContain('Expand All  (Jacket)')
+      expect(summary).toContain('Widen  (Boots)')
+      expect(summary).not.toContain('Every dial in the snapshot took')
+    })
+
+    it('caps a long miss list and says how many it dropped', () => {
+      const missed = Array.from({ length: 20 }, (_, i) => `dial_${i}`)
+      const summary = snap.dthMorphSnapApplySummary({ figure: 'G9', applied: 1, missed, failed: [] })
+      expect(summary).toContain('... and 8 more')
+      expect(summary).not.toContain('dial_19')
+    })
+
+    it('says a figure was LOADED when it built one, so the scene change is never a surprise', () => {
+      expect(
+        snap.dthMorphSnapApplySummary({
+          figure: 'Genesis 9',
+          created: true,
+          applied: 128,
+          missed: [],
+          failed: [],
+        }),
+      ).toContain('Loaded Genesis 9 and applied 128 dials')
+    })
   })
 })

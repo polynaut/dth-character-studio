@@ -322,4 +322,21 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
     took — so "it works" confirms the PAIR, not `deleteAllKeys()` on its own.
     Keep both, and keep the read-back that turns a wrong assumption into a named
     failure rather than a silently still-animated scene.
+- **Reading a morph value back to REPLAY it means `getRawValue()`, never
+  `getValue()`.** `getValue(t)` is what the property evaluates to once every ERC
+  link feeding it has contributed; `getRawValue(t)` is what the dial itself
+  holds. They differ exactly when the property is DRIVEN — one shape control at 1
+  drives a hundred underlying morphs whose own raw value never leaves 0 — so
+  writing evaluated values onto another figure applies each driver's contribution
+  a SECOND time (the driver still drives there), and the result is a distorted
+  copy rather than the same character. Not measured fresh: it is what the shipped
+  runtime already encodes — `DthScanFrames.dsa` prints a diagnostic wherever the
+  two disagree, and `memorizeBaseMorphs`' comment in `DthUtils.dsa` records the
+  same double-apply as a fixed bug at a group boundary. Two corollaries for
+  anything scanning dials: **"is this dial set" is raw ≠ DEFAULT, not raw ≠ 0**
+  (FACS Detail Strength sits at 1 untouched — the ROM runtime's own
+  `setPropertyByName` comment names it), and `getDefaultValue()` is the probe to
+  feature-detect for it, falling back to an ASSUMED 0 that the run then has to
+  admit to. `DthMorphSnapshot.dsa` is the worked example (unit-tested against
+  duck-typed properties in `runtime.test.ts`).
 
