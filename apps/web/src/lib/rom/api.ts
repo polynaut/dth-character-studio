@@ -246,6 +246,7 @@ export {
   fetchCachedHoudiniScans,
   fetchHoudiniProjectStatus,
   fetchHoudiniSourceRecents,
+  fetchMaterialPlan,
   forgetHoudiniSource,
   rememberHoudiniSource,
   scanCharacterHoudiniProjects,

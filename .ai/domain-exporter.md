@@ -719,6 +719,48 @@ Part of the domain reference — `.ai/domain.md` is the index.
   folders survive, failed deletes stay recorded for retry. Clearing
   `exportPath` deletes nothing (those are the user's last exports), it only
   drops the record.
+- **The Daz-side `.dth` carries the whole MATERIAL description, and nothing read
+  it until v0.80.** MEASURED 2026-08-14 on a real export (LaraCroft_G81, `DTH
+  Version` 2.0.2, 607 KB): alongside the import paths it holds `Materials[]` —
+  one entry per Daz SURFACE — plus a flat `Discovered Textures` index (exactly
+  the union of the per-property textures, no extra information). Each entry:
+  `Asset Name` (`Boots_12736`) / `Asset Label`, `Material Name` (`boots`),
+  `Material Type` (the Daz shader — `Iray Uber`, `PBRSkin`), `Value` (the Daz
+  CONTENT TYPE — `Actor/Character`, `Follower/Wardrobe`,
+  `Follower/Attachment/Head/Face/Tears`; the key name says nothing about what it
+  holds) and `Properties[]`, EVERY channel the shader has (117 on an Iray Uber
+  surface) with `Name`/`Label`/`Value`/`Data Type`/`Texture` — the handful with a
+  non-empty `Texture` are the mapped ones.
+  **`Material Name` IS the surface a DazToHueMaterial slot claims**: verified by
+  comparing that export against its own scanned `.hiplc` — 26 claims, exact
+  string equality on every one present in both. `surfaceClaim` (`material-plan.ts`)
+  is the single place that spelling lives. NOT verified: whether a name ever
+  needs escaping on its way into the FBX. Every name measured survives verbatim
+  (underscores, mixed case), but none needing a transform has been seen — so a
+  mismatch is reported, never repaired by guessing.
+  Consequence: a material setup can be PROPOSED from a file already on disk —
+  no Daz-side scan, no hython, no `.hip` opened. The grouping needs no heuristic
+  either, because `Value` is vendor-authored (the one exception is the eye
+  stack, which is `Actor/Character` like the body and needs its own material —
+  that is a NAME heuristic and is marked as such in `slotNameFor`). What CANNOT
+  be derived: a baker built from a constant rather than a map. A real
+  `T_Skin_Roughness` exists in a project whose export has no roughness texture on
+  any surface, so a texture-derived proposal is partial BY CONSTRUCTION and must
+  never be presented as a finished setup.
+  Read by the Utils drawer's **Export check** tab (read-only in v0.80):
+  `material-plan.ts` (pure) + `fetchMaterialPlan` (api/houdini-material.ts).
+  Two scoping rules it must keep:
+  1. **The scan records `imports` per PROJECT, not per node**, so a project
+     importing several `.dth`s cannot have a material node attributed to a
+     scene — `canDiffProject` refuses rather than blaming the wrong node.
+     Per-node attribution needs a Python change (walk the material node's
+     network to its own DazToHueImport); nothing does it today.
+  2. **Stored import paths are lowercased for COMPARISON and must not be
+     opened.** `_scene_dth_imports` normalizes + lowercases; reading that back
+     works only because NTFS folds case. `fetchMaterialPlan` matches the stored
+     spelling against `sceneDthPath` and opens the studio's OWN spelling (the
+     same key `op_prefill` matches a network on), falling back to the stored one
+     for an import the studio did not write.
 - **The Unreal-side `.dth` is a JSON manifest naming its own outputs**
   (MEASURED on three real exports, `dth_version` 2.5): keys `character_name`,
   `skinning_method`, `source_skeleton`/`target_skeleton`, and the collections

@@ -234,14 +234,16 @@ export function nodeLabel(node: MaterialNodeInfo): { primary: string; secondary:
 
 /**
  * The drawer's tabs. `general` acts on the project FILES themselves — the
- * per-project Houdini settings the studio knows the right value for; the other
- * two transfer a NODE KIND between projects.
+ * per-project Houdini settings the studio knows the right value for; the
+ * NodeKind ones transfer a node kind between projects; `exportCheck` judges the
+ * material setup against the export the project imports and writes nothing at
+ * all (it is the only tab with no action, which is why it carries no node kind).
  *
  * `general` leads and opens first: it is the tab that answers "is this project
  * healthy?", it needs no second project picked to be useful, and every one of
  * its findings comes free with the scan the drawer runs anyway.
  */
-export type DrawerTab = NodeKind | 'general'
+export type DrawerTab = NodeKind | 'general' | 'exportCheck'
 
 /** The file-level actions of the General tab. One report slot is shared between
  *  them — see {@link ActionReport}.

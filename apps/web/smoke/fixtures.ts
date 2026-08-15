@@ -238,6 +238,128 @@ export const DUF = {
 /** Frame lengths the fake `pose_asset_frames` measures for each block. */
 export const FRAMES = { base: 328, mouth: 21, gp: 104, dk: 54, phys: 21 }
 
+// ── The Export check world ───────────────────────────────────────────────────
+// Shared by the behaviour spec (houdini-export-check.smoke.ts) and the guide
+// screenshot, because the shot has to show the state the spec asserts — a
+// second copy of this data would let the picture in the guide drift away from
+// the behaviour that is actually tested.
+//
+// Trimmed from LaraCroft_G81's own export and the claims of its own `.hiplc`:
+// a skin slot still claiming two Golden Palace surfaces after the graft was
+// removed from the scene, and wardrobe the setup never covered.
+
+/** A slot/layer claim, in the plain-text form DazToHue binds by. */
+export const claim = (surface: string) => `@fbx_material_name=${surface}`
+
+/** The `.dth` the demo project's network imports — the primary scene exports
+ *  into a folder named after the scene. The scan stores this path lowercased
+ *  and normalized (what the drawer looks it up by); the api opens the studio's
+ *  own spelling, which is what a seed writes. */
+export const EXPORT_CHECK_DTH = `${P.exportDir}/KiraDefault_G9_GP/Kira.dth`
+
+/** Figure surfaces, the eye stack, and two wardrobe assets — enough to exercise
+ *  every branch of the grouping rule. */
+export const EXPORT_CHECK_DTH_BODY = {
+  'DTH Version': '2.0.2',
+  'Character Name': 'Kira',
+  Materials: [
+    ...['Body', 'Face'].map((name) => ({
+      'Asset Name': 'Genesis9',
+      'Material Name': name,
+      'Material Type': 'Iray Uber',
+      Value: 'Actor/Character',
+      Properties: [
+        { Name: 'Diffuse Color', Texture: `$DAZLIB/${name.toLowerCase()}_d.jpg` },
+        { Name: 'Bump Strength', Texture: `$DAZLIB/${name.toLowerCase()}_b.jpg` },
+      ],
+    })),
+    {
+      'Asset Name': 'Genesis9',
+      'Material Name': 'Pupils',
+      'Material Type': 'PBRSkin',
+      Value: 'Actor/Character',
+      Properties: [{ Name: 'Diffuse Color', Texture: '$DAZLIB/eyes_d.jpg' }],
+    },
+    {
+      'Asset Name': 'Boots_12736',
+      'Material Name': 'boots',
+      'Material Type': 'Iray Uber',
+      Value: 'Follower/Wardrobe',
+      Properties: [
+        { Name: 'Diffuse Color', Texture: '$DAZLIB/boots_d.jpg' },
+        { Name: 'Normal Map', Texture: '$DAZLIB/boots_n.jpg' },
+      ],
+    },
+  ],
+}
+
+/** The material node as the scan records it: a skin slot whose Golden Palace
+ *  claims outlived the graft, and a baker layer naming one of them. */
+export const EXPORT_CHECK_NODE = {
+  path: '/obj/DazToHue/DazToHueMaterial',
+  name: 'DazToHueMaterial',
+  nodeType: 'material',
+  networkBox: 'KiraDefault',
+  materials: 1,
+  uvChannels: 1,
+  bakers: 2,
+  layers: 8,
+  bakerNames: ['T_Skin_Colour', 'T_Skin_Normal'],
+  bakerGroups: [claim('Body'), claim('GPTorso')],
+  materialNames: ['MI_Skin', 'Skin'],
+  slots: [
+    {
+      name: 'Skin',
+      displayName: 'MI_Skin',
+      surfaces: [claim('Body'), claim('Face'), claim('GPTorso'), claim('GPVagina')],
+      bakers: 2,
+      layers: 8,
+      channelUvs: ['uv_geoshell'],
+    },
+  ],
+  sectionCounts: [],
+}
+
+/** Where a seeded scan store for the demo character lives. */
+export const EXPORT_CHECK_STORE = `${P.project}/.dcsmeta/characters/Kira/houdini-scan.json`
+
+/** The scan store as JSON, with `over` merged into the project record so a spec
+ *  can vary one fact (the imports, say) without restating the world. */
+export function exportCheckStore(over: Record<string, unknown> = {}): string {
+  return JSON.stringify({
+    version: 1,
+    projects: {
+      [P.houdini.toLowerCase()]: {
+        key: scanStoreEntryKey(P.houdini, P.exportDir),
+        scannedAt: '2026-08-14T00:00:00.000Z',
+        project: {
+          hipPath: P.houdini,
+          ok: true,
+          error: '',
+          nodes: [EXPORT_CHECK_NODE],
+          job: P.charFolder,
+          fps: 30,
+          imports: [EXPORT_CHECK_DTH.toLowerCase()],
+          exportSets: ['Kira'],
+          refs: { collapsible: 0, foreign: 0, broken: [], hipRelative: [], missingTextures: [] },
+          prefill: { fillable: [], missing: [] },
+          ...over,
+        },
+      },
+    },
+  })
+}
+
+/** Stamp the store's `__MTIME__` placeholder from inside the page — the fake
+ *  stamps its world when it is installed, so this can only run after that. */
+export async function stampScanStore(page: Page, storePath = EXPORT_CHECK_STORE) {
+  await page.addInitScript((path: string) => {
+    const mock = (window as unknown as { __tauriMock: { files: Map<string, unknown>; mtimeMs: number } }).__tauriMock
+    const raw = mock.files.get(path) as string
+    mock.files.set(path, raw.replace('__MTIME__', String(mock.mtimeMs)))
+  }, storePath)
+}
+
 /** A linked Unreal project for the project-window footer-bar screenshot. */
 export const UPROJECT = 'D:/Unreal Projects/DemoGame/DemoGame.uproject'
 /** A realistic DAZ Install Manager manifests folder for the Daz-Products docs. */

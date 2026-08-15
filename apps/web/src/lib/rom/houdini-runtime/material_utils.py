@@ -1068,6 +1068,7 @@ def _blank_info(node, kind):
         "bakers": 0,
         "layers": 0,
         "bakerNames": [],
+        "bakerGroups": [],
         "materialNames": [],
         "slots": [],
         "sectionCounts": [],
@@ -1094,7 +1095,7 @@ def _node_info(node):
         return info
 
     payload = _export_section(node, SECTION_BY_KEY["bakers"])
-    names, _, _, layers, _ = _baker_summary(payload)
+    names, _, groups, layers, _ = _baker_summary(payload)
     info = _blank_info(node, "material")
     info.update(
         {
@@ -1103,6 +1104,16 @@ def _node_info(node):
             "bakers": len(names),
             "layers": layers,
             "bakerNames": names,
+            # The geometry groups the baker LAYERS name, deduped and sorted.
+            # `_baker_summary` has always computed these and this function threw
+            # them away — which left the SECOND half of a stale setup invisible.
+            # A slot's `material_group` claiming a surface the scene no longer
+            # has is visible in `slots`; a LAYER naming that group is not, and it
+            # is the half that silently bakes nothing (measured: removing a
+            # Golden Palace graft leaves both behind, and Houdini reports
+            # neither). Sorted rather than in layer order — this answers "which
+            # groups does this setup depend on", not "which layer is which".
+            "bakerGroups": sorted(groups),
             "materialNames": sorted(_material_names(node)),
             "slots": _material_slots(node, payload),
         }

@@ -12,6 +12,9 @@ on another project, open its own card's Utils. (The one exception is the
 - **General** — the health check of the project itself, and the repairs for
   what it finds. The tab it opens on, and the only one useful without a source
   project picked.
+- **Export check** — this project's material setup held against the DTH Export
+  it imports: which claims still bind to a surface that exists, and what a setup
+  built from that export alone would look like. Read-only.
 - **Material**, **Skeleton**, **Occlusion** and **Groom occlusion** — copy a
   node's **complete setup** from one project into another. One tab per DazToHue
   node kind, because a setup belongs to its node: the material tab carries
@@ -435,6 +438,95 @@ there. hython reads the shelves from the Houdini **documents folder** in
 Settings, so that list is usually the fastest way to see that DazToHue isn't
 installed for the Houdini version the studio is pointed at.
 
+## The Export check tab
+
+Every DTH Export writes a **`Materials` list** into the `.dth` the HDA imports —
+one entry per Daz surface, carrying the asset that owns it, the Daz content type
+and every channel with its texture path. This tab reads that list and holds it
+against what this project's material nodes actually claim.
+
+**Nothing here is written.** No hython runs, no `.hip` is opened: both inputs are
+already on disk — the stored scan and the export the project imports — so the tab
+costs nothing to open and cannot damage a project.
+
+<p align="center">
+  <img width="900" alt="the Export check tab: a node's claims measured against the export, and the setup that export implies" src="screenshots/houdini-utils-export-check.png" />
+  <br>
+  <sub><em>Each material node against the export it imports — and, below, the setup that export alone implies.</em></sub>
+</p>
+
+### Does this setup still match the scene?
+
+A DazToHue material slot claims Daz surfaces by **plain text**
+(`@fbx_material_name=Body`), and so does every texture baker **layer**. Nothing
+re-binds those claims when the scene changes: swap a graft out, drop an outfit,
+and they go on naming surfaces the scene no longer exports. Measured on DazToHue
+2.5, a baker layer in that state **finishes normally and bakes nothing** —
+neither Houdini nor the HDA reports it.
+
+Each material node gets four rows:
+
+| Row | What it means |
+| --- | --- |
+| **Claims backed by the export** | slot claims naming a surface the export contains — the ones that work |
+| **Claims the export does not back** | *dead*: the slot names a surface this scene no longer has, so it merges nothing. Each is listed as the surface and the slot holding it |
+| **Baker layer groups the export does not back** | *dead*: the layer's geometry group names a surface that is gone, so **that layer bakes nothing** — the silent failure above |
+| **Surfaces with no material** | surfaces the export contains that no slot claims, grouped by Daz content type |
+
+**The last row is never flagged**, deliberately. Whether an unclaimed surface is
+a defect depends on what the node is *for* — a "naked" variant node is supposed
+to leave its wardrobe unclaimed — so they are grouped by content type
+(`Actor/Character`, `Follower/Wardrobe`) and left for you to read, rather than
+badged as a problem the studio cannot actually judge.
+
+A layer group in a vocabulary this can't judge — the geoshell group field rides
+the same list, and its vocabulary has never been measured here — is reported as
+**not judged** rather than counted as dead or alive.
+
+### What a setup built from this export would look like
+
+**Setup the export implies** is the second half: the slots, the surfaces each
+would claim, and the bakers the textures imply.
+
+The grouping needs no heuristic, because the Daz **content type** is
+vendor-authored — the figure and its wardrobe are already labelled in the export.
+Bakers are named the way real projects already name them —
+`T_<Slot>_<Channel>`, so `T_Skin_Colour`, `T_Clothing_Normal` — one per channel
+that actually carries a texture.
+
+Wardrobe is the one genuine choice, so it is a toggle — both shapes exist in real
+setups:
+
+- **One clothing slot** — the whole outfit merges into one material.
+- **One slot per garment** — each garment gets its own.
+
+Two things a proposed slot can say in amber: **unmapped channels** (a texture
+whose Daz channel has no baker equivalent here — shown rather than dropped,
+because "there is a texture we don't know where to put" is worth knowing), and a
+slot that **mixes shaders**, which will not bake as one material.
+
+> **A proposal read from textures is partial by construction.** A baker built
+> from a constant rather than a map leaves no texture path in the export, so it
+> cannot be recovered from one. What you get is the part the export accounts
+> for, not the whole setup.
+
+Generating that proposal into a node is a separate step and is **not** part of
+this release: the tab shows you the shape, you build it.
+
+### When it can't answer
+
+A missing input is said plainly rather than shown as a clean result:
+
+- **not scanned yet** — the project hasn't been read; **Rescan** on the General
+  tab does it.
+- **no export at …** — run a DTH Export for that scene once and the setup can be
+  read from it.
+- **carries no material list** — the export predates the DTH version that writes
+  one.
+- **this project imports *n* scenes** — the scan records imports per project
+  rather than per network, so the studio cannot tell which material node belongs
+  to which scene. It refuses rather than guess.
+
 ## Scanning
 
 Like [Generate project](./06-into-houdini.md#generate-the-houdini-project-automatically),
@@ -443,9 +535,10 @@ and its matching documents folder in Settings. The drawer scans the one project
 it was opened on — when it opens and again after a run — and only when something
 that project depends on changed, so coming back to one nobody touched costs
 nothing. Reading a `.hip` the first time takes a few seconds; a transfer
-rewrites it, so it is read once more afterwards. One scan serves all three
-tabs — the `$JOB` and `$HIP` values are read in the same pass as the nodes — so
-switching between General, Material and Skeleton is instant.
+rewrites it, so it is read once more afterwards. One scan serves every tab — the
+`$JOB` and `$HIP` values are read in the same pass as the nodes — so switching
+between them is instant. (**Export check** adds one thing on top: it reads the
+export itself, and only while you are on that tab.)
 
 **Installing a new DazToHue invalidates it.** What the scan remembers depends on
 the DazToHue libraries hython loads, not only on the `.hip` — so installing,
@@ -453,6 +546,14 @@ updating or removing an `.hda` in the paired preferences folder re-reads every
 project that depended on it. Without that, a verdict phrased in the *old*
 release's vocabulary outlives the install that replaced it: a freshly installed
 DazToHue would keep being reported as the one it replaced.
+
+**So does a studio update that asks the scan a new question.** A stored answer
+only holds what the version that wrote it thought to record, so when an update
+starts reading something new out of a project — the baker layer groups the
+[Export check](#the-export-check-tab) needs, say — every stored answer is retired
+and re-earned. The first look at a project after such an update is therefore a
+real read rather than a cache hit, and a row that is briefly empty there is the
+rescan, not a finding.
 
 **Rescan re-reads the project.** The button bypasses the cache and opens the
 `.hip` with hython again, then says so — so a verdict you believe is wrong has

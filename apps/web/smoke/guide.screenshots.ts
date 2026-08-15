@@ -1,6 +1,20 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
 
-import { buildSeed, DIM_FOLDER, P, UPROJECT, fakeDll, prime, settle, type SeedOptions } from './fixtures.ts'
+import {
+  EXPORT_CHECK_DTH,
+  EXPORT_CHECK_DTH_BODY,
+  EXPORT_CHECK_STORE,
+  buildSeed,
+  DIM_FOLDER,
+  exportCheckStore,
+  P,
+  UPROJECT,
+  fakeDll,
+  prime,
+  settle,
+  stampScanStore,
+  type SeedOptions,
+} from './fixtures.ts'
 
 // Documentation screenshots for docs/guide/*. Reuses the smoke Tauri fake +
 // fixture world (one project "Demo", one character "Kira"). Each `test`
@@ -629,6 +643,28 @@ test('houdini-utils-recent-sources', async ({ page }) => {
   await source.getByText('Recently used').waitFor()
   await source.evaluate((el) => el.scrollIntoView({ block: 'center' }))
   await shoot(page, join(OUT, 'houdini-utils-recent-sources.png'), source)
+})
+
+test('houdini-utils-export-check', async ({ page }) => {
+  // The Export check tab reads two files and nothing else, so the shot needs
+  // both seeded: the scan store (the node's claims and baker groups) and the
+  // export those claims are measured against. Both come from the SAME fixture
+  // the behaviour spec uses — the guide must not show a state nothing tests.
+  const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true, houdiniProject: true })
+  seed.files[EXPORT_CHECK_DTH] = JSON.stringify(EXPORT_CHECK_DTH_BODY)
+  seed.files[EXPORT_CHECK_STORE] = exportCheckStore()
+  await prime(page, seed)
+  await stampScanStore(page)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+  await page.getByRole('button', { name: /^Utils/ }).first().click()
+  const drawer = page.getByRole('dialog')
+  await drawer.getByRole('tab', { name: 'Export check' }).click()
+  // The plan landed once the verdict rows are on screen — the dead claims are
+  // the finding the tab exists for, so frame nothing until they are there.
+  await drawer.getByText('this layer bakes nothing').waitFor()
+  await shoot(page, join(OUT, 'houdini-utils-export-check.png'), drawer)
 })
 
 test('dth-export-panel', async ({ page }) => {

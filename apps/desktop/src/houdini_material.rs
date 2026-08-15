@@ -90,6 +90,17 @@ pub struct MaterialNodeInfo {
     pub layers: u32,
     /// Each baker's name, in order (`T_Skin_Colour`, …).
     pub baker_names: Vec<String>,
+    /// The geometry groups the baker LAYERS name, deduped and sorted
+    /// (`@fbx_material_name=Body`). A layer binds to its group by plain text, so
+    /// a group naming a surface the scene no longer exports bakes nothing and
+    /// raises nothing — this is what makes that visible.
+    ///
+    /// `#[serde(default)]` for the same reason `hip_relative` carries it: the
+    /// Python's failed-load fallback has omitted a key before, and serde runs
+    /// FIRST here, so a missing one would fail the whole report — taking every
+    /// other project in the scan down with one unreadable `.hip`.
+    #[serde(default)]
+    pub baker_groups: Vec<String>,
     /// Every material slot name, with and without the node's prefix — used to
     /// tell whether a transferred baker's material exists here.
     pub material_names: Vec<String>,

@@ -50,6 +50,11 @@
             "T_Skin_Colour",
             "T_Skin_Normal"
           ],
+          "bakerGroups": [
+            "@fbx_material_name=Body",
+            "@fbx_material_name=Dress",
+            "@fbx_material_name=GPTorso"
+          ],
           "materialNames": [
             "MI_Skin",
             "Skin"
@@ -92,6 +97,7 @@
           "bakers": 0,
           "layers": 0,
           "bakerNames": [],
+          "bakerGroups": [],
           "materialNames": [],
           "slots": [],
           "sectionCounts": [

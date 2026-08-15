@@ -156,8 +156,14 @@ export function scanCacheKey(
  *     scan, which is a legitimate value ("no export nodes") and therefore would
  *     have been served forever. A version is owed for a scan that starts
  *     answering CORRECTLY, not only for one that starts answering at all.
+ * 7 — + `bakerGroups` — the geometry groups each baker LAYER names. The scan
+ *     already read them (`_baker_summary`'s third return value) and threw them
+ *     away, so a v6 entry cannot answer "does this setup still reference a
+ *     surface the scene no longer has" at all. `[]` there is a legitimate value
+ *     (a node with no bakers has no groups), which makes it indistinguishable
+ *     from "never asked" — the same trap as 5, so the same answer.
  */
-export const SCAN_ANSWER_VERSION = 6
+export const SCAN_ANSWER_VERSION = 7
 
 /**
  * Fold the installed operator libraries into one comparable string — name, mtime
