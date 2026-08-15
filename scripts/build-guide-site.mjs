@@ -42,6 +42,7 @@ const NAV = [
       '03-first-project.md',
       '04-first-character.md',
       '05-rom-in-daz.md',
+      'dth-export.md',
       '06-into-houdini.md',
     ],
   },
@@ -50,7 +51,9 @@ const NAV = [
     pages: [
       'custom-morphs.md',
       'advanced.md',
+      'bundled-scripts.md',
       'houdini-utils.md',
+      'houdini-project-checks.md',
       'tools.md',
       'attachments.md',
       'product-scanning.md',

@@ -42,9 +42,12 @@ With it empty, nothing is scanned — there would be nothing to match against.
 ## Show the Products tab (per project)
 
 **Settings → Project → Show the Daz Products tab** decides whether this project's
-characters get a **Products** tab. That is *all* it decides — the scanning and
-the filing happen either way, so turning the tab on later shows you results
-that were already collected.
+characters get a **Products** tab. It does not decide whether scanning happens:
+every export run scans the scene it just built either way, so turning the tab on
+later shows you results that were already collected. What it *also* switches off
+is the two things you would start by hand — the per-character
+[`Scan_Products_<Name>` script](#when-a-scan-happens) and the product pass in
+Tools → Scan project.
 
 <p align="center">
   <img width="900" alt="Settings → Project → Show the Daz Products tab" src="screenshots/settings-daz-products.png" />
@@ -61,9 +64,22 @@ that were already collected.
   covers every scene of every character in one unattended batch.
 - **By hand**, for a one-off scene: open the scene in Daz Studio and run
   **`Scan_Products_<Name>`** from the Content Library (installed beside the ROM
-  script under `Scripts/DTH-Character-Studio/<Project>/<Character>/`). The studio
-  picks that up next time you open the character — or press **Check for new
-  results** on the Products tab.
+  script under `Scripts/DTH-Character-Studio/<Project>/<Character>/`, with its own
+  Content Library tile like the ROM and Export scripts). The studio picks that up
+  next time you open the character —
+  or press **Check for new results** on the Products tab.
+
+  That script is the one thing the **Products tab toggle** does decide besides the
+  tab: with it off, the script isn't generated and
+  [Tools → Scan project](./tools.md#tab-1--scan-amp-index) refuses its product
+  pass. The scan that runs with every export is armed by the manifests folder
+  alone, and keeps filing results regardless.
+
+  A script's tiles are written when the character is **saved**, so a character you
+  haven't touched picks its artwork up on the next Save — or all at once via
+  [Tools → Refresh assets](./tools.md#tab-3--refresh-assets). Turning Daz Products
+  off retires the tiles along with the script, rather than leaving artwork behind
+  pointing at something that no longer exists.
 
 &nbsp;
 

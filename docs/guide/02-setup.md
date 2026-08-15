@@ -53,7 +53,7 @@ after activating, keeping the values.
 
 Skip this unless you have **two** Daz Studios installed.
 
-The [DTH Export batch](./05-rom-in-daz.md#batch-export--dth-export) is the one
+The [DTH Export batch](./dth-export.md) is the one
 thing that needs the **Runner plugin**, and a Daz plugin is built against a
 single Studio major version. So moving to a brand-new Daz Studio used to mean
 waiting for a Runner build before you could export at all — or putting the whole
@@ -88,7 +88,7 @@ export pointed at a folder that isn't there.
 
 > [!NOTE]
 > Don't confuse this with the **Export only** *mode* inside the
-> [DTH Export panel](./05-rom-in-daz.md#batch-export--dth-export). That one
+> [DTH Export panel](./dth-export.md). That one
 > decides *what* a batch does (export the saved ROM animations without
 > rebuilding them); this switch decides *which Daz Studio* runs it.
 
@@ -179,7 +179,7 @@ Daz Studio it finds on this machine:
   the studio at its release folder;
 - the **DTH Character Studio Runner** (ships inside the app, nothing to
   download), which lets the studio drive Daz: the
-  [**DTH Export** batch](./05-rom-in-daz.md#batch-export--dth-export),
+  [**DTH Export** batch](./dth-export.md),
   [**Tools → Scan & index → Scan project**](./tools.md#tab-1--scan-amp-index),
   [**Import from Daz scene**](./05-rom-in-daz.md), and opening scenes in an
   already-running Daz all go through it.

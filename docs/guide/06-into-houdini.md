@@ -25,7 +25,7 @@ In your DazToHue network, point the **PoseAsset** import at the character's
 `_pose_asset.csv` and the geometry import at the exported `.abc`/`.dth`.
 
 Wire the network once — from then on the studio can run it for you: pick the
-project in [**DTH Export**](./05-rom-in-daz.md#batch-export--dth-export) and it
+project in [**DTH Export**](./dth-export.md) and it
 runs the DazToHue exports for the scenes in scope, headless in the background —
 with **Skip Daz — use last exports** for a Houdini-only pass.
 
@@ -147,12 +147,17 @@ nothing waits on Houdini and a project you haven't touched since costs nothing t
 re-check. Projects linked from **outside** the character folder are left alone —
 those are yours, and the studio has no `$JOB` expectation for them.
 
-While a project is actually being read, the card's **orange left bar lights
-up** — a brighter glint sweeps down the stripe — because reading one means
-opening the whole scene in Houdini, which takes a while. Only the projects
-being re-read show it: a project that hasn't changed is answered from the cache
-without starting Houdini at all, so a still bar means "nothing to do", not "not
-checked yet". The card stays usable throughout.
+While a project is actually being read, the card's **orange left bar animates** —
+diagonal stripes travelling along it — because reading one means opening the
+whole scene in Houdini, which takes a while. Only the projects being re-read show
+it: a project that hasn't changed is answered from the cache without starting
+Houdini at all, so a still bar means "nothing to do", not "not checked yet". The
+card stays usable throughout.
+
+**Reduced motion slows the stripes rather than stopping them.** A loading
+indicator that has stopped moving says nothing at all — the stripes would still
+be drawn and would simply read as decoration — so a system with animations turned
+off gets the same bar at a third of the speed.
 
 A project that needs attention gets a **Needs attention** marker on its card,
 with the reason in the tooltip:
@@ -167,12 +172,13 @@ with the reason in the tooltip:
 | baker textures are missing | a material baker's layer texture names a file that is no longer on disk — usually a Daz product that was uninstalled |
 
 All but the last are repaired from the
-[**Utils** drawer's *General* tab](./houdini-utils.md#the-general-tab)
+[**Utils** drawer's *General* tab](./houdini-project-checks.md#the-general-tab)
 (**Repair project settings**, **Make paths portable**, **Fill network**) — which
 is exactly what makes **copying** a project workable: a copy arrives carrying the
 source's `$JOB` and file references, the card tells you so, and three buttons fix
-it. That drawer also copies a **material or skeleton setup** from one project
-into another; it has [its own page](./houdini-utils.md).
+it. That drawer's other tabs
+[copy a material or skeleton setup](./houdini-utils.md) from one project into
+another.
 
 **The missing texture has no repair button, deliberately** — putting the file
 back is a reinstall, outside the app. It earns the badge anyway: it is the one
@@ -230,7 +236,7 @@ pick up changes.
 ## Send to Unreal
 
 Sending happens in **one** place: the
-[DTH Export panel](./05-rom-in-daz.md#batch-export--dth-export)'s **Unreal
+[DTH Export panel](./dth-export.md)'s **Unreal
 projects** section, so a full **Daz → Houdini → Unreal** run is one Start. To
 send an export you already have without running anything, pick **Skip Daz — use
 last exports** and **Skip Houdini — use last exports**: then the whole run is

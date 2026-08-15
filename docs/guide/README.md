@@ -33,9 +33,17 @@ None of these are needed to generate a ROM:
 - [Advanced character options](./advanced.md) — multiple Daz scenes on one
   character (outfits, per-scene hair, per-scene overrides), and driving extra
   morphs off bone rotations (Modify JCM frames).
+- [The DTH Export batch](./dth-export.md) — the one button that runs the whole
+  round trip: Daz builds and exports every scene you pick, Houdini follows, and
+  the result can be queued for re-import into Unreal.
+- [Bundled fix-it scripts](./bundled-scripts.md) — the two Daz scripts you run
+  by hand: freeing a geograft trapped under a Golden Palace / Dicktator shell,
+  and rescuing an old scene that is only a baked ROM animation.
 - [The Utils drawer](./houdini-utils.md) — the Houdini project card's 🔧:
-  checking and repairing a project's `$JOB` and paths, and copying a material or
-  skeleton setup from one project into another.
+  copying a material, skeleton or occlusion setup from one project into another.
+- [Project checks and repairs](./houdini-project-checks.md) — the drawer's other
+  half: a project's `$JOB`, timeline, paths and blank DazToHue parameters
+  checked, and put right.
 - [The Tools page](./tools.md) — one-click **Scan & index** of a project (the
   morph/bone index behind the autocompletes), installing/maintaining your own
   Daz & Houdini content, deduplicating downloads, and refreshing generated
