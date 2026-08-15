@@ -322,7 +322,12 @@ export function planMaterialSetup(
         pushUnique(slot.unmappedChannels, channel.daz)
         continue
       }
-      const key = `${name} ${channel.channel}`
+      // Slot + channel, joined by a separator neither can contain: U+0000,
+      // written as a unicode ESCAPE and never as a raw byte. A literal NUL
+      // makes this whole file `binary` to ripgrep, so every repo-wide grep
+      // silently skips it — the file goes missing rather than reporting a
+      // match. (It did, until 2026-08-15.)
+      const key = `${name}\u0000${channel.channel}`
       let set = textures.get(key)
       if (!set) {
         set = new Set()
@@ -335,7 +340,7 @@ export function planMaterialSetup(
 
   for (const slot of slots.values()) {
     for (const baker of slot.bakers) {
-      baker.textures = [...(textures.get(`${slot.name} ${baker.channel}`) ?? [])]
+      baker.textures = [...(textures.get(`${slot.name}\u0000${baker.channel}`) ?? [])]
     }
   }
   return [...slots.values()]

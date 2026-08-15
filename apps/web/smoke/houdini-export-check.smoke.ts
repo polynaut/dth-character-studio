@@ -1,6 +1,14 @@
 import { expect, test } from '@playwright/test'
 
-import { P, buildSeed, scanStoreEntryKey } from './fixtures.ts'
+import {
+  EXPORT_CHECK_DTH,
+  EXPORT_CHECK_DTH_BODY,
+  EXPORT_CHECK_STORE,
+  P,
+  buildSeed,
+  exportCheckStore,
+  stampScanStore,
+} from './fixtures.ts'
 import { installTauriMock } from './tauri-mock.ts'
 
 import type { Page } from '@playwright/test'
@@ -14,116 +22,19 @@ import type { Page } from '@playwright/test'
 // the half of the material story that can ship without being able to write
 // anything.
 //
-// The fixture is real, trimmed from LaraCroft_G81's own export and the claims of
-// its own `.hiplc`: a skin slot still claiming two Golden Palace surfaces after
-// the graft was removed from the scene, and wardrobe the setup never covered.
-
-const STORE = `${P.project}/.dcsmeta/characters/Kira/houdini-scan.json`
-/** The `.dth` the network imports — the demo character's primary scene exports
- *  into a folder named after the scene. The scan stores this path lowercased and
- *  normalized, which is what the drawer looks it up by; the api opens the
- *  studio's own spelling, which is what this seeds. */
-const DTH = `${P.exportDir}/KiraDefault_G9_GP/Kira.dth`
-
-const claim = (surface: string) => `@fbx_material_name=${surface}`
-
-/** A trimmed real export: figure surfaces, the eye stack, and two wardrobe
- *  assets — enough to exercise every branch of the grouping rule. */
-const EXPORT = {
-  'DTH Version': '2.0.2',
-  'Character Name': 'Kira',
-  Materials: [
-    ...['Body', 'Face'].map((name) => ({
-      'Asset Name': 'Genesis9',
-      'Material Name': name,
-      'Material Type': 'Iray Uber',
-      Value: 'Actor/Character',
-      Properties: [
-        { Name: 'Diffuse Color', Texture: `$DAZLIB/${name.toLowerCase()}_d.jpg` },
-        { Name: 'Bump Strength', Texture: `$DAZLIB/${name.toLowerCase()}_b.jpg` },
-      ],
-    })),
-    {
-      'Asset Name': 'Genesis9',
-      'Material Name': 'Pupils',
-      'Material Type': 'PBRSkin',
-      Value: 'Actor/Character',
-      Properties: [{ Name: 'Diffuse Color', Texture: '$DAZLIB/eyes_d.jpg' }],
-    },
-    {
-      'Asset Name': 'Boots_12736',
-      'Material Name': 'boots',
-      'Material Type': 'Iray Uber',
-      Value: 'Follower/Wardrobe',
-      Properties: [
-        { Name: 'Diffuse Color', Texture: '$DAZLIB/boots_d.jpg' },
-        { Name: 'Normal Map', Texture: '$DAZLIB/boots_n.jpg' },
-      ],
-    },
-  ],
-}
-
-/** The material node as the scan records it: a skin slot whose Golden Palace
- *  claims outlived the graft, and a baker layer naming one of them. */
-const node = {
-  path: '/obj/DazToHue/DazToHueMaterial',
-  name: 'DazToHueMaterial',
-  nodeType: 'material',
-  networkBox: 'KiraDefault',
-  materials: 1,
-  uvChannels: 1,
-  bakers: 2,
-  layers: 8,
-  bakerNames: ['T_Skin_Colour', 'T_Skin_Normal'],
-  bakerGroups: [claim('Body'), claim('GPTorso')],
-  materialNames: ['MI_Skin', 'Skin'],
-  slots: [
-    {
-      name: 'Skin',
-      displayName: 'MI_Skin',
-      surfaces: [claim('Body'), claim('Face'), claim('GPTorso'), claim('GPVagina')],
-      bakers: 2,
-      layers: 8,
-      channelUvs: ['uv_geoshell'],
-    },
-  ],
-  sectionCounts: [],
-}
+// The fixture itself (a real setup, trimmed from LaraCroft_G81) lives in
+// fixtures.ts: the guide's screenshot of this tab has to show the state this
+// spec asserts, and a second copy would let the two drift apart.
 
 async function openExportCheck(
   page: Page,
   over: { project?: Record<string, unknown>; withExport?: boolean } = {},
 ): Promise<Page> {
   const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true, houdiniProject: true })
-  if (over.withExport !== false) seed.files[DTH] = JSON.stringify(EXPORT)
-  seed.files[STORE] = JSON.stringify({
-    version: 1,
-    projects: {
-      [P.houdini.toLowerCase()]: {
-        key: scanStoreEntryKey(P.houdini, P.exportDir),
-        scannedAt: '2026-08-14T00:00:00.000Z',
-        project: {
-          hipPath: P.houdini,
-          ok: true,
-          error: '',
-          nodes: [node],
-          job: P.charFolder,
-          fps: 30,
-          imports: [DTH.toLowerCase()],
-          exportSets: ['Kira'],
-          refs: { collapsible: 0, foreign: 0, broken: [], hipRelative: [], missingTextures: [] },
-          prefill: { fillable: [], missing: [] },
-          ...over.project,
-        },
-      },
-    },
-  })
+  if (over.withExport !== false) seed.files[EXPORT_CHECK_DTH] = JSON.stringify(EXPORT_CHECK_DTH_BODY)
+  seed.files[EXPORT_CHECK_STORE] = exportCheckStore(over.project)
   await page.addInitScript(installTauriMock, seed)
-  await page.addInitScript((storePath: string) => {
-    const mock = (window as any).__tauriMock
-    const raw = mock.files.get(storePath) as string
-    mock.files.set(storePath, raw.replace('__MTIME__', String(mock.mtimeMs)))
-  }, STORE)
+  await stampScanStore(page)
   await page.goto('/')
   await page.getByRole('link', { name: /Kira/ }).click()
   await expect(page.getByText(/custom ROM frames/)).toBeVisible()
@@ -201,7 +112,9 @@ test('a project importing several scenes refuses to guess which node is which', 
   page,
 }) => {
   await openExportCheck(page, {
-    project: { imports: [DTH.toLowerCase(), `${P.exportDir}/thick/kira_thick.dth`] },
+    project: {
+      imports: [EXPORT_CHECK_DTH.toLowerCase(), `${P.exportDir}/thick/kira_thick.dth`],
+    },
   })
   const drawer = page.getByRole('dialog')
 

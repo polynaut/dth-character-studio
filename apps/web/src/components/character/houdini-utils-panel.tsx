@@ -1654,8 +1654,12 @@ export function HoudiniUtilsPanel({
           </TabsContent>
         </Tabs>
 
-        {/* The panel's own footer action — the modal owns the actual run. */}
-        {tab === 'general' ? (
+        {/* The panel's own footer action — the modal owns the actual run.
+            Export check is READ-ONLY and has no action of its own, so it gets no
+            footer: it used to fall through to the transfer one, offering a
+            Transfer button over "0 target nodes selected" (the material tab's
+            empty selection) on a tab that cannot transfer anything. */}
+        {tab === 'exportCheck' ? null : tab === 'general' ? (
           <div className="mt-6 flex flex-wrap items-center justify-end gap-3 border-t pt-4">
             {/* One summary for the tab's three CHECKS: the old line described
                 only the $JOB repair, which read as the whole tab's verdict.
