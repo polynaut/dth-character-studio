@@ -174,6 +174,31 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   silent `return false` bail and does count. Trusting `ok` would report a clean
   one-scene export that missed a single dial as "1 of 1 scene failed" AND drop
   the Houdini + Unreal continuations, which both gate on `failed < total`.
+- **Anything that calls `logRunError` is deciding to cancel the export** — which
+  is easy to forget at the call site, and expensive when the finding does not
+  deserve it. Measured (LaraCroft_G81, DS 4.24, 2026-08-16): the interpolation
+  pass logged an error for **4 keys out of 7968**, so `ApplyDTHCharacter`
+  returned false, so the generated script's `dthRomOk === true` gate skipped the
+  export — while the Runner logged the row `done`. Downstream the character's
+  `daz-export/thick/` never existed and its Houdini scene failed its load-time
+  cook, and the only way to regenerate those files was another full ROM run,
+  which hit the same gate every time. Runtime v79 added `logRunWarning` for
+  exactly this: **NOT** counted by `runLogProblemCount`, so the export runs, and
+  still shown by the studio (amber). The test for which one to use is not
+  severity, it is *"are the exported artifacts still correct?"* — for a key that
+  kept the wrong interpolation the answer is yes (its VALUE is intact, and only
+  the motion between pose frames changes); for a key whose value could not be
+  restored it is no, and that one is still an error.
+- **A count is not a finding.** The same run reported its 4 bad keys with no
+  node, no dial, no key index and no frame — the pass had every one of them in
+  hand and threw them away. Nothing could be chased without patching the runtime
+  first. Since v79 each unfixable key is named in both the Daz log and the run
+  log's `keyProblems[]`, including **the interpolation Daz actually reports
+  back** (`CONSTANT (1)`) rather than only "not LINEAR", and the frame is
+  derived from `Scene.getTimeStep()` — `getKeyTime` returns TICKS, and a tick
+  count printed as a frame number is a wrong answer, not a raw one. Cap such a
+  list per KIND, never as one shared pool: the interesting kind is usually the
+  rare one, and a shared cap lets a flood of the common kind erase it.
 - **`App.openFile(path, false)` replaces the current scene without a save
   prompt** — relied on by both open-in-running-Daz paths: the forwarded one-shot
   `.dsa` bridge (`api/attachments.ts` `openSceneInRunningDaz`) and the Runner's
