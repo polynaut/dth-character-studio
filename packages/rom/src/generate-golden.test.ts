@@ -162,4 +162,39 @@ describe('generated artifacts (golden)', () => {
       expect(nonAsciiStringLiterals(file.content)).toEqual([])
     })
   }
+
+  /**
+   * A carrier the RUNNER executes must never open a modal.
+   *
+   * Measured 2026-08-16 (DS 4.24): a `MessageBox` in an unattended run waits
+   * forever for a click nobody is there to make, and a blocked Daz is
+   * indistinguishable from a hung `include()` — the log stops dead at "Loading
+   * script", nothing is written after it, CPU goes flat, and the main window is
+   * merely *disabled* rather than visibly modal. It cost hours of hunting a
+   * runtime that was working perfectly, and it stops the whole batch, not just
+   * the row.
+   *
+   * The hidden (dot-prefixed) scripts ARE the Runner's carriers — that is what
+   * hidden means here. The visible ones are Content Library tiles a human
+   * double-clicks, where a dialog is exactly right, so they are checked for the
+   * opposite: this is a rule about who is watching, not a ban on dialogs.
+   */
+  const runnerCarriers = files.filter((f) => f.fileName.startsWith('.'))
+  it('covers every hidden carrier (the list the modal rule is checked against)', () => {
+    expect(runnerCarriers.map((f) => f.fileName).sort()).toEqual([
+      '.Build_ROM_Animation.dsa',
+      '.Bulk_Export_Only.dsa',
+      '.Bulk_ROM_Export.dsa',
+    ])
+  })
+  for (const file of runnerCarriers) {
+    it(`opens no modal in ${file.fileName} — nobody is there to click it`, () => {
+      expect(file.content).not.toMatch(/MessageBox\./)
+    })
+  }
+  for (const file of files.filter((f) => f.fileName.endsWith('.dsa') && !f.fileName.startsWith('.'))) {
+    it(`keeps its dialogs in ${file.fileName} — a human runs this one`, () => {
+      expect(file.content).toMatch(/MessageBox\./)
+    })
+  }
 })

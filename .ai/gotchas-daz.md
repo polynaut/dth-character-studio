@@ -189,6 +189,26 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   kept the wrong interpolation the answer is yes (its VALUE is intact, and only
   the motion between pose frames changes); for a key whose value could not be
   restored it is no, and that one is still an error.
+- **A modal in an unattended run is indistinguishable from a hang, and it stops
+  the whole batch.** Measured 2026-08-16 (DS 4.24), and it cost hours: a
+  `MessageBox` in a Runner-executed carrier waits forever for a click nobody is
+  there to make. What you see is Daz's log stopping dead at `Loading script`
+  with **no** line after it, **no** "Script executed successfully", CPU flat,
+  the row never completing, and — the part that misleads — the main window
+  looking normal. It reads exactly like a hung `include()`, so the hunt starts
+  in the runtime, which is working perfectly. Two tells separate them: the
+  script's own side effects still happened (the failure log IS written, with the
+  right content and timestamp), and the main window is *disabled* — enumerate
+  top-level windows and look for a VISIBLE-but-DISABLED one, the signature of a
+  modal owning it; a title-only scan misses it.
+  So: **hidden (dot-prefixed) carriers never open a dialog** — that is what
+  hidden means here, and it is pinned by a test in `generate-golden.test.ts`.
+  The trap is that "unattended" is not the same as "bulk": `.Build_ROM_Animation.dsa`
+  is built with `bulk = false` (it wants the interactive script's shape) and is
+  still executed by the Runner, so gating dialogs on `bulk` left exactly that
+  carrier able to hang a run. `unattended` is its own flag for that reason. The
+  same flag existed on the export script but reached only the export BLOCK, so
+  the two guards that fire FIRST (wrong scene, no figure) could still block.
 - **A count is not a finding.** The same run reported its 4 bad keys with no
   node, no dial, no key index and no frame — the pass had every one of them in
   hand and threw them away. Nothing could be chased without patching the runtime

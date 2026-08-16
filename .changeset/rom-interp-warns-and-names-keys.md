@@ -42,4 +42,4 @@ runtime over the measured Daz semantics (`setKeyInterpolationType` does nothing,
 the named keys for the 4 that started this.
 
 Regenerate the character (Tools > Refresh assets) and re-run the ROM to pick
-this up: runtime 78 -> 79.
+this up: runtime 78 -> 80.

@@ -918,5 +918,24 @@ v79 — the interpolation pass stops blocking exports it cannot explain, and nam
       The studio surfaces both: the run report renders on errors OR warnings
       (amber instead of red when the export ran), and the sticky-header button
       says which it is.
+v80 — no unattended carrier opens a modal, and the missing-runtime message stops
+      lying about where it looked. Measured 2026-08-16 (DS 4.24): a MessageBox
+      in a Runner-executed script blocks forever on a click nobody can make, and
+      it presents as a HANG — the Daz log stops at "Loading script", nothing is
+      written after it, CPU goes flat, the row never completes, and the main
+      window looks normal (it is merely DISABLED; a visible-but-disabled
+      top-level window is the only reliable tell). It cost hours aimed at a
+      runtime that was fine. The three hidden carriers now print + log instead.
+      Two of them were missed by the obvious gate: .Build_ROM_Animation.dsa is
+      built with bulk = false yet the Runner executes it, so `unattended` is a
+      separate flag from `bulk`; and the export carrier's existing `unattended`
+      reached only the export block, leaving the wrong-scene and no-figure
+      guards — the two most likely to greet a batch — still able to block.
+      generate-golden.test.ts pins both halves: no hidden carrier may contain
+      MessageBox, and every visible one must (a human runs those).
+      Separately, dthRuntimeMissingError built its path from `dir_self`, which
+      the included runtime files reassign from getScriptFileName() — so the
+      "runtime is missing" message named Daz's resources folder, a place the
+      script never looked. It now reports from a `dthSelfDir` snapshot taken
+      before the first include.
 ```
-

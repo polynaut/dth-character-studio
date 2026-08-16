@@ -1310,6 +1310,10 @@ export function toBuildRomAnimationScriptDsa(
     '', // export forced off — there are no reference paths to anchor
     indexSync,
     progressLogPath,
+    // The RUNNER executes this one (a scene card's "Open and Generate ROM
+    // Animation"), even though it is built with bulk = false — so it is
+    // unattended, and a modal in it hangs the row forever.
+    true,
   )
   // Hidden (dot-prefixed) → no Content Library tile, no icon artwork.
   return { fileName: BUILD_ROM_ANIMATION_SCRIPT, content: file.content, target: 'daz' }
@@ -1422,6 +1426,16 @@ function buildRomScriptDsa(
    *  steps to (host-resolved app-data path; see {@link dthProgressSnippet}).
    *  '' = the script logs no progress. */
   progressLogPath = '',
+  /**
+   * Nobody is watching this run, so it must never open a modal — see the
+   * no-modal note in the emitted `dthFailureDialog`. Defaults to `bulk` because
+   * every bulk carrier is Runner-driven, but it is a SEPARATE flag on purpose:
+   * `.Build_ROM_Animation.dsa` is executed by the Runner too and is built with
+   * `bulk = false` (it wants the interactive script's shape, not the batch's),
+   * so tying "no dialogs" to `bulk` left exactly that carrier able to hang a
+   * run on a click nobody could make.
+   */
+  unattended = bulk,
 ): GeneratedFile {
   const config = buildCharacterConfig(character, romPaths, frames, metaDirAbs)
 
@@ -1585,11 +1599,21 @@ function dthWriteFailureLog(sError) {
 
 // Short + generic on purpose: the details (which morph, which frame, why)
 // belong in DTH Character Studio, which reads the run log back.
+${unattended ? `// UNATTENDED: no modal, ever. The Runner drives this scene inside a Daz nobody
+// is watching, so a dialog here waits forever for a click that never comes — and
+// it blocks EVERY row behind it. Measured 2026-08-16 (DS 4.24): a Daz sitting on
+// an unclicked modal is indistinguishable from a hung include — the log stops at
+// "Loading script", no line is ever written after it, CPU goes flat, and the
+// main window is merely disabled rather than obviously blocked. Hours went into
+// hunting a runtime that was working perfectly. The failure log is already
+// written by the caller; THAT is this script's channel.
 function dthFailureDialog() {
+    print("DTH Character Studio: the run failed - switch to the studio to see what failed.");
+}` : `function dthFailureDialog() {
     MessageBox.critical(
-        "Something went wrong while building the ROM.\\n\\nSwitch back to DTH Character Studio to see what failed.",
+        "Something went wrong while building the ROM.\\\\n\\\\nSwitch back to DTH Character Studio to see what failed.",
         "DTH Character Studio", "&OK");
-}
+}`}
 
 // G9 only: switch the Genesis 9 Tear shader's UV set to "UE5" so DTH's Lacrimal
 // Fluid material lines up (the UV set is a DzEnumProperty — set it by name through
@@ -1616,6 +1640,13 @@ function dthApplyUE5TearUV() {
 ${dthSettleSnippet()}
 ${dthProgressSnippet()}
 ${dthCancelSnippet()}
+// This script's OWN folder, captured before a single include runs. The runtime
+// files each assign their own \`dir_self\` from getScriptFileName(), so by the
+// time a guard below wants to name the path it looked in, \`dir_self\` is no
+// longer ours — and the missing-runtime message then accuses the install of a
+// fault it does not have (measured 2026-08-16: it reported the runtime
+// "missing" from Daz's own resources folder, which was never where it looked).
+var dthSelfDir = String(new DzFileInfo(getScriptFileName()).path());
 // The include MUST stay at the top level: Daz resolves include() through its
 // legacy-include mechanism, which fails inside try/catch ("URIError: Legacy Include").
 var dir_self = new DzDir(new DzFileInfo(getScriptFileName()).path());
@@ -1632,7 +1663,7 @@ function dthRuntimeMissingError() {
     var sPath = "";
     var bThere = false;
     try {
-        sPath = String(dir_self.filePath("../../.DthWorkflow.dsa"));
+        sPath = String(new DzDir(dthSelfDir).filePath("../../.DthWorkflow.dsa"));
         bThere = new DzFile(sPath).exists();
         // Tidy the '../../' out of the path before showing it - best effort,
         // the raw form is already correct.
@@ -1649,7 +1680,10 @@ if (dthSceneLinkErr) {
     // Wrong (or unsaved) scene open — refuse before touching anything, and log
     // it so the studio's run report names the aborted run too.
     dthWriteFailureLog(dthSceneLinkErr);
-    MessageBox.critical(dthSceneLinkErr, "DTH Character Studio", "&OK");
+${unattended ? `    // No modal — see dthFailureDialog. A wrong-scene refusal is the single
+    // most likely thing to greet an unattended batch, so it is also the most
+    // expensive place to wait for a click.
+    print("DTH Character Studio: " + dthSceneLinkErr);` : `    MessageBox.critical(dthSceneLinkErr, "DTH Character Studio", "&OK");`}
 } else if (dthCancelRequested()) {
     // The studio interrupted the run before this row's turn came. The Runner
     // still opens each remaining scene and executes this script — it owns the
@@ -1839,14 +1873,20 @@ ${dthProgressSnippet()}
 ${dthCancelSnippet()}
 ${figureAutoSelectSnippet(character.genesis)}var dthSceneLinkErr = dthSceneLinkError();
 if (dthSceneLinkErr) {
-    MessageBox.critical(dthSceneLinkErr, "DTH Character Studio", "&OK");
+${unattended ? `    // No modal: the Runner drives this one. \`unattended\` used to reach only
+    // the export block below, so the two guards that fire FIRST — and that a
+    // batch is most likely to hit — could still stop everything on a dialog.
+    print("DTH Character Studio: " + dthSceneLinkErr);` : `    MessageBox.critical(dthSceneLinkErr, "DTH Character Studio", "&OK");`}
 } else if (dthCancelRequested()) {
     // Interrupted before this row's turn — skip the scene and say so (the
     // bulk carrier's twin; see the ROM script's branch for why it must speak).
     print("DTH Character Studio: the export was interrupted - this scene was skipped.");
     dthProgressLog(100, "skipped - the export was interrupted");
 } else if (!dthFig) {
-    MessageBox.critical("No ${character.genesis} figure found in the scene - load the character's scene and re-run.", "DTH Character Studio", "&OK");
+${unattended ? `    // print only: this carrier has no dthWriteFailureLog (that lives in the ROM
+    // script), and the Runner's progress log below is what the studio reads.
+    print("DTH Character Studio: no ${character.genesis} figure found in the scene - nothing was exported.");
+    dthProgressLog(100, "no figure found - nothing was exported");` : `    MessageBox.critical("No ${character.genesis} figure found in the scene - load the character's scene and re-run.", "DTH Character Studio", "&OK");`}
 } else {
     // A beat before the exporter touches the scene: the Runner's scene load —
     // or the ROM build run just before this script — may still be settling.
