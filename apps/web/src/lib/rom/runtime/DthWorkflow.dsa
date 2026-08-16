@@ -275,9 +275,12 @@ function CreateFrameDatas(options, startFrame){
 
 function ApplyInitialValues(options, oNodeRoot){
 	//var oContentMgr = App.getContentMgr();
-	// Set the default interpolation off the bat, so hopefully it doesn't need to
-	// be set later — Linear everywhere (see setLinearInterp).
-	Scene.setDefaultKeyInterpolationType(DzProperty.Linear);
+	// Set the default interpolation off the bat, so keys created during the build
+	// start out right — Linear everywhere (see setLinearInterp). Through the
+	// RESOLVED constant: `DzProperty.Linear` does not exist on DS 4.24
+	// (measured 2026-08-16), so this line spent its whole life passing undefined.
+	var iLinear = dthLinearInterp();
+	if(iLinear !== undefined) Scene.setDefaultKeyInterpolationType(iLinear);
 	if( options["FACsDetailStrength"] > 0 ) {
 		setPropertyByName(oNodeRoot, "facs_ctrl_FACSDetailStrength", options["FACsDetailStrength"], 0) }
 	if( options["FlexionStrength"] > 0 ) {

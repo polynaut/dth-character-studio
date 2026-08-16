@@ -67,18 +67,39 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   keyed pose frames are identical under either interpolation — CONSTANT vs
   LINEAR only changes the motion BETWEEN pose frames, which is why stamping
   transforms is safe for a PoseAsset export that samples whole pose frames.
-- **`setKeyInterpolationType()` can do nothing, silently.** Same run: the pass
-  collected 107 morph props, the Daz log shows no error and the scene saved
-  after it — yet 43 of those 107 (`facs_bs_*`, morph modifiers on the figure's
-  own geometry, squarely inside the walk) still serialized CONSTANT. No
-  exception, no warning, no effect. Suspected cause (**not proven**): the enum
-  argument resolving to `undefined` — the Daz API reference spells this enum two
-  ways, `DzFloatProperty.LINEAR_INTERP` and `DzProperty.InterpLinear`, and a name
-  a build doesn't define is just `undefined`. Hence runtime v77: resolve the
-  constant against the running build, **read every stamp back** with
-  `getKeyInterpolationType`, and rewrite the key through `setValue` (which takes
-  the interpolation as an argument) when it didn't take. Never assume a Daz
-  setter worked because it didn't throw.
+- **`setKeyInterpolationType()` does nothing on DS 4.24 — use `setValue`.**
+  Measured over 7747 keys: **zero** changed, in EITHER overload
+  (`(i, type)` and `(i, type, 0, 0, 0)`), with no exception and no warning. The
+  enum is not the problem — `DzFloatProperty.LINEAR_INTERP` and
+  `DzProperty.InterpLinear` both exist and are both `0`. What works is
+  **`setValue(tm, val, LINEAR)`**: it rewrites the key's interpolation, at any
+  time, inside an undo hold or not. Two conditions, both measured: `setValue` is
+  a no-op when the value doesn't change (so nudge the value off and put it back
+  exactly), and the **interpolation ARGUMENT is what lands** — setting the
+  session default and calling `setValue(tm, val)` leaves an existing key's
+  interpolation alone. Never assume a Daz setter worked because it didn't throw;
+  `getKeyInterpolationType` reads back honestly and is the only proof.
+- **`DzProperty.Linear` does not exist** (DS 4.24) — it reads `undefined`, and
+  `Scene.setDefaultKeyInterpolationType(undefined)` fails silently. The runtime
+  passed exactly that for years. The spellings that DO resolve are
+  `DzProperty.InterpLinear` / `InterpConstant` and
+  `DzFloatProperty.LINEAR_INTERP` / `CONSTANT_INTERP` / `TCB_INTERP` (0 / 1 / 2).
+- **Some channels can never be re-interpolated, and that is fine.** Locked
+  transforms (`min == max == 0`) and the hidden `/Hidden/CTRLMDs` ERC
+  controllers refuse the value nudge, so Daz never rewrites their keys — 310 of
+  1500 in the measured run. Every one was a SINGLE key at frame 0, where
+  interpolation spans nothing. Count them apart from real failures, and never
+  let them abort the pass: runtime v77 had a "give up after 100 fruitless
+  attempts" breaker, those channels sit at the HEAD of the node walk, and so the
+  breaker fired on them and switched the fix off for the 5233 keys behind them.
+  A give-up rule must key off the *reason* something failed, not a raw count.
+- **The Timeline pane's "Set Key Interpolation > Linear" is not scriptable.**
+  `DzTimePaneSetInterpLinearAction` (in `dztimeline.dll`, alongside
+  `DzTimePaneSelectItemAnimRangeKeysAction` and the `DzTimePaneSetKeyScope*`
+  family) is found by the action manager but reports `enabled: false` outside
+  the pane's own focus/selection context, so triggering it does nothing. The
+  manual workflow — select all keys, set Linear — has no script equivalent
+  through the actions; `setValue` is the route.
 - **Daz writes an implicit, un-typed key at frame 0.** A channel whose first REAL
   key sits later serializes as `[0, value]` with **no** interpolation element,
   while a channel with a real key at 0 (e.g. one loaded from a preset) gets

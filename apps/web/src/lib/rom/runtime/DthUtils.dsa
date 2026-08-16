@@ -244,10 +244,11 @@ function writeRunLog(sPath, oSummary){
 var DTH_LINEAR_INTERP;                 // resolved once, by dthLinearInterp()
 var DTH_LINEAR_INTERP_DONE = false;
 
-// How many times a pass may try the setValue rewrite and still come back with a
-// key that won't read LINEAR, before it stops trying (see dthStampKeyLinear).
-var DTH_INTERP_REWRITE_BUDGET = 100;
-var DTH_INTERP_REWRITE_FAILS = 0;
+// The nudge a key's value takes and gives back, to make Daz rewrite the key
+// (see dthStampKeyLinear). A value that will not move by this much in EITHER
+// direction belongs to a locked or driven channel, which is reported, not
+// retried.
+var DTH_INTERP_NUDGE = 0.001;
 
 /**********************************************************************
  * The LINEAR interpolation constant of the RUNNING Daz. The API reference
@@ -386,35 +387,48 @@ function dthEnsureFrameZeroKey(oProp, iInterp){
 }
 
 /**********************************************************************
- * LINEAR for key `j`, VERIFIED. True only when the property reads the key back
- * as LINEAR — or when this build cannot report interpolation at all, in which
- * case the stamp is taken at face value (there is nothing better to do, and
- * every Daz that has setKeyInterpolationType also has the getter). */
+ * LINEAR for key `j`, VERIFIED. Returns:
+ *    1  the key reads back LINEAR (or this build cannot report interpolation
+ *       at all, in which case the stamp is taken at face value),
+ *    0  the key's VALUE would not move, so Daz never rewrote it - a locked or
+ *       ERC-driven channel (see below); nothing more can be done here,
+ *   -1  the value moved and the key still is not LINEAR - a real failure.
+ *
+ * MEASURED 2026-08-16 (DS 4.24), which is why this looks the way it does:
+ *   - setKeyInterpolationType() changed NOTHING, in either overload, on any of
+ *     7747 keys. It is still called first because it costs one call and may be
+ *     the right route on another build - but it is never trusted.
+ *   - setValue(t, v, LINEAR) DOES rewrite the key's interpolation: 1190 of 1500
+ *     attempts. It is a no-op when the value doesn't change, hence the nudge,
+ *     and the interpolation ARGUMENT is what lands (the session default alone
+ *     changes nothing on an existing key).
+ *   - The 310 that refused were all channels whose value cannot move: locked
+ *     transforms (min == max == 0) and the hidden /Hidden/CTRLMDs ERC
+ *     controllers, every one of them a SINGLE key at frame 0, where
+ *     interpolation spans nothing. Those are counted apart, not called
+ *     failures - and NOT allowed to abort the pass for everything after them,
+ *     which is exactly the bug that made runtime v77 report 5333 failures. */
 function dthStampKeyLinear(oProp, j, iInterp){
-	if(iInterp === undefined) return false;
+	if(iInterp === undefined) return -1;
 	if(typeof oProp.setKeyInterpolationType == "function") oProp.setKeyInterpolationType(j, iInterp);
-	if(typeof oProp.getKeyInterpolationType != "function") return true;
-	if(oProp.getKeyInterpolationType(j) == iInterp) return true;
-	// A build where NEITHER route works must not spend two setValue calls on
-	// every key of ~1600 channels to find that out a thousand times over. The
-	// first DTH_INTERP_REWRITE_BUDGET fruitless rewrites are the evidence; after
-	// that the pass just stamps, counts, and reports.
-	if(DTH_INTERP_REWRITE_FAILS >= DTH_INTERP_REWRITE_BUDGET) return false;
-	// The stamp didn't take: rewrite the key through setValue, which carries
-	// the interpolation as an argument. Same nudge-and-restore as the frame-0
-	// key — the value must end EXACTLY where it started.
+	if(typeof oProp.getKeyInterpolationType != "function") return 1;
+	if(oProp.getKeyInterpolationType(j) == iInterp) return 1;
+	// Rewrite the key through setValue, which carries the interpolation as an
+	// argument: nudge the value off and put it back EXACTLY. Both directions,
+	// because a value sitting on a limit clamps straight back to itself.
 	var tKey = oProp.getKeyTime(j);
 	var fValue = oProp.getKeyValue(j);
-	var aNudge = [fValue + 0.001, fValue - 0.001];
+	var aNudge = [fValue + DTH_INTERP_NUDGE, fValue - DTH_INTERP_NUDGE];
+	var bValueMoved = false;
 	for(var n = 0; n < aNudge.length; n++){
 		dthSetValueInterp(oProp, tKey, aNudge[n], iInterp);
+		if(!approx_eq(oProp.getKeyValue(j), fValue)) bValueMoved = true;
 		dthSetValueInterp(oProp, tKey, fValue, iInterp);
 		if(oProp.getKeyInterpolationType(j) == iInterp) break;
 	}
 	if(!approx_eq(oProp.getKeyValue(j), fValue)) oProp.setValue(tKey, fValue);
-	if(oProp.getKeyInterpolationType(j) == iInterp) return true;
-	DTH_INTERP_REWRITE_FAILS++;
-	return false;
+	if(oProp.getKeyInterpolationType(j) == iInterp) return 1;
+	return bValueMoved ? -1 : 0;
 }
 
 /**********************************************************************
@@ -435,18 +449,20 @@ function dthKeyedNodes(oNodeRoot){
 
 function setLinearInterp(oNodes, startFrame, endFrame){
 
+	var iInterp = dthLinearInterp();
 	// Set the session default to match, so keys created later start out right.
-	Scene.setDefaultKeyInterpolationType(DzProperty.Linear);
+	// It takes the RESOLVED constant: `DzProperty.Linear` — what this line
+	// passed until v78 — is undefined on DS 4.24 (measured), so the call has
+	// been handing Daz an undefined enum for as long as it has existed.
+	if(iInterp !== undefined) Scene.setDefaultKeyInterpolationType(iInterp);
 
  	startFrame = typeof startFrame !== 'undefined' ? startFrame : 0;
  	endFrame = typeof endFrame !== 'undefined' ? endFrame : 0;
 
-	var iInterp = dthLinearInterp();
-	DTH_INTERP_REWRITE_FAILS = 0;
 	var aProps = collectInterpProps(oNodes);
 	print("Animated channels to set LINEAR interp:", aProps.length)
 
-	var iKeys = 0, iFailedKeys = 0, iZeroAdded = 0, iZeroFailed = 0;
+	var iKeys = 0, iLinear = 0, iLocked = 0, iFailedKeys = 0, iZeroAdded = 0, iZeroFailed = 0;
 	for(var i = 0; i < aProps.length; i++){
 		var oProp = aProps[i];
 		var iZero = dthEnsureFrameZeroKey(oProp, iInterp);
@@ -455,15 +471,22 @@ function setLinearInterp(oNodes, startFrame, endFrame){
 		var iNumKeys = oProp.getNumKeys();
 		for(var j = 0; j < iNumKeys; j++){
 			iKeys++;
-			if(!dthStampKeyLinear(oProp, j, iInterp)) iFailedKeys++;
+			var iResult = dthStampKeyLinear(oProp, j, iInterp);
+			if(iResult > 0) iLinear++;
+			else if(iResult == 0) iLocked++;
+			else iFailedKeys++;
 		}
 	}
-	print("Set LINEAR interp on", (iKeys - iFailedKeys), "of", iKeys, "key(s);",
-		iZeroAdded, "frame-0 key(s) made real");
-	// A key that will not read back LINEAR is this bug returning, so it goes in
-	// the run log where the studio shows it. A channel that kept its implicit
-	// frame-0 key is a deliberate refusal — an ERC-driven value that is not ours
-	// to write — worth saying, not worth failing a run over.
+	print("LINEAR on", iLinear, "of", iKeys, "key(s);", iLocked,
+		"on locked/driven channels;", iZeroAdded, "frame-0 key(s) made real");
+	// A key whose VALUE cannot move is a locked transform or a hidden ERC
+	// controller — measured as always a single key at frame 0, where
+	// interpolation spans nothing. Worth saying; not worth failing a run over.
+	// A key that DID move and still is not LINEAR is this bug returning, and
+	// that one goes in the run log where the studio shows it.
+	if(iLocked > 0){
+		print("NOTE:", iLocked, "key(s) sit on locked or driven channels - a value that cannot move cannot be re-keyed. Measured as single keys at frame 0, where interpolation spans nothing.");
+	}
 	if(iZeroFailed > 0){
 		print("WARNING:", iZeroFailed, "channel(s) kept an implicit frame-0 key (driven value, or no key could be made there) - frame 0 falls back to Daz's default interpolation on those.");
 	}

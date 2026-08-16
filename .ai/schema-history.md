@@ -859,5 +859,21 @@ v77 — every ROM key is stamped LINEAR for real. Measured on a shipped v76 ROM
       old "never touch transforms" rule was about not MOVING them, and nothing
       in the pass moves a value - only the shape of the motion BETWEEN pose
       frames changes, never a value at a keyed frame.
+v78 — v77 shipped a pass that reported 5333 of 7747 keys unfixable; this is the
+      one that actually works. Two measured facts (DS 4.24, from probes run
+      against a built ROM scene): setKeyInterpolationType() changes NOTHING in
+      either overload, and setValue(t, v, LINEAR) DOES rewrite a key's
+      interpolation (1190 of 1500 attempts) with the interp ARGUMENT deciding,
+      not the session default. v77 already did the setValue rewrite - but its
+      circuit breaker gave up after 100 fruitless attempts, and the first 100
+      channels of the walk are the ones that can never work (locked transforms
+      with min == max, hidden /Hidden/CTRLMDs ERC controllers - all single keys
+      at frame 0, where interpolation spans nothing). So the breaker fired on
+      the hopeless head of the list and switched the fix off for everything
+      after it. It is gone: a key whose VALUE will not move is now counted
+      apart from a key that moved and stayed wrong, and only the latter reaches
+      the run log. Also: `DzProperty.Linear` is undefined on DS 4.24, so every
+      Scene.setDefaultKeyInterpolationType call in this runtime had been
+      passing an undefined enum - they take the resolved constant now.
 ```
 
