@@ -278,6 +278,23 @@ export async function fetchDazPluginState({ data }: { data?: unknown } = {}): Pr
 }
 
 /**
+ * Phrases pinned on the Rust side (`report.rs` hint constants, `elevate.rs`
+ * ELEVATION_CANCELLED) that this layer reads a failure by.
+ *
+ * A failed copy's own detail line is what tells the panel WHICH remedy to offer,
+ * and the two it can hit are not interchangeable: administrator rights fix a
+ * permission refusal and do nothing at all for a DLL Daz Studio has loaded. An
+ * elevation button offered for a locked DLL would prompt, fail identically, and
+ * teach the user the button is a lie — so it is offered only for the failure it
+ * actually fixes. Rust tests pin each phrase; reword both sides together.
+ */
+export const INSTALL_PHRASES = {
+  needsAdmin: 'needs administrator rights',
+  dazLocked: 'close every Daz Studio window',
+  elevationCancelled: 'Cancelled at the Windows permission prompt',
+} as const
+
+/**
  * Install BOTH plugins into every detected Daz installation — the panel's one
  * button.
  *
@@ -293,7 +310,7 @@ export async function fetchDazPluginState({ data }: { data?: unknown } = {}): Pr
  * to fix before any of this means anything.
  */
 export async function installDazPlugins({ data }: { data: unknown }): Promise<InstallReport> {
-  const { dryRun, force, folders } = z
+  const { dryRun, force, folders, elevated } = z
     .object({
       dryRun: z.boolean().optional(),
       force: z.boolean().optional(),
@@ -302,6 +319,11 @@ export async function installDazPlugins({ data }: { data: unknown }): Promise<In
        *  RUN (which deliberately saves nothing) would plan from settings.json
        *  and report a different set of copies than the table above it shows. */
       folders: z.array(z.string()).optional(),
+      /** Do the copies in a one-shot ELEVATED helper process (one UAC prompt for
+       *  the whole batch) instead of in this one — see `elevate.rs`. The plan is
+       *  computed identically either way, so a retry after a permission failure
+       *  picks up exactly the copies that are still pending. */
+      elevated: z.boolean().optional(),
     })
     .parse(data ?? {})
   const state = await fetchDazPluginState({ data: folders ? { folders } : {} })
@@ -340,6 +362,23 @@ export async function installDazPlugins({ data }: { data: unknown }): Promise<In
       state.sources.length === 0
         ? 'No DTH Exporter Plugin release found — add the folder holding its DLLs above.'
         : 'Everything is already up to date in every detected Daz Studio.',
+    )
+  }
+  // With administrator rights: ONE call carrying every job, because one UAC
+  // prompt per DLL would be intolerable. A dry run never comes here — it writes
+  // nothing, so it can never lack the rights to, and prompting to preview would
+  // be absurd.
+  if (elevated && !dryRun) {
+    return installReportSchema.parse(
+      await invoke('install_dth_plugins_elevated', {
+        request: {
+          jobs: jobs.map((job) => ({
+            label: job.label,
+            exporterFolder: job.folder,
+            dazInstallFolder: job.target,
+          })),
+        },
+      }),
     )
   }
   const steps: InstallReport['steps'] = []

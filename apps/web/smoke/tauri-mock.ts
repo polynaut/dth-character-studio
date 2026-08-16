@@ -87,6 +87,11 @@ export interface TauriMockSeed {
   sceneAnimationFrames?: Record<string, number>
   /** What `elevated_session` answers — an elevated (UAC) window. Default false. */
   elevated?: boolean
+  /** Makes every UNELEVATED plugin copy (`install_dth_plugin`) fail with this
+   *  detail. The detail is what the panel reads to decide which remedy to offer
+   *  (`INSTALL_PHRASES`), so a spec seeds the real Rust wording. The ELEVATED
+   *  command succeeds regardless — that's the point of clicking it. */
+  pluginInstallFailure?: string
   /** Absolute paths whose fs commands are HELD — the invoke neither resolves
    *  nor rejects until the spec calls `__tauriMock.releaseHeld()` (which also
    *  stops holding future calls). Lets a spec freeze an async probe mid-flight
@@ -611,19 +616,46 @@ export function installTauriMock(seed: TauriMockSeed): void {
       case 'install_dth_plugin': {
         // Canned success: the copy itself is native Rust; the smoke pins the
         // UI around the report (toast, step list, post-install notices).
+        // `pluginInstallFailure` turns it into the refusal the elevated path
+        // exists for.
         const req = (args as { request: { dryRun?: boolean; label?: string } }).request
+        const failure = seed.pluginInstallFailure
         return {
           dryRun: req.dryRun ?? false,
           steps: [
-            {
-              label: req.label ?? 'DTH Exporter Plugin',
-              files: 1,
-              status: 'ok',
-              detail: '',
-              filesList: ['dth_exporter.dll'],
-            },
+            failure
+              ? {
+                  label: req.label ?? 'DTH Exporter Plugin',
+                  files: 0,
+                  status: 'error',
+                  detail: failure,
+                  filesList: [],
+                }
+              : {
+                  label: req.label ?? 'DTH Exporter Plugin',
+                  files: 1,
+                  status: 'ok',
+                  detail: '',
+                  filesList: ['dth_exporter.dll'],
+                },
           ],
-          totalFiles: 1,
+          totalFiles: failure ? 0 : 1,
+        }
+      }
+      case 'install_dth_plugins_elevated': {
+        // The elevated helper takes the WHOLE batch in one call — one UAC prompt
+        // for every copy — and reports a step per job, like the loop it replaces.
+        const { jobs } = (args as { request: { jobs: Array<{ label: string }> } }).request
+        return {
+          dryRun: false,
+          steps: jobs.map((job) => ({
+            label: job.label,
+            files: 1,
+            status: 'ok',
+            detail: '',
+            filesList: ['dth_exporter.dll'],
+          })),
+          totalFiles: jobs.length,
         }
       }
       case 'unc_for_path':

@@ -124,6 +124,24 @@ fn error_text(code: u32) -> String {
     }
 }
 
+/// A path on a mapped network drive rewritten to its UNC form
+/// (`X:\_3d\daz3d` → `\\host\share\_3d\daz3d`); None for a local drive or an
+/// unmapped letter, which need no rewriting.
+///
+/// Drive mappings are per-logon-session, so a process running under the
+/// ADMINISTRATOR token has none of the user's letters — an elevated helper handed
+/// `X:\…` fails on the SOURCE path, which reads as a nonsense error next to a
+/// destination that was the actual point. Whatever crosses into an elevated child
+/// goes through here first, in the unelevated parent that can still see the
+/// mapping (see `elevate.rs`).
+#[cfg(windows)]
+pub(crate) fn unc_path(path: &str) -> Option<String> {
+    let unc = unc_for(path)?;
+    // `unc_for` only answers for a `X:`-style path, so byte 2 is a char boundary.
+    let rest = path[2..].replace('/', "\\");
+    Some(format!("{}{}", unc.trim_end_matches('\\'), rest))
+}
+
 /// Resolve the UNC behind a path on a mapped network drive (for remembering it).
 // `(async)`: WNet calls can block on an unreachable server — off the main thread.
 #[cfg(windows)]

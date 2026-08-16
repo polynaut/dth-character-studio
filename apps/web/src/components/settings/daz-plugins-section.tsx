@@ -1,12 +1,26 @@
 import { useCallback, useEffect, useState } from 'react'
-import { AlertTriangle, CircleCheck, Download, FolderOpen, Plus, RefreshCw, X } from 'lucide-react'
+import {
+  AlertTriangle,
+  CircleCheck,
+  Download,
+  FolderOpen,
+  Plus,
+  RefreshCw,
+  ShieldCheck,
+  X,
+} from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button, InfoPopup, Input, useRefetchOnFocus } from '@dth/ui'
 import { InstallReportList } from '#/components/install-controls.tsx'
 import { PathCode } from '#/components/path-code.tsx'
 import { PostInstallElevationNotice } from '#/components/settings/post-install-elevation-notice.tsx'
-import { fetchDazPluginState, installDazPlugins, pendingPluginInstalls } from '#/lib/rom/api.ts'
+import {
+  fetchDazPluginState,
+  INSTALL_PHRASES,
+  installDazPlugins,
+  pendingPluginInstalls,
+} from '#/lib/rom/api.ts'
 import { pickFolder } from '#/lib/desktop.ts'
 import { browseStart, displayPath, normalizePath } from '#/lib/path.ts'
 
@@ -139,7 +153,10 @@ export function DazPluginsSection({
     }
   }
 
-  async function run(dryRun: boolean, force = false) {
+  /** `elevated` runs the copies in a one-shot administrator helper (one UAC
+   *  prompt for the whole batch) instead of in this process — the studio itself
+   *  stays unelevated either way. */
+  async function run(dryRun: boolean, force = false, elevated = false) {
     setBusy(true)
     try {
       // A real install writes into Daz, so the list it used must be the one on
@@ -148,12 +165,12 @@ export function DazPluginsSection({
       // either way the plan is computed from the same list the table above was
       // drawn from, never from a settings.json the user has since edited.
       if (!dryRun && !(await saveBeforeInstall())) return
-      const result = await installDazPlugins({ data: { dryRun, force, folders } })
+      const result = await installDazPlugins({ data: { dryRun, force, folders, elevated } })
       setReport(result)
       const failed = result.steps.filter((step) => step.status === 'error').length
       if (failed > 0) {
         toast.warning(
-          `${result.steps.length - failed} of ${result.steps.length} plugin copies succeeded — ${failed} failed (admin rights?)`,
+          `${result.steps.length - failed} of ${result.steps.length} plugin copies succeeded — ${failed} failed`,
         )
       } else {
         toast.success(
@@ -164,13 +181,25 @@ export function DazPluginsSection({
       }
       await load()
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e))
+      const message = e instanceof Error ? e.message : String(e)
+      // Declining the Windows permission prompt is a CHOICE, not a failure —
+      // reporting it in red would be telling the user they did something wrong.
+      if (message.includes(INSTALL_PHRASES.elevationCancelled)) toast.info(message)
+      else toast.error(message)
     } finally {
       setBusy(false)
     }
   }
 
   const pending = state ? pendingPluginInstalls(state) : 0
+
+  // What the failures actually WERE, so the panel offers the remedy that fits
+  // instead of the union of both. Administrator rights and "close Daz" are not
+  // interchangeable — see INSTALL_PHRASES for why offering the wrong one is
+  // worse than offering nothing.
+  const failedSteps = report?.steps.filter((step) => step.status === 'error') ?? []
+  const needsAdmin = failedSteps.some((step) => step.detail.includes(INSTALL_PHRASES.needsAdmin))
+  const dazLocked = failedSteps.some((step) => step.detail.includes(INSTALL_PHRASES.dazLocked))
 
   // Each found DLL, attached to the configured folder row it came from — the
   // hint then reads as that row's own detection result, so repeating the full
@@ -415,12 +444,33 @@ export function DazPluginsSection({
 
       {report && <InstallReportList report={report} onClose={() => setReport(null)} />}
 
-      {report?.steps.some((step) => step.status === 'error') && (
-        <p className="text-sm text-destructive">
-          A copy failed — close all Daz Studio windows and restart DTH Character Studio as
-          administrator, then try again. (A running Daz locks its loaded plugin DLLs, and{' '}
-          <span className="font-mono">Program Files</span> needs elevation.)
-        </p>
+      {failedSteps.length > 0 && (
+        <div className="space-y-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm">
+          {dazLocked && (
+            <p>
+              Daz Studio has one of these plugins loaded, and Windows locks a loaded DLL — close
+              every Daz Studio window and install again. Administrator rights do nothing for this
+              one.
+            </p>
+          )}
+          {needsAdmin && (
+            <p>
+              Writing into <span className="font-mono">Program Files</span> needs administrator
+              rights. The studio can borrow them for this copy alone: one Windows prompt, no
+              restart, and this window stays unelevated (so drag-and-drop and your mapped drives
+              keep working).
+            </p>
+          )}
+          {!dazLocked && !needsAdmin && <p>A copy failed — the reason is on its row above.</p>}
+          {needsAdmin && (
+            // Same `force` the main button would compute, so a failure while
+            // REINSTALLING up-to-date plugins retries those instead of finding
+            // nothing pending and reporting "already up to date".
+            <Button size="sm" disabled={busy} onClick={() => void run(false, pending === 0, true)}>
+              <ShieldCheck /> Install with administrator rights
+            </Button>
+          )}
+        </div>
       )}
 
       <PostInstallElevationNotice report={report} />

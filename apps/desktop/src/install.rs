@@ -4,7 +4,8 @@ use std::path::Path;
 
 use crate::fsutil::{copy_dir, copy_dir_add_only, count_files, folder_name};
 use crate::report::{
-    io_detail, step_err, step_ok, step_skip, InstallReport, InstallStep, ADMIN_HINT,
+    io_detail, step_err, step_ok, step_skip, InstallReport, InstallStep, PLUGIN_ADMIN_HINT,
+    PLUGIN_ELEVATED_DENIED_HINT, PLUGIN_LOCKED_HINT,
 };
 
 // Paths are resolved by the frontend (which release/plugin, where); the native
@@ -185,8 +186,42 @@ fn install_contents(label: &str, src_dir: &Path, dst_dir: &Path, dry: bool) -> I
     step_ok(label, files, detail)
 }
 
+/// Which guidance a failed plugin copy has earned, or None when the error is
+/// neither of the two causes we can name.
+///
+/// The causes are genuinely different — elevation fixes a permission refusal and
+/// does NOTHING for a DLL Daz Studio has loaded — so they must never be offered
+/// as one blurred hint. With the install able to elevate on demand, a locked DLL
+/// that suggests "try administrator rights" turns that button into a cargo cult:
+/// click, fail identically, stop trusting it. A cause we can't name gets no hint
+/// at all rather than a guessed one (a full disk is not an elevation problem).
+fn copy_failure_hint(e: &std::io::Error, elevated: bool) -> Option<&'static str> {
+    // ERROR_SHARING_VIOLATION (32) — the file is open in another process. Rust
+    // maps it to no ErrorKind of its own, so the raw OS code is the only way to
+    // tell it apart from a refusal.
+    if e.raw_os_error() == Some(32) {
+        return Some(PLUGIN_LOCKED_HINT);
+    }
+    // ERROR_ACCESS_DENIED (5) — what Program Files returns unelevated.
+    if e.kind() == std::io::ErrorKind::PermissionDenied {
+        return Some(if elevated { PLUGIN_ELEVATED_DENIED_HINT } else { PLUGIN_ADMIN_HINT });
+    }
+    None
+}
+
 /// Copy every `.dll` in `exporter_folder` into `<daz_install>/plugins`.
-fn install_plugin_dlls(label: &str, exporter_folder: &Path, daz_install: &Path, dry: bool) -> InstallStep {
+///
+/// `elevated` only chooses the wording of a permission failure — it is a
+/// statement about the process this runs in, not a request to elevate. The
+/// elevated path (`elevate.rs`) calls THIS function from its child process, so
+/// both paths copy identically and can never drift.
+pub(crate) fn install_plugin_dlls(
+    label: &str,
+    exporter_folder: &Path,
+    daz_install: &Path,
+    dry: bool,
+    elevated: bool,
+) -> InstallStep {
     if !exporter_folder.exists() {
         return step_skip(label, format!("exporter folder not found ({})", exporter_folder.display()));
     }
@@ -235,16 +270,15 @@ fn install_plugin_dlls(label: &str, exporter_folder: &Path, daz_install: &Path, 
     for dll in &dlls {
         let to = plugins.join(dll.file_name().unwrap());
         if let Err(e) = fs::copy(dll, &to) {
-            // Writing into Program Files needs elevation, and Windows also locks
-            // plugin DLLs that a running Daz Studio has loaded — but surface the
-            // ACTUAL error too: a disk-full/other failure must not be
-            // misdiagnosed as an elevation problem.
+            // Always surface the ACTUAL error; the hint (when we have one) is
+            // appended to it, never substituted for it — a disk-full failure
+            // must not be misdiagnosed as an elevation problem.
+            let hint = copy_failure_hint(&e, elevated)
+                .map(|h| format!(" — {h}"))
+                .unwrap_or_default();
             return step_err(
                 label,
-                format!(
-                    "couldn't write {}: {e} — {ADMIN_HINT} (Daz also locks loaded plugin DLLs)",
-                    to.display()
-                ),
+                format!("couldn't write {}: {e}{hint}", to.display()),
             );
         }
         files += 1;
@@ -307,6 +341,10 @@ pub fn install_dth_plugin(request: PluginInstallRequest) -> InstallReport {
         Path::new(&request.exporter_folder),
         Path::new(&request.daz_install_folder),
         request.dry_run,
+        // This command runs in the studio's own process — elevated only if the
+        // whole app was started that way, which is exactly what `elevate.rs`
+        // exists to stop being necessary.
+        crate::elevation::is_elevated(),
     );
     let total_files = step.files;
     InstallReport { dry_run: request.dry_run, steps: vec![step], total_files }
