@@ -199,51 +199,369 @@ function writeRunLog(sPath, oSummary){
  * special case (Constant keys, a workaround for DS6 drifting Linear ROM keys)
  * is ROLLED BACK (runtime v35): it didn't actually solve the drift and caused
  * headaches with the DK9 ROM, and mrpdean is rolling the same workaround out
- * of the next DTH release (July 2026). */
-function setLinearInterp(oNodes, startFrame, endFrame){
+ * of the next DTH release (July 2026).
+ *
+ * MEASURED 2026-08-16 — DS 4.24, runtime v76, scene.animations read straight
+ * out of a shipped LaraCroft_G81_THICK_ROM.duf. Three facts, and this pass is
+ * the answer to all three:
+ *
+ *  1. 230 of its 292 morph channels serialized CONSTANT, 62 LINEAR. That split
+ *     is NOT two kinds of morph: the CONSTANT ones are exactly the channels the
+ *     ROM PRESETS key (pCTRL*, CTRL*, facs_ctrl_*, facs_jnt_*, facs_bs_*), the
+ *     LINEAR ones exactly the channels this runtime CREATES with setValue.
+ *     Loading a pose preset carries the interpolation stored IN the preset, and
+ *     mrpdean's ROM .duf files hold CONSTANT — so "loaded from a file" vs
+ *     "created by a script" is the whole of it.
+ *  2. The old pass was meant to erase that difference and did not. That run's
+ *     Daz log shows it collecting 107 props, finishing without an error, and
+ *     the scene saving after it — yet 43 of those 107 (the facs_bs_*
+ *     blendshapes: morph modifiers on the figure's own geometry, squarely
+ *     inside the old walk) still serialized CONSTANT. A setKeyInterpolationType
+ *     that changes nothing and reports nothing is indistinguishable from a
+ *     working one, so every stamp is now READ BACK, and a key that won't take
+ *     the stamp is rewritten through setValue (which carries the interpolation
+ *     as an argument). What could not be set is counted and logged.
+ *  3. Every channel this runtime creates serialized its frame-0 entry as
+ *     [0, value] with NO interpolation, while preset-loaded channels carry one.
+ *     Daz writes that bare entry for a channel whose first REAL key sits later,
+ *     and on load it falls back to whatever default interpolation the READER
+ *     has. dthEnsureFrameZeroKey turns it into a real key — same value, same
+ *     animation, but its interpolation is now written down.
+ *
+ * The old walk also skipped node properties WHOLESALE to protect the figure's
+ * transforms, and every pCTRL / facs_ control dial lives exactly there — ~190
+ * of the CONSTANT channels were never even looked at.
+ *
+ * EVERY animated channel is walked now, TRANSFORMS INCLUDED (bones too). The
+ * same measurement found all 1298 transform channels of that file CONSTANT,
+ * uniformly, from the same presets. The old "transforms should never be
+ * touched" rule was about not MOVING them, and nothing here moves a value: a
+ * stamp changes interpolation only, and the setValue fallback restores the
+ * exact value it read. At the keyed pose frames CONSTANT and LINEAR give
+ * identical values either way — what changes is the shape of the motion
+ * BETWEEN pose frames. */
 
-	// Set the session default to match, so keys created later start out right.
-	Scene.setDefaultKeyInterpolationType(DzProperty.Linear);
+var DTH_LINEAR_INTERP;                 // resolved once, by dthLinearInterp()
+var DTH_LINEAR_INTERP_DONE = false;
 
- 	startFrame = typeof startFrame !== 'undefined' ? startFrame : 0;
- 	endFrame = typeof endFrame !== 'undefined' ? endFrame : 0;
-	var props = [];
+// The nudge a key's value takes and gives back, to make Daz rewrite the key
+// (see dthStampKeyLinear). A value that will not move by this much in EITHER
+// direction belongs to a locked or driven channel, which is reported, not
+// retried.
+var DTH_INTERP_NUDGE = 0.001;
 
-	// Properties to skip (transforms should never be touched)
-	var skipProps = ["Scale", "XScale", "YScale", "ZScale",
-					 "XRotate", "YRotate", "ZRotate",
-					 "XTranslate", "YTranslate", "ZTranslate",
-					 "General Scale", "X Scale", "Y Scale", "Z Scale"];
+/* What one key's stamp came to. Named rather than numbered, because the five
+ * outcomes are NOT a severity scale — IMMOVABLE is usually harmless and
+ * VALUE_LOST is the worst thing this pass can do, and a caller reading `-1`
+ * would never guess which is which. */
+var DTH_KEY_LINEAR     = "linear";      // reads back LINEAR - the only verified win
+var DTH_KEY_UNVERIFIED = "unverified";  // rewritten, but this build cannot read interpolation back
+var DTH_KEY_IMMOVABLE  = "immovable";   // the VALUE would not move, so Daz never rewrote the key
+var DTH_KEY_FAILED     = "failed";      // the value moved and the key is still not LINEAR
+var DTH_KEY_VALUE_LOST = "value-lost";  // the nudge could not be put back - the key's VALUE is wrong
 
-	for(var x = 0; x < oNodes.length; x++)
-	{
+/**********************************************************************
+ * The LINEAR interpolation constant of the RUNNING Daz. The API reference
+ * spells this enum two ways — DzFloatProperty documents LINEAR_INTERP,
+ * DzProperty documents InterpLinear — and a name a build does NOT define reads
+ * back as `undefined`, which is enough to turn setKeyInterpolationType into a
+ * silent no-op (fact 2 above looks exactly like that). So: take the first
+ * spelling this build actually has, and print which one it was, because the
+ * next person debugging ROM interpolation should not have to guess. */
+function dthLinearInterp(){
+	if(DTH_LINEAR_INTERP_DONE) return DTH_LINEAR_INTERP;
+	DTH_LINEAR_INTERP_DONE = true;
+	var aTry = [];
+	if(typeof DzFloatProperty != "undefined"){
+		aTry.push(["DzFloatProperty.LINEAR_INTERP", DzFloatProperty.LINEAR_INTERP]);
+		aTry.push(["DzFloatProperty.InterpLinear", DzFloatProperty.InterpLinear]);
+	}
+	if(typeof DzProperty != "undefined"){
+		aTry.push(["DzProperty.InterpLinear", DzProperty.InterpLinear]);
+		aTry.push(["DzProperty.LINEAR_INTERP", DzProperty.LINEAR_INTERP]);
+		aTry.push(["DzProperty.Linear", DzProperty.Linear]);
+	}
+	// Diagnostic: this is the constant the session default is set from, below
+	// and in ApplyInitialValues. Undefined there means new keys fall back to
+	// the user's Daz preference instead of Linear.
+	print("Interpolation constants: DzProperty.Linear =",
+		(typeof DzProperty != "undefined") ? DzProperty.Linear : "<no DzProperty>");
+	for(var i = 0; i < aTry.length; i++){
+		if(aTry[i][1] !== undefined && aTry[i][1] !== null){
+			DTH_LINEAR_INTERP = aTry[i][1];
+			print("Stamping keys with", aTry[i][0], "=", DTH_LINEAR_INTERP);
+			return DTH_LINEAR_INTERP;
+		}
+	}
+	logRunError("No LINEAR interpolation constant on DzFloatProperty/DzProperty in this Daz build - ROM keys keep whatever interpolation they were created with.");
+	return undefined;
+}
+
+/** setValue, with the interpolation argument when this build gave us one. */
+function dthSetValueInterp(oProp, tTime, fValue, iInterp){
+	if(iInterp === undefined) oProp.setValue(tTime, fValue);
+	else oProp.setValue(tTime, fValue, iInterp);
+}
+
+/** Collect `oProp` when it is animated and not already collected. */
+function dthPushInterpProp(aProps, oSeen, sNodeKey, oProp){
+	if(!oProp || typeof oProp.getNumKeys != "function") return;
+	if(oProp.getNumKeys() < 1) return;
+	var sKey = sNodeKey + "|" + String(oProp.getName());
+	if(oSeen[sKey]) return;
+	oSeen[sKey] = true;
+	aProps.push(oProp);
+}
+
+/**********************************************************************
+ * Every animated float channel on `oNodes`: the morph modifiers on each node's
+ * OBJECT (delta morphs, FACS blendshapes) AND the node's own channels — the
+ * pCTRL / CTRL / facs_ctrl_ controllers the ROM presets key, which have no
+ * modifier of their own and which the pre-v77 walk never saw, plus the
+ * transform channels (see setLinearInterp: a ROM's bone keys arrive CONSTANT
+ * from the presets too, and nothing here moves a value). */
+function collectInterpProps(oNodes){
+	var aProps = [];
+	var oSeen = {};
+	for(var x = 0; x < oNodes.length; x++){
 		var oNode = oNodes[x];
+		if(!oNode) continue;
+		var sNodeKey = String(oNode.getName());
 		var oObj = oNode.getObject();
-		// Only process morph modifiers, NOT node properties (which include Scale/Transform)
 		if(oObj){
-			for(var i=0; i<oObj.getNumModifiers(); i++)
-			{
+			for(var i = 0; i < oObj.getNumModifiers(); i++){
 				var oMod = oObj.getModifier(i);
-				if(oMod && oMod.inherits("DzMorph"))
-				{
-					var oProp = oMod.getValueControl();
-					if(oProp && oProp.getNumKeys() > 1)
-					{
-						props.push(oProp);
-					}
+				if(!oMod || !oMod.inherits("DzMorph")) continue;
+				// getValueChannel first, getValueControl as the fallback — the
+				// same pair resetFrameDatasAtFrame uses to survive both APIs.
+				var oMorphProp = null;
+				if(typeof oMod.getValueChannel == "function") oMorphProp = oMod.getValueChannel();
+				if(!oMorphProp && typeof oMod.getValueControl == "function") oMorphProp = oMod.getValueControl();
+				dthPushInterpProp(aProps, oSeen, sNodeKey, oMorphProp);
+			}
+		}
+		if(typeof oNode.getNumProperties != "function") continue;
+		for(var p = 0; p < oNode.getNumProperties(); p++){
+			var oNodeProp = oNode.getProperty(p);
+			if(!oNodeProp || !oNodeProp.inherits("DzFloatProperty")) continue;
+			dthPushInterpProp(aProps, oSeen, sNodeKey, oNodeProp);
+		}
+	}
+	return aProps;
+}
+
+/**********************************************************************
+ * Give a channel a REAL key at frame 0 (fact 3 above). Same value it already
+ * holds there, so the animation is unchanged — only now the interpolation of
+ * that key is written to the .duf instead of being left to the reader.
+ *
+ * setValue is a no-op when the value doesn't change, so the value is nudged off
+ * and put back exactly; both directions, because a value sitting on a limit
+ * clamps straight back to itself.
+ *
+ * An ERC-DRIVEN channel reads its controller's contribution back through
+ * getValue, so keying it from getValue can DOUBLE-APPLY — this is the -10%
+ * character height that read as -20% (see closeDanglingMorphKeys), and a wrong
+ * value is far worse than an implicit key. A driven channel is therefore left
+ * alone up front where the build can say so, and rolled back after the fact
+ * where it can't.
+ *
+ * Returns 1 when a key was added, 0 when one was already there or the channel
+ * isn't animated, -1 when it was skipped, could not be added, or was rolled
+ * back. A rollback that does not fully undo itself leaves a WRONG VALUE at
+ * frame 0 and logs a run-log error naming the channel — the caller's summary
+ * line covers only the benign "kept its implicit key" half of -1. */
+function dthEnsureFrameZeroKey(oProp, iInterp){
+	if(oProp.getNumKeys() < 1) return 0;
+	if(oProp.getKeyTime(0) == 0) return 0;
+	// Driven by an ERC link? Then its value at frame 0 is not ours to write.
+	if(typeof oProp.getNumControllers == "function" && oProp.getNumControllers() > 0) return -1;
+	var iKeysBefore = oProp.getNumKeys();
+	var fAt0 = oProp.getValue(0);
+	var aNudge = [fAt0 + DTH_INTERP_NUDGE, fAt0 - DTH_INTERP_NUDGE];
+	for(var n = 0; n < aNudge.length && oProp.getKeyTime(0) != 0; n++){
+		dthSetValueInterp(oProp, 0, aNudge[n], iInterp);
+		dthSetValueInterp(oProp, 0, fAt0, iInterp);
+	}
+	if(oProp.getKeyTime(0) != 0) return -1;
+	if(approx_eq(oProp.getValue(0), fAt0)) return 1;
+	// The value moved: this build reported no controllers but behaves like a
+	// driven channel. Drop the key again — [0,0] is the one key just added
+	// whether deleteKeys reads its arguments as times or as indices. Every way
+	// that rollback can fail leaves a WRONG VALUE at frame 0, so every one of
+	// them is a run-log error naming the channel; none may pass as the benign
+	// "kept its implicit key" case the caller reports.
+	if(typeof oProp.deleteKeys != "function"){
+		logRunError("Frame-0 key on " + oProp.getLabel() + " moved the channel's value to " +
+			oProp.getValue(0) + " (expected " + fAt0 + ") and this Daz build has no deleteKeys to undo it - check this channel at frame 0.");
+		return -1;
+	}
+	oProp.deleteKeys(0, 0);
+	var iKeysAfter = oProp.getNumKeys();
+	if(iKeysAfter > iKeysBefore){
+		logRunError("Frame-0 key rollback on " + oProp.getLabel() + " removed nothing - the channel now holds " +
+			oProp.getValue(0) + " at frame 0 instead of " + fAt0 + ".");
+	} else if(iKeysAfter < iKeysBefore){
+		logRunError("Frame-0 key rollback on " + oProp.getLabel() + " removed " +
+			(iKeysBefore + 1 - iKeysAfter) + " key(s) instead of 1 - check this channel's animation.");
+	}
+	return -1;
+}
+
+/**********************************************************************
+ * LINEAR for key `j`, VERIFIED. Returns one of the DTH_KEY_* outcomes above.
+ *
+ * A build with no getKeyInterpolationType gets DTH_KEY_UNVERIFIED, never
+ * DTH_KEY_LINEAR: setKeyInterpolationType is measured to do NOTHING, so
+ * "stamped it and could not read it back" would mean reporting a whole ROM
+ * fixed while changing not one key. The setValue rewrite still runs there (it
+ * is the mechanism that works), and the caller says plainly that it could not
+ * be confirmed.
+ *
+ * MEASURED 2026-08-16 (DS 4.24), which is why this looks the way it does:
+ *   - setKeyInterpolationType() changed NOTHING, in either overload, on any of
+ *     7747 keys. It is still called first because it costs one call and may be
+ *     the right route on another build - but it is never trusted.
+ *   - setValue(t, v, LINEAR) DOES rewrite the key's interpolation: 1190 of 1500
+ *     attempts. It is a no-op when the value doesn't change, hence the nudge,
+ *     and the interpolation ARGUMENT is what lands (the session default alone
+ *     changes nothing on an existing key).
+ *   - The 310 that refused were all channels whose value cannot move: locked
+ *     transforms (min == max == 0) and the hidden /Hidden/CTRLMDs ERC
+ *     controllers, every one of them a SINGLE key at frame 0, where
+ *     interpolation spans nothing. Hence DTH_KEY_IMMOVABLE - but that is what
+ *     ONE scene held, so this function reports the fact and setLinearInterp
+ *     decides, per channel, whether this scene agrees. An immovable key on a
+ *     multi-key channel is a real failure and says so.
+ *     Immovable is also never allowed to abort the pass for everything after
+ *     it, which is exactly the bug that made runtime v77 report 5333 failures. */
+function dthStampKeyLinear(oProp, j, iInterp){
+	var bCanRead = (typeof oProp.getKeyInterpolationType == "function");
+	if(typeof oProp.setKeyInterpolationType == "function") oProp.setKeyInterpolationType(j, iInterp);
+	if(bCanRead && oProp.getKeyInterpolationType(j) == iInterp) return DTH_KEY_LINEAR;
+	// Rewrite the key through setValue, which carries the interpolation as an
+	// argument: nudge the value off and put it back EXACTLY. Both directions,
+	// because a value sitting on a limit clamps straight back to itself.
+	var tKey = oProp.getKeyTime(j);
+	var fValue = oProp.getKeyValue(j);
+	var aNudge = [fValue + DTH_INTERP_NUDGE, fValue - DTH_INTERP_NUDGE];
+	var bValueMoved = false;
+	for(var n = 0; n < aNudge.length; n++){
+		dthSetValueInterp(oProp, tKey, aNudge[n], iInterp);
+		if(!approx_eq(oProp.getKeyValue(j), fValue)) bValueMoved = true;
+		dthSetValueInterp(oProp, tKey, fValue, iInterp);
+		// Blind build: the rewrite is all there is, and a value that moved is
+		// the only evidence it happened. One direction is enough.
+		if(bValueMoved && !bCanRead) break;
+		if(bCanRead && oProp.getKeyInterpolationType(j) == iInterp) break;
+	}
+	// The VALUE is what must survive this pass. A key left sitting a nudge off
+	// its own value is worse than a key with the wrong interpolation, so the
+	// restore is retried AND read back, and it outranks every other outcome.
+	if(!approx_eq(oProp.getKeyValue(j), fValue)){
+		oProp.setValue(tKey, fValue);
+		if(!approx_eq(oProp.getKeyValue(j), fValue)) return DTH_KEY_VALUE_LOST;
+	}
+	if(!bCanRead) return bValueMoved ? DTH_KEY_UNVERIFIED : DTH_KEY_IMMOVABLE;
+	if(oProp.getKeyInterpolationType(j) == iInterp) return DTH_KEY_LINEAR;
+	return bValueMoved ? DTH_KEY_FAILED : DTH_KEY_IMMOVABLE;
+}
+
+/**********************************************************************
+ * The figure and EVERY node under it — the bones the ROM presets pose, the G9
+ * mouth, the GP/DK geografts, conformed clothing. The complete set of nodes a
+ * ROM carries keys on, which is what the final interpolation pass needs: a
+ * root-and-mouth pass never saw a geograft's art-direction morphs, a frame-0
+ * clothing fit, or a single bone rotation. */
+function dthKeyedNodes(oNodeRoot){
+	var aNodes = [oNodeRoot];
+	if(!oNodeRoot || typeof oNodeRoot.getNodeChildren != "function") return aNodes;
+	var aKids = oNodeRoot.getNodeChildren(true);
+	for(var i = 0; aKids && i < aKids.length; i++){
+		if(aKids[i]) aNodes.push(aKids[i]);
+	}
+	return aNodes;
+}
+
+function setLinearInterp(oNodes){
+
+	var iInterp = dthLinearInterp();
+	// No constant to stamp WITH: dthLinearInterp has already logged that, and
+	// there is nothing this pass can do about it. Return before touching the
+	// scene rather than nudging thousands of values for no possible gain.
+	if(iInterp === undefined) return;
+	// Set the session default to match, so keys created later start out right.
+	// It takes the RESOLVED constant: `DzProperty.Linear` — what this line
+	// passed until v78 — is undefined on DS 4.24 (measured), so the call has
+	// been handing Daz an undefined enum for as long as it has existed. Now
+	// that it lands, it OUTLIVES the run: the user's Daz keeps creating Linear
+	// keys until they change it back or restart (documented in the gotchas).
+	Scene.setDefaultKeyInterpolationType(iInterp);
+
+	var aProps = collectInterpProps(oNodes);
+	print("Animated channels to set LINEAR interp:", aProps.length)
+
+	var iKeys = 0, iLinear = 0, iUnverified = 0, iSpansNothing = 0, iStuck = 0;
+	var iFailedKeys = 0, iValueLost = 0, iZeroAdded = 0, iZeroFailed = 0;
+	var aStuckNames = [];
+	for(var i = 0; i < aProps.length; i++){
+		var oProp = aProps[i];
+		var iZero = dthEnsureFrameZeroKey(oProp, iInterp);
+		if(iZero > 0) iZeroAdded++;
+		else if(iZero < 0) iZeroFailed++;
+		var iNumKeys = oProp.getNumKeys();
+		// A key that cannot be re-keyed is only harmless when it is the
+		// channel's ONE key and it sits at frame 0, where interpolation spans
+		// nothing. Every immovable channel measured was exactly that — but ASK
+		// this scene rather than repeat that measurement as if it were a law.
+		var bBenignIfStuck = (iNumKeys == 1 && oProp.getKeyTime(0) == 0);
+		var bNamed = false;   // one channel contributes ONE name, not one per key
+		for(var j = 0; j < iNumKeys; j++){
+			iKeys++;
+			var sResult = dthStampKeyLinear(oProp, j, iInterp);
+			if(sResult == DTH_KEY_LINEAR) iLinear++;
+			else if(sResult == DTH_KEY_UNVERIFIED) iUnverified++;
+			else if(sResult == DTH_KEY_VALUE_LOST) iValueLost++;
+			else if(sResult == DTH_KEY_FAILED) iFailedKeys++;
+			else if(bBenignIfStuck) iSpansNothing++;
+			else {
+				iStuck++;
+				if(!bNamed && aStuckNames.length < 10){
+					aStuckNames.push(oProp.getLabel());
+					bNamed = true;
 				}
 			}
 		}
-		// Skip node properties entirely - they include Scale/Transform which should never be modified
 	}
-	print("Morph props to set LINEAR interp:", props.length)
-	var iInterp = DzFloatProperty.LINEAR_INTERP;
-	for( var i = 0; i < props.length; i++){
-		oProp = props[i];
-		for( var j = 0; j < oProp.getNumKeys(); j++) {
-			// Only set interpolation type - do NOT call setValue as it can modify values
-			oProp.setKeyInterpolationType(j, iInterp);
-		}
+	print("LINEAR on", iLinear, "of", iKeys, "key(s);", iSpansNothing,
+		"span nothing;", iZeroAdded, "frame-0 key(s) made real");
+	// A single key at frame 0 on a locked transform or a hidden ERC controller
+	// cannot be re-keyed and does not need to be. Worth saying; not worth
+	// failing a run over. Everything below it IS.
+	if(iSpansNothing > 0){
+		print("NOTE:", iSpansNothing, "key(s) would not take a new value - each is its channel's only key, at frame 0, where interpolation spans nothing.");
+	}
+	if(iZeroFailed > 0){
+		print("WARNING:", iZeroFailed, "channel(s) kept an implicit frame-0 key (driven value, or no key could be made there) - frame 0 falls back to Daz's default interpolation on those.");
+	}
+	// A wrong VALUE is the worst thing this pass can leave behind - louder than
+	// any interpolation problem, and named first.
+	if(iValueLost > 0){
+		logRunError("Key interpolation: " + iValueLost + " key(s) could not be restored to their original value after the interpolation rewrite. Those keys are off by up to " +
+			DTH_INTERP_NUDGE + " - re-run the ROM and check them before exporting.");
+	}
+	if(iStuck > 0){
+		logRunError("Key interpolation: " + iStuck + " key(s) on multi-key or non-zero-frame channels would not take a new value, so they keep their old interpolation (e.g. " +
+			aStuckNames.join(", ") + ").");
+	}
+	if(iFailedKeys > 0){
+		logRunError("Key interpolation: " + iFailedKeys + " of " + iKeys +
+			" key(s) would not read back LINEAR. The ROM still builds, but those keys use Daz's default interpolation.");
+	}
+	// Stamped, but this build cannot report interpolation back, so the pass has
+	// NOT been confirmed. Say that instead of counting them as wins.
+	if(iUnverified > 0){
+		logRunError("Key interpolation: " + iUnverified + " key(s) were rewritten LINEAR but this Daz build has no getKeyInterpolationType, so none of it could be verified.");
 	}
 }
 
@@ -321,7 +639,13 @@ function setPropertyByName(oNode, sPropName, fValue, iFrame){
 	// setValue returns false when the value is ALREADY fValue (nothing to change),
 	// so don't gate success on its return — verify by reading the value back. This
 	// stops a no-op (e.g. FACS Detail Strength already at 1) logging a false "Failed".
-	oProp.setValue(tFrame, fValue, DzProperty.Linear);
+	//
+	// The interpolation goes through the RESOLVED constant (v78): this line used to
+	// pass `DzProperty.Linear`, which is undefined on DS 4.24 — and unlike the
+	// session default, an interpolation ARGUMENT is the thing that lands on the key
+	// (measured; see dthStampKeyLinear). So this call has been handing Daz an
+	// undefined enum on the one call form where the argument decides.
+	dthSetValueInterp(oProp, tFrame, fValue, dthLinearInterp());
 	if (approx_eq(oProp.getValue(tFrame), fValue)){
 		print("Set property", oProp.getLabel(), "to", fValue, "at frame", iFrame);
 		return true;

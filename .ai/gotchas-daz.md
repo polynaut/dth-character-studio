@@ -52,6 +52,85 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   broke the DK9 ROM; mrpdean removed the same workaround from the DTH release
   (July 2026). Keys are LINEAR everywhere again, and the runtime no longer
   version-detects DS6 for interpolation.
+- **A ROM's key interpolation has TWO sources, and only one of them is ours.**
+  Measured 2026-08-16 (DS 4.24, runtime v76, `scene.animations` read out of a
+  shipped `*_ROM.duf`): of 292 morph channels, **230 serialized `CONSTANT` and
+  62 `LINEAR`** — and the split is not two kinds of morph. The CONSTANT ones are
+  exactly the channels mrpdean's ROM **presets** key (`pCTRL*`, `CTRL*`,
+  `facs_ctrl_*`, `facs_jnt_*`, `facs_bs_*`): **`loadPreset` carries the
+  interpolation stored in the preset `.duf`, and those files hold CONSTANT.**
+  The LINEAR ones are exactly the channels the runtime **creates** with
+  `setValue` (they inherit the session default). `Scene.setDefaultKeyInterpolationType`
+  cannot touch the first group — it only governs keys created afterwards. All
+  1298 transform/bone channels of that same file were CONSTANT too, uniformly,
+  from the same presets; since v77 the pass stamps those as well. Values at the
+  keyed pose frames are identical under either interpolation — CONSTANT vs
+  LINEAR only changes the motion BETWEEN pose frames, which is why stamping
+  transforms is safe for a PoseAsset export that samples whole pose frames.
+- **`setKeyInterpolationType()` does nothing on DS 4.24 — use `setValue`.**
+  Measured over 7747 keys: **zero** changed, in EITHER overload
+  (`(i, type)` and `(i, type, 0, 0, 0)`), with no exception and no warning. The
+  enum is not the problem — `DzFloatProperty.LINEAR_INTERP` and
+  `DzProperty.InterpLinear` both exist and are both `0`. What works is
+  **`setValue(tm, val, LINEAR)`**: it rewrites the key's interpolation, at any
+  time, inside an undo hold or not. Two conditions, both measured: `setValue` is
+  a no-op when the value doesn't change (so nudge the value off and put it back
+  exactly), and the **interpolation ARGUMENT is what lands** — setting the
+  session default and calling `setValue(tm, val)` leaves an existing key's
+  interpolation alone. Never assume a Daz setter worked because it didn't throw;
+  `getKeyInterpolationType` reads back honestly and is the only proof.
+- **`DzProperty.Linear` does not exist** (DS 4.24) — it reads `undefined`, and
+  `Scene.setDefaultKeyInterpolationType(undefined)` fails silently. The runtime
+  passed exactly that for years. The spellings that DO resolve are
+  `DzProperty.InterpLinear` / `InterpConstant` and
+  `DzFloatProperty.LINEAR_INTERP` / `CONSTANT_INTERP` / `TCB_INTERP` (0 / 1 / 2).
+  It had **three** call sites, not two, and the third is the one that matters
+  most: `setPropertyByName` passed it as `setValue`'s interpolation ARGUMENT —
+  the one place the argument is what lands. Grep the whole runtime for a
+  constant like this, not just the API you were debugging; v78 fixed two of the
+  three on the first pass and the review caught the third.
+- **Setting the session default outlives the run.** Now that
+  `Scene.setDefaultKeyInterpolationType` gets a defined enum, running a ROM
+  script leaves the user's Daz creating **Linear** keys afterwards — it is a
+  session-level setting the runtime never puts back. Harmless for the ROM (the
+  final pass stamps every key regardless) but it is a real change to the user's
+  app, and it is new: for as long as the call passed `undefined` it did nothing
+  at all. NOT verified whether it also persists into Daz's saved preferences
+  across a restart.
+- **Some channels can never be re-interpolated, and that is fine.** Locked
+  transforms (`min == max == 0`) and the hidden `/Hidden/CTRLMDs` ERC
+  controllers refuse the value nudge, so Daz never rewrites their keys — 310 of
+  1500 when measured on a SAVED-AND-RELOADED ROM scene (a live build reported
+  none of them: those channels only carry keys once the scene has been through
+  a save). Every one was a SINGLE key at frame 0, where interpolation spans
+  nothing. Count them apart from real failures, and never
+  let them abort the pass: runtime v77 had a "give up after 100 fruitless
+  attempts" breaker, those channels sit at the HEAD of the node walk, and so the
+  breaker fired on them and switched the fix off for the 5233 keys behind them.
+  A give-up rule must key off the *reason* something failed, not a raw count.
+  **"Single key at frame 0" is what that scene held, not a law** — the runtime
+  re-checks `getNumKeys() == 1 && getKeyTime(0) == 0` per channel before calling
+  an immovable key harmless, and an immovable key anywhere else is a run-log
+  error. A measurement quoted back as an invariant is how a silent failure gets
+  a licence.
+- **The Timeline pane's "Set Key Interpolation > Linear" is not scriptable.**
+  `DzTimePaneSetInterpLinearAction` (in `dztimeline.dll`, alongside
+  `DzTimePaneSelectItemAnimRangeKeysAction` and the `DzTimePaneSetKeyScope*`
+  family) is found by the action manager but reports `enabled: false` outside
+  the pane's own focus/selection context, so triggering it does nothing. The
+  manual workflow — select all keys, set Linear — has no script equivalent
+  through the actions; `setValue` is the route.
+- **Daz writes an implicit, un-typed key at frame 0.** A channel whose first REAL
+  key sits later serializes as `[0, value]` with **no** interpolation element,
+  while a channel with a real key at 0 (e.g. one loaded from a preset) gets
+  `[0, value, ["CONSTANT"]]`. The bare entry falls back to whatever default
+  interpolation the READER has. `setValue(0, v)` on a still-unkeyed property
+  sets its static value rather than creating a key, which is how the ROM's own
+  frame-0 reset left every created channel like this. v77's
+  `dthEnsureFrameZeroKey` nudges the value off and back to force a real key —
+  and rolls it back if the value moved at all, because `getValue` on an
+  ERC-driven channel reads the controller's contribution too (the double-apply
+  trap `closeDanglingMorphKeys` already documents).
 - **A failed script `include()`/load logs nothing** in Daz Studio. Diagnose with a
   minimal probe `.dsa` that logs before/after the suspect statement. It can also
   fail TRANSIENTLY: on 2026-08-14 a `.Bulk_ROM_Export.dsa` that had run five

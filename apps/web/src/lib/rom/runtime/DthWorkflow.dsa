@@ -237,10 +237,12 @@ function ApplyDTHWorkflow(options){
 
 	/** ****************************************************************/
 	// Final pass over ALL keyed morphs (Linear everywhere — see setLinearInterp).
-	// The mouth node is included: its FAC keys are morph
-	// modifiers on the MOUTH object, which a root-only pass never touches.
+	// EVERY node the build can key, not just the figure and the mouth: the FAC
+	// keys are morph modifiers on the MOUTH object, the GP/DK art-direction
+	// morphs sit on their geografts and a frame-0 clothing fit lands on the
+	// conformed item — a root-only pass never touches any of them.
 	print("Setting key interpolation");
-	setLinearInterp(oNodeMouth ? [oNodeRoot, oNodeMouth] : [oNodeRoot]);
+	setLinearInterp(dthKeyedNodes(oNodeRoot));
 
 	// Reset timeline to frame 0 so character appears in base state
 	Scene.setFrame(0);
@@ -273,9 +275,12 @@ function CreateFrameDatas(options, startFrame){
 
 function ApplyInitialValues(options, oNodeRoot){
 	//var oContentMgr = App.getContentMgr();
-	// Set the default interpolation off the bat, so hopefully it doesn't need to
-	// be set later — Linear everywhere (see setLinearInterp).
-	Scene.setDefaultKeyInterpolationType(DzProperty.Linear);
+	// Set the default interpolation off the bat, so keys created during the build
+	// start out right — Linear everywhere (see setLinearInterp). Through the
+	// RESOLVED constant: `DzProperty.Linear` does not exist on DS 4.24
+	// (measured 2026-08-16), so this line spent its whole life passing undefined.
+	var iLinear = dthLinearInterp();
+	if(iLinear !== undefined) Scene.setDefaultKeyInterpolationType(iLinear);
 	if( options["FACsDetailStrength"] > 0 ) {
 		setPropertyByName(oNodeRoot, "facs_ctrl_FACSDetailStrength", options["FACsDetailStrength"], 0) }
 	if( options["FlexionStrength"] > 0 ) {
@@ -386,9 +391,10 @@ function ApplyDK9(options, oNodeRoot, oNodeDk9, startFrame){
 	if( options["dkArtDirection"] ){
 		applyArtDirectionData(options["dkArtDirection"], oNodeRoot, startFrame);
 	}
-
-	print("Setting keys to linear interpolation");
-	setLinearInterp([oNodeDk9]);
+	// No per-block setLinearInterp (v78): this node is a child of oNodeRoot, so
+	// the final pass in ApplyDTHWorkflow already covers it — and since v78 that
+	// pass also CREATES frame-0 keys, which mid-build would capture whatever
+	// value the block happened to leave rather than the finished base state.
 }
 
 
@@ -406,8 +412,11 @@ function ApplyPhysics(options, oNodeRoot, startFrame){
 		return false;
 	}
 
-	print("Setting keys to linear interpolation");
-	setLinearInterp([oNodeRoot]);
+	// No per-block setLinearInterp (v78) — see the note in ApplyDK9. On THIS
+	// node it also mattered for correctness: a mid-build frame-0 key on the
+	// figure lands before restoreNodeTransforms / resetFrameDatasAtFrame /
+	// restorePreservedMorphs run, which made a preserved morph's frame-0 value
+	// depend on whether the Physics block was enabled.
 	return true;
 }
 
@@ -451,9 +460,7 @@ function ApplyGP9(options, oNodeRoot, oNodeGP, startFrame){
 	// and would hold through Physics/custom.
 	closeDanglingMorphKeys([oNodeGP], startFrame + gpFrameCount);
 
-	print("Setting keys to linear interpolation");
-	setLinearInterp([oNodeGP]);
-
+	// No per-block setLinearInterp (v78) — see the note in ApplyDK9.
 	return true;
 }
 

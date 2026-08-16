@@ -838,5 +838,55 @@ v76 — the generated `Scan_Products_<Name>.dsa` carries Content Library artwork
       what makes Refresh assets do it. Its artwork also joins the removal
       sweep's `iconBearing` list, so turning Daz Products off retires the tiles
       with the script instead of leaving a tile pointing at nothing.
+v77 — every ROM key is stamped LINEAR for real. Measured on a shipped v76 ROM
+      (2026-08-16, DS 4.24): 230 of 292 morph channels serialized CONSTANT —
+      exactly the channels mrpdean's ROM PRESETS key, whose interpolation comes
+      from the preset .duf, while the 62 the runtime CREATES were LINEAR. The
+      pass meant to unify them didn't: it skipped node properties wholesale
+      (where every pCTRL*/facs_* control dial lives, ~190 channels) AND its
+      setKeyInterpolationType left the 43 facs_bs_* blendshapes it DID walk
+      untouched, with no error. So setLinearInterp now walks node dials too
+      (transforms excluded by group + by name), resolves the LINEAR enum against
+      the running build instead of trusting one spelling, READS BACK every stamp
+      and rewrites the key through setValue when it didn't take, and gives each
+      channel a real frame-0 key — Daz writes an implicit `[0, value]` with no
+      interpolation when the first real key sits later, which falls back to the
+      reader's default. Failures are counted into the run log instead of passing
+      silently. The final pass also covers EVERY node under the figure (bones,
+      geografts, clothing), not just the figure and the mouth, and no longer
+      excludes transform channels: the same measurement found all 1298 of that
+      file's transform channels CONSTANT, uniformly, from the same presets. The
+      old "never touch transforms" rule was about not MOVING them, and nothing
+      in the pass moves a value - only the shape of the motion BETWEEN pose
+      frames changes, never a value at a keyed frame.
+v78 — v77 shipped a pass that reported 5333 of 7747 keys unfixable; this is the
+      one that actually works. Two measured facts (DS 4.24, from probes run
+      against a built ROM scene): setKeyInterpolationType() changes NOTHING in
+      either overload, and setValue(t, v, LINEAR) DOES rewrite a key's
+      interpolation (1190 of 1500 attempts) with the interp ARGUMENT deciding,
+      not the session default. v77 already did the setValue rewrite - but its
+      circuit breaker gave up after 100 fruitless attempts, and the first 100
+      channels of the walk are the ones that can never work (locked transforms
+      with min == max, hidden /Hidden/CTRLMDs ERC controllers - all single keys
+      at frame 0, where interpolation spans nothing). So the breaker fired on
+      the hopeless head of the list and switched the fix off for everything
+      after it. It is gone: a key whose VALUE will not move is now counted
+      apart from a key that moved and stayed wrong, and only the latter reaches
+      the run log. Also: `DzProperty.Linear` is undefined on DS 4.24, so all
+      THREE places this runtime passed it had been handing Daz an undefined
+      enum - the two Scene.setDefaultKeyInterpolationType calls and, the one
+      that matters most, setPropertyByName's setValue(t, v, interp), where the
+      argument is the thing that lands. All take the resolved constant now.
+      The pass reports only what it can prove: a key that would not move is
+      benign ONLY when this scene says it is the channel's one key at frame 0
+      (measured per channel, not assumed from the 2026-08-16 sample); a build
+      with no getKeyInterpolationType is "rewritten but unverified", never
+      counted as LINEAR; a nudge that cannot be put back is its own, louder
+      failure than any interpolation problem; and with no LINEAR constant
+      resolved the pass returns before touching the scene. The three per-block
+      setLinearInterp calls (DK, GP, Physics) are gone: all three nodes are
+      children of oNodeRoot and so already inside the final pass, and running
+      the frame-0 half of it mid-build made a preserved morph's frame-0 value
+      depend on whether the Physics block was enabled.
 ```
 
