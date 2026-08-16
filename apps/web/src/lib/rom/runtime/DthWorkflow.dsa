@@ -237,10 +237,12 @@ function ApplyDTHWorkflow(options){
 
 	/** ****************************************************************/
 	// Final pass over ALL keyed morphs (Linear everywhere — see setLinearInterp).
-	// The mouth node is included: its FAC keys are morph
-	// modifiers on the MOUTH object, which a root-only pass never touches.
+	// EVERY node the build can key, not just the figure and the mouth: the FAC
+	// keys are morph modifiers on the MOUTH object, the GP/DK art-direction
+	// morphs sit on their geografts and a frame-0 clothing fit lands on the
+	// conformed item — a root-only pass never touches any of them.
 	print("Setting key interpolation");
-	setLinearInterp(oNodeMouth ? [oNodeRoot, oNodeMouth] : [oNodeRoot]);
+	setLinearInterp(dthKeyedNodes(oNodeRoot));
 
 	// Reset timeline to frame 0 so character appears in base state
 	Scene.setFrame(0);

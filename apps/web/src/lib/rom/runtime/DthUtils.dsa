@@ -199,7 +199,240 @@ function writeRunLog(sPath, oSummary){
  * special case (Constant keys, a workaround for DS6 drifting Linear ROM keys)
  * is ROLLED BACK (runtime v35): it didn't actually solve the drift and caused
  * headaches with the DK9 ROM, and mrpdean is rolling the same workaround out
- * of the next DTH release (July 2026). */
+ * of the next DTH release (July 2026).
+ *
+ * MEASURED 2026-08-16 — DS 4.24, runtime v76, scene.animations read straight
+ * out of a shipped LaraCroft_G81_THICK_ROM.duf. Three facts, and this pass is
+ * the answer to all three:
+ *
+ *  1. 230 of its 292 morph channels serialized CONSTANT, 62 LINEAR. That split
+ *     is NOT two kinds of morph: the CONSTANT ones are exactly the channels the
+ *     ROM PRESETS key (pCTRL*, CTRL*, facs_ctrl_*, facs_jnt_*, facs_bs_*), the
+ *     LINEAR ones exactly the channels this runtime CREATES with setValue.
+ *     Loading a pose preset carries the interpolation stored IN the preset, and
+ *     mrpdean's ROM .duf files hold CONSTANT — so "loaded from a file" vs
+ *     "created by a script" is the whole of it.
+ *  2. The old pass was meant to erase that difference and did not. That run's
+ *     Daz log shows it collecting 107 props, finishing without an error, and
+ *     the scene saving after it — yet 43 of those 107 (the facs_bs_*
+ *     blendshapes: morph modifiers on the figure's own geometry, squarely
+ *     inside the old walk) still serialized CONSTANT. A setKeyInterpolationType
+ *     that changes nothing and reports nothing is indistinguishable from a
+ *     working one, so every stamp is now READ BACK, and a key that won't take
+ *     the stamp is rewritten through setValue (which carries the interpolation
+ *     as an argument). What could not be set is counted and logged.
+ *  3. Every channel this runtime creates serialized its frame-0 entry as
+ *     [0, value] with NO interpolation, while preset-loaded channels carry one.
+ *     Daz writes that bare entry for a channel whose first REAL key sits later,
+ *     and on load it falls back to whatever default interpolation the READER
+ *     has. dthEnsureFrameZeroKey turns it into a real key — same value, same
+ *     animation, but its interpolation is now written down.
+ *
+ * The old walk also skipped node properties WHOLESALE to protect the figure's
+ * transforms, and every pCTRL / facs_ control dial lives exactly there — ~190
+ * of the CONSTANT channels were never even looked at. They are walked now, with
+ * transforms skipped by group AND by name. BONE transforms stay untouched: the
+ * ROM's bone channels arrive CONSTANT from mrpdean's presets, the PoseAsset
+ * side samples whole pose frames either way, and changing them is a separate
+ * decision from this one. */
+
+// Transform + rig-plumbing groups a ROM must never re-interpolate. Same shape
+// as DthScanMorphs' DTH_RX_SKIP_GROUP (a separate script — no shared scope);
+// tested against the property PATH with its leading slash stripped.
+var DTH_RX_SKIP_INTERP_GROUP = /^(General|Transforms|Display|Simulation|Smoothing|Mesh Smoothing|Line Tessellation|Rigid Follow|Instances)($|\/)/;
+
+// The second net, by property NAME — a rig that files its transforms under some
+// other group still must not be touched. (This list is the old walk's `skipProps`,
+// which never actually ran: node properties were skipped wholesale before it.)
+var DTH_SKIP_INTERP_PROPS = {
+	"Scale": true, "XScale": true, "YScale": true, "ZScale": true,
+	"XRotate": true, "YRotate": true, "ZRotate": true,
+	"XTranslate": true, "YTranslate": true, "ZTranslate": true,
+	"General Scale": true, "X Scale": true, "Y Scale": true, "Z Scale": true
+};
+
+var DTH_LINEAR_INTERP;                 // resolved once, by dthLinearInterp()
+var DTH_LINEAR_INTERP_DONE = false;
+
+/**********************************************************************
+ * The LINEAR interpolation constant of the RUNNING Daz. The API reference
+ * spells this enum two ways — DzFloatProperty documents LINEAR_INTERP,
+ * DzProperty documents InterpLinear — and a name a build does NOT define reads
+ * back as `undefined`, which is enough to turn setKeyInterpolationType into a
+ * silent no-op (fact 2 above looks exactly like that). So: take the first
+ * spelling this build actually has, and print which one it was, because the
+ * next person debugging ROM interpolation should not have to guess. */
+function dthLinearInterp(){
+	if(DTH_LINEAR_INTERP_DONE) return DTH_LINEAR_INTERP;
+	DTH_LINEAR_INTERP_DONE = true;
+	var aTry = [];
+	if(typeof DzFloatProperty != "undefined"){
+		aTry.push(["DzFloatProperty.LINEAR_INTERP", DzFloatProperty.LINEAR_INTERP]);
+		aTry.push(["DzFloatProperty.InterpLinear", DzFloatProperty.InterpLinear]);
+	}
+	if(typeof DzProperty != "undefined"){
+		aTry.push(["DzProperty.InterpLinear", DzProperty.InterpLinear]);
+		aTry.push(["DzProperty.LINEAR_INTERP", DzProperty.LINEAR_INTERP]);
+		aTry.push(["DzProperty.Linear", DzProperty.Linear]);
+	}
+	// Diagnostic: this is the constant the session default is set from, below
+	// and in ApplyInitialValues. Undefined there means new keys fall back to
+	// the user's Daz preference instead of Linear.
+	print("Interpolation constants: DzProperty.Linear =",
+		(typeof DzProperty != "undefined") ? DzProperty.Linear : "<no DzProperty>");
+	for(var i = 0; i < aTry.length; i++){
+		if(aTry[i][1] !== undefined && aTry[i][1] !== null){
+			DTH_LINEAR_INTERP = aTry[i][1];
+			print("Stamping keys with", aTry[i][0], "=", DTH_LINEAR_INTERP);
+			return DTH_LINEAR_INTERP;
+		}
+	}
+	logRunError("No LINEAR interpolation constant on DzFloatProperty/DzProperty in this Daz build - ROM keys keep whatever interpolation they were created with.");
+	return undefined;
+}
+
+/** setValue, with the interpolation argument when this build gave us one. */
+function dthSetValueInterp(oProp, tTime, fValue, iInterp){
+	if(iInterp === undefined) oProp.setValue(tTime, fValue);
+	else oProp.setValue(tTime, fValue, iInterp);
+}
+
+/** Collect `oProp` when it is animated and not already collected. */
+function dthPushInterpProp(aProps, oSeen, sNodeKey, oProp){
+	if(!oProp || typeof oProp.getNumKeys != "function") return;
+	if(oProp.getNumKeys() < 1) return;
+	var sKey = sNodeKey + "|" + String(oProp.getName());
+	if(oSeen[sKey]) return;
+	oSeen[sKey] = true;
+	aProps.push(oProp);
+}
+
+/**********************************************************************
+ * Every animated, non-transform float channel on `oNodes`: the morph modifiers
+ * on each node's OBJECT (delta morphs, FACS blendshapes) AND the node's own
+ * dials — the pCTRL / CTRL / facs_ctrl_ controllers the ROM presets key, which
+ * have no modifier of their own and which the pre-v77 walk never saw. Bones
+ * carry transforms and rig floats only, so they are skipped whole. */
+function collectInterpProps(oNodes){
+	var aProps = [];
+	var oSeen = {};
+	for(var x = 0; x < oNodes.length; x++){
+		var oNode = oNodes[x];
+		if(!oNode || oNode.inherits("DzBone")) continue;
+		var sNodeKey = String(oNode.getName());
+		var oObj = oNode.getObject();
+		if(oObj){
+			for(var i = 0; i < oObj.getNumModifiers(); i++){
+				var oMod = oObj.getModifier(i);
+				if(!oMod || !oMod.inherits("DzMorph")) continue;
+				// getValueChannel first, getValueControl as the fallback — the
+				// same pair resetFrameDatasAtFrame uses to survive both APIs.
+				var oMorphProp = null;
+				if(typeof oMod.getValueChannel == "function") oMorphProp = oMod.getValueChannel();
+				if(!oMorphProp && typeof oMod.getValueControl == "function") oMorphProp = oMod.getValueControl();
+				dthPushInterpProp(aProps, oSeen, sNodeKey, oMorphProp);
+			}
+		}
+		if(typeof oNode.getNumProperties != "function") continue;
+		for(var p = 0; p < oNode.getNumProperties(); p++){
+			var oNodeProp = oNode.getProperty(p);
+			if(!oNodeProp || !oNodeProp.inherits("DzFloatProperty")) continue;
+			if(DTH_SKIP_INTERP_PROPS[String(oNodeProp.getName())]) continue;
+			if(typeof oNodeProp.getPath == "function" &&
+				DTH_RX_SKIP_INTERP_GROUP.test(String(oNodeProp.getPath()).replace(/^\//, ""))) continue;
+			dthPushInterpProp(aProps, oSeen, sNodeKey, oNodeProp);
+		}
+	}
+	return aProps;
+}
+
+/**********************************************************************
+ * Give a channel a REAL key at frame 0 (fact 3 above). Same value it already
+ * holds there, so the animation is unchanged — only now the interpolation of
+ * that key is written to the .duf instead of being left to the reader.
+ *
+ * setValue is a no-op when the value doesn't change, so the value is nudged off
+ * and put back exactly; both directions, because a value sitting on a limit
+ * clamps straight back to itself.
+ *
+ * An ERC-DRIVEN channel reads its controller's contribution back through
+ * getValue, so keying it from getValue can DOUBLE-APPLY — this is the -10%
+ * character height that read as -20% (see closeDanglingMorphKeys), and a wrong
+ * value is far worse than an implicit key. A driven channel is therefore left
+ * alone up front where the build can say so, and rolled back after the fact
+ * where it can't.
+ *
+ * Returns 1 when a key was added, 0 when one was already there or the channel
+ * isn't animated, -1 when it was skipped, could not be added, or was rolled
+ * back. */
+function dthEnsureFrameZeroKey(oProp, iInterp){
+	if(oProp.getNumKeys() < 1) return 0;
+	if(oProp.getKeyTime(0) == 0) return 0;
+	// Driven by an ERC link? Then its value at frame 0 is not ours to write.
+	if(typeof oProp.getNumControllers == "function" && oProp.getNumControllers() > 0) return -1;
+	var iKeysBefore = oProp.getNumKeys();
+	var fAt0 = oProp.getValue(0);
+	var aNudge = [fAt0 + 0.001, fAt0 - 0.001];
+	for(var n = 0; n < aNudge.length && oProp.getKeyTime(0) != 0; n++){
+		dthSetValueInterp(oProp, 0, aNudge[n], iInterp);
+		dthSetValueInterp(oProp, 0, fAt0, iInterp);
+	}
+	if(oProp.getKeyTime(0) != 0) return -1;
+	if(approx_eq(oProp.getValue(0), fAt0)) return 1;
+	// The value moved: this build reported no controllers but behaves like a
+	// driven channel. Drop the key again — [0,0] is the one key just added
+	// whether deleteKeys reads its arguments as times or as indices — and say
+	// so loudly if anything but that one key went with it.
+	if(typeof oProp.deleteKeys == "function"){
+		oProp.deleteKeys(0, 0);
+		if(oProp.getNumKeys() != iKeysBefore)
+			logRunError("Frame-0 key rollback on " + oProp.getLabel() + " removed " +
+				(iKeysBefore - oProp.getNumKeys()) + " key(s) instead of 1 - check this channel's animation.");
+	}
+	return -1;
+}
+
+/**********************************************************************
+ * LINEAR for key `j`, VERIFIED. True only when the property reads the key back
+ * as LINEAR — or when this build cannot report interpolation at all, in which
+ * case the stamp is taken at face value (there is nothing better to do, and
+ * every Daz that has setKeyInterpolationType also has the getter). */
+function dthStampKeyLinear(oProp, j, iInterp){
+	if(iInterp === undefined) return false;
+	if(typeof oProp.setKeyInterpolationType == "function") oProp.setKeyInterpolationType(j, iInterp);
+	if(typeof oProp.getKeyInterpolationType != "function") return true;
+	if(oProp.getKeyInterpolationType(j) == iInterp) return true;
+	// The stamp didn't take: rewrite the key through setValue, which carries
+	// the interpolation as an argument. Same nudge-and-restore as the frame-0
+	// key — the value must end EXACTLY where it started.
+	var tKey = oProp.getKeyTime(j);
+	var fValue = oProp.getKeyValue(j);
+	var aNudge = [fValue + 0.001, fValue - 0.001];
+	for(var n = 0; n < aNudge.length; n++){
+		dthSetValueInterp(oProp, tKey, aNudge[n], iInterp);
+		dthSetValueInterp(oProp, tKey, fValue, iInterp);
+		if(oProp.getKeyInterpolationType(j) == iInterp) break;
+	}
+	if(!approx_eq(oProp.getKeyValue(j), fValue)) oProp.setValue(tKey, fValue);
+	return (oProp.getKeyInterpolationType(j) == iInterp);
+}
+
+/**********************************************************************
+ * The figure plus every non-bone node under it — the G9 mouth, the GP/DK
+ * geografts, conformed clothing: the complete set of nodes a ROM build can lay
+ * a key on. The final interpolation pass takes this, not just the root, because
+ * a geograft's art-direction morphs and a frame-0 clothing fit are keys this
+ * runtime wrote too. Bones are left out on purpose (transforms only). */
+function dthKeyedNodes(oNodeRoot){
+	var aNodes = [oNodeRoot];
+	if(!oNodeRoot || typeof oNodeRoot.getNodeChildren != "function") return aNodes;
+	var aKids = oNodeRoot.getNodeChildren(true);
+	for(var i = 0; aKids && i < aKids.length; i++){
+		if(aKids[i] && !aKids[i].inherits("DzBone")) aNodes.push(aKids[i]);
+	}
+	return aNodes;
+}
+
 function setLinearInterp(oNodes, startFrame, endFrame){
 
 	// Set the session default to match, so keys created later start out right.
@@ -207,43 +440,35 @@ function setLinearInterp(oNodes, startFrame, endFrame){
 
  	startFrame = typeof startFrame !== 'undefined' ? startFrame : 0;
  	endFrame = typeof endFrame !== 'undefined' ? endFrame : 0;
-	var props = [];
 
-	// Properties to skip (transforms should never be touched)
-	var skipProps = ["Scale", "XScale", "YScale", "ZScale",
-					 "XRotate", "YRotate", "ZRotate",
-					 "XTranslate", "YTranslate", "ZTranslate",
-					 "General Scale", "X Scale", "Y Scale", "Z Scale"];
+	var iInterp = dthLinearInterp();
+	var aProps = collectInterpProps(oNodes);
+	print("Morph props to set LINEAR interp:", aProps.length)
 
-	for(var x = 0; x < oNodes.length; x++)
-	{
-		var oNode = oNodes[x];
-		var oObj = oNode.getObject();
-		// Only process morph modifiers, NOT node properties (which include Scale/Transform)
-		if(oObj){
-			for(var i=0; i<oObj.getNumModifiers(); i++)
-			{
-				var oMod = oObj.getModifier(i);
-				if(oMod && oMod.inherits("DzMorph"))
-				{
-					var oProp = oMod.getValueControl();
-					if(oProp && oProp.getNumKeys() > 1)
-					{
-						props.push(oProp);
-					}
-				}
-			}
+	var iKeys = 0, iFailedKeys = 0, iZeroAdded = 0, iZeroFailed = 0;
+	for(var i = 0; i < aProps.length; i++){
+		var oProp = aProps[i];
+		var iZero = dthEnsureFrameZeroKey(oProp, iInterp);
+		if(iZero > 0) iZeroAdded++;
+		else if(iZero < 0) iZeroFailed++;
+		var iNumKeys = oProp.getNumKeys();
+		for(var j = 0; j < iNumKeys; j++){
+			iKeys++;
+			if(!dthStampKeyLinear(oProp, j, iInterp)) iFailedKeys++;
 		}
-		// Skip node properties entirely - they include Scale/Transform which should never be modified
 	}
-	print("Morph props to set LINEAR interp:", props.length)
-	var iInterp = DzFloatProperty.LINEAR_INTERP;
-	for( var i = 0; i < props.length; i++){
-		oProp = props[i];
-		for( var j = 0; j < oProp.getNumKeys(); j++) {
-			// Only set interpolation type - do NOT call setValue as it can modify values
-			oProp.setKeyInterpolationType(j, iInterp);
-		}
+	print("Set LINEAR interp on", (iKeys - iFailedKeys), "of", iKeys, "key(s);",
+		iZeroAdded, "frame-0 key(s) made real");
+	// A key that will not read back LINEAR is this bug returning, so it goes in
+	// the run log where the studio shows it. A channel that kept its implicit
+	// frame-0 key is a deliberate refusal — an ERC-driven value that is not ours
+	// to write — worth saying, not worth failing a run over.
+	if(iZeroFailed > 0){
+		print("WARNING:", iZeroFailed, "channel(s) kept an implicit frame-0 key (driven value, or no key could be made there) - frame 0 falls back to Daz's default interpolation on those.");
+	}
+	if(iFailedKeys > 0){
+		logRunError("Key interpolation: " + iFailedKeys + " of " + iKeys +
+			" key(s) would not read back LINEAR. The ROM still builds, but those keys use Daz's default interpolation.");
 	}
 }
 

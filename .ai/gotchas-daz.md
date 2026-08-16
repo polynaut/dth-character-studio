@@ -52,6 +52,41 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   broke the DK9 ROM; mrpdean removed the same workaround from the DTH release
   (July 2026). Keys are LINEAR everywhere again, and the runtime no longer
   version-detects DS6 for interpolation.
+- **A ROM's key interpolation has TWO sources, and only one of them is ours.**
+  Measured 2026-08-16 (DS 4.24, runtime v76, `scene.animations` read out of a
+  shipped `*_ROM.duf`): of 292 morph channels, **230 serialized `CONSTANT` and
+  62 `LINEAR`** — and the split is not two kinds of morph. The CONSTANT ones are
+  exactly the channels mrpdean's ROM **presets** key (`pCTRL*`, `CTRL*`,
+  `facs_ctrl_*`, `facs_jnt_*`, `facs_bs_*`): **`loadPreset` carries the
+  interpolation stored in the preset `.duf`, and those files hold CONSTANT.**
+  The LINEAR ones are exactly the channels the runtime **creates** with
+  `setValue` (they inherit the session default). `Scene.setDefaultKeyInterpolationType`
+  cannot touch the first group — it only governs keys created afterwards. All
+  1298 transform/bone channels of that same file were CONSTANT too, uniformly,
+  from the same presets.
+- **`setKeyInterpolationType()` can do nothing, silently.** Same run: the pass
+  collected 107 morph props, the Daz log shows no error and the scene saved
+  after it — yet 43 of those 107 (`facs_bs_*`, morph modifiers on the figure's
+  own geometry, squarely inside the walk) still serialized CONSTANT. No
+  exception, no warning, no effect. Suspected cause (**not proven**): the enum
+  argument resolving to `undefined` — the Daz API reference spells this enum two
+  ways, `DzFloatProperty.LINEAR_INTERP` and `DzProperty.InterpLinear`, and a name
+  a build doesn't define is just `undefined`. Hence runtime v77: resolve the
+  constant against the running build, **read every stamp back** with
+  `getKeyInterpolationType`, and rewrite the key through `setValue` (which takes
+  the interpolation as an argument) when it didn't take. Never assume a Daz
+  setter worked because it didn't throw.
+- **Daz writes an implicit, un-typed key at frame 0.** A channel whose first REAL
+  key sits later serializes as `[0, value]` with **no** interpolation element,
+  while a channel with a real key at 0 (e.g. one loaded from a preset) gets
+  `[0, value, ["CONSTANT"]]`. The bare entry falls back to whatever default
+  interpolation the READER has. `setValue(0, v)` on a still-unkeyed property
+  sets its static value rather than creating a key, which is how the ROM's own
+  frame-0 reset left every created channel like this. v77's
+  `dthEnsureFrameZeroKey` nudges the value off and back to force a real key —
+  and rolls it back if the value moved at all, because `getValue` on an
+  ERC-driven channel reads the controller's contribution too (the double-apply
+  trap `closeDanglingMorphKeys` already documents).
 - **A failed script `include()`/load logs nothing** in Daz Studio. Diagnose with a
   minimal probe `.dsa` that logs before/after the suspect statement. It can also
   fail TRANSIENTLY: on 2026-08-14 a `.Bulk_ROM_Export.dsa` that had run five

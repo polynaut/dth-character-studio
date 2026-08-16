@@ -838,5 +838,21 @@ v76 — the generated `Scan_Products_<Name>.dsa` carries Content Library artwork
       what makes Refresh assets do it. Its artwork also joins the removal
       sweep's `iconBearing` list, so turning Daz Products off retires the tiles
       with the script instead of leaving a tile pointing at nothing.
+v77 — every ROM key is stamped LINEAR for real. Measured on a shipped v76 ROM
+      (2026-08-16, DS 4.24): 230 of 292 morph channels serialized CONSTANT —
+      exactly the channels mrpdean's ROM PRESETS key, whose interpolation comes
+      from the preset .duf, while the 62 the runtime CREATES were LINEAR. The
+      pass meant to unify them didn't: it skipped node properties wholesale
+      (where every pCTRL*/facs_* control dial lives, ~190 channels) AND its
+      setKeyInterpolationType left the 43 facs_bs_* blendshapes it DID walk
+      untouched, with no error. So setLinearInterp now walks node dials too
+      (transforms excluded by group + by name), resolves the LINEAR enum against
+      the running build instead of trusting one spelling, READS BACK every stamp
+      and rewrites the key through setValue when it didn't take, and gives each
+      channel a real frame-0 key — Daz writes an implicit `[0, value]` with no
+      interpolation when the first real key sits later, which falls back to the
+      reader's default. Failures are counted into the run log instead of passing
+      silently. The final pass also covers every non-bone node under the figure
+      (geografts, clothing), not just the figure and the mouth.
 ```
 
