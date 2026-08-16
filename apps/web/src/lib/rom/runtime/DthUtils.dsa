@@ -230,29 +230,24 @@ function writeRunLog(sPath, oSummary){
  *
  * The old walk also skipped node properties WHOLESALE to protect the figure's
  * transforms, and every pCTRL / facs_ control dial lives exactly there — ~190
- * of the CONSTANT channels were never even looked at. They are walked now, with
- * transforms skipped by group AND by name. BONE transforms stay untouched: the
- * ROM's bone channels arrive CONSTANT from mrpdean's presets, the PoseAsset
- * side samples whole pose frames either way, and changing them is a separate
- * decision from this one. */
-
-// Transform + rig-plumbing groups a ROM must never re-interpolate. Same shape
-// as DthScanMorphs' DTH_RX_SKIP_GROUP (a separate script — no shared scope);
-// tested against the property PATH with its leading slash stripped.
-var DTH_RX_SKIP_INTERP_GROUP = /^(General|Transforms|Display|Simulation|Smoothing|Mesh Smoothing|Line Tessellation|Rigid Follow|Instances)($|\/)/;
-
-// The second net, by property NAME — a rig that files its transforms under some
-// other group still must not be touched. (This list is the old walk's `skipProps`,
-// which never actually ran: node properties were skipped wholesale before it.)
-var DTH_SKIP_INTERP_PROPS = {
-	"Scale": true, "XScale": true, "YScale": true, "ZScale": true,
-	"XRotate": true, "YRotate": true, "ZRotate": true,
-	"XTranslate": true, "YTranslate": true, "ZTranslate": true,
-	"General Scale": true, "X Scale": true, "Y Scale": true, "Z Scale": true
-};
+ * of the CONSTANT channels were never even looked at.
+ *
+ * EVERY animated channel is walked now, TRANSFORMS INCLUDED (bones too). The
+ * same measurement found all 1298 transform channels of that file CONSTANT,
+ * uniformly, from the same presets. The old "transforms should never be
+ * touched" rule was about not MOVING them, and nothing here moves a value: a
+ * stamp changes interpolation only, and the setValue fallback restores the
+ * exact value it read. At the keyed pose frames CONSTANT and LINEAR give
+ * identical values either way — what changes is the shape of the motion
+ * BETWEEN pose frames. */
 
 var DTH_LINEAR_INTERP;                 // resolved once, by dthLinearInterp()
 var DTH_LINEAR_INTERP_DONE = false;
+
+// How many times a pass may try the setValue rewrite and still come back with a
+// key that won't read LINEAR, before it stops trying (see dthStampKeyLinear).
+var DTH_INTERP_REWRITE_BUDGET = 100;
+var DTH_INTERP_REWRITE_FAILS = 0;
 
 /**********************************************************************
  * The LINEAR interpolation constant of the RUNNING Daz. The API reference
@@ -308,17 +303,18 @@ function dthPushInterpProp(aProps, oSeen, sNodeKey, oProp){
 }
 
 /**********************************************************************
- * Every animated, non-transform float channel on `oNodes`: the morph modifiers
- * on each node's OBJECT (delta morphs, FACS blendshapes) AND the node's own
- * dials — the pCTRL / CTRL / facs_ctrl_ controllers the ROM presets key, which
- * have no modifier of their own and which the pre-v77 walk never saw. Bones
- * carry transforms and rig floats only, so they are skipped whole. */
+ * Every animated float channel on `oNodes`: the morph modifiers on each node's
+ * OBJECT (delta morphs, FACS blendshapes) AND the node's own channels — the
+ * pCTRL / CTRL / facs_ctrl_ controllers the ROM presets key, which have no
+ * modifier of their own and which the pre-v77 walk never saw, plus the
+ * transform channels (see setLinearInterp: a ROM's bone keys arrive CONSTANT
+ * from the presets too, and nothing here moves a value). */
 function collectInterpProps(oNodes){
 	var aProps = [];
 	var oSeen = {};
 	for(var x = 0; x < oNodes.length; x++){
 		var oNode = oNodes[x];
-		if(!oNode || oNode.inherits("DzBone")) continue;
+		if(!oNode) continue;
 		var sNodeKey = String(oNode.getName());
 		var oObj = oNode.getObject();
 		if(oObj){
@@ -337,9 +333,6 @@ function collectInterpProps(oNodes){
 		for(var p = 0; p < oNode.getNumProperties(); p++){
 			var oNodeProp = oNode.getProperty(p);
 			if(!oNodeProp || !oNodeProp.inherits("DzFloatProperty")) continue;
-			if(DTH_SKIP_INTERP_PROPS[String(oNodeProp.getName())]) continue;
-			if(typeof oNodeProp.getPath == "function" &&
-				DTH_RX_SKIP_INTERP_GROUP.test(String(oNodeProp.getPath()).replace(/^\//, ""))) continue;
 			dthPushInterpProp(aProps, oSeen, sNodeKey, oNodeProp);
 		}
 	}
@@ -402,6 +395,11 @@ function dthStampKeyLinear(oProp, j, iInterp){
 	if(typeof oProp.setKeyInterpolationType == "function") oProp.setKeyInterpolationType(j, iInterp);
 	if(typeof oProp.getKeyInterpolationType != "function") return true;
 	if(oProp.getKeyInterpolationType(j) == iInterp) return true;
+	// A build where NEITHER route works must not spend two setValue calls on
+	// every key of ~1600 channels to find that out a thousand times over. The
+	// first DTH_INTERP_REWRITE_BUDGET fruitless rewrites are the evidence; after
+	// that the pass just stamps, counts, and reports.
+	if(DTH_INTERP_REWRITE_FAILS >= DTH_INTERP_REWRITE_BUDGET) return false;
 	// The stamp didn't take: rewrite the key through setValue, which carries
 	// the interpolation as an argument. Same nudge-and-restore as the frame-0
 	// key — the value must end EXACTLY where it started.
@@ -414,21 +412,23 @@ function dthStampKeyLinear(oProp, j, iInterp){
 		if(oProp.getKeyInterpolationType(j) == iInterp) break;
 	}
 	if(!approx_eq(oProp.getKeyValue(j), fValue)) oProp.setValue(tKey, fValue);
-	return (oProp.getKeyInterpolationType(j) == iInterp);
+	if(oProp.getKeyInterpolationType(j) == iInterp) return true;
+	DTH_INTERP_REWRITE_FAILS++;
+	return false;
 }
 
 /**********************************************************************
- * The figure plus every non-bone node under it — the G9 mouth, the GP/DK
- * geografts, conformed clothing: the complete set of nodes a ROM build can lay
- * a key on. The final interpolation pass takes this, not just the root, because
- * a geograft's art-direction morphs and a frame-0 clothing fit are keys this
- * runtime wrote too. Bones are left out on purpose (transforms only). */
+ * The figure and EVERY node under it — the bones the ROM presets pose, the G9
+ * mouth, the GP/DK geografts, conformed clothing. The complete set of nodes a
+ * ROM carries keys on, which is what the final interpolation pass needs: a
+ * root-and-mouth pass never saw a geograft's art-direction morphs, a frame-0
+ * clothing fit, or a single bone rotation. */
 function dthKeyedNodes(oNodeRoot){
 	var aNodes = [oNodeRoot];
 	if(!oNodeRoot || typeof oNodeRoot.getNodeChildren != "function") return aNodes;
 	var aKids = oNodeRoot.getNodeChildren(true);
 	for(var i = 0; aKids && i < aKids.length; i++){
-		if(aKids[i] && !aKids[i].inherits("DzBone")) aNodes.push(aKids[i]);
+		if(aKids[i]) aNodes.push(aKids[i]);
 	}
 	return aNodes;
 }
@@ -442,8 +442,9 @@ function setLinearInterp(oNodes, startFrame, endFrame){
  	endFrame = typeof endFrame !== 'undefined' ? endFrame : 0;
 
 	var iInterp = dthLinearInterp();
+	DTH_INTERP_REWRITE_FAILS = 0;
 	var aProps = collectInterpProps(oNodes);
-	print("Morph props to set LINEAR interp:", aProps.length)
+	print("Animated channels to set LINEAR interp:", aProps.length)
 
 	var iKeys = 0, iFailedKeys = 0, iZeroAdded = 0, iZeroFailed = 0;
 	for(var i = 0; i < aProps.length; i++){

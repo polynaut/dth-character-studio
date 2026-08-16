@@ -63,7 +63,10 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   `setValue` (they inherit the session default). `Scene.setDefaultKeyInterpolationType`
   cannot touch the first group — it only governs keys created afterwards. All
   1298 transform/bone channels of that same file were CONSTANT too, uniformly,
-  from the same presets.
+  from the same presets; since v77 the pass stamps those as well. Values at the
+  keyed pose frames are identical under either interpolation — CONSTANT vs
+  LINEAR only changes the motion BETWEEN pose frames, which is why stamping
+  transforms is safe for a PoseAsset export that samples whole pose frames.
 - **`setKeyInterpolationType()` can do nothing, silently.** Same run: the pass
   collected 107 morph props, the Daz log shows no error and the scene saved
   after it — yet 43 of those 107 (`facs_bs_*`, morph modifiers on the figure's

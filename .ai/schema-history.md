@@ -852,7 +852,12 @@ v77 — every ROM key is stamped LINEAR for real. Measured on a shipped v76 ROM
       channel a real frame-0 key — Daz writes an implicit `[0, value]` with no
       interpolation when the first real key sits later, which falls back to the
       reader's default. Failures are counted into the run log instead of passing
-      silently. The final pass also covers every non-bone node under the figure
-      (geografts, clothing), not just the figure and the mouth.
+      silently. The final pass also covers EVERY node under the figure (bones,
+      geografts, clothing), not just the figure and the mouth, and no longer
+      excludes transform channels: the same measurement found all 1298 of that
+      file's transform channels CONSTANT, uniformly, from the same presets. The
+      old "never touch transforms" rule was about not MOVING them, and nothing
+      in the pass moves a value - only the shape of the motion BETWEEN pose
+      frames changes, never a value at a keyed frame.
 ```
 
