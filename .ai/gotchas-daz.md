@@ -84,6 +84,19 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   passed exactly that for years. The spellings that DO resolve are
   `DzProperty.InterpLinear` / `InterpConstant` and
   `DzFloatProperty.LINEAR_INTERP` / `CONSTANT_INTERP` / `TCB_INTERP` (0 / 1 / 2).
+  It had **three** call sites, not two, and the third is the one that matters
+  most: `setPropertyByName` passed it as `setValue`'s interpolation ARGUMENT —
+  the one place the argument is what lands. Grep the whole runtime for a
+  constant like this, not just the API you were debugging; v78 fixed two of the
+  three on the first pass and the review caught the third.
+- **Setting the session default outlives the run.** Now that
+  `Scene.setDefaultKeyInterpolationType` gets a defined enum, running a ROM
+  script leaves the user's Daz creating **Linear** keys afterwards — it is a
+  session-level setting the runtime never puts back. Harmless for the ROM (the
+  final pass stamps every key regardless) but it is a real change to the user's
+  app, and it is new: for as long as the call passed `undefined` it did nothing
+  at all. NOT verified whether it also persists into Daz's saved preferences
+  across a restart.
 - **Some channels can never be re-interpolated, and that is fine.** Locked
   transforms (`min == max == 0`) and the hidden `/Hidden/CTRLMDs` ERC
   controllers refuse the value nudge, so Daz never rewrites their keys — 310 of
@@ -95,6 +108,11 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   attempts" breaker, those channels sit at the HEAD of the node walk, and so the
   breaker fired on them and switched the fix off for the 5233 keys behind them.
   A give-up rule must key off the *reason* something failed, not a raw count.
+  **"Single key at frame 0" is what that scene held, not a law** — the runtime
+  re-checks `getNumKeys() == 1 && getKeyTime(0) == 0` per channel before calling
+  an immovable key harmless, and an immovable key anywhere else is a run-log
+  error. A measurement quoted back as an invariant is how a silent failure gets
+  a licence.
 - **The Timeline pane's "Set Key Interpolation > Linear" is not scriptable.**
   `DzTimePaneSetInterpLinearAction` (in `dztimeline.dll`, alongside
   `DzTimePaneSelectItemAnimRangeKeysAction` and the `DzTimePaneSetKeyScope*`

@@ -38,9 +38,24 @@ keyed pose frames are identical under either interpolation, so only the motion
 — geografts and conformed clothing carry keys the run wrote too.
 
 Two long-standing latent bugs fell out of this: `DzProperty.Linear` does not
-exist on DS 4.24, so every `Scene.setDefaultKeyInterpolationType` call in the
-runtime had been passing an undefined enum; and the key-interpolation pass had
-been silently ineffective for as long as it has shipped.
+exist on DS 4.24, so all three places the runtime passed it — the two
+`Scene.setDefaultKeyInterpolationType` calls and, the one that actually decides
+a key's interpolation, `setPropertyByName`'s `setValue(t, v, interp)` — had been
+handing Daz an undefined enum; and the key-interpolation pass had been silently
+ineffective for as long as it has shipped.
+
+One consequence to know about: with the session default finally getting a real
+constant, running a ROM script leaves your Daz creating **Linear** keys
+afterwards. The ROM does not depend on it — every key is stamped explicitly —
+but it is a setting the script changes and does not put back.
+
+The pass now reports only what it can prove. A key whose value will not move is
+called harmless only where this scene confirms it is that channel's one key at
+frame 0; anywhere else it is a logged failure. A Daz build that cannot read
+interpolation back gets "rewritten, unverified" rather than a clean bill. A
+nudge that cannot be put back is reported as the value problem it is, ahead of
+any interpolation complaint. And with no LINEAR constant available at all, the
+pass stops before touching the scene instead of nudging every value for nothing.
 
 Verified on a real ROM (LaraCroft G8.1, DS 4.24): 292 of 292 morph channels and
 1298 of 1298 transform channels come out LINEAR on every key, frame 0 included,

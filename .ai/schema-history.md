@@ -872,8 +872,21 @@ v78 — v77 shipped a pass that reported 5333 of 7747 keys unfixable; this is th
       the hopeless head of the list and switched the fix off for everything
       after it. It is gone: a key whose VALUE will not move is now counted
       apart from a key that moved and stayed wrong, and only the latter reaches
-      the run log. Also: `DzProperty.Linear` is undefined on DS 4.24, so every
-      Scene.setDefaultKeyInterpolationType call in this runtime had been
-      passing an undefined enum - they take the resolved constant now.
+      the run log. Also: `DzProperty.Linear` is undefined on DS 4.24, so all
+      THREE places this runtime passed it had been handing Daz an undefined
+      enum - the two Scene.setDefaultKeyInterpolationType calls and, the one
+      that matters most, setPropertyByName's setValue(t, v, interp), where the
+      argument is the thing that lands. All take the resolved constant now.
+      The pass reports only what it can prove: a key that would not move is
+      benign ONLY when this scene says it is the channel's one key at frame 0
+      (measured per channel, not assumed from the 2026-08-16 sample); a build
+      with no getKeyInterpolationType is "rewritten but unverified", never
+      counted as LINEAR; a nudge that cannot be put back is its own, louder
+      failure than any interpolation problem; and with no LINEAR constant
+      resolved the pass returns before touching the scene. The three per-block
+      setLinearInterp calls (DK, GP, Physics) are gone: all three nodes are
+      children of oNodeRoot and so already inside the final pass, and running
+      the frame-0 half of it mid-build made a preserved morph's frame-0 value
+      depend on whether the Physics block was enabled.
 ```
 
