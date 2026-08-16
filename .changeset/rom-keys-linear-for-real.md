@@ -42,5 +42,10 @@ exist on DS 4.24, so every `Scene.setDefaultKeyInterpolationType` call in the
 runtime had been passing an undefined enum; and the key-interpolation pass had
 been silently ineffective for as long as it has shipped.
 
+Verified on a real ROM (LaraCroft G8.1, DS 4.24): 292 of 292 morph channels and
+1298 of 1298 transform channels come out LINEAR on every key, frame 0 included,
+with no channel missing its first-key interpolation — and every key value,
+including each morph's base and its full-strength spike, identical to before.
+
 Regenerate the character (Tools > Refresh assets) and re-run the ROM to pick
 this up: runtime 76 -> 78.

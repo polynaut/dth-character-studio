@@ -87,8 +87,10 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
 - **Some channels can never be re-interpolated, and that is fine.** Locked
   transforms (`min == max == 0`) and the hidden `/Hidden/CTRLMDs` ERC
   controllers refuse the value nudge, so Daz never rewrites their keys — 310 of
-  1500 in the measured run. Every one was a SINGLE key at frame 0, where
-  interpolation spans nothing. Count them apart from real failures, and never
+  1500 when measured on a SAVED-AND-RELOADED ROM scene (a live build reported
+  none of them: those channels only carry keys once the scene has been through
+  a save). Every one was a SINGLE key at frame 0, where interpolation spans
+  nothing. Count them apart from real failures, and never
   let them abort the pass: runtime v77 had a "give up after 100 fruitless
   attempts" breaker, those channels sit at the HEAD of the node walk, and so the
   breaker fired on them and switched the fix off for the 5233 keys behind them.
