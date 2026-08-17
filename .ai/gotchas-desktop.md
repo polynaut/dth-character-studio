@@ -599,7 +599,8 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   hex-payload-as-argv design safe: a real batch is a few KB (2 hex chars per
   JSON byte), and the failure mode past it is an error code, not a half-decoded
   install. Measured with the `open` verb — the `runas`/AppInfo half needs a UAC
-  prompt per trial and was NOT measured.
+  prompt per trial, so its ceiling is unprobed, though a live run on 2026-08-17
+  confirmed it carries a real batch (a few KB) without complaint.
   And **the UNC rewrite fixes the drive LETTER, not the credentials**: a share
   the user mounted with stored credentials has no session under the
   administrator token either, so `\\host\share\…` can still be unreachable over
