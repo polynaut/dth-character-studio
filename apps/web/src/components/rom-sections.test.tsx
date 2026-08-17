@@ -27,8 +27,8 @@ function sectionsWithMultiMorphPose(): RomSectionsModel {
           name: 'SLGlutes SS',
           boneScaleRef: false,
           morphs: [
-            { id: 'm1', node: 'Genesis9', prop: 'SL_Glutes SS Left', value: 1, autoBase: true },
-            { id: 'm2', node: 'Genesis9', prop: 'SL_Glutes SS Right', value: 1, autoBase: true },
+            { id: 'm1', node: 'Genesis9', prop: 'SL_Glutes SS Left', value: 1 },
+            { id: 'm2', node: 'Genesis9', prop: 'SL_Glutes SS Right', value: 1 },
           ],
         },
       ],
@@ -62,74 +62,6 @@ describe('RomSections multi-morph editor', () => {
       .map((input) => (input as HTMLInputElement).value)
     expect(values).toContain('SL_Glutes SS Left')
     expect(values).toContain('SL_Glutes SS Right')
-  })
-})
-
-describe('Auto (per-morph auto base) — the v31 default and its opt-out', () => {
-  // The WRITE side of schema v31. `migrate.test.ts` covers the read side (an
-  // absent flag reads back ON); this covers the only place a user can turn it
-  // OFF. The two together are what make the opt-out survive: because the schema
-  // default is `true`, an off that reaches disk as an ABSENT key reads back as
-  // ON at the next load and silently undoes the user's choice. So the handler
-  // must write an explicit `false` — the pre-v31 `checked ? true : undefined`
-  // is now a data-losing bug, and nothing but this test would catch its return.
-  function Controlled({ onLatest }: { onLatest: (sections: RomSectionsModel) => void }) {
-    const [sections, setSections] = useState(sectionsWithMultiMorphPose())
-    return (
-      <RomSections
-        sections={sections}
-        genesis="G9"
-        gender="female"
-        skinning="dqs"
-        catalog={{ folder: '', assets: [], error: null }}
-        presetFrames={{ base: 328, gp: 104, dk: 54, phys: 43 }}
-        onChange={(s) => {
-          setSections(s)
-          onLatest(s)
-        }}
-      />
-    )
-  }
-
-  function expandMorphs() {
-    fireEvent.click(screen.getByText('Full Body'))
-    fireEvent.click(
-      screen.getByTitle('Combine multiple Daz morphs into this single generated morph'),
-    )
-    // Matched on the title's gist, not its wording — one checkbox per morph.
-    return screen.getAllByTitle<HTMLInputElement>(/on by default/)
-  }
-
-  it('renders Auto checked and disables Base while it is on', () => {
-    render(<Controlled onLatest={() => {}} />)
-    const autos = expandMorphs()
-    expect(autos).toHaveLength(2)
-    expect(autos.every((box) => box.checked)).toBe(true)
-    // Base is dead input while Auto resolves the floor from the scene.
-    const row = autos[0].closest('tr')!
-    expect(within(row).getByPlaceholderText<HTMLInputElement>('0').disabled).toBe(true)
-  })
-
-  it('stores an explicit false when unchecked — never an absent key', () => {
-    let latest: RomSectionsModel | null = null
-    render(
-      <Controlled
-        onLatest={(s) => {
-          latest = s
-        }}
-      />,
-    )
-    fireEvent.click(expandMorphs()[0])
-
-    const morphs = latest!.FBM.groups[0].poses[0].morphs
-    expect(morphs[0].autoBase).toBe(false) // `undefined` here = the opt-out is lost on reload
-    expect(morphs[1].autoBase).toBe(true) // the sibling morph is untouched
-
-    // …and the row reflects it: Base becomes editable again.
-    const autos = screen.getAllByTitle<HTMLInputElement>(/on by default/)
-    expect(autos[0].checked).toBe(false)
-    const row = autos[0].closest('tr')!
-    expect(within(row).getByPlaceholderText<HTMLInputElement>('0').disabled).toBe(false)
   })
 })
 
@@ -214,7 +146,7 @@ describe('Morph name autocomplete (scanned index)', () => {
             id: 'p1',
             name: 'BodyTone',
             boneScaleRef: false,
-            morphs: [{ id: 'm1', node: 'Genesis9', prop: '', value: 1, autoBase: true }],
+            morphs: [{ id: 'm1', node: 'Genesis9', prop: '', value: 1 }],
           },
         ],
       },
@@ -804,7 +736,7 @@ describe('scene override mode', () => {
               id: 'gen-p1',
               name: 'Spread',
               boneScaleRef: false,
-              morphs: [{ id: 'gen-m1', node: 'GoldenPalace_G9', prop: 'GP_Spread', value: 1, autoBase: true }],
+              morphs: [{ id: 'gen-m1', node: 'GoldenPalace_G9', prop: 'GP_Spread', value: 1 }],
             },
           ],
         },

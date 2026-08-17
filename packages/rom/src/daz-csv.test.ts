@@ -42,7 +42,6 @@ describe('posesFromDazCsv', () => {
       node: 'Hip, twist',
       prop: 'prop_X',
       value: 0.5,
-      autoBase: true,
     })
   })
 
@@ -57,15 +56,15 @@ describe('posesFromDazCsv', () => {
         frame: 382,
         name: 'Head',
         morphs: [
-          { id: expect.any(String), node: 'Genesis9', prop: 'Lycan9_head_bs_Head_HD4', value: -1, autoBase: true },
-          { id: expect.any(String), node: 'Genesis9', prop: 'Lycan9_body_bs_Body', value: 1, autoBase: true },
+          { id: expect.any(String), node: 'Genesis9', prop: 'Lycan9_head_bs_Head_HD4', value: -1 },
+          { id: expect.any(String), node: 'Genesis9', prop: 'Lycan9_body_bs_Body', value: 1 },
         ],
       },
       {
         frame: 384,
         name: 'AnconeusL',
         morphs: [
-          { id: expect.any(String), node: 'Genesis9', prop: 'xMusc_body_bs_AnconeusL_B_HD2', value: 1, autoBase: true },
+          { id: expect.any(String), node: 'Genesis9', prop: 'xMusc_body_bs_AnconeusL_B_HD2', value: 1 },
         ],
       },
     ])

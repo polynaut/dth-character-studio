@@ -175,6 +175,23 @@ of that file ~12k tokens to scroll past.
       clothing morph silently missed (the runtime only searched the figure
       root). `''` keeps each list's old reach — broadcast for frame-0,
       figure root for preserve. Additive with defaults — no migration step.
+ 33 — RETRACTED before any release: the mesh SubD level (`subdLevel`, #866),
+      reverted by #872 because its Daz property spellings were never measured.
+      The number is burned — no released build ever wrote it, and a dev-only
+      file carrying `subdLevel` still parses (zod strips the unknown key).
+      Re-lands under a NEW version once a real figure has been stamped.
+ 34 — REMOVED the per-morph `base` (v-early) and `autoBase` (v31) sawtooth
+      floors. Measured 2026-08-17 (DS4 exporter 2.0.2, scripted doExport with
+      either flag AND the dialog export — all identical): the DTH Exporter's
+      FBX pass excludes every morph whose ROM keys VARY from the base mesh,
+      while the alembic pass bakes the true timeline. A non-zero floor
+      therefore ships a shaped alembic base against an unshaped FBX base —
+      the two artifacts the HDA validates against each other drift, silently,
+      and every morph the HDA GENERATES spans only the leftover headroom
+      instead of the full range. The floor is always 0 now; a walked morph
+      dialed non-zero at frame 0 FAILS its frames loudly at build time
+      instead (runtime v82's `checkDialedWalkedMorphs`). Removals are
+      zod-stripped — no migration step.
 ```
 
 ## Generated-runtime versions (`RUNTIME_VERSION`)
@@ -948,4 +965,34 @@ v80 — no unattended carrier opens a modal, and the missing-runtime message sto
       implicit frame-0 key for never-keyed channels (2599 channels collected vs
       1590 genuinely animated in that character's saved ROM). Each reported key
       now carries its channel's key COUNT for exactly that reason.
+ 81 — RETRACTED before any release: the mesh SubD stamp (`dthApplySubDLevel`,
+      #866), reverted by #872 with schema v33 — the Daz property spellings
+      were never measured. The number is burned; re-lands under a NEW version
+      once measured. No released build ever generated a v81 script.
+ 82 — the sawtooth floor is ALWAYS 0, and the dialed-walked-morph GATE
+      replaces the retired autoBase (schema v34 carries the field removal).
+      `resolveAutoBaseValues` is gone; `resetFrameDatasAtFrame` anchors every
+      walked morph at 0 on frame 0; `checkDialedWalkedMorphs` (DthUtils.dsa)
+      runs right before that reset — it reads each walked dial's frame-0
+      scene value BEFORE the reset destroys the evidence, and any |value| >
+      0.001 files a `failedMorphs` entry PER FRAME that walks the dial
+      (naming the value, and whether the channel is ERC-driven so the user
+      zeroes the CONTROLLING dial). failedMorphs is counted by
+      `runLogProblemCount`, so the export gate skips the export and the
+      studio report shows the offending frames red with the reason. The build
+      itself continues — one report names every offender, not one per
+      rebuild. Why fail instead of floor: the exporter's FBX pass excludes
+      varying-keyed morphs from the base mesh unconditionally (measured
+      2026-08-17 — scripted doExport, both flag values, and the DIALOG export
+      produce the identical FBX), so a dialed walked morph can only ever ship
+      a drifting fbx/abc pair; the shape must ride the HDA-generated morph
+      instead, at full range. The gate has TWO legs: checkDialedWalkedMorphs
+      covers frameDatas (custom sections / extraFrames), and
+      applyArtDirectionData runs the same per-dial check itself
+      (dialedWalkedVerdict) — GP/DK art-direction morphs sawtooth with the
+      same 0 floor but never enter frameDatas, so the first leg cannot see
+      them; the art leg reads each dial at first encounter, BEFORE keying the
+      channel (keying destroys the evidence), and still applies the morph.
+      Both legs are exercised for real in the sandbox harness
+      (dialed-walked-gate.test.ts).
 ```

@@ -71,13 +71,13 @@ function fbmGroup(): RomGroup {
       {
         id: 'p1',
         name: 'BodyTone',
-        morphs: [{ id: 'm1', node: 'Genesis9', prop: 'body_bs_BodyTone', value: 1, autoBase: true }],
+        morphs: [{ id: 'm1', node: 'Genesis9', prop: 'body_bs_BodyTone', value: 1 }],
         boneScaleRef: false,
       },
       {
         id: 'p2',
         name: 'Glute UpDown',
-        morphs: [{ id: 'm2', node: 'Genesis9', prop: 'SS_body_bs_Glute UpDown', value: -1, autoBase: true }],
+        morphs: [{ id: 'm2', node: 'Genesis9', prop: 'SS_body_bs_Glute UpDown', value: -1 }],
         boneScaleRef: false,
       },
     ],
@@ -217,7 +217,7 @@ describe('mirrorGroup', () => {
         {
           id: 'pl',
           name: 'MajoraPush1',
-          morphs: [{ id: 'ml', node: 'Golden Palace', prop: 'GPL_Majora_Push 1_Left', value: 1, autoBase: true }],
+          morphs: [{ id: 'ml', node: 'Golden Palace', prop: 'GPL_Majora_Push 1_Left', value: 1 }],
           boneScaleRef: false,
         },
       ],
@@ -243,8 +243,8 @@ describe('mirrorGroup', () => {
           // "Cleft" contains "left" but is no side marker — the old blind swap
           // corrupted it into body_bs_CrightChin. Word-initial "left" still swaps.
           morphs: [
-            { id: 'mc1', node: 'Genesis9', prop: 'body_bs_CleftChin', value: 1, autoBase: true },
-            { id: 'mc2', node: 'Genesis9', prop: 'thigh_left_up', value: 1, autoBase: true },
+            { id: 'mc1', node: 'Genesis9', prop: 'body_bs_CleftChin', value: 1 },
+            { id: 'mc2', node: 'Genesis9', prop: 'thigh_left_up', value: 1 },
           ],
           boneScaleRef: false,
         },
@@ -269,9 +269,9 @@ describe('mirrorGroup', () => {
           name: 'ShldrDown',
           morphs: [
             // Stock Daz JCM naming: the uppercase suffix twin of _l.
-            { id: 'm1', node: 'Genesis9', prop: 'pJCMShldrDown_40_L', value: 1, autoBase: true },
+            { id: 'm1', node: 'Genesis9', prop: 'pJCMShldrDown_40_L', value: 1 },
             // G9 bone naming: the lowercase prefix twin of L_.
-            { id: 'm2', node: 'Genesis9', prop: 'l_thigh', value: 1, autoBase: true },
+            { id: 'm2', node: 'Genesis9', prop: 'l_thigh', value: 1 },
           ],
           boneScaleRef: false,
         },
@@ -298,9 +298,9 @@ describe('mirrorGroup', () => {
             // `_` and digits are word chars, so `\b` never fired here — the
             // uppercase prefix rule must use the same letter-only lookbehind
             // as its lowercase twin.
-            { id: 'm1', node: 'Genesis9', prop: 'Foot_L_Bend', value: 1, autoBase: true },
-            { id: 'm2', node: 'Genesis9', prop: 'Foot_l_Bend', value: 1, autoBase: true },
-            { id: 'm3', node: 'Genesis9', prop: 'x3L_twist', value: 1, autoBase: true },
+            { id: 'm1', node: 'Genesis9', prop: 'Foot_L_Bend', value: 1 },
+            { id: 'm2', node: 'Genesis9', prop: 'Foot_l_Bend', value: 1 },
+            { id: 'm3', node: 'Genesis9', prop: 'x3L_twist', value: 1 },
           ],
           boneScaleRef: false,
         },
@@ -325,9 +325,9 @@ describe('mirrorGroup', () => {
           name: 'Guard',
           morphs: [
             // `_L` continuing into a word is no side marker (would become _Rarge).
-            { id: 'mg1', node: 'Genesis9', prop: 'Ball_Large', value: 1, autoBase: true },
+            { id: 'mg1', node: 'Genesis9', prop: 'Ball_Large', value: 1 },
             // `l_` preceded by a letter is no bone prefix (would become Curr_lower).
-            { id: 'mg2', node: 'Genesis9', prop: 'Curl_lower', value: 1, autoBase: true },
+            { id: 'mg2', node: 'Genesis9', prop: 'Curl_lower', value: 1 },
           ],
           boneScaleRef: false,
         },
@@ -375,38 +375,32 @@ describe('buildFbmData', () => {
       frame: 0,
       section: 'FBM',
       name: 'BodyTone',
-      morphs: [{ node: 'Genesis9', prop: 'body_bs_BodyTone', value: 1, autoBase: true }],
+      morphs: [{ node: 'Genesis9', prop: 'body_bs_BodyTone', value: 1 }],
     })
     expect(data.frames[1].frame).toBe(1)
   })
 
-  it('emits autoBase by default, and a fixed base only where autoBase is off', () => {
+  it('emits exactly node/prop/value per morph — no floor fields (v34)', () => {
     const sections = makeSections()
-    // autoBase OFF (the v31 opt-out) + an explicit base — the only combination
-    // in which `base` still means anything at run time.
     sections.FBM.groups[0].poses[0].morphs[0] = {
       id: 'mb',
       node: 'GoldenPalace_G9',
       prop: 'GP9_Anus_Depth',
       value: 0.5,
-      base: 0.2,
-      autoBase: false,
     }
     const data = buildFbmData(makeCharacter({ sections }))
-    // toEqual is exact: an autoBase:false morph emits NO autoBase key (the
-    // runtime reads absent as off), and keeps its fixed base.
+    // toEqual is exact: the retired base/autoBase floors are gone — the
+    // sawtooth floor is always 0 and a dialed walked morph fails loudly in the
+    // runtime instead (checkDialedWalkedMorphs).
     expect(data.frames[0].morphs[0]).toEqual({
       node: 'GoldenPalace_G9',
       prop: 'GP9_Anus_Depth',
       value: 0.5,
-      base: 0.2,
     })
-    // An untouched morph carries the v31 default — auto-base on, no fixed base.
     expect(data.frames[1].morphs[0]).toEqual({
       node: 'Genesis9',
       prop: 'SS_body_bs_Glute UpDown',
       value: -1,
-      autoBase: true,
     })
   })
 })
@@ -455,7 +449,7 @@ describe('toCharacterScriptDsa', () => {
       frame: 0,
       section: 'FBM',
       name: 'BodyTone',
-      morphs: [{ node: 'Genesis9', prop: 'body_bs_BodyTone', value: 1, autoBase: true }],
+      morphs: [{ node: 'Genesis9', prop: 'body_bs_BodyTone', value: 1 }],
     })
     // No separate FBM / CSV / art-direction files — everything is inline.
     expect(file.content).not.toContain('extraJSONs')
@@ -511,7 +505,7 @@ describe('toCharacterScriptDsa', () => {
         rom: 'gp',
         frame: 100,
         name: 'AnusOpen',
-        morphs: [{ id: 'am1', node: 'Genesis 9', prop: 'GP_Anus_Open', value: 0.9, autoBase: true }],
+        morphs: [{ id: 'am1', node: 'Genesis 9', prop: 'GP_Anus_Open', value: 0.9 }],
       },
     ]
     const config = characterConfig(toCharacterScriptDsa(makeCharacter({ sections })).content)
@@ -1120,7 +1114,7 @@ describe('buildArtDirectionData', () => {
         rom: 'gp',
         frame: 100,
         name: 'AnusOpen',
-        morphs: [{ id: 'am1', node: 'Genesis 9', prop: 'GP_Anus_Open', value: 0.9, autoBase: true }],
+        morphs: [{ id: 'am1', node: 'Genesis 9', prop: 'GP_Anus_Open', value: 0.9 }],
       },
       { id: 'a2', rom: 'gp', frame: 96, name: 'VaginaOpen', morphs: [] },
     ]
@@ -1133,7 +1127,7 @@ describe('buildArtDirectionData', () => {
       frame: 100,
       section: 'GP9',
       name: 'AnusOpen',
-      morphs: [{ node: 'Genesis 9', prop: 'GP_Anus_Open', value: 0.9, autoBase: true }],
+      morphs: [{ node: 'Genesis 9', prop: 'GP_Anus_Open', value: 0.9 }],
     })
     // The character script inlines the same data as config.gpArtDirection (no DK).
     const config = characterConfig(toCharacterScriptDsa(character).content)
@@ -1156,10 +1150,10 @@ describe('buildArtDirectionData', () => {
     sections.GEN.enabled = true
     sections.GEN.artDirection = [
       // In-range (GP block is 104): kept.
-      { id: 'ok', rom: 'gp', frame: 100, name: 'AnusOpen', morphs: [{ id: 'aok', node: 'Genesis 9', prop: 'GP_Anus_Open', value: 0.9, autoBase: true }] },
+      { id: 'ok', rom: 'gp', frame: 100, name: 'AnusOpen', morphs: [{ id: 'aok', node: 'Genesis 9', prop: 'GP_Anus_Open', value: 0.9 }] },
       // >= 104: would stamp at gpStart+5000, deep in the custom-frame range,
       // corrupting a custom pose's deltas. Must be dropped.
-      { id: 'oob', rom: 'gp', frame: 5000, name: 'Bogus', morphs: [{ id: 'abo', node: 'Genesis 9', prop: 'GP_Bogus', value: 1, autoBase: true }] },
+      { id: 'oob', rom: 'gp', frame: 5000, name: 'Bogus', morphs: [{ id: 'abo', node: 'Genesis 9', prop: 'GP_Bogus', value: 1 }] },
     ]
     const character = makeCharacter({ sections })
     const json = buildArtDirectionData(character, 'gp', 'GP9', 'Golden Palace', FRAMES.gp)

@@ -63,14 +63,14 @@ function group(id: string, suffix: RomGroup['suffix']): RomGroup {
       {
         id: `${id}-p1`,
         name: 'BodyTone',
-        morphs: [{ id: `${id}-m1`, node: 'Genesis9', prop: 'body_bs_BodyTone', value: 1, autoBase: true }],
+        morphs: [{ id: `${id}-m1`, node: 'Genesis9', prop: 'body_bs_BodyTone', value: 1 }],
         boneScaleRef: false,
       },
       {
         id: `${id}-p2`,
         name: 'Glute UpDown',
         morphs: [
-          { id: `${id}-m2`, node: 'Genesis9', prop: 'SS_body_bs_Glute UpDown', value: -1, autoBase: true },
+          { id: `${id}-m2`, node: 'Genesis9', prop: 'SS_body_bs_Glute UpDown', value: -1 },
         ],
         boneScaleRef: true,
       },

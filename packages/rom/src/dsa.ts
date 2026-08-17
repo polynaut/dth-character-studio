@@ -150,28 +150,19 @@ export function stripTrailingSlashes(path: string): string {
 }
 
 /**
- * One morph as the runtime reads it. `autoBase` is emitted only when ON (schema
- * v31's default) — the runtime reads an absent flag as off, so the opt-out costs
- * no key. Same for `base`, which is unset unless the user typed one.
- *
- * MEASURED: only the extraFrames path honours these two. The art-direction path
- * (`applyArtDirectionData` in DthUtils.dsa) sawtooths through
- * `createMorphFrame(oProp, frame, value)` with no base argument, so a GP/DK
- * art-direction morph always returns to 0 whatever this emits. They are emitted
- * there anyway rather than special-cased away: the field belongs to the morph,
- * and stripping it would encode the runtime's current limit into the payload.
- *
- * Takes `Morph` itself, not a structural subset: v31 made `autoBase` REQUIRED on
- * the parsed type precisely so tsc names every site that handles a morph, and a
- * local `autoBase?: boolean` here would have quietly opted the emitter out of it.
+ * One morph as the runtime reads it: node/prop/value, nothing else. The
+ * sawtooth floor is ALWAYS 0 since schema v34 / runtime v82 — the retired
+ * `base`/`autoBase` floors could never export correctly (the DTH Exporter's
+ * FBX pass excludes varying-keyed morphs from the base mesh, so a non-zero
+ * floor made the Alembic and FBX bases drift apart; measured 2026-08-17).
+ * A walked morph that is dialed non-zero at frame 0 now FAILS its frame in
+ * the runtime instead (`checkDialedWalkedMorphs`, DthUtils.dsa).
  */
 function morphJson(morph: Morph) {
   return {
     node: morph.node,
     prop: morph.prop,
     value: morph.value,
-    ...(morph.base !== undefined ? { base: morph.base } : {}),
-    ...(morph.autoBase ? { autoBase: true } : {}),
   }
 }
 

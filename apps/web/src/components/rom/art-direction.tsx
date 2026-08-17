@@ -65,8 +65,7 @@ export function ArtDirectionEditor({
 
   // A frame is a per-scene override when its morph content differs from the base's
   // (ids ignored — they're editing handles). Only meaningful on a non-primary scene.
-  const morphKey = (ms: Array<Morph>) =>
-    JSON.stringify(ms.map((m) => [m.node, m.prop, m.value, m.base ?? null, m.autoBase]))
+  const morphKey = (ms: Array<Morph>) => JSON.stringify(ms.map((m) => [m.node, m.prop, m.value]))
   const baseFrameMorphs = (rom: 'gp' | 'dk', frame: number): Array<Morph> =>
     baseConfig?.artDirection.find((e) => e.rom === rom && e.frame === frame)?.morphs ?? []
 

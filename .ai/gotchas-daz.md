@@ -4,6 +4,36 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
 
 ## Daz Studio integration (measured behavior)
 
+- **The DTH Exporter's FBX pass excludes every morph whose ROM keys VARY from
+  the base mesh — on every export path.** Measured 2026-08-17 (DS4 4.24,
+  exporter 2.0.2.0; ~10 live probes on a stock G8.1F with `FBMHeavy` dialed
+  0.5, geometry compared in hython by the scale-invariant bbox depth/height
+  ratio — shaped 0.1919, unshaped 0.1446, spike 0.2477):
+  - static dial, NO keys → FBX 0.1919 = ABC 0.1919 (morph carried, match);
+  - FLAT keys (every key the same value) → 0.1919 = 0.1919 (still carried);
+  - VARYING keys (any sawtooth spike) → **FBX 0.1446 vs ABC-base 0.1919** —
+    the morph is dropped from the FBX base mesh entirely (same point count,
+    no blendshape channel appears; a binary scan finds zero `BlendShape`
+    deformers), while the alembic bakes the true per-frame mesh;
+  - identical for `doExport(dir, name, refFrames, false)`, the unmeasured
+    `…, true)` variant, and the **dialog** export (probed by staging the same
+    scene and clicking Export in the real dialog): all three FBX byte-classes
+    match. ERC-driven-ness is IRRELEVANT (non-driven `FBMPearFigure` drifts
+    identically). The exporter's own log is line-identical drift vs no-drift;
+    the scene dials are restored after `doExport` returns — the mid-export
+    zero-drop visible in the viewport is transient and plugin-internal.
+  Consequence (the whole classic DTH pipeline is built on it): FBX and
+  alembic bases only match when every walked morph evaluates **0 at frame 0**
+  — which the old script era guaranteed with 0-floor sawtooths, and which the
+  studio enforces since runtime v82 by failing dialed walked morphs loudly
+  (`checkDialedWalkedMorphs`; the retired v31 autoBase floors were exactly the
+  configuration that broke this). Also note: a keyed-but-flat channel is safe,
+  which is why `frameZeroMorphs` (single key at 0) export correctly.
+  Probe technique that earned this, reusable: hand-written Runner job files
+  (empty `scenePath` row = fresh scene) run arbitrary probe `.dsa` in the live
+  Daz; the DazToHue Exporter dialog accepts NO synthetic input (mouse_event at
+  verified hit-test coords, PostMessage with correct client coords, SendKeys —
+  all inert; only a human click actuates it).
 - **The DAZ Install Manager already knows every Daz path, and stores them at a
   FIXED location — never search the disk for DIM.** Measured on DIM 1.4.1.96
   (2026-08-07), three plain INI files under `%APPDATA%/DAZ 3D`
