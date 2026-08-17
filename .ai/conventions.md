@@ -123,7 +123,11 @@ hooks in `.claude/settings.json` move these the same way:
   guessed it was there. And after any doc rewrite, run
   `node .claude/hooks/inject-gotchas.mjs --audit`;
   `node .claude/hooks/inject-gotchas.test.mjs` covers the matching itself (both
-  run on a fresh clone with no install).
+  run on a fresh clone with no install). **Both also run in CI** — the
+  `validate` job in `validate-pull-request.yml`, before `pnpm install` — so a
+  doc edit that unhooks a trigger fails the PR instead of going quiet. That
+  belt-and-braces is earned: this ritual was written down, and an anchor still
+  died for days (below).
   **The audit checks three ways an anchor dies, because only the first is
   visible.** STALE (the text moved, nothing extracts) is the obvious one.
   AMBIGUOUS is the phrase now matching twice, where `indexOf` hands back the
@@ -133,6 +137,16 @@ hooks in `.claude/settings.json` move these the same way:
   the fact they fired for — green to a check that stops at "the anchor
   resolves". The general lesson for any extract-at-runtime mechanism: assert on
   what the reader RECEIVES, never on whether something was produced.
+  **And a doc CORRECTION breaks anchors exactly like a rewrite does** — the
+  `ffi-surface` anchor was the verbatim `**FFI surface: 52 commands**`, so
+  re-verifying that count to 54 (which the sentence itself asks for) killed the
+  trigger silently. The lesson that generalises is not "remember to run the
+  audit" — that was already the rule, and the correction walked straight past it,
+  which is why the audit is a CI check now. It is **keep out of an anchor
+  anything the doc expects to revise**: a count, a pinned dependency version
+  (`cargo-pins`), or a LINE WRAP — an anchor spanning a newline pins where the
+  sentence breaks today, so re-flowing the paragraph breaks it
+  (`unreal-engine-registry`). Anchor one line, on the words, not the figures.
   **The table is deliberately not exhaustive, and says so in what it injects.**
   the `gotchas-*.md` files hold ~90 measured facts and only the action-tied ones have
   triggers, so silence from this hook means "no trigger matched", never "nothing

@@ -24,11 +24,17 @@ behave identically.
 Daz Studio has no usable "remote control" API, but a plugin can watch the
 filesystem. So the handoff is a file, and the plugin's whole job is:
 
-1. **Poll for the job file** (a small JSON the studio wrote): check on startup
-   and then **regularly** (a timer, every few seconds) for as long as Daz
-   runs. Polling — not just a startup check — is what lets the studio push a
-   new batch to an **already-running** Daz instance: Daz can stay open after
-   the first batch and keep picking up work.
+1. **Watch for the job file** (a small JSON the studio wrote): check on
+   startup, then keep looking for as long as Daz runs — so the studio can push
+   a new batch to an **already-running** Daz instance: Daz can stay open after
+   the first batch and keep picking up work. Since Runner v1.3.0 "keep
+   looking" is real file watching (`QFileSystemWatcher` on each content dir's
+   `Scripts/DTH-Character-Studio/`) with a slow fallback poll underneath —
+   change notification is best-effort on network shares, and a content dir
+   whose scripts folder doesn't exist yet can't be watched at all. Older
+   Runners poll on a plain a-few-seconds timer; both satisfy the contract —
+   the file IS the interface, how promptly each side notices is quality of
+   implementation.
 2. When found: **rename it** (`running_` prefix) — the "started working on it"
    signal (the studio can only abort a file that hasn't been renamed yet).
 3. For each row: **open the row's scene — or explicitly a NEW EMPTY scene when
@@ -244,12 +250,19 @@ after the last row:
 Exact API spellings should be verified against the SDK headers of the plugin's
 build; the shapes below are the known-good mechanisms.
 
-- **When to check:** a repeating `QTimer` (a few seconds is plenty — the check
-  is one `QFile::exists` per content dir). Start it once Daz is fully up and
-  the event loop is idle — deferred from the plugin's init (e.g.
+- **When to check:** a `QFileSystemWatcher` on every content dir's
+  `Scripts/DTH-Character-Studio/` (the `directoryChanged` signal, debounced a
+  beat — the studio writes temp-file-then-rename, so a burst is normal), with
+  a repeating `QTimer` underneath as the safety net (the check is one
+  `QFile::exists` per content dir; slow when the watches are armed, a few
+  seconds when they can't be — a scripts folder that doesn't exist yet can't
+  be watched, and change notification on network shares is best-effort). The
+  fallback tick is also where the watch list re-syncs: dirs created after
+  startup get their watch then. Start all of it once Daz is fully up and the
+  event loop is idle — deferred from the plugin's init (e.g.
   `QTimer::singleShot` first, or the SDK's app-started signal); checking too
-  early risks content-directory mapping not being ready. Stop (or gate) the
-  timer while a batch is running, restart it after.
+  early risks content-directory mapping not being ready. Stop (or gate) both
+  while a batch is running, restart them after.
 - **Finding the file:**
 
   ```cpp
@@ -339,8 +352,11 @@ is the natural shape — the same one the unsaved-changes cancellation already
 uses. Nothing about this is required: the studio's interrupt works against a
 plugin that knows nothing about it.
 
-**Progress watch (studio-side):** the studio polls the `running_` file and
-shows the plugin-owned `progress` ("Exporting 40%"). When it reads
+**Progress watch (studio-side):** the studio watches the `running_` file —
+real file watching over the scripts dir and the progress log's folder
+(`api/execute/watch.ts`), with the old interval degraded to a slow heartbeat
+underneath (`lib/fs-watch.ts` on why the poll survives) — and shows the
+plugin-owned `progress` ("Exporting 40%"). When it reads
 `progress: 100` it **deletes the file** and reports the outcome (per-row
 `failed` statuses + errors included). A `running_` file below 100 whose Daz
 Studio is no longer running is a dead run: the studio cleans it up and

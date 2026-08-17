@@ -58,6 +58,9 @@ export {
 } from './execute/jobs.ts'
 export type { ExecuteJobsSummary, ExecuteSceneStatus } from './execute/jobs.ts'
 
+export { watchExportRunFiles } from './execute/watch.ts'
+export type { StopWatching } from './execute/watch.ts'
+
 export {
   PROJECT_SCAN_RUN,
   abortProjectScanRun,

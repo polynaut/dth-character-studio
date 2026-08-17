@@ -429,6 +429,17 @@ export function installTauriMock(seed: TauriMockSeed): void {
       case 'plugin:fs|stat':
       case 'plugin:fs|lstat':
         return statOf(norm(args.path))
+      // Real file watching (lib/fs-watch.ts) is DELIBERATELY refused, not
+      // faked: specs simulate the Runner/Houdini side by mutating `files`
+      // directly via page.evaluate, which no invoke-level watch fake could
+      // see — a "successful" watch that never fires would slow the app's
+      // fallback poll to its heartbeat and starve those specs. The refusal is
+      // a supported outcome (watchPaths returns null), so the app keeps the
+      // full-speed poll every spec was written against.
+      case 'plugin:fs|watch':
+        throw new Error('[tauri-mock] fs watch is not supported in the smoke fake')
+      case 'plugin:fs|unwatch':
+        return null
 
       // --- other plugins ---------------------------------------------------
       case 'plugin:path|resolve_directory':
