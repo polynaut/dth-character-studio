@@ -23,7 +23,6 @@ var dthCharacterConfig = {
   "FACsDetailStrength": 1,
   "FlexionStrength": 1,
   "bApplyUE5TearUV": true,
-  "subdLevel": 2,
   "presetFrames": {
     "base": 328,
     "gp": 104,

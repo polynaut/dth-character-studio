@@ -290,11 +290,6 @@ function ApplyInitialValues(options, oNodeRoot){
 		setPropertyByName(oNodeRoot, "facs_ctrl_FACSDetailStrength", options["FACsDetailStrength"], 0) }
 	if( options["FlexionStrength"] > 0 ) {
 		setPropertyByName(oNodeRoot, "body_ctrl_FlexionAutoStrength", options["FlexionStrength"], 0) }
-	// Mesh subdivision BEFORE anything is posed or keyed: one level on the
-	// viewport dial and the render dial of every node under the figure that has
-	// them, so the mesh the poses are judged on is the mesh that gets captured.
-	// Absent / -1 leaves the scene's own levels alone (see dthApplySubDLevel).
-	dthApplySubDLevel(oNodeRoot, options["subdLevel"]);
 }
 
 
@@ -494,7 +489,7 @@ function ApplyDTHCharacter(config){
 	var keys = [
 		"genesis",
 		"bIncludeJCM", "bIncludeFAC", "bIncludeDK", "bIncludeGP", "bIncludePhysics", "bDQS",
-		"FACsDetailStrength", "FlexionStrength", "presetFrames", "subdLevel",
+		"FACsDetailStrength", "FlexionStrength", "presetFrames",
 		"jcmRomPath", "mouthRomPath", "gpRomPath", "dkRomPath", "physRomPath",
 		"aGPFenceOffsets", "aDK9FenceOffsets",
 		"preserveMorphs", "preserveNodeTransforms", "jcmMorphMods", "frameZeroMorphs"

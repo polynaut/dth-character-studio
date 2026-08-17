@@ -433,33 +433,6 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   script does. Only genital-graft shells are in scope: a tattoo or skin-overlay shell
   legitimately WANTS the graft surfaces on, so a blanket sweep over every
   `DzGeometryShellNode` would break those.
-- **The subdivision property spellings are GUESSES — the first live run reports the
-  real ones, and this is where they get pinned.** `dthApplySubDLevel`
-  (`DthUtils.dsa`, runtime v81) stamps one level on the viewport dial and the render
-  dial of every node under the figure. It was written with **no live Daz to measure
-  against**, so nothing in it depends on the names being right: the candidates
-  `SubDIALevel` / `SubDRenderLevel` are tried first only because a `findProperty` is
-  cheap, then the node's **and its object's** property lists are searched by SHAPE
-  (name-or-label carrying "subd" + "level", split on whether it also says "render";
-  the Base/High enum by "resolution" + "level" + actually having items). Every run
-  prints the dials it used —
-  `SubD level 2 stamped on 12 of 12 node(s); viewport dial '…', render dial '…', resolution '…'`.
-  **Replace this bullet with the measured names the first time that line is read off
-  a real figure**, and pin them at the top of the candidate arrays. Three things that
-  are already known to matter, whatever the names turn out to be:
-  - The two dials are **not guaranteed to live on the same owner** (node vs.
-    `getObject()`), so each is searched for independently. A lookup that stops at the
-    first owner to answer *anything* sets the viewport level and leaves the render one
-    alone — manufacturing the exact mismatch the pass exists to remove.
-  - A level above 0 is **inert while the mesh sits at Base resolution**, so the
-    Base/High enum is switched first, by item STRING (anything carrying "high"), never
-    by a guessed index — an enum's ordering is not a contract.
-  - Every setter is **read back**, the enum included. A dial that silently clamps, or a
-    mesh that will not leave Base, is a run WARNING (the export is still correct — the
-    scene keeps its own subdivision), and *finding nothing to stamp at all* is a
-    warning too. While the spellings are unverified that last case is the likeliest
-    failure, and a pass that only `print`s it leaves the studio's report showing a
-    clean run for a level that was never applied.
 - **`DzContentMgr.findFile(rel, DzContentMgr.AllDirsAndCloud)` is the supported way
   to resolve a content-relative path** (confirmed against Daz's own shipped scripts
   under `data/resources/Lesson Strips`, which use exactly that two-arg form). Content
