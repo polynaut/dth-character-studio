@@ -309,6 +309,10 @@ GH_REPO=polynaut/dth-character-studio \
 - Dependabot PRs are exempt — which means product-relevant dependency bumps never
   release themselves. The `/dep-release` skill (`.claude/skills/dep-release`)
   finds and ships them.
+- **A dependabot major of a GitHub ACTION moves only the pin, not the workflow's
+  usage of it** — diff the pinned tag's `action.yml` inputs/outputs against the
+  workflow before merging (earned by #868/#876: changesets/action v2's renamed
+  inputs broke every Version run on main).
 - **Never date a change by guessing its release version.** A comment or `.ai/`
   line like "since v0.70" written while the PR is open is a guess: the release
   train batches every merged changeset into ONE version, so four feature PRs

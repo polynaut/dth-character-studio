@@ -22,21 +22,6 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   the current head keeps red "cancelled" required checks. Only ever approve or
   re-run the NEWEST run; for a cancelled current head,
   `gh run rerun <run-id> --failed` re-runs just the killed jobs.
-- **A dependabot MAJOR bump of a GitHub ACTION ships only the pin — the
-  workflow's usage of it stays v-old and fails on the next run** (measured
-  2026-08-17: changesets/action 1.9.0→2.1.0 via #868 broke the Version run on
-  main until #876). changesets/action v2 renamed inputs
-  `version`→`version-script`, `title`→`pr-title`, `commit`→`commit-message`,
-  output `pullRequestNumber`→`pr-number` (hyphen → bracket syntax in
-  expressions), and reads its token from the `github-token` INPUT (default
-  plain `github.token`) instead of env — the PAT must go to the input or the
-  no-CI-on-version-PR babysitting problem above returns. Env `GITHUB_TOKEN` is
-  STILL needed alongside: `@changesets/get-github-info` reads it inside
-  `pnpm version-packages` (fails loud without). v2 also pushes
-  `changeset-release/main` via the API with that token
-  (`push-with-git-cli: false` default), not with the checkout's credentials.
-  When merging a dependabot bump of any ACTION, diff the pinned tag's
-  `action.yml` inputs/outputs against the workflow before merging.
 - **`github-actions[bot]` cannot create releases on this repo** (403 "Resource
   not accessible by integration" despite `contents: write`). The publish job runs
   on the `RELEASE_PAT` secret — if publishing ever 403s/401s again, **check the
