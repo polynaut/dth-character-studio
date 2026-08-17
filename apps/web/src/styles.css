@@ -262,7 +262,7 @@ a {
     transform: translateY(15%);
   }
   to {
-    transform: translateY(19%);
+    transform: translateY(20%);
   }
 }
 /* The zoom pushes the square image IN as the header collapses so the face reads

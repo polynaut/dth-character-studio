@@ -82,15 +82,17 @@ for (const genesis of ['G8.1', 'G8', 'G3']) {
   }) => {
     await openCharacter(page, genesis)
     const height = await panHeight(page)
-    // Four points further down at both ends. Asserted on the PAINTED transform:
-    // the attribute could be set correctly and still do nothing if the rule that
-    // reads it were wrong, and that failure is invisible from the DOM.
+    // Further down at both ends, and by MORE once collapsed (4 points at rest,
+    // 5 collapsed — the pans are not a constant offset apart). Asserted on the
+    // PAINTED transform: the attribute could be set correctly and still do
+    // nothing if the rule that reads it were wrong, and that failure is
+    // invisible from the DOM.
     expect(await panY(page)).toBeCloseTo(height * 0.15, 0)
     // …and it must still be ON the scroll timeline. The pre-G9 rule swaps only
     // `animation-name`; had it used the `animation` shorthand it would have reset
     // `animation-timeline` to auto, freezing the portrait at its resting offset —
     // which the assertion above would have passed anyway.
     await scrollPastTheCollapse(page)
-    expect(await panY(page)).toBeCloseTo(height * 0.19, 0)
+    expect(await panY(page)).toBeCloseTo(height * 0.2, 0)
   })
 }
