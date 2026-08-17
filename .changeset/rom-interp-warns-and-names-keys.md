@@ -41,5 +41,18 @@ runtime over the measured Daz semantics (`setKeyInterpolationType` does nothing,
 `setValue` is what rewrites a key), but the next real ROM run is what will show
 the named keys for the 4 that started this.
 
+One class of finding turned out not to be a finding at all. A key that is its
+channel's ONLY key, at frame 0, interpolates across nothing — there is no second
+key to travel to — so whether the stamp took cannot change any value anywhere.
+That exemption previously applied only to keys whose value REFUSED to move,
+which was an accident of the scene it was measured on rather than a property of
+spans. The first real run proved it: all four of its findings were single keys at
+frame 0 on `Bone Fill Opacity` / `Bone Edge Opacity` — viewport drawing dials
+under `/Display/Scene View/Bones` that nobody had animated, which reach the walk
+only because Daz reports an implicit frame-0 key for never-keyed channels. Those
+four are now correctly counted as spanning nothing, and each reported key also
+carries its channel's key COUNT, so "does this interpolation span anything?" is
+answerable from the report instead of requiring a scene to open.
+
 Regenerate the character (Tools > Refresh assets) and re-run the ROM to pick
 this up: runtime 78 -> 80.

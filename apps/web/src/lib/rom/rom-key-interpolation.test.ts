@@ -40,6 +40,8 @@ interface KeyProblem {
   propLabel?: string
   path?: string
   key: number
+  /** How many keys the channel holds — one key spans nothing. */
+  keys: number
   frame: number
   interp: string
   reason: string
@@ -245,12 +247,37 @@ describe('the LINEAR interpolation pass names the keys it could not fix', () => 
     // The FRAME, derived from the time step — not the raw tick count.
     expect(entry.frame).toBe(88)
     expect(entry.key).toBe(1)
+    // The count that says whether this key's interpolation spans anything.
+    expect(entry.keys).toBe(2)
     // What Daz actually holds, named rather than left as a number to decode.
     expect(entry.interp).toBe('CONSTANT (1)')
     expect(entry.path).toBe('/Pose Controls/Head')
     expect(entry.reason).toContain('does not read back LINEAR')
     // The same detail reaches the Daz log, which is all a user has mid-run.
     expect(printed).toContain('Genesis9/head / facs_bs_MouthOpen')
+  })
+
+  it('a lone key at frame 0 spans nothing — even when its value moved', () => {
+    // The first REAL report (2026-08-17, LaraCroft_G81) found 4 unfixable keys
+    // in 7968, and every one was this: a channel holding ONE key at frame 0
+    // whose value moved but whose interpolation would not read back LINEAR.
+    // They were Bone Fill/Edge Opacity — VIEWPORT DRAWING dials nobody animated,
+    // which only reach the walk because Daz reports an implicit frame-0 key for
+    // never-keyed channels. One key has no second key to interpolate towards, so
+    // there is nothing to report, whatever the stamp did.
+    //
+    // The old rule granted that only to keys whose value REFUSED to move, which
+    // was an accident of the sample it was measured on, not a property of spans.
+    const viewportDial = new FakeProp('Bone Fill Opacity', 'stubborn', [0])
+    const { log, problems, printed } = runPass([
+      fakeNode('LeonyPonytail_257085', [viewportDial]),
+    ])
+
+    expect(problems).toBe(0)
+    expect(log.keyProblems).toEqual([])
+    expect(log.warnings.join('\n')).not.toContain('would not read back LINEAR')
+    // Counted and explained, never silently dropped.
+    expect(printed).toContain('1 span nothing')
   })
 
   it('separates a key that spans nothing from one that is genuinely stuck', () => {

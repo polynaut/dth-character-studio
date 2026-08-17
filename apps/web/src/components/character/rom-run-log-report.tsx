@@ -206,7 +206,8 @@ function KeyProblemLine({ problem }: { problem: RomRunKeyProblem }) {
     <>
       <span className="text-amber-600 dark:text-amber-500">{problem.kind}</span>{' '}
       {problem.frame >= 0 ? `frame ${problem.frame}` : 'frame ?'}
-      {problem.key >= 0 && ` · key ${problem.key}`} · {problem.node} /{' '}
+      {problem.key >= 0 && ` · key ${problem.key}${problem.keys ? ` of ${problem.keys}` : ''}`} ·{' '}
+      {problem.node} /{' '}
       <strong>{problem.prop}</strong>
       {problem.propLabel && ` (${problem.propLabel})`}
       {problem.interp && ` · reads back ${problem.interp}`}

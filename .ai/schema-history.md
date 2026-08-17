@@ -938,4 +938,14 @@ v80 — no unattended carrier opens a modal, and the missing-runtime message sto
       "runtime is missing" message named Daz's resources folder, a place the
       script never looked. It now reports from a `dthSelfDir` snapshot taken
       before the first include.
+      Also v80: a key that is its channel's ONLY key at frame 0 is counted as
+      spanning nothing whatever the stamp did — the exemption used to require
+      that the value REFUSE to move, which was an artefact of the locked/driven
+      sample it was measured on, not a property of spans. Measured 2026-08-17 on
+      the first real v79 report: 4 findings of 7968 keys, every one a single
+      frame-0 key on Bone Fill/Edge Opacity (`/Display/Scene View/Bones`) — dials
+      nobody animated, which reach the walk at all only because Daz reports an
+      implicit frame-0 key for never-keyed channels (2599 channels collected vs
+      1590 genuinely animated in that character's saved ROM). Each reported key
+      now carries its channel's key COUNT for exactly that reason.
 ```

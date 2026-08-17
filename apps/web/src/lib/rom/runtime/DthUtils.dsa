@@ -390,6 +390,12 @@ function dthKeyProblemEntry(sKind, oChan, iKey, tTime, iRead, sReason){
 		node: oChan.node,
 		prop: String(oProp.getName()),
 		key: iKey,
+		// How many keys the CHANNEL holds. Without it a report cannot answer the
+		// first question anyone asks of a bad key — does its interpolation span
+		// anything at all? — and the first real report could not: four findings
+		// on channels holding one key each, which is nothing, read as four
+		// broken keys.
+		keys: oProp.getNumKeys(),
 		frame: dthFrameOfTime(tTime),
 		interp: dthInterpName(iRead),
 		reason: sReason
@@ -412,7 +418,7 @@ function dthKeyProblemLine(oEntry){
 	var s = oEntry.node + " / " + oEntry.prop;
 	if(oEntry.propLabel) s += " (" + oEntry.propLabel + ")";
 	if(oEntry.path) s += " [" + oEntry.path + "]";
-	if(oEntry.key >= 0) s += " - key " + oEntry.key;
+	if(oEntry.key >= 0) s += " - key " + oEntry.key + " of " + oEntry.keys;
 	s += " at frame " + (oEntry.frame < 0 ? "?" : oEntry.frame);
 	if(oEntry.interp) s += ", reads back " + oEntry.interp;
 	return s;
@@ -478,7 +484,16 @@ function dthSetValueInterp(oProp, tTime, fValue, iInterp){
 
 /** Collect `oProp` when it is animated and not already collected — WITH the node
  *  it belongs to, which is half of a key's identity when the pass has to report
- *  one it could not fix. */
+ *  one it could not fix.
+ *
+ *  "Animated" here means `getNumKeys() >= 1`, which is WIDER than it sounds:
+ *  Daz reports an implicit key at frame 0 for a channel nobody ever keyed (see
+ *  the note above dthEnsureFrameZeroKey), so this collects plenty of channels
+ *  that carry no animation at all — measured 2026-08-17, 2599 collected against
+ *  1590 genuinely animated channels in the saved ROM of the same character. That
+ *  is not a problem in itself (a stamp on a static channel is harmless), but it
+ *  is exactly why a single key at frame 0 must never be REPORTED as a failure:
+ *  see the spans-nothing rule in setLinearInterp. */
 function dthPushInterpProp(aChannels, oSeen, sNodeKey, sNodePath, oProp){
 	if(!oProp || typeof oProp.getNumKeys != "function") return;
 	if(oProp.getNumKeys() < 1) return;
@@ -720,7 +735,26 @@ function setLinearInterp(oNodes){
 			var sResult = dthStampKeyLinear(oProp, j, iInterp);
 			if(sResult == DTH_KEY_LINEAR){ iLinear++; continue; }
 			if(sResult == DTH_KEY_UNVERIFIED){ iUnverified++; continue; }
-			if(sResult == DTH_KEY_IMMOVABLE && bBenignIfStuck){ iSpansNothing++; continue; }
+			// A key that is its channel's ONLY key, at frame 0, interpolates
+			// across nothing — there is no second key to travel to. So its
+			// interpolation type cannot change any value anywhere, and whether
+			// the stamp took is not a fact worth reporting.
+			//
+			// This used to apply to IMMOVABLE only, and that was an accident of
+			// how the measurement was made rather than a rule: the sample that
+			// taught us about spans-nothing channels was locked/driven, so they
+			// all refused the nudge. A channel whose value DOES move and still
+			// won't read back LINEAR is the same nothing when it holds one key at
+			// frame 0 — and that is precisely what the first real report found
+			// (2026-08-17): 4 of 7968 keys, all frame 0, all Bone Fill/Edge
+			// Opacity — VIEWPORT DRAWING dials under /Display/Scene View/Bones,
+			// which nobody animated at all. They only reached the walk because
+			// Daz reports an implicit frame-0 key for never-keyed channels. The
+			// old classification turned that into a warning on a real character's
+			// run report, and before v79 into a blocked export.
+			if(bBenignIfStuck && (sResult == DTH_KEY_IMMOVABLE || sResult == DTH_KEY_FAILED)){
+				iSpansNothing++; continue;
+			}
 			var sKind, sReason;
 			if(sResult == DTH_KEY_VALUE_LOST){
 				iValueLost++; sKind = "value-lost";

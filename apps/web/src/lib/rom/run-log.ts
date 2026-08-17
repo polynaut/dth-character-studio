@@ -46,6 +46,12 @@ export interface RomRunKeyProblem {
   path?: string
   /** Key index on the channel; -1 for a whole-channel problem (`frame-zero`). */
   key: number
+  /**
+   * How many keys the channel holds. The number that answers "does this key's
+   * interpolation span anything?" — one key spans nothing, so it cannot matter.
+   * 0 in a log written before runtime v80 recorded it.
+   */
+  keys: number
   /** -1 when the runtime could not resolve what a frame is worth. */
   frame: number
   /** What Daz reports for this key AFTER the pass, e.g. `CONSTANT (1)`. '' when
@@ -132,6 +138,7 @@ export function parseKeyProblems(value: unknown): Array<RomRunKeyProblem> {
       propLabel: typeof entry.propLabel === 'string' ? entry.propLabel : undefined,
       path: typeof entry.path === 'string' ? entry.path : undefined,
       key: typeof entry.key === 'number' ? entry.key : -1,
+      keys: typeof entry.keys === 'number' ? entry.keys : 0,
       frame: typeof entry.frame === 'number' ? entry.frame : -1,
       interp: typeof entry.interp === 'string' ? entry.interp : '',
       reason: typeof entry.reason === 'string' ? entry.reason : '',
