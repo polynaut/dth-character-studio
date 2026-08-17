@@ -468,15 +468,28 @@ export async function dazStudioRunning(): Promise<boolean> {
  * Delete files from disk (best-effort, each independently) — used when unlinking
  * a Daz scene / Houdini project with "Delete file on disk" on. The caller passes
  * the asset plus any siblings (e.g. a scene's `.png` / `.tip.png` thumbnails).
+ * `folders` are removed RECURSIVELY — reserved for folders the studio owns
+ * outright, like a scene's own subfolder with its `rom-animations/` inside
+ * (`sceneDeleteTargets` in lib/scene-subfolder.ts decides when that is safe).
  */
 export async function deleteFiles({ data }: { data: unknown }): Promise<void> {
-  const { paths } = z.object({ paths: z.array(z.string()) }).parse(data)
+  const { paths, folders } = z
+    .object({ paths: z.array(z.string()), folders: z.array(z.string()).default([]) })
+    .parse(data)
   for (const p of paths) {
     if (!p) continue
     try {
       if (await exists(p)) await remove(p)
     } catch {
       // best-effort — a locked/absent file shouldn't fail the whole unlink
+    }
+  }
+  for (const f of folders) {
+    if (!f) continue
+    try {
+      if (await exists(f)) await remove(f, { recursive: true })
+    } catch {
+      // best-effort, same as above
     }
   }
 }

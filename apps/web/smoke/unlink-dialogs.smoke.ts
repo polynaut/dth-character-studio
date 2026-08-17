@@ -1,5 +1,10 @@
 import { expect, test } from '@playwright/test'
 
+// The real path rule, not a restated literal — see rom-animation.ts on why the
+// leaf module is imported directly (the package root's `?raw` imports don't
+// resolve node-side).
+import { romAnimationPath } from '../../../packages/rom/src/rom-animation.ts'
+
 import { P, buildSeed } from './fixtures.ts'
 import { installTauriMock } from './tauri-mock.ts'
 
@@ -117,4 +122,70 @@ test('the default unlink keeps the file; ticking the toggle deletes it', async (
   await again.getByRole('button', { name: 'Delete' }).click()
   await expect(again).toHaveCount(0)
   expect(await has(page, P.houdini)).toBe(false)
+})
+
+// ── Scene deletion cleans up after itself ────────────────────────────────────
+// A deleted scene must not leave its subfolder behind: every linked scene lives
+// in its own folder below the scenes root, and that folder holds its saved
+// `rom-animations/`. Deleting removes the whole folder when the scene has one
+// to itself, and only the scene's files + its OWN saved ROM animation when the
+// folder is shared (the legacy layout parks several scenes in the root).
+
+test('deleting a scene with its own subfolder removes the folder, ROM animations included', async ({
+  page,
+}) => {
+  const beach = `${P.charFolder}/daz3d/beach/KiraBeach.duf`
+  const seed = buildSeed({ demo: true, activeProjectFile: P.dcsp })
+  const kira = JSON.parse(seed.files[`${P.charFolder}/Kira.json`])
+  kira.extraScenes = [beach]
+  seed.files[`${P.charFolder}/Kira.json`] = JSON.stringify(kira, null, 2)
+  seed.files[beach] = 'duf-fixture'
+  seed.files[romAnimationPath(beach)] = 'duf-rom-animation'
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await expect(page.getByText(/custom ROM frames/)).toBeVisible()
+
+  const card = page.locator('.group\\/card').filter({ hasText: /KiraBeach/ })
+  await card.getByRole('button', { name: 'Unlink from character' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Remove Daz scene?' })
+  // The copy names what the delete takes with it — this scene owns its folder.
+  await expect(dialog.getByText(/scene’s folder — saved ROM animations included/)).toBeVisible()
+  await dialog.getByRole('switch').click() // arm the delete
+  await dialog.getByRole('button', { name: 'Delete' }).click()
+  await expect(dialog).toHaveCount(0)
+
+  expect(await has(page, beach)).toBe(false)
+  expect(await has(page, romAnimationPath(beach))).toBe(false)
+  // The primary and its tree are untouched.
+  expect(await has(page, P.scene)).toBe(true)
+})
+
+test('deleting a scene that shares the root folder spares the other scenes’ files', async ({
+  page,
+}) => {
+  // extraScene: the Summertide scene sits DIRECTLY in daz3d/ beside the primary
+  // (the legacy layout) — so does the shared rom-animations/ folder.
+  const seed = buildSeed({ demo: true, activeProjectFile: P.dcsp, extraScene: true })
+  seed.files[romAnimationPath(P.scene)] = 'duf-rom-animation'
+  seed.files[romAnimationPath(P.scene2)] = 'duf-rom-animation'
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await expect(page.getByText(/custom ROM frames/)).toBeVisible()
+
+  const card = page.locator('.group\\/card').filter({ hasText: /Summertide/ })
+  await card.getByRole('button', { name: 'Unlink from character' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Remove Daz scene?' })
+  // Shared folder → the copy promises only the scene's own ROM animation.
+  await expect(dialog.getByText(/its saved ROM animation/)).toBeVisible()
+  await dialog.getByRole('switch').click() // arm the delete
+  await dialog.getByRole('button', { name: 'Delete' }).click()
+  await expect(dialog).toHaveCount(0)
+
+  expect(await has(page, P.scene2)).toBe(false)
+  expect(await has(page, romAnimationPath(P.scene2))).toBe(false)
+  // The primary, its ROM animation, and the shared folder survive.
+  expect(await has(page, P.scene)).toBe(true)
+  expect(await has(page, romAnimationPath(P.scene))).toBe(true)
 })

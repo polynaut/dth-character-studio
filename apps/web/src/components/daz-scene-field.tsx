@@ -44,6 +44,7 @@ import { pickDufPath, pickFolder } from '#/lib/desktop.ts'
 import {
   PRIMARY_SCENE_SUBFOLDER,
   deriveScenesRootRel,
+  sceneDeleteTargets,
   sceneSubfolderConflict,
   suggestSceneSubfolder,
 } from '#/lib/scene-subfolder.ts'
@@ -988,10 +989,17 @@ export function DazSceneField({
       onScenesRemoved?.([scene])
       if (removeDeleteFile) {
         try {
-          const noDuf = scene.replace(/\.duf$/i, '')
-          await deleteFiles({
-            data: { paths: [scene, `${scene}.png`, `${scene}.tip.png`, `${noDuf}.tip.png`] },
+          // The scene's own subfolder (rom-animations included) when it has one
+          // to itself, else its files plus its own saved ROM animation — see
+          // sceneDeleteTargets. `remaining` is the post-unlink link set, so a
+          // folder another linked scene lives in is never deleted.
+          const targets = sceneDeleteTargets({
+            sceneAbs: scene,
+            charFolderAbs: charFolder,
+            scenesRootRel,
+            remainingScenesAbs: remaining,
           })
+          await deleteFiles({ data: { paths: targets.files, folders: targets.folders } })
         } catch (e) {
           // Non-fatal: the unlink is already persisted — the file just stays.
           toast.warning(
@@ -1066,6 +1074,21 @@ export function DazSceneField({
         The old primary is linked in place — your original file is kept.
       </p>
     ) : null
+
+  // What "Delete file on disk" will actually remove for the scene pending
+  // removal — drives the remove dialog's copy: a scene with a subfolder of its
+  // own loses the whole folder (saved ROM animations included), a shared-folder
+  // scene its files plus its own saved ROM animation. Must mirror
+  // confirmRemove's sceneDeleteTargets call, so the dialog never promises less
+  // than the delete does.
+  const removesWholeFolder =
+    pendingRemove !== '' &&
+    sceneDeleteTargets({
+      sceneAbs: pendingRemove,
+      charFolderAbs: charFolder,
+      scenesRootRel,
+      remainingScenesAbs: linkedScenes.filter((s) => s !== pendingRemove),
+    }).folders.length > 0
 
   // Two-tone path chip for the scenes ROOT: everything through the CHARACTER
   // folder is dimmed — we're already inside the character here, so only the
@@ -1548,7 +1571,16 @@ export function DazSceneField({
       {pendingRemove && (
         <RemoveAssetDialog
           title="Remove Daz scene?"
-          description="Unlink this Daz scene from the character."
+          // For a linked-in-place scene the delete toggle is locked off, so the
+          // base sentence is the whole story; otherwise the copy names what a
+          // delete takes with it (folder vs files — see removesWholeFolder).
+          description={
+            !insideCharFolder(pendingRemove)
+              ? 'Unlink this Daz scene from the character.'
+              : removesWholeFolder
+                ? 'Unlink this Daz scene from the character. Deleting also removes the scene’s folder — saved ROM animations included.'
+                : 'Unlink this Daz scene from the character. Deleting also removes its saved ROM animation.'
+          }
           deleteFile={removeDeleteFile}
           onDeleteFileChange={setRemoveDeleteFile}
           // A scene linked in place (outside the character folder) is the user's
