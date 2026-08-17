@@ -99,7 +99,7 @@ each lives in its file's frontmatter; this table is the map.
 | `/verify` | Runs the full verification gate in order (typecheck, lint, tests, smoke, cargo) and fixes what fails. |
 | `/write-pr` | The house style for PR descriptions — structure, tone, and naming what was and wasn't verified. |
 | `/dep-release` | Puts already-merged dependency bumps on the release train — Dependabot PRs carry no changesets, so product-relevant bumps never release themselves. |
-| `/docs-refresh` | Brings `docs/guide` back in step with the code: documents features that shipped without docs, refreshes or proposes screenshots, deletes what no longer applies, proposes splits for overgrown pages. |
+| `/refresh-docs` | Brings `docs/guide` back in step with the code. It **proposes** what shipped undocumented and asks which of it to document and at what depth (one line / paragraph / section / page) before writing a word, refreshes or proposes screenshots, deletes what no longer applies, and holds every page to a word budget — a pass that only added is a failed pass. |
 | `/upgrade-dth` | Walkthrough for a new **DazToHue** release: every studio↔DTH coupling surface (PoseAsset CSV era, HDA node/parm names, the Exporter Plugin contract, preset assets, install layout) as contract → check → adjust, with the tests that pin each. |
 | `/upgrade-daz` | Walkthrough for a new **Daz Studio**: flavor detection and its closed DS4/DS6 world, the Runner plugin's SDK/ABI rules, the emitted-DazScript quirk ledger, and the process/launch hardcodes. |
 | `/upgrade-houdini` | Walkthrough for a new **Houdini**: pairing the new install with its fresh (empty!) prefs folder and reinstalling the DTH assets there, then the hython/Python/env assumptions. |
@@ -110,7 +110,7 @@ re-stamp the "measured against" versions and fold what the new release changed
 back into the skill.
 
 When to reach for which: `/verify` before pushing, `/grill` before merging
-anything non-trivial, `/write-pr` when opening the PR, `/docs-refresh` after a
+anything non-trivial, `/write-pr` when opening the PR, `/refresh-docs` after a
 run of feature merges, `/dep-release` after merging Dependabot PRs, and the
 `upgrade-*` trio when the corresponding external release ships.
 

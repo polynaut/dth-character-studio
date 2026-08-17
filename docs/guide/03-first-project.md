@@ -1,9 +1,8 @@
 # 3 · Your first project
 
-A project groups the characters of one production (a game, a film, a series of
-commissions). On disk it is simply a **folder you choose**, marked by a single
-**`.dcsp`** project file — keep it wherever you keep that production's files,
-back it up with them, and you're done.
+A project groups the characters of one production. On disk it is a **folder you
+choose**, marked by a single **`.dcsp`** file — keep it wherever you keep that
+production's files and back it up with them.
 
 ## Create it
 
@@ -14,13 +13,12 @@ back it up with them, and you're done.
 </p>
 
 1. On the **Home** screen press **New project**.
-2. **Choose folder…** — pick the folder the project should live in. You can
-   also just drop a folder anywhere onto the Home screen.
+2. **Choose folder…** — pick the folder the project should live in (or drop a
+   folder anywhere onto the Home screen).
 3. Give it a **Project name** and press **Create**.
 
 The project opens **in its own window**. From now on you can also open it by
-double-clicking the `.dcsp` file in Explorer, or from the Home screen's recent
-list:
+double-clicking the `.dcsp` in Explorer, or from the Home screen's recent list.
 
 <p align="center">
   <img width="900" alt="Home screen with the project in the recent list" src="screenshots/home.png" />
@@ -34,28 +32,19 @@ list:
   <sub><em>The project opens in its own window.</em></sub>
 </p>
 
-
 ## Good to know
 
-- Every character you create becomes a **subfolder of the project** —
-  definition, scenes, and generated files live together, so the project folder
-  is fully self-contained and portable.
-- The project page has more tabs beside **Characters**: **Notes** (freeform
-  markdown for the whole project — images can be dropped straight in) and
-  **Operations** (the project-level danger zone: deleting the project, which
-  refuses while its files are open in Daz or Houdini). Enabling
+- Every character becomes a **subfolder of the project** — definition, scenes and
+  generated files live together, so the project folder is self-contained.
+- Beside **Characters** the project page has **Notes** (freeform markdown) and
+  **Operations** (the project-level danger zone). Enabling
   [Assets](./attachments.md) adds an **Attachments** tab.
-- Per-project options (folder layout, the optional [Assets](./attachments.md)
-  and [Daz Products](./product-scanning.md) features) live in
-  **Settings → Project** — the defaults are fine for a first run. One is
-  destructive: changing **Characters subfolder** later *moves* the existing
-  character folders (their scene and Houdini links are repointed).
-
-- **Path chips** — the monospace path badges all over the app — **copy the
-  full path on click**; **Alt+click opens the location in Explorer** (for a
-  file, its folder). Where a chip carries a pencil, it edits the value in
-  place. The same Alt+click works on every linked card — Daz scenes, Houdini
-  projects and Unreal projects.
+- Per-project options live in **Settings → Project**; the defaults are fine for a
+  first run. One is destructive: changing **Characters subfolder** later *moves*
+  the existing character folders.
+- **Path chips** — the monospace path badges all over the app — **copy the full
+  path on click**, and **Alt+click opens the location in Explorer**. A chip with a
+  pencil edits the value in place. The same Alt+click works on every linked card.
 
   <p align="center">
     <img width="372" alt="Clicking a path chip copies the full path" src="clips/path-chip-copy.webp" />
@@ -71,38 +60,30 @@ list:
 
 ## Linking Unreal projects
 
-The bar docked to the bottom of the project window holds the **Unreal
-projects** this studio project feeds. Link one or more `.uproject` files with
-the button or by dropping them onto the bar — links only: the files stay where
-they are, and unlinking never deletes anything.
+The bar docked to the bottom of the project window holds the **Unreal projects**
+this studio project feeds. Link `.uproject` files with the button or by dropping
+them onto the bar — links only: the files stay where they are, and unlinking
+never deletes anything.
 
-- **The open button** on a card launches the project in Unreal Engine;
-  **Alt+click** shows it in Explorer instead. The card's path chip works like
-  every path chip (click copies, Alt+click reveals). The rest of the card is
-  inert — no accidental launches.
-- **The small install button** on each card opens the **install dialog**: what
-  goes into this Unreal project — the linked DTH release's *Unreal Engine
-  Content* (into `Content/DazToHue`), the **DTH Character Studio Runner** — marked
-  **built in**, because it ships inside the app rather than coming from your
-  plugin folders (and carries a version, so a card shows an amber ⚠ when its
-  project holds an older copy than the app ships — re-install and restart the
-  editor once); it is the small Python plugin that makes
-  [Send to Unreal](./06-into-houdini.md#send-to-unreal) work, so restart the
-  editor once after installing it — plus every plugin build from your
-  [Unreal Engine Plugins folders](./02-setup.md#unreal-engine-plugins) that
-  matches this project's engine version (read from its `.uproject` when the
-  dialog opens). Everything is pre-checked; uncheck what you don't want and
-  press **Install**. A checked item that is already in the project is
-  overwritten with the offered build (project-local additions inside the
-  folders survive — installing never deletes first). The button dims once
-  `Content/DazToHue` exists, but stays clickable — reinstalls and plugins live
-  in the dialog. A project whose engine association is a source-build GUID
-  lists every build unchecked instead: only you know what fits it.
-- **Creating the Unreal project itself is Unreal's job** — its New Project
-  screen is where the templates live (Third Person, Blueprint vs C++, the
-  starter content), and picking the right one for a production is a decision
-  worth making there. Make the project in Unreal, then link it here and use the
-  install button.
+- **The open button** launches the project in Unreal Engine; **Alt+click** shows
+  it in Explorer. The rest of the card is inert — no accidental launches.
+- **The install button** opens the **install dialog**: everything is pre-checked,
+  so uncheck what you don't want and press **Install**.
+  - the linked DTH release's *Unreal Engine Content* (into `Content/DazToHue`);
+  - the **DTH Character Studio Runner**, marked **built in** because it ships
+    inside the app — the small Python plugin that makes
+    [Send to Unreal](./06-into-houdini.md#send-to-unreal) work. Restart the editor
+    once after installing it; a card shows an amber ⚠ when its project holds an
+    older copy than the app ships;
+  - every plugin build from your
+    [Unreal Engine Plugins folders](./02-setup.md#unreal-engine-plugins) matching
+    this project's engine version.
+
+  A checked item already in the project is overwritten with the offered build
+  (project-local additions inside the folders survive). A project whose engine
+  association is a source-build GUID lists every build unchecked instead.
+- **Creating the Unreal project itself is Unreal's job** — its New Project screen
+  is where the templates live. Make it in Unreal, then link it here.
 
 <p align="center">
   <img width="900" alt="Unreal projects footer bar with a linked project card" src="screenshots/project-unreal-footer.png" />

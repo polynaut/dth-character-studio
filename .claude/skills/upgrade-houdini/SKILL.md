@@ -119,7 +119,7 @@ variable expansion surfaces here — and in `hipRefPrefixFor`
   `houdini-material-merge.test.ts` provenance comment, `.ai/gotchas.md`
   Houdini sections, `.ai/domain.md` (Generate/Refresh/456.py sections).
 - Guide: `02-setup.md` (Houdini cards, prefs-folder explanation, extras),
-  `06-into-houdini.md`. Screenshots via `/docs-refresh`.
+  `06-into-houdini.md`. Screenshots via `/refresh-docs`.
 - Smoke fixtures pin `Houdini 22.0.368` + `houdini22.0` throughout
   (`smoke/houdini-*.smoke.ts`, `guide.screenshots.ts`).
 - KNOWN GAP (Backlog C9, `.ai/domain.md`): no record of which Houdini (or
