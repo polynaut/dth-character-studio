@@ -1,5 +1,53 @@
 # @dth/web
 
+## 0.82.0
+
+
+### Patch Changes
+
+- [#875](https://github.com/polynaut/dth-character-studio/pull/875) [`1c58289`](https://github.com/polynaut/dth-character-studio/commit/1c58289c656d1307603239504a1ac70df89ab11a) Thanks [@polynaut](https://github.com/polynaut)! - Dependency refresh: TanStack Router 1.170.28 (+ router plugin and devtools), lucide-react 1.31.0 and sonner 2.0.8 in the app UI.
+
+- [#863](https://github.com/polynaut/dth-character-studio/pull/863) [`79e7f92`](https://github.com/polynaut/dth-character-studio/commit/79e7f92f0d05c25107d69cd4623dfa359297d9ab) Thanks [@polynaut](https://github.com/polynaut)! - **Export only** disappears from the installation you activate.
+
+  Activating the Daz install that was flagged **Export only** left its switch on
+  screen — now on the _active_ card, still on — which reads as if activating had
+  somehow demoted the install. It cannot mean anything there: the flag says "the
+  export batch runs somewhere other than where everything else runs", and an
+  installation that runs everything is exactly the case it excludes.
+
+  So the switch is no longer offered on the active card, and activating a flagged
+  install clears the stored flag in the same save. Hiding it alone would have been
+  the worse half of the fix: the flag would stay armed with nothing on screen to
+  disarm it, harmless only because it happened to point at the active folder
+  anyway.
+
+  A flag an earlier version already left stranded on the active installation is
+  cleaned up the same way: the next activation — any activation — disarms it,
+  instead of letting it spring back as a redirect to the previous Studio.
+
+  Nothing changes for the arrangement the flag is actually for — a newer Studio
+  running everything with the batch kept in an older one still works exactly as
+  before.
+
+- [#872](https://github.com/polynaut/dth-character-studio/pull/872) [`e6eff51`](https://github.com/polynaut/dth-character-studio/commit/e6eff5154d59ccbf5207a20b8225908c03283609) Thanks [@polynaut](https://github.com/polynaut)! - **Mesh SubD level is held back** — reverted before it reached a release.
+
+  The feature stamps one subdivision level on the viewport dial and the render
+  dial of every mesh under the figure, and it was built against **guessed Daz
+  property names**: there was no live Daz Studio to measure them on. The design
+  absorbs that (candidate names, then a search by shape, then a read-back of every
+  setter, and a run warning when nothing is found), but "absorbs it" is not
+  "verified", and the one thing the feature promises — that what you judge a pose
+  on is what gets exported — is exactly the thing that cannot be claimed until a
+  real figure has been stamped.
+
+  So it comes out of this release rather than shipping unverified. Nothing changes
+  for anyone: it merged and was reverted without a version in between, so no build
+  ever offered the setting. It goes back in once the property names are measured.
+
+- Updated dependencies [[`1c58289`](https://github.com/polynaut/dth-character-studio/commit/1c58289c656d1307603239504a1ac70df89ab11a), [`e6eff51`](https://github.com/polynaut/dth-character-studio/commit/e6eff5154d59ccbf5207a20b8225908c03283609), [`eafecf9`](https://github.com/polynaut/dth-character-studio/commit/eafecf960a10a9a9bec2a078c3926e4b7766af25)]:
+  - @dth/ui@0.82.0
+  - @dth/rom@0.82.0
+
 ## 0.81.0
 
 ### Minor Changes

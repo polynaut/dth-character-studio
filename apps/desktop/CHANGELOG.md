@@ -1,5 +1,52 @@
 # @dth/desktop
 
+## 0.82.0
+
+### Minor Changes
+
+- [#865](https://github.com/polynaut/dth-character-studio/pull/865) [`c453503`](https://github.com/polynaut/dth-character-studio/commit/c453503ece2b694905eae9c6e6a8c82ed3ab16f4) Thanks [@polynaut](https://github.com/polynaut)! - The DTH Export run is now followed by real file watching instead of polling.
+
+  The studio watches the Daz job-file pair (the Daz library's studio scripts
+  folder) and the verbose progress log (app-data) with a native file watcher —
+  the fs plugin's notify backend (`ReadDirectoryChangesW` on Windows, FSEvents
+  on macOS). The Runner's pickup rename, every per-row rewrite and the final
+  progress-100 write now reach the export button, the pipeline panel and the
+  Tools → Scan project panel the moment they land, instead of on the next
+  2.5-second poll tick.
+
+  The interval survives as a slow safety-net heartbeat, deliberately: change
+  notification over SMB/NAS shares is best-effort, watching isn't available in
+  a plain browser, and a Daz that dies mid-run announces itself through no file
+  event. The Houdini and Unreal legs keep their full-speed poll — their files
+  aren't part of this watch (yet).
+
+  Every refresh trigger (watch event, heartbeat, window focus) now funnels
+  through one coalesced call per panel, so a burst of events can never race two
+  destructive finished-run reads over the same job file.
+
+  Paired with DTH Character Studio Runner v1.3.0, which watches for the handoff
+  the same way (`QFileSystemWatcher` + fallback timer) — together they make the
+  studio → Daz pickup and the Daz → studio results near-instant. Older Runners
+  keep working on their poll; the job-file contract is unchanged.
+
+- [#873](https://github.com/polynaut/dth-character-studio/pull/873) [`eafecf9`](https://github.com/polynaut/dth-character-studio/commit/eafecf960a10a9a9bec2a078c3926e4b7766af25) Thanks [@polynaut](https://github.com/polynaut)! - The ROM now fails loudly when a walked morph is dialed in the scene — and the
+  autoBase/base sawtooth floors are gone (schema v34, runtime v82).
+
+  Measured root cause of the FBX/Alembic base-shape drift: the DTH Exporter's
+  FBX pass excludes every morph whose ROM keys vary from the base mesh — on the
+  scripted and the dialog export path alike — while the Alembic bakes the true
+  timeline. A non-zero sawtooth floor (the v31 autoBase feature, or a manual
+  `base`) therefore always shipped a shaped Alembic base against an unshaped FBX
+  base, and shrank the HDA-generated morphs to the leftover dial headroom.
+
+  Now the sawtooth floor is always 0, and a new build-time gate fails every
+  frame that walks a morph dialed non-zero at frame 0 (tolerance 0.001, ERC-
+  driven dials called out so you zero the controlling dial). The failures ride
+  the run log: the offending frames turn red in the studio with the reason, and
+  the export is skipped — a drifting export can no longer be produced silently.
+  Zero the dial in the export scene (its shape reaches Unreal through the
+  generated morph, now at full range) and rebuild.
+
 ## 0.81.0
 
 ## 0.80.0
@@ -186,8 +233,8 @@
   a project on another rate gets a **Needs attention** badge naming it, and a new
   **Timeline (FPS)** row in the Utils drawer's General tab. **Repair $JOB** is now
   **Repair project settings** and fixes both, each judged on its own — a project
-  whose `$JOB` is fine and whose timeline is 24 gets only the timeline written, and
-  the report says which of the two moved. What Houdini's `setFps` does to keys in an
+  whose `$JOB`is fine and whose timeline is 24 gets only the timeline written, and
+the report says which of the two moved. What Houdini's`setFps` does to keys in an
   already-animated scene is Houdini's behaviour and is not something this studio has
   measured; the run's usual rolling backup is stated alongside it. A value the scan
   could not read stays _unknown_ and is never repaired.
