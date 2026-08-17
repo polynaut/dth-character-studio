@@ -24,13 +24,18 @@ primary's skeleton (*Add anyway* overrides) — then copied into its **own
 subfolder** of the character's scenes folder (the name is suggested from the
 scene's filename and stays editable, but can't be empty — each scene's export
 nests under it) or left in place. The **primary** scene can't be unlinked;
-extras can. Every card has **Open in Daz**. The primary can be **replaced**
+extras can. Removing one with **Delete file on disk** ticked also deletes the
+scene's own subfolder — saved ROM animations included — and its `daz-export`
+folder; a scene sharing a folder with others (the pre-subfolder layout) loses
+only its own files, its own saved ROM animation and its own exports. Every card
+has **Open in Daz**. The primary can be **replaced**
 instead: its card's folder button browses for a new scene, runs the same
 validation and copy-vs-link decision as Add scene, then swaps it in — the
 Genitalia section re-derives from the new scene's geograft, its detected
 [hair items](#hair-items--per-scene-kept-out-of-the-export) are pre-selected,
-the avatar follows, and an old in-folder copy can be deleted right there (a
-linked-in-place original is always kept).
+the avatar follows, and an old in-folder copy is cleaned up right there — its
+saved ROM animation and its exports included (a linked-in-place original is
+always kept, and an export folder the replacement is about to use stays).
 
 Replacing is only offered while the primary is the character's **only** scene.
 Every extra scene was checked against the primary when it was added — above all

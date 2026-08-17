@@ -4,6 +4,7 @@ import {
   deriveScenesRootRel,
   hipAnchorDirs,
   hipRefPrefixFor,
+  sceneDeleteTargets,
   sceneSubfolderConflict,
   suggestSceneSubfolder,
 } from './scene-subfolder'
@@ -34,6 +35,239 @@ describe('suggestSceneSubfolder', () => {
 
   it('strips filesystem-illegal characters', () => {
     expect(suggestSceneSubfolder('X:\\s\\What_Is: This?.duf', 'Y')).toBe('What_Is_This')
+  })
+})
+
+describe('sceneDeleteTargets — what "Delete file on disk" removes', () => {
+  const CHAR = 'D:/DTH Projects/Demo/Kira'
+
+  it('a scene in its own subfolder loses the whole folder (rom-animations included)', () => {
+    expect(
+      sceneDeleteTargets({
+        sceneAbs: `${CHAR}/daz3d/beach/Beach.duf`,
+        charFolderAbs: CHAR,
+        scenesRootRel: 'daz3d',
+        remainingScenesAbs: [`${CHAR}/daz3d/primary/Kira.duf`],
+      }),
+    ).toEqual({
+      folders: [`${CHAR}/daz3d/beach`],
+      files: [],
+      sceneFolder: `${CHAR}/daz3d/beach`,
+      exportFolder: '',
+    })
+  })
+
+  it('the primary in its "primary" subfolder is a folder delete too', () => {
+    expect(
+      sceneDeleteTargets({
+        sceneAbs: `${CHAR}/daz3d/primary/Kira.duf`,
+        charFolderAbs: CHAR,
+        scenesRootRel: 'daz3d',
+        remainingScenesAbs: [`${CHAR}/daz3d/beach/Beach.duf`],
+      }).folders,
+    ).toEqual([`${CHAR}/daz3d/primary`])
+  })
+
+  it('a legacy scene directly in the scenes root deletes its files + its own ROM animation only', () => {
+    const scene = `${CHAR}/daz3d/Kira.duf`
+    const targets = sceneDeleteTargets({
+      sceneAbs: scene,
+      charFolderAbs: CHAR,
+      scenesRootRel: 'daz3d',
+      remainingScenesAbs: [],
+    })
+    expect(targets.folders).toEqual([])
+    expect(targets.sceneFolder).toBe('')
+    expect(targets.files).toEqual([
+      scene,
+      `${scene}.png`,
+      `${scene}.tip.png`,
+      `${CHAR}/daz3d/Kira.tip.png`,
+      `${CHAR}/daz3d/rom-animations/Kira_ROM.duf`,
+      `${CHAR}/daz3d/rom-animations/Kira_ROM.duf.png`,
+    ])
+  })
+
+  it('the export folder goes with the scene — in folder AND file mode', () => {
+    // Folder mode: the scene's own subfolder plus its export folder.
+    expect(
+      sceneDeleteTargets({
+        sceneAbs: `${CHAR}/daz3d/beach/Beach.duf`,
+        charFolderAbs: CHAR,
+        scenesRootRel: 'daz3d',
+        remainingScenesAbs: [`${CHAR}/daz3d/primary/Kira.duf`],
+        exportRootAbs: `${CHAR}/houdini/daz-export`,
+        exportSubfolderRel: 'beach',
+        remainingExportSubfoldersRel: ['primary'],
+      }),
+    ).toEqual({
+      folders: [`${CHAR}/daz3d/beach`, `${CHAR}/houdini/daz-export/beach`],
+      files: [],
+      sceneFolder: `${CHAR}/daz3d/beach`,
+      exportFolder: `${CHAR}/houdini/daz-export/beach`,
+    })
+    // File mode (legacy root scene, stem-named export folder): files + export.
+    const legacy = sceneDeleteTargets({
+      sceneAbs: `${CHAR}/daz3d/Kira.duf`,
+      charFolderAbs: CHAR,
+      scenesRootRel: 'daz3d',
+      remainingScenesAbs: [],
+      exportRootAbs: `${CHAR}/houdini/daz-export`,
+      exportSubfolderRel: 'Kira',
+      remainingExportSubfoldersRel: [],
+    })
+    expect(legacy.folders).toEqual([`${CHAR}/houdini/daz-export/Kira`])
+    expect(legacy.files).toContain(`${CHAR}/daz3d/Kira.duf`)
+  })
+
+  it('an export folder a remaining scene claims — or a root outside the character folder — is kept', () => {
+    // The replace flow's same-subfolder case: the new primary claims "primary".
+    expect(
+      sceneDeleteTargets({
+        sceneAbs: `${CHAR}/daz3d/primary/Old.duf`,
+        charFolderAbs: CHAR,
+        scenesRootRel: 'daz3d',
+        remainingScenesAbs: [`${CHAR}/daz3d/primary/New.duf`],
+        exportRootAbs: `${CHAR}/houdini/daz-export`,
+        exportSubfolderRel: 'primary',
+        remainingExportSubfoldersRel: ['PRIMARY'], // case-insensitive claim
+      }).exportFolder,
+    ).toBe('')
+    // A pre-v29 loose definition can carry a hand-picked root anywhere on disk,
+    // possibly shared between characters — never deleted from.
+    expect(
+      sceneDeleteTargets({
+        sceneAbs: `${CHAR}/daz3d/beach/Beach.duf`,
+        charFolderAbs: CHAR,
+        scenesRootRel: 'daz3d',
+        remainingScenesAbs: [],
+        exportRootAbs: 'E:/Shared DTH Exports',
+        exportSubfolderRel: 'beach',
+        remainingExportSubfoldersRel: [],
+      }).exportFolder,
+    ).toBe('')
+  })
+
+  it('an export folder a remaining scene lives UNDER is kept (root pointing into the scenes tree)', () => {
+    // A pre-v29 hand-picked export root can point INTO the scenes tree. Here
+    // the removed scene's export folder ("sets") is the very folder a remaining
+    // scene lives under — no remaining scene CLAIMS "sets" (the nested one's
+    // subfolder is "sets/beach"), so only the containment guard refuses it.
+    expect(
+      sceneDeleteTargets({
+        sceneAbs: `${CHAR}/daz3d/sets/Removed.duf`,
+        charFolderAbs: CHAR,
+        scenesRootRel: 'daz3d',
+        remainingScenesAbs: [`${CHAR}/daz3d/sets/beach/Scene.duf`],
+        exportRootAbs: `${CHAR}/daz3d`,
+        exportSubfolderRel: 'sets',
+        remainingExportSubfoldersRel: ['sets/beach'],
+      }).exportFolder,
+    ).toBe('')
+  })
+
+  it('the scene folder is kept when the export ROOT lives inside it and other scenes remain', () => {
+    // The remaining scenes' exports live under that root — taking the folder
+    // would take them too. Falls back to per-file deletion; the removed
+    // scene's OWN export subfolder under the root still goes.
+    const targets = sceneDeleteTargets({
+      sceneAbs: `${CHAR}/daz3d/beach/Beach.duf`,
+      charFolderAbs: CHAR,
+      scenesRootRel: 'daz3d',
+      remainingScenesAbs: [`${CHAR}/daz3d/primary/Kira.duf`],
+      exportRootAbs: `${CHAR}/daz3d/beach/exports`,
+      exportSubfolderRel: 'beach',
+      remainingExportSubfoldersRel: ['primary'],
+    })
+    expect(targets.sceneFolder).toBe('')
+    expect(targets.files).toContain(`${CHAR}/daz3d/beach/Beach.duf`)
+    expect(targets.exportFolder).toBe(`${CHAR}/daz3d/beach/exports/beach`)
+    // With NO scene remaining, everything under the folder is the leaving
+    // scene's — the folder goes whole again.
+    expect(
+      sceneDeleteTargets({
+        sceneAbs: `${CHAR}/daz3d/beach/Beach.duf`,
+        charFolderAbs: CHAR,
+        scenesRootRel: 'daz3d',
+        remainingScenesAbs: [],
+        exportRootAbs: `${CHAR}/daz3d/beach/exports`,
+        exportSubfolderRel: 'beach',
+        remainingExportSubfoldersRel: [],
+      }).sceneFolder,
+    ).toBe(`${CHAR}/daz3d/beach`)
+  })
+
+  it('a folder another linked scene lives in is never deleted (falls back to files)', () => {
+    const shared = sceneDeleteTargets({
+      sceneAbs: `${CHAR}/daz3d/outfits/Beach.duf`,
+      charFolderAbs: CHAR,
+      scenesRootRel: 'daz3d',
+      remainingScenesAbs: [`${CHAR}/daz3d/outfits/City.duf`],
+    })
+    expect(shared.folders).toEqual([])
+    expect(shared.files).toContain(`${CHAR}/daz3d/outfits/Beach.duf`)
+    // A remaining scene NESTED below the dir blocks the same way, case- and
+    // separator-insensitively (Windows paths).
+    expect(
+      sceneDeleteTargets({
+        sceneAbs: `${CHAR}/daz3d/outfits/Beach.duf`,
+        charFolderAbs: CHAR,
+        scenesRootRel: 'daz3d',
+        remainingScenesAbs: ['D:\\DTH PROJECTS\\Demo\\Kira\\daz3d\\OUTFITS\\deep\\City.duf'],
+      }).folders,
+    ).toEqual([])
+  })
+
+  it('a sibling folder that merely shares the name prefix does not block', () => {
+    expect(
+      sceneDeleteTargets({
+        sceneAbs: `${CHAR}/daz3d/beach/Beach.duf`,
+        charFolderAbs: CHAR,
+        scenesRootRel: 'daz3d',
+        remainingScenesAbs: [`${CHAR}/daz3d/beachhouse/House.duf`],
+      }).folders,
+    ).toEqual([`${CHAR}/daz3d/beach`])
+  })
+
+  it('a linked-in-place scene (outside the character folder) never yields a folder', () => {
+    expect(
+      sceneDeleteTargets({
+        sceneAbs: 'X:/My Scenes/own/Original.duf',
+        charFolderAbs: CHAR,
+        scenesRootRel: 'daz3d',
+        remainingScenesAbs: [],
+      }).folders,
+    ).toEqual([])
+  })
+
+  it('an empty scenes root anchors at the character folder — subfolder yes, root itself no', () => {
+    expect(
+      sceneDeleteTargets({
+        sceneAbs: `${CHAR}/primary/Kira.duf`,
+        charFolderAbs: CHAR,
+        scenesRootRel: '',
+        remainingScenesAbs: [],
+      }).folders,
+    ).toEqual([`${CHAR}/primary`])
+    expect(
+      sceneDeleteTargets({
+        sceneAbs: `${CHAR}/Kira.duf`,
+        charFolderAbs: CHAR,
+        scenesRootRel: '',
+        remainingScenesAbs: [],
+      }).folders,
+    ).toEqual([])
+  })
+
+  it('normalizes backslash inputs to forward slashes', () => {
+    expect(
+      sceneDeleteTargets({
+        sceneAbs: 'D:\\DTH Projects\\Demo\\Kira\\daz3d\\beach\\Beach.duf',
+        charFolderAbs: 'D:\\DTH Projects\\Demo\\Kira',
+        scenesRootRel: 'daz3d',
+        remainingScenesAbs: [],
+      }).folders,
+    ).toEqual([`${CHAR}/daz3d/beach`])
   })
 })
 
