@@ -14,15 +14,13 @@ import type { ColumnDef } from '@tanstack/react-table'
 import type { RomPose } from '@dth/rom'
 
 import { GuideLink } from '#/components/guide-link.tsx'
-import { NumberCell, OptionalNumberCell, TextCell } from './cells.tsx'
+import { NumberCell, TextCell } from './cells.tsx'
 import { MorphNameCell } from './morph-name-cell.tsx'
 
 export interface MorphPatch {
   node?: string
   prop?: string
   value?: number
-  base?: number | undefined
-  autoBase?: boolean | undefined
 }
 
 /**
@@ -462,8 +460,8 @@ export function SortablePoseRow({
       {expanded && (
         // The multi-morph editor renders as REAL table rows sharing the parent grid's
         // columns, so its sub-columns line up under the main ones: drag→(blank),
-        // Frame→#, Name→Node, Parameter name→Parameter name, Value→Value, Bone scale→Base,
-        // morphs→Auto, actions→(remove). (A colSpan block with its own widths couldn't
+        // Frame→#, Name→Node, Parameter name→Parameter name, Value→Value, Bone scale and
+        // morphs→(blank), actions→(remove). (A colSpan block with its own widths couldn't
         // align to the auto-sized table columns.) The Parameter name / Value
         // fields render for a single morph too — the panel is where more
         // morphs get added, so the full row must be editable in place.
@@ -494,26 +492,14 @@ export function SortablePoseRow({
                   flush over the digits — the same trick the main grid's Value header uses. */}
               <span className="block w-20 pr-5 text-right">Value</span>
             </td>
-            <td className="py-1 pr-1 pl-8 text-center">
-              <span className="flex items-center justify-center gap-1">
-                Base
-                <InfoPopup label="Base — more information">
-                  The value the sawtooth returns to on the frames around the pose (default 0) —
-                  for morphs already dialed in as part of the base shape.
-                </InfoPopup>
-              </span>
-            </td>
-            <td className="py-1 pr-1 pl-8 text-left">
-              <span className="flex items-center gap-1">
-                Auto
-                <InfoPopup label="Auto — more information">
-                  Resolve the base from the morph's current scene value at apply time — on by
-                  default. A morph the scene already dials as part of the base shape returns to
-                  THAT value around its pose instead of 0; one that isn't dialed reads 0 there, so
-                  nothing changes. Uncheck to always return to the Base value.
-                </InfoPopup>
-              </span>
-            </td>
+            {/* The Base/Auto floor columns are GONE (schema v34): the sawtooth
+                floor is always 0 now — a non-zero floor can never export
+                consistently (the exporter's FBX pass drops varying-keyed
+                morphs from the base mesh), so a walked morph dialed non-zero
+                fails its frames loudly at build time instead. The empty cells
+                keep the sub-grid aligned under the parent columns. */}
+            <td />
+            <td />
             <td />
           </tr>
           {pose.morphs.map((morph, morphIndex) => (
@@ -547,29 +533,8 @@ export function SortablePoseRow({
                   onCommit={(value) => meta.updateMorphAt(row.index, morphIndex, { value })}
                 />
               </td>
-              <td className="py-0.5 pr-1 pl-8">
-                <div className="flex justify-center">
-                  <OptionalNumberCell
-                    value={morph.base}
-                    placeholder="0"
-                    disabled={morph.autoBase}
-                    onCommit={(base) => meta.updateMorphAt(row.index, morphIndex, { base })}
-                  />
-                </div>
-              </td>
-              <td className="py-0.5 pr-1 pl-8">
-                <div className="flex h-full items-center justify-start pl-1">
-                  <input
-                    type="checkbox"
-                    className={`size-3.5 ${overridden ? 'accent-daz-green' : 'accent-primary'}`}
-                    title="Resolve the base from the morph's current scene value at apply time — on by default; uncheck to always reset this morph to Base"
-                    checked={morph.autoBase}
-                    onChange={(e) =>
-                      meta.updateMorphAt(row.index, morphIndex, { autoBase: e.target.checked })
-                    }
-                  />
-                </div>
-              </td>
+              <td />
+              <td />
               <td className="py-0.5 pr-4 pl-1">
                 {/* The same bin as the row's own delete (size-7), centered with flexbox.
                     An icon button's own baseline is its bottom edge, so baseline /

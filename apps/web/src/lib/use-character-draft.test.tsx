@@ -69,7 +69,7 @@ function makeInvalidCharacter(): Character {
         {
           id: 'p1',
           name: '', // empty — romValidationErrors flags it
-          morphs: [{ id: 'm1', node: 'Genesis9', prop: 'body_bs_BodyTone', value: 1, autoBase: true }],
+          morphs: [{ id: 'm1', node: 'Genesis9', prop: 'body_bs_BodyTone', value: 1 }],
           boneScaleRef: false,
         },
       ],

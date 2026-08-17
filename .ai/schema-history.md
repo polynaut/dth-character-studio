@@ -182,6 +182,18 @@ of that file ~12k tokens to scroll past.
       every pre-v33 character did, so reading an old definition changes no
       ROM. `0` is a real level (the base cage), which is exactly why "off"
       could not be 0. Additive with a default — no migration step.
+ 34 — REMOVED the per-morph `base` (v-early) and `autoBase` (v31) sawtooth
+      floors. Measured 2026-08-17 (DS4 exporter 2.0.2, scripted doExport with
+      either flag AND the dialog export — all identical): the DTH Exporter's
+      FBX pass excludes every morph whose ROM keys VARY from the base mesh,
+      while the alembic pass bakes the true timeline. A non-zero floor
+      therefore ships a shaped alembic base against an unshaped FBX base —
+      the two artifacts the HDA validates against each other drift, silently,
+      and every morph the HDA GENERATES spans only the leftover headroom
+      instead of the full range. The floor is always 0 now; a walked morph
+      dialed non-zero at frame 0 FAILS its frames loudly at build time
+      instead (runtime v82's `checkDialedWalkedMorphs`). Removals are
+      zod-stripped — no migration step.
 ```
 
 ## Generated-runtime versions (`RUNTIME_VERSION`)
@@ -980,4 +992,22 @@ v80 — no unattended carrier opens a modal, and the missing-runtime message sto
       from that is a staleness rule, not a gap: a saved ROM carries the level
       it was built with, so changing `subdLevel` reaches an export only after
       the ROM is rebuilt.
+ 82 — the sawtooth floor is ALWAYS 0, and the dialed-walked-morph GATE
+      replaces the retired autoBase (schema v34 carries the field removal).
+      `resolveAutoBaseValues` is gone; `resetFrameDatasAtFrame` anchors every
+      walked morph at 0 on frame 0; `checkDialedWalkedMorphs` (DthUtils.dsa)
+      runs right before that reset — it reads each walked dial's frame-0
+      scene value BEFORE the reset destroys the evidence, and any |value| >
+      0.001 files a `failedMorphs` entry PER FRAME that walks the dial
+      (naming the value, and whether the channel is ERC-driven so the user
+      zeroes the CONTROLLING dial). failedMorphs is counted by
+      `runLogProblemCount`, so the export gate skips the export and the
+      studio report shows the offending frames red with the reason. The build
+      itself continues — one report names every offender, not one per
+      rebuild. Why fail instead of floor: the exporter's FBX pass excludes
+      varying-keyed morphs from the base mesh unconditionally (measured
+      2026-08-17 — scripted doExport, both flag values, and the DIALOG export
+      produce the identical FBX), so a dialed walked morph can only ever ship
+      a drifting fbx/abc pair; the shape must ride the HDA-generated morph
+      instead, at full range.
 ```

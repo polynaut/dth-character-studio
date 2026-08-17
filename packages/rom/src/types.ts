@@ -121,51 +121,34 @@ export interface DthPoseAsset {
 export const morphSchema = z.object({
   /** Stable row id for grid editing (minted on read when absent — schema v19,
    *  the same pattern as the v18 JCM rule/drive ids). NEVER reaches generated
-   *  output: `morphJson` emits node/prop/value/base/autoBase only, on every
-   *  path (extraFrames, art direction). */
+   *  output: `morphJson` emits node/prop/value only, on every path
+   *  (extraFrames, art direction). */
   id: z.string().max(MAX_NAME_LENGTH).default(() => newId()),
   /** Scene node the property lives on, e.g. "Genesis9". */
   node: z.string().max(MAX_NAME_LENGTH),
   /** Internal property name, e.g. "body_bs_BodyTone". */
   prop: z.string().max(MAX_NAME_LENGTH),
   value: z.number(),
-  /**
-   * Value the sawtooth returns to on the frames around the pose (default 0).
-   * For morphs already dialed in as part of the base shape.
-   */
-  base: z.number().optional(),
-  /**
-   * Resolve `base` from the morph's current scene value at apply time —
-   * **on by default** (schema v31).
-   *
-   * A morph the character already dials as part of its base shape (a "shaped"
-   * variant reusing an FBM the ROM also walks) must sawtooth back to THAT value,
-   * not to 0, or the ROM erases the base shape on every frame around the pose.
-   * Auto-base makes that the automatic case: the runtime reads the morph's own
-   * frame-0 value and reuses it as the sawtooth floor. A morph that ISN'T dialed
-   * in the scene reads 0 there, so the behaviour is identical to the old default —
-   * which is why on is the safe default and off is the opt-out.
-   *
-   * `.default(true)` is the migration: a pre-v31 definition stored the flag only
-   * when it was ON (off was written as absent), so every existing morph reads
-   * back with auto-base ON. Being a `.default` and not `.optional`, the field is
-   * required on the parsed type — every morph-creation site must state its
-   * intent, which is what keeps "on by default" true no matter how a morph is
-   * added.
-   */
-  autoBase: z.boolean().default(true),
+  // NOTE (schema v34): the sawtooth FLOOR is always 0 now. The `base` (manual
+  // non-zero floor, v?–v33) and `autoBase` (floor = the morph's own frame-0
+  // scene value, v31–v33) fields are REMOVED — zod strips them from stored
+  // definitions on read. A non-zero floor can never export correctly: the DTH
+  // Exporter's FBX pass excludes every morph whose ROM keys VARY from the base
+  // mesh (measured 2026-08-17, DS4 exporter 2.0.2 — scripted doExport AND the
+  // dialog alike), so a walked morph flooring at its dialed value produces a
+  // shaped Alembic base against an unshaped FBX base — the two artifacts
+  // drift, silently. The runtime now FAILS the frame instead when a walked
+  // morph is dialed non-zero at frame 0 (see DthUtils `checkDialedWalkedMorphs`).
 })
 export type Morph = z.infer<typeof morphSchema>
 
 /**
- * A freshly added morph row — the ONE place a new morph's defaults live, so
- * "auto-base is on however a morph is added" is a single fact and not a rule
- * every call site has to remember. Used by every add path: the pose grid's
- * Add morph / Add pose / insert-between, the art-direction rows and the DAZ
- * morph-CSV import.
+ * A freshly added morph row — the ONE place a new morph's defaults live. Used
+ * by every add path: the pose grid's Add morph / Add pose / insert-between,
+ * the art-direction rows and the DAZ morph-CSV import.
  */
 export function newMorph(node: string, patch: Partial<Morph> = {}): Morph {
-  return { id: newId(), node, prop: '', value: 1, autoBase: true, ...patch }
+  return { id: newId(), node, prop: '', value: 1, ...patch }
 }
 
 /**
@@ -857,7 +840,7 @@ export function jcmMorphModForRuntime(mod: JcmMorphMod): {
  * step — is `.ai/schema-history.md`. Bumping this means adding the entry there,
  * in the same commit.
  */
-export const CHARACTER_SCHEMA_VERSION = 33
+export const CHARACTER_SCHEMA_VERSION = 34
 
 /**
  * Version of the generated **script runtime** — the bundled DTH `.dsa` runtime
@@ -876,7 +859,7 @@ export const CHARACTER_SCHEMA_VERSION = 33
  * step — is `.ai/schema-history.md`. Bumping this means adding the entry there,
  * in the same commit.
  */
-export const RUNTIME_VERSION = 81
+export const RUNTIME_VERSION = 82
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

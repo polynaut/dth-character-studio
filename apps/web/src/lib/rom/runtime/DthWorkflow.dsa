@@ -102,9 +102,10 @@ function ApplyDTHWorkflow(options){
 	// these rows define the base state the whole ROM builds on (a clothing fit
 	// like "Expand All" must shape the outfit before anything is keyed), and
 	// the two passes that READ scene state — memorizeBaseMorphs' close-out
-	// baseline and resolveAutoBaseValues' sawtooth floors — must both see
-	// them. Until v74 this ran after the preset blocks, so those reads never
-	// saw the values at all.
+	// baseline and the dialed-walked-morph gate (checkDialedWalkedMorphs) —
+	// must both see them. Until v74 this ran after the preset blocks, so those
+	// reads never saw the values at all. A frame-0 morph that is ALSO walked
+	// by the ROM fails the gate — deliberately: that combination drifts.
 	applyFrameZeroMorphs(oNodeRoot, options.frameZeroMorphs);
 
 	// Memorize node transforms before any ROM loading overwrites them
@@ -193,14 +194,18 @@ function ApplyDTHWorkflow(options){
 	if( options["bWriteDebugCSV"] ) printCSV(frameDatas, dir_self.filePath("OUT.csv"));
 
 	/** ****************************************************************/
-	// Resolve autoBase values by reading current morph values from the scene
-	// Must happen before reset so we know what value to restore
-	resolveAutoBaseValues(oNodeRoot, frameDatas);
+	// The dialed-walked-morph gate (v82, replaces the retired autoBase): a
+	// walked morph dialed non-zero at frame 0 cannot export consistently (the
+	// exporter's FBX pass drops varying-keyed morphs from the base mesh), so
+	// its frames FAIL here - reported per frame, export skipped by the gate.
+	// MUST run before the frame-0 reset below, which zeroes the very dials
+	// this reads.
+	checkDialedWalkedMorphs(oNodeRoot, frameDatas);
 
 	/** ****************************************************************/
-	// IMPORTANT: Set FBM morphs at frame 0 to preserve base state
-	// Morphs with autoBase will be reset to their current scene value instead of 0
-	print("Setting FBM morphs at frame 0 to preserve base state");
+	// Anchor every walked morph at 0 on frame 0 - the sawtooth floor is
+	// always 0 (v82), matching what the exporter's FBX pass can carry.
+	print("Anchoring walked morphs at 0 on frame 0");
 	resetFrameDatasAtFrame(oNodeRoot, frameDatas, 0);
 
 	/** ****************************************************************/

@@ -1145,7 +1145,7 @@ describe('characterSchema — v31 autoBase default flip (false → true)', () =>
                 // Pre-v31 shape: OFF was written as an absent key, ON as `true`.
                 morphs: [
                   { id: 'm1', node: 'Genesis9', prop: 'body_bs_BodyTone', value: 1 },
-                  { id: 'm2', node: 'Genesis9', prop: 'body_bs_GluteSize', value: 1, autoBase: true },
+                  { id: 'm2', node: 'Genesis9', prop: 'body_bs_GluteSize', value: 1 },
                 ],
               },
             ],
@@ -1168,36 +1168,28 @@ describe('characterSchema — v31 autoBase default flip (false → true)', () =>
     },
   })
 
-  it('turns auto-base ON for every morph a pre-v31 definition left unset', () => {
-    const parsed = characterSchema.parse(migrateCharacterData(v30Character()))
-    const morphs = parsed.sections.FBM.groups[0].poses[0].morphs
-    // This IS the one-time migration: absent (= off before v31) reads back as on.
-    expect(morphs[0].autoBase).toBe(true)
-    // A stored `true` is unchanged.
-    expect(morphs[1].autoBase).toBe(true)
-    // Art-direction morphs share morphSchema, so they get the same default.
-    expect(parsed.sections.GEN.artDirection[0].morphs[0].autoBase).toBe(true)
-  })
-
-  it('keeps an explicit false — the v31 opt-out survives a round trip', () => {
+  it('strips the retired base/autoBase floor fields on read (v34)', () => {
+    // A v31–v33 definition stored the floors on the morph rows. The fields are
+    // REMOVED in v34 — a non-zero sawtooth floor can never export consistently
+    // (the exporter's FBX pass drops varying-keyed morphs from the base mesh),
+    // so zod strips them and the runtime fails dialed walked morphs loudly
+    // instead. No migration step: a removed field needs none.
     const raw = v30Character()
-    raw.sections.FBM.groups[0].poses[0].morphs[0].autoBase = false
+    const morphs = raw.sections.FBM.groups[0].poses[0].morphs as Array<Record<string, unknown>>
+    morphs[0].autoBase = true
+    morphs[1].base = 0.5
     const parsed = characterSchema.parse(migrateCharacterData(raw))
-    expect(parsed.sections.FBM.groups[0].poses[0].morphs[0].autoBase).toBe(false)
-    // Idempotent in the saved state: re-parsing the parsed result changes nothing
-    // (a false must NOT be re-flipped to true on the next read).
+    expect(parsed.sections.FBM.groups[0].poses[0].morphs[0]).not.toHaveProperty('autoBase')
+    expect(parsed.sections.FBM.groups[0].poses[0].morphs[1]).not.toHaveProperty('base')
+    // Idempotent: re-parsing the parsed result changes nothing.
     const again = characterSchema.parse(migrateCharacterData(structuredClone(parsed)))
     expect(again).toEqual(parsed)
   })
 
-  it('an auto-based morph emits autoBase into the generated config; an opted-out one does not', () => {
-    const on = characterSchema.parse(migrateCharacterData(v30Character()))
-    expect(toCharacterScriptDsa(on).content).toContain('"autoBase": true')
-
-    const raw = v30Character()
-    for (const morph of raw.sections.FBM.groups[0].poses[0].morphs) morph.autoBase = false
-    raw.sections.GEN.artDirection[0].morphs[0].autoBase = false
-    const off = characterSchema.parse(migrateCharacterData(raw))
-    expect(toCharacterScriptDsa(off).content).not.toContain('autoBase')
+  it('emits no floor fields into the generated config (the floor is always 0)', () => {
+    const parsed = characterSchema.parse(migrateCharacterData(v30Character()))
+    const content = toCharacterScriptDsa(parsed).content
+    expect(content).not.toContain('autoBase')
+    expect(content).not.toContain('"base"')
   })
 })

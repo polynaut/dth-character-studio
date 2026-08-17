@@ -352,7 +352,8 @@ The persisted `Character` shape is versioned (`CHARACTER_SCHEMA_VERSION` in
    direction decides whether you need a step. `.default()` only fires on an
    ABSENT key, so it re-reads every old file — which is the migration when you
    WANT old data to change (v31 turned per-morph `autoBase` on for every stored
-   morph and deliberately added no step), and a data-loss bug when you don't
+   morph and deliberately added no step; the field itself was REMOVED in v34 —
+   the example survives it), and a data-loss bug when you don't
    (v20 flipped `sceneOverride.enabled` and added a step to preserve the old
    meaning of an omitted key). Decide which one you are doing and say so in the
    history entry. When the new default should also hold for freshly minted
@@ -364,7 +365,8 @@ The persisted `Character` shape is versioned (`CHARACTER_SCHEMA_VERSION` in
    flip makes the old default the OPT-OUT, and an opt-out that reaches disk as
    an absent key reads back as the NEW default and silently undoes the user's
    choice. So the handler must write the value EXPLICITLY (v31's Auto checkbox
-   writes `autoBase: false`, not the pre-v31 `checked ? true : undefined`) — a
+   wrote `autoBase: false`, not the pre-v31 `checked ? true : undefined`;
+   control retired with the field in v34) — a
    one-character regression that the `migrate.test.ts` case cannot see, because
    it only ever exercises the read side.
 4. Steps run pre-zod on raw objects, must be idempotent, and guard on

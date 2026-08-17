@@ -1309,16 +1309,21 @@ function processFrameDataJSON(jsonData, frameDatas, iOffset){
 		if (frameEntry.morphs && Array.isArray(frameEntry.morphs)) {
 			for (var j = 0; j < frameEntry.morphs.length; j++) {
 				var morph = frameEntry.morphs[j];
+				// The sawtooth floor is ALWAYS 0 (runtime v82). The retired
+				// base/autoBase floors could never export correctly: the DTH
+				// Exporter's FBX pass excludes varying-keyed morphs from the
+				// base mesh (measured 2026-08-17, scripted AND dialog export),
+				// so a non-zero floor made the alembic and FBX bases drift.
+				// A walked morph dialed non-zero at frame 0 FAILS its frames
+				// instead - see checkDialedWalkedMorphs.
 				var keyData = {
 					frameIdx: frameNum,
 					nodeName: morph.node,
 					propName: morph.prop,
-					propValue: parseFloat(morph.value),
-					baseValue: (morph.base !== undefined) ? parseFloat(morph.base) : 0,
-					autoBase: (morph.autoBase === true)
+					propValue: parseFloat(morph.value)
 				};
 				addFrameData(frameDatas, keyData);
-				verbose("add JSON frame data. frame:", frameNum, "prop:", morph.prop, "base:", keyData.baseValue, "autoBase:", keyData.autoBase);
+				verbose("add JSON frame data. frame:", frameNum, "prop:", morph.prop);
 			}
 		}
 		frameCount++;
@@ -1453,8 +1458,11 @@ function createMorphFrames( oNode, morphConfigs, iStartFrame){
 }
 
 
-// Reset all morphs in frameDatas to 0 at a specific frame (typically frame 0)
-// This preserves the base state and prevents interpolation issues
+// Key every walked morph to 0 at a specific frame (typically frame 0), so the
+// sawtooth has an anchored floor and nothing interpolates across the ROM start.
+// ALWAYS 0 (runtime v82): a non-zero anchor cannot survive the exporter's FBX
+// pass, so the frames of a dialed walked morph fail loudly instead
+// (checkDialedWalkedMorphs) rather than exporting a silently drifting pair.
 function resetFrameDatasAtFrame(oNodeRoot, frameDatas, resetFrame){
 	resetFrame = resetFrame || 0;
 	var timeStep = Scene.getTimeStep();
@@ -1494,11 +1502,9 @@ function resetFrameDatasAtFrame(oNodeRoot, frameDatas, resetFrame){
 					}
 
 					if(oProp){
-						// Use baseValue for reset (respects pre-existing morph values)
-						var resetValue = (keyData.baseValue !== undefined) ? keyData.baseValue : 0;
-						oProp.setValue(resetFrame * timeStep, resetValue);
+						oProp.setValue(resetFrame * timeStep, 0);
 						processedProps[keyData.propName] = true;
-						verbose("Reset", keyData.propName, "to", resetValue, "at frame", resetFrame);
+						verbose("Reset", keyData.propName, "to 0 at frame", resetFrame);
 					}
 				}
 			}
@@ -1508,18 +1514,49 @@ function resetFrameDatasAtFrame(oNodeRoot, frameDatas, resetFrame){
 }
 
 
-/** Resolves autoBase flags in frameDatas by reading current property values from the scene.
- *  Must be called before applyFrameDatas so that baseValue reflects the scene state. */
-function resolveAutoBaseValues(oNodeRoot, frameDatas){
-	var resolved = 0;
+/**********************************************************************
+ * The dialed-walked-morph gate (runtime v82) - replaces the retired autoBase.
+ *
+ * A walked (spiked) morph MUST evaluate 0 at frame 0. The DTH Exporter's FBX
+ * pass excludes every morph whose ROM keys VARY from the base mesh (measured
+ * 2026-08-17, DS4 exporter 2.0.2 - scripted doExport with either flag AND the
+ * dialog export produce the identical FBX), while the alembic pass bakes the
+ * true timeline. A walked morph dialed non-zero in the scene therefore ships
+ * a shaped alembic base against an unshaped FBX base - the two artifacts the
+ * HDA validates against each other drift, silently, and every morph the HDA
+ * GENERATES from those frames spans only the leftover headroom instead of the
+ * full 0..1 range.
+ *
+ * So this fails LOUD instead: every frame that walks a dialed morph gets a
+ * failedMorphs entry (frame + reason), which runLogProblemCount counts, so
+ * ApplyDTHCharacter returns false and the export gate skips the export. The
+ * build itself continues - the user gets EVERY offender in one report, with
+ * red frame markers in the studio, not one per rebuild.
+ *
+ * MUST run BEFORE resetFrameDatasAtFrame(0): the reset keys the dials to 0,
+ * which would destroy exactly the evidence this gate reads. Runs after the
+ * frame-0 morphs applied (v74 ordering), so a frame-0 morph that is ALSO
+ * walked is caught too - that combination drifts like any other dial.
+ *
+ * The tolerance absorbs float noise on an untouched dial, nothing more; a
+ * deliberately dialed value in either direction is far above it.
+ */
+var DTH_DIALED_WALKED_TOLERANCE = 0.001;
+
+function checkDialedWalkedMorphs(oNodeRoot, frameDatas){
+	var oSeen = {};      // nodeName|propName -> {value, driven} or false (clean)
+	var iFailed = 0;
 	for(var i = 0; i < frameDatas.length; i++){
 		var frameData = frameDatas[i];
-		if(frameData && frameData.keyDatas){
-			for(var j = 0; j < frameData.keyDatas.length; j++){
-				var keyData = frameData.keyDatas[j];
-				if(!keyData.autoBase) continue;
-
-				// Find the node
+		if(!frameData || !frameData.keyDatas) continue;
+		for(var j = 0; j < frameData.keyDatas.length; j++){
+			var keyData = frameData.keyDatas[j];
+			if(!keyData.propName) continue;
+			var sKey = keyData.nodeName + "|" + keyData.propName;
+			if(oSeen[sKey] === undefined){
+				// Resolve the property once per dial - the same node/prop walk
+				// the reset pass uses, so the two can never disagree on a name.
+				var oVerdict = false;
 				var oNode;
 				if(oNodeRoot.getName() == keyData.nodeName || oNodeRoot.getLabel() == keyData.nodeName)
 					oNode = oNodeRoot;
@@ -1527,7 +1564,6 @@ function resolveAutoBaseValues(oNodeRoot, frameDatas){
 					oNode = oNodeRoot.findNodeChild(keyData.nodeName, true);
 				if(!oNode)
 					oNode = oNodeRoot.findNodeChildByLabel(keyData.nodeName, true);
-
 				if(oNode){
 					var oProp = getMorphPropFromNode(oNode, keyData.propName);
 					if(!oProp){
@@ -1543,21 +1579,33 @@ function resolveAutoBaseValues(oNodeRoot, frameDatas){
 							}
 						}
 					}
-
 					if(oProp){
-						// Read the current value at time 0 (base state)
-						var currentValue = oProp.getValue(0);
-						keyData.baseValue = currentValue;
-						print("autoBase resolved:", keyData.propName, "current value:", currentValue);
-						resolved++;
+						var fValue = oProp.getValue(0);
+						if(Math.abs(fValue) > DTH_DIALED_WALKED_TOLERANCE){
+							var bDriven = (typeof oProp.getNumControllers == "function" && oProp.getNumControllers() > 0);
+							oVerdict = { value: fValue, driven: bDriven };
+						}
 					}
+					// An unresolvable prop is NOT failed here - applyKeyData
+					// reports "morph/property not found" on its own frames.
 				}
-				// Clear the flag so it's not re-processed
-				keyData.autoBase = false;
+				oSeen[sKey] = oVerdict;
+			}
+			if(oSeen[sKey]){
+				var oBad = oSeen[sKey];
+				var sReason = "dialed at " + (Math.round(oBad.value * 1000) / 1000) +
+					" in the scene - a walked morph must be at 0, or the exported FBX base " +
+					"loses it while the alembic keeps it (the shapes drift). Zero the dial" +
+					(oBad.driven ? " (it is DRIVEN - zero the controlling dial)" : "") +
+					" and rebuild; its shape reaches Unreal through the generated morph instead.";
+				logRunFailedMorph(keyData.frameIdx, keyData.nodeName, keyData.propName, sReason);
+				iFailed++;
 			}
 		}
 	}
-	if(resolved > 0) print("Resolved", resolved, "autoBase morph values from scene");
+	if(iFailed > 0) print("Dialed-walked-morph gate: " + iFailed + " frame morph(s) failed - the export will be skipped.");
+	else print("Dialed-walked-morph gate: all walked morphs are at 0 in the scene.");
+	return iFailed;
 }
 
 
@@ -1668,7 +1716,8 @@ function applyKeyData(oNodeRoot, keyData, overrideFrameIdx){
 			//*********** Main action - create the morph frame;
 			// if(createMorphFrameByKey(oProp, keyData.frameIdx, keyData.propValue, iKey)){
 			var frameIdx = overrideFrameIdx == undefined ? keyData.frameIdx : overrideFrameIdx;
-			var baseValue = (keyData.baseValue !== undefined) ? keyData.baseValue : 0;
+			// The sawtooth floor is always 0 (runtime v82) - see checkDialedWalkedMorphs.
+			var baseValue = 0;
 
 			// Check for noSawtooth flag - just set value at this frame without affecting adjacent frames
 			if (keyData.noSawtooth) {
