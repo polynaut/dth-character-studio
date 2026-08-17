@@ -148,6 +148,55 @@ describe('sceneDeleteTargets — what "Delete file on disk" removes', () => {
     ).toBe('')
   })
 
+  it('an export folder a remaining scene lives UNDER is kept (root pointing into the scenes tree)', () => {
+    // A pre-v29 hand-picked export root can point INTO the scenes tree. Here
+    // the removed scene's export folder ("sets") is the very folder a remaining
+    // scene lives under — no remaining scene CLAIMS "sets" (the nested one's
+    // subfolder is "sets/beach"), so only the containment guard refuses it.
+    expect(
+      sceneDeleteTargets({
+        sceneAbs: `${CHAR}/daz3d/sets/Removed.duf`,
+        charFolderAbs: CHAR,
+        scenesRootRel: 'daz3d',
+        remainingScenesAbs: [`${CHAR}/daz3d/sets/beach/Scene.duf`],
+        exportRootAbs: `${CHAR}/daz3d`,
+        exportSubfolderRel: 'sets',
+        remainingExportSubfoldersRel: ['sets/beach'],
+      }).exportFolder,
+    ).toBe('')
+  })
+
+  it('the scene folder is kept when the export ROOT lives inside it and other scenes remain', () => {
+    // The remaining scenes' exports live under that root — taking the folder
+    // would take them too. Falls back to per-file deletion; the removed
+    // scene's OWN export subfolder under the root still goes.
+    const targets = sceneDeleteTargets({
+      sceneAbs: `${CHAR}/daz3d/beach/Beach.duf`,
+      charFolderAbs: CHAR,
+      scenesRootRel: 'daz3d',
+      remainingScenesAbs: [`${CHAR}/daz3d/primary/Kira.duf`],
+      exportRootAbs: `${CHAR}/daz3d/beach/exports`,
+      exportSubfolderRel: 'beach',
+      remainingExportSubfoldersRel: ['primary'],
+    })
+    expect(targets.sceneFolder).toBe('')
+    expect(targets.files).toContain(`${CHAR}/daz3d/beach/Beach.duf`)
+    expect(targets.exportFolder).toBe(`${CHAR}/daz3d/beach/exports/beach`)
+    // With NO scene remaining, everything under the folder is the leaving
+    // scene's — the folder goes whole again.
+    expect(
+      sceneDeleteTargets({
+        sceneAbs: `${CHAR}/daz3d/beach/Beach.duf`,
+        charFolderAbs: CHAR,
+        scenesRootRel: 'daz3d',
+        remainingScenesAbs: [],
+        exportRootAbs: `${CHAR}/daz3d/beach/exports`,
+        exportSubfolderRel: 'beach',
+        remainingExportSubfoldersRel: [],
+      }).sceneFolder,
+    ).toBe(`${CHAR}/daz3d/beach`)
+  })
+
   it('a folder another linked scene lives in is never deleted (falls back to files)', () => {
     const shared = sceneDeleteTargets({
       sceneAbs: `${CHAR}/daz3d/outfits/Beach.duf`,

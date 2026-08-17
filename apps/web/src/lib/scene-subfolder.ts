@@ -339,16 +339,23 @@ export function deriveScenesRootRel(primaryDirRel: string, dazSubdir: string): s
  * - its dir is strictly BELOW the scenes root — never the root itself, the
  *   character folder, or anything outside them;
  * - no OTHER still-linked scene lives at or under that dir (two scenes sharing
- *   a folder fall back to per-file deletion).
+ *   a folder fall back to per-file deletion);
+ * - the character's export ROOT doesn't sit at or under the dir while other
+ *   scenes remain linked (a pre-v29 hand-picked root can live anywhere, a
+ *   scene subfolder included — the folder would take every remaining scene's
+ *   exports with it).
  * For a nested subfolder only the DIRECT parent is returned — an ancestor
  * could hold sibling scenes' folders.
  *
  * The export folder has its own guards: the export ROOT must sit inside the
  * character folder (a pre-v29 loose definition can still carry a hand-picked
- * root anywhere on disk, possibly SHARED between characters), and no remaining
+ * root anywhere on disk, possibly SHARED between characters), no remaining
  * scene may claim the same export subfolder (`remainingExportSubfoldersRel` —
  * the replace flow passes the NEW primary's, so a replacement landing in the
- * same subfolder keeps the folder it is about to export into).
+ * same subfolder keeps the folder it is about to export into), and no
+ * remaining SCENE may live at or under the folder itself (the same hand-picked
+ * root pointing INTO the scenes tree can make the removed scene's export
+ * folder an ancestor of a remaining scene's — a name claim can't see that).
  */
 export function sceneDeleteTargets(args: {
   sceneAbs: string
@@ -387,6 +394,7 @@ export function sceneDeleteTargets(args: {
   const rootRel = cleanRel(args.scenesRootRel)
   const scenesRoot = rootRel ? `${charFolder}/${rootRel}` : charFolder
 
+  const exportRoot = norm(args.exportRootAbs ?? '')
   const ownsFolder =
     sceneDir !== '' &&
     charFolder !== '' &&
@@ -395,7 +403,12 @@ export function sceneDeleteTargets(args: {
     !args.remainingScenesAbs.some((s) => {
       const other = norm(s)
       return lower(other) === lower(sceneDir) || below(sceneDir, other)
-    })
+    }) &&
+    !(
+      exportRoot !== '' &&
+      args.remainingScenesAbs.length > 0 &&
+      (lower(exportRoot) === lower(sceneDir) || below(sceneDir, exportRoot))
+    )
   const sceneFolder = ownsFolder ? sceneDir : ''
 
   // Shared/legacy layout: the scene's files, its thumbnails, and its own saved
@@ -406,18 +419,25 @@ export function sceneDeleteTargets(args: {
     ? []
     : [scene, `${scene}.png`, `${scene}.tip.png`, `${noDuf}.tip.png`, rom, `${rom}.png`]
 
-  const exportRoot = norm(args.exportRootAbs ?? '')
   const exportRel = cleanRel(args.exportSubfolderRel ?? '')
   const exportClaimed = (args.remainingExportSubfoldersRel ?? []).some(
     (r) => lower(cleanRel(r)) === lower(exportRel),
   )
-  const exportFolder =
+  const exportDir =
     exportRoot !== '' &&
     exportRel !== '' &&
     charFolder !== '' &&
     below(charFolder, exportRoot) &&
     !exportClaimed
       ? `${exportRoot}/${exportRel}`
+      : ''
+  const exportFolder =
+    exportDir !== '' &&
+    !args.remainingScenesAbs.some((s) => {
+      const other = norm(s)
+      return lower(other) === lower(exportDir) || below(exportDir, other)
+    })
+      ? exportDir
       : ''
 
   return {
