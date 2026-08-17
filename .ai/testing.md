@@ -164,6 +164,17 @@ The **real SPA in a real browser** against an in-memory fake of the native layer
   one card spins, and the cached one does not" assertable without timing
   anything. A feature whose whole point is what the UI does while something runs
   needs one of these before it needs a spec.
+- **Smoke does NOT test how things LOOK.** No assertions on geometry, offsets,
+  crops, opacity, colours or animation state — `boundingBox()`,
+  `getComputedStyle`, `toHaveCSS` on a visual property. Standing rule, set
+  2026-08-17 after six such tests were deleted: they break on every deliberate
+  retune (which is most of what visual work IS), and they never answer the only
+  question that matters — does it look right — which a human answers by looking.
+  A crop can be pixel-correct against its spec and still frame the wrong part of
+  a face. Assert what the app DOES: what it writes, what it invokes, what it
+  says. If a visual value is load-bearing enough to need pinning, pin the number
+  where it is defined (a comment, or a unit test over the constants) — not
+  through the rendered page.
 - `apps/web/smoke/fixtures.ts` — `buildSeed(opts)` builds the world (project
   "Demo", character "Kira", DTH release tree). The character goes through the
   **real `characterSchema`**, so schema bumps fail here loudly.
