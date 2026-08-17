@@ -573,6 +573,39 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   gate reading one install while the launcher starts another is a "ready" over an
   export that opens Daz and waits forever, so a new consumer of "where does the
   batch run" adds itself to that rule, never a fourth answer.
+- **Elevating a CHILD, not the session** (`elevate.rs`, the Daz plugin install).
+  Four facts that shaped it, three of them the kind that only bite on someone
+  else's machine:
+  `std::process::Command` can never produce an elevated child — a child inherits
+  the parent's token — so the only route is `ShellExecuteExW` with the `runas`
+  verb (`SEE_MASK_NOCLOSEPROCESS` to get a handle worth waiting on, and the
+  calling thread needs `CoInitializeEx`; a Tauri async command's pool thread has
+  no COM). **A declined UAC prompt is `ERROR_CANCELLED` (1223) from
+  `GetLastError` after `ShellExecuteExW` returns FALSE** — a choice, not a
+  failure, and the UI must not paint it red.
+  **The administrator token has none of the user's mapped drive letters** (they
+  are per-logon-session), so any path handed to an elevated child is rewritten to
+  UNC first, in the unelevated parent, by `drives::unc_path` — a machine with its
+  Daz release folders on `X:` otherwise fails on the SOURCE path while the error
+  talks about the destination. And **`ERROR_SHARING_VIOLATION` (32) has no
+  `std::io::ErrorKind`** — `raw_os_error() == Some(32)` is the only way to tell
+  "Daz has this DLL loaded" from "access denied", which matters because
+  elevation fixes exactly one of them and the app now offers a button for it.
+  Two more, measured 2026-08-17 while reviewing that code:
+  **`lpParameters` carries ~32K and fails LOUDLY past it** — a probe passed
+  32,182 chars through to the child byte-for-byte and got `ERROR_FILENAME_EXCED_RANGE`
+  (206) from `ShellExecuteExW` at 32,782, i.e. the CreateProcess command-line
+  ceiling, with no silent-truncation window in between. That is what makes the
+  hex-payload-as-argv design safe: a real batch is a few KB (2 hex chars per
+  JSON byte), and the failure mode past it is an error code, not a half-decoded
+  install. Measured with the `open` verb — the `runas`/AppInfo half needs a UAC
+  prompt per trial and was NOT measured.
+  And **the UNC rewrite fixes the drive LETTER, not the credentials**: a share
+  the user mounted with stored credentials has no session under the
+  administrator token either, so `\\host\share\…` can still be unreachable over
+  there. `install_plugin_dlls` therefore probes the source with `try_exists()`,
+  not `exists()` — the latter answers `false` for "not allowed to look", which
+  would report a folder the user is staring at as missing.
 - **Creating a directory link on Windows: junction, not symlink** (HISTORICAL
   since v0.63 — the studio no longer creates junctions, but the measured facts
   keep the sweep's test honest). A junction

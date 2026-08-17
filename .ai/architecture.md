@@ -151,7 +151,9 @@ typed report), `avatar.rs` (avatar image
 up/downscale), `shellopen.rs` (Explorer-delegated file open — the launched app
 inherits the pristine user-session environment, not the studio's),
 `elevation.rs` (elevated-session detection + the title prefix below),
-`drives.rs` (network
+`elevate.rs` (the opposite direction — installing the Daz plugins with
+administrator rights WITHOUT an elevated session: a one-shot elevated child of
+our own exe, see below), `drives.rs` (network
 drive remap), `foreground.rs`, `github.rs` (server-side GitHub API — webview CSP
 blocks it), `archive.rs` (zip-bomb bounds), `content.rs`, `fsutil.rs`
 (recursive-delete rails + `move_tree`, the one mover shared by dedup's
@@ -172,15 +174,36 @@ nothing else shows: mapped network drives are per-session so its drive letters
 are absent (drives.rs), and files it creates get an elevated owner. Every title
 goes through `window_title()`, which is idempotent — the startup pass re-titles
 the config's `main` window from its CURRENT title (that one never passes through
-the builders), and a rename re-titles an already-marked window. Renaming a project
+the builders), and a rename re-titles an already-marked window.
+
+**Elevation is scoped to the copy that needs it, not the session.** The only
+thing here that requires administrator rights is copying plugin DLLs into
+`<Daz>/plugins`, so `elevate.rs` runs THAT in a one-shot child — our own exe,
+launched with `ShellExecuteExW`'s `runas` verb and a hidden
+`--dth-elevated-plugin-install <hex payload>` flag, intercepted by
+`run_worker_if_requested()` in `main()` BEFORE Tauri exists. The child calls the
+same `install::install_plugin_dlls` the in-process path does (one copy
+implementation, no drift), writes its `InstallReport` to a temp file and exits.
+Three properties are load-bearing: the flag must match exactly and must never
+fall through to `run()` (that would put an elevated WINDOW on screen — the exact
+thing this avoids); the payload travels as a command-line argument, not a file,
+so nothing on disk can be swapped between UAC consent and the copy; and source
+paths are rewritten to UNC in the unelevated parent (`drives::unc_path`) because
+the administrator token has none of the user's mapped drive letters. Relaunching
+the whole studio elevated stays possible but is no longer the plugin install's
+answer.
+
+Renaming a project
 (`api/projects.renameProject`) therefore renames the `.dcsp` file too
 (`storage.renameManifestFile`) and calls `sync_renamed_project_window` to
 live-re-title + re-pin every open window on the old file (no close/reopen).
 
-**FFI surface: 52 commands** (count re-verified 2026-08-11 — the previous "36"
-had drifted) registered in `generate_handler!` — installs
+**FFI surface: 54 commands** (count re-verified 2026-08-16 — it read "52", which
+had drifted by one BEFORE `install_dth_plugins_elevated` was added; count it,
+don't trust it) registered in `generate_handler!` — installs
 (`install_dth_release/plugin/daz_assets/daz_merge/houdini_presets/unreal_dth`,
-plus `install_unreal_plugin`), the Unreal side (`unreal_engine_installs` — HKLM
+plus `install_unreal_plugin` and `install_dth_plugins_elevated` — the same plugin
+copy, run by an elevated helper process; see elevate.rs), the Unreal side (`unreal_engine_installs` — HKLM
 Epic-launcher registry, `scan_unreal_plugins` — the configured plugin-source
 folders, `unreal_project_state` — a `.uproject`'s engine association + what it
 already carries; see unreal_install.rs),

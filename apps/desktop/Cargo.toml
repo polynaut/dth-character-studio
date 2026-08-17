@@ -100,6 +100,12 @@ windows-sys = { version = "0.61", features = [
   "Win32_System_Diagnostics_ToolHelp",
   # Reading the process token to detect an elevated session (elevation.rs).
   "Win32_Security",
+  # ShellExecuteEx's `runas` verb — starting the one-shot elevated plugin-install
+  # helper without elevating the studio itself (elevate.rs). `Command::spawn`
+  # can't do this: a child inherits the parent's token.
+  "Win32_UI_Shell",
+  # ShellExecuteEx needs COM initialised on the calling thread (elevate.rs).
+  "Win32_System_Com",
   # Writing a directory junction's reparse point (see junction.rs).
   "Win32_Storage_FileSystem",
   "Win32_System_IO",

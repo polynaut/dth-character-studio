@@ -8,6 +8,7 @@ mod contract_tests;
 mod daz;
 mod dedup;
 mod drives;
+mod elevate;
 mod elevation;
 mod exports;
 mod foreground;
@@ -30,6 +31,10 @@ mod unreal_install;
 mod windows;
 
 use crate::windows::{dcsp_from_args, lock_windows, ProjectMapping, WindowProjects};
+
+/// The elevated plugin-install worker's entry point — `main()` calls this before
+/// `run()`, and for a worker launch it never returns (see `elevate.rs`).
+pub use crate::elevate::run_worker_if_requested;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -146,6 +151,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             install::install_dth_release,
             install::install_dth_plugin,
+            elevate::install_dth_plugins_elevated,
             assets::install_daz_assets,
             assets::list_daz_assets,
             avatar::upscale_avatar_file,

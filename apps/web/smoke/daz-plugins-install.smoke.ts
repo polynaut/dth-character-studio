@@ -71,6 +71,14 @@ const installCalls = (page: Page) =>
       })),
   )
 
+/** The elevated helper's calls — one per BATCH, carrying every job. */
+const elevatedCalls = (page: Page) =>
+  page.evaluate(() =>
+    ((window as any).__tauriMock.calls as Array<{ cmd: string; args: any }>)
+      .filter((c) => c.cmd === 'install_dth_plugins_elevated')
+      .map((c) => (c.args.request.jobs as Array<{ label: string }>).map((j) => j.label)),
+  )
+
 async function openPlugins(page: Page, seed = machineSeed()) {
   await page.addInitScript(installTauriMock, seed)
   await page.goto('/')
@@ -195,6 +203,86 @@ test('a release folder for only one generation leaves the other install named, n
   expect(calls.filter((c) => c.label.startsWith('Exporter'))).toEqual([
     { from: `${EXPORTER_ROOT}/Daz Studio 4`, to: DS4, label: 'Exporter plugin → DAZ Studio 4' },
   ])
+})
+
+// The two ways a plugin copy fails look identical from the outside and have
+// nothing in common as remedies: administrator rights fix a refused write and do
+// NOTHING for a DLL Daz Studio has loaded. Offering the elevation button for the
+// second would prompt, fail identically, and teach the user the button is a lie.
+// The details below are the real Rust wording (report.rs), which is what the
+// panel reads — the constants are pinned by a Rust test on the other side.
+const DENIED = String.raw`couldn't write C:\Program Files\DAZ 3D\DAZStudio6\plugins\dsp_dth_exporter.dll: Access is denied. (os error 5) — this needs administrator rights — use "Install with administrator rights"`
+const LOCKED = String.raw`couldn't write C:\Program Files\DAZ 3D\DAZStudio6\plugins\dsp_dth_exporter.dll: The process cannot access the file because it is being used by another process. (os error 32) — Daz Studio has this plugin loaded — close every Daz Studio window and try again`
+
+test('a refused copy offers administrator rights — ONE prompt for the whole batch', async ({
+  page,
+}) => {
+  await openPlugins(page, machineSeed((s) => (s.pluginInstallFailure = DENIED)))
+  await page.getByRole('button', { name: /Install \/ update all/ }).click()
+
+  // Four copies attempted in this process, four refused.
+  await expect.poll(() => installCalls(page)).toHaveLength(4)
+  const elevate = page.getByRole('button', { name: 'Install with administrator rights' })
+  await expect(elevate).toBeVisible()
+  // …and the studio does not ask to be restarted: that was the old answer, and
+  // it cost the whole session its mapped drives and drag-and-drop.
+  const section = page.locator('section').filter({ hasText: 'Daz Studio plugins' })
+  await expect(section.getByText(/restart DTH Character Studio as administrator/i)).toHaveCount(0)
+
+  await elevate.click()
+  // ONE elevated call carrying every job — a UAC prompt per DLL would be
+  // intolerable, and is exactly what a per-job loop would produce.
+  await expect.poll(() => elevatedCalls(page)).toHaveLength(1)
+  expect((await elevatedCalls(page))[0]).toHaveLength(4)
+  // The unelevated command was not re-run alongside it.
+  expect(await installCalls(page)).toHaveLength(4)
+  await expect(elevate).toHaveCount(0)
+})
+
+// The exact phrase `elevate.rs` returns when ShellExecuteExW comes back with
+// ERROR_CANCELLED, pinned there by a Rust test and matched here by
+// INSTALL_PHRASES.elevationCancelled.
+const CANCELLED = 'Cancelled at the Windows permission prompt — nothing was installed.'
+
+test('declining the Windows prompt is reported as a CHOICE, and the offer stands', async ({
+  page,
+}) => {
+  await openPlugins(
+    page,
+    machineSeed((s) => {
+      s.pluginInstallFailure = DENIED
+      s.elevatedInstallFailure = CANCELLED
+    }),
+  )
+  await page.getByRole('button', { name: /Install \/ update all/ }).click()
+  const elevate = page.getByRole('button', { name: 'Install with administrator rights' })
+  await elevate.click()
+  await expect.poll(() => elevatedCalls(page)).toHaveLength(1)
+
+  // Neutral, not red. Dismissing a permission prompt is an answer to a question
+  // the app asked — painting it as a failure tells the user they did something
+  // wrong for saying no.
+  const note = page
+    .locator('[data-sonner-toast]')
+    .filter({ hasText: /Cancelled at the Windows permission prompt/ })
+  await expect(note).toBeVisible()
+  await expect(note).toHaveAttribute('data-type', 'info')
+  await expect(page.locator('[data-sonner-toast][data-type="error"]')).toHaveCount(0)
+
+  // And the way forward is still on screen: a cancel changed nothing, so the
+  // report — and its button — must survive to be clicked again.
+  await expect(elevate).toBeVisible()
+})
+
+test('a LOCKED plugin asks for Daz to be closed, and offers no elevation', async ({ page }) => {
+  await openPlugins(page, machineSeed((s) => (s.pluginInstallFailure = LOCKED)))
+  await page.getByRole('button', { name: /Install \/ update all/ }).click()
+  await expect.poll(() => installCalls(page)).toHaveLength(4)
+
+  await expect(page.getByText(/close every Daz Studio window and install again/)).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: 'Install with administrator rights' }),
+  ).toHaveCount(0)
 })
 
 test('a migrated folder can be REMOVED — the legacy field does not put it back', async ({
