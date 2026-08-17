@@ -89,6 +89,11 @@ const MAX_IMAGE_LENGTH = 1_000_000
 /** Arrays of paths (linked scenes/projects, preset selections). */
 const MAX_PATH_LIST = 1000
 
+/** Highest SubD level the studio will stamp (see `subdLevel`). A product cap,
+ *  not a measured Daz limit: the picker offers 0-4, and a level past that costs
+ *  memory in fourfold steps for detail an export does not carry. */
+const MAX_SUBD_LEVEL = 4
+
 /** One pre-defined DTH pose preset (.duf) from the DazToHue Poses folder. */
 export interface DthPoseAsset {
   /** File name without extension, e.g. "G9 DQS JCM FAC - Base". */
@@ -842,7 +847,7 @@ export function jcmMorphModForRuntime(mod: JcmMorphMod): {
  * step — is `.ai/schema-history.md`. Bumping this means adding the entry there,
  * in the same commit.
  */
-export const CHARACTER_SCHEMA_VERSION = 32
+export const CHARACTER_SCHEMA_VERSION = 33
 
 /**
  * Version of the generated **script runtime** — the bundled DTH `.dsa` runtime
@@ -861,7 +866,7 @@ export const CHARACTER_SCHEMA_VERSION = 32
  * step — is `.ai/schema-history.md`. Bumping this means adding the entry there,
  * in the same commit.
  */
-export const RUNTIME_VERSION = 80
+export const RUNTIME_VERSION = 81
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a
@@ -1049,6 +1054,21 @@ export const characterSchema = z.object({
    *  ROM build, so DTH's Lacrimal Fluid material lines up without the manual
    *  Surfaces-tab step. No-op on non-G9 figures (no UE5 tear UV ships for them). */
   applyUE5TearUV: z.boolean().default(false),
+  /**
+   * Mesh SubD level stamped onto the figure tree at the start of the ROM build
+   * (schema v33): the SAME level for the VIEWPORT and the RENDER, on every node
+   * under the figure that has one — the figure, its geografts, conformed
+   * clothing. Two levels that disagree mean the mesh you judge a pose by is not
+   * the mesh that gets rendered or exported, which is what makes a
+   * "does this artefact come from the exporter or from the scene?" question
+   * unanswerable by looking.
+   *
+   * `-1` (the default) leaves every node's own levels exactly as the scene has
+   * them — what every character did before this field existed, and what an
+   * existing definition keeps on read. `0` is a real level (base cage), not
+   * "off", which is why "off" needs its own value.
+   */
+  subdLevel: z.number().int().min(-1).max(MAX_SUBD_LEVEL).default(-1),
   /** Morph values restored after ROM loading (e.g. breast position). A row's
    *  `node` (v32) scopes the lookup to one scene node; '' = figure root. */
   preserveMorphs: z.array(preserveMorphSchema).default([]),

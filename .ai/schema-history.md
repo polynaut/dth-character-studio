@@ -175,6 +175,13 @@ of that file ~12k tokens to scroll past.
       clothing morph silently missed (the runtime only searched the figure
       root). `''` keeps each list's old reach — broadcast for frame-0,
       figure root for preserve. Additive with defaults — no migration step.
+ 33 — added `subdLevel`: ONE mesh subdivision level stamped on the figure tree
+      at the start of the ROM build, on the VIEWPORT dial and the RENDER dial
+      alike, so the mesh a pose is judged on is the mesh that gets captured.
+      `-1` (the default) leaves the scene's own levels alone — which is what
+      every pre-v33 character did, so reading an old definition changes no
+      ROM. `0` is a real level (the base cage), which is exactly why "off"
+      could not be 0. Additive with a default — no migration step.
 ```
 
 ## Generated-runtime versions (`RUNTIME_VERSION`)
@@ -948,4 +955,21 @@ v80 — no unattended carrier opens a modal, and the missing-runtime message sto
       implicit frame-0 key for never-keyed channels (2599 channels collected vs
       1590 genuinely animated in that character's saved ROM). Each reported key
       now carries its channel's key COUNT for exactly that reason.
+ 81 — the mesh SubD stamp (`dthApplySubDLevel`, DthUtils.dsa), run from
+      ApplyInitialValues before anything is posed: one level on the viewport
+      AND render dials of every node under the figure that has them, plus a
+      switch to High Resolution for a level above 0 (a level on a base-
+      resolution mesh subdivides to nothing). Carried as `config.subdLevel`,
+      OMITTED when the character opted out — so an older script, which has no
+      such key, means the same thing.
+      **The Daz property spellings are NOT measured.** The pass tries
+      `SubDIALevel`/`SubDRenderLevel` first, falls back to searching the
+      node's (and its object's) property list by shape, and PRINTS whichever
+      dial it found — so the first live run reports the real names and they
+      can be pinned. Every level is read back; one that will not take is a
+      run WARNING (the export is still correct — the scene keeps its own
+      subdivision), never an error. NOT applied by the split
+      `Export_…`/`.Bulk_Export_Only` carrier, which does not include the
+      runtime: a split-export character re-exports at whatever subdivision the
+      saved scene carries.
 ```

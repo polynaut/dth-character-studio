@@ -62,6 +62,24 @@ generation they are shown greyed out):
   builds. Leave them at `100 %` unless the stock correctives need dialing up
   or down.
 
+Below them, on every generation, sits **Mesh SubD level**. Daz keeps two
+subdivision levels per mesh — one the viewport draws with, one used for renders
+and for what the exporter captures — and they are separate dials that are
+routinely set differently. Pick a level here and the ROM script stamps *both* of
+them, at that level, on the figure and everything under it (geografts, conformed
+clothing) before it builds anything; a level above `0` also switches those meshes
+to **High Resolution**, since a subdivision level on a base-resolution mesh does
+nothing at all.
+
+The default, **Leave as-is**, touches nothing. Set a level when you want what you
+see in the viewport to be what gets exported — which is what makes a mesh
+artefact worth chasing: if you can see it at the export's subdivision, it shipped.
+A level a mesh refuses is reported as a warning on the character page; the export
+still runs, carrying that scene's own subdivision.
+
+> The split **Export only** script does not stamp the level — it re-exports the
+> saved scene as it stands. Rebuild the ROM to apply a change.
+
 <details>
 <summary><strong>Linked files — Daz scenes &amp; Houdini projects</strong></summary>
 <table><tr><td>

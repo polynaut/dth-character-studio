@@ -55,7 +55,7 @@ const RUNTIME_ASSETS = [
 // Bump this together with RUNTIME_VERSION whenever a runtime file legitimately
 // changes (this run prints the new value in the failure message).
 const EXPECTED_RUNTIME_HASH =
-  'ce046c10384389b28feb6b429da7e8ab498f244e4ba4626ea61b43573bb7fdd9'
+  '95c0a921a04a160b095f28064b9908273a607433c44b146ffe0ce9ec3c733f4f'
 
 function runtimeHash(): string {
   const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
@@ -976,5 +976,182 @@ describe('kill animation (DthKillAnimation.dsa)', () => {
     expect(kill.dthKillAnimSummary({ cleared: 812, keys: 9431, frames: 617 })).toBe(
       'Removed 9431 keys from 812 properties (617 frames of animation).',
     )
+  })
+})
+
+/* ---- the SubD stamp (DthUtils.dsa) -----------------------------------------
+ * `dthApplySubDLevel` is the one pass in this runtime built to work WITHOUT
+ * knowing what Daz calls its subdivision dials: candidate names first, then a
+ * search by shape, then a read-back that proves whatever it found actually
+ * took. That design is only worth anything if the fallbacks are exercised, and
+ * a live Daz cannot be one of these tests — so the sandbox fakes nodes whose
+ * dials are spelled RIGHT, spelled WRONG, and refusing outright, and asserts
+ * the pass does the correct thing in each case. What this can NOT prove is
+ * which spelling real Daz uses; that is what the run's own log line reports.
+ */
+
+interface FakeProp {
+  getName: () => string
+  getLabel: () => string
+  getValue: () => number
+  setValue: (v: number) => void
+  getNumItems?: () => number
+  getItem?: (i: number) => string
+}
+
+/** A dial. `max` fakes Daz clamping a level the mesh will not go to. */
+function dial(name: string, label = name, max = Infinity): FakeProp {
+  let value = 0
+  return {
+    getName: () => name,
+    getLabel: () => label,
+    getValue: () => value,
+    setValue: (v) => {
+      value = Math.min(v, max)
+    },
+  }
+}
+
+/** The Mesh Resolution enum — Base / High Resolution, in that order. */
+function resolutionDial(): FakeProp {
+  const items = ['Base', 'High Resolution']
+  let value = 0
+  return {
+    getName: () => 'lodlevel',
+    getLabel: () => 'Resolution Level',
+    getValue: () => value,
+    setValue: (v) => {
+      value = v
+    },
+    getNumItems: () => items.length,
+    getItem: (i) => items[i] ?? '',
+  }
+}
+
+function fakeOwner(props: Array<FakeProp>) {
+  return {
+    findProperty: (name: string) => props.find((p) => p.getName() === name) ?? null,
+    findPropertyByLabel: (label: string) => props.find((p) => p.getLabel() === label) ?? null,
+    getNumProperties: () => props.length,
+    getProperty: (i: number) => props[i] ?? null,
+  }
+}
+
+/** A scene node carrying its dials directly (the `props` list). */
+function fakeNode(label: string, props: Array<FakeProp> = [], children: Array<unknown> = []) {
+  return {
+    ...fakeOwner(props),
+    getLabel: () => label,
+    getNodeChildren: () => children,
+    getObject: () => null,
+  }
+}
+
+interface SubdModule {
+  dthApplySubDLevel: (root: unknown, level: number | undefined) => void
+  DTH_RUN_LOG: { errors: Array<string>; warnings: Array<string> }
+}
+
+/** A fresh sandbox per call — which is also why `resetRunLog()` must NOT be
+ *  called here: it REBINDS the runtime's `DTH_RUN_LOG` to a new object, leaving
+ *  the reference exported above pointing at an orphan that no log line can ever
+ *  reach. Every "no warnings" assertion below would then pass by construction.
+ *  (Found the honest way: the clamp test refused to see a warning that was
+ *  really being written.) */
+function loadSubd(): { mod: SubdModule; lines: Array<string> } {
+  const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
+  const src = readFileSync(join(dir, 'DthUtils.dsa'), 'utf8')
+  const lines: Array<string> = []
+  const mod = runInNewContext(`${src}\n;({ dthApplySubDLevel, DTH_RUN_LOG })`, {
+    print: (...args: Array<unknown>) => lines.push(args.join(' ')),
+  }) as SubdModule
+  return { mod, lines }
+}
+
+describe('mesh SubD stamp (DthUtils.dsa)', () => {
+  it('sets viewport AND render to the same level on the candidate spellings', () => {
+    const { mod, lines } = loadSubd()
+    const view = dial('SubDIALevel', 'SubDivision Level')
+    const render = dial('SubDRenderLevel', 'Render SubD Level')
+    mod.dthApplySubDLevel(fakeNode('Genesis9', [view, render]), 3)
+    expect(view.getValue()).toBe(3)
+    expect(render.getValue()).toBe(3)
+    expect(mod.DTH_RUN_LOG.warnings).toEqual([])
+    expect(lines.join('\n')).toContain('stamped on 1 node(s)')
+  })
+
+  it('finds the dials by SHAPE when the names are not the ones we guessed', () => {
+    // The whole point of the fallback: these two names appear nowhere in the
+    // runtime, and the pass still has to land both levels — and SAY what it
+    // found, so the real spelling can be pinned after one live run.
+    const { mod, lines } = loadSubd()
+    const view = dial('MeshSubdLevelSomething', 'Subd Level')
+    const render = dial('MeshSubdLevelRenderish', 'Render Subd Level')
+    mod.dthApplySubDLevel(fakeNode('Genesis9', [view, render]), 2)
+    expect(view.getValue()).toBe(2)
+    expect(render.getValue()).toBe(2)
+    expect(lines.join('\n')).toContain("viewport dial 'MeshSubdLevelSomething'")
+    expect(lines.join('\n')).toContain("render dial 'MeshSubdLevelRenderish'")
+  })
+
+  it('reaches every node under the figure, and skips the ones with no dials', () => {
+    const { mod } = loadSubd()
+    const graftView = dial('SubDIALevel')
+    const graftRender = dial('SubDRenderLevel')
+    const bone = fakeNode('l_thigh')
+    const graft = fakeNode('GoldenPalace_G9', [graftView, graftRender])
+    const rootView = dial('SubDIALevel')
+    const rootRender = dial('SubDRenderLevel')
+    mod.dthApplySubDLevel(fakeNode('Genesis9', [rootView, rootRender], [bone, graft]), 1)
+    expect(rootView.getValue()).toBe(1)
+    expect(graftRender.getValue()).toBe(1)
+    // A bone has no subdivision to stamp — passed over in silence, never a
+    // warning, or a normal run would report hundreds of them.
+    expect(mod.DTH_RUN_LOG.warnings).toEqual([])
+  })
+
+  it('warns — and NAMES the node — when a level will not take', () => {
+    // Daz clamping the render level is the interesting failure: it leaves the
+    // two dials DISAGREEING, which is the exact state this pass exists to
+    // remove, so it must never pass silently.
+    const { mod } = loadSubd()
+    const view = dial('SubDIALevel')
+    const render = dial('SubDRenderLevel', 'Render SubD Level', 1)
+    mod.dthApplySubDLevel(fakeNode('Boots', [view, render]), 4)
+    expect(mod.DTH_RUN_LOG.warnings).toHaveLength(1)
+    expect(mod.DTH_RUN_LOG.warnings[0]).toContain('Boots')
+    expect(mod.DTH_RUN_LOG.warnings[0]).toContain('render refused')
+    // A warning, never an error: the export still ships, carrying the scene's
+    // own subdivision (`errors` is what cancels it).
+    expect(mod.DTH_RUN_LOG.errors).toEqual([])
+  })
+
+  it('switches the mesh to High Resolution for a level above 0, but not for 0', () => {
+    // A level above 0 on a mesh sitting at Base subdivides to nothing, so the
+    // stamp would be a silent no-op — the one outcome worth pre-empting.
+    const { mod } = loadSubd()
+    const res = resolutionDial()
+    mod.dthApplySubDLevel(fakeNode('Genesis9', [dial('SubDIALevel'), dial('SubDRenderLevel'), res]), 2)
+    expect(res.getValue()).toBe(1)
+
+    const { mod: mod0 } = loadSubd()
+    const res0 = resolutionDial()
+    mod0.dthApplySubDLevel(
+      fakeNode('Genesis9', [dial('SubDIALevel'), dial('SubDRenderLevel'), res0]),
+      0,
+    )
+    expect(res0.getValue()).toBe(0)
+  })
+
+  it('touches nothing at all when the character opted out', () => {
+    const { mod } = loadSubd()
+    for (const level of [-1, undefined]) {
+      const view = dial('SubDIALevel')
+      const render = dial('SubDRenderLevel')
+      const res = resolutionDial()
+      mod.dthApplySubDLevel(fakeNode('Genesis9', [view, render, res]), level)
+      expect([view.getValue(), render.getValue(), res.getValue()]).toEqual([0, 0, 0])
+    }
+    expect(mod.DTH_RUN_LOG.warnings).toEqual([])
   })
 })

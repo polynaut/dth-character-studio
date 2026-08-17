@@ -3,6 +3,11 @@ import {
   Label,
   NumberField,
   OverrideMark,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   Switch,
   cn,
   overrideLabelClass,
@@ -151,6 +156,52 @@ export function IdentitySection({
           </span>
         </div>
       </fieldset>
+
+      {/* Mesh SubD level — character-level, every generation, and deliberately
+          NOT per-scene: the whole point is one level everywhere, so a value that
+          could differ per scene would reintroduce the mismatch it removes. */}
+      <div>
+        <Label className="mb-1">
+          Mesh SubD level
+          <InfoPopup label="Mesh SubD level — more information">
+            <div className="space-y-2">
+              <p>
+                Sets the <strong>viewport</strong> and <strong>render</strong> subdivision to
+                the same level on the figure and everything under it — geografts, conformed
+                clothing — at the start of the ROM build.
+              </p>
+              <p>
+                Daz keeps those two as separate dials, so by default the mesh you judge a pose
+                on is not the mesh that gets rendered and exported. When they agree, an artefact
+                you can see in the viewport is an artefact that shipped — which is what makes
+                “is this the exporter or the scene?” answerable by looking.
+              </p>
+              <p>
+                <strong>Leave as-is</strong> touches nothing, which is how every character
+                behaved before this existed. A level above 0 also switches those meshes to High
+                Resolution, or the level would do nothing at all.
+              </p>
+            </div>
+          </InfoPopup>
+        </Label>
+        <Select
+          value={String(character.subdLevel)}
+          onValueChange={(value) => patch({ subdLevel: Number(value) })}
+        >
+          <SelectTrigger className="w-48">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="-1">Leave as-is</SelectItem>
+            {[0, 1, 2, 3, 4].map((level) => (
+              <SelectItem key={level} value={String(level)}>
+                Level {level}
+                {level === 0 ? ' (base cage)' : ''}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
       {/* Gender — read-only: derived from the creation scene (the figure id
           for the gendered generations, the GP/DK geograft for the neutral G9 —

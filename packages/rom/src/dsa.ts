@@ -1065,6 +1065,11 @@ export function buildCharacterConfig(
     // (an example UE5 tear UV only ships for Genesis 9).
     bApplyUE5TearUV: character.genesis === 'G9' && character.applyUE5TearUV,
   }
+  // The SubD stamp is OMITTED at -1 rather than sent as -1: the runtime's own
+  // default is "leave the scene alone", so an absent key and an off character
+  // say the same thing — and a config that carries a sentinel invites a runtime
+  // that forgets to test for it.
+  if (character.subdLevel >= 0) config.subdLevel = character.subdLevel
   // Measured preset-block lengths (base/gp/dk/phys), so the Daz runtime sizes
   // each block from the real .duf frame counts instead of hard-coded literals —
   // the two artifacts can't drift. Omitted only in pure/web contexts (no native
