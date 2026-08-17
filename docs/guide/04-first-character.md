@@ -77,8 +77,9 @@ artefact worth chasing: if you can see it at the export's subdivision, it shippe
 A level a mesh refuses is reported as a warning on the character page; the export
 still runs, carrying that scene's own subdivision.
 
-> The split **Export only** script does not stamp the level — it re-exports the
-> saved scene as it stands. Rebuild the ROM to apply a change.
+> **Export only** re-exports the saved ROM animation, which already carries the
+> level it was built with — so the level reaches that export too. Changing it
+> reaches one only after the ROM is rebuilt.
 
 <details>
 <summary><strong>Linked files — Daz scenes &amp; Houdini projects</strong></summary>

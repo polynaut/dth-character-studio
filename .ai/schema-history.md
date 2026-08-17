@@ -968,8 +968,13 @@ v80 — no unattended carrier opens a modal, and the missing-runtime message sto
       dial it found — so the first live run reports the real names and they
       can be pinned. Every level is read back; one that will not take is a
       run WARNING (the export is still correct — the scene keeps its own
-      subdivision), never an error. NOT applied by the split
-      `Export_…`/`.Bulk_Export_Only` carrier, which does not include the
-      runtime: a split-export character re-exports at whatever subdivision the
-      saved scene carries.
+      subdivision), never an error.
+      The split `Export_…`/`.Bulk_Export_Only` carrier does not stamp, and
+      does not need to: its job rows open the SAVED ROM animation
+      (`rom-animations/<stem>_ROM.duf`), which the ROM script writes AFTER
+      `ApplyDTHCharacter` returns — so the stamped levels are already in that
+      file. The level travels in the SCENE, not in the script. What follows
+      from that is a staleness rule, not a gap: a saved ROM carries the level
+      it was built with, so changing `subdLevel` reaches an export only after
+      the ROM is rebuilt.
 ```
