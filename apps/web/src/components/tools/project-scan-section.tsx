@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Ban, ChevronDown, ChevronRight, FileWarning, Loader2, ScanSearch } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { Button, InfoPopup, Label, useRefetchOnFocus } from '@dth/ui'
+import { Button, InfoPopup, Label, useArmedWatch, useCoalescedRefresh, useRefetchOnFocus } from '@dth/ui'
 import { SceneTile } from '#/components/portrait.tsx'
 import { RunnerGateNotice } from '#/components/runner-gate-notice.tsx'
 import {
@@ -17,7 +17,7 @@ import {
 } from '#/lib/rom/api.ts'
 import { normalizeSceneKey } from '#/lib/rom/execute-jobs.ts'
 
-import type { ProjectScanPlan, RunnerGate, StopWatching } from '#/lib/rom/api.ts'
+import type { ProjectScanPlan, RunnerGate } from '#/lib/rom/api.ts'
 
 /** Scene paths are compared by the ONE key convention the whole handoff uses. */
 const sceneKey = normalizeSceneKey
@@ -163,23 +163,7 @@ export function ProjectScanSection({
   // run, ingests the product scans and toasts — and two refreshes racing over
   // that moment must not both act on it. An ask that lands mid-refresh runs
   // AFTER it, so the newest state is never skipped.
-  const refreshBusyRef = useRef(false)
-  const refreshAgainRef = useRef(false)
-  async function refreshCoalesced() {
-    if (refreshBusyRef.current) {
-      refreshAgainRef.current = true
-      return
-    }
-    refreshBusyRef.current = true
-    try {
-      do {
-        refreshAgainRef.current = false
-        await refresh()
-      } while (refreshAgainRef.current)
-    } finally {
-      refreshBusyRef.current = false
-    }
-  }
+  const refreshCoalesced = useCoalescedRefresh(refresh)
 
   useRefetchOnFocus(
     () => {
@@ -193,27 +177,9 @@ export function ProjectScanSection({
   // the panel follows the batch the moment it moves. Armed on the live/idle
   // BOOLEAN, not on `phase` — pending→running must not tear the watch down.
   const live = phase !== 'idle'
-  const [runWatchArmed, setRunWatchArmed] = useState(false)
-  useEffect(() => {
-    if (!live) return
-    let stop: StopWatching | null = null
-    let disposed = false
-    void watchExportRunFiles(() => void refreshCoalesced()).then((stopper) => {
-      if (!stopper) return
-      if (disposed) {
-        stopper()
-        return
-      }
-      stop = stopper
-      setRunWatchArmed(true)
-    })
-    return () => {
-      disposed = true
-      stop?.()
-      setRunWatchArmed(false)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [live])
+  const runWatchArmed = useArmedWatch(live, () =>
+    watchExportRunFiles(() => void refreshCoalesced()),
+  )
   // With the watch armed the interval is only the heartbeat under events a NAS
   // share may swallow — and the one prompter for a Daz that died mid-run
   // (lib/fs-watch.ts on why the poll survives). Full speed without a watch (a

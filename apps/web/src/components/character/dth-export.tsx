@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Ban } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { Button, useRefetchOnFocus } from '@dth/ui'
+import { Button, useArmedWatch, useCoalescedRefresh, useRefetchOnFocus } from '@dth/ui'
 import {
   abortExporterJobs,
   adoptHoudiniRun,
@@ -28,7 +28,7 @@ import {
 } from '#/lib/rom/export-cards.ts'
 import { formatElapsed, scriptFailureLines, tidyRunErrors } from '#/lib/rom/execute-jobs.ts'
 
-import type { ExportRunProgress, StopWatching } from '#/lib/rom/api.ts'
+import type { ExportRunProgress } from '#/lib/rom/api.ts'
 import type { UnrealTarget } from '#/lib/rom/export-cards.ts'
 import type {
   ExportPipelineView,
@@ -1151,10 +1151,18 @@ export function DthExportAction({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Every refresh funnels through ONE coalesced call: fetchExportRunProgress's
+  // finished/dead handling is destructive (it deletes the job file and yields
+  // the one outcome snapshot), so a burst of watch events — or an event landing
+  // on top of a heartbeat tick — must not race two refreshes over that moment.
+  // A refresh asked for while one is in flight runs AFTER it instead of
+  // alongside it, so the last state change is never skipped either.
+  // (refreshStatus is declared above; function declarations hoist.)
+  const refreshStatusCoalesced = useCoalescedRefresh(refreshStatus)
   useRefetchOnFocus(
     () => {
-      // Through the coalescer (declared below; function declarations hoist):
-      // a focus refresh can land while a watch event's refresh is mid-flight.
+      // Through the coalescer: a focus refresh can land while a watch event's
+      // refresh is mid-flight.
       void refreshStatusCoalesced()
     },
     [],
@@ -1162,57 +1170,15 @@ export function DthExportAction({
   )
   const watching =
     pending === true || progress !== null || houdini !== null || unrealRun !== null
-  // Every refresh funnels through ONE coalesced call: fetchExportRunProgress's
-  // finished/dead handling is destructive (it deletes the job file and yields
-  // the one outcome snapshot), so a burst of watch events — or an event landing
-  // on top of a heartbeat tick — must not race two refreshes over that moment.
-  // A refresh asked for while one is in flight runs AFTER it instead of
-  // alongside it, so the last state change is never skipped either.
-  const refreshBusyRef = useRef(false)
-  const refreshAgainRef = useRef(false)
-  async function refreshStatusCoalesced() {
-    if (refreshBusyRef.current) {
-      refreshAgainRef.current = true
-      return
-    }
-    refreshBusyRef.current = true
-    try {
-      do {
-        refreshAgainRef.current = false
-        await refreshStatus()
-      } while (refreshAgainRef.current)
-    } finally {
-      refreshBusyRef.current = false
-    }
-  }
   // Real file watching over the run's files (the job-file pair in the Daz
   // library, the progress log in app-data): the Runner's pickup rename, its
   // per-row rewrites and the final progress-100 write arrive as change events,
   // so the UI follows the batch the moment it moves instead of on the next
-  // poll tick.
-  const [runWatchArmed, setRunWatchArmed] = useState(false)
-  useEffect(() => {
-    if (!watching) return
-    let stop: StopWatching | null = null
-    let disposed = false
-    void watchExportRunFiles(() => void refreshStatusCoalesced()).then((stopper) => {
-      if (!stopper) return
-      if (disposed) {
-        stopper()
-        return
-      }
-      stop = stopper
-      setRunWatchArmed(true)
-    })
-    return () => {
-      disposed = true
-      stop?.()
-      setRunWatchArmed(false)
-    }
-    // Armed on `watching` alone — the watched DIRECTORIES never change for a
-    // mounted editor, only the files inside them do.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [watching])
+  // poll tick. Armed on `watching` alone — the watched DIRECTORIES never
+  // change for a mounted editor, only the files inside them do.
+  const runWatchArmed = useArmedWatch(watching, () =>
+    watchExportRunFiles(() => void refreshStatusCoalesced()),
+  )
   // With the watch armed, the interval degrades to a slow heartbeat — the net
   // under events a NAS share may swallow (lib/fs-watch.ts) and the only
   // prompter for states no file event announces (a Daz that died mid-run).
