@@ -224,6 +224,13 @@ gets per-scene PoseAsset CSVs — see
 
 ## The rest of the character page
 
+Everything above covered the ROM. The page around it, box by box — open the one
+you need:
+
+<details>
+<summary><strong>The header — avatar, rename, path chip, Save/Discard</strong></summary>
+<table><tr><td>
+
 <p align="center">
   <img width="900" alt="character page header" src="screenshots/character-header.png" />
   <br>
@@ -236,41 +243,91 @@ gets per-scene PoseAsset CSVs — see
 - **Name** — click to rename. The folder, notes and generated scripts follow.
 - **Subtitle** — the generation, the **skinning** the ROM targets (DQS or Linear,
   derived from the preset assets), and the custom-frame count.
+- **Path chip** — where the definition lives on disk.
 - **Save / Discard** — the page edits a **draft**: nothing touches disk until
-  **Save** (which also regenerates). **Ctrl** turns a settled Save into **Re-save**,
-  force-rewriting the files.
-- **Notes** — freeform **markdown** for this character: hover, hit the pencil,
-  **drop images or files straight into the editor**. Autosaves to `<Name>.notes.md`
-  beside the definition, so it travels with your project backup. A **Products** tab
-  appears when the project [switches it on](./product-scanning.md).
-- **The run report** — after a ROM run in Daz had problems, a banner appears the
-  moment you switch back, listing every failed frame with its reason. Clicking an
-  entry **switches to that scene and jumps to the pose row**. A clean run clears it.
+  **Save** (which also regenerates). **Discard** reverts to the last save.
+  **Ctrl** turns a settled Save into **Re-save**, force-rewriting the files.
+
+</td></tr></table>
+</details>
 
 <details>
-<summary><strong>Operations — fill, export/import, delete</strong></summary>
+<summary><strong>Notes — and the Products tab</strong></summary>
 <table><tr><td>
 
-- **Fill from character** — the same two-step wizard as at creation: pick a source
-  character (same generation and gender) from any project, then check which of its
-  ROM sections to copy. Retargeting always rides with JCM. The checked sections
-  **replace** this character's config in the editor draft; nothing lands on disk
-  until you save, and GEN keeps its own scene-derived setup.
-- **Export** — packs the character into a self-contained `<Name>_<date>.dcsc.zip`:
-  definition, notes, all Daz scenes, all Houdini project files, avatar and
-  metadata. Two toggles add the regenerable — often gigabyte-sized — **Daz
-  exports** and **Houdini exports** trees. Save first.
-- **Import** — that button, or dropping the zip on the character page, opens a
-  wizard pre-selected for a full restore that lets you dial it back: the **name**,
-  which **ROM sections**, which **Daz scenes** (the primary always; existing scenes
-  are **always wiped**) and which **Houdini projects**. Dropping the zip on the
-  *project* page restores it as a **new character** instead. Every stored path is
-  fixed for the new location — including each Houdini project's `$JOB`, which needs
-  a paired Houdini install. Can't be undone.
-- **Delete** — removes the character's folder and generated files, with a
-  confirmation that lets you **keep the Daz files folder** and **keep the Houdini
-  files folder**. Either way `daz-export` goes: regenerable output, often gigabytes
-  of it. Can't be undone.
+Freeform **markdown notes** for this character: hover, hit the pencil to edit,
+**drop images or files straight into the editor**. It autosaves to
+`<Name>.notes.md` beside the definition (media in `.dcsmeta/media`), so notes
+travel with your project backup. The project page has the same tab for
+project-wide notes.
+
+A **Products** tab appears when the project switches it on — see
+[Daz product scanning](./product-scanning.md).
+
+</td></tr></table>
+</details>
+
+<details>
+<summary><strong>The run report</strong></summary>
+<table><tr><td>
+
+After a ROM run in Daz had problems, a **report banner** appears the moment you
+switch back: every failed frame with its reason, grouped under the scene it came
+from. Clicking an entry **switches to that scene and jumps to the pose row**, and
+the failed rows are tinted red in the tables. **Dismiss** clears it; a clean run
+clears it automatically.
+
+</td></tr></table>
+</details>
+
+<details>
+<summary><strong>Filling the ROM from another character</strong></summary>
+<table><tr><td>
+
+**Operations → Fill from character** opens the same two-step wizard as at
+creation: pick a source character (same generation and gender) from any project,
+then check which of its ROM sections to copy. Retargeting always rides with JCM;
+the *Modify JCM frames* rules and preserve lists are optional extras. The checked
+sections **replace** this character's config in the editor draft; nothing lands on
+disk until you save, and GEN keeps its own scene-derived setup.
+
+</td></tr></table>
+</details>
+
+<details>
+<summary><strong>Export &amp; import — the whole character as one zip</strong></summary>
+<table><tr><td>
+
+**Operations → Export** packs the character into a self-contained
+`<Name>_<date>.dcsc.zip`: definition, notes, all Daz scenes, all Houdini project
+files, avatar and metadata. Two toggles add the regenerable — often
+gigabyte-sized — **Daz exports** and **Houdini exports** trees. Save first.
+
+The zip restores in two ways:
+
+- **Onto a character** — its **Operations → Import** button, or dropping the zip
+  on its page, opens a wizard pre-selected for a full restore that lets you dial
+  it back: the **name**, which **ROM sections**, which **Daz scenes** (the primary
+  always; existing scenes are **always wiped**) and which **Houdini projects**.
+- **Onto a project** — drop the zip on the project page and it is restored as a
+  **new character**.
+
+Every stored path is fixed for the new location — including each Houdini project's
+`$JOB`, which needs a paired Houdini install. The `.dsa` scripts and CSV are
+regenerated. A scene or `.hip` **linked in place outside** the character folder
+keeps its original absolute path. This can't be undone.
+
+</td></tr></table>
+</details>
+
+<details>
+<summary><strong>Deleting a character</strong></summary>
+<table><tr><td>
+
+**Operations → Delete** removes the character's folder and generated files, with a
+confirmation that lets you **keep the Daz files folder** (your scenes) and **keep
+the Houdini files folder** (your `.hip` projects). Either way `daz-export` goes:
+regenerable output, often gigabytes of it. This can't be undone.
 
 </td></tr></table>
 </details>

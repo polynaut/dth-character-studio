@@ -98,6 +98,15 @@ Keep, always: warnings the reader can act on, anything destructive or
 irreversible, measured numbers that change a decision, and the one-sentence
 "why" behind a behaviour that would otherwise look like a bug.
 
+**Never merge `<details>` accordions together, and never flatten one into the
+page.** Several small accordions beat one big one: each is a labelled door the
+reader opens only if that box is what they came for, and folding six into one
+puts them back in front of a wall of text — with five fewer entries in the search
+index, since each summary is its own anchor. Accordions are a *reading* device,
+so they do not count against the §6 budget the way running prose does. Trim the
+text inside them instead. *Earned by:* the 2026-08-17 diet, which collapsed the
+character page's six boxes into one and had to put them back.
+
 ## 5. Screenshots
 
 Three kinds, and they are NOT interchangeable:
