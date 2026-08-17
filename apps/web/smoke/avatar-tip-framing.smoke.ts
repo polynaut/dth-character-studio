@@ -41,14 +41,18 @@ async function scrollPastTheCollapse(page: Page) {
   )
 }
 
-async function openCharacter(page: Page, genesis: string, houdiniProject = false) {
-  // With an active project the window opens INTO it, so the character is one
-  // click away — `/` alone lands on the launcher's recents list.
+/** The project window, open on its overview, with the character re-stamped to
+ *  `genesis`. `/` lands here directly because the seed pins an active project. */
+async function openProject(page: Page, genesis: string, houdiniProject = false) {
   const seed = buildSeed({ activeProjectFile: P.dcsp, houdiniProject })
   const file = `${P.charFolder}/Kira.json`
   seed.files[file] = JSON.stringify({
     ...(JSON.parse(seed.files[file]!) as Record<string, unknown>),
     genesis,
+    // A stored avatar, which the MINIMAL seed leaves empty — without one the
+    // overview's tile renders the name-initial fallback and there is no <img> to
+    // measure. The file itself is seeded unconditionally.
+    image: 'char-kira--sc-1767225600000.png',
   })
   // The generated script's NAME carries the generation (`characterScriptName` =
   // slug_genesis), so re-stamping the character without moving its script leaves
@@ -62,6 +66,10 @@ async function openCharacter(page: Page, genesis: string, houdiniProject = false
   }
   await page.addInitScript(installTauriMock, seed)
   await page.goto('/')
+}
+
+async function openCharacter(page: Page, genesis: string, houdiniProject = false) {
+  await openProject(page, genesis, houdiniProject)
   await page.getByRole('link', { name: /Kira/ }).click()
   await page.locator('.avatar-scroll-pan').waitFor()
 }
@@ -174,11 +182,13 @@ const tileLifts = (page: Page) =>
       .map((img) => {
         const frame = img.parentElement as HTMLElement
         const border = (frame.getBoundingClientRect().height - frame.clientHeight) / 2
-        return +(
-          img.getBoundingClientRect().top -
-          frame.getBoundingClientRect().top -
-          border
-        ).toFixed(1)
+        // Rounded: every lift is a whole number of pixels by design, while an
+        // `aspect-ratio` frame lays out fractionally (the 13/9 tile is 44.3px
+        // tall) and `clientHeight` is an integer — which puts a tenth of a pixel
+        // of noise on the border term, not on the value under test.
+        return Math.round(
+          img.getBoundingClientRect().top - frame.getBoundingClientRect().top - border,
+        )
       }),
   )
 
@@ -200,4 +210,22 @@ test('landscape tiles: the rendered sizes land their painted lift, per generatio
   // −6px, from the +12 measured on a real G8.1 tip at `md`. Any size that drifts
   // off this number is the mismatched-pair bug SCENE_TILE_SIZES exists to stop.
   expect(preG9).toEqual(preG9.map(() => -6))
+})
+
+test("the overview's LIST tile is a landscape crop too, and follows the generation", async ({
+  page,
+}) => {
+  // The third landscape variant, and the one that expresses its lift as flat
+  // pixels rather than `-50%` + a correction. It has to land the same painted
+  // offset as the scene tiles — a character reads as the same face whichever
+  // list it appears in.
+  await openProject(page, 'G9')
+  await page.getByRole('button', { name: 'List view' }).click()
+  await expect.poll(() => tileLifts(page)).toEqual([-14])
+
+  await openProject(page, 'G8.1')
+  // The view is persisted (`dth.characters.view`), so the second window opens
+  // in list view already — clicking again would toggle nothing, and asserting
+  // straight away is the honest check that it stayed.
+  await expect.poll(() => tileLifts(page)).toEqual([-6])
 })

@@ -108,6 +108,27 @@ export const SCENE_TILE_SIZES = {
 export type SceneTileSize = keyof typeof SCENE_TILE_SIZES
 
 /**
+ * The same two landscape framings for a frame that positions in FIXED PIXELS
+ * instead of `-50% + correction` — the project overview's list-view tile, whose
+ * 13/9 box has no half-height baseline to cancel.
+ *
+ * The numbers ARE the painted lifts from {@link SCENE_TILE_SIZES} (−14px / −6px),
+ * which is the point: every landscape crop of a tip puts the face in one place,
+ * whatever shape the frame is. `-translate-y-[14px]` predates all of this and is
+ * what confirmed the invariant — it had already been tuned, independently, to
+ * exactly the value the scene tiles resolve to.
+ */
+export const LANDSCAPE_FIXED_LIFT = {
+  g9: '-translate-y-[14px]',
+  preG9: '-translate-y-[6px]',
+} as const
+
+/** The landscape face lift for a fixed-pixel frame — see {@link LANDSCAPE_FIXED_LIFT}. */
+export function landscapeLift(genesis: GenesisVersion | undefined): string {
+  return isPreG9Tip(genesis) ? LANDSCAPE_FIXED_LIFT.preG9 : LANDSCAPE_FIXED_LIFT.g9
+}
+
+/**
  * A Daz scene's preview as a small LANDSCAPE tile — the framing used wherever a
  * scene is shown compactly (the scene footer's chips, the Tools scan picker's
  * rows). Fixed h/w rather than an aspect ratio, so the tile is a stable box
