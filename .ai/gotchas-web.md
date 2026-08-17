@@ -394,26 +394,31 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   here — it came out mushy; Lanczos was the one that read crisp. Diagnostic tell: if a
   static side-by-side shows the browser downsample ≈ a hand pass, the defect is
   aliasing (missing low-pass), not the resample quality.
-- **DevTools cannot resolve `var()` inside a `@keyframes` block, and the result
-  is indistinguishable from an undefined variable.** A keyframe rule is not
-  attached to any element, so there is no context to resolve against — the Styles
-  pane prints the raw `translateY(var(--dth-avatar-pan-from))` with the reference
-  rendered as unresolved. Reported as "the vars don't seem to be defined" on
-  #860; they were defined the whole time. Verified against the PRODUCTION bundle,
-  not just dev (Lightning CSS keeps both the custom-property rules and the
-  keyframe `var()` intact): `--dth-avatar-pan-from` computes to `11%` on the
-  wrapper AND the inherited image, painting `matrix(1,0,0,1,0,27.94)` on a 254px
-  element — 15% / 38.1px with `data-tip-framing="pre-g9"`. **Inspect the ELEMENT,
-  not the keyframe**: Computed pane filtered to the property, or
-  `getComputedStyle($0).transform`. Worth knowing before parameterising any other
-  animation this way — the pattern is right, its debugging affordance is not.
-- **Parameterising a keyframe: put the variables on an ANCESTOR, not the animated
-  element.** Custom properties inherit, so a default set directly on the animated
-  element beats an override inherited from the wrapper — the override silently
-  does nothing. The avatar pan defines both ends on `.avatar-scroll-shrink` (the
-  wrapper, which is what knows the character) and the image just consumes them;
-  the inactive-timeline fallback reads the same `from` variable, or the element
-  sits wrong on exactly the pages too short to scroll a timeline into life.
+- **Don't drive `@keyframes` from custom properties — DevTools shows them as
+  undefined and you cannot tell that apart from a real bug.** Tried on #860 (one
+  keyframe block, `translateY(var(--dth-avatar-pan-from))`, the pair set per
+  generation on the wrapper). It WORKS: measured in dev and in the minified
+  bundle, the variable computes to `11%` on the wrapper and the inherited image
+  and paints `matrix(1,0,0,1,0,27.94)` on a 254px element (15% / 38.1px for
+  pre-G9). But hovering the reference in the Styles pane reports
+  "`--dth-avatar-pan-from` is not defined", and it cost two rounds of "the vars
+  aren't working" before the approach was abandoned. A keyframe rule belongs to
+  no element, so there is nothing to resolve against — that is the likely cause,
+  inferred, not measured against DevTools internals. The shipped shape is **two
+  keyframe blocks with literal percentages**, switched by `animation-name`.
+  Four adjacent numbers beat an animation nobody can read in the tool they debug
+  CSS with. **Inspect the ELEMENT, never the keyframe**:
+  `getComputedStyle($0).transform`.
+- **Overriding which keyframes an element runs: swap `animation-name`, NEVER the
+  `animation` shorthand.** The shorthand resets `animation-timeline` to `auto`,
+  which silently takes a scroll-driven element OFF its timeline and freezes it at
+  the resting value — measured on #860 by making exactly that change: all three
+  pre-G9 specs dropped their collapsed-state assertion while the resting one kept
+  passing. (It is the same reason the base rule declares `animation-timeline`
+  AFTER its shorthand.) The trap for the test: an element frozen at rest still
+  reports the correct RESTING offset, so a spec that only checks the rest state
+  passes over a completely dead animation. Assert both ends — scroll past the
+  range and read the transform again.
 
 ## `prefers-reduced-motion: reduce` is ON for this dev machine — and it is NOT `MinAnimate` (measured 2026-08-14)
 

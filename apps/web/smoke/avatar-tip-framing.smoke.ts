@@ -27,9 +27,19 @@ const panY = (page: Page) =>
     return new DOMMatrix(getComputedStyle(el).transform).f
   })
 
-/** The painted height the percentage offsets resolve against. */
+/** The LAYOUT height the percentage offsets resolve against — `offsetHeight`,
+ *  not the bounding rect, which the collapsed state's `scale` would inflate. */
 const panHeight = (page: Page) =>
-  page.evaluate(() => document.querySelector('.avatar-scroll-pan')!.getBoundingClientRect().height)
+  page.evaluate(() => (document.querySelector('.avatar-scroll-pan') as HTMLElement).offsetHeight)
+
+/** Scroll past the pan's range end (248px) and let the scroll-driven animation
+ *  settle, so the assertion sees the COLLAPSED end rather than the resting one. */
+async function scrollPastTheCollapse(page: Page) {
+  await page.evaluate(() => window.scrollTo(0, 400))
+  await page.evaluate(
+    () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
+  )
+}
 
 async function openCharacter(page: Page, genesis: string) {
   // With an active project the window opens INTO it, so the character is one
@@ -56,24 +66,31 @@ async function openCharacter(page: Page, genesis: string) {
   await page.locator('.avatar-scroll-pan').waitFor()
 }
 
-test('a G9 portrait rests at the G9 pan', async ({ page }) => {
+test('a G9 portrait pans 11% → 15%, resting and collapsed', async ({ page }) => {
   await openCharacter(page, 'G9')
   const height = await panHeight(page)
-  // 11% — the offset the pan was originally tuned to, on the generation it was
-  // tuned against. Tolerant by a pixel: the wrapper is laid out in CSS px and
-  // the matrix comes back as a float.
+  // The offsets the pan was originally tuned to, on the generation it was tuned
+  // against. Tolerant by a pixel: laid out in CSS px, read back as a float.
   expect(await panY(page)).toBeCloseTo(height * 0.11, 0)
+  await scrollPastTheCollapse(page)
+  expect(await panY(page)).toBeCloseTo(height * 0.15, 0)
 })
 
 for (const genesis of ['G8.1', 'G8', 'G3']) {
-  test(`a ${genesis} portrait rests LOWER, where Daz puts that generation's face`, async ({
+  test(`a ${genesis} portrait pans LOWER, where Daz puts that generation's face`, async ({
     page,
   }) => {
     await openCharacter(page, genesis)
     const height = await panHeight(page)
-    // 15% — four points further down than G9. The assertion is on the painted
-    // transform, so it fails if the attribute is set but the variable never
-    // reaches the image (a broken cascade looks identical from the DOM).
+    // Four points further down at both ends. Asserted on the PAINTED transform:
+    // the attribute could be set correctly and still do nothing if the rule that
+    // reads it were wrong, and that failure is invisible from the DOM.
     expect(await panY(page)).toBeCloseTo(height * 0.15, 0)
+    // …and it must still be ON the scroll timeline. The pre-G9 rule swaps only
+    // `animation-name`; had it used the `animation` shorthand it would have reset
+    // `animation-timeline` to auto, freezing the portrait at its resting offset —
+    // which the assertion above would have passed anyway.
+    await scrollPastTheCollapse(page)
+    expect(await panY(page)).toBeCloseTo(height * 0.19, 0)
   })
 }
