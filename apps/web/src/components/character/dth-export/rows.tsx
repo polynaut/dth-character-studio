@@ -19,6 +19,7 @@ import {
   launchDazForPendingJobs,
 } from '#/lib/rom/api.ts'
 import { EXPORT_MODE_LABELS } from '#/lib/rom/execute-jobs.ts'
+import type { GenesisVersion } from '@dth/rom'
 import type { ExecuteSceneStatus } from '#/lib/rom/api.ts'
 import type { HoudiniRunMode, RunChoice } from '#/lib/rom/execute-jobs.ts'
 
@@ -99,6 +100,7 @@ export function WaitForDazCloseModal({
  *  daz-card utility supplies the tint/ring via `data-selected`. */
 export function SceneRow({
   status,
+  genesis,
   mode,
   checked,
   loading,
@@ -107,6 +109,9 @@ export function SceneRow({
   onSelectAll,
 }: {
   status: ExecuteSceneStatus
+  /** The character's generation — picks the preview's face crop, because Daz
+   *  frames a G3/G8/G8.1 render higher in the tip than a G9 one (lib/tip-framing). */
+  genesis: GenesisVersion
   /** The chosen run — decides what the row's hint reports and whether it can
    *  run at all (Export only needs a saved ROM animation; Houdini only needs
    *  the scene's last Daz export on disk). */
@@ -180,6 +185,7 @@ export function SceneRow({
         <Portrait
           scenePath={status.scenePath}
           name={displayName}
+          genesis={genesis}
           className="aspect-[3/4] h-[56px] shrink-0 rounded-md"
           fallbackClassName="text-lg"
         />

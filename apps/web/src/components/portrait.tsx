@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
 
 import { resolveImageSrc, resolveScenePreview } from '#/lib/rom/api.ts'
+import { isPreG9Tip } from '#/lib/tip-framing.ts'
 import { cn } from '@dth/ui'
+
+import type { GenesisVersion } from '@dth/rom'
 
 /**
  * Resolve a portrait's source URL from EITHER a stored avatar `image` reference
@@ -133,6 +136,7 @@ export function Portrait({
   image,
   scenePath,
   name,
+  genesis,
   zoom = true,
   className,
   imgClassName,
@@ -142,6 +146,15 @@ export function Portrait({
   image?: string
   scenePath?: string
   name: string
+  /** The generation of the character this image is a Daz render OF, when it is
+   *  one — it picks the face crop, because Daz frames G3/G8/G8.1 higher in the
+   *  square than G9 (see lib/tip-framing).
+   *
+   *  Pass it ONLY for Daz imagery: a character's tip or one of its scene
+   *  previews. Leave it off for anything Daz didn't compose — a Houdini
+   *  project's thumbnail, a static placeholder, a photo the user uploaded. Those
+   *  keep the default crop, and omitting the prop is what guarantees it. */
+  genesis?: GenesisVersion
   zoom?: boolean
   className?: string
   imgClassName?: string
@@ -163,7 +176,18 @@ export function Portrait({
           alt=""
           className={cn(
             'size-full object-cover',
-            zoom && 'origin-top -translate-x-[2%] -translate-y-[17%] scale-[2.3] object-top',
+            // Two whole class strings, not a shared prefix plus a computed lift:
+            // Tailwind scans SOURCE TEXT, and an arbitrary token it never sees
+            // spelled out generates no rule (the leading-token trap in
+            // SceneTile's comment above, PR #468). Both spell their lift out.
+            zoom &&
+              (isPreG9Tip(genesis)
+                ? 'origin-top -translate-x-[2%] -translate-y-[5%] scale-[2.3] object-top'
+                : 'origin-top -translate-x-[2%] -translate-y-[17%] scale-[2.3] object-top'),
+            // Still last: a call site that hand-picks its own lift (SceneTile's
+            // landscape tiles, the overview's list view) keeps winning through
+            // twMerge — those framings are tuned separately and are NOT covered
+            // by the generation crop.
             imgClassName,
           )}
         />

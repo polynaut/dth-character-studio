@@ -940,6 +940,12 @@ function ProjectCharactersPage() {
                       <Portrait
                         image={character.image}
                         name={character.name}
+                        // The avatar is a Daz render of THIS character, so its
+                        // face crop follows the generation. Only the grid view:
+                        // list overrides the lift with a fixed −14px below, and
+                        // twMerge keeps that winning (its pre-G9 value is not
+                        // measured — see lib/tip-framing).
+                        genesis={character.genesis}
                         // Both views keep the portrait face-zoom; list view uses
                         // the landscape 13:9 crop (the ratio the character page's
                         // header settles into) and overrides the zoom's % lift

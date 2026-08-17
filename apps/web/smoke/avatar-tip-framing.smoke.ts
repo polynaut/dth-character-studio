@@ -41,10 +41,10 @@ async function scrollPastTheCollapse(page: Page) {
   )
 }
 
-async function openCharacter(page: Page, genesis: string) {
+async function openCharacter(page: Page, genesis: string, houdiniProject = false) {
   // With an active project the window opens INTO it, so the character is one
   // click away — `/` alone lands on the launcher's recents list.
-  const seed = buildSeed({ activeProjectFile: P.dcsp })
+  const seed = buildSeed({ activeProjectFile: P.dcsp, houdiniProject })
   const file = `${P.charFolder}/Kira.json`
   seed.files[file] = JSON.stringify({
     ...(JSON.parse(seed.files[file]!) as Record<string, unknown>),
@@ -96,3 +96,48 @@ for (const genesis of ['G8.1', 'G8', 'G3']) {
     expect(await panY(page)).toBeCloseTo(height * 0.2, 0)
   })
 }
+
+// The SMALL portraits are a second, independent framing: a fixed `scale-[2.3]`
+// crop nudged up with translateY, on the cards rather than the header. They need
+// the same per-generation correction — but ONLY where the picture is something
+// Daz composed. A Houdini project's card wears the same portrait frame and is
+// not a Genesis render at all; shifting it would be a crop applied for a reason
+// that does not hold there. `Portrait` gets the generation only from Daz call
+// sites, and omitting the prop is what guarantees the rest keep the default.
+
+/** Every zoomed card portrait on the page, tagged by the KIND of card holding it
+ *  (`daz-card` / `houdini-card`, the classes LinkedAssetCard already carries for
+ *  its accent colour). Tagging rather than indexing is what makes "the Daz one
+ *  moved, the Houdini one did not" survive a change in render order. */
+const cardCrops = (page: Page) =>
+  page.evaluate(() =>
+    [...document.querySelectorAll('img')]
+      .filter((img) => img.className.includes('object-cover') && img.className.includes('scale-'))
+      .map((img) => ({
+        kind: img.closest('.daz-card') ? 'daz' : img.closest('.houdini-card') ? 'houdini' : 'other',
+        translate: getComputedStyle(img).translate,
+      }))
+      .filter((c) => c.kind !== 'other'),
+  )
+
+test('G9: the Daz scene card and the Houdini card share one crop', async ({ page }) => {
+  await openCharacter(page, 'G9', true)
+  await expect.poll(() => cardCrops(page)).toEqual([
+    { kind: 'daz', translate: '-2% -17%' },
+    { kind: 'houdini', translate: '-2% -17%' },
+  ])
+})
+
+test('pre-G9: the Daz scene card lifts less — and the Houdini card does NOT move', async ({
+  page,
+}) => {
+  await openCharacter(page, 'G8.1', true)
+  // The Houdini row is the point of this spec. Its thumbnail is not a Daz render
+  // of anything, so a change made because Daz frames G8.1 high in a tip must not
+  // reach it — a regression here would silently re-crop every Houdini card on
+  // every pre-G9 character.
+  await expect.poll(() => cardCrops(page)).toEqual([
+    { kind: 'daz', translate: '-2% -5%' },
+    { kind: 'houdini', translate: '-2% -17%' },
+  ])
+})
