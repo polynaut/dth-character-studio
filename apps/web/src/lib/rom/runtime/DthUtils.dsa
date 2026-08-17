@@ -15,17 +15,62 @@ function verbose(){
  * ROM run log — collects every problem of a run (a morph that couldn't be
  * applied, a preset that failed to load, any unexpected error) so the run can
  * finish drift-free and the studio can show exactly what failed afterwards.
- * Written as JSON by writeRunLog (path baked into the generated script). */
-var DTH_RUN_LOG = { errors: [], failedMorphs: [] };
+ * Written as JSON by writeRunLog (path baked into the generated script).
+ *
+ * FOUR channels, and the split is a CONTRACT, not tidiness:
+ *
+ *   errors       - this ROM is not fit to export. Counted by runLogProblemCount,
+ *                  so ApplyDTHCharacter returns false and the generated script's
+ *                  export gate skips the export.
+ *   warnings     - something to SHOW, that does not condemn the ROM. NOT
+ *                  counted, so the export still runs. Anything filed here must
+ *                  be defensible as "the exported artifacts are still correct".
+ *   failedMorphs - one dial that could not be applied; its frame stays, empty.
+ *   keyProblems  - the individual keys the interpolation pass could not fix,
+ *                  named well enough to go and look at them (runtime v79).
+ *                  Capped per kind; the message says how many were left out.
+ *
+ * The warnings channel exists because a run that reported 4 bad keys out of 7968
+ * used to block a character's entire Houdini side, and the user saw a row marked
+ * "done" with no export and no reason unless they opened the Daz log. */
+var DTH_RUN_LOG = { errors: [], warnings: [], failedMorphs: [], keyProblems: [] };
 
 function resetRunLog(){
-	DTH_RUN_LOG = { errors: [], failedMorphs: [] };
+	DTH_RUN_LOG = { errors: [], warnings: [], failedMorphs: [], keyProblems: [] };
 }
 
-/** A general problem (preset failed, node missing, unexpected error, …). */
+/** A general problem (preset failed, node missing, unexpected error, …).
+ *  BLOCKS the export — see the channel contract above. */
 function logRunError(sMessage){
 	DTH_RUN_LOG.errors.push(String(sMessage));
 	print("ERROR:", sMessage);
+}
+
+/** A problem worth showing that does NOT block the export. The studio surfaces
+ *  it beside the errors; the export runs. Use this only where the exported
+ *  artifacts are still correct — if in doubt it is an error. */
+function logRunWarning(sMessage){
+	DTH_RUN_LOG.warnings.push(String(sMessage));
+	print("WARNING:", sMessage);
+}
+
+/** How many of each kind of key problem get NAMED. A ROM carries ~8000 keys and
+ *  a pathological run could name every one of them, flooding both the Daz log
+ *  and the studio's report — so each kind gets its own budget (per kind, not one
+ *  shared pool: 5000 of one kind must not squeeze out the 4 of another, which is
+ *  exactly the interesting case). The counts are always exact. */
+var DTH_KEY_PROBLEM_CAP = 8;
+
+/** File one named key problem, if its kind still has budget. `oCounts` is the
+ *  caller's per-kind tally (total seen, not total named). Returns the entry when
+ *  it was recorded, null when the cap swallowed it. */
+function logRunKeyProblem(oCounts, oEntry){
+	var sKind = oEntry.kind;
+	if(oCounts[sKind] === undefined) oCounts[sKind] = 0;
+	oCounts[sKind]++;
+	if(oCounts[sKind] > DTH_KEY_PROBLEM_CAP) return null;
+	DTH_RUN_LOG.keyProblems.push(oEntry);
+	return oEntry;
 }
 
 /** One morph/property that couldn't be applied — the frame slot stays, only
@@ -37,6 +82,9 @@ function logRunFailedMorph(iFrame, sNode, sProp, sReason){
 	print("FAILED MORPH: frame", iFrame, "-", sNode, "/", sProp, "-", sReason);
 }
 
+/** What makes a run NOT ok: errors and failed morphs. Warnings and key problems
+ *  are deliberately absent — they are reported, not fatal (see the contract
+ *  above), and counting them here would put the export gate back where it was. */
 function runLogProblemCount(){
 	return DTH_RUN_LOG.errors.length + DTH_RUN_LOG.failedMorphs.length;
 }
@@ -142,7 +190,9 @@ function writeRunLog(sPath, oSummary){
 	oRun.finishedAt = new Date().toString();
 	oRun.finishedAtMs = new Date().getTime();
 	oRun.errors = DTH_RUN_LOG.errors;
+	oRun.warnings = DTH_RUN_LOG.warnings;
 	oRun.failedMorphs = DTH_RUN_LOG.failedMorphs;
+	oRun.keyProblems = DTH_RUN_LOG.keyProblems;
 	// Which scene produced this run — without it the studio cannot attribute a
 	// failure to a scene, let alone select it. '' for an unsaved scene.
 	var sScene = "";
@@ -260,6 +310,135 @@ var DTH_KEY_IMMOVABLE  = "immovable";   // the VALUE would not move, so Daz neve
 var DTH_KEY_FAILED     = "failed";      // the value moved and the key is still not LINEAR
 var DTH_KEY_VALUE_LOST = "value-lost";  // the nudge could not be put back - the key's VALUE is wrong
 
+/* What dthEnsureFrameZeroKey came to. Named for the same reason: "-1" covered
+ * three outcomes that want three different sentences, and the caller could only
+ * report the count of all of them. */
+var DTH_ZERO_ADDED       = "added";        // a real key now sits at frame 0
+var DTH_ZERO_PRESENT     = "present";      // one was already there (or the channel isn't animated)
+var DTH_ZERO_DRIVEN      = "driven";       // ERC-driven: frame 0 is not ours to write
+var DTH_ZERO_REFUSED     = "refused";      // no key could be made there
+var DTH_ZERO_ROLLED_BACK = "rolled-back";  // added, moved the value, taken away again
+
+/**********************************************************************
+ * Value -> name for the interpolation enum, so a key that reads back `1` can be
+ * REPORTED as CONSTANT rather than as a number nobody can act on.
+ *
+ * Only spellings this build actually defines are used, and only ones measured to
+ * exist (DS 4.24: DzFloatProperty.LINEAR_INTERP / CONSTANT_INTERP / TCB_INTERP =
+ * 0 / 1 / 2, DzProperty.InterpLinear / InterpConstant). A value with no name
+ * known here is printed bare — a guessed name would be worse than a number. */
+var DTH_INTERP_NAMES = null;
+function dthInterpName(iValue){
+	if(iValue === undefined || iValue === null) return "";
+	if(!DTH_INTERP_NAMES){
+		DTH_INTERP_NAMES = {};
+		var aNamed = [];
+		if(typeof DzFloatProperty != "undefined"){
+			aNamed.push(["LINEAR", DzFloatProperty.LINEAR_INTERP]);
+			aNamed.push(["CONSTANT", DzFloatProperty.CONSTANT_INTERP]);
+			aNamed.push(["TCB", DzFloatProperty.TCB_INTERP]);
+		}
+		if(typeof DzProperty != "undefined"){
+			aNamed.push(["LINEAR", DzProperty.InterpLinear]);
+			aNamed.push(["CONSTANT", DzProperty.InterpConstant]);
+		}
+		for(var i = 0; i < aNamed.length; i++){
+			if(aNamed[i][1] === undefined || aNamed[i][1] === null) continue;
+			if(DTH_INTERP_NAMES[aNamed[i][1]] === undefined) DTH_INTERP_NAMES[aNamed[i][1]] = aNamed[i][0];
+		}
+	}
+	var sName = DTH_INTERP_NAMES[iValue];
+	return sName ? (sName + " (" + iValue + ")") : String(iValue);
+}
+
+/** A key's time as a FRAME, which is the only unit anyone reading this report
+ *  thinks in. -1 when the scene won't say what a frame is worth. */
+function dthFrameOfTime(tTime){
+	try {
+		var iStep = Scene.getTimeStep();
+		if(!iStep) return -1;
+		return Math.round(tTime / iStep);
+	} catch(e){ return -1; }
+}
+
+/** The node's place in the scene tree ("Genesis8_1Female/hip/abdomenLower/…"),
+ *  because a bare property name cannot say which of ninety bones it sits on.
+ *  Guarded against a cycle it should never meet. */
+function dthNodePath(oNode){
+	var aParts = [];
+	var oCur = oNode;
+	var iGuard = 0;
+	while(oCur && iGuard++ < 64){
+		aParts.unshift(String(oCur.getName()));
+		oCur = (typeof oCur.getNodeParent == "function") ? oCur.getNodeParent() : null;
+	}
+	return aParts.join("/");
+}
+
+/**********************************************************************
+ * ONE key the interpolation pass could not fix, named. This is what the counts
+ * were missing: a run reporting "4 of 7968 key(s) would not read back LINEAR"
+ * gave nobody a single thing to go and look at.
+ *
+ * `iKey` is -1 for a whole-channel problem (frame 0 has no key to index).
+ * `iRead` is the interpolation Daz reports for the key AFTER the pass — the
+ * evidence, on builds that can be asked; undefined on the ones that can't. */
+function dthKeyProblemEntry(sKind, oChan, iKey, tTime, iRead, sReason){
+	var oProp = oChan.prop;
+	var oEntry = {
+		kind: sKind,
+		node: oChan.node,
+		prop: String(oProp.getName()),
+		key: iKey,
+		// How many keys the CHANNEL holds. Without it a report cannot answer the
+		// first question anyone asks of a bad key — does its interpolation span
+		// anything at all? — and the first real report could not: four findings
+		// on channels holding one key each, which is nothing, read as four
+		// broken keys.
+		keys: oProp.getNumKeys(),
+		frame: dthFrameOfTime(tTime),
+		interp: dthInterpName(iRead),
+		reason: sReason
+	};
+	var sLabel = String(oProp.getLabel());
+	if(sLabel && sLabel != oEntry.prop) oEntry.propLabel = sLabel;
+	// The dial's group path in the Parameters pane, when this build offers it —
+	// it is how a human finds the channel in the UI.
+	try {
+		if(typeof oProp.getPath == "function"){
+			var sPath = String(oProp.getPath());
+			if(sPath) oEntry.path = sPath;
+		}
+	} catch(e){ /* no path on this build - the node/property pair still identifies it */ }
+	return oEntry;
+}
+
+/** One key problem as a line for the Daz log. */
+function dthKeyProblemLine(oEntry){
+	var s = oEntry.node + " / " + oEntry.prop;
+	if(oEntry.propLabel) s += " (" + oEntry.propLabel + ")";
+	if(oEntry.path) s += " [" + oEntry.path + "]";
+	if(oEntry.key >= 0) s += " - key " + oEntry.key + " of " + oEntry.keys;
+	s += " at frame " + (oEntry.frame < 0 ? "?" : oEntry.frame);
+	if(oEntry.interp) s += ", reads back " + oEntry.interp;
+	return s;
+}
+
+/** "(Foo / bar at frame 12; Baz / qux at frame 40; and 3 more.)" — the named
+ *  sample that goes INSIDE a run-log message, so the studio's one-line report
+ *  points at something even before the user opens the detail list. */
+function dthKeyProblemSample(aEntries, iTotal){
+	if(aEntries.length < 1) return "";
+	var aShort = [];
+	for(var i = 0; i < aEntries.length && i < 3; i++){
+		aShort.push(aEntries[i].node + " / " + aEntries[i].prop +
+			" at frame " + (aEntries[i].frame < 0 ? "?" : aEntries[i].frame));
+	}
+	var s = " (" + aShort.join("; ");
+	if(iTotal > aShort.length) s += "; and " + (iTotal - aShort.length) + " more";
+	return s + ".)";
+}
+
 /**********************************************************************
  * The LINEAR interpolation constant of the RUNNING Daz. The API reference
  * spells this enum two ways — DzFloatProperty documents LINEAR_INTERP,
@@ -303,14 +482,25 @@ function dthSetValueInterp(oProp, tTime, fValue, iInterp){
 	else oProp.setValue(tTime, fValue, iInterp);
 }
 
-/** Collect `oProp` when it is animated and not already collected. */
-function dthPushInterpProp(aProps, oSeen, sNodeKey, oProp){
+/** Collect `oProp` when it is animated and not already collected — WITH the node
+ *  it belongs to, which is half of a key's identity when the pass has to report
+ *  one it could not fix.
+ *
+ *  "Animated" here means `getNumKeys() >= 1`, which is WIDER than it sounds:
+ *  Daz reports an implicit key at frame 0 for a channel nobody ever keyed (see
+ *  the note above dthEnsureFrameZeroKey), so this collects plenty of channels
+ *  that carry no animation at all — measured 2026-08-17, 2599 collected against
+ *  1590 genuinely animated channels in the saved ROM of the same character. That
+ *  is not a problem in itself (a stamp on a static channel is harmless), but it
+ *  is exactly why a single key at frame 0 must never be REPORTED as a failure:
+ *  see the spans-nothing rule in setLinearInterp. */
+function dthPushInterpProp(aChannels, oSeen, sNodeKey, sNodePath, oProp){
 	if(!oProp || typeof oProp.getNumKeys != "function") return;
 	if(oProp.getNumKeys() < 1) return;
 	var sKey = sNodeKey + "|" + String(oProp.getName());
 	if(oSeen[sKey]) return;
 	oSeen[sKey] = true;
-	aProps.push(oProp);
+	aChannels.push({ prop: oProp, node: sNodePath });
 }
 
 /**********************************************************************
@@ -319,14 +509,19 @@ function dthPushInterpProp(aProps, oSeen, sNodeKey, oProp){
  * pCTRL / CTRL / facs_ctrl_ controllers the ROM presets key, which have no
  * modifier of their own and which the pre-v77 walk never saw, plus the
  * transform channels (see setLinearInterp: a ROM's bone keys arrive CONSTANT
- * from the presets too, and nothing here moves a value). */
-function collectInterpProps(oNodes){
-	var aProps = [];
+ * from the presets too, and nothing here moves a value).
+ *
+ * Returns CHANNEL RECORDS ({ prop, node }), not bare properties: the node path
+ * is resolved once here, per node, and carried along so a key that fails the
+ * pass can be named without walking the tree again. */
+function collectInterpChannels(oNodes){
+	var aChannels = [];
 	var oSeen = {};
 	for(var x = 0; x < oNodes.length; x++){
 		var oNode = oNodes[x];
 		if(!oNode) continue;
 		var sNodeKey = String(oNode.getName());
+		var sNodePath = dthNodePath(oNode);
 		var oObj = oNode.getObject();
 		if(oObj){
 			for(var i = 0; i < oObj.getNumModifiers(); i++){
@@ -337,17 +532,17 @@ function collectInterpProps(oNodes){
 				var oMorphProp = null;
 				if(typeof oMod.getValueChannel == "function") oMorphProp = oMod.getValueChannel();
 				if(!oMorphProp && typeof oMod.getValueControl == "function") oMorphProp = oMod.getValueControl();
-				dthPushInterpProp(aProps, oSeen, sNodeKey, oMorphProp);
+				dthPushInterpProp(aChannels, oSeen, sNodeKey, sNodePath, oMorphProp);
 			}
 		}
 		if(typeof oNode.getNumProperties != "function") continue;
 		for(var p = 0; p < oNode.getNumProperties(); p++){
 			var oNodeProp = oNode.getProperty(p);
 			if(!oNodeProp || !oNodeProp.inherits("DzFloatProperty")) continue;
-			dthPushInterpProp(aProps, oSeen, sNodeKey, oNodeProp);
+			dthPushInterpProp(aChannels, oSeen, sNodeKey, sNodePath, oNodeProp);
 		}
 	}
-	return aProps;
+	return aChannels;
 }
 
 /**********************************************************************
@@ -366,16 +561,17 @@ function collectInterpProps(oNodes){
  * alone up front where the build can say so, and rolled back after the fact
  * where it can't.
  *
- * Returns 1 when a key was added, 0 when one was already there or the channel
- * isn't animated, -1 when it was skipped, could not be added, or was rolled
- * back. A rollback that does not fully undo itself leaves a WRONG VALUE at
- * frame 0 and logs a run-log error naming the channel — the caller's summary
- * line covers only the benign "kept its implicit key" half of -1. */
+ * Returns one of the DTH_ZERO_* outcomes above. They used to be a single `-1`
+ * covering three different things — driven, refused, and rolled back — which is
+ * why the caller could only ever report a count. A rollback that does not fully
+ * undo itself leaves a WRONG VALUE at frame 0 and logs a run-log error naming
+ * the channel; it is still DTH_ZERO_ROLLED_BACK so the caller can tell it apart
+ * from the benign "kept its implicit key" cases. */
 function dthEnsureFrameZeroKey(oProp, iInterp){
-	if(oProp.getNumKeys() < 1) return 0;
-	if(oProp.getKeyTime(0) == 0) return 0;
+	if(oProp.getNumKeys() < 1) return DTH_ZERO_PRESENT;
+	if(oProp.getKeyTime(0) == 0) return DTH_ZERO_PRESENT;
 	// Driven by an ERC link? Then its value at frame 0 is not ours to write.
-	if(typeof oProp.getNumControllers == "function" && oProp.getNumControllers() > 0) return -1;
+	if(typeof oProp.getNumControllers == "function" && oProp.getNumControllers() > 0) return DTH_ZERO_DRIVEN;
 	var iKeysBefore = oProp.getNumKeys();
 	var fAt0 = oProp.getValue(0);
 	var aNudge = [fAt0 + DTH_INTERP_NUDGE, fAt0 - DTH_INTERP_NUDGE];
@@ -383,8 +579,8 @@ function dthEnsureFrameZeroKey(oProp, iInterp){
 		dthSetValueInterp(oProp, 0, aNudge[n], iInterp);
 		dthSetValueInterp(oProp, 0, fAt0, iInterp);
 	}
-	if(oProp.getKeyTime(0) != 0) return -1;
-	if(approx_eq(oProp.getValue(0), fAt0)) return 1;
+	if(oProp.getKeyTime(0) != 0) return DTH_ZERO_REFUSED;
+	if(approx_eq(oProp.getValue(0), fAt0)) return DTH_ZERO_ADDED;
 	// The value moved: this build reported no controllers but behaves like a
 	// driven channel. Drop the key again — [0,0] is the one key just added
 	// whether deleteKeys reads its arguments as times or as indices. Every way
@@ -394,7 +590,7 @@ function dthEnsureFrameZeroKey(oProp, iInterp){
 	if(typeof oProp.deleteKeys != "function"){
 		logRunError("Frame-0 key on " + oProp.getLabel() + " moved the channel's value to " +
 			oProp.getValue(0) + " (expected " + fAt0 + ") and this Daz build has no deleteKeys to undo it - check this channel at frame 0.");
-		return -1;
+		return DTH_ZERO_ROLLED_BACK;
 	}
 	oProp.deleteKeys(0, 0);
 	var iKeysAfter = oProp.getNumKeys();
@@ -405,7 +601,7 @@ function dthEnsureFrameZeroKey(oProp, iInterp){
 		logRunError("Frame-0 key rollback on " + oProp.getLabel() + " removed " +
 			(iKeysBefore + 1 - iKeysAfter) + " key(s) instead of 1 - check this channel's animation.");
 	}
-	return -1;
+	return DTH_ZERO_ROLLED_BACK;
 }
 
 /**********************************************************************
@@ -498,70 +694,157 @@ function setLinearInterp(oNodes){
 	// keys until they change it back or restart (documented in the gotchas).
 	Scene.setDefaultKeyInterpolationType(iInterp);
 
-	var aProps = collectInterpProps(oNodes);
-	print("Animated channels to set LINEAR interp:", aProps.length)
+	var aChannels = collectInterpChannels(oNodes);
+	print("Animated channels to set LINEAR interp:", aChannels.length)
 
 	var iKeys = 0, iLinear = 0, iUnverified = 0, iSpansNothing = 0, iStuck = 0;
 	var iFailedKeys = 0, iValueLost = 0, iZeroAdded = 0, iZeroFailed = 0;
-	var aStuckNames = [];
-	for(var i = 0; i < aProps.length; i++){
-		var oProp = aProps[i];
-		var iZero = dthEnsureFrameZeroKey(oProp, iInterp);
-		if(iZero > 0) iZeroAdded++;
-		else if(iZero < 0) iZeroFailed++;
+	// Per-kind naming budget (see logRunKeyProblem) and the entries that made it
+	// in, kept per kind so each message can quote its OWN keys.
+	var oNamed = {};
+	var aFailed = [], aStuck = [], aValueLost = [], aZeroFailed = [];
+	for(var i = 0; i < aChannels.length; i++){
+		var oChan = aChannels[i];
+		var oProp = oChan.prop;
+		var sZero = dthEnsureFrameZeroKey(oProp, iInterp);
+		if(sZero == DTH_ZERO_ADDED) iZeroAdded++;
+		else if(sZero == DTH_ZERO_DRIVEN || sZero == DTH_ZERO_REFUSED){
+			iZeroFailed++;
+			var oZeroEntry = logRunKeyProblem(oNamed, dthKeyProblemEntry("frame-zero", oChan, -1, 0, undefined,
+				(sZero == DTH_ZERO_DRIVEN)
+					? "driven by a controller - keying frame 0 from getValue would double-apply the controller's contribution"
+					: "no key could be made at frame 0"));
+			if(oZeroEntry) aZeroFailed.push(oZeroEntry);
+		}
+		// DTH_ZERO_ROLLED_BACK is deliberately absent: it already logged a run
+		// ERROR naming the channel, and counting it here too would report one
+		// problem twice, once as fatal and once as a warning.
 		var iNumKeys = oProp.getNumKeys();
 		// A key that cannot be re-keyed is only harmless when it is the
 		// channel's ONE key and it sits at frame 0, where interpolation spans
 		// nothing. Every immovable channel measured was exactly that — but ASK
 		// this scene rather than repeat that measurement as if it were a law.
 		var bBenignIfStuck = (iNumKeys == 1 && oProp.getKeyTime(0) == 0);
-		var bNamed = false;   // one channel contributes ONE name, not one per key
+		var bCanRead = (typeof oProp.getKeyInterpolationType == "function");
+		// One channel contributes ONE name per kind, not one per key: a channel
+		// with 200 bad keys must not spend the whole budget the four keys on
+		// four other channels needed.
+		var oChanNamed = {};
 		for(var j = 0; j < iNumKeys; j++){
 			iKeys++;
 			var sResult = dthStampKeyLinear(oProp, j, iInterp);
-			if(sResult == DTH_KEY_LINEAR) iLinear++;
-			else if(sResult == DTH_KEY_UNVERIFIED) iUnverified++;
-			else if(sResult == DTH_KEY_VALUE_LOST) iValueLost++;
-			else if(sResult == DTH_KEY_FAILED) iFailedKeys++;
-			else if(bBenignIfStuck) iSpansNothing++;
-			else {
-				iStuck++;
-				if(!bNamed && aStuckNames.length < 10){
-					aStuckNames.push(oProp.getLabel());
-					bNamed = true;
-				}
+			if(sResult == DTH_KEY_LINEAR){ iLinear++; continue; }
+			if(sResult == DTH_KEY_UNVERIFIED){ iUnverified++; continue; }
+			// A key that is its channel's ONLY key, at frame 0, interpolates
+			// across nothing — there is no second key to travel to. So its
+			// interpolation type cannot change any value anywhere, and whether
+			// the stamp took is not a fact worth reporting.
+			//
+			// This used to apply to IMMOVABLE only, and that was an accident of
+			// how the measurement was made rather than a rule: the sample that
+			// taught us about spans-nothing channels was locked/driven, so they
+			// all refused the nudge. A channel whose value DOES move and still
+			// won't read back LINEAR is the same nothing when it holds one key at
+			// frame 0 — and that is precisely what the first real report found
+			// (2026-08-17): 4 of 7968 keys, all frame 0, all Bone Fill/Edge
+			// Opacity — VIEWPORT DRAWING dials under /Display/Scene View/Bones,
+			// which nobody animated at all. They only reached the walk because
+			// Daz reports an implicit frame-0 key for never-keyed channels. The
+			// old classification turned that into a warning on a real character's
+			// run report, and before v79 into a blocked export.
+			if(bBenignIfStuck && (sResult == DTH_KEY_IMMOVABLE || sResult == DTH_KEY_FAILED)){
+				iSpansNothing++; continue;
 			}
+			var sKind, sReason;
+			if(sResult == DTH_KEY_VALUE_LOST){
+				iValueLost++; sKind = "value-lost";
+				sReason = "the nudge could not be put back - this key's VALUE is wrong";
+			} else if(sResult == DTH_KEY_FAILED){
+				iFailedKeys++; sKind = "failed";
+				sReason = "the value moved (so Daz rewrote the key) and it still does not read back LINEAR";
+			} else {
+				iStuck++; sKind = "stuck";
+				sReason = "the value would not move in either direction, so Daz never rewrote the key";
+			}
+			if(oChanNamed[sKind]) continue;
+			oChanNamed[sKind] = true;
+			// Read the interpolation back ONCE, here: the report should say what
+			// Daz actually holds, not merely that it isn't LINEAR. Affordable
+			// because this is the rare path — the fast one `continue`d above.
+			var iRead = bCanRead ? oProp.getKeyInterpolationType(j) : undefined;
+			var oEntry = logRunKeyProblem(oNamed,
+				dthKeyProblemEntry(sKind, oChan, j, oProp.getKeyTime(j), iRead, sReason));
+			if(!oEntry) continue;
+			if(sKind == "value-lost") aValueLost.push(oEntry);
+			else if(sKind == "failed") aFailed.push(oEntry);
+			else aStuck.push(oEntry);
 		}
 	}
 	print("LINEAR on", iLinear, "of", iKeys, "key(s);", iSpansNothing,
 		"span nothing;", iZeroAdded, "frame-0 key(s) made real");
+	// The list that was missing. A run reporting "4 of 7968 key(s) would not read
+	// back LINEAR" named nothing at all, so there was nothing to chase — not the
+	// node, not the dial, not the frame. Every named key goes to the Daz log AND
+	// into the run log's keyProblems, which is what the studio shows.
+	if(DTH_RUN_LOG.keyProblems.length > 0){
+		print("Key interpolation - the keys that could not be stamped (up to",
+			DTH_KEY_PROBLEM_CAP, "channels per kind; the counts below are exact):");
+		for(var q = 0; q < DTH_RUN_LOG.keyProblems.length; q++){
+			var oQ = DTH_RUN_LOG.keyProblems[q];
+			print("   ", oQ.kind + ":", dthKeyProblemLine(oQ), "-", oQ.reason);
+		}
+	}
 	// A single key at frame 0 on a locked transform or a hidden ERC controller
 	// cannot be re-keyed and does not need to be. Worth saying; not worth
 	// failing a run over. Everything below it IS.
 	if(iSpansNothing > 0){
 		print("NOTE:", iSpansNothing, "key(s) would not take a new value - each is its channel's only key, at frame 0, where interpolation spans nothing.");
 	}
-	if(iZeroFailed > 0){
-		print("WARNING:", iZeroFailed, "channel(s) kept an implicit frame-0 key (driven value, or no key could be made there) - frame 0 falls back to Daz's default interpolation on those.");
-	}
-	// A wrong VALUE is the worst thing this pass can leave behind - louder than
-	// any interpolation problem, and named first.
+	// A wrong VALUE is the worst thing this pass can leave behind - and the only
+	// one that still blocks the export, because it is the only one that makes a
+	// POSE FRAME wrong. Louder than any interpolation problem, and named first.
 	if(iValueLost > 0){
 		logRunError("Key interpolation: " + iValueLost + " key(s) could not be restored to their original value after the interpolation rewrite. Those keys are off by up to " +
-			DTH_INTERP_NUDGE + " - re-run the ROM and check them before exporting.");
+			DTH_INTERP_NUDGE + " - re-run the ROM and check them before exporting." +
+			dthKeyProblemSample(aValueLost, iValueLost));
+	}
+	/* Everything below is a WARNING, and that is a deliberate change (runtime
+	 * v79). It used to be logRunError, which counts as a run problem, which makes
+	 * ApplyDTHCharacter return false, which makes the generated script skip the
+	 * export entirely — so a run where 4 keys of 7968 kept the wrong
+	 * interpolation built the ROM and exported NOTHING, and the studio showed a
+	 * row marked "done" with no reason on it. Measured, on LaraCroft_G81.
+	 *
+	 * What a non-LINEAR key actually costs: the key's own VALUE is untouched (the
+	 * pass restores it and re-reads it, and a value it cannot restore is the
+	 * error above). Interpolation decides the curve BETWEEN keys, so every keyed
+	 * pose frame is identical either way — the measured basis for that is in
+	 * .ai/gotchas-daz.md, from reading a shipped ROM .duf. A PoseAsset export
+	 * samples whole pose frames, so these keys do not change what ships.
+	 *
+	 * That is why they are reported rather than fatal. It is NOT a claim that
+	 * they are fine: they are named now, individually, in the Daz log and in the
+	 * studio, so the next person can decide with the channel in front of them
+	 * instead of a count. */
+	if(iZeroFailed > 0){
+		logRunWarning("Key interpolation: " + iZeroFailed + " channel(s) kept an implicit frame-0 key (driven value, or no key could be made there) - frame 0 falls back to Daz's default interpolation on those." +
+			dthKeyProblemSample(aZeroFailed, iZeroFailed));
 	}
 	if(iStuck > 0){
-		logRunError("Key interpolation: " + iStuck + " key(s) on multi-key or non-zero-frame channels would not take a new value, so they keep their old interpolation (e.g. " +
-			aStuckNames.join(", ") + ").");
+		logRunWarning("Key interpolation: " + iStuck + " key(s) on multi-key or non-zero-frame channels would not take a new value, so they keep their old interpolation. The keys' values are unchanged, so the exported pose frames are unaffected." +
+			dthKeyProblemSample(aStuck, iStuck));
 	}
 	if(iFailedKeys > 0){
-		logRunError("Key interpolation: " + iFailedKeys + " of " + iKeys +
-			" key(s) would not read back LINEAR. The ROM still builds, but those keys use Daz's default interpolation.");
+		logRunWarning("Key interpolation: " + iFailedKeys + " of " + iKeys +
+			" key(s) would not read back LINEAR, so they keep Daz's default interpolation. Their values are unchanged and every pose frame is exact - only the motion BETWEEN pose frames on those channels differs, which a PoseAsset export does not sample. The export was NOT blocked." +
+			dthKeyProblemSample(aFailed, iFailedKeys));
 	}
 	// Stamped, but this build cannot report interpolation back, so the pass has
-	// NOT been confirmed. Say that instead of counting them as wins.
+	// NOT been confirmed. Say that instead of counting them as wins — and do not
+	// block on it either: "this Daz cannot answer the question" is not evidence
+	// that the answer is bad, and blocking would make such a build unusable.
 	if(iUnverified > 0){
-		logRunError("Key interpolation: " + iUnverified + " key(s) were rewritten LINEAR but this Daz build has no getKeyInterpolationType, so none of it could be verified.");
+		logRunWarning("Key interpolation: " + iUnverified + " key(s) were rewritten LINEAR but this Daz build has no getKeyInterpolationType, so none of it could be verified.");
 	}
 }
 

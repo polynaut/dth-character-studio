@@ -76,6 +76,7 @@ export type {
   CharacterWithProject,
   MorphIndexEntry,
   RomRunFailedMorph,
+  RomRunKeyProblem,
   RomRunLog,
   RomRunSceneRun,
   ScanFrameCsv,

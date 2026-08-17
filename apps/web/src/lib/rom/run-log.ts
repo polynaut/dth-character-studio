@@ -20,6 +20,47 @@ export interface RomRunFailedMorph {
 }
 
 /**
+ * ONE key the Daz-side LINEAR interpolation pass could not stamp, named well
+ * enough to go and look at it (runtime v79).
+ *
+ * It exists because the counts alone were unchaseable: a run reporting "4 of
+ * 7968 key(s) would not read back LINEAR" told nobody which node, which dial or
+ * which frame — and until v79 that anonymous 4 also blocked the whole export.
+ * The runtime caps the list per kind (the message carries the exact totals).
+ */
+export interface RomRunKeyProblem {
+  /**
+   * The runtime's own kinds — `failed` (rewritten, still not LINEAR), `stuck`
+   * (the value would not move, so Daz never rewrote the key), `value-lost` (the
+   * key's VALUE is wrong — the one kind that still fails a run) and `frame-zero`
+   * (the channel kept Daz's implicit, un-typed key at frame 0). Kept as a plain
+   * string so a kind added by a newer runtime still displays instead of vanishing.
+   */
+  kind: string
+  /** The node's path in the scene tree, e.g. `Genesis9/hip/abdomenLower`. */
+  node: string
+  prop: string
+  /** The dial's display label, when it differs from `prop`. */
+  propLabel?: string
+  /** The property's group path in the Parameters pane, when Daz offered one. */
+  path?: string
+  /** Key index on the channel; -1 for a whole-channel problem (`frame-zero`). */
+  key: number
+  /**
+   * How many keys the channel holds. The number that answers "does this key's
+   * interpolation span anything?" — one key spans nothing, so it cannot matter.
+   * 0 in a log written before runtime v80 recorded it.
+   */
+  keys: number
+  /** -1 when the runtime could not resolve what a frame is worth. */
+  frame: number
+  /** What Daz reports for this key AFTER the pass, e.g. `CONSTANT (1)`. '' when
+   *  the Daz build has no `getKeyInterpolationType` to ask. */
+  interp: string
+  reason: string
+}
+
+/**
  * ONE scene's run inside a run log. A DTH Export batch works a row per scene,
  * so a log holds one of these per scene it ran — and every problem is
  * attributable to the scene that produced it, which is what lets the report
@@ -35,9 +76,19 @@ export interface RomRunSceneRun {
   finishedAt: string
   finishedAtMs: number
   framesTotal?: number
+  /** Errors and failed morphs only. A run can be `ok` and still have warnings —
+   *  that is the point of the split (see {@link RomRunSceneRun.warnings}). */
   ok: boolean
   errors: Array<string>
+  /**
+   * Problems the run reported that do NOT condemn the ROM: the export ran.
+   * A warning must still be shown — the failure this channel was added for was
+   * invisible, not harmless (a row marked "done" that exported nothing).
+   * Empty for a log written by a runtime older than v79.
+   */
+  warnings: Array<string>
   failedMorphs: Array<RomRunFailedMorph>
+  keyProblems: Array<RomRunKeyProblem>
 }
 
 /** The run log the generated ROM script writes into the character folder after
@@ -55,7 +106,9 @@ export interface RomRunLog {
   /** Flattened across every scene — the "what went wrong" view. Use
    *  {@link runs} whenever a problem has to be attributed to a scene. */
   errors: Array<string>
+  warnings: Array<string>
   failedMorphs: Array<RomRunFailedMorph>
+  keyProblems: Array<RomRunKeyProblem>
   unreadable?: boolean
 }
 
@@ -73,6 +126,26 @@ export function parseFailedMorphs(value: unknown): Array<RomRunFailedMorph> {
   })
 }
 
+/** The named key problems of one raw log record (absent before runtime v79). */
+export function parseKeyProblems(value: unknown): Array<RomRunKeyProblem> {
+  if (!Array.isArray(value)) return []
+  return value.map((k) => {
+    const entry = (k ?? {}) as Record<string, unknown>
+    return {
+      kind: typeof entry.kind === 'string' ? entry.kind : '',
+      node: typeof entry.node === 'string' ? entry.node : '',
+      prop: typeof entry.prop === 'string' ? entry.prop : '',
+      propLabel: typeof entry.propLabel === 'string' ? entry.propLabel : undefined,
+      path: typeof entry.path === 'string' ? entry.path : undefined,
+      key: typeof entry.key === 'number' ? entry.key : -1,
+      keys: typeof entry.keys === 'number' ? entry.keys : 0,
+      frame: typeof entry.frame === 'number' ? entry.frame : -1,
+      interp: typeof entry.interp === 'string' ? entry.interp : '',
+      reason: typeof entry.reason === 'string' ? entry.reason : '',
+    }
+  })
+}
+
 /** One scene's run out of a raw log record (v2 `runs[]` entry, or a whole v1
  *  log — which predates scene tagging and so lands under scene ''). */
 export function parseSceneRun(value: unknown): RomRunSceneRun {
@@ -85,7 +158,11 @@ export function parseSceneRun(value: unknown): RomRunSceneRun {
     framesTotal: typeof record.framesTotal === 'number' ? record.framesTotal : undefined,
     ok: record.ok === true,
     errors: Array.isArray(record.errors) ? record.errors.map((e) => String(e)) : [],
+    // Absent in every log written before runtime v79 — an older log simply has
+    // nothing to say here, which is not the same as having been clean.
+    warnings: Array.isArray(record.warnings) ? record.warnings.map((w) => String(w)) : [],
     failedMorphs: parseFailedMorphs(record.failedMorphs),
+    keyProblems: parseKeyProblems(record.keyProblems),
   }
 }
 
@@ -119,7 +196,9 @@ export function parseRomRunLogText(text: string): RomRunLog {
     ok: runs.length > 0 ? runs.every((r) => r.ok) : record.ok === true,
     runs,
     errors: runs.flatMap((r) => r.errors),
+    warnings: runs.flatMap((r) => r.warnings),
     failedMorphs: runs.flatMap((r) => r.failedMorphs),
+    keyProblems: runs.flatMap((r) => r.keyProblems),
     unreadable: record.unreadable === true || undefined,
   }
 }
@@ -146,7 +225,9 @@ export function mergeRomRunLogs(stored: RomRunLog, fresh: RomRunLog): RomRunLog 
     ok: runs.every((r) => r.ok),
     runs,
     errors: runs.flatMap((r) => r.errors),
+    warnings: runs.flatMap((r) => r.warnings),
     failedMorphs: runs.flatMap((r) => r.failedMorphs),
+    keyProblems: runs.flatMap((r) => r.keyProblems),
   }
 }
 
@@ -168,10 +249,14 @@ export function unreadableRomRunLog(): RomRunLog {
         finishedAtMs: Date.now(),
         ok: false,
         errors: [message],
+        warnings: [],
         failedMorphs: [],
+        keyProblems: [],
       },
     ],
     errors: [message],
+    warnings: [],
     failedMorphs: [],
+    keyProblems: [],
   }
 }

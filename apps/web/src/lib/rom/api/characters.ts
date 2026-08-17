@@ -7,7 +7,7 @@ import { withBusyCursor } from '../../busy-cursor.ts'
 import { ROM_RUN_LOG_FILE } from '@dth/rom'
 import { mergeRomRunLogs, parseRomRunLogText, unreadableRomRunLog } from '../run-log.ts'
 import type { RomRunLog } from '../run-log.ts'
-export type { RomRunFailedMorph, RomRunLog, RomRunSceneRun } from '../run-log.ts'
+export type { RomRunFailedMorph, RomRunKeyProblem, RomRunLog, RomRunSceneRun } from '../run-log.ts'
 
 import { LAST_ROM_RUN_FILE } from '../character-internals.ts'
 import * as storage from '../storage'

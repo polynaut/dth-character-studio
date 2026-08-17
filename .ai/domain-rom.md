@@ -180,6 +180,17 @@ backup first.
     kept so a log already on disk at upgrade time still reports.
   - Clicking a failure in the report SELECTS its scene before revealing the
     frame (route: `revealFailure`).
+  - **Four channels, and the split is the export gate** (runtime v79):
+    `errors` + `failedMorphs` are counted by `runLogProblemCount`, so they make
+    `ApplyDTHCharacter` return false and the generated script skip the export;
+    `warnings` and `keyProblems` are NOT — they are reported and stepped over.
+    File under `warnings` only what leaves the exported artifacts correct. The
+    studio renders the report on errors OR warnings (amber when the export ran,
+    red when it did not), so "reported" never means "invisible": the failure
+    that forced the split was a row marked `done` that exported nothing.
+    `keyProblems[]` carries the individual keys the interpolation pass could not
+    stamp — node path, dial, key index, frame, and what Daz reports instead of
+    LINEAR — capped per kind by the runtime, with exact counts in the message.
 - **Scene overrides fold into the ONE ROM script** (runtime v32): it embeds a
   `dthSceneOverrides` map (normalized open-scene path → the few config fields that
   scene changes — a fresh `extraFrames` for a ROM override, the G9 dials for an

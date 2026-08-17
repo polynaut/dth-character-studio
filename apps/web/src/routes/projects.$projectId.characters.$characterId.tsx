@@ -517,6 +517,7 @@ function CharacterPage({ onImportRemount }: { onImportRemount: () => void }) {
         folderChip={folderChip}
         folderMove={folderMove}
         hasRunProblems={runLog.hasRunProblems}
+        hasRunWarnings={runLog.hasRunWarnings}
       />
 
       {/* The editor body is isolated with `contain: layout paint`: when the sticky
@@ -527,7 +528,7 @@ function CharacterPage({ onImportRemount }: { onImportRemount: () => void }) {
           become their containing block and break their viewport positioning. */}
       <div className="contain-editor-body">
       {/* Above the tabs, so the report is visible from the Products tab too. */}
-      {runLog.romRunLog && !runLog.romRunLog.ok && (
+      {runLog.romRunLog && runLog.showRunReport && (
         <RomRunLogReport
           romRunLog={runLog.romRunLog}
           onDismiss={() => void runLog.dismiss()}

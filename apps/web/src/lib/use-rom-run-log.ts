@@ -49,7 +49,16 @@ export function useRomRunLog(
     }
   }, [projectId, characterId])
 
+  /** The run was not `ok` — the generated script skipped the export. Red. */
   const hasRunProblems = !!romRunLog && !romRunLog.ok
+  /**
+   * The run had something to say and exported anyway (runtime v79). Amber, and
+   * shown just as prominently: the whole reason this channel exists is that the
+   * silent version of it — an export refused over 4 keys, with a row marked
+   * "done" — was invisible outside the Daz log.
+   */
+  const hasRunWarnings = !!romRunLog && romRunLog.warnings.length > 0
+  const showRunReport = hasRunProblems || hasRunWarnings
   /**
    * Frames whose morphs failed — the matching editor rows go red — for the
    * SELECTED scene only.
@@ -86,5 +95,14 @@ export function useRomRunLog(
     setRevealFrame((prev) => ({ frame, nonce: (prev?.nonce ?? 0) + 1 }))
   }, [])
 
-  return { romRunLog, dismiss, hasRunProblems, failedFrames, revealFrame, revealFailedFrame }
+  return {
+    romRunLog,
+    dismiss,
+    hasRunProblems,
+    hasRunWarnings,
+    showRunReport,
+    failedFrames,
+    revealFrame,
+    revealFailedFrame,
+  }
 }

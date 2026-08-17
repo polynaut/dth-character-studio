@@ -888,5 +888,64 @@ v78 — v77 shipped a pass that reported 5333 of 7747 keys unfixable; this is th
       children of oNodeRoot and so already inside the final pass, and running
       the frame-0 half of it mid-build made a preserved morph's frame-0 value
       depend on whether the Physics block was enabled.
+v79 — the interpolation pass stops blocking exports it cannot explain, and names
+      every key it could not fix. Measured (LaraCroft_G81, DS 4.24, 2026-08-16):
+      a ROM run reported "4 of 7968 key(s) would not read back LINEAR", that
+      line was a run-log ERROR, an error makes ApplyDTHCharacter return false,
+      and the generated script's export gate then skipped the export entirely.
+      The Runner still logged the row as `done`, so the user saw a finished run,
+      no files, and no reason short of opening the Daz log - and the only way to
+      regenerate that character's THICK export was another full ROM run, which
+      hit the same gate. 0.05% of the keys held the whole Houdini side.
+      Two changes. (1) The run log grows a WARNINGS channel (plus keyProblems,
+      below) that runLogProblemCount does NOT count, and every interpolation
+      outcome moves into it: a key that keeps Daz's default interpolation has
+      its VALUE intact, so every keyed pose frame is exact and only the motion
+      BETWEEN pose frames differs - which a PoseAsset export does not sample.
+      The one outcome that still fails a run is DTH_KEY_VALUE_LOST, because that
+      one makes a pose frame itself wrong. A build with no
+      getKeyInterpolationType warns too: "this Daz cannot answer" is not
+      evidence of a bad answer, and blocking would make such a build unable to
+      export at all. (2) Every unfixable key is NAMED, in the Daz log and in the
+      run log's new keyProblems[]: node path, property name + label + Parameters
+      path, key index, FRAME (derived from the scene's time step, not a tick
+      count) and the interpolation Daz actually reports back, e.g. CONSTANT (1).
+      Capped per KIND (8 channels each, one entry per channel), so 5000 of one
+      kind cannot squeeze out the 4 of another - the counts in the message stay
+      exact. dthEnsureFrameZeroKey's three different `-1`s became named
+      DTH_ZERO_* outcomes for the same reason; its rolled-back case no longer
+      double-reports as both a fatal error and a warning count.
+      The studio surfaces both: the run report renders on errors OR warnings
+      (amber instead of red when the export ran), and the sticky-header button
+      says which it is.
+v80 — no unattended carrier opens a modal, and the missing-runtime message stops
+      lying about where it looked. Measured 2026-08-16 (DS 4.24): a MessageBox
+      in a Runner-executed script blocks forever on a click nobody can make, and
+      it presents as a HANG — the Daz log stops at "Loading script", nothing is
+      written after it, CPU goes flat, the row never completes, and the main
+      window looks normal (it is merely DISABLED; a visible-but-disabled
+      top-level window is the only reliable tell). It cost hours aimed at a
+      runtime that was fine. The three hidden carriers now print + log instead.
+      Two of them were missed by the obvious gate: .Build_ROM_Animation.dsa is
+      built with bulk = false yet the Runner executes it, so `unattended` is a
+      separate flag from `bulk`; and the export carrier's existing `unattended`
+      reached only the export block, leaving the wrong-scene and no-figure
+      guards — the two most likely to greet a batch — still able to block.
+      generate-golden.test.ts pins both halves: no hidden carrier may contain
+      MessageBox, and every visible one must (a human runs those).
+      Separately, dthRuntimeMissingError built its path from `dir_self`, which
+      the included runtime files reassign from getScriptFileName() — so the
+      "runtime is missing" message named Daz's resources folder, a place the
+      script never looked. It now reports from a `dthSelfDir` snapshot taken
+      before the first include.
+      Also v80: a key that is its channel's ONLY key at frame 0 is counted as
+      spanning nothing whatever the stamp did — the exemption used to require
+      that the value REFUSE to move, which was an artefact of the locked/driven
+      sample it was measured on, not a property of spans. Measured 2026-08-17 on
+      the first real v79 report: 4 findings of 7968 keys, every one a single
+      frame-0 key on Bone Fill/Edge Opacity (`/Display/Scene View/Bones`) — dials
+      nobody animated, which reach the walk at all only because Daz reports an
+      implicit frame-0 key for never-keyed channels (2599 channels collected vs
+      1590 genuinely animated in that character's saved ROM). Each reported key
+      now carries its channel's key COUNT for exactly that reason.
 ```
-

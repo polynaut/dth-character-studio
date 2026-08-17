@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { Link } from '@tanstack/react-router'
-import { ArrowLeft, CircleX, Pencil, Save, Undo2 } from 'lucide-react'
+import { ArrowLeft, CircleX, Pencil, Save, TriangleAlert, Undo2 } from 'lucide-react'
 
 import { Avatar } from '#/components/avatar.tsx'
 import { DirPathChip } from '#/components/dir-path-chip.tsx'
@@ -86,6 +86,7 @@ export function EditorHeader({
   folderChip,
   folderMove,
   hasRunProblems,
+  hasRunWarnings = false,
   dazLibraryConfigured,
   unrealProjects = NO_UNREAL_PROJECTS,
 }: {
@@ -99,6 +100,9 @@ export function EditorHeader({
   folderMove: { editValue: string; onMove: (next: string) => Promise<unknown> } | null
   /** Show the "errors in the last ROM run" scroll-up button. */
   hasRunProblems: boolean
+  /** The run exported but reported warnings — the same button, amber, and only
+   *  when there are no errors to out-rank it. */
+  hasRunWarnings?: boolean
   /** “My DAZ 3D Library” is set (DTH Export needs it for the job file + scripts). */
   dazLibraryConfigured: boolean
   /** The project's linked `.uproject`s — the DTH Export panel's third leg. */
@@ -202,16 +206,29 @@ export function EditorHeader({
             the button fades/slides in on scroll (scroll-timeline, same range as
             the subtitle collapse) so it's hidden at the top where the full report
             is already visible. Click scrolls back up to the report. */}
-        {hasRunProblems && (
+        {(hasRunProblems || hasRunWarnings) && (
           <div className="pointer-events-none absolute inset-x-0 top-5 z-20 flex justify-center">
             <button
               type="button"
               onClick={smoothScrollTop}
               title="Scroll to the run report"
-              className="runhint-scroll pointer-events-auto flex items-center gap-1.5 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-1.5 text-sm font-medium text-destructive shadow-sm transition-colors hover:bg-destructive/20"
+              className={
+                hasRunProblems
+                  ? 'runhint-scroll pointer-events-auto flex items-center gap-1.5 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-1.5 text-sm font-medium text-destructive shadow-sm transition-colors hover:bg-destructive/20'
+                  : 'runhint-scroll pointer-events-auto flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-sm font-medium text-amber-600 shadow-sm transition-colors hover:bg-amber-500/20 dark:text-amber-500'
+              }
             >
-              <CircleX className="size-4 shrink-0" />
-              Errors in the last ROM run — click to see details
+              {hasRunProblems ? (
+                <>
+                  <CircleX className="size-4 shrink-0" />
+                  Errors in the last ROM run — click to see details
+                </>
+              ) : (
+                <>
+                  <TriangleAlert className="size-4 shrink-0" />
+                  Warnings from the last ROM run — click to see details
+                </>
+              )}
             </button>
           </div>
         )}

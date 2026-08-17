@@ -174,6 +174,51 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   silent `return false` bail and does count. Trusting `ok` would report a clean
   one-scene export that missed a single dial as "1 of 1 scene failed" AND drop
   the Houdini + Unreal continuations, which both gate on `failed < total`.
+- **Anything that calls `logRunError` is deciding to cancel the export** — which
+  is easy to forget at the call site, and expensive when the finding does not
+  deserve it. Measured (LaraCroft_G81, DS 4.24, 2026-08-16): the interpolation
+  pass logged an error for **4 keys out of 7968**, so `ApplyDTHCharacter`
+  returned false, so the generated script's `dthRomOk === true` gate skipped the
+  export — while the Runner logged the row `done`. Downstream the character's
+  `daz-export/thick/` never existed and its Houdini scene failed its load-time
+  cook, and the only way to regenerate those files was another full ROM run,
+  which hit the same gate every time. Runtime v79 added `logRunWarning` for
+  exactly this: **NOT** counted by `runLogProblemCount`, so the export runs, and
+  still shown by the studio (amber). The test for which one to use is not
+  severity, it is *"are the exported artifacts still correct?"* — for a key that
+  kept the wrong interpolation the answer is yes (its VALUE is intact, and only
+  the motion between pose frames changes); for a key whose value could not be
+  restored it is no, and that one is still an error.
+- **A modal in an unattended run is indistinguishable from a hang, and it stops
+  the whole batch.** Measured 2026-08-16 (DS 4.24), and it cost hours: a
+  `MessageBox` in a Runner-executed carrier waits forever for a click nobody is
+  there to make. What you see is Daz's log stopping dead at `Loading script`
+  with **no** line after it, **no** "Script executed successfully", CPU flat,
+  the row never completing, and — the part that misleads — the main window
+  looking normal. It reads exactly like a hung `include()`, so the hunt starts
+  in the runtime, which is working perfectly. Two tells separate them: the
+  script's own side effects still happened (the failure log IS written, with the
+  right content and timestamp), and the main window is *disabled* — enumerate
+  top-level windows and look for a VISIBLE-but-DISABLED one, the signature of a
+  modal owning it; a title-only scan misses it.
+  So: **hidden (dot-prefixed) carriers never open a dialog** — that is what
+  hidden means here, and it is pinned by a test in `generate-golden.test.ts`.
+  The trap is that "unattended" is not the same as "bulk": `.Build_ROM_Animation.dsa`
+  is built with `bulk = false` (it wants the interactive script's shape) and is
+  still executed by the Runner, so gating dialogs on `bulk` left exactly that
+  carrier able to hang a run. `unattended` is its own flag for that reason. The
+  same flag existed on the export script but reached only the export BLOCK, so
+  the two guards that fire FIRST (wrong scene, no figure) could still block.
+- **A count is not a finding.** The same run reported its 4 bad keys with no
+  node, no dial, no key index and no frame — the pass had every one of them in
+  hand and threw them away. Nothing could be chased without patching the runtime
+  first. Since v79 each unfixable key is named in both the Daz log and the run
+  log's `keyProblems[]`, including **the interpolation Daz actually reports
+  back** (`CONSTANT (1)`) rather than only "not LINEAR", and the frame is
+  derived from `Scene.getTimeStep()` — `getKeyTime` returns TICKS, and a tick
+  count printed as a frame number is a wrong answer, not a raw one. Cap such a
+  list per KIND, never as one shared pool: the interesting kind is usually the
+  rare one, and a shared cap lets a flood of the common kind erase it.
 - **`App.openFile(path, false)` replaces the current scene without a save
   prompt** — relied on by both open-in-running-Daz paths: the forwarded one-shot
   `.dsa` bridge (`api/attachments.ts` `openSceneInRunningDaz`) and the Runner's
