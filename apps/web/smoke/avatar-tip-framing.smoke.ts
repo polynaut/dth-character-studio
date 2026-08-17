@@ -141,3 +141,63 @@ test('pre-G9: the Daz scene card lifts less — and the Houdini card does NOT mo
     { kind: 'houdini', translate: '-2% -17%' },
   ])
 })
+
+// The LANDSCAPE scene tiles (the footer's pills, the Tools scan rows) are a
+// third framing: a `-50%` lift plus a per-size px correction. Those corrections
+// are only derivable because of an invariant — within one framing every size
+// lands the SAME painted lift, since where the face sits in a tip has nothing to
+// do with how big the tile is. The px term exists purely to cancel the differing
+// `-50%` baselines (of the CONTENT box: the frame's border-2 is 4px of it).
+// Asserting the painted pixels, not the classes, is what keeps that honest: a
+// size added with a mismatched pair reads fine in the source and clips the head
+// on screen. NOTE this can only cover the sizes a page actually renders — the
+// character page shows `md` alone. The invariant across ALL sizes (including
+// `sm`, whose pre-G9 value is derived rather than measured) is pinned by
+// `scene-tile-sizes.test.ts`.
+
+/** Each landscape tile's painted lift in px — the gap between the frame's inner
+ *  top edge and the image's painted top (`scale` is origin-top, so it leaves the
+ *  top edge put and the whole gap IS the translate). */
+const tileLifts = (page: Page) =>
+  page.evaluate(() =>
+    [...document.querySelectorAll('img')]
+      // LANDSCAPE frames only — by shape, not by class: `sm` lifts with
+      // `-translate-y-1/2` and `md` with a calc, and matching on the class text
+      // also swept in the portrait CARDS (`-translate-y-[17%]` contains the same
+      // substring), whose lift is a different framing with a different answer.
+      .filter((img) => {
+        const frame = img.parentElement as HTMLElement | null
+        return (
+          img.className.includes('scale-') && !!frame && frame.clientWidth > frame.clientHeight
+        )
+      })
+      .map((img) => {
+        const frame = img.parentElement as HTMLElement
+        const border = (frame.getBoundingClientRect().height - frame.clientHeight) / 2
+        return +(
+          img.getBoundingClientRect().top -
+          frame.getBoundingClientRect().top -
+          border
+        ).toFixed(1)
+      }),
+  )
+
+test('landscape tiles: the rendered sizes land their painted lift, per generation', async ({
+  page,
+}) => {
+  await openCharacter(page, 'G9')
+  // Scrolled: the scene footer only docks once the up-page cards leave.
+  await scrollPastTheCollapse(page)
+  const g9 = await tileLifts(page)
+  expect(g9.length).toBeGreaterThan(0)
+  // −14px: −50% of sm's 28px content box, and −50% of md's 36 plus its +4.
+  expect(g9).toEqual(g9.map(() => -14))
+
+  await openCharacter(page, 'G8.1')
+  await scrollPastTheCollapse(page)
+  const preG9 = await tileLifts(page)
+  expect(preG9.length).toBe(g9.length)
+  // −6px, from the +12 measured on a real G8.1 tip at `md`. Any size that drifts
+  // off this number is the mismatched-pair bug SCENE_TILE_SIZES exists to stop.
+  expect(preG9).toEqual(preG9.map(() => -6))
+})

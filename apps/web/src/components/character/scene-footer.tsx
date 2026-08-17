@@ -7,6 +7,8 @@ import { Button, cn, useModifierHeld } from '@dth/ui'
 import { PrimaryBadge } from '#/components/primary-badge.tsx'
 import { SceneLabel } from '#/components/character/scene-label.tsx'
 
+import type { GenesisVersion } from '@dth/rom'
+
 const stemOf = (p: string) => p.replace(/\\/g, '/').split('/').pop()?.replace(/\.duf$/i, '') ?? ''
 
 /** The "primary" role badge shown on the primary scene's footer card (compact variant). */
@@ -43,6 +45,7 @@ export interface SceneDockActions {
 export function SceneFooter({
   show,
   scenes,
+  genesis,
   primary,
   selected,
   onSelect,
@@ -51,6 +54,9 @@ export function SceneFooter({
   show: boolean
   /** Every linked scene path (the primary first, then extras). */
   scenes: Array<string>
+  /** The character's generation — Daz frames a G3/G8/G8.1 render higher in the
+   *  tip, so each pill's tile needs its own face lift. */
+  genesis: GenesisVersion
   /** The primary scene's path (`character.scenePath`) — gets the "primary" tag. */
   primary: string
   /** The currently selected scene's path (`effectiveScene`) — ringed green. */
@@ -166,6 +172,7 @@ export function SceneFooter({
                   <SceneLabel
                     scenePath={path}
                     name={nameOf(path)}
+                    genesis={genesis}
                     accentBar
                     size="lg"
                     subline={isPrimary ? primaryTag : undefined}
