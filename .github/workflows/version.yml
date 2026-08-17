@@ -21,16 +21,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          # The changesets action PUSHES changeset-release/main with whatever
-          # credentials this checkout persists — the env token below only
-          # reaches its PR create/update API calls. Without an explicit token
-          # here the push went out as github-actions[bot] (default
-          # GITHUB_TOKEN), and a bot-pushed head trips the public-repo
-          # first-time-contributor approval gate: every validation run on the
-          # version PR sat "action_required" until a manual "Approve and run"
-          # (the PR's AUTHOR was the PAT owner all along, which is why the PR
-          # itself looked right). Hand the PAT to the push side too and the
-          # checks fire unattended. Measured 2026-08-03; see .ai/gotchas.md.
+          # Under changesets/action v1 the changeset-release/main push used the
+          # credentials this checkout persisted, and a github-actions[bot] push
+          # tripped the public-repo first-time-contributor approval gate (every
+          # validation run sat "action_required"; measured 2026-08-03, see
+          # .ai/gotchas.md). v2 pushes via the GitHub API with its github-token
+          # input instead (push-with-git-cli defaults to false), so that input
+          # carries the PAT now — this one is kept as belt-and-braces so any
+          # git-side push also goes out as the PAT owner.
           token: ${{ secrets.CHANGESETS_TOKEN || secrets.GITHUB_TOKEN }}
       # pnpm version comes from package.json "packageManager" (no `version:` here,
       # or action-setup errors on the duplicate).
@@ -40,20 +38,29 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - uses: changesets/action@198f833dd7d863100ea6e28967bc9a9fdefadb0a # v1
+      - uses: changesets/action@198f833dd7d863100ea6e28967bc9a9fdefadb0a # v2.1.0
         id: changesets
         with:
-          version: pnpm version-packages
-          title: '🚢 chore: version packages'
-          commit: 'chore: version packages'
+          # v2 renamed the inputs (version→version-script, title→pr-title,
+          # commit→commit-message) and made the token an INPUT — its API calls
+          # (PR create/update, and the branch push: v2's default
+          # push-with-git-cli:false pushes via the API, not the checkout's git
+          # credentials) authenticate with github-token, no longer with an env
+          # var. Prefer the PAT (secret CHANGESETS_TOKEN): GitHub deliberately
+          # does NOT re-trigger `on: pull_request` workflows for PRs opened by
+          # GITHUB_TOKEN, so a version PR authored by it gets no CI runs and
+          # (with required checks on main) can't be merged without manual
+          # close/reopen. A PAT-authored PR fires the checks normally — no
+          # babysitting. Falls back to GITHUB_TOKEN when the secret is absent.
+          # See docs/devops.md.
+          github-token: ${{ secrets.CHANGESETS_TOKEN || secrets.GITHUB_TOKEN }}
+          version-script: pnpm version-packages
+          pr-title: '🚢 chore: version packages'
+          commit-message: 'chore: version packages'
         env:
-          # Prefer a PAT / GitHub App token (secret CHANGESETS_TOKEN) over the
-          # default GITHUB_TOKEN. GitHub deliberately does NOT re-trigger
-          # `on: pull_request` workflows for PRs opened by GITHUB_TOKEN, so the
-          # version PR gets no CI runs and (with required checks on main) can't
-          # be merged without manually closing/reopening it. A PAT-authored PR
-          # fires the checks normally — no babysitting. Falls back to
-          # GITHUB_TOKEN when the secret is absent (old behaviour). See docs/devops.md.
+          # Still needed alongside the input: @changesets/get-github-info reads
+          # env GITHUB_TOKEN inside `pnpm version-packages` (changelog-github
+          # resolves PR/commit/author links through it) and fails loud without.
           GITHUB_TOKEN: ${{ secrets.CHANGESETS_TOKEN || secrets.GITHUB_TOKEN }}
 
       # The action writes an npm-centric boilerplate intro ("…publish to npm
@@ -61,12 +68,14 @@ jobs:
       # for this repo — everything IS automated. Replace the intro with what
       # merging actually does, keep the generated "# Releases" section.
       - name: De-boilerplate the version PR description
-        if: steps.changesets.outputs.pullRequestNumber
+        # v2 renamed the output pullRequestNumber → pr-number (hyphen forces
+        # the bracket syntax).
+        if: steps.changesets.outputs['pr-number']
         env:
           GH_TOKEN: ${{ secrets.CHANGESETS_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          num='${{ steps.changesets.outputs.pullRequestNumber }}'
+          num='${{ steps.changesets.outputs['pr-number'] }}'
           body=$(gh pr view "$num" --repo "$GITHUB_REPOSITORY" --json body -q .body)
           case "$body" in
             *'# Releases'*) ;;
