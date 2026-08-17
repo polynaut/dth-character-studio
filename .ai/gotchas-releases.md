@@ -9,13 +9,14 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   `latest.json` is right — a broken one can't be fixed in place.
 - **The version PR's checks sat `action_required` until manually approved — and
   bulk-approving stale runs cancels the current head's run** (measured
-  2026-08-03, the v0.61 train). Two separate mechanisms:
-  the changesets action pushes `changeset-release/main` with the credentials
-  `actions/checkout` persists, and `CHANGESETS_TOKEN` only reached the action's
-  env (PR create/update API) — so the PR's AUTHOR was the PAT owner while every
-  push was `github-actions[bot]`, and a bot-pushed head trips the public-repo
-  first-time-contributor approval gate on each refresh (fixed: the checkout now
-  gets `token:` too). Separately, ALL of a PR's validation runs share one
+  2026-08-03, the v0.61 train). Two separate mechanisms. The first is resolved:
+  a `github-actions[bot]`-pushed head trips the public-repo
+  first-time-contributor approval gate on each refresh, and under
+  changesets/action v1 the branch push used the checkout's persisted
+  credentials while the PAT only reached the PR API — the why and the current
+  v2 token plumbing live as comments in `version.yml` (the PAT now feeds the
+  `github-token` input, which v2 uses for the API-side branch push too). The
+  second is still live: ALL of a PR's validation runs share one
   concurrency group (`validate-refs/pull/<n>/merge`, cancel-in-progress), so
   approving/re-running several held runs in one sweep lets the LAST click
   cancel the in-flight ones — the survivor can green-light a STALE head while
