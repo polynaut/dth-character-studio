@@ -150,7 +150,7 @@ if (process.argv.includes('--audit')) {
   for (const t of TRIGGERS) {
     if (!t.anchor) continue
     if (t.anchor.includes('\n'))
-      fail('MULTILINE', t, `anchor spans a line break, so re-wrapping the paragraph would kill it`)
+      fail('MULTILINE', t, 'anchor spans a line break, so re-wrapping the paragraph would kill it')
     const text = doc(t.doc)
     const found = bullet(text, t.anchor)
     if (!found) {

@@ -47,9 +47,9 @@ jobs:
       # injected, with nothing on screen to say so. The audit was already a
       # written ritual ("run it after a doc rewrite") and a doc CORRECTION still
       # walked past it. So it is a check now, not a reminder — the same call this
-      # repo made for branch tracking. `--audit` catches all three quiet deaths
-      # (stale / ambiguous / truncated-past-the-anchor); the test asserts the
-      # payload a session actually receives.
+      # repo made for branch tracking. `--audit` catches all four quiet deaths
+      # (stale / ambiguous / truncated-past-the-anchor / multiline); the test
+      # asserts the payload a session actually receives.
       - name: Gotcha hooks (anchors resolve + payload is delivered)
         run: |
           node .claude/hooks/inject-gotchas.mjs --audit
