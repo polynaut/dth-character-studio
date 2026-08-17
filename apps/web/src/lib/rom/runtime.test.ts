@@ -55,7 +55,7 @@ const RUNTIME_ASSETS = [
 // Bump this together with RUNTIME_VERSION whenever a runtime file legitimately
 // changes (this run prints the new value in the failure message).
 const EXPECTED_RUNTIME_HASH =
-  '95c0a921a04a160b095f28064b9908273a607433c44b146ffe0ce9ec3c733f4f'
+  'ac3d01fe729d994a3b6678b9fca2dcb0a2c56f184935f7b7fc86613d79be5e7d'
 
 function runtimeHash(): string {
   const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
@@ -1037,14 +1037,26 @@ function fakeOwner(props: Array<FakeProp>) {
   }
 }
 
-/** A scene node carrying its dials directly (the `props` list). */
-function fakeNode(label: string, props: Array<FakeProp> = [], children: Array<unknown> = []) {
+/** A scene node. `props` are the dials on the NODE; `objProps` the ones on its
+ *  DzObject — Daz puts them in either place, and is not obliged to put both in
+ *  the same one, which is the case that has to be faked to be tested at all. */
+function fakeNode(
+  label: string,
+  props: Array<FakeProp> = [],
+  children: Array<unknown> = [],
+  objProps: Array<FakeProp> | null = null,
+) {
   return {
     ...fakeOwner(props),
     getLabel: () => label,
     getNodeChildren: () => children,
-    getObject: () => null,
+    getObject: () => (objProps ? fakeOwner(objProps) : null),
   }
+}
+
+/** The three dials a mesh normally carries, spelled as this runtime guesses. */
+function meshDials(): Array<FakeProp> {
+  return [dial('SubDIALevel'), dial('SubDRenderLevel'), resolutionDial()]
 }
 
 interface SubdModule {
@@ -1073,36 +1085,54 @@ describe('mesh SubD stamp (DthUtils.dsa)', () => {
     const { mod, lines } = loadSubd()
     const view = dial('SubDIALevel', 'SubDivision Level')
     const render = dial('SubDRenderLevel', 'Render SubD Level')
-    mod.dthApplySubDLevel(fakeNode('Genesis9', [view, render]), 3)
+    mod.dthApplySubDLevel(fakeNode('Genesis9', [view, render, resolutionDial()]), 3)
     expect(view.getValue()).toBe(3)
     expect(render.getValue()).toBe(3)
     expect(mod.DTH_RUN_LOG.warnings).toEqual([])
-    expect(lines.join('\n')).toContain('stamped on 1 node(s)')
+    expect(lines.join('\n')).toContain('stamped on 1 of 1 node(s)')
   })
 
   it('finds the dials by SHAPE when the names are not the ones we guessed', () => {
     // The whole point of the fallback: these two names appear nowhere in the
     // runtime, and the pass still has to land both levels — and SAY what it
-    // found, so the real spelling can be pinned after one live run.
+    // found, so the real spelling can be pinned after one live run. The
+    // resolution enum is guessed just as blindly, so it is reported too.
     const { mod, lines } = loadSubd()
     const view = dial('MeshSubdLevelSomething', 'Subd Level')
     const render = dial('MeshSubdLevelRenderish', 'Render Subd Level')
-    mod.dthApplySubDLevel(fakeNode('Genesis9', [view, render]), 2)
+    mod.dthApplySubDLevel(fakeNode('Genesis9', [view, render, resolutionDial()]), 2)
     expect(view.getValue()).toBe(2)
     expect(render.getValue()).toBe(2)
     expect(lines.join('\n')).toContain("viewport dial 'MeshSubdLevelSomething'")
     expect(lines.join('\n')).toContain("render dial 'MeshSubdLevelRenderish'")
+    expect(lines.join('\n')).toContain("resolution 'lodlevel'")
+  })
+
+  it('asks the node AND its object, filling each dial independently', () => {
+    // Daz keeps these on the node for some meshes and on the DzObject for
+    // others, and nothing says it keeps both in the same place. A search that
+    // stops at the first owner to answer ANYTHING sets the viewport level and
+    // leaves the render one untouched — the exact mismatch this pass exists to
+    // remove, produced by the pass itself.
+    const { mod } = loadSubd()
+    const view = dial('SubDIALevel')
+    const render = dial('SubDRenderLevel')
+    const res = resolutionDial()
+    mod.dthApplySubDLevel(fakeNode('Genesis9', [view], [], [render, res]), 3)
+    expect([view.getValue(), render.getValue(), res.getValue()]).toEqual([3, 3, 1])
+    expect(mod.DTH_RUN_LOG.warnings).toEqual([])
   })
 
   it('reaches every node under the figure, and skips the ones with no dials', () => {
     const { mod } = loadSubd()
-    const graftView = dial('SubDIALevel')
-    const graftRender = dial('SubDRenderLevel')
+    const [graftView, graftRender] = [dial('SubDIALevel'), dial('SubDRenderLevel')]
     const bone = fakeNode('l_thigh')
-    const graft = fakeNode('GoldenPalace_G9', [graftView, graftRender])
-    const rootView = dial('SubDIALevel')
-    const rootRender = dial('SubDRenderLevel')
-    mod.dthApplySubDLevel(fakeNode('Genesis9', [rootView, rootRender], [bone, graft]), 1)
+    const graft = fakeNode('GoldenPalace_G9', [graftView, graftRender, resolutionDial()])
+    const [rootView, rootRender] = [dial('SubDIALevel'), dial('SubDRenderLevel')]
+    mod.dthApplySubDLevel(
+      fakeNode('Genesis9', [rootView, rootRender, resolutionDial()], [bone, graft]),
+      1,
+    )
     expect(rootView.getValue()).toBe(1)
     expect(graftRender.getValue()).toBe(1)
     // A bone has no subdivision to stamp — passed over in silence, never a
@@ -1117,12 +1147,54 @@ describe('mesh SubD stamp (DthUtils.dsa)', () => {
     const { mod } = loadSubd()
     const view = dial('SubDIALevel')
     const render = dial('SubDRenderLevel', 'Render SubD Level', 1)
-    mod.dthApplySubDLevel(fakeNode('Boots', [view, render]), 4)
+    mod.dthApplySubDLevel(fakeNode('Boots', [view, render, resolutionDial()]), 4)
     expect(mod.DTH_RUN_LOG.warnings).toHaveLength(1)
     expect(mod.DTH_RUN_LOG.warnings[0]).toContain('Boots')
     expect(mod.DTH_RUN_LOG.warnings[0]).toContain('render refused')
     // A warning, never an error: the export still ships, carrying the scene's
     // own subdivision (`errors` is what cancels it).
+    expect(mod.DTH_RUN_LOG.errors).toEqual([])
+  })
+
+  it('counts every refusal exactly, and caps only the NAMES', () => {
+    // A capped count reads as a small problem. 20 meshes refusing a level is
+    // not a small problem, and the run log has to be able to say so without
+    // naming all 20 (DTH_SUBD_REPORT_CAP) — the same contract the key-problem
+    // report already keeps.
+    const { mod } = loadSubd()
+    const kids: Array<ReturnType<typeof fakeNode>> = []
+    for (let i = 0; i < 20; i++) {
+      kids.push(fakeNode(`Item${i}`, [dial('SubDIALevel', `v${i}`, 0), dial('SubDRenderLevel', `r${i}`, 0)]))
+    }
+    mod.dthApplySubDLevel(fakeNode('Genesis9', meshDials(), kids), 4)
+    const warning = mod.DTH_RUN_LOG.warnings.join('\n')
+    expect(warning).toContain('did not fully take on 20 of 21 node(s)')
+    expect(warning).toContain('not stamped at all (20)')
+    expect(warning).toContain('(+12 more)')
+  })
+
+  it('separates a half-stamped node from one that took nothing, per kind', () => {
+    // Half a stamp and no stamp are different problems — a flood of one must
+    // not push the other out of the report, so each kind keeps its own budget
+    // and its own exact count.
+    const { mod } = loadSubd()
+    const half = fakeNode('Jacket', [dial('SubDIALevel'), dial('SubDRenderLevel', 'r', 1), resolutionDial()])
+    const none = fakeNode('Boots', [dial('SubDIALevel', 'v', 0), dial('SubDRenderLevel', 'r2', 0)])
+    mod.dthApplySubDLevel(fakeNode('Genesis9', meshDials(), [half, none]), 4)
+    const warning = mod.DTH_RUN_LOG.warnings.join('\n')
+    expect(warning).toContain('partly stamped (1): Jacket')
+    expect(warning).toContain('not stamped at all (1): Boots')
+  })
+
+  it('warns when the level reached NOTHING, instead of reporting a clean run', () => {
+    // The likeliest real-world failure while the dial spellings are unverified:
+    // no node answers, so nothing is stamped and nothing refuses either. Left
+    // to `print` alone the studio's report would show a clean run for a level
+    // that was never applied.
+    const { mod } = loadSubd()
+    mod.dthApplySubDLevel(fakeNode('Genesis9', [dial('SomethingElse')], [fakeNode('l_thigh')]), 2)
+    expect(mod.DTH_RUN_LOG.warnings).toHaveLength(1)
+    expect(mod.DTH_RUN_LOG.warnings[0]).toContain('was applied to nothing')
     expect(mod.DTH_RUN_LOG.errors).toEqual([])
   })
 
@@ -1141,6 +1213,20 @@ describe('mesh SubD stamp (DthUtils.dsa)', () => {
       0,
     )
     expect(res0.getValue()).toBe(0)
+    // At 0 there is nothing to switch to, so a missing enum is not a problem.
+    expect(mod0.DTH_RUN_LOG.warnings).toEqual([])
+  })
+
+  it('does not call a level stamped when the mesh stayed at Base', () => {
+    // The switch is a setter like any other, so it is read back like any other:
+    // dials set on a mesh that never left Base subdivide nothing, and reporting
+    // that as stamped is the silent no-op in its most convincing costume.
+    const { mod } = loadSubd()
+    const stuck = resolutionDial()
+    stuck.setValue = () => {} // refuses to leave Base
+    mod.dthApplySubDLevel(fakeNode('Genesis9', [dial('SubDIALevel'), dial('SubDRenderLevel'), stuck]), 2)
+    expect(mod.DTH_RUN_LOG.warnings).toHaveLength(1)
+    expect(mod.DTH_RUN_LOG.warnings[0]).toContain('High Res refused')
   })
 
   it('touches nothing at all when the character opted out', () => {

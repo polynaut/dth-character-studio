@@ -90,9 +90,19 @@ const MAX_IMAGE_LENGTH = 1_000_000
 const MAX_PATH_LIST = 1000
 
 /** Highest SubD level the studio will stamp (see `subdLevel`). A product cap,
- *  not a measured Daz limit: the picker offers 0-4, and a level past that costs
- *  memory in fourfold steps for detail an export does not carry. */
-const MAX_SUBD_LEVEL = 4
+ *  not a measured Daz limit: a level past this costs memory in fourfold steps
+ *  for detail an export does not carry. EXPORTED because the picker has to
+ *  offer exactly `0..MAX_SUBD_LEVEL` — a hardcoded list in the UI would be a
+ *  second source for one fact, and the schema would start rejecting a level the
+ *  UI still offered (or vice versa) the moment this number moved. */
+export const MAX_SUBD_LEVEL = 4
+
+/** Every stampable SubD level, in picker order. `-1` ("leave as-is") is not
+ *  here: it is the absence of a level, not one of them. */
+export const SUBD_LEVELS: ReadonlyArray<number> = Array.from(
+  { length: MAX_SUBD_LEVEL + 1 },
+  (_unused, i) => i,
+)
 
 /** One pre-defined DTH pose preset (.duf) from the DazToHue Poses folder. */
 export interface DthPoseAsset {

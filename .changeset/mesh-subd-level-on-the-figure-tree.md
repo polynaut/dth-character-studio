@@ -24,5 +24,8 @@ keeps behaving exactly as it did. A level a mesh refuses is reported as a warnin
 and the export still runs on that scene's own subdivision; it never cancels an
 export over what is a cosmetic mismatch.
 
-Not applied by the split **Export only** script, which re-exports the saved scene
-as it stands rather than rebuilding the ROM.
+**Export only** gets the level too, without stamping anything itself: it
+re-exports the saved ROM animation, which was written after the stamp and
+carries it. What follows is a staleness rule rather than a gap — a saved ROM
+carries the level it was built with, so changing the level reaches an export
+only once the ROM is rebuilt.

@@ -13,12 +13,15 @@ import {
   overrideLabelClass,
 } from '@dth/ui'
 
+import { SUBD_LEVELS } from '@dth/rom'
+
 import type { Character, SceneOverride } from '@dth/rom'
 import type { ReactNode } from 'react'
 
 /**
  * The character's identity block: hair items, the Genesis-9 dials (FACS / flexion
- * strengths, UE5 tear UV) which only exist on Genesis 9, and Gender at the bottom.
+ * strengths, UE5 tear UV) which only exist on Genesis 9, the Mesh SubD level
+ * (every generation, character-wide), and Gender at the bottom.
  *
  * Per-scene overrides are IMPLICIT — no toggle. With a non-primary Daz scene
  * selected each dial is editable but shows the primary scene's value muted (a "can
@@ -27,7 +30,9 @@ import type { ReactNode } from 'react'
  * label that swaps to a reset button on hover. `writeIdentity` stores the value and
  * derives the `identity.enabled` gate from "any dial differs". Genesis is set once
  * at creation (not shown here); Gender is character-level, never per-scene, and
- * READ-ONLY — derived from the primary scene (`primarySceneDerivation`).
+ * READ-ONLY — derived from the primary scene (`primarySceneDerivation`). The Mesh
+ * SubD level is character-level too, and editable on any scene: a level that
+ * could differ per scene would put back the very mismatch it exists to remove.
  */
 export function IdentitySection({
   character,
@@ -159,7 +164,11 @@ export function IdentitySection({
 
       {/* Mesh SubD level — character-level, every generation, and deliberately
           NOT per-scene: the whole point is one level everywhere, so a value that
-          could differ per scene would reintroduce the mismatch it removes. */}
+          could differ per scene would reintroduce the mismatch it removes. It
+          therefore sits OUTSIDE the fieldset above, and stays character-wide
+          even with a non-primary scene selected — which its dials do not, so
+          the popup has to say so or the neighbouring green override marks make
+          the wrong promise. */}
       <div>
         <Label className="mb-1">
           Mesh SubD level
@@ -181,6 +190,11 @@ export function IdentitySection({
                 behaved before this existed. A level above 0 also switches those meshes to High
                 Resolution, or the level would do nothing at all.
               </p>
+              <p>
+                Unlike the dials above it, this one is <strong>not per-scene</strong>: it
+                applies to every Daz scene on this character, whichever one is selected.
+                One level everywhere is the entire point.
+              </p>
             </div>
           </InfoPopup>
         </Label>
@@ -193,7 +207,9 @@ export function IdentitySection({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="-1">Leave as-is</SelectItem>
-            {[0, 1, 2, 3, 4].map((level) => (
+            {/* From the schema's own cap, never a hardcoded list — the picker
+                must not be able to offer a level `characterSchema` rejects. */}
+            {SUBD_LEVELS.map((level) => (
               <SelectItem key={level} value={String(level)}>
                 Level {level}
                 {level === 0 ? ' (base cage)' : ''}

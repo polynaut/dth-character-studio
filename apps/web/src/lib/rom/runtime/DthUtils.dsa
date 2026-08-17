@@ -696,16 +696,39 @@ function dthKeyedNodes(oNodeRoot){
  * does not matter. The candidate names are tried first only because a lookup is
  * cheap; when none resolves, the owner's property list is searched by SHAPE
  * (a dial whose name or label carries "subd" and "level", split on whether it
- * also says "render") and whatever is found is NAMED in the Daz log - so the
- * first real run reports the true spellings and they can be pinned here.
- * Nothing trusts a setter that merely didn't throw: every level is read back.
+ * also says "render"; the Base/High enum by "resolution" + "level" + having
+ * items) and whatever is found is NAMED in the Daz log - so the first real run
+ * reports the true spellings and they can be pinned here and in
+ * .ai/gotchas-daz.md.
+ *
+ * Nothing trusts a setter that merely didn't throw: every level AND the
+ * resolution switch is read back. And finding nothing to stamp anywhere is
+ * reported as a WARNING, not as a quiet success - with the spellings still
+ * unverified that is the likeliest way this pass fails.
  */
 var DTH_SUBD_VIEW_NAMES = ["SubDIALevel", "SubDivisionLevel"];
 var DTH_SUBD_RENDER_NAMES = ["SubDRenderLevel", "SubDivisionRenderLevel"];
-/** How many unstampable nodes get named in the run log before the list is cut.
+/** How many unstampable nodes get NAMED in the run log before the list is cut.
  *  Per KIND, never one shared pool - a flood of one kind must not erase the
- *  other, which is the rarer and more interesting one. */
+ *  other, which is the rarer and more interesting one. The COUNTS are always
+ *  exact and reported separately from the names; a capped count reads as a
+ *  small problem (same contract as DTH_KEY_PROBLEM_CAP). */
 var DTH_SUBD_REPORT_CAP = 8;
+
+/** A node's label, for a report line. Guarded like every other accessor in this
+ *  pass: it walks whatever the figure tree hands it. */
+function dthSubDLabel(oNode){
+	return oNode && typeof oNode.getLabel == "function" ? String(oNode.getLabel()) : "(unnamed node)";
+}
+
+/** "<what> (<exact count>): a, b, c (+N more)". The count is the REAL one and
+ *  only the names are capped - reporting the capped length as the count is how
+ *  30 refusals get read as 8. */
+function dthSubDReport(sWhat, iCount, aNames){
+	var sOut = sWhat + " (" + iCount + "): " + aNames.join(", ");
+	if(iCount > aNames.length) sOut += " (+" + (iCount - aNames.length) + " more)";
+	return sOut;
+}
 
 /** Every property of oOwner, or [] when it cannot be enumerated. Two shapes
  *  because DzElement subclasses do not agree on one: an indexed pair
@@ -743,22 +766,68 @@ function dthFindPropByNames(oOwner, aNames){
 	return null;
 }
 
-/** A SubD LEVEL dial found by shape rather than by name. bRender picks the
- *  render one, else the viewport one - the two are told apart by the word
- *  "render" appearing in either the name or the label, which is the only thing
- *  they can be assumed to differ by. */
-function dthDiscoverSubDProp(oOwner, bRender){
+/** Every dial this pass cares about on ONE owner, found by shape rather than by
+ *  name: the viewport level, the render level, and the Base/High resolution
+ *  enum. The two levels are told apart by the word "render" appearing in either
+ *  the name or the label, which is the only thing they can be assumed to differ
+ *  by; the enum is told from them by carrying ITEMS at all.
+ *
+ *  One sweep, not three, because on a figure the property list is long and this
+ *  shape search is the EXPECTED path for as long as the spellings above are
+ *  unverified - it runs for every node in the tree. */
+function dthDiscoverSubDDials(oOwner){
+	var oFound = { view: null, render: null, resolution: null };
 	var aProps = dthPropertyList(oOwner);
 	for(var i = 0; i < aProps.length; i++){
 		var oP = aProps[i];
 		var sName = typeof oP.getName == "function" ? String(oP.getName()) : "";
 		var sLabel = typeof oP.getLabel == "function" ? String(oP.getLabel()) : "";
 		var sBoth = (sName + " " + sLabel).toLowerCase();
+		if(sBoth.indexOf("level") < 0) continue;
 		// "subdivision" starts with "subd", so one test covers both spellings.
-		if(sBoth.indexOf("subd") < 0 || sBoth.indexOf("level") < 0) continue;
-		if((sBoth.indexOf("render") >= 0) == bRender) return oP;
+		if(sBoth.indexOf("subd") >= 0){
+			if(sBoth.indexOf("render") >= 0){ if(!oFound.render) oFound.render = oP; }
+			else if(!oFound.view) oFound.view = oP;
+			continue;
+		}
+		if(sBoth.indexOf("resolution") < 0 || oFound.resolution) continue;
+		if(typeof oP.getNumItems == "function" && typeof oP.getItem == "function") oFound.resolution = oP;
 	}
-	return null;
+	return oFound;
+}
+
+/**
+ * Every dial for ONE node, gathered across BOTH of its owners.
+ *
+ * Daz keeps these on the node for some meshes and on the node's OBJECT for
+ * others, and nothing guarantees it keeps both in the same place - so each dial
+ * is filled independently and the walk only stops once every slot it still
+ * needs is filled. Stopping at the first owner that answered ANYTHING is what
+ * leaves the viewport dial set and the render dial untouched, which is the one
+ * outcome this whole pass exists to remove.
+ *
+ * bNeedResolution is false at level 0 (nothing to switch to High), and it is
+ * what lets a node whose two levels both answered to a candidate NAME skip the
+ * property sweep entirely.
+ */
+function dthNodeSubDDials(oNode, bNeedResolution){
+	var aOwners = [oNode];
+	if(oNode && typeof oNode.getObject == "function"){
+		var oObj = oNode.getObject();
+		if(oObj) aOwners.push(oObj);
+	}
+	var oOut = { view: null, render: null, resolution: null };
+	for(var k = 0; k < aOwners.length; k++){
+		var oOwner = aOwners[k];
+		if(!oOut.view) oOut.view = dthFindPropByNames(oOwner, DTH_SUBD_VIEW_NAMES);
+		if(!oOut.render) oOut.render = dthFindPropByNames(oOwner, DTH_SUBD_RENDER_NAMES);
+		if(oOut.view && oOut.render && (oOut.resolution || !bNeedResolution)) break;
+		var oShape = dthDiscoverSubDDials(oOwner);
+		if(!oOut.view) oOut.view = oShape.view;
+		if(!oOut.render) oOut.render = oShape.render;
+		if(!oOut.resolution) oOut.resolution = oShape.resolution;
+	}
+	return oOut;
 }
 
 /** Set one level and PROVE it: true only when the dial reads back as iLevel.
@@ -771,26 +840,22 @@ function dthSetSubDProp(oProp, iLevel){
 	return Math.round(Number(oProp.getValue())) == iLevel;
 }
 
-/** Switch a mesh to its High Resolution item, so a stamped level above 0 is not
- *  a silent no-op: a mesh sitting at Base subdivides to nothing whatever its
- *  SubD dials say. The item is found by its own string (anything carrying
- *  "high"), never by a guessed index - an enum's ordering is not a contract. */
-function dthSetHighResolution(oOwner){
-	var aProps = dthPropertyList(oOwner);
-	for(var i = 0; i < aProps.length; i++){
-		var oP = aProps[i];
-		var sName = typeof oP.getName == "function" ? String(oP.getName()) : "";
-		var sLabel = typeof oP.getLabel == "function" ? String(oP.getLabel()) : "";
-		var sBoth = (sName + " " + sLabel).toLowerCase();
-		if(sBoth.indexOf("resolution") < 0 || sBoth.indexOf("level") < 0) continue;
-		if(typeof oP.getNumItems != "function" || typeof oP.getItem != "function") continue;
-		var iNum = oP.getNumItems();
-		for(var j = 0; j < iNum; j++){
-			var sItem = String(oP.getItem(j)).toLowerCase();
-			if(sItem.indexOf("high") < 0) continue;
-			if(typeof oP.setValue == "function") oP.setValue(j);
-			return true;
-		}
+/** Switch a mesh to its High Resolution item and PROVE it took - a mesh left
+ *  sitting at Base subdivides to nothing whatever its SubD dials say, so an
+ *  unproven switch is exactly how a stamped level becomes a silent no-op. The
+ *  item is found by its own string (anything carrying "high"), never by a
+ *  guessed index - an enum's ordering is not a contract. */
+function dthSetHighResolution(oProp){
+	if(!oProp || typeof oProp.getNumItems != "function" || typeof oProp.getItem != "function")
+		return false;
+	if(typeof oProp.setValue != "function" || typeof oProp.getValue != "function") return false;
+	var iNum = oProp.getNumItems();
+	for(var j = 0; j < iNum; j++){
+		var sItem = String(oProp.getItem(j)).toLowerCase();
+		if(sItem.indexOf("high") < 0) continue;
+		if(Math.round(Number(oProp.getValue())) == j) return true;
+		oProp.setValue(j);
+		return Math.round(Number(oProp.getValue())) == j;
 	}
 	return false;
 }
@@ -815,55 +880,74 @@ function dthApplySubDLevel(oNodeRoot, iLevel){
 	// an older studio says by carrying no key at all.
 	if(iLevel === undefined || iLevel === null || iLevel < 0) return;
 	var aNodes = dthKeyedNodes(oNodeRoot);
-	var iStamped = 0, iPartial = 0;
-	var aUnstamped = [];
-	var sFoundView = "", sFoundRender = "";
+	// Above 0 a level is inert while the mesh sits at Base, so the resolution
+	// enum is part of the stamp - at 0 there is nothing to switch to.
+	var bNeedRes = iLevel > 0;
+	// Exact tallies. iCandidates counts the nodes that HAVE something to stamp,
+	// which is what tells "this figure has 40 meshes and 2 refused" apart from
+	// "this build recognises no dial on this figure at all".
+	var iCandidates = 0, iFull = 0, iPartial = 0, iRefused = 0;
+	var aPartialNames = [], aRefusedNames = [];
+	var sFoundView = "", sFoundRender = "", sFoundRes = "";
 	for(var i = 0; i < aNodes.length; i++){
 		var oNode = aNodes[i];
 		if(!oNode) continue;
-		// The dials live on the node for some meshes and on its object for
-		// others, so both are asked before a node is called SubD-less.
-		var aOwners = [oNode];
-		if(typeof oNode.getObject == "function"){
-			var oObj = oNode.getObject();
-			if(oObj) aOwners.push(oObj);
-		}
-		var oView = null, oRender = null;
-		for(var k = 0; k < aOwners.length && !oView && !oRender; k++){
-			oView = dthFindPropByNames(aOwners[k], DTH_SUBD_VIEW_NAMES) ||
-				dthDiscoverSubDProp(aOwners[k], false);
-			oRender = dthFindPropByNames(aOwners[k], DTH_SUBD_RENDER_NAMES) ||
-				dthDiscoverSubDProp(aOwners[k], true);
-			// Above 0 the level means nothing while the mesh sits at its base
-			// resolution, so the same owner is switched to High first.
-			if((oView || oRender) && iLevel > 0) dthSetHighResolution(aOwners[k]);
-		}
-		if(!oView && !oRender) continue;
-		// Report the spellings ONCE (they are the same across a scene) - this
-		// is the line that turns the guesswork above into a measured fact.
-		if(oView && !sFoundView && typeof oView.getName == "function") sFoundView = String(oView.getName());
-		if(oRender && !sFoundRender && typeof oRender.getName == "function") sFoundRender = String(oRender.getName());
-		var bView = oView ? dthSetSubDProp(oView, iLevel) : false;
-		var bRender = oRender ? dthSetSubDProp(oRender, iLevel) : false;
-		if(bView && bRender){ iStamped++; continue; }
+		var oDials = dthNodeSubDDials(oNode, bNeedRes);
+		// A bone, a null or a light has no subdivision at all - passed over in
+		// silence, or a normal run would report hundreds of them.
+		if(!oDials.view && !oDials.render) continue;
+		iCandidates++;
+		// Report the spellings ONCE (they are the same across a scene) - this is
+		// the line that turns the guesswork above into a measured fact.
+		if(oDials.view && !sFoundView && typeof oDials.view.getName == "function")
+			sFoundView = String(oDials.view.getName());
+		if(oDials.render && !sFoundRender && typeof oDials.render.getName == "function")
+			sFoundRender = String(oDials.render.getName());
+		if(oDials.resolution && !sFoundRes && typeof oDials.resolution.getName == "function")
+			sFoundRes = String(oDials.resolution.getName());
+		// High Resolution FIRST: the levels below mean nothing until the mesh
+		// subdivides at all.
+		var bRes = bNeedRes ? dthSetHighResolution(oDials.resolution) : true;
+		var bView = oDials.view ? dthSetSubDProp(oDials.view, iLevel) : false;
+		var bRender = oDials.render ? dthSetSubDProp(oDials.render, iLevel) : false;
+		if(bView && bRender && bRes){ iFull++; continue; }
+		var sDetail = dthSubDLabel(oNode) +
+			" (viewport " + (oDials.view ? (bView ? "ok" : "refused") : "absent") +
+			", render " + (oDials.render ? (bRender ? "ok" : "refused") : "absent") +
+			(bNeedRes ? ", High Res " + (oDials.resolution ? (bRes ? "ok" : "refused") : "absent") : "") + ")";
 		// Half a stamp is the one outcome worth separating: it leaves the
-		// viewport and the render DISAGREEING, which is the exact condition
-		// this pass exists to remove.
-		if(bView || bRender) iPartial++;
-		if(aUnstamped.length < DTH_SUBD_REPORT_CAP){
-			aUnstamped.push(oNode.getLabel() +
-				" (viewport " + (oView ? (bView ? "ok" : "refused") : "absent") +
-				", render " + (oRender ? (bRender ? "ok" : "refused") : "absent") + ")");
+		// viewport and the render DISAGREEING, which is the exact condition this
+		// pass exists to remove. Each kind gets its OWN name budget - a flood of
+		// one must not erase the other, which is the rarer and more telling one.
+		if(bView || bRender || bRes){
+			iPartial++;
+			if(aPartialNames.length < DTH_SUBD_REPORT_CAP) aPartialNames.push(sDetail);
+		} else {
+			iRefused++;
+			if(aRefusedNames.length < DTH_SUBD_REPORT_CAP) aRefusedNames.push(sDetail);
 		}
 	}
-	print("SubD level " + iLevel + " stamped on " + iStamped + " node(s)" +
+	print("SubD level " + iLevel + " stamped on " + iFull + " of " + iCandidates + " node(s)" +
 		(sFoundView ? "; viewport dial '" + sFoundView + "'" : "") +
-		(sFoundRender ? ", render dial '" + sFoundRender + "'" : ""));
-	if(aUnstamped.length > 0){
-		logRunWarning("SubD level " + iLevel + " could not be set on " +
-			(iPartial > 0 ? iPartial + " node(s) fully and " : "") +
-			aUnstamped.length + " node(s) at all - they keep the scene's own subdivision: " +
-			aUnstamped.join(", "));
+		(sFoundRender ? ", render dial '" + sFoundRender + "'" : "") +
+		(sFoundRes ? ", resolution '" + sFoundRes + "'" : ""));
+	// Nothing to stamp ANYWHERE is not a quiet success. With the dial spellings
+	// still unverified this is the likeliest way the pass fails, and a run that
+	// only prints it leaves the studio's report saying the level was applied.
+	if(iCandidates === 0){
+		logRunWarning("SubD level " + iLevel + " was applied to nothing: no node under " +
+			dthSubDLabel(oNodeRoot) + " has a subdivision dial this runtime recognises, so the " +
+			"scene keeps its own subdivision. The dial names are unverified (see dthApplySubDLevel) " +
+			"- the Daz log line above names whatever was found.");
+		return;
+	}
+	var aParts = [];
+	if(iPartial > 0) aParts.push(dthSubDReport("partly stamped", iPartial, aPartialNames));
+	if(iRefused > 0) aParts.push(dthSubDReport("not stamped at all", iRefused, aRefusedNames));
+	if(aParts.length > 0){
+		logRunWarning("SubD level " + iLevel + " did not fully take on " + (iPartial + iRefused) +
+			" of " + iCandidates + " node(s) - they keep the scene's own subdivision. " +
+			aParts.join("; "));
 	}
 }
 

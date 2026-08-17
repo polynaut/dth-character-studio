@@ -962,13 +962,16 @@ v80 — no unattended carrier opens a modal, and the missing-runtime message sto
       resolution mesh subdivides to nothing). Carried as `config.subdLevel`,
       OMITTED when the character opted out — so an older script, which has no
       such key, means the same thing.
-      **The Daz property spellings are NOT measured.** The pass tries
-      `SubDIALevel`/`SubDRenderLevel` first, falls back to searching the
-      node's (and its object's) property list by shape, and PRINTS whichever
-      dial it found — so the first live run reports the real names and they
-      can be pinned. Every level is read back; one that will not take is a
-      run WARNING (the export is still correct — the scene keeps its own
-      subdivision), never an error.
+      **The Daz property spellings are NOT measured** — the full rule, and
+      where the real names get pinned, is in `.ai/gotchas-daz.md`. In short:
+      candidate names first, then a shape search of the node's AND its
+      object's property lists (each dial filled independently — the two are
+      not guaranteed to share an owner), and every setter read back, the
+      Base/High enum included. A level that will not take is a run WARNING
+      (the export is still correct — the scene keeps its own subdivision),
+      never an error; so is finding nothing to stamp at all, which while the
+      spellings are unverified is the likeliest outcome and the one a
+      `print`-only report would hide.
       The split `Export_…`/`.Bulk_Export_Only` carrier does not stamp, and
       does not need to: its job rows open the SAVED ROM animation
       (`rom-animations/<stem>_ROM.duf`), which the ROM script writes AFTER
