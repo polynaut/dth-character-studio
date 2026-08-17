@@ -1097,6 +1097,32 @@ describe('characterSchema — v32 morph-row node scope (additive)', () => {
   })
 })
 
+// v33 added `subdLevel` — additive with a -1 default, so there is no migrate
+// step. The default is the whole safety argument: -1 means "leave the scene's
+// own subdivision alone", which is exactly what every pre-v33 character did, so
+// nobody's ROM changes by being read on the new build.
+describe('characterSchema — v33 mesh SubD level (additive)', () => {
+  const base = { id: 'c1', name: 'Electra', createdAt: '2026-01-01', updatedAt: '2026-01-01' }
+
+  it('reads a v32 definition as "leave as-is", never as a level', () => {
+    const parsed = characterSchema.parse({ ...base, schemaVersion: 32 })
+    expect(parsed.subdLevel).toBe(-1)
+  })
+
+  it('round-trips a stored level, 0 included', () => {
+    // 0 is a REAL level (the base cage), not another spelling of "off" — which
+    // is the reason "off" had to be -1 rather than 0 in the first place.
+    expect(characterSchema.parse({ ...base, subdLevel: 0 }).subdLevel).toBe(0)
+    expect(characterSchema.parse({ ...base, subdLevel: 3 }).subdLevel).toBe(3)
+  })
+
+  it('refuses a level outside the offered range, rather than clamping it', () => {
+    expect(() => characterSchema.parse({ ...base, subdLevel: 5 })).toThrow()
+    expect(() => characterSchema.parse({ ...base, subdLevel: -2 })).toThrow()
+    expect(() => characterSchema.parse({ ...base, subdLevel: 1.5 })).toThrow()
+  })
+})
+
 describe('characterSchema — v31 autoBase default flip (false → true)', () => {
   const now = '2026-08-11T00:00:00.000Z'
   const v30Character = (): Record<string, any> => ({
