@@ -96,6 +96,13 @@ contains('points at the source doc', sample, '.ai/gotchas-desktop.md')
 
 /* Heading-anchored facts: the ones the section walk can overshoot. */
 contains('heading-anchored fact survives the cut', edit('D:\\dth\\apps\\desktop\\src\\windows.rs', 'x2'), 'native title')
+/* Re-anchored away from the doc's line wrap (it used to span the break) — assert
+   the bullet still arrives, not merely that the shorter phrase resolves. */
+contains(
+  'wrap-independent anchor still delivers',
+  edit('D:\\dth\\apps\\desktop\\src\\unreal_install.rs', 'x2b'),
+  'no 5.8 key',
+)
 contains('…and the one 5 KB into its section', edit('D:\\dth\\apps\\desktop\\src\\daz.rs', 'x3'), 'launch_daz_studio')
 contains('…and the frame-math invariant', edit('D:\\dth\\packages\\rom\\src\\frames.ts', 'x4'), 'Frame numbers are never stored')
 
