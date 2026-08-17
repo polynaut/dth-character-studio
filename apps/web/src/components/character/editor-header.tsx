@@ -12,9 +12,32 @@ import { Button, EditableTitle, useModifierHeld, useStickyHeaderInset } from '@d
 import { useConfirm } from '#/lib/use-confirm.tsx'
 import { characterSkinning, countPoses } from '@dth/rom'
 
+import type { GenesisVersion } from '@dth/rom'
+
 import type { RootedDir } from '#/lib/character-paths.ts'
 import type { ExportPipelineView } from '#/components/character/export-pipeline-panel.tsx'
 import type { CharacterDraft } from '#/lib/use-character-draft.ts'
+
+/**
+ * How Daz frames the figure in the tip image it renders, per generation — which
+ * decides where the header portrait has to be panned to land the face in the
+ * frame (the two `--dth-avatar-pan-*` pairs in styles.css).
+ *
+ * G3/G8/G8.1 come out sitting noticeably HIGHER in the square than G9 does, so
+ * the G9 pan crops the top of their head and leaves empty tile under the chin.
+ * The offsets themselves stay in CSS; this only says which set to use.
+ *
+ * A `Record<GenesisVersion, …>` on purpose: adding a generation to the enum must
+ * fail to compile until someone has actually LOOKED at a tip for it, rather than
+ * inheriting whichever framing happened to be the fallback. Same reasoning as
+ * `GENERATIONS` in the core — a new generation is a table row, not a guess.
+ */
+const TIP_FRAMING: Record<GenesisVersion, 'g9' | 'pre-g9'> = {
+  G9: 'g9',
+  'G8.1': 'pre-g9',
+  G8: 'pre-g9',
+  G3: 'pre-g9',
+}
 
 /**
  * Scroll-to-top via the NATIVE `behavior:'smooth'`. A hand-rolled rAF ease was
@@ -245,7 +268,14 @@ export function EditorHeader({
               — the image is rasterized once and the box just changes its clip
               rect, which stays smooth even with the heavy form relaying out below
               the sticky header. */}
-          <div className="avatar-scroll-shrink h-[224px] w-[168px] overflow-hidden rounded-lg bg-[#262626]">
+          <div
+            className="avatar-scroll-shrink h-[224px] w-[168px] overflow-hidden rounded-lg bg-[#262626]"
+            // Which of the two pans in styles.css this portrait gets. Daz frames
+            // the figure differently per generation in the tip it renders, and
+            // the wrapper is where the variables belong (they inherit down to
+            // the image). Nothing to set for the G9 framing — that's the default.
+            data-tip-framing={TIP_FRAMING[character.genesis] === 'g9' ? undefined : 'pre-g9'}
+          >
             <Avatar
               image={character.image}
               name={character.name}

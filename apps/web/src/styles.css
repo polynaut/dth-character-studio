@@ -229,17 +229,38 @@ a {
   }
 }
 
+/* Where the pan starts and ends. Variables rather than literals because Daz does
+   not frame every generation the same way in the tip it renders: a G3/G8/G8.1
+   figure sits noticeably HIGHER in the square than a G9 one, so the G9-tuned pan
+   leaves a band of empty tile under the chin and crops the top of the head. The
+   only thing that differs is these two numbers, so they are parameters and the
+   keyframes stay single-sourced — two copies of the pan would drift the moment
+   one is retuned.
+
+   Set on the WRAPPER, not the image: custom properties inherit, and the wrapper
+   is the element that knows which character it is drawing (see editor-header's
+   `data-tip-framing`). Defining them on `.avatar-scroll-pan` itself would put the
+   default directly on the image, where it would beat the inherited override. */
+.avatar-scroll-shrink {
+  --dth-avatar-pan-from: 11%;
+  --dth-avatar-pan-to: 15%;
+}
+.avatar-scroll-shrink[data-tip-framing='pre-g9'] {
+  --dth-avatar-pan-from: 15%;
+  --dth-avatar-pan-to: 19%;
+}
+
 /* The image is a SQUARE that the zoom below over-scans past the wrapper, so an
    OPAQUE avatar (an uploaded photo) still fills the 3:4 frame in every state, and
    the pan can drift either way without exposing the wrapper's grey fill. It eases
-   from 11% down at the top to 15% as the header collapses; translateY is
-   composited, so it's smooth and never touches layout. */
+   from the resting offset down to the collapsed one as the header collapses;
+   translateY is composited, so it's smooth and never touches layout. */
 @keyframes dth-avatar-pan {
   from {
-    transform: translateY(11%);
+    transform: translateY(var(--dth-avatar-pan-from));
   }
   to {
-    transform: translateY(15%);
+    transform: translateY(var(--dth-avatar-pan-to));
   }
 }
 /* The zoom pushes the square image IN as the header collapses so the face reads
@@ -266,8 +287,9 @@ a {
        so the `scroll()` timeline goes INACTIVE and the animation drops out entirely —
        without this the image would fall back to scale 1 / no shift and under-fill the
        wrapper. When the timeline IS active, the animation (fill both) overrides these
-       from scroll 0, so this is a no-op there. */
-    transform: translateY(11%);
+       from scroll 0, so this is a no-op there. Same variable as the keyframe's `from`,
+       or a pre-G9 tip would sit wrong on exactly the pages that can't scroll. */
+    transform: translateY(var(--dth-avatar-pan-from));
     scale: 1;
     /* Both track the scroll 1:1 (linear). The zoom HOLDS its rest value (1) until
        the shrink starts (100px, matching .avatar-scroll-shrink's range) then eases
