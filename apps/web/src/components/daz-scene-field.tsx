@@ -30,6 +30,8 @@ import {
   romAnimationFresh,
   sceneWearables,
 } from '#/lib/rom/api.ts'
+import { sceneExportSubfolders } from '@dth/rom'
+
 import { romAnimationPath } from '#/lib/rom/execute-jobs.ts'
 import { SceneValidationTable } from '#/components/scene-compat.tsx'
 import {
@@ -419,6 +421,13 @@ export function DazSceneField({
   // itself (legacy layout).
   const scenesRootRel = deriveScenesRootRel(primaryDirRel, defaultSubdir)
   const baseDazRel = scenesRootRel || defaultSubdir
+  // The per-scene EXPORT subfolders (the same rule generation uses), for the
+  // removal flows: a deleted/replaced scene's export folder goes with it —
+  // sceneDeleteTargets guards WHEN that is safe. Keyed like the map itself
+  // (normalized + lowercased).
+  const scenesRootAbs = [charFolder, scenesRootRel].filter(Boolean).join('/')
+  const exportSubfolderMap = sceneExportSubfolders(character, scenesRootAbs)
+  const exportKeyOf = (p: string) => p.trim().replace(/\\/g, '/').toLowerCase()
 
   // ── Open-in-Daz dropdown: the scene vs its saved ROM animation ──────────
   // The card's open button shows a menu (Alt+click keeps the direct Explorer
@@ -822,14 +831,27 @@ export function DazSceneField({
           // Same decision as the remove flow: the old primary's whole subfolder
           // when the replacement VACATED it (saved ROM animations included),
           // else its files plus its own rom-animations/<stem>_ROM.duf — which
-          // used to be left behind as a stale save either way. The new primary
-          // is in `remainingScenesAbs`, so a replacement copied into the SAME
-          // folder blocks the folder branch by construction.
+          // used to be left behind as a stale save either way. Its export
+          // folder goes too, UNLESS the new link set claims the same one (a
+          // replacement into the same subfolder keeps the folder it is about
+          // to export into) — hence the post-replace map below. The new
+          // primary is in `remainingScenesAbs`, so a replacement copied into
+          // the SAME folder blocks the scene-folder branch by construction.
+          const newLinked = [newPrimary || dest, ...character.extraScenes]
+          const newExportMap = sceneExportSubfolders(
+            { ...character, scenePath: newPrimary || dest },
+            scenesRootAbs,
+          )
           const targets = sceneDeleteTargets({
             sceneAbs: oldPrimary,
             charFolderAbs: charFolder,
             scenesRootRel,
-            remainingScenesAbs: [newPrimary || dest, ...character.extraScenes],
+            remainingScenesAbs: newLinked,
+            exportRootAbs: character.exportPath,
+            exportSubfolderRel: exportSubfolderMap[exportKeyOf(oldPrimary)] ?? '',
+            remainingExportSubfoldersRel: newLinked
+              .map((s) => newExportMap[exportKeyOf(s)] ?? '')
+              .filter(Boolean),
           })
           await deleteFiles({ data: { paths: targets.files, folders: targets.folders } })
         } catch (e) {
@@ -1003,14 +1025,20 @@ export function DazSceneField({
       if (removeDeleteFile) {
         try {
           // The scene's own subfolder (rom-animations included) when it has one
-          // to itself, else its files plus its own saved ROM animation — see
-          // sceneDeleteTargets. `remaining` is the post-unlink link set, so a
-          // folder another linked scene lives in is never deleted.
+          // to itself, else its files plus its own saved ROM animation — and in
+          // both modes its export folder; see sceneDeleteTargets. `remaining`
+          // is the post-unlink link set, so a folder (scene or export) another
+          // linked scene uses is never deleted.
           const targets = sceneDeleteTargets({
             sceneAbs: scene,
             charFolderAbs: charFolder,
             scenesRootRel,
             remainingScenesAbs: remaining,
+            exportRootAbs: character.exportPath,
+            exportSubfolderRel: exportSubfolderMap[exportKeyOf(scene)] ?? '',
+            remainingExportSubfoldersRel: remaining
+              .map((s) => exportSubfolderMap[exportKeyOf(s)] ?? '')
+              .filter(Boolean),
           })
           await deleteFiles({ data: { paths: targets.files, folders: targets.folders } })
         } catch (e) {
@@ -1091,17 +1119,34 @@ export function DazSceneField({
   // What "Delete file on disk" will actually remove for the scene pending
   // removal — drives the remove dialog's copy: a scene with a subfolder of its
   // own loses the whole folder (saved ROM animations included), a shared-folder
-  // scene its files plus its own saved ROM animation. Must mirror
+  // scene its files plus its own saved ROM animation; the scene's export
+  // folder goes in both modes when it has one to itself. Must mirror
   // confirmRemove's sceneDeleteTargets call, so the dialog never promises less
   // than the delete does.
-  const removesWholeFolder =
-    pendingRemove !== '' &&
-    sceneDeleteTargets({
-      sceneAbs: pendingRemove,
-      charFolderAbs: charFolder,
-      scenesRootRel,
-      remainingScenesAbs: linkedScenes.filter((s) => s !== pendingRemove),
-    }).folders.length > 0
+  const removePendingRemaining = linkedScenes.filter((s) => s !== pendingRemove)
+  const removeTargetsPreview =
+    pendingRemove !== ''
+      ? sceneDeleteTargets({
+          sceneAbs: pendingRemove,
+          charFolderAbs: charFolder,
+          scenesRootRel,
+          remainingScenesAbs: removePendingRemaining,
+          exportRootAbs: character.exportPath,
+          exportSubfolderRel: exportSubfolderMap[exportKeyOf(pendingRemove)] ?? '',
+          remainingExportSubfoldersRel: removePendingRemaining
+            .map((s) => exportSubfolderMap[exportKeyOf(s)] ?? '')
+            .filter(Boolean),
+        })
+      : null
+  // "Deleting also removes …" — assembled from what the delete will take.
+  const removeDeleteExplainer = removeTargetsPreview
+    ? ` Deleting also removes ${[
+        removeTargetsPreview.sceneFolder
+          ? 'the scene’s folder (saved ROM animations included)'
+          : 'its saved ROM animation',
+        ...(removeTargetsPreview.exportFolder ? ['its Daz export folder'] : []),
+      ].join(' and ')}.`
+    : ''
 
   // Two-tone path chip for the scenes ROOT: everything through the CHARACTER
   // folder is dimmed — we're already inside the character here, so only the
@@ -1586,13 +1631,11 @@ export function DazSceneField({
           title="Remove Daz scene?"
           // For a linked-in-place scene the delete toggle is locked off, so the
           // base sentence is the whole story; otherwise the copy names what a
-          // delete takes with it (folder vs files — see removesWholeFolder).
+          // delete takes with it (see removeDeleteExplainer).
           description={
             !insideCharFolder(pendingRemove)
               ? 'Unlink this Daz scene from the character.'
-              : removesWholeFolder
-                ? 'Unlink this Daz scene from the character. Deleting also removes the scene’s folder — saved ROM animations included.'
-                : 'Unlink this Daz scene from the character. Deleting also removes its saved ROM animation.'
+              : `Unlink this Daz scene from the character.${removeDeleteExplainer}`
           }
           deleteFile={removeDeleteFile}
           onDeleteFileChange={setRemoveDeleteFile}

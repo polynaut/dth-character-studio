@@ -328,10 +328,12 @@ export function deriveScenesRootRel(primaryDirRel: string, dazSubdir: string): s
  * folder holds the scene, its thumbnails and its saved `rom-animations/` —
  * else the scene's files plus its own saved ROM animation, leaving the shared
  * folder alone (the legacy layout parks several scenes, and one shared
- * `rom-animations/`, directly in the root).
+ * `rom-animations/`, directly in the root). In BOTH modes the scene's EXPORT
+ * folder (`<exportRoot>/<exportSubfolderRel>/` — the generated `.dth`/FBX/
+ * Alembic/CSV live there and describe a scene that is leaving) goes with it.
  *
- * The folder answer requires ALL of these — each guard alone closes one way to
- * delete files that aren't the scene's:
+ * The scene-folder answer requires ALL of these — each guard alone closes one
+ * way to delete files that aren't the scene's:
  * - the scene sits INSIDE the character folder (a linked-in-place scene is the
  *   user's original; its folder is never the studio's to delete);
  * - its dir is strictly BELOW the scenes root — never the root itself, the
@@ -340,6 +342,13 @@ export function deriveScenesRootRel(primaryDirRel: string, dazSubdir: string): s
  *   a folder fall back to per-file deletion).
  * For a nested subfolder only the DIRECT parent is returned — an ancestor
  * could hold sibling scenes' folders.
+ *
+ * The export folder has its own guards: the export ROOT must sit inside the
+ * character folder (a pre-v29 loose definition can still carry a hand-picked
+ * root anywhere on disk, possibly SHARED between characters), and no remaining
+ * scene may claim the same export subfolder (`remainingExportSubfoldersRel` —
+ * the replace flow passes the NEW primary's, so a replacement landing in the
+ * same subfolder keeps the folder it is about to export into).
  */
 export function sceneDeleteTargets(args: {
   sceneAbs: string
@@ -348,17 +357,34 @@ export function sceneDeleteTargets(args: {
   scenesRootRel: string
   /** Scenes still linked AFTER this removal (absolute paths). */
   remainingScenesAbs: ReadonlyArray<string>
-}): { folders: Array<string>; files: Array<string> } {
+  /** The character's derived export root (`Character.exportPath`); ''/omitted = none. */
+  exportRootAbs?: string
+  /** The removed scene's export subfolder below that root (`sceneExportSubfolders`
+   *  in @dth/rom); ''/omitted = none known. */
+  exportSubfolderRel?: string
+  /** Export subfolders the REMAINING scenes use — or are about to: a claim on
+   *  the removed scene's folder keeps it. */
+  remainingExportSubfoldersRel?: ReadonlyArray<string>
+}): {
+  /** Everything to delete, assembled — `sceneFolder`/`exportFolder` + `files`. */
+  folders: Array<string>
+  files: Array<string>
+  /** The scene's own subfolder, '' when it falls back to per-file deletion. */
+  sceneFolder: string
+  /** The scene's export folder, '' when there is none to delete safely. */
+  exportFolder: string
+} {
   const norm = (p: string) => stripTrailingSeparators(p.replace(/\\/g, '/'))
   const lower = (p: string) => p.toLowerCase()
   /** Strictly below `dir` (never `dir` itself) — case-insensitive (Windows). */
   const below = (dir: string, p: string) => lower(p).startsWith(`${lower(dir)}/`)
+  const cleanRel = (p: string) => trimSeparators(p.replace(/\\/g, '/')).trim()
 
   const scene = norm(args.sceneAbs)
   const slash = scene.lastIndexOf('/')
   const sceneDir = slash > 0 ? scene.slice(0, slash) : ''
   const charFolder = norm(args.charFolderAbs)
-  const rootRel = trimSeparators(args.scenesRootRel.replace(/\\/g, '/')).trim()
+  const rootRel = cleanRel(args.scenesRootRel)
   const scenesRoot = rootRel ? `${charFolder}/${rootRel}` : charFolder
 
   const ownsFolder =
@@ -370,14 +396,34 @@ export function sceneDeleteTargets(args: {
       const other = norm(s)
       return lower(other) === lower(sceneDir) || below(sceneDir, other)
     })
-  if (ownsFolder) return { folders: [sceneDir], files: [] }
+  const sceneFolder = ownsFolder ? sceneDir : ''
 
   // Shared/legacy layout: the scene's files, its thumbnails, and its own saved
   // ROM animation (`rom-animations/` itself may hold other scenes' saves).
   const noDuf = scene.replace(/\.duf$/i, '')
   const rom = romAnimationPath(scene)
+  const files = ownsFolder
+    ? []
+    : [scene, `${scene}.png`, `${scene}.tip.png`, `${noDuf}.tip.png`, rom, `${rom}.png`]
+
+  const exportRoot = norm(args.exportRootAbs ?? '')
+  const exportRel = cleanRel(args.exportSubfolderRel ?? '')
+  const exportClaimed = (args.remainingExportSubfoldersRel ?? []).some(
+    (r) => lower(cleanRel(r)) === lower(exportRel),
+  )
+  const exportFolder =
+    exportRoot !== '' &&
+    exportRel !== '' &&
+    charFolder !== '' &&
+    below(charFolder, exportRoot) &&
+    !exportClaimed
+      ? `${exportRoot}/${exportRel}`
+      : ''
+
   return {
-    folders: [],
-    files: [scene, `${scene}.png`, `${scene}.tip.png`, `${noDuf}.tip.png`, rom, `${rom}.png`],
+    folders: [sceneFolder, exportFolder].filter(Boolean),
+    files,
+    sceneFolder,
+    exportFolder,
   }
 }

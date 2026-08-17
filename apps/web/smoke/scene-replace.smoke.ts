@@ -42,9 +42,12 @@ test('replace primary: validates, swaps, derives GEN, seeds hair, deletes the ol
 }) => {
   const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true })
   seed.files[NEW_SCENE] = 'duf-fixture-new'
-  // The old primary's saved ROM animation — stale the moment the primary is
-  // another scene, so the replace must take it along (asserted below).
+  // The old primary's saved ROM animation and exports — stale the moment the
+  // primary is another scene, so the replace must take them along (asserted
+  // below). The old primary sits in the root, so its export folder is
+  // stem-named; the replacement lands in "primary" and claims a DIFFERENT one.
   seed.files[romAnimationPath(P.scene)] = 'duf-rom-animation'
+  seed.files[`${P.exportDir}/KiraDefault_G9_GP/Kira.dth`] = 'dth-fixture'
   seed.dialogPath = NEW_SCENE
   seed.sceneFigure = { id: 'Genesis9', label: 'Kira' }
   // The replacement carries its own hair — keyed on BOTH paths: the dialog
@@ -89,13 +92,15 @@ test('replace primary: validates, swaps, derives GEN, seeds hair, deletes the ol
   expect(seeded?.hair.map((h) => h.nodeLabel)).toEqual([NEW_HAIR])
 
   // Filesystem: the new copy exists, the OLD primary's files are gone — its
-  // stale saved ROM animation included. The old primary sits directly in the
-  // shared daz3d/ root (legacy layout), so only ITS files go, never the root.
+  // stale saved ROM animation and export folder included. The old primary sits
+  // directly in the shared daz3d/ root (legacy layout), so only ITS files go,
+  // never the root.
   const keys = await fileKeys(page)
   expect(keys).toContain(COPIED_SCENE)
   expect(keys).not.toContain(P.scene)
   expect(keys).not.toContain(`${P.scene}.tip.png`)
   expect(keys).not.toContain(romAnimationPath(P.scene))
+  expect(keys).not.toContain(`${P.exportDir}/KiraDefault_G9_GP/Kira.dth`)
 
   expect(await unhandledCommands(page)).toEqual([])
 })

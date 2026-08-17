@@ -49,7 +49,12 @@ describe('sceneDeleteTargets — what "Delete file on disk" removes', () => {
         scenesRootRel: 'daz3d',
         remainingScenesAbs: [`${CHAR}/daz3d/primary/Kira.duf`],
       }),
-    ).toEqual({ folders: [`${CHAR}/daz3d/beach`], files: [] })
+    ).toEqual({
+      folders: [`${CHAR}/daz3d/beach`],
+      files: [],
+      sceneFolder: `${CHAR}/daz3d/beach`,
+      exportFolder: '',
+    })
   })
 
   it('the primary in its "primary" subfolder is a folder delete too', () => {
@@ -59,30 +64,88 @@ describe('sceneDeleteTargets — what "Delete file on disk" removes', () => {
         charFolderAbs: CHAR,
         scenesRootRel: 'daz3d',
         remainingScenesAbs: [`${CHAR}/daz3d/beach/Beach.duf`],
-      }),
-    ).toEqual({ folders: [`${CHAR}/daz3d/primary`], files: [] })
+      }).folders,
+    ).toEqual([`${CHAR}/daz3d/primary`])
   })
 
   it('a legacy scene directly in the scenes root deletes its files + its own ROM animation only', () => {
     const scene = `${CHAR}/daz3d/Kira.duf`
+    const targets = sceneDeleteTargets({
+      sceneAbs: scene,
+      charFolderAbs: CHAR,
+      scenesRootRel: 'daz3d',
+      remainingScenesAbs: [],
+    })
+    expect(targets.folders).toEqual([])
+    expect(targets.sceneFolder).toBe('')
+    expect(targets.files).toEqual([
+      scene,
+      `${scene}.png`,
+      `${scene}.tip.png`,
+      `${CHAR}/daz3d/Kira.tip.png`,
+      `${CHAR}/daz3d/rom-animations/Kira_ROM.duf`,
+      `${CHAR}/daz3d/rom-animations/Kira_ROM.duf.png`,
+    ])
+  })
+
+  it('the export folder goes with the scene — in folder AND file mode', () => {
+    // Folder mode: the scene's own subfolder plus its export folder.
     expect(
       sceneDeleteTargets({
-        sceneAbs: scene,
+        sceneAbs: `${CHAR}/daz3d/beach/Beach.duf`,
+        charFolderAbs: CHAR,
+        scenesRootRel: 'daz3d',
+        remainingScenesAbs: [`${CHAR}/daz3d/primary/Kira.duf`],
+        exportRootAbs: `${CHAR}/houdini/daz-export`,
+        exportSubfolderRel: 'beach',
+        remainingExportSubfoldersRel: ['primary'],
+      }),
+    ).toEqual({
+      folders: [`${CHAR}/daz3d/beach`, `${CHAR}/houdini/daz-export/beach`],
+      files: [],
+      sceneFolder: `${CHAR}/daz3d/beach`,
+      exportFolder: `${CHAR}/houdini/daz-export/beach`,
+    })
+    // File mode (legacy root scene, stem-named export folder): files + export.
+    const legacy = sceneDeleteTargets({
+      sceneAbs: `${CHAR}/daz3d/Kira.duf`,
+      charFolderAbs: CHAR,
+      scenesRootRel: 'daz3d',
+      remainingScenesAbs: [],
+      exportRootAbs: `${CHAR}/houdini/daz-export`,
+      exportSubfolderRel: 'Kira',
+      remainingExportSubfoldersRel: [],
+    })
+    expect(legacy.folders).toEqual([`${CHAR}/houdini/daz-export/Kira`])
+    expect(legacy.files).toContain(`${CHAR}/daz3d/Kira.duf`)
+  })
+
+  it('an export folder a remaining scene claims — or a root outside the character folder — is kept', () => {
+    // The replace flow's same-subfolder case: the new primary claims "primary".
+    expect(
+      sceneDeleteTargets({
+        sceneAbs: `${CHAR}/daz3d/primary/Old.duf`,
+        charFolderAbs: CHAR,
+        scenesRootRel: 'daz3d',
+        remainingScenesAbs: [`${CHAR}/daz3d/primary/New.duf`],
+        exportRootAbs: `${CHAR}/houdini/daz-export`,
+        exportSubfolderRel: 'primary',
+        remainingExportSubfoldersRel: ['PRIMARY'], // case-insensitive claim
+      }).exportFolder,
+    ).toBe('')
+    // A pre-v29 loose definition can carry a hand-picked root anywhere on disk,
+    // possibly shared between characters — never deleted from.
+    expect(
+      sceneDeleteTargets({
+        sceneAbs: `${CHAR}/daz3d/beach/Beach.duf`,
         charFolderAbs: CHAR,
         scenesRootRel: 'daz3d',
         remainingScenesAbs: [],
-      }),
-    ).toEqual({
-      folders: [],
-      files: [
-        scene,
-        `${scene}.png`,
-        `${scene}.tip.png`,
-        `${CHAR}/daz3d/Kira.tip.png`,
-        `${CHAR}/daz3d/rom-animations/Kira_ROM.duf`,
-        `${CHAR}/daz3d/rom-animations/Kira_ROM.duf.png`,
-      ],
-    })
+        exportRootAbs: 'E:/Shared DTH Exports',
+        exportSubfolderRel: 'beach',
+        remainingExportSubfoldersRel: [],
+      }).exportFolder,
+    ).toBe('')
   })
 
   it('a folder another linked scene lives in is never deleted (falls back to files)', () => {

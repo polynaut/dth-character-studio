@@ -19,3 +19,11 @@ Replacing the primary makes the same decision for the old copy: its subfolder
 goes whole when the replacement vacated it, and a shared folder loses the old
 scene's files plus its saved ROM animation — which used to be left behind as a
 stale `rom-animations/<oldStem>_ROM.duf` either way.
+
+The scene's **export folder** (`daz-export/<subfolder>/` — the generated
+`.dth`/FBX/Alembic/CSV) is cleaned up too, in both flows and both modes. Two
+guards there: an export folder a remaining scene uses is kept (a replacement
+landing in the same subfolder keeps the folder it's about to export into), and
+an export root outside the character folder (a pre-v29 hand-picked path,
+possibly shared between characters) is never deleted from. The remove dialog
+copy names everything a delete will take.

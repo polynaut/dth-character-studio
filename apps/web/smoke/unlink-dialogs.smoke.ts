@@ -129,18 +129,21 @@ test('the default unlink keeps the file; ticking the toggle deletes it', async (
 // in its own folder below the scenes root, and that folder holds its saved
 // `rom-animations/`. Deleting removes the whole folder when the scene has one
 // to itself, and only the scene's files + its OWN saved ROM animation when the
-// folder is shared (the legacy layout parks several scenes in the root).
+// folder is shared (the legacy layout parks several scenes in the root). The
+// scene's export folder (`daz-export/<subfolder>/`) goes with it in both modes.
 
 test('deleting a scene with its own subfolder removes the folder, ROM animations included', async ({
   page,
 }) => {
   const beach = `${P.charFolder}/daz3d/beach/KiraBeach.duf`
+  const beachExport = `${P.exportDir}/beach/KiraBeach.dth`
   const seed = buildSeed({ demo: true, activeProjectFile: P.dcsp })
   const kira = JSON.parse(seed.files[`${P.charFolder}/Kira.json`])
   kira.extraScenes = [beach]
   seed.files[`${P.charFolder}/Kira.json`] = JSON.stringify(kira, null, 2)
   seed.files[beach] = 'duf-fixture'
   seed.files[romAnimationPath(beach)] = 'duf-rom-animation'
+  seed.files[beachExport] = 'dth-fixture'
   await page.addInitScript(installTauriMock, seed)
   await page.goto('/')
   await page.getByRole('link', { name: /Kira/ }).click()
@@ -149,14 +152,20 @@ test('deleting a scene with its own subfolder removes the folder, ROM animations
   const card = page.locator('.group\\/card').filter({ hasText: /KiraBeach/ })
   await card.getByRole('button', { name: 'Unlink from character' }).click()
   const dialog = page.getByRole('dialog', { name: 'Remove Daz scene?' })
-  // The copy names what the delete takes with it — this scene owns its folder.
-  await expect(dialog.getByText(/scene’s folder — saved ROM animations included/)).toBeVisible()
+  // The copy names what the delete takes with it — this scene owns its folder,
+  // and its export folder goes too.
+  await expect(
+    dialog.getByText(
+      /scene’s folder \(saved ROM animations included\) and its Daz export folder/,
+    ),
+  ).toBeVisible()
   await dialog.getByRole('switch').click() // arm the delete
   await dialog.getByRole('button', { name: 'Delete' }).click()
   await expect(dialog).toHaveCount(0)
 
   expect(await has(page, beach)).toBe(false)
   expect(await has(page, romAnimationPath(beach))).toBe(false)
+  expect(await has(page, beachExport)).toBe(false)
   // The primary and its tree are untouched.
   expect(await has(page, P.scene)).toBe(true)
 })
@@ -165,10 +174,15 @@ test('deleting a scene that shares the root folder spares the other scenes’ fi
   page,
 }) => {
   // extraScene: the Summertide scene sits DIRECTLY in daz3d/ beside the primary
-  // (the legacy layout) — so does the shared rom-animations/ folder.
+  // (the legacy layout) — so does the shared rom-animations/ folder. Their
+  // export folders fall back to the scene STEMS and stay separate.
   const seed = buildSeed({ demo: true, activeProjectFile: P.dcsp, extraScene: true })
+  const primaryExport = `${P.exportDir}/KiraDefault_G9_GP/Kira.dth`
+  const extraExport = `${P.exportDir}/KiraSummertide_G9_GP/Kira_KiraSummertide_G9_GP.dth`
   seed.files[romAnimationPath(P.scene)] = 'duf-rom-animation'
   seed.files[romAnimationPath(P.scene2)] = 'duf-rom-animation'
+  seed.files[primaryExport] = 'dth-fixture'
+  seed.files[extraExport] = 'dth-fixture'
   await page.addInitScript(installTauriMock, seed)
   await page.goto('/')
   await page.getByRole('link', { name: /Kira/ }).click()
@@ -177,15 +191,19 @@ test('deleting a scene that shares the root folder spares the other scenes’ fi
   const card = page.locator('.group\\/card').filter({ hasText: /Summertide/ })
   await card.getByRole('button', { name: 'Unlink from character' }).click()
   const dialog = page.getByRole('dialog', { name: 'Remove Daz scene?' })
-  // Shared folder → the copy promises only the scene's own ROM animation.
-  await expect(dialog.getByText(/its saved ROM animation/)).toBeVisible()
+  // Shared folder → the copy promises the scene's own ROM animation + exports.
+  await expect(
+    dialog.getByText(/its saved ROM animation and its Daz export folder/),
+  ).toBeVisible()
   await dialog.getByRole('switch').click() // arm the delete
   await dialog.getByRole('button', { name: 'Delete' }).click()
   await expect(dialog).toHaveCount(0)
 
   expect(await has(page, P.scene2)).toBe(false)
   expect(await has(page, romAnimationPath(P.scene2))).toBe(false)
-  // The primary, its ROM animation, and the shared folder survive.
+  expect(await has(page, extraExport)).toBe(false)
+  // The primary, its ROM animation, its exports, and the shared folder survive.
   expect(await has(page, P.scene)).toBe(true)
   expect(await has(page, romAnimationPath(P.scene))).toBe(true)
+  expect(await has(page, primaryExport)).toBe(true)
 })
