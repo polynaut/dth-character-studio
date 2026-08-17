@@ -32,7 +32,12 @@ tauri-build = { version = "2", features = [] }
 # author wants to debug the shipped app against a live Daz Studio.
 tauri = { version = "2", features = ["devtools"] }
 tauri-plugin-dialog = "2"
-tauri-plugin-fs = "2"
+# `watch`: real file watching (the notify crate — ReadDirectoryChangesW on
+# Windows, FSEvents on macOS) behind the plugin's watch/unwatch commands. The
+# execute layer watches the Daz job-file pair and the progress log instead of
+# interval-polling them (lib/fs-watch.ts); notify's deps stay clear of the
+# brotli/alloc-stdlib pins above.
+tauri-plugin-fs = { version = "2", features = ["watch"] }
 tauri-plugin-shell = "2"
 tauri-plugin-os = "2"
 serde = { version = "1", features = ["derive"] }

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Ban } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { Button, useRefetchOnFocus } from '@dth/ui'
+import { Button, useArmedWatch, useCoalescedRefresh, useRefetchOnFocus } from '@dth/ui'
 import {
   abortExporterJobs,
   adoptHoudiniRun,
@@ -17,6 +17,7 @@ import {
   openUnrealForPendingJob,
   startHoudiniExport,
   startUnrealImport,
+  watchExportRunFiles,
 } from '#/lib/rom/api.ts'
 import { holdBusyCursor } from '#/lib/busy-cursor.ts'
 import {
@@ -1150,29 +1151,58 @@ export function DthExportAction({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Every refresh funnels through ONE coalesced call: fetchExportRunProgress's
+  // finished/dead handling is destructive (it deletes the job file and yields
+  // the one outcome snapshot), so a burst of watch events — or an event landing
+  // on top of a heartbeat tick — must not race two refreshes over that moment.
+  // A refresh asked for while one is in flight runs AFTER it instead of
+  // alongside it, so the last state change is never skipped either.
+  // (refreshStatus is declared above; function declarations hoist.)
+  const refreshStatusCoalesced = useCoalescedRefresh(refreshStatus)
   useRefetchOnFocus(
     () => {
-      void refreshStatus()
+      // Through the coalescer: a focus refresh can land while a watch event's
+      // refresh is mid-flight.
+      void refreshStatusCoalesced()
     },
     [],
     { immediate: true },
   )
   const watching =
     pending === true || progress !== null || houdini !== null || unrealRun !== null
+  // Real file watching over the run's files (the job-file pair in the Daz
+  // library, the progress log in app-data): the Runner's pickup rename, its
+  // per-row rewrites and the final progress-100 write arrive as change events,
+  // so the UI follows the batch the moment it moves instead of on the next
+  // poll tick. Armed on `watching` alone — the watched DIRECTORIES never
+  // change for a mounted editor, only the files inside them do.
+  const runWatchArmed = useArmedWatch(watching, () =>
+    watchExportRunFiles(() => void refreshStatusCoalesced()),
+  )
+  // With the watch armed, the interval degrades to a slow heartbeat — the net
+  // under events a NAS share may swallow (lib/fs-watch.ts) and the only
+  // prompter for states no file event announces (a Daz that died mid-run).
+  // It stays the full-speed poll whenever the watch isn't there (a plain
+  // browser, a failed start) — and while a Houdini or Unreal leg is live:
+  // those legs' files are outside this watch and discover progress by polling
+  // alone.
+  const fastPoll = !runWatchArmed || houdini !== null || unrealRun !== null
   useEffect(() => {
     if (!watching) return
-    const id = window.setInterval(() => {
-      void refreshStatus()
-      // Cheap while nothing is armed: fetchHoudiniRunProgress returns null
-      // immediately without touching the filesystem.
-      void refreshHoudini()
-      void refreshUnreal()
-    }, 2500)
+    const id = window.setInterval(
+      () => {
+        void refreshStatusCoalesced()
+        // Cheap while nothing is armed: fetchHoudiniRunProgress returns null
+        // immediately without touching the filesystem.
+        void refreshHoudini()
+        void refreshUnreal()
+      },
+      fastPoll ? 2500 : 15_000,
+    )
     return () => window.clearInterval(id)
-    // Re-arm on `watching` alone (ONE interval): refreshStatus only captures
-    // character.id, which is constant for a mounted editor.
+    // The refreshers only capture character.id, constant for a mounted editor.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [watching])
+  }, [watching, fastPoll])
   // While the Runner works the batch, the whole app carries the OS progress
   // cursor — "it's working" is visible wherever the mouse is.
   const running = progress !== null

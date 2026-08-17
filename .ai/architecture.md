@@ -79,9 +79,13 @@ a plain browser with native features as no-ops):
   itself a **barrel** over `api/execute/`, which imports only downward:
   `primitives.ts` (character + scenes root, handoff stamps, Daz probes/launch,
   job-file paths) → `run-state.ts` (the run sidecar = which window owns a run,
-  the progress log, interrupt/abort, the polled job-file state) → `jobs.ts`
-  (the handoff) and `scans.ts` (the project/scene scans riding it) as PEERS on
-  top. The one slot they share is `runOwner.current` in `run-state.ts` — a
+  the progress log, interrupt/abort, the job-file state the UI refreshes on)
+  and `watch.ts` (real file watching over the job-file pair + progress log —
+  what makes refreshes event-driven; `lib/fs-watch.ts` is the isTauri-guarded
+  wrapper over the fs plugin's notify-backed `watch`, and every consumer keeps
+  a slowed-down interval as the net under it: SMB shares drop change events)
+  → `jobs.ts` (the handoff) and `scans.ts` (the project/scene scans riding it)
+  as PEERS on top. The one slot they share is `runOwner.current` in `run-state.ts` — a
   holder object, because an imported `let` binding cannot be assigned across a
   module boundary),
   `houdini.ts` (Generate project via hython + the leftover-junction sweep),
@@ -91,7 +95,11 @@ a plain browser with native features as no-ops):
   `native-types.ts` (the FFI zod schemas).
 - **Two job-file handoffs, deliberately the same shape** — the studio writes a
   JSON job, the other side works through it and writes results back, the studio
-  polls. Daz's is `execute.ts` + `execute-jobs.ts` (the Runner plugin). Houdini's
+  notices: for the Daz handoff via real file watching (`api/execute/watch.ts`,
+  heartbeat poll underneath), for Houdini's still by polling. Daz's is
+  `execute.ts` + `execute-jobs.ts` (the Runner plugin; the Runner watches for
+  the handoff the same way since v1.3.0 — `QFileSystemWatcher` + fallback
+  timer). Houdini's
   is `lib/rom/houdini-jobs.ts` + `lib/rom/houdini-runtime/456.py`, run HEADLESS:
   `hython headless_export.py` loads the `.hip` and execs 456.py once, with
   `DTH_HOUDINI_JOB` pointing at a job (never via `HOUDINI_SCRIPT_PATH` — the

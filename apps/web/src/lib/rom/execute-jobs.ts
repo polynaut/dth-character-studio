@@ -215,6 +215,24 @@ export function jobFileJson(
 export const EXPORT_PROGRESS_FILE = 'export-progress.log'
 
 /**
+ * Is this path one of the three files an export run speaks through — the job
+ * file pair or the verbose progress log? The filter behind the run watch
+ * (api/execute/watch.ts): the watch covers whole DIRECTORIES (the studio
+ * scripts root, the app-data folder), so every unrelated write there — a
+ * settings save, a scan output — must not wake the UI. Case-insensitive on the
+ * basename, because the paths come back from the OS (NTFS preserves case but
+ * doesn't promise the spelling the studio wrote).
+ */
+export function isExportRunFile(path: string): boolean {
+  const base = path.replaceAll('\\', '/').split('/').pop()?.toLowerCase() ?? ''
+  return (
+    base === EXPORTER_JOB_FILE.toLowerCase() ||
+    base === RUNNING_JOB_FILE.toLowerCase() ||
+    base === EXPORT_PROGRESS_FILE.toLowerCase()
+  )
+}
+
+/**
  * How many equal steps a mode's job row comprises — the per-scene percent
  * scale both writers share: the Runner reports the scene OPEN (step 1) and the
  * terminal done/failed, the generated script the interior steps.

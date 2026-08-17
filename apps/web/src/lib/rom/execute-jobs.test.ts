@@ -14,6 +14,7 @@ import {
   expectedSceneExportFolders,
   parseExportProgressLog,
   formatAgo,
+  isExportRunFile,
   isReclaimableBatch,
   jobFileMayBeLive,
   migratedExportFolder,
@@ -824,5 +825,29 @@ describe('tidyRunErrors', () => {
 
   it('drops blank lines rather than emitting empty rows', () => {
     expect(tidyRunErrors(['', '   ', 'real'])).toEqual(['real'])
+  })
+})
+
+describe('isExportRunFile — the run watch’s event filter', () => {
+  it('matches the three run files under RAW OS spellings (backslashes, mixed case)', () => {
+    // The paths come from notify, not from the studio: Windows separators and
+    // whatever casing the filesystem reports — never the spelling we wrote.
+    expect(
+      isExportRunFile('X:\\DazLibrary\\Scripts\\DTH-Character-Studio\\dth_exporter_jobs.json'),
+    ).toBe(true)
+    expect(
+      isExportRunFile(
+        'X:\\DazLibrary\\Scripts\\DTH-Character-Studio\\Running_DTH_Exporter_Jobs.JSON',
+      ),
+    ).toBe(true)
+    expect(isExportRunFile('C:/Users/x/AppData/Local/com.app/EXPORT-PROGRESS.LOG')).toBe(true)
+  })
+
+  it('ignores the watched directories’ unrelated traffic', () => {
+    // The watch covers whole dirs (app-data included) — a settings save or a
+    // temp file from an atomic write must not wake the UI.
+    expect(isExportRunFile('C:/Users/x/AppData/Local/com.app/settings.json')).toBe(false)
+    expect(isExportRunFile('C:/Users/x/AppData/Local/com.app/export-progress.log.tmp-123')).toBe(false)
+    expect(isExportRunFile('X:\\DazLibrary\\Scripts\\DTH-Character-Studio')).toBe(false)
   })
 })
