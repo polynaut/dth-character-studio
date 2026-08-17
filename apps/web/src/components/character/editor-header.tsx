@@ -11,6 +11,7 @@ import { ImageDialog } from '#/components/image-dialog.tsx'
 import { Button, EditableTitle, useModifierHeld, useStickyHeaderInset } from '@dth/ui'
 import { useConfirm } from '#/lib/use-confirm.tsx'
 import { characterSkinning, countPoses } from '@dth/rom'
+import { isPreG9Tip } from '#/lib/tip-framing.ts'
 
 import type { RootedDir } from '#/lib/character-paths.ts'
 import type { ExportPipelineView } from '#/components/character/export-pipeline-panel.tsx'
@@ -245,7 +246,14 @@ export function EditorHeader({
               — the image is rasterized once and the box just changes its clip
               rect, which stays smooth even with the heavy form relaying out below
               the sticky header. */}
-          <div className="avatar-scroll-shrink h-[224px] w-[168px] overflow-hidden rounded-lg bg-[#262626]">
+          <div
+            className="avatar-scroll-shrink h-[224px] w-[168px] overflow-hidden rounded-lg bg-[#262626]"
+            // Which of the two pans in styles.css this portrait gets. Daz frames
+            // the figure differently per generation in the tip it renders, and
+            // the wrapper is where the variables belong (they inherit down to
+            // the image). Nothing to set for the G9 framing — that's the default.
+            data-tip-framing={isPreG9Tip(character.genesis) ? 'pre-g9' : undefined}
+          >
             <Avatar
               image={character.image}
               name={character.name}

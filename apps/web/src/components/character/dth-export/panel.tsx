@@ -841,6 +841,7 @@ export function DthExportPanel({
               <SceneRow
                 key={normalizeSceneKey(row.scenePath)}
                 status={row}
+                genesis={character.genesis}
                 mode={mode}
                 checked={checked.has(row.scenePath)}
                 loading={status === null}

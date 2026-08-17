@@ -164,9 +164,35 @@ The **real SPA in a real browser** against an in-memory fake of the native layer
   one card spins, and the cached one does not" assertable without timing
   anything. A feature whose whole point is what the UI does while something runs
   needs one of these before it needs a spec.
+- **Smoke does NOT test how things LOOK.** No assertions on geometry, offsets,
+  crops, opacity, colours or animation state — `boundingBox()`,
+  `getComputedStyle`, `toHaveCSS` on a visual property. Standing rule, set
+  2026-08-17 after six such tests were deleted: they break on every deliberate
+  retune (which is most of what visual work IS), and they never answer the only
+  question that matters — does it look right — which a human answers by looking.
+  A crop can be pixel-correct against its spec and still frame the wrong part of
+  a face. Assert what the app DOES: what it writes, what it invokes, what it
+  says. If a visual value is load-bearing enough to need pinning, pin the number
+  where it is defined (a comment, or a unit test over the constants) — not
+  through the rendered page.
 - `apps/web/smoke/fixtures.ts` — `buildSeed(opts)` builds the world (project
   "Demo", character "Kira", DTH release tree). The character goes through the
   **real `characterSchema`**, so schema bumps fail here loudly.
+- **Re-stamping a seeded character means re-stamping every file its identity
+  NAMES.** Measured 2026-08-17 (#860): overriding `genesis` on the seed character
+  and nothing else redirects the whole window to **Refresh assets** before a spec
+  can assert anything. `characterScriptName` is `slug_genesis`, so the seeded
+  script is `ROM_Kira_G9.dsa` — a character re-stamped to G8 has no script under
+  its own name, the startup staleness probe reads "Script Runtime Version: not
+  generated", and it redirects. Move the file with the character
+  (`ROM_Kira_<genesis>.dsa`) and DELETE the old one; a leftover is a second,
+  stale generation. The same rule holds for anything else keyed by a field a spec
+  overrides — the seed is a coherent world, not a bag of independent knobs.
+  What makes this expensive is the SYMPTOM: the character link "was detached from
+  the DOM, retrying" until the click timed out, which reads as list churn and
+  sends you profiling re-renders. Nothing said "wrong page". Dumping
+  `body.innerText` named it in one run — the same lesson as the drawer-text bug
+  in `gotchas-web.md`: **print what the UI actually says before theorising.**
 - `smoke/*.smoke.ts` — 33 spec files / ~100 tests. The core families: `studio.smoke.ts`
   (one test per window kind), `override.smoke.ts` (the per-scene ROM override
   flow end to end), `houdini-export.smoke.ts` / `houdini-only.smoke.ts` /

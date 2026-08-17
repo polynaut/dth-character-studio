@@ -394,6 +394,35 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   here — it came out mushy; Lanczos was the one that read crisp. Diagnostic tell: if a
   static side-by-side shows the browser downsample ≈ a hand pass, the defect is
   aliasing (missing low-pass), not the resample quality.
+- **A custom property used in `@keyframes` must be REGISTERED (`@property`) or
+  carry a `var()` fallback — otherwise it has no value where you inspect it.**
+  Unregistered and fallback-less, `translateY(var(--dth-avatar-pan-from))` has
+  nothing to resolve against outside an element context, and the Styles pane
+  reports "`--dth-avatar-pan-from` is not defined" over a variable that is
+  defined and animating on the element. Indistinguishable from a real bug: it
+  cost two rounds of "the vars aren't working" on #860, and the variable was
+  correct throughout (measured in dev AND the minified bundle — `11%` on the
+  wrapper and the inherited image, painting `matrix(1,0,0,1,0,27.94)` on a 254px
+  element; 15% / 38.1px for pre-G9). `@property` with `syntax`/`inherits`/
+  `initial-value` gives it a computed value everywhere, which is the actual gap;
+  a fallback in the `var()` closes it locally. **This is a note on how to write
+  the technique, NOT a reason to avoid it** — the first version of this entry
+  said "don't parameterise keyframes", which was the wrong lesson drawn from one
+  badly-written instance. (Whether registration also changes what DevTools
+  prints is unverified — the resolution gap is the part that is understood.)
+  The avatar pan ended up as two literal keyframe blocks regardless, a local call
+  about four adjacent numbers. **Inspect the ELEMENT, never the keyframe**:
+  `getComputedStyle($0).transform`.
+- **Overriding which keyframes an element runs: swap `animation-name`, NEVER the
+  `animation` shorthand.** The shorthand resets `animation-timeline` to `auto`,
+  which silently takes a scroll-driven element OFF its timeline and freezes it at
+  the resting value — measured on #860 by making exactly that change: all three
+  pre-G9 specs dropped their collapsed-state assertion while the resting one kept
+  passing. (It is the same reason the base rule declares `animation-timeline`
+  AFTER its shorthand.) The trap for the test: an element frozen at rest still
+  reports the correct RESTING offset, so a spec that only checks the rest state
+  passes over a completely dead animation. Assert both ends — scroll past the
+  range and read the transform again.
 
 ## `prefers-reduced-motion: reduce` is ON for this dev machine — and it is NOT `MinAnimate` (measured 2026-08-14)
 

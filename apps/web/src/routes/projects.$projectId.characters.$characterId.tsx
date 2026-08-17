@@ -765,6 +765,7 @@ function CharacterPage({ onImportRemount }: { onImportRemount: () => void }) {
       <SceneFooter
         show={sceneLinked && activeTab === 'character' && !scenesOnScreen}
         scenes={sceneSel.linkedScenes}
+        genesis={character.genesis}
         primary={character.scenePath}
         selected={sceneSel.effectiveScene}
         onSelect={sceneSel.selectScene}

@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
 
 import { resolveImageSrc, resolveScenePreview } from '#/lib/rom/api.ts'
+import { isPreG9Tip } from '#/lib/tip-framing.ts'
 import { cn } from '@dth/ui'
+
+import type { GenesisVersion } from '@dth/rom'
 
 /**
  * Resolve a portrait's source URL from EITHER a stored avatar `image` reference
@@ -68,24 +71,64 @@ export function usePortraitSrc({
  * zoom/pan (twMerge wins on conflicts); `fallbackClassName` sizes the initial.
  */
 /**
- * The LANDSCAPE scene-thumbnail framings, as name → (box, face lift).
+ * The LANDSCAPE scene-thumbnail framings, as name → (box, face lift per Daz
+ * framing).
  *
- * These two values are a PAIR and must never be mixed: the lift is a percentage
- * of the box height while the zoom (`scale-[2.3]`, anchored `origin-top`) is
- * fixed, so a taller box lands the crop higher and needs its own correction —
- * measured at +4px for `md`. Picking `md`'s box with `sm`'s lift clips the head,
- * which is exactly the bug this table exists to make unrepresentable. Add a size
- * here (measured against a real preview) rather than hand-rolling the classes at
- * a call site.
+ * A row's values are a PAIR and must never be mixed: the lift is a percentage of
+ * the box height while the zoom (`scale-[2.3]`, anchored `origin-top`) is fixed,
+ * so a taller box lands the crop higher and needs its own correction. Picking
+ * `md`'s box with `sm`'s lift clips the head, which is exactly the bug this table
+ * exists to make unrepresentable.
+ *
+ * THE INVARIANT that makes the px corrections derivable rather than guessed:
+ * within a column every size resolves to the SAME painted lift, because where
+ * the face sits in a tip has nothing to do with how big the tile is. The px term
+ * exists only to cancel the differing `-50%` baselines — and that baseline is the
+ * CONTENT box, so the frame's `border-2` is 4px of it (`sm` 32→28, `md` 40→36).
+ * Measured: `g9` is −14px painted in both sizes (−50%·28, and −50%·36+4).
+ * `preG9` is −6px (−50%·36+12, measured against a real G8.1 tip; `sm`'s +8
+ * follows from the same −6). Add a size by choosing its px so BOTH columns keep
+ * landing on their column's painted lift — then LOOK at it, because nothing here
+ * is asserted: framing is judged by eye, not by a test (see
+ * {@link LANDSCAPE_FIXED_LIFT} for the third variant that has to agree).
  */
 const SCENE_TILE_SIZES = {
   /** The compact chip — scene footer, inline scene labels. */
-  sm: { frame: 'h-8 w-[56px]', lift: '-translate-y-1/2' },
+  sm: {
+    frame: 'h-8 w-[56px]',
+    g9: '-translate-y-1/2',
+    preG9: 'translate-y-[calc(-50%_+_8px)]',
+  },
   /** The roomier row tile — pickers and list rows. */
-  md: { frame: 'h-10 w-[64px]', lift: 'translate-y-[calc(-50%_+_4px)]' },
+  md: {
+    frame: 'h-10 w-[64px]',
+    g9: 'translate-y-[calc(-50%_+_4px)]',
+    preG9: 'translate-y-[calc(-50%_+_12px)]',
+  },
 } as const
 
 export type SceneTileSize = keyof typeof SCENE_TILE_SIZES
+
+/**
+ * The same two landscape framings for a frame that positions in FIXED PIXELS
+ * instead of `-50% + correction` — the project overview's list-view tile, whose
+ * 13/9 box has no half-height baseline to cancel.
+ *
+ * The numbers ARE the painted lifts from {@link SCENE_TILE_SIZES} (−14px / −6px),
+ * which is the point: every landscape crop of a tip puts the face in one place,
+ * whatever shape the frame is. `-translate-y-[14px]` predates all of this and is
+ * what confirmed the invariant — it had already been tuned, independently, to
+ * exactly the value the scene tiles resolve to.
+ */
+const LANDSCAPE_FIXED_LIFT = {
+  g9: '-translate-y-[14px]',
+  preG9: '-translate-y-[6px]',
+} as const
+
+/** The landscape face lift for a fixed-pixel frame — see {@link LANDSCAPE_FIXED_LIFT}. */
+export function landscapeLift(genesis: GenesisVersion | undefined): string {
+  return isPreG9Tip(genesis) ? LANDSCAPE_FIXED_LIFT.preG9 : LANDSCAPE_FIXED_LIFT.g9
+}
 
 /**
  * A Daz scene's preview as a small LANDSCAPE tile — the framing used wherever a
@@ -102,6 +145,7 @@ export type SceneTileSize = keyof typeof SCENE_TILE_SIZES
 export function SceneTile({
   scenePath,
   name,
+  genesis,
   size = 'sm',
   muted = false,
   className,
@@ -109,21 +153,29 @@ export function SceneTile({
   scenePath: string
   /** Fallback initial when the scene has no preview yet. */
   name: string
+  /** The generation of the character this scene renders — Daz frames a
+   *  G3/G8/G8.1 figure higher in the tip, so the face lift differs. Omitted
+   *  where the caller doesn't know it; that keeps the G9 lift. */
+  genesis?: GenesisVersion
   size?: SceneTileSize
   /** Greyscale + the dimmed treatment (an inactive/primary-marked scene). */
   muted?: boolean
   className?: string
 }) {
-  const { frame, lift } = SCENE_TILE_SIZES[size]
+  const tile = SCENE_TILE_SIZES[size]
   return (
     <Portrait
       scenePath={scenePath}
       name={name}
-      // The lift MUST be a quoted `cn(...)` util, not a leading
-      // `-translate-y-[…]` in a template literal — Tailwind doesn't scan a
-      // leading arbitrary token, so the rule wouldn't generate (see PR #468).
-      imgClassName={cn(lift, muted && 'grayscale')}
-      className={cn(frame, 'shrink-0 rounded', muted && 'scene-label-tile', className)}
+      // NOT `genesis` — this tile owns its own lift (a landscape crop, its own
+      // measured pairs above) and passes it as an override, so Portrait's
+      // portrait-shaped crop must not also fire.
+      // The lift MUST arrive as a quoted string through `cn(...)`, never built
+      // in a template literal: Tailwind doesn't scan a leading arbitrary token,
+      // so the rule wouldn't generate (see PR #468). Both columns above are
+      // written out whole for that reason.
+      imgClassName={cn(isPreG9Tip(genesis) ? tile.preG9 : tile.g9, muted && 'grayscale')}
+      className={cn(tile.frame, 'shrink-0 rounded', muted && 'scene-label-tile', className)}
       fallbackClassName="text-[8px]"
     />
   )
@@ -133,6 +185,7 @@ export function Portrait({
   image,
   scenePath,
   name,
+  genesis,
   zoom = true,
   className,
   imgClassName,
@@ -142,6 +195,15 @@ export function Portrait({
   image?: string
   scenePath?: string
   name: string
+  /** The generation of the character this image is a Daz render OF, when it is
+   *  one — it picks the face crop, because Daz frames G3/G8/G8.1 higher in the
+   *  square than G9 (see lib/tip-framing).
+   *
+   *  Pass it ONLY for Daz imagery: a character's tip or one of its scene
+   *  previews. Leave it off for anything Daz didn't compose — a Houdini
+   *  project's thumbnail, a static placeholder, a photo the user uploaded. Those
+   *  keep the default crop, and omitting the prop is what guarantees it. */
+  genesis?: GenesisVersion
   zoom?: boolean
   className?: string
   imgClassName?: string
@@ -163,7 +225,18 @@ export function Portrait({
           alt=""
           className={cn(
             'size-full object-cover',
-            zoom && 'origin-top -translate-x-[2%] -translate-y-[17%] scale-[2.3] object-top',
+            // Two whole class strings, not a shared prefix plus a computed lift:
+            // Tailwind scans SOURCE TEXT, and an arbitrary token it never sees
+            // spelled out generates no rule (the leading-token trap in
+            // SceneTile's comment above, PR #468). Both spell their lift out.
+            zoom &&
+              (isPreG9Tip(genesis)
+                ? 'origin-top -translate-x-[2%] -translate-y-[5%] scale-[2.3] object-top'
+                : 'origin-top -translate-x-[2%] -translate-y-[17%] scale-[2.3] object-top'),
+            // Still last: a call site that hand-picks its own lift (SceneTile's
+            // landscape tiles, the overview's list view) keeps winning through
+            // twMerge — those framings are tuned separately and are NOT covered
+            // by the generation crop.
             imgClassName,
           )}
         />

@@ -3,7 +3,7 @@ import { Link, createFileRoute, notFound, useRouter } from '@tanstack/react-rout
 import { FolderOpen, PaintBucket, UserPlus, X } from 'lucide-react'
 
 import { Button, EditableTitle, Field, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SidePanel, Switch, Tabs, TabsContent, TabsList, TabsTrigger, Tag, cn } from '@dth/ui'
-import { Portrait } from '#/components/portrait.tsx'
+import { Portrait, landscapeLift } from '#/components/portrait.tsx'
 import { ScenePreview } from '#/components/scene-preview.tsx'
 import { BulkDeleteDialog } from '#/components/bulk-delete-dialog.tsx'
 import { AssetsGrid } from '#/components/assets-grid.tsx'
@@ -940,11 +940,17 @@ function ProjectCharactersPage() {
                       <Portrait
                         image={character.image}
                         name={character.name}
+                        // The avatar is a Daz render of THIS character, so its
+                        // face crop follows the generation — in BOTH views: this
+                        // drives the grid's portrait crop, and the list's own
+                        // landscape lift below takes the generation too.
+                        genesis={character.genesis}
                         // Both views keep the portrait face-zoom; list view uses
                         // the landscape 13:9 crop (the ratio the character page's
                         // header settles into) and overrides the zoom's % lift
-                        // with a fixed −14px so the face sits right at the top.
-                        imgClassName={view === 'list' ? '-translate-y-[14px]' : undefined}
+                        // with the fixed-pixel LANDSCAPE lift, which is the same
+                        // painted offset every other landscape tile lands on.
+                        imgClassName={view === 'list' ? landscapeLift(character.genesis) : undefined}
                         className={cn(
                           'shrink-0 rounded-md',
                           view === 'grid' ? 'aspect-[3/4] w-16' : 'aspect-[13/9] w-16',

@@ -404,7 +404,12 @@ export function ProjectScanSection({
                               disabled={busy}
                               onChange={(e) => toggleScene(scene, e.target.checked)}
                             />
-                            <SceneTile scenePath={scene} name={sceneName(scene)} size="md" />
+                            <SceneTile
+                              scenePath={scene}
+                              name={sceneName(scene)}
+                              genesis={character.genesis}
+                              size="md"
+                            />
                             <span className="min-w-0 flex-1 truncate">{sceneName(scene)}</span>
                           </label>
                         )

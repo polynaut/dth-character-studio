@@ -53,7 +53,7 @@ import { seedSceneHair } from '#/lib/groom-detect.ts'
 
 import type { CharacterLocation, SceneWearables } from '#/lib/rom/api.ts'
 import type { PersistCharacterPatch } from '#/lib/use-character-draft.ts'
-import type { Character } from '@dth/rom'
+import type { Character, GenesisVersion } from '@dth/rom'
 
 /**
  * A linked Daz scene as a clickable card — its `.tip.png` portrait, the
@@ -62,6 +62,7 @@ import type { Character } from '@dth/rom'
 function SceneCard({
   scenePath,
   name,
+  genesis,
   onOpen,
   onRename,
   onRemove,
@@ -75,6 +76,10 @@ function SceneCard({
 }: {
   scenePath: string
   name: string
+  /** The character's generation — Daz frames its render of a G3/G8/G8.1 figure
+   *  higher in the tip than a G9 one, so the preview needs a different face crop
+   *  (see lib/tip-framing). */
+  genesis: GenesisVersion
   onOpen: (e: React.MouseEvent) => void
   /** Inline-rename the scene's files (in-folder scenes only — a linked-in-place
    *  scene is the user's original, its name stays theirs). */
@@ -111,6 +116,7 @@ function SceneCard({
         <Portrait
           scenePath={scenePath}
           name={name}
+          genesis={genesis}
           // h-[78px]: the PRIMARY label's bottom lands 2px ABOVE the avatar's
           // bottom edge (stack = title 24 + mt-1 4 + chip ~21 + gap-2 8 +
           // PRIMARY 19 ≈ 76, measured). Re-measure if the rows change.
@@ -1313,6 +1319,7 @@ export function DazSceneField({
                   <SceneCard
                     scenePath={character.scenePath}
                     name={character.name}
+                    genesis={character.genesis}
                     onOpen={(e) => onOpenClick(character.scenePath, e)}
                     onRename={
                       insideCharFolder(character.scenePath)
@@ -1359,6 +1366,7 @@ export function DazSceneField({
                   <SceneCard
                     scenePath={scene}
                     name={character.name}
+                    genesis={character.genesis}
                     onOpen={(e) => onOpenClick(scene, e)}
                     onRename={
                       insideCharFolder(scene) ? (next) => renameLinkedScene(scene, next) : undefined
