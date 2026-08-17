@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Ban, ChevronDown, ChevronRight, FileWarning, Loader2, ScanSearch } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -13,10 +13,11 @@ import {
   fetchProjectScanPlan,
   ingestProjectProductScans,
   startProjectScan,
+  watchExportRunFiles,
 } from '#/lib/rom/api.ts'
 import { normalizeSceneKey } from '#/lib/rom/execute-jobs.ts'
 
-import type { ProjectScanPlan, RunnerGate } from '#/lib/rom/api.ts'
+import type { ProjectScanPlan, RunnerGate, StopWatching } from '#/lib/rom/api.ts'
 
 /** Scene paths are compared by the ONE key convention the whole handoff uses. */
 const sceneKey = normalizeSceneKey
@@ -157,20 +158,73 @@ export function ProjectScanSection({
     setProgress(run.state === 'running' ? { done: run.processed, total: run.total } : null)
   }
 
+  // One coalesced funnel for every refresh trigger (focus, watch event,
+  // heartbeat): the finished snapshot above is destructive — it consumes the
+  // run, ingests the product scans and toasts — and two refreshes racing over
+  // that moment must not both act on it. An ask that lands mid-refresh runs
+  // AFTER it, so the newest state is never skipped.
+  const refreshBusyRef = useRef(false)
+  const refreshAgainRef = useRef(false)
+  async function refreshCoalesced() {
+    if (refreshBusyRef.current) {
+      refreshAgainRef.current = true
+      return
+    }
+    refreshBusyRef.current = true
+    try {
+      do {
+        refreshAgainRef.current = false
+        await refresh()
+      } while (refreshAgainRef.current)
+    } finally {
+      refreshBusyRef.current = false
+    }
+  }
+
   useRefetchOnFocus(
     () => {
-      void refresh()
+      void refreshCoalesced()
     },
     [],
     { immediate: true },
   )
+  // Real file watching while a run is live: the Runner's pickup rename and
+  // per-row rewrites (and the progress-log lines) arrive as change events, so
+  // the panel follows the batch the moment it moves. Armed on the live/idle
+  // BOOLEAN, not on `phase` — pending→running must not tear the watch down.
+  const live = phase !== 'idle'
+  const [runWatchArmed, setRunWatchArmed] = useState(false)
   useEffect(() => {
-    if (phase === 'idle') return
-    const id = window.setInterval(() => void refresh(), 2500)
-    return () => window.clearInterval(id)
-    // Re-armed on `phase` alone — refresh captures nothing that changes.
+    if (!live) return
+    let stop: StopWatching | null = null
+    let disposed = false
+    void watchExportRunFiles(() => void refreshCoalesced()).then((stopper) => {
+      if (!stopper) return
+      if (disposed) {
+        stopper()
+        return
+      }
+      stop = stopper
+      setRunWatchArmed(true)
+    })
+    return () => {
+      disposed = true
+      stop?.()
+      setRunWatchArmed(false)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase])
+  }, [live])
+  // With the watch armed the interval is only the heartbeat under events a NAS
+  // share may swallow — and the one prompter for a Daz that died mid-run
+  // (lib/fs-watch.ts on why the poll survives). Full speed without a watch (a
+  // plain browser, a failed start).
+  useEffect(() => {
+    if (!live) return
+    const id = window.setInterval(() => void refreshCoalesced(), runWatchArmed ? 15_000 : 2500)
+    return () => window.clearInterval(id)
+    // Re-armed on the booleans alone — refresh captures nothing that changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live, runWatchArmed])
 
   async function onStart() {
     setStarting(true)

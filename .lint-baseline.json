@@ -1,5 +1,5 @@
 {
   "oxc/no-map-spread": 13,
-  "eslint/no-await-in-loop": 185,
+  "eslint/no-await-in-loop": 187,
   "react/no-unstable-nested-components": 24
 }

@@ -199,12 +199,14 @@ export {
   startSceneScan,
   fetchSceneScanProgress,
   abortSceneScan,
+  watchExportRunFiles,
 } from './api/execute'
 export type {
   ExecuteJobsSummary,
   ExecuteSceneStatus,
   ExporterJobFileState,
   ExportRunProgress,
+  StopWatching,
   ProjectScanCharacter,
   ProjectScanPlan,
   ProjectScanSummary,
