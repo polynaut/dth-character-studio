@@ -1123,7 +1123,7 @@ describe('characterSchema — v33 mesh SubD level (additive)', () => {
   })
 })
 
-describe('characterSchema — v31 autoBase default flip (false → true)', () => {
+describe('characterSchema — v34 strips the retired base/autoBase floors', () => {
   const now = '2026-08-11T00:00:00.000Z'
   const v30Character = (): Record<string, any> => ({
     id: 'c1',

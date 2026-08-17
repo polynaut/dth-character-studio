@@ -1266,7 +1266,7 @@ function addFrameData(frameDatas, keyData){
 //       "name": "Anus_Open",
 //       "morphs": [
 //         { "node": "GoldenPalace_G9", "prop": "GP9_Anus_Open", "value": 1.0 },
-//         { "node": "GoldenPalace_G9", "prop": "GP9_Anus_Depth", "value": 0.5, "base": 0.2 }
+//         { "node": "GoldenPalace_G9", "prop": "GP9_Anus_Depth", "value": 0.5 }
 //       ]
 //     }
 //   ]
@@ -1538,10 +1538,33 @@ function resetFrameDatasAtFrame(oNodeRoot, frameDatas, resetFrame){
  * frame-0 morphs applied (v74 ordering), so a frame-0 morph that is ALSO
  * walked is caught too - that combination drifts like any other dial.
  *
+ * GP/DK art-direction morphs sawtooth with the same 0 floor but never enter
+ * frameDatas, so this function cannot see them - applyArtDirectionData runs
+ * the same per-dial check (dialedWalkedVerdict) itself, before it keys each
+ * channel.
+ *
  * The tolerance absorbs float noise on an untouched dial, nothing more; a
  * deliberately dialed value in either direction is far above it.
  */
 var DTH_DIALED_WALKED_TOLERANCE = 0.001;
+
+/** Reads one walked dial's frame-0 scene value: false when clean, else
+ *  { value, driven } for dialedWalkedReason. Must be called BEFORE anything
+ *  keys the channel - keying is what destroys the evidence. */
+function dialedWalkedVerdict(oProp){
+	var fValue = oProp.getValue(0);
+	if(Math.abs(fValue) <= DTH_DIALED_WALKED_TOLERANCE) return false;
+	var bDriven = (typeof oProp.getNumControllers == "function" && oProp.getNumControllers() > 0);
+	return { value: fValue, driven: bDriven };
+}
+
+function dialedWalkedReason(oBad){
+	return "dialed at " + (Math.round(oBad.value * 1000) / 1000) +
+		" in the scene - a walked morph must be at 0, or the exported FBX base " +
+		"loses it while the alembic keeps it (the shapes drift). Zero the dial" +
+		(oBad.driven ? " (it is DRIVEN - zero the controlling dial)" : "") +
+		" and rebuild; its shape reaches Unreal through the generated morph instead.";
+}
 
 function checkDialedWalkedMorphs(oNodeRoot, frameDatas){
 	var oSeen = {};      // nodeName|propName -> {value, driven} or false (clean)
@@ -1580,11 +1603,7 @@ function checkDialedWalkedMorphs(oNodeRoot, frameDatas){
 						}
 					}
 					if(oProp){
-						var fValue = oProp.getValue(0);
-						if(Math.abs(fValue) > DTH_DIALED_WALKED_TOLERANCE){
-							var bDriven = (typeof oProp.getNumControllers == "function" && oProp.getNumControllers() > 0);
-							oVerdict = { value: fValue, driven: bDriven };
-						}
+						oVerdict = dialedWalkedVerdict(oProp);
 					}
 					// An unresolvable prop is NOT failed here - applyKeyData
 					// reports "morph/property not found" on its own frames.
@@ -1592,13 +1611,7 @@ function checkDialedWalkedMorphs(oNodeRoot, frameDatas){
 				oSeen[sKey] = oVerdict;
 			}
 			if(oSeen[sKey]){
-				var oBad = oSeen[sKey];
-				var sReason = "dialed at " + (Math.round(oBad.value * 1000) / 1000) +
-					" in the scene - a walked morph must be at 0, or the exported FBX base " +
-					"loses it while the alembic keeps it (the shapes drift). Zero the dial" +
-					(oBad.driven ? " (it is DRIVEN - zero the controlling dial)" : "") +
-					" and rebuild; its shape reaches Unreal through the generated morph instead.";
-				logRunFailedMorph(keyData.frameIdx, keyData.nodeName, keyData.propName, sReason);
+				logRunFailedMorph(keyData.frameIdx, keyData.nodeName, keyData.propName, dialedWalkedReason(oSeen[sKey]));
 				iFailed++;
 			}
 		}
@@ -2693,6 +2706,16 @@ function applyArtDirectionData(jsonData, oNodeRoot, startFrame) {
 
     var timeStep = Scene.getTimeStep();
     var appliedCount = 0;
+    // The dialed-walked-morph gate, art-direction leg (runtime v82): these
+    // morphs sawtooth through createMorphFrame with the same 0 floor as
+    // frameDatas morphs, so a dialed one drifts identically - but they never
+    // enter frameDatas, so checkDialedWalkedMorphs cannot see them. Each dial
+    // is read at FIRST encounter, before this pass keys the channel (keying
+    // destroys the evidence). A prop the ROM also walks was already anchored
+    // at 0 by the frame-0 reset, so it reads clean here and is reported once,
+    // by the frameDatas gate. The morph is still applied - the build
+    // continues, and the export gate skips the export.
+    var oDialSeen = {}; // node|prop -> {value, driven} or false (clean)
 
     for (var i = 0; i < jsonData.frames.length; i++) {
         var frameEntry = jsonData.frames[i];
@@ -2755,6 +2778,12 @@ function applyArtDirectionData(jsonData, oNodeRoot, startFrame) {
             if (!oProp) {
                 logRunFailedMorph(absoluteFrame, morph.node, morph.prop, "morph/property not found (art direction)");
                 continue;
+            }
+
+            var sDialKey = morph.node + "|" + morph.prop;
+            if (oDialSeen[sDialKey] === undefined) oDialSeen[sDialKey] = dialedWalkedVerdict(oProp);
+            if (oDialSeen[sDialKey]) {
+                logRunFailedMorph(absoluteFrame, morph.node, morph.prop, dialedWalkedReason(oDialSeen[sDialKey]));
             }
 
             // Apply the morph value at this frame using sawtooth pattern

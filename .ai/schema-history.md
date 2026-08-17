@@ -1009,5 +1009,13 @@ v80 — no unattended carrier opens a modal, and the missing-runtime message sto
       2026-08-17 — scripted doExport, both flag values, and the DIALOG export
       produce the identical FBX), so a dialed walked morph can only ever ship
       a drifting fbx/abc pair; the shape must ride the HDA-generated morph
-      instead, at full range.
+      instead, at full range. The gate has TWO legs: checkDialedWalkedMorphs
+      covers frameDatas (custom sections / extraFrames), and
+      applyArtDirectionData runs the same per-dial check itself
+      (dialedWalkedVerdict) — GP/DK art-direction morphs sawtooth with the
+      same 0 floor but never enter frameDatas, so the first leg cannot see
+      them; the art leg reads each dial at first encounter, BEFORE keying the
+      channel (keying destroys the evidence), and still applies the morph.
+      Both legs are exercised for real in the sandbox harness
+      (dialed-walked-gate.test.ts).
 ```
