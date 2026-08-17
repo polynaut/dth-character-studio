@@ -48,6 +48,20 @@ plain browser JS; keep them dependency-free.
     the build — **run `pnpm build:guide` before pushing a doc link**; it is the
     only gate that catches it, and it is NOT part of the `/verify` gate
     (typecheck / lint / test / smoke / cargo all pass with a dead link).
+  - **An apostrophe slugifies to the digits `39`** — same mechanism one step
+    worse. marked escapes `'` to `&#39;` in the rendered heading, and stripping
+    the non-alphanumerics leaves the `39` behind, so
+    `## Finding a morph's internal Daz name` is
+    `#finding-a-morph39s-internal-daz-name`. Measured 2026-08-17 on the guide
+    diet, where the "obvious" `#finding-a-morphs-…` failed the build. Rewrite
+    the heading without the apostrophe rather than shipping a link that reads
+    like a typo.
+  - **`<details>` summaries are anchors too, and they follow the OPPOSITE rule**:
+    the accordion post-pass strips entities before slugging, so a summary
+    reading `morphs &amp; node` is `#morphs--node` (two dashes, no `amp`). These
+    ids are newer than the headings' and carry no GitHub-slug compatibility, so
+    the two rules genuinely differ — check which kind of anchor you are linking
+    to before writing it.
 
 ## Deploy & previews
 

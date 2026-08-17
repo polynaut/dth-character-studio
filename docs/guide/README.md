@@ -1,54 +1,43 @@
 # Getting started
 
-This guide takes you from a fresh install to your first generated Range of Motion:
-you'll set the studio up, create a project and a character, build the ROM in Daz
-Studio — optionally exporting straight into the DTH pipeline — and hand the result
+From a fresh install to your first generated Range of Motion: set the studio up,
+create a project and a character, build the ROM in Daz Studio, hand the result
 to Houdini.
 
 ## What you need
 
-- [DTH Character Studio](https://github.com/polynaut/dth-character-studio/releases/latest) on **Windows 10/11**, or on **macOS** (Apple Silicon) — the Mac build defines characters and generates both artifacts, but everything that drives Daz Studio and Houdini for you is [Windows-only](./01-installation.md#macos)
-- **[Daz Studio](https://www.daz3d.com/technology/)** with a **Genesis 9** character (G3, G8, G8.1 and G9 are all selectable; G9 is the deeply validated path)
-- The **[DazToHue](https://www.artstation.com/marketplace/p/BLM5K/daztohue)** package by mrpdean —
-  it contains the **DTH release** (Daz + Houdini content) and the **DTH Exporter Plugin**
-- **[SideFX Houdini](https://www.sidefx.com/products/houdini/)** — needed for the far side of the pipeline
+- [DTH Character Studio](https://github.com/polynaut/dth-character-studio/releases/latest) on **Windows 10/11** or **macOS** (Apple Silicon). The Mac build defines characters and generates both artifacts; the automation that drives Daz and Houdini is [Windows-only](./01-installation.md#macos).
+- **[Daz Studio](https://www.daz3d.com/technology/)** with a **Genesis 9** character (G3, G8, G8.1 and G9 are selectable; G9 is the deeply validated path)
+- The **[DazToHue](https://www.artstation.com/marketplace/p/BLM5K/daztohue)** package by mrpdean — it contains the **DTH release** (Daz + Houdini content) and the **DTH Exporter Plugin**
+- **[SideFX Houdini](https://www.sidefx.com/products/houdini/)**
 
 ## The steps
 
 1. [Install the app](./01-installation.md)
 2. [One-time setup](./02-setup.md) — wire up the DTH release and the Exporter Plugin
 3. [Your first project](./03-first-project.md)
-4. [Your first character](./04-first-character.md) — define it and get easy scripts for Daz Studio
+4. [Your first character](./04-first-character.md) — define it, get its Daz scripts
 5. [Build the ROM in Daz Studio](./05-rom-in-daz.md) — with optional direct export
-6. [Into Houdini](./06-into-houdini.md)
-
+6. [The DTH Export batch](./dth-export.md) — or let the studio run the whole round trip
+7. [Into Houdini](./06-into-houdini.md)
 
 ## Optional & advanced
 
 None of these are needed to generate a ROM:
 
-- [Custom morphs](./custom-morphs.md) — listing the morphs of a section
-  yourself: pose rows, combining several Daz morphs into one output, bone-scale
-  reference frames, and finding a morph's internal Daz name.
+- [Custom morphs](./custom-morphs.md) — pose rows, combining several Daz morphs
+  into one output, bone-scale reference frames, internal Daz names.
 - [Advanced character options](./advanced.md) — multiple Daz scenes on one
-  character (outfits, per-scene hair, per-scene overrides), and driving extra
-  morphs off bone rotations (Modify JCM frames).
-- [The DTH Export batch](./dth-export.md) — the one button that runs the whole
-  round trip: Daz builds and exports every scene you pick, Houdini follows, and
-  the result can be queued for re-import into Unreal.
-- [Bundled fix-it scripts](./bundled-scripts.md) — the two Daz scripts you run
-  by hand: freeing a geograft trapped under a Golden Palace / Dicktator shell,
-  and rescuing an old scene that is only a baked ROM animation.
-- [The Utils drawer](./houdini-utils.md) — the Houdini project card's 🔧:
-  copying a material, skeleton or occlusion setup from one project into another.
-- [Project checks and repairs](./houdini-project-checks.md) — the drawer's other
-  half: a project's `$JOB`, timeline, paths and blank DazToHue parameters
-  checked, and put right.
-- [The Tools page](./tools.md) — one-click **Scan & index** of a project (the
-  morph/bone index behind the autocompletes), installing/maintaining your own
-  Daz & Houdini content, deduplicating downloads, and refreshing generated
-  files.
-- [Attachments](./attachments.md) — reusable Daz scenes (not full characters),
-  organized in a project alongside its characters. *(Opt-in per project.)*
-- [Daz product scanning](./product-scanning.md) — discover which Daz products
-  a character uses and store the list on it. *(Opt-in per project.)*
+  character (outfits, per-scene hair, per-scene overrides) and Modify JCM frames.
+- [Bundled fix-it scripts](./bundled-scripts.md) — a geograft trapped under a
+  Golden Palace shell; a scene that is only a baked ROM animation.
+- [The Utils drawer](./houdini-utils.md) — copy a material, skeleton or occlusion
+  setup between Houdini projects.
+- [Project checks and repairs](./houdini-project-checks.md) — a project's `$JOB`,
+  timeline, paths and blank DazToHue parameters, checked and put right.
+- [The Tools page](./tools.md) — **Scan & index**, installing your own Daz &
+  Houdini content, deduplicating downloads, refreshing generated files.
+- [Attachments](./attachments.md) — reusable Daz scenes and Houdini templates.
+  *(Opt-in per project.)*
+- [Daz product scanning](./product-scanning.md) — which Daz products a character
+  uses. *(Opt-in per project.)*

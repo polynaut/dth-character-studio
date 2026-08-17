@@ -201,7 +201,7 @@ script regeneration flow from there. Nothing else to hand-maintain.
 - Docs sweep: `poseasset-csv-spec.md` header pin, `.ai/domain.md` (exporter
   contract, Houdini handoff, era sections), `.ai/gotchas.md` measured facts,
   the guide pages (02-setup, 05-rom-in-daz, 06-into-houdini, tools) — run
-  `/docs-refresh` for screenshots. Smoke fixtures pin a release version
+  `/refresh-docs` for screenshots. Smoke fixtures pin a release version
   (`apps/web/smoke/fixtures.ts` `DTH_VERSION`) — bump if specs depend on it.
 - **Update THIS file** with what the new release changed: new measured facts
   go to `.ai/gotchas.md`, procedure/anchor changes land here, and the

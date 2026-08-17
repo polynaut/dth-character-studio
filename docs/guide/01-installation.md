@@ -5,52 +5,37 @@ reading this on.
 
 ## Windows
 
-Download the installer (`…_x64-setup.exe`) and run it.
-
-- It's **code-signed** (publisher: *Open Source Developer Remo Vincenzo Vetere*),
-  so Windows SmartScreen lets it through without drama.
-- It installs **per user** — no administrator rights needed.
-- The app **updates itself**: it checks on launch and installs new versions with
-  one click.
+Download the installer (`…_x64-setup.exe`) and run it. It's **code-signed**
+(publisher: *Open Source Developer Remo Vincenzo Vetere*), installs **per user**
+(no admin rights), and **updates itself** — it checks on launch and installs new
+versions with one click.
 
 ## macOS
 
-Download the `…_aarch64.dmg` and drag the app to Applications.
-
-- **Apple Silicon only** (M1 and newer). There is no Intel build.
-- The app is **Developer-ID signed, notarized and stapled**, so it opens
-  normally — no Gatekeeper right-click dance.
-- It **updates itself** on macOS too.
+Download the `…_aarch64.dmg` and drag the app to Applications. **Apple Silicon
+only** (M1 and newer); there is no Intel build. It is Developer-ID signed,
+notarized and stapled, so it opens without the Gatekeeper right-click dance, and
+it updates itself too.
 
 &nbsp;
 
 > [!IMPORTANT]
-> **The automation is Windows-only.** On macOS the studio is a character
-> definition and generation tool: you define the ROM and **Save** writes both
-> artifacts — the Daz apply-script (`.dsa`) and the Houdini PoseAsset CSV — and
-> those files are the product. Running them is then yours to do by hand.
+> **The automation is Windows-only.** On macOS the studio still defines characters
+> and generates both artifacts — **Save** writes the Daz apply-script (`.dsa`) and
+> the Houdini PoseAsset CSV, and those files are the product. You run them by hand:
+> the script works in Daz Studio for Mac and the CSV imports in Houdini for Mac.
 >
-> Windows-only, because each one drives another application or reads the
-> Windows registry:
->
-> - Everything that **drives Daz Studio** for you — the
->   [DTH Export batch](./dth-export.md),
->   [Tools → Scan & index](./tools.md#tab-1--scan-amp-index), opening a scene in
->   a running Daz, and the bundled
->   [Runner plugin](./02-setup.md#daz-studio-plugins).
-> - The **DTH Exporter Plugin** itself, which is a Windows Daz plugin — so
->   [direct export](./05-rom-in-daz.md#direct-export-optional-recommended) and
->   the [bone-scale reference skeletons](./custom-morphs.md) that depend on it.
-> - Everything that **drives Houdini** through `hython` —
->   [Generate project](./06-into-houdini.md#generate-the-houdini-project-automatically),
->   [Fill network](./houdini-project-checks.md#the-general-tab), and the whole
->   [Utils drawer](./houdini-utils.md).
-> - The **installation cards** in Settings, which read DIM's and SideFX's
->   Windows registration — on macOS you fill the folder paths in yourself.
->
-> You can still run the generated script in Daz Studio for Mac and import the
-> CSV in Houdini for Mac by hand; that is the classic workflow the studio
-> automates on Windows.
+> What needs Windows, because it drives another application or reads the registry:
+> everything that **drives Daz Studio** (the [DTH Export batch](./dth-export.md),
+> [Tools → Scan & index](./tools.md#tab-1--scan-amp-index), the bundled
+> [Runner plugin](./02-setup.md#daz-studio-plugins)); the **DTH Exporter Plugin**
+> and so [direct export](./05-rom-in-daz.md#direct-export-optional-recommended) and
+> the [bone-scale reference skeletons](./custom-morphs.md); everything that
+> **drives Houdini** through `hython`
+> ([Generate project](./06-into-houdini.md#generate-the-houdini-project-automatically),
+> [Fill network](./houdini-project-checks.md#the-general-tab), the whole
+> [Utils drawer](./houdini-utils.md)); and the **installation cards** in Settings,
+> which read DIM's and SideFX's Windows registration.
 
 &nbsp;
 
