@@ -88,9 +88,11 @@ export function usePortraitSrc({
  * Measured: `g9` is −14px painted in both sizes (−50%·28, and −50%·36+4).
  * `preG9` is −6px (−50%·36+12, measured against a real G8.1 tip; `sm`'s +8
  * follows from the same −6). Add a size by choosing its px so BOTH columns keep
- * landing on their column's painted lift — the smoke spec asserts exactly that.
+ * landing on their column's painted lift — then LOOK at it, because nothing here
+ * is asserted: framing is judged by eye, not by a test (see
+ * {@link LANDSCAPE_FIXED_LIFT} for the third variant that has to agree).
  */
-export const SCENE_TILE_SIZES = {
+const SCENE_TILE_SIZES = {
   /** The compact chip — scene footer, inline scene labels. */
   sm: {
     frame: 'h-8 w-[56px]',
@@ -118,7 +120,7 @@ export type SceneTileSize = keyof typeof SCENE_TILE_SIZES
  * what confirmed the invariant — it had already been tuned, independently, to
  * exactly the value the scene tiles resolve to.
  */
-export const LANDSCAPE_FIXED_LIFT = {
+const LANDSCAPE_FIXED_LIFT = {
   g9: '-translate-y-[14px]',
   preG9: '-translate-y-[6px]',
 } as const
