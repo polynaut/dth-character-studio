@@ -43,9 +43,7 @@ A name **you** type is flagged rather than silently rewritten.
 ## Several Daz morphs in one row
 
 A pose row can drive its one output from **several Daz morphs at once** — expand
-its **morphs** toggle. That bakes a shape which only exists as a combination of
-dials into a single clean morph for Houdini and Unreal: the listed morphs are keyed
-together on that frame and blend into the output named in **Name**.
+its **morphs** toggle.
 
 <p align="center">
   <img width="900" alt="Expanded pose rows: a single-morph row, and rows combining several morphs into one output" src="screenshots/combine-morphs.png" />
@@ -70,8 +68,18 @@ Every entry in that list carries its own:
 > `0` — so the ROM stops erasing the base shape. A morph the scene does not dial
 > reads `0` anyway, so for most morphs Auto changes nothing.
 
-**Add morph** adds more; the trash icon removes one (a pose always keeps at least
-one).
+<details>
+<summary><strong>Combining several morphs into one output — why you'd do it</strong></summary>
+<table><tr><td>
+
+Combining bakes a shape that only exists as a combination of dials — or a
+controller plus its corrective — into a single clean morph for Houdini and Unreal:
+all the listed morphs are keyed together on that one frame and blend into the
+output named in **Name**. **Add morph** adds more; the trash icon removes one (a
+pose always keeps at least one).
+
+</td></tr></table>
+</details>
 
 <details>
 <summary><strong>Bone scale — morphs that scale bones (reference skeletons)</strong></summary>
