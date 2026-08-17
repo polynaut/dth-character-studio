@@ -19,10 +19,6 @@ var options = {
 	bDQS: false,// set true to enable Dual Quat Skinning, defaults to linear
 	FACsDetailStrength: 1.0,
 	FlexionStrength: 1.0,
-	// One mesh SubD level stamped on the figure tree (viewport AND render) before
-	// the ROM is built. -1 leaves every node's own levels alone, which is what a
-	// script generated before this option existed also means by omitting it.
-	subdLevel: -1,
 	// Write OUT*.csv debug dumps (frameDatas / success / failed / scanned) into the
 	// scripts folder. Off by default so normal runs don't litter the repo.
 	bWriteDebugCSV: false,

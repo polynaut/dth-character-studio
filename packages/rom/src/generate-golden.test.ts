@@ -98,10 +98,6 @@ function goldenCharacter(): Character {
     generation: 'G9',
     sections: allSections(),
     applyUE5TearUV: true,
-    // A real level, so the emitted config line is pinned. The DEFAULT (-1,
-    // omitted entirely) is pinned by generate.test.ts instead — a golden can
-    // only ever hold one of the two.
-    subdLevel: 2,
     scenePath: 'C:/DTH/Project/assets/characters/Electra G9/daz3d/Electra.duf',
     extraScenes: ['C:/DTH/Project/assets/characters/Electra G9/daz3d/Electra_Yoga.duf'],
     exportPath: 'C:/DTH/Export/Electra',

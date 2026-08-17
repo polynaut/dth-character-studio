@@ -6,7 +6,7 @@
 // skeleton/mesh AND every hair asset — no matter the "Run the export with the
 // ROM script" / "Export hair assets too" toggles (those govern the visible
 // per-character scripts only). Dot-prefixed: hidden from the Content Library.
-// DTH-Runtime: v81
+// DTH-Runtime: v80
 // Self-contained: this single ApplyDTHCharacter() call carries the full
 // character config AND all ROM morph definitions inline. It needs the DTH
 // runtime (the hidden .DthWorkflow.dsa + .DthUtils.dsa + .DthOptions.dsa), which
@@ -17,7 +17,7 @@ var dthCharacterConfig = {
   "genesis": "G9",
   "gender": "female",
   "characterName": "Electra G9",
-  "runtimeVersion": 81,
+  "runtimeVersion": 80,
   "studioVersion": "",
   "bIncludeJCM": true,
   "bIncludeFAC": true,
@@ -28,7 +28,6 @@ var dthCharacterConfig = {
   "FACsDetailStrength": 1,
   "FlexionStrength": 1,
   "bApplyUE5TearUV": true,
-  "subdLevel": 2,
   "presetFrames": {
     "base": 328,
     "gp": 104,
