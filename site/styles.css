@@ -740,11 +740,15 @@ a:hover {
 /* Screenshot teasers atop the "why" and "about" sections: the top of a real
    app page, cropped to a fixed 2560/1130 band and fading out so the heading
    rides up into it. The mask keeps the upper half of the band fully opaque
-   and fades out across the lower half, giving the heading a long ramp. */
+   and fades out across the lower half, giving the heading a long ramp.
+
+   No faked window chrome here, deliberately. A drawn titlebar (traffic dots on
+   a 38px bar) sat badly with the 3D tilt below — the bar is the one part of the
+   frame the eye reads as flat, so rotating it broke the illusion it existed to
+   create — and its px-fixed dots were oversized against the teaser on a phone.
+   The shot's own rounded frame + ring is the framing. */
 .section-teaser {
   position: relative;
-  display: flex;
-  flex-direction: column;
   overflow: hidden;
   border-radius: var(--radius);
   aspect-ratio: 2560 / 1130;
@@ -756,20 +760,6 @@ a:hover {
   box-shadow:
     0 30px 80px -24px rgb(0 0 0 / 0.6),
     0 0 90px -24px color-mix(in oklab, var(--primary) 45%, transparent);
-}
-
-/* Window titlebar (traffic dots) in the fully opaque zone — the band reads as
-   the app in a window, not background wallpaper. */
-.section-teaser::before {
-  content: '';
-  flex: none;
-  height: 38px;
-  background:
-    radial-gradient(circle 5.5px at 26px 50%, #f66057 98%, transparent),
-    radial-gradient(circle 5.5px at 48px 50%, #f4bd50 98%, transparent),
-    radial-gradient(circle 5.5px at 70px 50%, #61c454 98%, transparent),
-    linear-gradient(180deg, #383838, #2c2c2c);
-  border-bottom: 1px solid color-mix(in oklab, var(--border) 60%, transparent);
 }
 
 /* 1px ring on top of the shot, fading out with the mask like everything else. */
@@ -788,13 +778,13 @@ a:hover {
   height: auto;
 }
 
-/* 3D entrance + parallax: the window starts tilted back and flattens as it
+/* 3D entrance + parallax: the frame starts tilted back and flattens as it
    scrolls toward mid-viewport, while the shot INSIDE drifts a touch slower
-   than the window (classic depth cue). Both are scroll-driven CSS running on
+   than the frame (classic depth cue). Both are scroll-driven CSS running on
    the compositor — no JS. The image starts pulled up 44px and gives back at
-   most 38px across the window's whole traversal, so the sliding shot can
-   never open a gap under the titlebar. Browsers without animation-timeline
-   just show the flat, static framed window. */
+   most 38px across the whole traversal, so its top edge stays negative and the
+   sliding shot can never open a gap at the top of the frame. Browsers without
+   animation-timeline just show the flat, static framed shot. */
 @supports (animation-timeline: view()) {
   .section-teaser {
     transform-origin: 50% 100%;
@@ -809,13 +799,6 @@ a:hover {
     animation: teaser-parallax linear both;
     animation-timeline: --teaser;
     animation-range: cover 0% cover 100%;
-  }
-
-  /* The pulled-up image would otherwise paint OVER the titlebar (it comes
-     later in paint order) — keep the bar on top. */
-  .section-teaser::before {
-    position: relative;
-    z-index: 1;
   }
 }
 
