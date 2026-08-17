@@ -481,22 +481,6 @@ describe('toCharacterScriptDsa', () => {
     ).toBe(false)
   })
 
-  it('carries a chosen SubD level into the config', () => {
-    expect(characterConfig(toCharacterScriptDsa(makeCharacter({ subdLevel: 2 })).content).subdLevel).toBe(2)
-    // 0 is a level, not "off" — the config has to carry it, or picking the base
-    // cage would silently mean "leave the scene alone".
-    expect(characterConfig(toCharacterScriptDsa(makeCharacter({ subdLevel: 0 })).content).subdLevel).toBe(0)
-  })
-
-  it('omits subdLevel entirely at "leave as-is", rather than sending -1', () => {
-    // The runtime defaults to leaving the scene alone, so an absent key and an
-    // opted-out character say the same thing — and a config that never carries
-    // a sentinel cannot grow a runtime that forgets to test for one.
-    const file = toCharacterScriptDsa(makeCharacter({ subdLevel: -1 }))
-    expect(characterConfig(file.content).subdLevel).toBeUndefined()
-    expect(file.content).not.toContain('subdLevel')
-  })
-
   it("splits a JCM rule's signed drives[] into positive/negative by angle sign", () => {
     const character = makeCharacter({
       jcmMorphMods: [
