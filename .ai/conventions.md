@@ -133,6 +133,11 @@ hooks in `.claude/settings.json` move these the same way:
   the fact they fired for — green to a check that stops at "the anchor
   resolves". The general lesson for any extract-at-runtime mechanism: assert on
   what the reader RECEIVES, never on whether something was produced.
+  **And a doc CORRECTION breaks anchors exactly like a rewrite does** — the
+  `ffi-surface` anchor was the verbatim `**FFI surface: 52 commands**`, so
+  re-verifying that count to 54 (which the sentence itself asks for) killed the
+  trigger silently. Run the audit after any edit to an anchored line, and keep
+  figures the doc expects to revise OUT of the anchor.
   **The table is deliberately not exhaustive, and says so in what it injects.**
   the `gotchas-*.md` files hold ~90 measured facts and only the action-tied ones have
   triggers, so silence from this hook means "no trigger matched", never "nothing

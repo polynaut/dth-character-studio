@@ -33,6 +33,16 @@
  * Run `node .claude/hooks/inject-gotchas.mjs --audit` after editing a doc — it
  * fails on any anchor that no longer resolves.
  *
+ * ## Anchor on what will not be edited
+ *
+ * An anchor is a verbatim substring, so it inherits every reason the doc has to
+ * change. Keep out of it anything the doc EXPECTS to revise — counts above all:
+ * `**FFI surface: 52 commands**` went stale the moment someone did what that
+ * very sentence asks ("count it, don't trust it") and corrected it to 54, and
+ * the fact stopped being injected with nothing on screen to say so. Prefer the
+ * shortest phrase that is still unique; the audit's AMBIGUOUS check is what
+ * makes shortening safe.
+ *
  * @typedef {object} Trigger
  * @property {string} id          stable key — also the once-per-session dedupe key
  * @property {RegExp} [command]   matched against a Bash/PowerShell command
@@ -129,7 +139,7 @@ export const TRIGGERS = [
     id: 'lint-decisions',
     command: /pnpm\s+lint|oxlint/,
     doc: GOTCHAS_DESKTOP,
-    anchor: "The repo's ~250 lint warnings are DECISIONS",
+    anchor: 'lint warnings are DECISIONS',
   },
   {
     id: 'cargo-fmt',
@@ -446,7 +456,9 @@ export const TRIGGERS = [
     id: 'ffi-surface',
     path: /apps\/desktop\/src\/lib\.rs$/,
     doc: ARCH,
-    anchor: '**FFI surface: 52 commands**',
+    // NOT the count — the doc states it as a number it expects to be re-verified
+    // and corrected, and the anchor died the first time someone did (52 → 54).
+    anchor: '**FFI surface:',
   },
   {
     id: 'which-daz-launches',
