@@ -32,8 +32,8 @@ instead: its card's folder button browses for a new scene, runs the same
 validation and copy-vs-link decision as Add scene, then swaps it in — the
 Genitalia section re-derives from the new scene's geograft, its detected
 [hair items](#hair-items--per-scene-kept-out-of-the-export) are pre-selected,
-the avatar follows, and an old in-folder copy can be deleted right there (a
-linked-in-place original is always kept).
+the avatar follows, and an old in-folder copy is cleaned up right there — its
+saved ROM animation included (a linked-in-place original is always kept).
 
 Replacing is only offered while the primary is the character's **only** scene.
 Every extra scene was checked against the primary when it was added — above all

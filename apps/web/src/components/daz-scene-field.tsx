@@ -723,8 +723,10 @@ export function DazSceneField({
   /** Swap the primary for `scene` — the Add flow's copy/link mechanics, but the
    *  patch REPLACES `scenePath` (extras stay), the new primary re-derives the
    *  GEN section like a relink (gender stays baked), the persist runs through
-   *  relinkScene so the avatar follows, and the OLD primary's files go when the
-   *  user kept "Delete the old scene file" on (in-folder copies only). */
+   *  relinkScene so the avatar follows, and the OLD primary (in-folder copies
+   *  only) is cleaned up like a deleted scene: its whole subfolder when the
+   *  replacement vacated it, else its files plus its own saved ROM animation
+   *  (sceneDeleteTargets — the same decision the remove flow makes). */
   async function applyReplace(scene: string, copyInto: boolean) {
     // The last gate before anything is written — the dialog can outlive the
     // state that opened it (a scene added in another window, a focus refetch).
@@ -756,6 +758,9 @@ export function DazSceneField({
     }
     setBusy(true)
     setError('')
+    // The ACTUAL new primary path, captured from the producer for the old-file
+    // cleanup below — `dest` predicts it, but the copy is the authority.
+    let newPrimary = ''
     const saved = await persistPatch(
       async () => {
         const finalScene = copyInto
@@ -769,6 +774,7 @@ export function DazSceneField({
               },
             })
           : scene
+        newPrimary = finalScene
         const patch: Partial<Character> = {
           scenePath: finalScene,
           extraScenes: extrasWithoutPrimary(character.extraScenes, finalScene),
@@ -813,12 +819,19 @@ export function DazSceneField({
       // must never leave the character pointing at already-deleted files.
       if (oldPrimary && insideCharFolder(oldPrimary)) {
         try {
-          const noDuf = oldPrimary.replace(/\.duf$/i, '')
-          await deleteFiles({
-            data: {
-              paths: [oldPrimary, `${oldPrimary}.png`, `${oldPrimary}.tip.png`, `${noDuf}.tip.png`],
-            },
+          // Same decision as the remove flow: the old primary's whole subfolder
+          // when the replacement VACATED it (saved ROM animations included),
+          // else its files plus its own rom-animations/<stem>_ROM.duf — which
+          // used to be left behind as a stale save either way. The new primary
+          // is in `remainingScenesAbs`, so a replacement copied into the SAME
+          // folder blocks the folder branch by construction.
+          const targets = sceneDeleteTargets({
+            sceneAbs: oldPrimary,
+            charFolderAbs: charFolder,
+            scenesRootRel,
+            remainingScenesAbs: [newPrimary || dest, ...character.extraScenes],
           })
+          await deleteFiles({ data: { paths: targets.files, folders: targets.folders } })
         } catch (e) {
           toast.warning(
             `Replaced, but couldn't delete the old scene files: ${e instanceof Error ? e.message : String(e)}`,
