@@ -254,7 +254,19 @@ function SettingsPage() {
     const derived = deriveDazPaths(dazScan, key)
     if (!derived) return
     setActivating(key)
-    const next = { ...settings, ...derived, dazInstallKey: key }
+    // Activating the install that was flagged **Export only** answers the same
+    // question the flag did, in the opposite direction: it runs everything now,
+    // exports included. Stored, it would be an armed redirect with no card left
+    // to show it — the switch is never offered on the active install — so it is
+    // cleared in the SAME save rather than left to agree with the active folder
+    // by coincidence.
+    const disarmsExportOnly = settings.dazExportInstallKey === key
+    const next = {
+      ...settings,
+      ...derived,
+      dazInstallKey: key,
+      ...(disarmsExportOnly ? { dazExportInstallKey: '', dazExportInstallFolder: '' } : {}),
+    }
     try {
       await saveSettings({ data: { settings: next, baseline: initial } })
       setSettings(next)

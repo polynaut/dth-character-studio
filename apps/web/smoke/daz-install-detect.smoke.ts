@@ -296,6 +296,32 @@ test('Export only IS offered on DS4 beside an active DS6', async ({ page }) => {
   await expect(page.getByRole('switch', { name: 'Run export batches in DAZ Studio 4' })).toBeVisible()
 })
 
+test('activating the flagged installation takes Export only off it', async ({ page }) => {
+  // The commonest way to end up in the contradiction: DS6 runs everything, DS4
+  // is flagged for the export batch, then the user activates DS4. An install
+  // that runs everything cannot also run "only the exports", so the switch has
+  // nothing left to say — and leaving it on screen (armed, on the ACTIVE card)
+  // read as if activating had somehow demoted the install.
+  await openDazSettings(page, dimSeed())
+  await page.getByRole('button', { name: /DAZ Studio 6/ }).click()
+  await expect(page.getByText(/DAZ Studio 6 activated/)).toBeVisible()
+  await page.getByRole('switch', { name: 'Run export batches in DAZ Studio 4' }).click()
+  await expect
+    .poll(async () => (await savedSettings(page)).dazExportInstallKey)
+    .toBe('dzstudio4installdir-64')
+
+  await page.getByRole('button', { name: /DAZ Studio 4/ }).click()
+  await expect(page.getByText(/DAZ Studio 4 activated/)).toBeVisible()
+
+  // Gone from the screen — and, because the switch is the only way back, gone
+  // from disk in the same save rather than left armed where nothing shows it.
+  await expect(page.getByRole('switch', { name: /Run export batches in/ })).toHaveCount(0)
+  await expect.poll(async () => (await savedSettings(page)).dazExportInstallKey).toBe('')
+  expect((await savedSettings(page)).dazExportInstallFolder).toBe('')
+  // …and not mistaken for the flag outliving its install: DS4 is right there.
+  await expect(page.getByText(/Export batches are still pointed at an installation/)).toHaveCount(0)
+})
+
 test('Export only sends the batch to the older Studio, and only that one', async ({ page }) => {
   await openDazSettings(page, ds7Seed())
   await page.getByRole('button', { name: /DAZ Studio 7/ }).click()

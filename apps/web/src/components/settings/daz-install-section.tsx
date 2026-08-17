@@ -80,7 +80,16 @@ export function DazInstallSection({
   // taking it back are not the same decision: the stored key still redirects
   // every export, so withdrawing the control would leave the flag armed with
   // nothing on screen to disarm it.
-  const showsExportOnly = (key: string) => exportOnlyCandidates.includes(key) || exportOnlyKey === key
+  //
+  // The ACTIVE card is the one exception, and it is not a withdrawal: an
+  // installation that already runs everything cannot ALSO run "only the
+  // exports", so a switch there offers a distinction that no longer exists —
+  // and reads as if the active install were somehow demoted. Activating a
+  // flagged install clears the flag in the same save (the Settings route), so
+  // this hides nothing that is still armed; and even a settings.json that says
+  // otherwise resolves to that same folder anyway (`exportInstallFolder`).
+  const showsExportOnly = (key: string) =>
+    key !== activeKey && (exportOnlyCandidates.includes(key) || exportOnlyKey === key)
   // …and the flag can outlive the card entirely, once DIM stops listing the
   // install at all. Same treatment as `activeMissing`: say so and let the user
   // decide, rather than silently re-pointing their exports.

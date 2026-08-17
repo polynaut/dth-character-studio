@@ -573,6 +573,16 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   gate reading one install while the launcher starts another is a "ready" over an
   export that opens Daz and waits forever, so a new consumer of "where does the
   batch run" adds itself to that rule, never a fourth answer.
+- **The flagged install and the ACTIVE install are never the same one.** "Export
+  only" means "the batch runs somewhere OTHER than where everything else runs",
+  so on the active card it is not a choice — it is the default wearing a switch.
+  `exportOnlyCandidateKeys` never offers it there, the section never RENDERS it
+  there (the one exception to "a card carrying the flag keeps its switch"), and
+  activating a flagged install clears `dazExportInstallKey`/`…Folder` in the same
+  save (`routes/settings.tsx` → `onActivateDazInstall`). Clearing is the half
+  that is easy to forget: hiding the switch alone would leave the flag armed with
+  nothing on screen to disarm it — harmless only by coincidence, because
+  `exportInstallFolder` would resolve it to the active folder anyway.
 - **Elevating a CHILD, not the session** (`elevate.rs`, the Daz plugin install).
   Four facts that shaped it, three of them the kind that only bite on someone
   else's machine:
