@@ -37,6 +37,23 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+      # Before install — the hooks run as bare node from the repo root and depend
+      # on nothing, so this fails in ~1s when it fails.
+      #
+      # The gotcha-injection hook extracts each fact from `.ai/*` at runtime by a
+      # verbatim ANCHOR phrase, so any doc edit can silently unhook a trigger:
+      # `ffi-surface` anchored on "**FFI surface: 52 commands**" and died the day
+      # someone re-verified that count to 54 — the fact simply stopped being
+      # injected, with nothing on screen to say so. The audit was already a
+      # written ritual ("run it after a doc rewrite") and a doc CORRECTION still
+      # walked past it. So it is a check now, not a reminder — the same call this
+      # repo made for branch tracking. `--audit` catches all three quiet deaths
+      # (stale / ambiguous / truncated-past-the-anchor); the test asserts the
+      # payload a session actually receives.
+      - name: Gotcha hooks (anchors resolve + payload is delivered)
+        run: |
+          node .claude/hooks/inject-gotchas.mjs --audit
+          node .claude/hooks/inject-gotchas.test.mjs
       - run: pnpm install --frozen-lockfile
       # oxlint exits non-zero on any ERROR-severity rule, so this fails the check.
       # Beyond the `correctness` category, .oxlintrc.json promotes a handful of

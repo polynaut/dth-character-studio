@@ -30,8 +30,13 @@
  * table that reads as exhaustive is worse than no table, because it teaches the
  * reader that absence of a warning is evidence of safety.
  *
- * Run `node .claude/hooks/inject-gotchas.mjs --audit` after editing a doc — it
- * fails on any anchor that no longer resolves.
+ * `node .claude/hooks/inject-gotchas.mjs --audit` fails on any anchor that no
+ * longer resolves, and CI runs it on every PR (validate-pull-request.yml)
+ * alongside `inject-gotchas.test.mjs`. That is deliberate and load-bearing: the
+ * ritual "run the audit after a doc rewrite" was already written down here, and
+ * a doc CORRECTION still slipped past it and killed a trigger for days. The
+ * repo's standing answer to a rule that gets skipped is the one it reached for
+ * with branch tracking — make it a check, not a reminder.
  *
  * ## Anchor on what will not be edited
  *
@@ -39,9 +44,15 @@
  * change. Keep out of it anything the doc EXPECTS to revise — counts above all:
  * `**FFI surface: 52 commands**` went stale the moment someone did what that
  * very sentence asks ("count it, don't trust it") and corrected it to 54, and
- * the fact stopped being injected with nothing on screen to say so. Prefer the
- * shortest phrase that is still unique; the audit's AMBIGUOUS check is what
- * makes shortening safe.
+ * the fact stopped being injected with nothing on screen to say so. A pinned
+ * dependency version is the same shape (`cargo-pins`), and so is a LINE WRAP:
+ * an anchor spanning a newline bakes in where the sentence happens to break
+ * today, so re-flowing the paragraph breaks it (`unreal-engine-registry`).
+ * Keep anchors to one line, and prefer the shortest phrase that is still
+ * unique — shortening trades a STALE failure (says nothing) for an AMBIGUOUS
+ * one (hands back the WRONG bullet, confidently), which is only a good trade
+ * because the audit above catches it in CI rather than whenever someone
+ * remembers to look.
  *
  * @typedef {object} Trigger
  * @property {string} id          stable key — also the once-per-session dedupe key
@@ -151,7 +162,9 @@ export const TRIGGERS = [
     id: 'cargo-pins',
     command: /cargo\s+update/,
     doc: GOTCHAS_DESKTOP,
-    anchor: '`Cargo.lock` pins `alloc-stdlib = 0.2.2`',
+    // NOT the pinned version — the pin exists to be re-pinned (CLAUDE.md says so
+    // outright), so the number is the one part of this line expected to change.
+    anchor: '`Cargo.lock` pins `alloc-stdlib',
   },
 
   /* ---- the pure core ------------------------------------------------------ */
@@ -365,7 +378,10 @@ export const TRIGGERS = [
     id: 'unreal-engine-registry',
     path: /apps\/desktop\/src\/unreal_install\.rs$/,
     doc: GOTCHAS_RELEASES,
-    anchor: 'can be MISSING an installed\n  engine',
+    // Single line on purpose: spanning the wrap baked the doc's line break and
+    // its 2-space continuation indent into the anchor, so re-flowing the
+    // sentence — adding one word earlier in it — would have killed this too.
+    anchor: 'can be MISSING an installed',
   },
 
   /* ---- shell hazards ------------------------------------------------------- */

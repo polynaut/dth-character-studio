@@ -133,6 +133,13 @@ function stdinJson() {
  *                BEFORE the anchor, so the note delivered is real doc text that
  *                does not contain the fact it fired for.
  * The third is not hypothetical: it was true of three triggers in this table.
+ *
+ * MULTILINE is the fourth, and it is the only one checked BEFORE the fact rots:
+ * an anchor spanning a newline pins where the sentence happens to wrap today, so
+ * re-flowing the paragraph turns it into a STALE one later. The other three
+ * report a trigger that is already dead; this one refuses to author it. Prose
+ * saying "keep anchors to one line" is what this replaces — the rule that was
+ * only written down is precisely the rule this table has already watched fail.
  */
 if (process.argv.includes('--audit')) {
   let bad = 0
@@ -142,6 +149,8 @@ if (process.argv.includes('--audit')) {
   }
   for (const t of TRIGGERS) {
     if (!t.anchor) continue
+    if (t.anchor.includes('\n'))
+      fail('MULTILINE', t, `anchor spans a line break, so re-wrapping the paragraph would kill it`)
     const text = doc(t.doc)
     const found = bullet(text, t.anchor)
     if (!found) {
