@@ -322,6 +322,40 @@ test('activating the flagged installation takes Export only off it', async ({ pa
   await expect(page.getByText(/Export batches are still pointed at an installation/)).toHaveCount(0)
 })
 
+test('activating another install clears a flag stranded on the ACTIVE one', async ({ page }) => {
+  // A pre-fix build cleared nothing on activation, so a settings.json can
+  // already hold the contradiction: the flag on the install that is active.
+  // Today that state is invisible (the active card never shows the switch), and
+  // while it stays active it is harmless — the flag resolves to the same
+  // folder. The danger is the NEXT activation: left in place, the stale flag
+  // would come back to life as a redirect to the previous Studio, one the user
+  // never re-armed. Any activation while flag === active must disarm it.
+  const seed = dimSeed()
+  seed.files[SETTINGS] = JSON.stringify({
+    ...JSON.parse(seed.files[SETTINGS] ?? '{}'),
+    dazInstallKey: 'dzstudio4installdir-64',
+    dazInstallFolder: DS4,
+    dazExportInstallKey: 'dzstudio4installdir-64',
+    dazExportInstallFolder: DS4,
+  })
+  await openDazSettings(page, seed)
+
+  // The contradiction has no switch anywhere: DS4 is active (so its card never
+  // shows one) and DS6 is newer than the active install (so it is no candidate).
+  await expect(page.getByRole('switch', { name: /Run export batches in/ })).toHaveCount(0)
+
+  await page.getByRole('button', { name: /DAZ Studio 6/ }).click()
+  await expect(page.getByText(/DAZ Studio 6 activated/)).toBeVisible()
+
+  // The stale flag went with the activation instead of redirecting exports to DS4.
+  await expect.poll(async () => (await savedSettings(page)).dazExportInstallKey).toBe('')
+  expect((await savedSettings(page)).dazExportInstallFolder).toBe('')
+  // DS4 is an ordinary candidate again: switch offered, and OFF.
+  const ds4Switch = page.getByRole('switch', { name: 'Run export batches in DAZ Studio 4' })
+  await expect(ds4Switch).toBeVisible()
+  await expect(ds4Switch).not.toBeChecked()
+})
+
 test('Export only sends the batch to the older Studio, and only that one', async ({ page }) => {
   await openDazSettings(page, ds7Seed())
   await page.getByRole('button', { name: /DAZ Studio 7/ }).click()

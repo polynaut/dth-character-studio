@@ -16,6 +16,10 @@ the worse half of the fix: the flag would stay armed with nothing on screen to
 disarm it, harmless only because it happened to point at the active folder
 anyway.
 
+A flag an earlier version already left stranded on the active installation is
+cleaned up the same way: the next activation — any activation — disarms it,
+instead of letting it spring back as a redirect to the previous Studio.
+
 Nothing changes for the arrangement the flag is actually for — a newer Studio
 running everything with the batch kept in an older one still works exactly as
 before.
