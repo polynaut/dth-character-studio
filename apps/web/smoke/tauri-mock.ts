@@ -90,8 +90,13 @@ export interface TauriMockSeed {
   /** Makes every UNELEVATED plugin copy (`install_dth_plugin`) fail with this
    *  detail. The detail is what the panel reads to decide which remedy to offer
    *  (`INSTALL_PHRASES`), so a spec seeds the real Rust wording. The ELEVATED
-   *  command succeeds regardless — that's the point of clicking it. */
+   *  command succeeds regardless — that's the point of clicking it, unless
+   *  `elevatedInstallFailure` says otherwise. */
   pluginInstallFailure?: string
+  /** Makes `install_dth_plugins_elevated` REJECT with this message — the
+   *  command's whole error channel (a declined UAC prompt, a helper that left no
+   *  report) is a rejected invoke, not a report full of failed steps. */
+  elevatedInstallFailure?: string
   /** Absolute paths whose fs commands are HELD — the invoke neither resolves
    *  nor rejects until the spec calls `__tauriMock.releaseHeld()` (which also
    *  stops holding future calls). Lets a spec freeze an async probe mid-flight
@@ -645,6 +650,7 @@ export function installTauriMock(seed: TauriMockSeed): void {
       case 'install_dth_plugins_elevated': {
         // The elevated helper takes the WHOLE batch in one call — one UAC prompt
         // for every copy — and reports a step per job, like the loop it replaces.
+        if (seed.elevatedInstallFailure) throw new Error(seed.elevatedInstallFailure)
         const { jobs } = (args as { request: { jobs: Array<{ label: string }> } }).request
         return {
           dryRun: false,

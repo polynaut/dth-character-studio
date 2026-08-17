@@ -211,7 +211,7 @@ test('a release folder for only one generation leaves the other install named, n
 // second would prompt, fail identically, and teach the user the button is a lie.
 // The details below are the real Rust wording (report.rs), which is what the
 // panel reads — the constants are pinned by a Rust test on the other side.
-const DENIED = String.raw`couldn't write C:\Program Files\DAZ 3D\DAZStudio6\plugins\dsp_dth_exporter.dll: Access is denied. (os error 5) — writing there needs administrator rights — use "Install with administrator rights"`
+const DENIED = String.raw`couldn't write C:\Program Files\DAZ 3D\DAZStudio6\plugins\dsp_dth_exporter.dll: Access is denied. (os error 5) — this needs administrator rights — use "Install with administrator rights"`
 const LOCKED = String.raw`couldn't write C:\Program Files\DAZ 3D\DAZStudio6\plugins\dsp_dth_exporter.dll: The process cannot access the file because it is being used by another process. (os error 32) — Daz Studio has this plugin loaded — close every Daz Studio window and try again`
 
 test('a refused copy offers administrator rights — ONE prompt for the whole batch', async ({
@@ -237,6 +237,41 @@ test('a refused copy offers administrator rights — ONE prompt for the whole ba
   // The unelevated command was not re-run alongside it.
   expect(await installCalls(page)).toHaveLength(4)
   await expect(elevate).toHaveCount(0)
+})
+
+// The exact phrase `elevate.rs` returns when ShellExecuteExW comes back with
+// ERROR_CANCELLED, pinned there by a Rust test and matched here by
+// INSTALL_PHRASES.elevationCancelled.
+const CANCELLED = 'Cancelled at the Windows permission prompt — nothing was installed.'
+
+test('declining the Windows prompt is reported as a CHOICE, and the offer stands', async ({
+  page,
+}) => {
+  await openPlugins(
+    page,
+    machineSeed((s) => {
+      s.pluginInstallFailure = DENIED
+      s.elevatedInstallFailure = CANCELLED
+    }),
+  )
+  await page.getByRole('button', { name: /Install \/ update all/ }).click()
+  const elevate = page.getByRole('button', { name: 'Install with administrator rights' })
+  await elevate.click()
+  await expect.poll(() => elevatedCalls(page)).toHaveLength(1)
+
+  // Neutral, not red. Dismissing a permission prompt is an answer to a question
+  // the app asked — painting it as a failure tells the user they did something
+  // wrong for saying no.
+  const note = page
+    .locator('[data-sonner-toast]')
+    .filter({ hasText: /Cancelled at the Windows permission prompt/ })
+  await expect(note).toBeVisible()
+  await expect(note).toHaveAttribute('data-type', 'info')
+  await expect(page.locator('[data-sonner-toast][data-type="error"]')).toHaveCount(0)
+
+  // And the way forward is still on screen: a cancel changed nothing, so the
+  // report — and its button — must survive to be clicked again.
+  await expect(elevate).toBeVisible()
 })
 
 test('a LOCKED plugin asks for Daz to be closed, and offers no elevation', async ({ page }) => {

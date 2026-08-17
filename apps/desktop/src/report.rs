@@ -7,8 +7,12 @@ pub(crate) const ADMIN_HINT: &str =
 /// The plugin install's own version of the above. It does NOT ask for a restart:
 /// that path elevates on demand instead (see `elevate.rs`), so the way forward is
 /// one button, not a relaunch of the whole studio.
+///
+/// Worded without naming the direction ("writing there…") because the same hint
+/// covers a refused READ of the source folder — see `install::plugin_io_detail`,
+/// which is the other place a permission failure can reach the user from.
 pub(crate) const PLUGIN_ADMIN_HINT: &str =
-    "writing there needs administrator rights — use \"Install with administrator rights\"";
+    "this needs administrator rights — use \"Install with administrator rights\"";
 
 /// And what to say when the ELEVATED attempt is the one that was refused —
 /// repeating "use administrator rights" to someone who just did is a dead end.

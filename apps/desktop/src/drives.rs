@@ -136,10 +136,29 @@ fn error_text(code: u32) -> String {
 /// mapping (see `elevate.rs`).
 #[cfg(windows)]
 pub(crate) fn unc_path(path: &str) -> Option<String> {
-    let unc = unc_for(path)?;
-    // `unc_for` only answers for a `X:`-style path, so byte 2 is a char boundary.
-    let rest = path[2..].replace('/', "\\");
-    Some(format!("{}{}", unc.trim_end_matches('\\'), rest))
+    join_unc(&unc_for(path)?, path)
+}
+
+/// Put the tail of a `X:\…` path onto a resolved share root.
+///
+/// Split out of `unc_path` because the join is the part that can be wrong by one
+/// backslash, and the rest of that function needs a real mapped drive on the
+/// machine running the tests. None for anything that isn't `X:` followed by a
+/// separator (or by nothing at all): a DRIVE-RELATIVE path like `X:sub` names a
+/// place only the owning process's per-drive working directory can resolve, and
+/// gluing the tail on would produce `\\host\sharesub` — a wrong path wearing the
+/// costume of a rewritten one. Refusing leaves the original in place to fail
+/// later, loudly, on a path the user recognises.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn join_unc(unc: &str, path: &str) -> Option<String> {
+    // `get`, not a slice: a non-ASCII first character would make byte 2 a
+    // non-boundary and panic. (`unc_for` only answers for `X:`-style paths, but
+    // this is reachable from a test and must not depend on that.)
+    let rest = path.get(2..)?;
+    if !rest.is_empty() && !rest.starts_with(['\\', '/']) {
+        return None;
+    }
+    Some(format!("{}{}", unc.trim_end_matches('\\'), rest.replace('/', "\\")))
 }
 
 /// Resolve the UNC behind a path on a mapped network drive (for remembering it).
@@ -203,7 +222,40 @@ pub fn ensure_network_drives(_mappings: Vec<DriveMapping>) -> Vec<RemapResult> {
 
 #[cfg(test)]
 mod tests {
-    use super::same_unc;
+    use super::{join_unc, same_unc};
+
+    #[test]
+    fn a_mapped_drive_path_becomes_its_share_path() {
+        // THE rewrite an elevated child depends on: the administrator token has
+        // none of the user's drive letters, so `X:\_3d\daz3d` must arrive as the
+        // share path or the helper fails on the SOURCE (see elevate.rs).
+        assert_eq!(
+            join_unc(r"\\jebpot\devs", r"X:\_3d\daz3d").unwrap(),
+            r"\\jebpot\devs\_3d\daz3d"
+        );
+        // A share root that already ends in a separator must not double it.
+        assert_eq!(join_unc(r"\\jebpot\devs\", r"X:\_3d").unwrap(), r"\\jebpot\devs\_3d");
+        // The frontend hands over forward slashes routinely; UNC needs backslashes.
+        assert_eq!(
+            join_unc(r"\\jebpot\devs", "X:/_3d/daz 3d").unwrap(),
+            r"\\jebpot\devs\_3d\daz 3d"
+        );
+        // The bare drive IS the share root — not the root plus a stray separator.
+        assert_eq!(join_unc(r"\\jebpot\devs", "X:").unwrap(), r"\\jebpot\devs");
+        assert_eq!(join_unc(r"\\jebpot\devs", r"X:\").unwrap(), r"\\jebpot\devs\");
+    }
+
+    #[test]
+    fn a_path_that_cannot_be_rewritten_is_refused_rather_than_mangled() {
+        // Drive-RELATIVE: `\\jebpot\devssub` would be a wrong path presented as
+        // a correct one, which is worse than not rewriting at all.
+        assert!(join_unc(r"\\jebpot\devs", "X:sub").is_none());
+        // Too short to carry a tail, and a non-ASCII lead byte (the slice that
+        // would have panicked).
+        assert!(join_unc(r"\\jebpot\devs", "X").is_none());
+        assert!(join_unc(r"\\jebpot\devs", "").is_none());
+        assert!(join_unc(r"\\jebpot\devs", "Ä:\\x").is_none());
+    }
 
     #[test]
     fn same_unc_folds_unicode_case() {

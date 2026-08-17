@@ -209,6 +209,21 @@ fn copy_failure_hint(e: &std::io::Error, elevated: bool) -> Option<&'static str>
     None
 }
 
+/// A failed plugin-folder READ, worded like the copy failures below: the actual
+/// error first, then only a hint we can name.
+///
+/// Deliberately not `io_detail` — that one ends in "restart DTH Character Studio
+/// as administrator", which is the answer this whole path replaced, and which is
+/// actively WRONG for a source folder on a mapped drive: an elevated session is
+/// precisely where that drive letter stops existing (drives.rs). Nothing in the
+/// plugin install may still send the user to a relaunch.
+fn plugin_io_detail(prefix: &str, e: &std::io::Error, elevated: bool) -> String {
+    match copy_failure_hint(e, elevated) {
+        Some(hint) => format!("{prefix}: {e} — {hint}"),
+        None => format!("{prefix}: {e}"),
+    }
+}
+
 /// Copy every `.dll` in `exporter_folder` into `<daz_install>/plugins`.
 ///
 /// `elevated` only chooses the wording of a permission failure — it is a
@@ -222,8 +237,29 @@ pub(crate) fn install_plugin_dlls(
     dry: bool,
     elevated: bool,
 ) -> InstallStep {
-    if !exporter_folder.exists() {
-        return step_skip(label, format!("exporter folder not found ({})", exporter_folder.display()));
+    // `try_exists`, not `exists`: the latter answers false for "I'm not allowed
+    // to look", and the elevated child is exactly where that happens — a UNC
+    // source whose share the administrator token has no session to would report
+    // as a folder that isn't there, sending the user to look for a path they can
+    // see perfectly well themselves.
+    match exporter_folder.try_exists() {
+        Ok(true) => {}
+        Ok(false) => {
+            return step_skip(
+                label,
+                format!("exporter folder not found ({})", exporter_folder.display()),
+            )
+        }
+        Err(e) => {
+            return step_err(
+                label,
+                plugin_io_detail(
+                    &format!("couldn't read {}", exporter_folder.display()),
+                    &e,
+                    elevated,
+                ),
+            )
+        }
     }
     // An erroring entry is a hard error, never a silent drop — same posture as
     // install_contents: a partially-listable folder installing a subset of the
@@ -238,13 +274,22 @@ pub(crate) fn install_plugin_dlls(
                     Err(e) => {
                         return step_err(
                             label,
-                            io_detail(&exporter_folder.display().to_string(), &e),
+                            plugin_io_detail(&exporter_folder.display().to_string(), &e, elevated),
                         )
                     }
                 }
             }
         }
-        Err(e) => return step_err(label, e.to_string()),
+        Err(e) => {
+            return step_err(
+                label,
+                plugin_io_detail(
+                    &format!("couldn't read {}", exporter_folder.display()),
+                    &e,
+                    elevated,
+                ),
+            )
+        }
     }
     dlls.retain(|p| {
         p.is_file()

@@ -21,11 +21,15 @@
 //! flag must never do is reach `run()` — a fall-through would put an elevated
 //! WINDOW on screen, which is the exact outcome this module exists to avoid.
 
-use std::path::Path;
-
 use serde::{Deserialize, Serialize};
 
 use crate::report::InstallReport;
+
+// Almost everything below is Windows-only machinery reached through ONE
+// cross-platform door (`run_worker_if_requested` + the command), so on macOS the
+// encoder, the payload and the cancel phrase are compiled but never called. The
+// allows are scoped to `not(windows)` — same posture as `drives.rs` — so a
+// genuinely orphaned item on WINDOWS, where this actually runs, still warns.
 
 /// The argument that turns a normal launch into a one-shot install worker.
 /// Matched EXACTLY (see `worker_payload_arg`) — never by prefix.
@@ -38,6 +42,7 @@ const WORKER_FLAG: &str = "--dth-elevated-plugin-install";
 /// permission prompt is a choice, not a failure. The test below pins the phrase
 /// so a rewording fails there rather than silently turning a cancel back into an
 /// alarming error.
+#[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) const ELEVATION_CANCELLED: &str =
     "Cancelled at the Windows permission prompt — nothing was installed.";
 
@@ -71,6 +76,7 @@ pub(crate) struct PluginJob {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ElevatedPluginRequest {
+    #[cfg_attr(not(windows), allow(dead_code))]
     jobs: Vec<PluginJob>,
 }
 
@@ -83,6 +89,7 @@ pub(crate) struct ElevatedPluginRequest {
 /// changed after consent is given.
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(not(windows), allow(dead_code))]
 struct WorkerPayload {
     jobs: Vec<PluginJob>,
     /// Where the child writes its `InstallReport`. Tampering here can only
@@ -99,14 +106,18 @@ struct WorkerPayload {
 // becomes two arguments. There is no crate for this in the tree and it does not
 // earn one.
 
+#[cfg_attr(not(windows), allow(dead_code))]
 fn to_hex(bytes: &[u8]) -> String {
+    use std::fmt::Write as _;
+
     let mut out = String::with_capacity(bytes.len() * 2);
     for b in bytes {
-        out.push_str(&format!("{b:02x}"));
+        let _ = write!(out, "{b:02x}");
     }
     out
 }
 
+#[cfg_attr(not(windows), allow(dead_code))]
 fn from_hex(text: &str) -> Option<Vec<u8>> {
     if !text.len().is_multiple_of(2) {
         return None;
@@ -142,6 +153,8 @@ fn worker_payload_arg(args: &[String]) -> Option<String> {
 /// something a human can read.
 #[cfg(windows)]
 fn worker_main(payload_hex: &str) -> i32 {
+    use std::path::Path;
+
     let Some(bytes) = from_hex(payload_hex) else {
         return exit::BAD_PAYLOAD;
     };
@@ -193,13 +206,17 @@ pub fn run_worker_if_requested() {
     // The flag can only be produced by the Windows-only parent below, but a
     // worker launch must still never fall through to the app.
     #[cfg(not(windows))]
-    std::process::exit(exit_code_not_windows());
+    {
+        let _ = payload_hex;
+        std::process::exit(NOT_WINDOWS_EXIT);
+    }
 }
 
+/// Same meaning as `exit::BAD_PAYLOAD`: the worker did nothing. (That module is
+/// Windows-only, and this branch is unreachable in practice — only the Windows
+/// parent can produce the flag.)
 #[cfg(not(windows))]
-fn exit_code_not_windows() -> i32 {
-    2
-}
+const NOT_WINDOWS_EXIT: i32 = 2;
 
 // --- the unelevated parent -------------------------------------------------
 
