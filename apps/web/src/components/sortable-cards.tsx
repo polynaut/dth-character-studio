@@ -75,9 +75,9 @@ export function SortableCard({
       className={cn('group/sort relative', isDragging && 'z-20 opacity-70', className)}
     >
       {children}
-      {/* Same hover-reveal + adornment recipe as the card's corner cluster
-          (ghost at rest, solid #333 + white/20 edge on hover), so the grip
-          reads as one of the card's own controls. z-10 lifts it above the
+      {/* Hover-revealed like the card's corner cluster, but a bare glyph, not
+          a button: it highlights (text brightens) rather than growing a border
+          and fill — a grip is a handle, not an action. z-10 lifts it above the
           card's transparent cover button. */}
       <button
         type="button"
@@ -86,7 +86,7 @@ export function SortableCard({
         {...listeners}
         title="Drag to reorder"
         aria-label="Drag to reorder"
-        className="absolute top-1.5 left-2.5 z-10 flex size-6 cursor-grab items-center justify-center rounded-md border border-transparent text-muted-foreground opacity-0 transition-opacity group-hover/sort:opacity-100 focus-visible:opacity-100 hover:border-white/20 hover:bg-[#333] hover:text-foreground hover:shadow-sm active:cursor-grabbing"
+        className="absolute top-1.5 left-2.5 z-10 flex size-6 cursor-grab items-center justify-center text-muted-foreground opacity-0 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] transition-opacity group-hover/sort:opacity-100 focus-visible:opacity-100 hover:text-foreground active:cursor-grabbing"
       >
         <GripVertical className="size-3.5" />
       </button>
