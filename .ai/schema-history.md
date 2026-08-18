@@ -1052,4 +1052,16 @@ v80 — no unattended carrier opens a modal, and the missing-runtime message sto
       AFTER the scene deltas are diffed, so an override scene can neither
       carry nor strip it); the runtime prints to the Daz log instead. The
       visible attended ROM script keeps its modal.
+      Also v85: the previous-set sweep before doExport is a MOVE-ASIDE
+      (".dthprev"), not a delete. The destructive clear (v69, the DS4
+      skip-guard) meant any failure AFTER it — exporter exception, plugin
+      refusal, nothing produced — left the set's folder EMPTY (measured
+      2026-08-18 on v0.83.1: a failed re-export deleted the primary set, and
+      the Houdini project's auto-loading PoseAsset CSV with it). Success =
+      the exporter's own .dth landed (return values are deliberately not
+      read) → backups purged; failure → partial output deleted, backups
+      renamed back, problem filed. CSV delivery and the hair pass are gated
+      on the same verdict. DzDir.rename is capability-gated (unmeasured on
+      DS4) with the old destructive remove as fallback — no worse than
+      before.
 ```
