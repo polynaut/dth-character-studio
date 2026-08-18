@@ -1119,6 +1119,11 @@ export function toCharacterScriptDsa(
   indexSync?: IndexSyncOptions,
   /** See {@link buildRomScriptDsa}. */
   progressLogPath = '',
+  /** Absolute path of the DTH-Character-Studio scripts root the runtime is
+   *  installed in (host-resolved) - baked into the generated script as the
+   *  fallback for the one measured way getScriptFileName() lies; see
+   *  {@link runtimeDirSnippet}. '' = no fallback (pure/web contexts). */
+  runtimeRootAbs = '',
 ): GeneratedFile {
   return buildRomScriptDsa(
     character,
@@ -1132,7 +1137,69 @@ export function toCharacterScriptDsa(
     hipRefPrefix,
     indexSync,
     progressLogPath,
+    false,
+    runtimeRootAbs,
   )
+}
+
+/**
+ * The runtime-locating preamble emitted into every generated script that
+ * `include()`s the hidden DTH runtime. `getScriptFileName()` is how a script
+ * finds itself, and the runtime normally sits two levels up from its folder —
+ * but on the FIRST row of a Runner batch in a cold-started Daz that call can
+ * answer with one of Daz's OWN scripts instead (measured 2026-08-18: the
+ * include then resolved into `DAZStudio4/resources/` and the row failed
+ * "runtime missing" with the runtime installed and intact, while the next row
+ * of the same batch worked). The studio knows the install root at generation
+ * time, so it is baked in and probed whenever the relative answer has no
+ * runtime. `include()` itself must stay at the TOP level (Daz's legacy-include
+ * mechanism fails inside try/catch), which is why this resolves a DIRECTORY
+ * for the include lines to use rather than wrapping the include.
+ *
+ * `probeFile` is the sentinel checked at each candidate root — the (hidden,
+ * dot-prefixed) runtime file the emitting script includes first. The runtime
+ * files install as one set, so any one of them stands for the root.
+ */
+function runtimeDirSnippet(runtimeRootAbs: string, probeFile: string): string {
+  const baked = stripTrailingSlashes(runtimeRootAbs.replace(/\\/g, '/'))
+  return `// Where the hidden DTH runtime lives — normally two levels up from this
+// script's own folder, with the studio's baked install root as the fallback
+// for the one measured way getScriptFileName() lies (the first row of a batch
+// in a Daz still starting answers with a Daz-internal script; see the studio's
+// dsa.ts runtimeDirSnippet).
+var dthSelfDir = String(new DzFileInfo(getScriptFileName()).path());
+var dthBakedRuntimeDir = ${dazJson(baked)};
+function dthResolveRuntimeDir() {
+    var sRel = "";
+    try { sRel = String(new DzDir(dthSelfDir).filePath("../..")); } catch (dthRelErr) {}
+    if (sRel != "" && (new DzFile(sRel + "/${probeFile}")).exists()) return sRel;
+    if (dthBakedRuntimeDir != "" && (new DzFile(dthBakedRuntimeDir + "/${probeFile}")).exists()) return dthBakedRuntimeDir;
+    // Neither candidate has the runtime — return the relative answer so the
+    // include walks (and the failure report names) the normal location.
+    return sRel;
+}
+var dthRuntimeDir = dthResolveRuntimeDir();`
+}
+
+/**
+ * The whole runtime-locating block for the scan-only carriers (Export_/Groom_):
+ * {@link runtimeDirSnippet} plus the include lines their `indexSync` calls for —
+ * or NOTHING at all, because those two scripts include no runtime unless a scan
+ * is attached. Emitting the parts separately left three blank lines in every
+ * scan-less script, so the whole block (its surrounding blank lines included)
+ * lives or dies together.
+ *
+ * The sentinel is `.DthUtils.dsa` in both cases: it is the first include when
+ * `morphIndexDir` is set, and `.DthProducts.dsa` pulls it in itself otherwise —
+ * and the runtime installs as one set, so any member stands for the root.
+ */
+function runtimeIncludeBlock(runtimeRootAbs: string, indexSync?: IndexSyncOptions): string {
+  const scan = indexSync?.morphIndexDir
+    ? '\ninclude(dthRuntimeDir + "/.DthUtils.dsa");\ninclude(dthRuntimeDir + "/.DthScanMorphs.dsa");'
+    : ''
+  const products = indexSync?.products ? '\ninclude(dthRuntimeDir + "/.DthProducts.dsa");' : ''
+  if (!scan && !products) return ''
+  return `\n${runtimeDirSnippet(runtimeRootAbs, '.DthUtils.dsa')}${scan}${products}\n`
 }
 
 /**
@@ -1247,6 +1314,11 @@ export function toBulkRomExportScriptDsa(
   indexSync?: IndexSyncOptions,
   /** See {@link buildRomScriptDsa}. */
   progressLogPath = '',
+  /** Absolute path of the DTH-Character-Studio scripts root the runtime is
+   *  installed in (host-resolved) - baked into the generated script as the
+   *  fallback for the one measured way getScriptFileName() lies; see
+   *  {@link runtimeDirSnippet}. '' = no fallback (pure/web contexts). */
+  runtimeRootAbs = '',
 ): GeneratedFile {
   return buildRomScriptDsa(
     { ...character, exportWithRomScript: true, exportHairAssets: true },
@@ -1260,6 +1332,8 @@ export function toBulkRomExportScriptDsa(
     hipRefPrefix,
     indexSync,
     progressLogPath,
+    true,
+    runtimeRootAbs,
   )
 }
 
@@ -1284,6 +1358,11 @@ export function toBuildRomAnimationScriptDsa(
   /** See {@link buildRomScriptDsa} — the ROM line reports 100 here (the
    *  rom-only job rows declare the 2-step scale). */
   progressLogPath = '',
+  /** Absolute path of the DTH-Character-Studio scripts root the runtime is
+   *  installed in (host-resolved) - baked into the generated script as the
+   *  fallback for the one measured way getScriptFileName() lies; see
+   *  {@link runtimeDirSnippet}. '' = no fallback (pure/web contexts). */
+  runtimeRootAbs = '',
 ): GeneratedFile {
   const file = buildRomScriptDsa(
     { ...character, exportWithRomScript: false, exportHairAssets: false },
@@ -1301,6 +1380,7 @@ export function toBuildRomAnimationScriptDsa(
     // Animation"), even though it is built with bulk = false — so it is
     // unattended, and a modal in it hangs the row forever.
     true,
+    runtimeRootAbs,
   )
   // Hidden (dot-prefixed) → no Content Library tile, no icon artwork.
   return { fileName: BUILD_ROM_ANIMATION_SCRIPT, content: file.content, target: 'daz' }
@@ -1423,6 +1503,11 @@ function buildRomScriptDsa(
    * run on a click nobody could make.
    */
   unattended = bulk,
+  /** Absolute path of the DTH-Character-Studio scripts root the runtime is
+   *  installed in (host-resolved) - baked into the generated script as the
+   *  fallback for the one measured way getScriptFileName() lies; see
+   *  {@link runtimeDirSnippet}. '' = no fallback (pure/web contexts). */
+  runtimeRootAbs = '',
 ): GeneratedFile {
   const config = buildCharacterConfig(character, romPaths, frames, metaDirAbs)
 
@@ -1627,19 +1712,12 @@ function dthApplyUE5TearUV() {
 ${dthSettleSnippet()}
 ${dthProgressSnippet()}
 ${dthCancelSnippet()}
-// This script's OWN folder, captured before a single include runs. The runtime
-// files each assign their own \`dir_self\` from getScriptFileName(), so by the
-// time a guard below wants to name the path it looked in, \`dir_self\` is no
-// longer ours — and the missing-runtime message then accuses the install of a
-// fault it does not have (measured 2026-08-16: it reported the runtime
-// "missing" from Daz's own resources folder, which was never where it looked).
-var dthSelfDir = String(new DzFileInfo(getScriptFileName()).path());
+${runtimeDirSnippet(runtimeRootAbs, '.DthWorkflow.dsa')}
 // The include MUST stay at the top level: Daz resolves include() through its
 // legacy-include mechanism, which fails inside try/catch ("URIError: Legacy Include").
-var dir_self = new DzDir(new DzFileInfo(getScriptFileName()).path());
-include(dir_self.filePath("../../.DthWorkflow.dsa"));${indexSync?.morphIndexDir ? `
-include(dir_self.filePath("../../.DthScanMorphs.dsa"));` : ''}${indexSync?.products ? `
-include(dir_self.filePath("../../.DthProducts.dsa"));` : ''}
+include(dthRuntimeDir + "/.DthWorkflow.dsa");${indexSync?.morphIndexDir ? `
+include(dthRuntimeDir + "/.DthScanMorphs.dsa");` : ''}${indexSync?.products ? `
+include(dthRuntimeDir + "/.DthProducts.dsa");` : ''}
 
 // What to report when the include above left us without a runtime. The two
 // causes need OPPOSITE advice, and only a probe can tell them apart: a file
@@ -1650,16 +1728,24 @@ function dthRuntimeMissingError() {
     var sPath = "";
     var bThere = false;
     try {
-        sPath = String(new DzDir(dthSelfDir).filePath("../../.DthWorkflow.dsa"));
+        sPath = dthRuntimeDir + "/.DthWorkflow.dsa";
         bThere = new DzFile(sPath).exists();
-        // Tidy the '../../' out of the path before showing it - best effort,
+        // Tidy any '../../' out of the path before showing it - best effort,
         // the raw form is already correct.
         try { sPath = String(new DzFileInfo(sPath).absoluteFilePath()); } catch (dthAbsErr) {}
     } catch (dthRtErr) { /* couldn't even resolve it - the advice below still holds */ }
     if (bThere) {
         return "The DTH runtime could not be loaded, so the ROM was NOT built - nothing in this scene was changed.\\n\\nThe runtime file is where it belongs (" + sPath + "), so Daz failed to load it rather than to find it. Nothing is broken on disk: run the export again.";
     }
-    return "The DTH runtime (.DthWorkflow.dsa) is missing, so the ROM was NOT built - nothing in this scene was changed.\\n\\nExpected it at: " + (sPath ? sPath : "the DTH-Character-Studio scripts folder") + "\\n\\nReinstall it from DTH Character Studio: save the character, or Tools > Refresh assets.";
+    // Name EVERY probed location plus where this script believed it was - the
+    // one time this fired for real, that self-report (a Daz-internal path) WAS
+    // the diagnosis, and a report without it can only be re-guessed at.
+    var sWhere = "\\n\\nExpected it at: " + (sPath ? sPath : "the DTH-Character-Studio scripts folder");
+    if (dthBakedRuntimeDir != "" && dthRuntimeDir != dthBakedRuntimeDir) {
+        sWhere += "\\nAlso probed the studio's install root: " + dthBakedRuntimeDir + "/.DthWorkflow.dsa";
+    }
+    sWhere += "\\n(this script reported its own folder as: " + (dthSelfDir != "" ? dthSelfDir : "<empty>") + ")";
+    return "The DTH runtime (.DthWorkflow.dsa) is missing, so the ROM was NOT built - nothing in this scene was changed." + sWhere + "\\n\\nReinstall it from DTH Character Studio: save the character, or Tools > Refresh assets.";
 }
 
 var dthSceneLinkErr = dthSceneLinkError();
@@ -1836,6 +1922,11 @@ export function toExportScriptDsa(
   /** The Runner-v1.2.0 verbose progress log — see {@link dthProgressSnippet}.
    *  '' = the script logs no progress. */
   progressLogPath = '',
+  /** Absolute path of the DTH-Character-Studio scripts root the runtime is
+   *  installed in (host-resolved) - baked into the generated script as the
+   *  fallback for the one measured way getScriptFileName() lies; see
+   *  {@link runtimeDirSnippet}. '' = no fallback (pure/web contexts). */
+  runtimeRootAbs = '',
 ): GeneratedFile {
   const content = `// DAZ Studio version 4.22.0.16 filetype DAZ Script
 
@@ -1844,12 +1935,7 @@ export function toExportScriptDsa(
 // Runs the DTH Exporter on the ROM already built on the timeline and delivers
 // the PoseAsset CSV — it does NOT rebuild the ROM. Run it after the ROM script
 // (ROM_${characterScriptName(character)}.dsa) in the same Daz session.
-
-var dir_self_scan = new DzDir(new DzFileInfo(getScriptFileName()).path());${indexSync?.morphIndexDir ? `
-include(dir_self_scan.filePath("../../.DthUtils.dsa"));
-include(dir_self_scan.filePath("../../.DthScanMorphs.dsa"));` : ''}${indexSync?.products ? `
-include(dir_self_scan.filePath("../../.DthProducts.dsa"));` : ''}
-
+${runtimeIncludeBlock(runtimeRootAbs, indexSync)}
 var dthProgressLogPath = ${dazJson(progressLogPath)};
 // The studio's interrupt flag for this character — see EXPORT_CANCEL_FILE.
 var dthCancelPath = ${dazJson(cancelFlagPath(metaDirAbs))};
@@ -1930,6 +2016,11 @@ export function toBulkExportOnlyScriptDsa(
   sceneFrames: Record<string, PresetFrames> = {},
   /** See {@link buildRomScriptDsa}. */
   progressLogPath = '',
+  /** Absolute path of the DTH-Character-Studio scripts root the runtime is
+   *  installed in (host-resolved) - baked into the generated script as the
+   *  fallback for the one measured way getScriptFileName() lies; see
+   *  {@link runtimeDirSnippet}. '' = no fallback (pure/web contexts). */
+  runtimeRootAbs = '',
 ): GeneratedFile {
   const built = toExportScriptDsa(
     { ...character, exportHairAssets: true },
@@ -1942,6 +2033,7 @@ export function toBulkExportOnlyScriptDsa(
     indexSync,
     sceneFrames,
     progressLogPath,
+    runtimeRootAbs,
   )
   // Hidden (dot-prefixed) → the Content Library never shows it: no tile.
   return { fileName: BULK_EXPORT_ONLY_SCRIPT, content: built.content, target: 'daz' }
@@ -1970,6 +2062,11 @@ export function toGroomExportScriptDsa(
    *  a verified scene like every other export, so it keeps the scan data
    *  current too (the v55 contract). */
   indexSync?: IndexSyncOptions,
+  /** Absolute path of the DTH-Character-Studio scripts root the runtime is
+   *  installed in (host-resolved) - baked into the generated script as the
+   *  fallback for the one measured way getScriptFileName() lies; see
+   *  {@link runtimeDirSnippet}. '' = no fallback (pure/web contexts). */
+  runtimeRootAbs = '',
 ): GeneratedFile {
   const exportDir = character.exportPath.trim().replace(/\\/g, '/')
   const groomMap = groomSceneMap(character)
@@ -1989,12 +2086,7 @@ export function toGroomExportScriptDsa(
 // item stays FITTED, as worn), exports its 2-frame Alembic as <Name>_Hair_<item>
 // via the DTH Exporter, restores the scene. Run it on the character's scene with
 // the figure selected; the ROM is NOT needed.
-
-var dir_self_scan = new DzDir(new DzFileInfo(getScriptFileName()).path());${indexSync?.morphIndexDir ? `
-include(dir_self_scan.filePath("../../.DthUtils.dsa"));
-include(dir_self_scan.filePath("../../.DthScanMorphs.dsa"));` : ''}${indexSync?.products ? `
-include(dir_self_scan.filePath("../../.DthProducts.dsa"));` : ''}
-
+${runtimeIncludeBlock(runtimeRootAbs, indexSync)}
 ${sceneGuardSnippet(character)}
 ${openSceneFileSnippet()}${romAnimationSourceSnippet(romAnimationSourceMap(character))}
 var dthAction = MainWindow.getActionMgr().findAction("DazToHueExporterAction");
@@ -2055,6 +2147,11 @@ export interface ScanProductsOptions {
 export function toScanProductsScriptDsa(
   character: Character,
   opts: ScanProductsOptions,
+  /** Absolute path of the DTH-Character-Studio scripts root the runtime is
+   *  installed in (host-resolved) - baked into the generated script as the
+   *  fallback for the one measured way getScriptFileName() lies; see
+   *  {@link runtimeDirSnippet}. '' = no fallback (pure/web contexts). */
+  runtimeRootAbs = '',
 ): GeneratedFile {
   // Forward-slash both paths (DzFile/DzDir want '/' on Windows; matches the
   // export block) — JSON.stringify still escapes any remaining backslashes.
@@ -2078,8 +2175,8 @@ export function toScanProductsScriptDsa(
 
 ${sceneGuardSnippet(character)}
 ${openSceneFileSnippet()}${romAnimationSourceSnippet(romAnimationSourceMap(character))}
-var dir_self = new DzDir(new DzFileInfo(getScriptFileName()).path());
-include(dir_self.filePath("../../.DthProducts.dsa"));
+${runtimeDirSnippet(runtimeRootAbs, '.DthProducts.dsa')}
+include(dthRuntimeDir + "/.DthProducts.dsa");
 
 var dthSceneLinkErr = dthSceneLinkError();
 if (dthSceneLinkErr) {
@@ -2143,6 +2240,11 @@ export function generateAll(
   /** The Runner-v1.2.0 verbose progress log every generated carrier appends
    *  its finished steps to (host-resolved app-data path). '' = no progress. */
   progressLogPath = '',
+  /** Absolute path of the DTH-Character-Studio scripts root the runtime is
+   *  installed in (host-resolved) - baked into the generated script as the
+   *  fallback for the one measured way getScriptFileName() lies; see
+   *  {@link runtimeDirSnippet}. '' = no fallback (pure/web contexts). */
+  runtimeRootAbs = '',
 ): Array<GeneratedFile> {
   // With an export dir and exportWithRomScript off, the export is split into a
   // standalone Export_ script alongside the ROM_ script.
@@ -2179,6 +2281,7 @@ export function generateAll(
       hipRefPrefix,
       indexSync,
       progressLogPath,
+      runtimeRootAbs,
     ),
     ...(split
       ? [
@@ -2196,6 +2299,7 @@ export function generateAll(
             indexSync,
             sceneFrames,
             progressLogPath,
+            runtimeRootAbs,
           ),
         ]
       : []),
@@ -2214,6 +2318,7 @@ export function generateAll(
             hipRefPrefix,
             indexSync,
             progressLogPath,
+            runtimeRootAbs,
           ),
           // …and its export-only twin (DTH Export's "Export only" mode): the
           // exporter + hair pass over an already-built ROM, no rebuild.
@@ -2226,6 +2331,7 @@ export function generateAll(
             indexSync,
             sceneFrames,
             progressLogPath,
+            runtimeRootAbs,
           ),
         ]
       : []),
@@ -2242,9 +2348,10 @@ export function generateAll(
       scenesRootAbs,
       indexSync,
       progressLogPath,
+      runtimeRootAbs,
     ),
-    ...(groom ? [toGroomExportScriptDsa(character, scenesRootAbs, indexSync)] : []),
-    ...(scanProducts ? [toScanProductsScriptDsa(character, scanProducts)] : []),
+    ...(groom ? [toGroomExportScriptDsa(character, scenesRootAbs, indexSync, runtimeRootAbs)] : []),
+    ...(scanProducts ? [toScanProductsScriptDsa(character, scanProducts, runtimeRootAbs)] : []),
     toPoseAssetCsv(character, frames, era),
     ...overrideCsvs,
   ]

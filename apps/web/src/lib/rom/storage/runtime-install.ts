@@ -81,10 +81,13 @@ const RUNTIME_FILES: Record<string, string> = {
 }
 
 /**
- * The visible scan scripts, installed AS-IS at the DTH-Character-Studio root
- * (they run there, so they include the dot-prefixed runtime directly — no
- * `../../` rewrite), with the studio's app-data folder baked into their output
- * path at install time. Build_Genesis_Index builds + scans every generation's
+ * The visible scan scripts, installed at the DTH-Character-Studio root — they
+ * run there, and include the dot-prefixed runtime directly (the install still
+ * rewrites those includes to the ABSOLUTE root; see copyRuntimeFiles), with the
+ * studio's app-data folder AND that same root baked in at install time, so
+ * nothing they do depends on getScriptFileName().
+ *
+ * Build_Genesis_Index builds + scans every generation's
  * stock figures into the per-generation morph/bone index behind the Morph-name
  * and bone autocompletes (it replaced the four per-generation
  * `Scan_Morphs_<Genesis>` wrappers, which are swept below); Scan_Frames exports
@@ -246,7 +249,15 @@ export async function copyRuntimeFiles(
   // of what "installed and current" means, so it joins the marker stamp.
   const appData = (await dataDir()).replace(/\\/g, '/')
   const markerPath = join(destDir, RUNTIME_MARKER_FILE)
-  const stamp = `v${RUNTIME_VERSION}|${appData}`
+  // destPosix joins the stamp for the SAME reason, and since v84 it has to:
+  // this root is now baked into everything written below (every include, every
+  // `scriptDir`). A user who moves or renames their Daz library carries the
+  // marker along inside the folder, so a stamp blind to the destination would
+  // read "current" over an install whose baked paths all still name the OLD
+  // location — and absolute paths, unlike the `../../` form they replaced, do
+  // not survive the move. Including it here re-bakes instead.
+  const destPosix = destDir.replace(/\\/g, '/')
+  const stamp = `v${RUNTIME_VERSION}|${appData}|${destPosix}`
   if (!options?.force) {
     try {
       if ((await readTextFile(markerPath)) === stamp) {
@@ -264,25 +275,47 @@ export async function copyRuntimeFiles(
     }
   }
   await mkdir(destDir, { recursive: true })
+  // Every include is rewritten to the ABSOLUTE installed path (this very
+  // destDir, forward-slashed — DzFile/DzDir want '/'). The old relative
+  // rewrites resolved through getScriptFileName(), which on the first script
+  // of a cold-started Daz can answer with a Daz-internal path (measured
+  // 2026-08-18: the first row of a Runner batch then failed "runtime missing"
+  // with the runtime intact — see runtimeDirSnippet in @dth/rom's dsa.ts).
+  // The install rewrites these files for THIS machine anyway (the app-data
+  // bake below), so the absolute form gives up nothing. DzDir.filePath()
+  // passes an absolute argument through unchanged (Qt QDir semantics), so the
+  // rewrite composes with the sources' `dir_self.filePath("Dep.dsa")` shape.
   for (const [name, raw] of Object.entries(RUNTIME_FILES)) {
-    // The runtime files include each other via `dir_self.filePath("Dep.dsa")`,
-    // where dir_self comes from getScriptFileName() — which, inside an include(),
-    // is the TOP-LEVEL character script at <root>/<project>/<character>/, two
-    // levels below this runtime root. So rewrite each sibling reference to the
-    // dot-prefixed name AND climb `../../` back to the root where it lives
-    // (mirrors the character script's own `../../.DthWorkflow.dsa` include).
+    // Sibling references inside the runtime files ("Dep.dsa") point at the
+    // dot-prefixed installed copy at this root.
     let content = raw
     for (const dep of Object.keys(RUNTIME_FILES)) {
-      content = content.split(`"${dep}"`).join(`"../../.${dep}"`)
+      content = content.split(`"${dep}"`).join(`"${destPosix}/.${dep}"`)
     }
     await writeTextFile(join(destDir, `.${name}`), content)
   }
-  // The visible scan scripts: installed as-is (they run at this root — their
-  // includes of the dot-prefixed runtime resolve right here), with the studio's
-  // app-data folder baked into their output paths so the scans land where the
-  // studio reads them (DzFile wants '/').
+  // The visible scan scripts + hidden root carriers: their `".Dep.dsa"`
+  // references (already dot-prefixed — they run at this root) get the same
+  // absolute anchoring; the studio's app-data folder is baked into their output
+  // paths so the scans land where the studio reads them; and `__DTH_RUNTIME_DIR__`
+  // becomes this root.
+  //
+  // That last token is not cosmetic. The two hidden carriers pass it on as
+  // `scriptDir`, which is how `.Scan_Scene_Bulk.dsa` finds dth_scan_config.json
+  // and how the index build derives its content root — and BOTH run as Runner
+  // batch rows, the one place getScriptFileName() is known to lie. Deriving
+  // `scriptDir` from it there is the same trap this runtime version closes for
+  // the includes, so it is baked from the studio's own path instead.
   for (const [name, raw] of Object.entries({ ...VISIBLE_SCAN_SCRIPTS, ...HIDDEN_ROOT_SCRIPTS })) {
-    await writeTextFile(join(destDir, name), raw.split('__DTH_APPDATA_DIR__').join(appData))
+    let content = raw
+      .split('__DTH_APPDATA_DIR__')
+      .join(appData)
+      .split('__DTH_RUNTIME_DIR__')
+      .join(destPosix)
+    for (const dep of Object.keys(RUNTIME_FILES)) {
+      content = content.split(`".${dep}"`).join(`"${destPosix}/.${dep}"`)
+    }
+    await writeTextFile(join(destDir, name), content)
   }
   // …and their Content Library artwork beside them, so the scripts show up as
   // real tiles instead of broken-image placeholders. Best-effort per file: an

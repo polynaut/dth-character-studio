@@ -52,6 +52,10 @@ const SCAN_PRODUCTS = {
   dazLibraryFolder: 'C:/DAZ/Library',
 }
 
+/** The baked include-fallback root (host-resolved in real use; fixed like
+ *  {@link META_DIR}) — pins the cold-start fallback emission. */
+const RUNTIME_ROOT = 'C:/DAZ/Library/Scripts/DTH-Character-Studio'
+
 function group(id: string, suffix: RomGroup['suffix']): RomGroup {
   return {
     id,
@@ -115,6 +119,10 @@ describe('generated artifacts (golden)', () => {
     {},
     {},
     SCENES_ROOT,
+    '',
+    undefined,
+    '',
+    RUNTIME_ROOT,
   )
 
   it('emits a stable set of files', async () => {
@@ -134,6 +142,10 @@ describe('generated artifacts (golden)', () => {
       {},
       {},
       SCENES_ROOT,
+      '',
+      undefined,
+      '',
+      RUNTIME_ROOT,
     )
     expect(again.map((f) => `${f.fileName}\n${f.content}`)).toEqual(
       files.map((f) => `${f.fileName}\n${f.content}`),

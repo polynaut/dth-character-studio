@@ -1,5 +1,9 @@
 import { z } from 'zod'
 
+// Linear trims — `/\/+$/` is a high-severity CodeQL js/polynomial-redos alert
+// (see path-trim.ts). This module stays otherwise pure; path-trim imports nothing.
+import { stripTrailingSeparators } from '../path-trim'
+
 /**
  * The **Import from Daz scene** handoff: what the studio writes so the job
  * runner can scan a scene's keyed ROM frames without anyone watching.
@@ -92,11 +96,23 @@ function dsaString(value: string): string {
 /**
  * The one-run script handed to the job runner.
  *
- * Written INTO the studio's scripts folder in the Daz library, and that is
- * load-bearing: it resolves the runtime the same way the shelf script does —
- * `getScriptFileName()`'s own directory — so the two always include the same
- * `.DthUtils.dsa` / `.DthScanFrames.dsa` the studio installed. A script written
- * anywhere else would find no runtime and die on the include.
+ * Written INTO the studio's scripts folder in the Daz library (`runtimeRoot`),
+ * beside the `.DthUtils.dsa` / `.DthScanFrames.dsa` it includes.
+ *
+ * It may NOT find them via `getScriptFileName()` alone, the way a shelf script
+ * does: this script is a Runner batch row, and on the first row of a batch in a
+ * cold-started Daz that call answers with a Daz-internal path (measured
+ * 2026-08-18 — see `runtimeDirSnippet` in @dth/rom's `dsa.ts`, which resolves
+ * the same problem for the generated character scripts). So it probes its own
+ * reported folder first and falls back to the root the studio baked in — which
+ * it knows exactly, being the folder it is about to write this file into. The
+ * self-report still comes first so an install the user relocated keeps using
+ * the runtime sitting beside it.
+ *
+ * The `include()`s stay at the TOP level: Daz resolves them through its
+ * legacy-include mechanism, which fails inside try/catch ("URIError: Legacy
+ * Include"). That is why the resolver returns a DIRECTORY rather than wrapping
+ * the includes.
  *
  * `silent` is what separates this from the shelf script: no MessageBox (a modal
  * would block the runner on a Daz nobody is looking at) and a result file
@@ -107,7 +123,13 @@ export function scanRunScript(options: {
   outDir: string
   resultPath: string
   genesis: string
+  /** Absolute path of the DTH-Character-Studio scripts root this file is
+   *  written into — the include fallback. '' = no fallback. */
+  runtimeRoot?: string
 }): string {
+  // Forward-slashed and trailing-slash-free: DzFile/DzDir want '/', and the
+  // probe below concatenates rather than joins.
+  const runtimeRoot = stripTrailingSeparators(options.runtimeRoot ?? '').replace(/\\/g, '/')
   return [
     '// DAZ Studio version 4.0.0+ filetype DAZ Script',
     '',
@@ -115,9 +137,21 @@ export function scanRunScript(options: {
     '// studio and executed by the Runner after it opens the scene. Not a shelf',
     '// script: it reports through a result file and opens no dialog.',
     '',
-    'var dir_self = new DzDir(new DzFileInfo(getScriptFileName()).path());',
-    'include(dir_self.filePath(".DthUtils.dsa"));',
-    'include(dir_self.filePath(".DthScanFrames.dsa"));',
+    '// Where the runtime lives. getScriptFileName() is checked but not trusted:',
+    '// on the first row of a batch in a cold-started Daz it answers with a',
+    '// Daz-internal path, so the studio bakes its own install root as a fallback.',
+    'var dthSelfDir = String(new DzFileInfo(getScriptFileName()).path());',
+    `var dthBakedRuntimeDir = ${dsaString(runtimeRoot)};`,
+    'function dthResolveRuntimeDir() {',
+    '\tif (dthSelfDir != "" && (new DzFile(dthSelfDir + "/.DthUtils.dsa")).exists()) return dthSelfDir;',
+    '\tif (dthBakedRuntimeDir != "" && (new DzFile(dthBakedRuntimeDir + "/.DthUtils.dsa")).exists()) return dthBakedRuntimeDir;',
+    '\t// Neither has it — return the self-report so the include fails naming the',
+    '\t// normal location, and the Daz log shows where this script thought it was.',
+    '\treturn dthSelfDir;',
+    '}',
+    'var dthRuntimeDir = dthResolveRuntimeDir();',
+    'include(dthRuntimeDir + "/.DthUtils.dsa");',
+    'include(dthRuntimeDir + "/.DthScanFrames.dsa");',
     '',
     'DthScanFrames({',
     `\toutDir: ${dsaString(options.outDir)},`,

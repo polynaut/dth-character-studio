@@ -4,7 +4,8 @@
 // Build_Genesis_Index.dsa installed next to this file (which also includes the
 // DTH utils runtime first — this file calls into it for the generation-asset
 // table and node asset URIs, and must NOT include it itself: the install-time
-// rewrite would repoint the include two folders up).
+// rewrite would repoint the include at the installed runtime root, doubling
+// the load).
 //
 // It does the whole job on its own — no per-generation wrapper scripts, no
 // "select the figure first":

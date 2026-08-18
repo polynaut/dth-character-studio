@@ -15,13 +15,17 @@
 //
 // The output path is baked in by the studio when it installs this script.
 
-var sSelfDir = new DzFileInfo(getScriptFileName()).path();
-var dir_self = new DzDir(sSelfDir);
+// dir_self only shapes the include lines for the install-time rewrite (which
+// repoints each ".Dep.dsa" to its ABSOLUTE installed path). getScriptFileName()
+// is not trusted for anything else here - this script runs as a Runner batch
+// row, where a cold-started Daz can answer it with a Daz-internal path.
+var dir_self = new DzDir(new DzFileInfo(getScriptFileName()).path());
 include(dir_self.filePath(".DthUtils.dsa"));
 include(dir_self.filePath(".DthScanMorphs.dsa"));
 
 DthBuildGenesisIndex({
 	outDir: "__DTH_APPDATA_DIR__",
-	scriptDir: String(sSelfDir),
+	// Baked by the studio at install time (see scriptDir in Scan_Scene_Bulk.dsa).
+	scriptDir: "__DTH_RUNTIME_DIR__",
 	bulk: true
 });

@@ -388,13 +388,54 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   drift from the tags).
 - **A hidden runtime `.dsa` must never `include()` a sibling runtime by name.**
   `copyRuntimeFiles` blindly rewrites every `"<Dep>.dsa"` string inside a
-  RUNTIME_FILES entry to `"../../.<Dep>.dsa"` — correct for an include resolved from
-  a character script two levels down, fatal for the same file included by a VISIBLE
-  root-level script (`Build_Genesis_Index.dsa`, `Scan_Frames.dsa`), which lives at
-  the runtime root. So the visible wrapper does the includes, in dependency order
-  (`.DthUtils.dsa` first, then the scanner), and the scanner just calls the utils
-  functions as globals. The rewrite is string-blind: even a double-quoted runtime
-  filename in a COMMENT gets repointed.
+  RUNTIME_FILES entry to the ABSOLUTE installed path (`"<root>/.<Dep>.dsa"` since
+  runtime v84; `"../../.<Dep>.dsa"` before — the relative form was fatal for the
+  same file included by a VISIBLE root-level script, which lives AT the runtime
+  root). The absolute form resolves from any depth, but the layering rule stands:
+  the visible wrapper does the includes, in dependency order (`.DthUtils.dsa`
+  first, then the scanner), and the scanner just calls the utils functions as
+  globals — a scanner that included utils itself would now double-load it. The
+  rewrite is string-blind: even a double-quoted runtime filename in a COMMENT
+  gets repointed.
+- **`getScriptFileName()` lies on the first script of a cold-started Daz**
+  (measured 2026-08-18, DS6, LaraCroft_G81, a 2-scene DTH Export whose handoff
+  launched Daz): the FIRST row's bulk script captured a self-path that resolved
+  the runtime include into `C:/Program Files/DAZ 3D/DAZStudio4/resources/` —
+  Daz's own install tree — so the row failed "runtime missing" with the runtime
+  installed and intact, while row 2 of the same batch (same script, warm Daz)
+  worked. Recurring and previously unreproducible-on-demand: it needs the
+  cold-start window, and the misleading "expected at" path (pre-v80 reports)
+  sent earlier investigations at the install, which was never broken. WHY the
+  API answers a Daz-internal path there is unmeasured (plausibly Daz's own
+  startup scripting still in flight — inference, not fact).
+
+  Since runtime v84 nothing **a Runner batch row** relies on trusts it alone.
+  That covers two DIFFERENT uses, and the include is only the louder one:
+  - *Finding the runtime.* Generated scripts probe the relative answer and fall
+    back to an install root baked in at generation time (`runtimeDirSnippet`,
+    `packages/rom/src/dsa.ts`); the per-run `.dth_scan_run.dsa` does the same
+    against its own folder (`lib/rom/scan-run.ts`); the installed runtime and
+    root scripts get absolute includes (`copyRuntimeFiles`). The failure report
+    prints the raw self-reported folder, so a recurrence carries its evidence.
+  - *Deriving a data path.* `.Scan_Scene_Bulk.dsa` finds `dth_scan_config.json`
+    through `scriptDir`, and `Build_Genesis_Index*.dsa` derives its content root
+    the same way. Both are batch rows, so both are **baked** at install time
+    (`__DTH_RUNTIME_DIR__`), not read back from the API. A fix that repaired only
+    the includes would have left these failing in the identical window, with the
+    identical misleading message.
+
+  **When adding anything that runs as a batch row, ask which of the two it is** —
+  the trap is that a path derived from `getScriptFileName()` looks nothing like
+  an include and is just as broken. What still trusts it, deliberately: the
+  `OUT*.csv` debug dumps (`DthOptions.dsa`, `DthWorkflow.dsa`), which are off by
+  default and write nothing the studio reads.
+
+  Two consequences worth keeping: the absolute bake means the marker stamp in
+  `copyRuntimeFiles` must include the destination — a moved/renamed Daz library
+  carries the marker inside the folder, and absolute paths, unlike the `../../`
+  form they replaced, do not survive the move. And a script that is *installed*
+  can be baked outright, while a *generated* one still probes relative first, so
+  a relocated install keeps using the runtime sitting beside it.
 - **The stock figure/graft content paths are not what you'd guess** (measured
   2026-07-29 against a real "My DAZ 3D Library"): the G8 base figures are
   `People/Genesis 8 <Sex>/Genesis 8 Basic <Sex>.duf` (not `Genesis 8 <Sex>.duf`), and

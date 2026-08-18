@@ -537,9 +537,13 @@ export async function startSceneScan({ data }: { data: unknown }): Promise<Scene
   const resultPath = scanResultPath(outDir, scenePath)
 
   // The per-run script goes in the scripts ROOT, beside the runtime it includes
-  // (it resolves `.DthUtils.dsa` / `.DthScanFrames.dsa` from its own folder).
-  const scriptPath = joinPath(storage.studioScriptsDir(settings.dazLibraryFolder), SCAN_RUN_SCRIPT)
-  const runtimeProbe = joinPath(storage.studioScriptsDir(settings.dazLibraryFolder), '.DthUtils.dsa')
+  // (`.DthUtils.dsa` / `.DthScanFrames.dsa`). That root is also baked INTO the
+  // script as its include fallback: it runs as a Runner batch row, and the
+  // batch below may launch Daz itself — the window where getScriptFileName()
+  // answers with a Daz-internal path (see scanRunScript).
+  const runtimeRoot = storage.studioScriptsDir(settings.dazLibraryFolder)
+  const scriptPath = joinPath(runtimeRoot, SCAN_RUN_SCRIPT)
+  const runtimeProbe = joinPath(runtimeRoot, '.DthUtils.dsa')
   if (!(await exists(runtimeProbe))) {
     throw new Error(
       'The DTH runtime is not installed in your Daz library yet — save a character (or run Tools → Refresh assets) once, then try again.',
@@ -563,7 +567,10 @@ export async function startSceneScan({ data }: { data: unknown }): Promise<Scene
 
   await mkdir(outDir, { recursive: true }).catch(() => {})
   await remove(resultPath).catch(() => {})
-  await storage.writeTextFileAtomic(scriptPath, scanRunScript({ outDir, resultPath, genesis }))
+  await storage.writeTextFileAtomic(
+    scriptPath,
+    scanRunScript({ outDir, resultPath, genesis, runtimeRoot }),
+  )
 
   // Stamped BEFORE the handoff, so every file this run writes is newer than it.
   const startedAtMs = Date.now()
