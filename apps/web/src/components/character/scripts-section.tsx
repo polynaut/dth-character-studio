@@ -106,7 +106,7 @@ export function ScriptsSection({
         </span>
       </div>
       <div className="mt-5 border-t pt-4">
-        <h3 className="mb-3 flex w-fit items-center gap-1 text-sm font-semibold">
+        <h3 className="mb-3 flex w-fit items-center gap-1 text-xl font-semibold">
           Export directory
           <InfoPopup label="Export directory — more information">
             How the export directory works —{' '}
