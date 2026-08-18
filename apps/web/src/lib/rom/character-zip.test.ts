@@ -234,7 +234,7 @@ describe('mergeImportedCharacter', () => {
       { scenePath: `${DEST}/daz3d/primary/Vera.duf`, hair: [{ nodeLabel: 'Vera Hair' }] },
       { scenePath: `${DEST}/daz3d/yoga/Vera_Yoga.duf`, hair: [{ nodeLabel: 'Yoga Hair' }] },
     ],
-    preserveMorphs: [{ name: 'zipMorph', keepValue: 1 }],
+    preserveNodeTransforms: [{ nodeLabel: 'Zip Eye' }],
     sections: {
       FBM: {
         enabled: true,
@@ -247,7 +247,7 @@ describe('mergeImportedCharacter', () => {
   const target = character({
     id: 'char-kira',
     name: 'Kira',
-    preserveMorphs: [{ name: 'targetMorph', keepValue: 0.5 }],
+    preserveNodeTransforms: [{ nodeLabel: 'Target Eye' }],
     sections: {
       FBM: {
         enabled: true,
@@ -261,7 +261,7 @@ describe('mergeImportedCharacter', () => {
   const baseChoices = {
     name: 'Vera',
     sections: ['FBM'] as Array<'FBM'>,
-    extras: { jcmRules: true, preserveMorphs: true, preserveNodeTransforms: true },
+    extras: { jcmRules: true, preserveNodeTransforms: true },
     scenes: [
       `${DEST}/daz3d/primary/Vera.duf`,
       `${DEST}/daz3d/yoga/Vera_Yoga.duf`,
@@ -301,10 +301,10 @@ describe('mergeImportedCharacter', () => {
     const merged = mergeImportedCharacter({
       zip,
       target,
-      choices: { ...baseChoices, extras: { ...baseChoices.extras, preserveMorphs: false } },
+      choices: { ...baseChoices, extras: { ...baseChoices.extras, preserveNodeTransforms: false } },
       keptHoudini: [],
     })
-    expect(merged.preserveMorphs).toEqual([{ name: 'targetMorph', keepValue: 0.5, node: '' }])
+    expect(merged.preserveNodeTransforms).toEqual([{ nodeLabel: 'Target Eye' }])
   })
 
   it('deselected scenes drop their files’ refs, per-scene records and the avatar-source link', () => {

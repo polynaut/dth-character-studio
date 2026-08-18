@@ -103,22 +103,7 @@ to the `.hip` that reads it — see
 [where the Houdini project fits](./05-rom-in-daz.md#where-the-houdini-project-fits).
 
 <details>
-<summary><strong>Add morphs on frame 0</strong></summary>
-<table><tr><td>
-
-Morphs dialed once at **frame 0** of the ROM. With no item scope — the labels
-under the field reading **All items** — a row lands on *every* node carrying the
-morph, so a clothing **Expand All** reaches whichever outfit pieces the open scene
-wears. Picking a suggestion instead scopes the row to the item its dial lives on
-(✕ returns it to every item), which is what a fit value meant for one item needs.
-A scene without the morph — or the item — skips it. Overridable
-[per Daz scene](./advanced.md#per-scene-overrides--edit-to-override).
-
-</td></tr></table>
-</details>
-
-<details>
-<summary><strong>Advanced options — preserve morphs &amp; node transforms</strong></summary>
+<summary><strong>Advanced options</strong></summary>
 <table><tr><td>
 
 <p align="center">
@@ -127,18 +112,24 @@ A scene without the morph — or the item — skips it. Overridable
   <sub><em>The Advanced options section on the character page.</em></sub>
 </p>
 
-Neither is needed for a working ROM:
+Not needed for a working ROM:
 
-- **Preserve morphs after ROM loading** — the ROM zeroes morphs as it loads; any
-  morph listed here is restored to the value you set afterwards. Use it for
-  body-shaping controls that should hold across the whole ROM. Enter the
-  **property name** and the **hold value**; the labels under the field show which
-  scene item it is looked up on (empty = the figure itself).
+- **Morphs set at frame 0** — dialed once at **frame 0** of the ROM. With no item
+  scope — the labels under the field reading **All items** — a row lands on
+  *every* node carrying the morph, so a clothing **Expand All** reaches whichever
+  outfit pieces the open scene wears. Picking a suggestion instead scopes the row
+  to the item its dial lives on (✕ returns it to every item), which is what a fit
+  value meant for one item needs. A scene without the morph — or the item — skips
+  it.
 - **Preserve node transforms** — the listed node's transform is memorized before
   the ROM loads and restored after, so posed nodes (the eyes, say) keep their
   orientation. Enter the **node's label** as it appears in Daz.
 
-Both are [overridable per scene](./advanced.md#per-scene-overrides--edit-to-override).
+Both lists are [overridable per scene](./advanced.md#per-scene-overrides--edit-to-override).
+
+> Morph values no longer need a list of their own: current DazToHue releases hold
+> them across the ROM load by themselves, so the old *Preserve morphs after ROM
+> loading* field is gone.
 
 </td></tr></table>
 </details>
@@ -287,7 +278,7 @@ clears it automatically.
 **Operations → Fill from character** opens the same two-step wizard as at
 creation: pick a source character (same generation and gender) from any project,
 then check which of its ROM sections to copy. Retargeting always rides with JCM;
-the *Modify JCM frames* rules and preserve lists are optional extras. The checked
+the *Modify JCM frames* rules and the preserve list are optional extras. The checked
 sections **replace** this character's config in the editor draft; nothing lands on
 disk until you save, and GEN keeps its own scene-derived setup.
 

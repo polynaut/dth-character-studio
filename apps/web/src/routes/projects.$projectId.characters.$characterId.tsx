@@ -682,46 +682,45 @@ function CharacterPage({ onImportRemount }: { onImportRemount: () => void }) {
         sceneOverride={sceneSel.sceneOverride}
       />
 
-      <section className="mb-8 rounded-lg border bg-card p-5">
-        <h2 className="mb-3 flex w-fit items-center gap-1 text-xl font-semibold">
-          Add morphs on frame 0
-          <InfoPopup label="Add morphs on frame 0 — more information">
-            Each morph is set to its value at frame 0 of the ROM, on every node that carries it —
-            the figure and every fitted item. One row like a clothing &quot;Expand All&quot; reaches
-            whichever outfit pieces the open scene wears; a scene without the morph simply skips
-            it. Overridable per Daz scene.
-          </InfoPopup>
-        </h2>
-        <FrameZeroFields
-          character={character}
-          patch={patch}
-          overrideEligible={sceneSel.overrideEligible}
-          sceneOverride={sceneSel.sceneOverride}
-          writeFrameZero={sceneSel.writeFrameZero}
-          morphIndex={morphIndex}
-          scenePath={sceneSel.effectiveScene}
-        />
-      </section>
-
+      {/* One panel for the optional extras — frame-0 morphs at the TOP, where
+          the retired "Preserve morphs after ROM loading" list sat, node
+          transforms below. The route owns the layout (stacked, half width on
+          lg like the panels always were); the field components each render one
+          list. */}
       <section className="mb-8 rounded-lg border bg-card p-5">
         <h2 className="mb-3 flex w-fit items-center gap-1 text-xl font-semibold">
           Advanced options
           <InfoPopup label="Advanced options — more information">
-            Preserve morphs &amp; node transforms —{' '}
-            <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/04-first-character.html#advanced-options--preserve-morphs--node-transforms">
+            Morphs set at frame 0 — each is set to its value at frame 0 of the ROM, on every
+            node that carries it; one row like a clothing &quot;Expand All&quot; reaches
+            whichever outfit pieces the open scene wears, and a scene without the morph simply
+            skips it. Preserve node transforms — posed nodes keep their orientation across the
+            ROM load. Both are overridable per Daz scene —{' '}
+            <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/04-first-character.html#advanced-options">
               open the guide
             </GuideLink>
           </InfoPopup>
         </h2>
-        <PreserveFields
-          character={character}
-          patch={patch}
-          overrideEligible={sceneSel.overrideEligible}
-          sceneOverride={sceneSel.sceneOverride}
-          writePreserve={sceneSel.writePreserve}
-          morphIndex={morphIndex}
-          scenePath={sceneSel.effectiveScene}
-        />
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div className="space-y-6">
+            <FrameZeroFields
+              character={character}
+              patch={patch}
+              overrideEligible={sceneSel.overrideEligible}
+              sceneOverride={sceneSel.sceneOverride}
+              writeFrameZero={sceneSel.writeFrameZero}
+              morphIndex={morphIndex}
+              scenePath={sceneSel.effectiveScene}
+            />
+            <PreserveFields
+              character={character}
+              patch={patch}
+              overrideEligible={sceneSel.overrideEligible}
+              sceneOverride={sceneSel.sceneOverride}
+              writePreserve={sceneSel.writePreserve}
+            />
+          </div>
+        </div>
       </section>
 
       <ScriptsSection

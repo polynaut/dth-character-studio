@@ -1055,45 +1055,34 @@ describe('characterSchema — v28 frameZeroMorphs (additive)', () => {
   })
 })
 
-// v32 added `node` to the preserve-morph + frame-0 morph rows — additive with a
-// '' default (= the pre-v32 reach: broadcast for frame-0, figure root for
-// preserve), so there is no migrate step.
+// v32 added `node` to the frame-0 morph rows — additive with a '' default (= the
+// pre-v32 broadcast reach), so there is no migrate step. (It added the same field
+// to the preserve-morph rows, which retired in v35.)
 describe('characterSchema — v32 morph-row node scope (additive)', () => {
   const base = { id: 'c1', name: 'Electra', createdAt: '2026-01-01', updatedAt: '2026-01-01' }
 
-  it("fills node with '' on v31-shaped preserve + frame-0 rows", () => {
+  it("fills node with '' on v31-shaped frame-0 rows", () => {
     const parsed = characterSchema.parse({
       ...base,
       schemaVersion: 31,
-      preserveMorphs: [{ name: 'body_ctrl_BreastsUp-Down', keepValue: 0.6 }],
       frameZeroMorphs: [{ name: 'FBMExpandAll', value: -1 }],
     })
-    expect(parsed.preserveMorphs).toEqual([
-      { name: 'body_ctrl_BreastsUp-Down', keepValue: 0.6, node: '' },
-    ])
     expect(parsed.frameZeroMorphs).toEqual([{ name: 'FBMExpandAll', value: -1, node: '' }])
   })
 
-  it('round-trips a stored node scope, including inside the per-scene blocks', () => {
+  it('round-trips a stored node scope, including inside the per-scene block', () => {
     const parsed = characterSchema.parse({
       ...base,
       frameZeroMorphs: [{ name: 'FBMExpandAll', value: -1, node: 'Bags' }],
-      preserveMorphs: [{ name: 'ExpandAll', keepValue: 1, node: 'Boots' }],
       sceneOverrides: [
         {
           scenePath: 'X:/p/daz3d/Beach/Beach.duf',
           frameZero: [{ name: 'FBMExpandAll', value: -0.5, node: 'Backpack' }],
-          preserve: {
-            morphs: [{ name: 'ExpandAll', keepValue: 0, node: 'Gloves' }],
-            nodeTransforms: [],
-          },
         },
       ],
     })
     expect(parsed.frameZeroMorphs[0].node).toBe('Bags')
-    expect(parsed.preserveMorphs[0].node).toBe('Boots')
     expect(parsed.sceneOverrides[0].frameZero?.[0].node).toBe('Backpack')
-    expect(parsed.sceneOverrides[0].preserve?.morphs[0].node).toBe('Gloves')
   })
 })
 
@@ -1165,5 +1154,83 @@ describe('characterSchema — v34 strips the retired base/autoBase floors', () =
     const content = toCharacterScriptDsa(parsed).content
     expect(content).not.toContain('autoBase')
     expect(content).not.toContain('"base"')
+  })
+})
+
+// v35 retired "Preserve morphs after ROM loading" — the DTH release the studio
+// targets holds those values across the ROM itself. zod strips `preserveMorphs`
+// and the per-scene `preserve.morphs`; the step exists only to drop a `preserve`
+// block that was armed by the MORPH half alone (see migrate.ts).
+describe('characterSchema — v35 retires the preserve-morph list', () => {
+  const now = '2026-08-18T00:00:00.000Z'
+  const v34Character = (over: Record<string, any> = {}): Record<string, any> => ({
+    id: 'c1',
+    name: 'Electra',
+    createdAt: now,
+    updatedAt: now,
+    schemaVersion: 34,
+    preserveMorphs: [{ name: 'body_ctrl_BreastsUp-Down', keepValue: 0.6, node: '' }],
+    preserveNodeTransforms: [{ nodeLabel: 'Left Eye' }],
+    ...over,
+  })
+
+  it('strips the base list and the per-scene morph half', () => {
+    const parsed = characterSchema.parse(
+      migrateCharacterData(
+        v34Character({
+          sceneOverrides: [
+            {
+              scenePath: 'X:/p/daz3d/Beach.duf',
+              preserve: {
+                morphs: [{ name: 'ExpandAll', keepValue: 1, node: 'Boots' }],
+                nodeTransforms: [{ nodeLabel: 'Right Eye' }],
+              },
+            },
+          ],
+        }),
+      ),
+    )
+    expect(parsed).not.toHaveProperty('preserveMorphs')
+    expect(parsed.preserveNodeTransforms).toEqual([{ nodeLabel: 'Left Eye' }])
+    // The node half genuinely diverges, so the block stays — morph-free.
+    expect(parsed.sceneOverrides[0].preserve).toEqual({
+      nodeTransforms: [{ nodeLabel: 'Right Eye' }],
+    })
+  })
+
+  it('drops a preserve block that was armed by the morph half alone', () => {
+    // The editor wrote the FULL lists into an armed block, so a morph-only
+    // divergence carried a COPY of the base node list. Left in place it would
+    // silently pin that scene to today's base list — a no-op override the UI
+    // would never write. It goes.
+    const parsed = characterSchema.parse(
+      migrateCharacterData(
+        v34Character({
+          sceneOverrides: [
+            {
+              scenePath: 'X:/p/daz3d/Beach.duf',
+              hair: [{ nodeLabel: 'Ponytail' }],
+              preserve: {
+                morphs: [{ name: 'ExpandAll', keepValue: 1, node: 'Boots' }],
+                nodeTransforms: [{ nodeLabel: 'Left Eye' }],
+              },
+            },
+          ],
+        }),
+      ),
+    )
+    expect(parsed.sceneOverrides[0].preserve).toBeUndefined()
+    expect(parsed.sceneOverrides[0].hair).toEqual([{ nodeLabel: 'Ponytail' }])
+  })
+
+  it('is idempotent — a re-read of the migrated definition is unchanged', () => {
+    const parsed = characterSchema.parse(migrateCharacterData(v34Character()))
+    const again = characterSchema.parse(migrateCharacterData(structuredClone(parsed)))
+    expect(again).toEqual(parsed)
+  })
+
+  it('emits no preserveMorphs key into the generated config', () => {
+    const parsed = characterSchema.parse(migrateCharacterData(v34Character()))
+    expect(toCharacterScriptDsa(parsed).content).not.toContain('preserveMorphs')
   })
 })

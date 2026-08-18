@@ -26,7 +26,7 @@ import type { IndexedMorphEntry } from './contexts.ts'
  * definition) the scene entries are all dropped rather than all offered: an
  * unfiltered mix is exactly the noise the scan exists to remove.
  *
- * Both the ROM editor and the Advanced-options preserve-morph list wrap their
+ * Both the ROM editor and the Advanced-options frame-0 morph list wrap their
  * fields in this, so the same autocomplete works in both places.
  */
 export function MorphIndexProvider({

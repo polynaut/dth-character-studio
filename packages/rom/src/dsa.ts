@@ -949,12 +949,9 @@ function buildSceneConfigMap(
       delta.FlexionStrength = g9Dials ? override.identity.flexionStrength : 0
       delta.bApplyUE5TearUV = character.genesis === 'G9' && override.identity.applyUE5TearUV
     }
-    // Preserve lists — full replacement, ALWAYS both keys even empty, so an armed scene
-    // that cleared a list overrides the base's (empty ⇒ preserve nothing) — delete-all.
-    if (override.preserve) {
-      delta.preserveMorphs = override.preserve.morphs
-      delta.preserveNodeTransforms = override.preserve.nodeTransforms
-    }
+    // Preserve node transforms — full replacement, emitted even empty, so an armed
+    // scene that cleared the list overrides the base's (empty ⇒ preserve nothing).
+    if (override.preserve) delta.preserveNodeTransforms = override.preserve.nodeTransforms
     // JCM "Modify frames" — full replacement, emitted even empty (delete-all); excluded
     // from the section diff above so a cleared list still overrides the base's.
     if (override.jcm) delta.jcmMorphMods = override.jcm.map(jcmMorphModForRuntime)
@@ -1079,7 +1076,6 @@ export function buildCharacterConfig(
   if (romPaths.gp) config.gpRomPath = romPaths.gp
   if (romPaths.dk) config.dkRomPath = romPaths.dk
   if (romPaths.phys) config.physRomPath = romPaths.phys
-  if (character.preserveMorphs.length) config.preserveMorphs = character.preserveMorphs
   if (character.preserveNodeTransforms.length)
     config.preserveNodeTransforms = character.preserveNodeTransforms
   if (character.frameZeroMorphs.length) config.frameZeroMorphs = character.frameZeroMorphs

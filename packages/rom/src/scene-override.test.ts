@@ -664,20 +664,15 @@ describe('generateAll — scene overrides folded into the one script', () => {
     expect(merged.applyUE5TearUV).toBe(false)
   })
 
-  it('a preserve-only override full-replaces the base lists (empty overrides too), NO scene CSV', () => {
+  it('a preserve-only override full-replaces the base list (empty overrides too), NO scene CSV', () => {
     const preserveOverride = makeOverride({
       scenePath: scene,
-      preserve: {
-        // One row scoped to a scene node (v32) — the scope must reach the wire.
-        morphs: [{ name: 'body_ctrl_BreastsUp-Down', keepValue: 0.6, node: 'Boots' }],
-        nodeTransforms: [],
-      },
+      preserve: { nodeTransforms: [] },
     })
     const files = generateAll(
       makeCharacter({
         extraScenes: [scene],
         sceneOverrides: [preserveOverride],
-        preserveMorphs: [{ name: 'base_morph', keepValue: 1, node: '' }],
         preserveNodeTransforms: [{ nodeLabel: 'Left Eye' }],
       }),
       {},
@@ -690,9 +685,6 @@ describe('generateAll — scene overrides folded into the one script', () => {
       'ElectraG9_pose_asset.csv',
     ])
     const delta = grabObject(files[0].content, 'dthSceneOverrides')[sceneKey]
-    expect(delta.preserveMorphs).toEqual([
-      { name: 'body_ctrl_BreastsUp-Down', keepValue: 0.6, node: 'Boots' },
-    ])
     // The empty list is emitted so it OVERRIDES the base's [Left Eye] (delete-all).
     expect(delta.preserveNodeTransforms).toEqual([])
     expect(delta.extraFrames).toBeUndefined()

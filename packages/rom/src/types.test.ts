@@ -83,10 +83,10 @@ describe('string bounds (hostile shared JSONs)', () => {
       scenePath: 'X:\\_3d\\dth-characters\\Electra\\daz3d\\ElectraDefault_G9.duf',
       extraScenes: ['X:\\_3d\\dth-characters\\Electra\\daz3d\\ElectraSummer_G9.duf'],
       houdiniProjects: ['X:\\_3d\\dth-characters\\Electra\\houdini\\Electra.hip'],
-      preserveMorphs: [{ name: 'body_bs_BreastsPosition', keepValue: 0.5 }],
+      frameZeroMorphs: [{ name: 'body_bs_BreastsPosition', value: 0.5 }],
     })
     expect(character.name).toBe('Electra')
-    expect(character.preserveMorphs[0].keepValue).toBe(0.5)
+    expect(character.frameZeroMorphs[0].value).toBe(0.5)
   })
 
   it('rejects an absurd multi-megabyte string field', () => {
@@ -267,13 +267,12 @@ describe('numeric fields reject non-finite values (they would serialize as null 
   })
 
   for (const bad of [Infinity, -Infinity, NaN]) {
-    it(`rejects ${bad} across morph values, strengths, keepValue and JCM ranges`, () => {
+    it(`rejects ${bad} across morph values, strengths, frame-0 values and JCM ranges`, () => {
       expect(characterSchema.safeParse(withMorphValue(bad)).success).toBe(false)
       expect(characterSchema.safeParse({ ...base, facsDetailStrength: bad }).success).toBe(false)
       expect(characterSchema.safeParse({ ...base, flexionStrength: bad }).success).toBe(false)
       expect(
-        characterSchema.safeParse({ ...base, preserveMorphs: [{ name: 'm', keepValue: bad }] })
-          .success,
+        characterSchema.safeParse({ ...base, frameZeroMorphs: [{ name: 'm', value: bad }] }).success,
       ).toBe(false)
       expect(
         characterSchema.safeParse({
