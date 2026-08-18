@@ -314,6 +314,44 @@ export function mergeRomRunLogs(stored: RomRunLog, fresh: RomRunLog): RomRunLog 
   }
 }
 
+/**
+ * The log with the named scenes' runs removed, aggregates recomputed — `null`
+ * when that leaves nothing worth keeping (the caller deletes the file / clears
+ * the banner), and the SAME object back when none of them had an entry, so an
+ * identity check is a valid "nothing changed" test (the memoized ROM subtree
+ * depends on the log's identity — see `useRomRunLog`).
+ *
+ * A run retires exactly the verdicts it supersedes, which is per SCENE on both
+ * paths: the single-scene rebuild ("Generate new ROM" on a scene card) re-runs
+ * one scene, and a DTH Export batch re-runs the scenes the user ticked — a
+ * scene neither one touches keeps its findings, because nothing is coming to
+ * rewrite them. Which scenes a batch retires is `scenesRetiredByRun`
+ * (`execute-jobs.ts`), the one rule both the store and the screen read.
+ *
+ * An `unreadable` log is dropped whole: it describes a broken FILE, not a
+ * scene's result, so there is no per-scene entry to keep — and the run about to
+ * start writes a fresh one. A v1 log (pre-runtime-v54) and a run from an
+ * unsaved scene both sit under scene `''`, so they are retired only by a caller
+ * that passes `''` — which a ROM-rebuilding batch does, or they would pin the
+ * report through every future run.
+ */
+export function dropSceneRuns(log: RomRunLog, scenePaths: ReadonlyArray<string>): RomRunLog | null {
+  if (log.unreadable) return null
+  const keys = new Set(scenePaths.map(normalizeSceneKey))
+  const runs = log.runs.filter((r) => !keys.has(normalizeSceneKey(r.scene)))
+  if (runs.length === log.runs.length) return log
+  if (runs.length === 0) return null
+  return {
+    ...log,
+    ok: runs.every((r) => r.ok),
+    runs,
+    errors: runs.flatMap((r) => r.errors),
+    warnings: runs.flatMap((r) => r.warnings),
+    failedMorphs: runs.flatMap((r) => r.failedMorphs),
+    keyProblems: runs.flatMap((r) => r.keyProblems),
+  }
+}
+
 /** An existing-but-corrupt log still surfaces as a problem instead of throwing. */
 export function unreadableRomRunLog(): RomRunLog {
   const message =

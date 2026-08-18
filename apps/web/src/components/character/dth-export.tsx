@@ -26,7 +26,12 @@ import {
   runPercent,
   unrealTaskCards,
 } from '#/lib/rom/export-cards.ts'
-import { formatElapsed, scriptFailureLines, tidyRunErrors } from '#/lib/rom/execute-jobs.ts'
+import {
+  formatElapsed,
+  scenesRetiredByRun,
+  scriptFailureLines,
+  tidyRunErrors,
+} from '#/lib/rom/execute-jobs.ts'
 
 import type { ExportRunProgress } from '#/lib/rom/api.ts'
 import type { UnrealTarget } from '#/lib/rom/export-cards.ts'
@@ -112,6 +117,7 @@ export function DthExportAction({
   dazLibraryConfigured,
   unrealProjects = NO_UNREAL_PROJECTS,
   onPipeline,
+  onRunStarted,
 }: {
   projectId: string
   character: Character
@@ -126,6 +132,12 @@ export function DthExportAction({
    *  up so the header can render {@link ExportPipelinePanel} ABOVE the whole
    *  button cluster (this component only owns its own buttons). Null = no run. */
   onPipeline?: (view: ExportPipelineView | null) => void
+  /** A handoff just went out — the page drops the PREVIOUS run's findings for
+   *  the scenes it retires (the red banner + the red morph rows), which the
+   *  handoff has already retired on disk. Which scenes those are is
+   *  {@link scenesRetiredByRun}: the ones the run re-runs, and none at all for
+   *  an export-only run, which rebuilds no ROM. */
+  onRunStarted?: (scenePaths: ReadonlyArray<string>) => void
 }) {
   const [open, setOpen] = useState(false)
   // null = not yet checked (renders as the normal export button).
@@ -1310,6 +1322,14 @@ export function DthExportAction({
           onExported={(run) => {
             // A new run supersedes the previous outcome (see dismissFinishToasts).
             dismissFinishToasts()
+            // …including the previous ROM run's findings for the scenes this
+            // run supersedes. The handoff has already retired the same scenes
+            // on disk (executeCharacterJobs → clearSceneRunLogs), off the SAME
+            // rule — so this is purely the on-screen half: the red "errors in
+            // the last ROM run" banner and the red morph rows go the moment the
+            // new run appears, instead of hanging over a live progress bar
+            // until Daz writes a fresh log.
+            onRunStarted?.(scenesRetiredByRun(run.mode, run.scenes))
             runReportRef.current = null
             resetUnrealLeg()
             // A new run is never born interrupted — and the handoff itself

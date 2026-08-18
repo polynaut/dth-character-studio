@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 
 import { dismissRomRunLog, fetchRomRunLog } from '#/lib/rom/api.ts'
-import { failedMorphKeysByScene } from '#/lib/rom/run-log.ts'
+import { dropSceneRuns, failedMorphKeysByScene } from '#/lib/rom/run-log.ts'
 import { useRefetchOnFocus } from '@dth/ui'
 
 export type RomRunLog = Awaited<ReturnType<typeof fetchRomRunLog>>
@@ -33,6 +33,31 @@ export function useRomRunLog(projectId: string, characterId: string, initial: Ro
         // on every refocus — keep the last log; the next focus retries.
       })
   }, [projectId, characterId])
+
+  /**
+   * Forget the named scenes' findings on the spot — no API call.
+   *
+   * The on-screen half of a handoff that has ALREADY retired the same scenes on
+   * disk: the DTH Export batch (`executeCharacterJobs` → `clearSceneRunLogs`,
+   * over `scenesRetiredByRun`) and the single-scene rebuild
+   * (`generateRomAnimation`, over the one scene it re-runs). Starting a run must
+   * clear its own red banner and red morph rows immediately, rather than leaving
+   * them under a live progress bar until Daz writes a new log.
+   *
+   * Per scene, never wholesale, because that is all a run supersedes — the
+   * scenes it does not touch keep their findings, and nothing is coming to
+   * rewrite them. Local-only on purpose: re-clearing what the handoff just
+   * cleared would be a second round trip for nothing, and the refocus refetch
+   * now reads a store that agrees, so the state cannot come back.
+   *
+   * `dropSceneRuns` hands the same object back when none of the scenes had an
+   * entry, so a run of unreported scenes leaves the log's identity — and with
+   * it the memoized ROM subtree — untouched.
+   */
+  const forgetScenes = useCallback((scenePaths: ReadonlyArray<string>) => {
+    if (scenePaths.length === 0) return
+    setRomRunLog((prev: RomRunLog) => (prev ? dropSceneRuns(prev, scenePaths) : prev))
+  }, [])
 
   const dismiss = useCallback(async () => {
     setRomRunLog(null)
@@ -86,6 +111,7 @@ export function useRomRunLog(projectId: string, characterId: string, initial: Ro
   return {
     romRunLog,
     dismiss,
+    forgetScenes,
     hasRunProblems,
     hasRunWarnings,
     showRunReport,

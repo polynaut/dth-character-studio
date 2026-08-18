@@ -10,6 +10,7 @@ import type { RomRunLog } from '../run-log.ts'
 export type { RomRunFailedMorph, RomRunKeyProblem, RomRunLog, RomRunSceneRun } from '../run-log.ts'
 
 import { LAST_ROM_RUN_FILE } from '../character-internals.ts'
+import { clearRomRunLogFiles } from './run-log-store.ts'
 import * as storage from '../storage'
 import { normalizeRelFolder } from '../library'
 import { normalizeSceneKey } from '../execute-jobs.ts'
@@ -354,15 +355,7 @@ export async function dismissRomRunLog({ data }: { data: unknown }): Promise<voi
   const project = await resolveProject(projectId)
   const location = await locateCharacter(charsRoot(project), id)
   if (!location) return
-  const folder = storage.characterMetaDir(project.path, location.relFolder, id)
-  for (const name of [LAST_ROM_RUN_FILE, ROM_RUN_LOG_FILE]) {
-    try {
-      const path = joinPath(folder, name)
-      if (await exists(path)) await remove(path)
-    } catch {
-      // best-effort — a locked file just leaves the banner until the next run
-    }
-  }
+  await clearRomRunLogFiles(storage.characterMetaDir(project.path, location.relFolder, id))
 }
 
 const saveInput = z.object({ projectId: z.string().min(1), character: z.unknown() })

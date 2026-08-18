@@ -166,6 +166,47 @@ backup first.
     ingesting DELETES the transport file, so a user who alt-tabs back mid-batch
     splits one batch across two logs — replacing would drop the first half at
     exactly the moment they looked.
+  - **The merge is why a starting run RETIRES the previous report** — and why
+    it retires it PER SCENE, on disk as well as on screen (`api/run-log-store.ts`,
+    a leaf module so `api/execute/jobs.ts` stays out of an import cycle through
+    `characters.ts` → `generate.ts`). Without it the merge folds the last run's
+    failures into the new run's report, and the character page's focus refetch
+    re-raises the old red banner (and the red morph rows) while the new run is
+    still working.
+    - **The rule is one function** — `scenesRetiredByRun(mode, scenes)` in the
+      pure `execute-jobs.ts` — read by BOTH halves, so the report on screen and
+      the report on disk cannot disagree: the disk half is
+      `clearSceneRunLogs(metaDir, …)` from the handoff, the screen half
+      `useRomRunLog().forgetScenes` from `DthExportAction`'s `onExported`.
+    - **A run retires the scenes it RE-RUNS, and no others.** A DTH Export batch
+      is a user-made selection and "Generate new ROM" (`generateRomAnimation`,
+      the scene card's menu → `DazSceneField`'s `onRomRebuildStarted`) is one
+      scene; wiping the log would throw away findings for scenes that have
+      nothing coming to rewrite them, because nothing is going to re-run them.
+      Keying by the SOURCE scene is correct because `ApplyDTHCharacter` writes
+      the run log BEFORE the generated script's save-as repoints the open scene.
+    - **Plus the untagged `''` entries** (a v1 log, or a run from an unsaved
+      scene) on any ROM-rebuilding batch: they name no scene, so no future run
+      can ever replace them — left alone they pin the report through every clean
+      run from then on.
+    - **`export-only` retires NOTHING.** It rebuilds no ROM: the verdict it
+      would be deleting still describes the ROM it is about to export — the
+      failed-morph rows included — and a clean export writes no run log to
+      replace it with (the export carrier only touches the log on failure, see
+      `dthExportLogProblem`). The cost is that a repeated export failure appends
+      its message again; that is what main did too, and it beats losing the ROM
+      report over a run that changed nothing.
+    - `dropSceneRuns` returns the same object when no named scene has an entry —
+      the "nothing changed" signal both the store (skip the write) and the hook
+      (keep the memoized ROM subtree) rely on. It drops an `unreadable` log
+      whole (a broken FILE, not a scene).
+    - Both handoffs clear BEFORE the job file lands, not after: a Daz that is
+      already up polls for that file and can be writing its own run log within
+      the second. The cost is `generateRomAnimation`'s two-window race — the
+      window that loses `assertHandoffOwned` has already retired the scene it
+      never got to run.
+    - The finish report is unaffected either way — `scriptRunFailures` only
+      counts entries written since the handoff.
   - The red row markers match by MORPH IDENTITY — `morphKey` = `node|prop`
     (`lib/rom/run-log.ts`) — never by the log's frame numbers: frames are
     recomputed from row order on every edit, so a stored frame describes the
