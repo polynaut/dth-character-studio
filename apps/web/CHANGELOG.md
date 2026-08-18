@@ -1,7 +1,24 @@
 # @dth/web
 
-## 0.83.0
+## 0.83.1
 
+### Patch Changes
+
+- [#890](https://github.com/polynaut/dth-character-studio/pull/890) [`832988d`](https://github.com/polynaut/dth-character-studio/commit/832988d0b8fbe2cbe8cb6a509d8452eafec6aa35) Thanks [@polynaut](https://github.com/polynaut)! - Generate Houdini project: no more red "name already exists" flash under the name input while the dialog closes after a successful generation — the dialog was catching its own freshly created project in the live collision check.
+
+- [#889](https://github.com/polynaut/dth-character-studio/pull/889) [`d669744`](https://github.com/polynaut/dth-character-studio/commit/d6697440528acf09270ede94f2210895887e18a2) Thanks [@polynaut](https://github.com/polynaut)! - Internal, no behaviour change: the lint gate no longer carries a warning-count baseline. The 221 advisory warnings the repo kept on purpose are now exempted where they happen — a file-level `oxlint-disable` with its reason in the modules whose whole shape is ordered filesystem work, an `oxlint-disable-next-line` with its reason at one-off sites, and one rule turned off in `.oxlintrc.json` because its suggested fix (mutate in place) is wrong for immutable state. `pnpm lint` now runs `--deny-warnings` over a tree at zero, so any new warning fails outright instead of hiding inside a total.
+
+- [#893](https://github.com/polynaut/dth-character-studio/pull/893) [`5fe2a9d`](https://github.com/polynaut/dth-character-studio/commit/5fe2a9d5e7a52da38b7100bce6d0bcca5f750b56) Thanks [@polynaut](https://github.com/polynaut)! - The generated Daz scripts no longer lose the DTH runtime on the first scene of a cold-started export or scan (runtime v84). On the first row of a Runner batch in a freshly launched Daz, `getScriptFileName()` could answer with a Daz-internal path, so the runtime include resolved into `DAZStudio4/resources/` and the row failed "runtime missing" with the runtime installed and intact.
+
+  Nothing a batch row depends on reads that answer alone any more: every generated script (and the per-run scan script) probes the normal location first and falls back to the install root baked in by the studio; the installed runtime uses absolute includes; and the bulk scan carriers get their config/content-root folder baked in too, rather than deriving it from the same call. The failure report now names every probed location plus the script's raw self-reported folder.
+
+  Save the character (or Tools → Refresh assets) after updating to regenerate the scripts.
+
+- Updated dependencies [[`5fe2a9d`](https://github.com/polynaut/dth-character-studio/commit/5fe2a9d5e7a52da38b7100bce6d0bcca5f750b56)]:
+  - @dth/rom@0.83.1
+  - @dth/ui@0.83.1
+
+## 0.83.0
 
 ### Patch Changes
 
