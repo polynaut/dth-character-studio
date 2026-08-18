@@ -329,7 +329,6 @@ export interface ScanState {
 
 export const EMPTY_SCAN: ScanState = { loading: false, error: '', projects: [] }
 
-
 /** The "Character from the studio…" source picker's candidate list: every
  *  character that still has a Houdini project to offer — the CURRENT character
  *  included, so a setup can be copied between two of its own projects. What
