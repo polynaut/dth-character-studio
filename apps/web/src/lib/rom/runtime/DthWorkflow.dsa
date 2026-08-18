@@ -2,7 +2,10 @@
 
 // DthUtils.dsa + DthOptions.dsa load relative to the INVOKING script's folder:
 // getScriptFileName() resolves to the top-level script being run, not this file,
-// so they must sit alongside whatever script includes this one.
+// so they must sit alongside whatever script includes this one. (The installed
+// copies don't rely on that: the studio rewrites these includes to the ABSOLUTE
+// installed root — getScriptFileName() can lie on the first script of a
+// cold-started Daz; see runtime-install.ts.)
 var dir_self = new DzDir (new DzFileInfo (getScriptFileName ()).path ());
 include (dir_self.filePath ("DthUtils.dsa"));
 include (dir_self.filePath ("DthOptions.dsa"));

@@ -451,6 +451,12 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   // the open scene at run time; generateAll also mints a per-scene PoseAsset CSV
   // for each ROM-override scene (Houdini has no runtime to select frames). Both
   // destinations get them below.
+  // The runtime root, baked into every generated script as the include fallback
+  // for the one measured way getScriptFileName() lies (see runtimeDirSnippet in
+  // @dth/rom's dsa.ts). Machine-specific by design, like the progress-log path.
+  const runtimeRootAbs = settings.dazLibraryFolder
+    ? storage.studioScriptsDir(settings.dazLibraryFolder)
+    : ''
   const files = generateAll(
     versioned,
     romPaths,
@@ -468,6 +474,7 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
     // writes into the job (execute.ts). Machine-specific by design, like the
     // baked CSV-delivery path.
     await storage.dataPath(EXPORT_PROGRESS_FILE),
+    runtimeRootAbs,
   )
   // Scene-suffixed SCRIPT names of every stored override (active or not) — the
   // sweep candidates. Filtered against what was just written, this removes the

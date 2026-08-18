@@ -388,13 +388,31 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   drift from the tags).
 - **A hidden runtime `.dsa` must never `include()` a sibling runtime by name.**
   `copyRuntimeFiles` blindly rewrites every `"<Dep>.dsa"` string inside a
-  RUNTIME_FILES entry to `"../../.<Dep>.dsa"` — correct for an include resolved from
-  a character script two levels down, fatal for the same file included by a VISIBLE
-  root-level script (`Build_Genesis_Index.dsa`, `Scan_Frames.dsa`), which lives at
-  the runtime root. So the visible wrapper does the includes, in dependency order
-  (`.DthUtils.dsa` first, then the scanner), and the scanner just calls the utils
-  functions as globals. The rewrite is string-blind: even a double-quoted runtime
-  filename in a COMMENT gets repointed.
+  RUNTIME_FILES entry to the ABSOLUTE installed path (`"<root>/.<Dep>.dsa"` since
+  runtime v84; `"../../.<Dep>.dsa"` before — the relative form was fatal for the
+  same file included by a VISIBLE root-level script, which lives AT the runtime
+  root). The absolute form resolves from any depth, but the layering rule stands:
+  the visible wrapper does the includes, in dependency order (`.DthUtils.dsa`
+  first, then the scanner), and the scanner just calls the utils functions as
+  globals — a scanner that included utils itself would now double-load it. The
+  rewrite is string-blind: even a double-quoted runtime filename in a COMMENT
+  gets repointed.
+- **`getScriptFileName()` lies on the first script of a cold-started Daz**
+  (measured 2026-08-18, DS6, LaraCroft_G81, a 2-scene DTH Export whose handoff
+  launched Daz): the FIRST row's bulk script captured a self-path that resolved
+  the runtime include into `C:/Program Files/DAZ 3D/DAZStudio4/resources/` —
+  Daz's own install tree — so the row failed "runtime missing" with the runtime
+  installed and intact, while row 2 of the same batch (same script, warm Daz)
+  worked. Recurring and previously unreproducible-on-demand: it needs the
+  cold-start window, and the misleading "expected at" path (pre-v80 reports)
+  sent earlier investigations at the install, which was never broken. WHY the
+  API answers a Daz-internal path there is unmeasured (plausibly Daz's own
+  startup scripting still in flight — inference, not fact). Since runtime v84
+  nothing load-bearing trusts it alone: generated scripts probe the relative
+  answer and fall back to the baked install root (`runtimeDirSnippet`,
+  `packages/rom/src/dsa.ts`), installed root/runtime scripts use absolute
+  includes, and the failure report prints the raw self-reported folder so a
+  recurrence carries its own evidence.
 - **The stock figure/graft content paths are not what you'd guess** (measured
   2026-07-29 against a real "My DAZ 3D Library"): the G8 base figures are
   `People/Genesis 8 <Sex>/Genesis 8 Basic <Sex>.duf` (not `Genesis 8 <Sex>.duf`), and

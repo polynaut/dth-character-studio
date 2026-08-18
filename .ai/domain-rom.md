@@ -78,7 +78,9 @@ backup first.
 `generateAll()` (`packages/rom/src/generate.ts`) returns `{fileName, content, target: 'daz'|'houdini'}`:
 
 - `ROM_<Name>_<Genesis>.dsa` — self-contained apply script: inline `config` object
-  → `include('../../.DthWorkflow.dsa')` → `ApplyDTHCharacter(config)`. Installed to
+  → `include(dthRuntimeDir + "/.DthWorkflow.dsa")` (normally resolved two levels
+  up from the script's own folder, falling back to the baked install root — see
+  the v84 entry in `schema-history.md`) → `ApplyDTHCharacter(config)`. Installed to
   `<Daz library>/Scripts/DTH-Character-Studio/<project>/<character>/`; the shared
   **DTH runtime** (`.DthWorkflow.dsa`, `.DthUtils.dsa`, …) is co-installed once at
   that root (`copyRuntimeFiles` in `apps/web/src/lib/rom/storage/runtime-install.ts`;

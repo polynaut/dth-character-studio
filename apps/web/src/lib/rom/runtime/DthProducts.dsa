@@ -16,8 +16,9 @@
 //
 // Like the other runtime files, this loads DthUtils.dsa relative to the INVOKING
 // (top-level) script's folder — getScriptFileName() resolves to that script, not
-// this file. The studio rewrites the bare "DthUtils.dsa" include to the hidden
-// "../../.DthUtils.dsa" at install time.
+// this file. The studio rewrites the bare include to the hidden installed copy
+// at the ABSOLUTE runtime root at install time (getScriptFileName() can lie on
+// the first script of a cold-started Daz; see runtime-install.ts).
 var dir_self = new DzDir(new DzFileInfo(getScriptFileName()).path());
 if (typeof verbose !== "function")
   include(dir_self.filePath("DthUtils.dsa"));

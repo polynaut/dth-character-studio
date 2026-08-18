@@ -1018,4 +1018,19 @@ v80 — no unattended carrier opens a modal, and the missing-runtime message sto
       frame now keeps its posed keys instead of ending flat.
       `preserveNodeTransforms` (memorizeNodeTransforms / restoreNodeTransforms)
       is untouched.
+ 84 — the runtime include no longer trusts getScriptFileName() alone. Measured
+      2026-08-18 (LaraCroft_G81, 2-scene DTH Export, Daz launched by the run):
+      on the FIRST row of a Runner batch in a cold-started Daz,
+      getScriptFileName() answered with a Daz-internal path — the include
+      resolved into `DAZStudio4/resources/` and the row failed "runtime
+      missing" with the runtime installed and intact; row 2 of the same batch
+      worked. Every generated script now emits a resolver (runtimeDirSnippet)
+      that probes the relative answer first and falls back to the studio's
+      install root baked in at generation time; the failure report names every
+      probed location AND the raw self-reported folder (that self-report was
+      the entire diagnosis). The installed runtime/root scripts get their
+      sibling includes rewritten to the ABSOLUTE install root instead of
+      `../../.<Dep>.dsa` (copyRuntimeFiles), removing their own
+      getScriptFileName() dependence. No schema change, no migration step —
+      regeneration reads live settings, so Refresh assets rebakes correctly.
 ```

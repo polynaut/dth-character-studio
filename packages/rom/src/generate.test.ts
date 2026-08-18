@@ -440,7 +440,7 @@ describe('toCharacterScriptDsa', () => {
     const file = toCharacterScriptDsa(makeCharacter())
     expect(file.fileName).toBe('ROM_ElectraG9_G9.dsa')
     expect(file.target).toBe('daz')
-    expect(file.content).toContain('include(dir_self.filePath("../../.DthWorkflow.dsa"));')
+    expect(file.content).toContain('include(dthRuntimeDir + "/.DthWorkflow.dsa");')
     expect(file.content).toContain('ApplyDTHCharacter(')
     const config = characterConfig(file.content)
     expect(config.bIncludeJCM).toBe(true)
@@ -548,7 +548,7 @@ describe('toCharacterScriptDsa', () => {
     // level — Daz resolves it via its legacy-include mechanism, which fails
     // inside try/catch ("URIError: Legacy Include"). Top level = unindented line;
     // wrapping it in any block would indent it.
-    expect(withFolder.content).toMatch(/^include\(dir_self\.filePath/m)
+    expect(withFolder.content).toMatch(/^include\(dthRuntimeDir \+ /m)
     // A missing runtime is guarded by a typeof check, not by wrapping include().
     expect(withFolder.content).toContain('typeof ApplyDTHCharacter != "function"')
     // Pure/web context (no character folder): no log path, catch-all still there.
@@ -583,7 +583,7 @@ describe('toScanProductsScriptDsa', () => {
     expect(file.fileName).toBe('Scan_Products_ElectraG9.dsa')
     expect(file.target).toBe('daz')
     expect(file.content).toContain('// DTH-Runtime: v')
-    expect(file.content).toContain('include(dir_self.filePath("../../.DthProducts.dsa"));')
+    expect(file.content).toContain('include(dthRuntimeDir + "/.DthProducts.dsa");')
     expect(file.content).toContain('DthScanProducts(')
   })
 
