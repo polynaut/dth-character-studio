@@ -427,7 +427,7 @@ export function ProjectScanSection({
                             <SceneTile
                               scenePath={scene}
                               name={sceneName(scene)}
-                              genesis={character.genesis}
+                              offsetY={character.imageOffsetY}
                               size="md"
                             />
                             <span className="min-w-0 flex-1 truncate">{sceneName(scene)}</span>

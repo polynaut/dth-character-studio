@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { usePortraitSrc } from '#/components/portrait.tsx'
+import { avatarOffsetFlat } from '#/lib/avatar-offset.ts'
 import { resolveImageSrc, resolveImageSrcAtSize } from '#/lib/rom/api.ts'
 import { cn } from '@dth/ui'
 
@@ -60,6 +61,7 @@ export function Avatar({
   image,
   scenePath,
   name,
+  offsetY,
   className,
   fallbackClassName,
   renderPx,
@@ -67,6 +69,11 @@ export function Avatar({
   image: string
   scenePath?: string
   name: string
+  /** The character's `imageOffsetY` — its vertical framing nudge, a signed % of
+   *  the picture. Applied in the `translate` slot, because this component's one
+   *  zoomed consumer (the character header) spends `transform` and `scale` on
+   *  the scroll animation — see lib/avatar-offset for what that costs. */
+  offsetY?: number
   className?: string
   fallbackClassName?: string
   /** CSS px the image is painted at (longest side). When set, the stored avatar is
@@ -79,7 +86,9 @@ export function Avatar({
   // While the variant resolves, fall back to the full image so nothing flashes.
   const src = renderPx && !scenePath ? variant || base : base
   if (src) {
-    return <img src={src} alt="" className={cn('object-cover', className)} />
+    return (
+      <img src={src} alt="" style={avatarOffsetFlat(offsetY)} className={cn('object-cover', className)} />
+    )
   }
   return (
     <div

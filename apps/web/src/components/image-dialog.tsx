@@ -4,8 +4,8 @@ import { X } from 'lucide-react'
 import { Avatar } from '#/components/avatar.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import { ImageCropEditor } from '#/components/image-crop-editor.tsx'
-import { Portrait } from '#/components/portrait.tsx'
-import { Button, Input, Modal } from '@dth/ui'
+import { Portrait, usePortraitSrc } from '#/components/portrait.tsx'
+import { Button, Input, Label, Modal, NumberField } from '@dth/ui'
 import { validateAvatarSource } from '#/lib/image-crop.ts'
 import {
   deleteCharacterUpload,
@@ -16,12 +16,78 @@ import {
 } from '#/lib/rom/api.ts'
 
 /**
+ * How far the vertical-offset control lets the picture travel, as a % of itself.
+ * The core schema tolerates ±50 — this is the range that is USEFUL: the header
+ * portrait shows about 87% of the square's height, so ±25 already runs a shift
+ * off either end of it. Keeping the control inside its own sane range means a
+ * typed number can be clamped here instead of being rejected by zod at save.
+ */
+const OFFSET_LIMIT = 25
+
+/** The header pan's resting `translateY` (`dth-avatar-pan`'s `from`, styles.css). */
+const HEADER_REST_PAN = 11
+
+/**
+ * The picture as the CHARACTER HEADER frames it — the preview the offset is
+ * tuned against, because that portrait is the biggest and most-looked-at crop
+ * of it in the app.
+ *
+ * The geometry is editor-header's, re-expressed as PERCENTAGES so it holds at
+ * any preview width: the header lays a 254px square image inside a 168×224
+ * frame (164×220 of content) at `-45px` margins — 254/164 = 154.9% of the
+ * content box, offset by −45/164 = −27.4% of it. One number does both edges
+ * because a margin percentage resolves against the containing block's WIDTH,
+ * top margin included.
+ *
+ * The character's offset ADDS straight onto the resting pan here, which is what
+ * the header itself paints at rest: there the two live in different transform
+ * slots (see lib/avatar-offset) but its zoom rests at exactly 1, so the sum is
+ * the same. Below a preview this small the distinction has nothing to show.
+ *
+ * Kept in step with editor-header + styles.css BY HAND — retune the numbers
+ * together, or this dialog starts lying about the framing it is selling.
+ */
+function HeaderFramePreview({
+  src,
+  name,
+  offsetY,
+}: {
+  src: string
+  name: string
+  offsetY: number
+}) {
+  return (
+    <div className="aspect-[3/4] w-[120px] shrink-0 overflow-hidden rounded-lg border-2 border-[#2d2d2d] bg-[#262626]">
+      {src ? (
+        <img
+          src={src}
+          alt=""
+          style={{ transform: `translateY(${HEADER_REST_PAN + offsetY}%)` }}
+          className="aspect-square w-[154.9%] max-w-none -ml-[27.4%] -mt-[27.4%] object-cover"
+        />
+      ) : (
+        <div className="flex size-full items-center justify-center bg-muted text-5xl font-bold text-muted-foreground">
+          {name.charAt(0).toUpperCase()}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
  * Avatar edit dialog: shows the current image, accepts an external image URL,
  * or a drag-and-dropped (or picked) image file which is stored under
  * <data>/images/ and referenced by filename (see lib/rom/image).
+ *
+ * It also owns the character's VERTICAL FRAMING offset (`imageOffsetY`): Daz
+ * frames a figure in the `.tip.png` it renders according to how tall that
+ * figure is, so a short or tall character comes out sitting high or low in the
+ * square and every crop of it in the app misses the face by the same amount.
+ * One number fixes all of them at once — see lib/avatar-offset.
  */
 export function ImageDialog({
   image,
+  offsetY,
   name,
   characterId,
   scenes,
@@ -29,6 +95,8 @@ export function ImageDialog({
   onClose,
 }: {
   image: string
+  /** The character's stored `imageOffsetY` — seeds the offset control. */
+  offsetY: number
   name: string
   characterId: string
   /** The PRIMARY Daz scene (as a 0-or-1 array), offering its `.tip.png` as a
@@ -49,7 +117,7 @@ export function ImageDialog({
    *  when the persist was refused up front or failed — the dialog then resets
    *  its preview to the last persisted image. */
   onApply: (
-    produce: () => Promise<{ image: string; imageScene: string }>,
+    produce: () => Promise<{ image: string; imageScene: string; imageOffsetY: number }>,
   ) => Promise<object | null>
   onClose: () => void
 }) {
@@ -65,7 +133,19 @@ export function ImageDialog({
   // here; a recent upload / pasted URL just moves `url`. Apply commits the winner.
   const [stagedScene, setStagedScene] = useState<string | null>(null)
   const [stagedCrop, setStagedCrop] = useState<{ png: Uint8Array; previewUrl: string } | null>(null)
+  // The framing offset is staged the same way — Apply commits it with whatever
+  // image is selected, so picking a new image and re-framing it is ONE save.
+  const [offset, setOffset] = useState(offsetY)
   const fileInput = useRef<HTMLInputElement>(null)
+
+  // The selection resolved to a loadable URL for the header-frame preview. A
+  // staged crop is previewed from its own bytes and needs no resolution; the
+  // hook still runs (unconditionally, as it must) against an empty selection.
+  const resolvedPreview = usePortraitSrc({
+    image: stagedCrop || stagedScene ? '' : url,
+    scenePath: stagedScene ?? '',
+  })
+  const previewSrc = stagedCrop?.previewUrl ?? resolvedPreview
 
   // Load the recent-uploads gallery on open and after each new upload lands.
   useEffect(() => {
@@ -179,8 +259,10 @@ export function ImageDialog({
   // persistPatch's single-flight + validation guards; a refused/failed persist keeps
   // the dialog open with the staged selection intact and the error shown.
   async function commit() {
-    // Nothing changed → just close (don't re-save the same image).
-    if (!stagedCrop && !stagedScene && url === image) {
+    // Nothing changed → just close (don't re-save the same image). The offset
+    // counts as a change on its own: re-framing without touching the picture is
+    // the whole point of the control, and it must not silently no-op.
+    if (!stagedCrop && !stagedScene && url === image && offset === offsetY) {
       onClose()
       return
     }
@@ -193,14 +275,14 @@ export function ImageDialog({
         crop
           ? async () => {
               const served = await uploadCroppedAvatar({ data: { characterId, bytes: crop.png } })
-              return { image: served, imageScene: '' }
+              return { image: served, imageScene: '', imageOffsetY: offset }
             }
           : scene
             ? async () => {
                 const served = await setAvatarFromScene({ data: { characterId, scenePath: scene } })
-                return { image: served, imageScene: scene }
+                return { image: served, imageScene: scene, imageOffsetY: offset }
               }
-            : async () => ({ image: url, imageScene: '' }),
+            : async () => ({ image: url, imageScene: '', imageOffsetY: offset }),
       )
       if (saved !== null) onClose()
     } catch (e) {
@@ -255,33 +337,88 @@ export function ImageDialog({
         />
       ) : (
         <>
-        <div className="flex justify-center">
-          {stagedCrop ? (
-            // The freshly-cropped bytes, not yet uploaded.
-            <Portrait
-              src={stagedCrop.previewUrl}
-              name={name}
-              zoom={false}
-              className="size-40 rounded-lg"
-              fallbackClassName="text-5xl"
+        {/* Two previews, because they answer two different questions: the square
+            is WHICH picture is stored, the portrait is HOW it will be framed.
+            Same height, so the row reads as one pair. */}
+        <div className="flex items-start justify-center gap-4">
+          <div className="flex flex-col items-center gap-1.5">
+            {stagedCrop ? (
+              // The freshly-cropped bytes, not yet uploaded.
+              <Portrait
+                src={stagedCrop.previewUrl}
+                name={name}
+                zoom={false}
+                className="size-40 rounded-lg"
+                fallbackClassName="text-5xl"
+              />
+            ) : stagedScene ? (
+              // The picked scene's tip, not yet copied in.
+              <Portrait
+                scenePath={stagedScene}
+                name={name}
+                zoom={false}
+                className="size-40 rounded-lg"
+                fallbackClassName="text-5xl"
+              />
+            ) : (
+              <Avatar
+                image={url}
+                name={name}
+                className="size-40 rounded-lg"
+                fallbackClassName="text-5xl"
+              />
+            )}
+            <span className="text-xs text-muted-foreground">Stored image</span>
+          </div>
+          <div className="flex flex-col items-center gap-1.5">
+            <HeaderFramePreview src={previewSrc} name={name} offsetY={offset} />
+            <span className="text-xs text-muted-foreground">Framed in the app</span>
+          </div>
+        </div>
+
+        {/* The character's vertical framing offset. Lives here rather than in the
+            form because it belongs to the picture, and because this is the only
+            place both previews are on screen to tune it against. */}
+        <div>
+          <div className="flex items-center gap-3">
+            <Label htmlFor="avatar-offset-y" className="shrink-0">
+              Vertical offset
+            </Label>
+            <input
+              id="avatar-offset-y"
+              type="range"
+              min={-OFFSET_LIMIT}
+              max={OFFSET_LIMIT}
+              step={0.5}
+              // Clamped for the TRACK only: a value typed past the slider's range
+              // is still legal (the schema allows ±50) and must not be silently
+              // rewritten by the thumb rendering at the end of its travel.
+              value={Math.max(-OFFSET_LIMIT, Math.min(OFFSET_LIMIT, offset))}
+              disabled={busy}
+              onChange={(e) => setOffset(Number(e.target.value))}
+              className="flex-1"
             />
-          ) : stagedScene ? (
-            // The picked scene's tip, not yet copied in.
-            <Portrait
-              scenePath={stagedScene}
-              name={name}
-              zoom={false}
-              className="size-40 rounded-lg"
-              fallbackClassName="text-5xl"
+            <NumberField
+              value={offset}
+              onCommit={(v) => setOffset(Math.max(-OFFSET_LIMIT, Math.min(OFFSET_LIMIT, v)))}
+              className="w-20 pr-6"
+              suffix="%"
+              title="Percent of the picture — positive moves it down"
             />
-          ) : (
-            <Avatar
-              image={url}
-              name={name}
-              className="size-40 rounded-lg"
-              fallbackClassName="text-5xl"
-            />
-          )}
+            <Button
+              variant="ghost"
+              disabled={busy || offset === 0}
+              onClick={() => setOffset(0)}
+              title="Back to the default framing"
+            >
+              Reset
+            </Button>
+          </div>
+          <p className="mt-1.5 text-xs text-muted-foreground">
+            Moves this character&rsquo;s picture up or down in every avatar and scene thumbnail in
+            the app &mdash; for a figure Daz frames too high or too low in the previews it renders.
+            0 is the default.
+          </p>
         </div>
 
         <FileDropZone

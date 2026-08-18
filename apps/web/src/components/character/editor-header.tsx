@@ -11,7 +11,6 @@ import { ImageDialog } from '#/components/image-dialog.tsx'
 import { Button, EditableTitle, useModifierHeld, useStickyHeaderInset } from '@dth/ui'
 import { useConfirm } from '#/lib/use-confirm.tsx'
 import { characterSkinning, countPoses } from '@dth/rom'
-import { isPreG9Tip } from '#/lib/tip-framing.ts'
 
 import type { RootedDir } from '#/lib/character-paths.ts'
 import type { ExportPipelineView } from '#/components/character/export-pipeline-panel.tsx'
@@ -252,17 +251,14 @@ export function EditorHeader({
               — the image is rasterized once and the box just changes its clip
               rect, which stays smooth even with the heavy form relaying out below
               the sticky header. */}
-          <div
-            className="avatar-scroll-shrink h-[224px] w-[168px] overflow-hidden rounded-lg bg-[#262626]"
-            // Which of the two pans in styles.css this portrait gets. Daz frames
-            // the figure differently per generation in the tip it renders, and
-            // the wrapper is where the variables belong (they inherit down to
-            // the image). Nothing to set for the G9 framing — that's the default.
-            data-tip-framing={isPreG9Tip(character.genesis) ? 'pre-g9' : undefined}
-          >
+          <div className="avatar-scroll-shrink h-[224px] w-[168px] overflow-hidden rounded-lg bg-[#262626]">
             <Avatar
               image={character.image}
               name={character.name}
+              // The character's own framing nudge (the avatar dialog's OffsetY).
+              // It rides in `translate`; the pan/zoom above own `transform` and
+              // `scale`, so the two compose (see lib/avatar-offset).
+              offsetY={character.imageOffsetY}
               // A square image LAID OUT at the rest over-scan size (254px = the
               // wrapper's 164px content box × the 1.55 rest scale, centred with
               // the -45px margins) so it fills the wrapper at scale 1 — no GPU
@@ -358,6 +354,7 @@ export function EditorHeader({
       {imageDialogOpen && (
         <ImageDialog
           image={character.image}
+          offsetY={character.imageOffsetY}
           name={character.name}
           characterId={character.id}
           scenes={character.scenePath ? [character.scenePath] : []}
@@ -366,8 +363,9 @@ export function EditorHeader({
           // dialog hands a PRODUCER (the upload/copy runs inside it, past
           // persistPatch's single-flight/validate guards); the produced patch
           // carries the source scene ('' for uploads/URLs) so the avatar
-          // auto-sync knows what to mirror. persistPatch validates, blocks
-          // racing saves, regenerates and rolls back on failure.
+          // auto-sync knows what to mirror, and the framing offset the dialog
+          // staged alongside it. persistPatch validates, blocks racing saves,
+          // regenerates and rolls back on failure.
           onApply={(produce) => draft.persistPatch(produce, { toast: 'Image updated' })}
           onClose={() => setImageDialogOpen(false)}
         />

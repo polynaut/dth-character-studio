@@ -1234,3 +1234,46 @@ describe('characterSchema — v35 retires the preserve-morph list', () => {
     expect(toCharacterScriptDsa(parsed).content).not.toContain('preserveMorphs')
   })
 })
+
+// v36 added `imageOffsetY` — a per-character vertical framing nudge for every
+// picture of that character (see types.ts). Additive with a zod default, so
+// there is no step: the interesting property is that a definition written
+// before it reads back at 0, which IS the framing every character already had.
+describe('characterSchema — v36 adds the avatar Y offset', () => {
+  const now = '2026-08-18T00:00:00.000Z'
+  const v35Character = (over: Record<string, any> = {}): Record<string, any> => ({
+    id: 'c1',
+    name: 'Electra',
+    createdAt: now,
+    updatedAt: now,
+    schemaVersion: 35,
+    image: 'electra.png',
+    ...over,
+  })
+
+  it('defaults a pre-v36 definition to 0 — the framing it already had', () => {
+    const parsed = characterSchema.parse(migrateCharacterData(v35Character()))
+    expect(parsed.imageOffsetY).toBe(0)
+  })
+
+  it('keeps a stored offset, positive or negative', () => {
+    expect(
+      characterSchema.parse(migrateCharacterData(v35Character({ imageOffsetY: 7.5 })))
+        .imageOffsetY,
+    ).toBe(7.5)
+    expect(
+      characterSchema.parse(migrateCharacterData(v35Character({ imageOffsetY: -12 }))).imageOffsetY,
+    ).toBe(-12)
+  })
+
+  it('rejects an offset outside ±50 — a full half-picture shift is already absurd', () => {
+    expect(() => characterSchema.parse(v35Character({ imageOffsetY: 80 }))).toThrow()
+    expect(() => characterSchema.parse(v35Character({ imageOffsetY: -80 }))).toThrow()
+  })
+
+  it('is idempotent — a re-read of the migrated definition is unchanged', () => {
+    const parsed = characterSchema.parse(migrateCharacterData(v35Character({ imageOffsetY: 4 })))
+    const again = characterSchema.parse(migrateCharacterData(structuredClone(parsed)))
+    expect(again).toEqual(parsed)
+  })
+})

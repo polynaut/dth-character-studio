@@ -230,7 +230,12 @@ you need:
 
 - **Avatar** — click the portrait to use the primary scene's thumbnail, drop an
   image file (cropped square in the built-in editor), or paste a URL. Applied
-  immediately; stored in the project's `.dcsmeta/images`.
+  immediately; stored in the project's `.dcsmeta/images`. The same dialog has a
+  **Vertical offset** slider: Daz frames a figure in its previews by how tall it
+  is, so a short or tall character can come out sitting high or low in the
+  square. The slider moves that character's picture up or down in *every* avatar
+  and scene thumbnail at once, and the dialog previews the result while you
+  drag. 0 is the default.
 - **Name** — click to rename. The folder, notes and generated scripts follow.
 - **Subtitle** — the generation, the **skinning** the ROM targets (DQS or Linear,
   derived from the preset assets), and the custom-frame count.
