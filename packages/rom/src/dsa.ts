@@ -1272,34 +1272,8 @@ function runtimeIncludeBlock(runtimeRootAbs: string, indexSync?: IndexSyncOption
 }
 
 /**
- * The settle helper emitted into every generated ROM/export script (inline —
- * the Export_ scripts don't include the runtime, so nothing shared can carry
- * it): pump Daz's event loop for `nMs` so work queued by the PREVIOUS step (a
- * Runner scene load's deferred setup, the ROM build's timeline churn) lands
- * before the next step starts. sleep() in 50 ms slices WITH processEvents
- * between them — a single blocking sleep would hold the very event loop the
- * pause exists to drain. Capability-gated and try-wrapped: a Daz build missing
- * either global just proceeds.
- */
-function dthSettleSnippet(): string {
-  return `// Let Daz settle between automation steps: pump the event loop briefly so
-// queued work (a scene load's deferred setup, the ROM build's churn) lands
-// before the next step starts. Best effort by construction.
-function dthSettle(nMs) {
-    try {
-        var dthSettleT0 = new Date().getTime();
-        while (new Date().getTime() - dthSettleT0 < nMs) {
-            if (typeof processEvents == "function") processEvents();
-            if (typeof sleep == "function") { sleep(50); } else { break; }
-        }
-    } catch (dthSettleErr) { /* never fail a run over a pause */ }
-}
-`
-}
-
-/**
  * The verbose-progress appender emitted into the ROM/export carriers (inline —
- * the Export_ script has no runtime include, and dthSettle sets the pattern):
+ * the Export_ script has no runtime include, so nothing shared can carry it):
  * appends a Runner-v1.2.0 progress-log line `[<pct>] <scene stem>: <message>`
  * to the baked `dthProgressLogPath`. The percent scale is the job row's step
  * count (see the studio's `jobStepsForMode`); the Runner writes the scene-open
@@ -1331,7 +1305,7 @@ function dthProgressLog(nPct, sMsg) {
 
 /**
  * The interrupt probe emitted into every generated carrier (inline, like
- * {@link dthSettleSnippet} and {@link dthProgressSnippet} — the Export_ script
+ * {@link dthProgressSnippet} — the Export_ script
  * includes no runtime, so nothing shared can carry it): "has the studio asked
  * this run to stop?", answered by the existence of the baked
  * {@link EXPORT_CANCEL_FILE}.
@@ -1786,7 +1760,6 @@ function dthApplyUE5TearUV() {
     } catch (dthUvErr) { /* leave the tear UV as-is; the ROM build continues */ }
 }
 
-${dthSettleSnippet()}
 ${dthProgressSnippet()}
 ${dthCancelSnippet()}
 ${runtimeDirSnippet(runtimeRootAbs, '.DthWorkflow.dsa')}
@@ -1852,10 +1825,7 @@ ${unattended ? `    // No modal — see dthFailureDialog. A wrong-scene refusal 
     dthFailureDialog();
 } else {
     try {
-${bulk ? `        // The Runner just loaded this scene — give Daz a beat before the first
-        // scripted work touches it.
-        dthSettle(1000);
-` : ''}${indentLines(indentLines(indexSyncSnippet(indexSync)))}        // Start marker: the ROM build begins (the percent stays at the
+${indentLines(indentLines(indexSyncSnippet(indexSync)))}        // Start marker: the ROM build begins (the percent stays at the
         // scene-open step — only the status text moves until it finishes).
         dthProgressLog(${exportBlock ? 20 : 50}, "generating ROM");
         var dthRomOk = ApplyDTHCharacter(dthCharacterConfig);
@@ -1945,9 +1915,6 @@ ${bulk ? `        // The Runner just loaded this scene — give Daz a beat befor
         // as failure too, not just hard aborts) — a broken ROM must never ship
         // a PoseAsset CSV/FBX as if it were good. Fix the problem and re-run.
         if (dthRomOk === true && !dthCancelledAfterRom) {
-            // The ROM build (and the ROM-scene save) just finished — give Daz
-            // a beat before the exporter starts.
-            dthSettle(1000);
 ${exportBlock}        }` : ''}
     } catch (dthErr) {
         // Unexpected exception — ApplyDTHCharacter couldn't log/report it itself.
@@ -2018,7 +1985,6 @@ var dthProgressLogPath = ${dazJson(progressLogPath)};
 var dthCancelPath = ${dazJson(cancelFlagPath(metaDirAbs))};
 ${sceneGuardSnippet(character)}
 ${openSceneFileSnippet()}${romAnimationSourceSnippet(romAnimationSourceMap(character))}
-${dthSettleSnippet()}
 ${dthProgressSnippet()}
 ${dthCancelSnippet()}
 ${figureAutoSelectSnippet(character.genesis)}var dthSceneLinkErr = dthSceneLinkError();
@@ -2038,9 +2004,6 @@ ${unattended ? `    // print only: this carrier has no dthWriteFailureLog (that 
     print("DTH Character Studio: no ${character.genesis} figure found in the scene - nothing was exported.");
     dthProgressLog(100, "no figure found - nothing was exported");` : `    MessageBox.critical("No ${character.genesis} figure found in the scene - load the character's scene and re-run.", "DTH Character Studio", "&OK");`}
 } else {
-    // A beat before the exporter touches the scene: the Runner's scene load —
-    // or the ROM build run just before this script — may still be settling.
-    dthSettle(1000);
 ${indentLines(indexSyncSnippet(indexSync))}${buildExportBlock(
     character,
     frames,

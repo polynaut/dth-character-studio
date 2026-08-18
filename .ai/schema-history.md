@@ -1103,4 +1103,18 @@ v80 — no unattended carrier opens a modal, and the missing-runtime message sto
       on a matching `v<N>` marker and the script header reads current, so the
       second one never reaches an install that already has the first.
       No schema change, no migration step.
+v87 — the v71 `dthSettle(1000)` pauses are REMOVED (helper and all three call
+      sites): the bulk ROM carrier no longer sleeps after the scene load, and
+      no carrier sleeps between the ROM build and the exporter — a DTH Export
+      paid up to ~2 s of artificial wait per scene. The pauses were
+      precautionary from the start (#795 added them without a measured
+      failure they fixed; "own precautions aren't evidence"), and every real
+      settling problem since was solved by its own targeted fix, not by the
+      sleep. If a scene-load race ever DOES surface, re-add a wait gated on
+      the actual condition being waited for, not a fixed timer. Note PR #901
+      (open at the time of this bump) also claims v87 for the DS4 sweep
+      revert — the `RUNTIME_VERSION` merge conflict forces whichever lands
+      second to renumber; keep the numbers distinct (see the v86 note for
+      why sharing one is unfixable in the field).
+      No schema change, no migration step.
 ```
