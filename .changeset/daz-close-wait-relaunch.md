@@ -1,4 +1,8 @@
 ---
+# bump: patch is deliberate — the new api export `pendingExportHandoffState`
+# REPLACES `exporterJobsWorking`, which this PR removes from the same barrel:
+# one dialog's per-tick probe, rewritten because it was wrong. Nothing new is
+# reachable in the app — the same dialog, on the same flow, now resolves.
 '@dth/web': patch
 ---
 
