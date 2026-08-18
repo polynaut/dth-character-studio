@@ -3,12 +3,13 @@ import { CircleX, TriangleAlert, X } from 'lucide-react'
 import { Button } from '@dth/ui'
 
 import type { RomRunKeyProblem, RomRunLog, RomRunSceneRun } from '#/lib/rom/api.ts'
+import { morphKey } from '#/lib/rom/run-log.ts'
 
 /**
  * The report the studio shows for the last Daz-side ROM run — errors, warnings,
  * failed morphs and the individual keys the interpolation pass could not stamp.
- * Purely presentational: clicking a failed morph asks the parent to reveal that
- * frame in the ROM editor (`onRevealFrame`, which also SELECTS the run's scene);
+ * Purely presentational: clicking a failed morph asks the parent to reveal its
+ * row in the ROM editor (`onRevealMorph`, which also SELECTS the run's scene);
  * the dismiss button clears the log (`onDismiss`).
  *
  * TWO severities, and the difference is the export gate. An **error** (or a
@@ -22,18 +23,19 @@ import type { RomRunKeyProblem, RomRunLog, RomRunSceneRun } from '#/lib/rom/api.
  *
  * A DTH Export batch runs one row per scene, so a log can hold several scenes'
  * runs — findings are listed UNDER THE SCENE they came from rather than in one
- * flat list, because "frame 40 failed" means nothing until you know whose frame
- * 40 (a scene override can reorder, insert and delete ROM frames).
+ * flat list: the frame numbers shown are per scene (a scene override can
+ * reorder, insert and delete ROM frames), and the dial a failure names is
+ * dialed in that scene.
  */
 export function RomRunLogReport({
   romRunLog,
   onDismiss,
-  onRevealFrame,
+  onRevealMorph,
 }: {
   romRunLog: RomRunLog
   onDismiss: () => void
-  /** Select `scene` (when it names one) and jump to `frame` in the editor. */
-  onRevealFrame: (frame: number, scene: string) => void
+  /** Select `scene` (when it names one) and jump to the morph's row. */
+  onRevealMorph: (key: string, scene: string) => void
 }) {
   const problems = romRunLog.errors.length + romRunLog.failedMorphs.length
   // Did the export run? That is what the colour has to answer — `ok` is the
@@ -88,9 +90,10 @@ export function RomRunLogReport({
       {romRunLog.failedMorphs.length > 0 && (
         <p className="mt-3 text-sm">
           These morphs could not be applied — their frames stay in the ROM (empty), so the rest
-          of the character is unaffected. The matching rows in the ROM sections below are marked
-          red for the selected scene. Click one to jump to it — the studio switches to that
-          scene first — then fix the morph name or add the missing content, Save, and re-run.
+          of the character is unaffected. Every row in the ROM sections below that walks one of
+          them is marked red. Click one to jump to it — the studio switches to the scene that
+          reported it first — then fix the morph name or add the missing content, Save, and
+          re-run.
         </p>
       )}
 
@@ -102,7 +105,7 @@ export function RomRunLogReport({
             key={`${run.scene}|${i}`}
             run={run}
             showHeading={showSceneHeadings}
-            onRevealFrame={onRevealFrame}
+            onRevealMorph={onRevealMorph}
           />
         ))}
       </div>
@@ -132,11 +135,11 @@ function KeyProblemExplainer() {
 function SceneRunProblems({
   run,
   showHeading,
-  onRevealFrame,
+  onRevealMorph,
 }: {
   run: RomRunSceneRun
   showHeading: boolean
-  onRevealFrame: (frame: number, scene: string) => void
+  onRevealMorph: (key: string, scene: string) => void
 }) {
   return (
     <div>
@@ -167,7 +170,7 @@ function SceneRunProblems({
             <li key={i}>
               <button
                 type="button"
-                onClick={() => onRevealFrame(morph.frame, run.scene)}
+                onClick={() => onRevealMorph(morphKey(morph.node, morph.prop), run.scene)}
                 className="text-left hover:underline"
                 title={
                   run.sceneName

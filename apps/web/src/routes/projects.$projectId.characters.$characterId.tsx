@@ -306,11 +306,11 @@ function CharacterPage({ onImportRemount }: { onImportRemount: () => void }) {
       window.removeEventListener('resize', onScroll)
     }
   }, [])
-  // The ROM run log + the "reveal failed frame" signal for the editor. The
-  // selected scene scopes which failures mark rows red: a batch logs one run
-  // per scene, and a scene override can reorder the ROM, so another scene's
-  // frame numbers would mark the wrong rows.
-  const runLog = useRomRunLog(projectId, initial.id, initialRomRunLog, sceneSel.effectiveScene)
+  // The ROM run log + the "reveal failed morph" signal for the editor. Failures
+  // mark rows by morph identity (node|prop), so they are red whatever scene is
+  // selected and survive row edits — a frame number only describes the ROM as
+  // it was when the run happened.
+  const runLog = useRomRunLog(projectId, initial.id, initialRomRunLog)
 
   // New files saved into the character's folder (unlinked scenes/.hips) —
   // rescanned on focus; a banner offers the add wizard (lib/use-detected-files).
@@ -319,13 +319,14 @@ function CharacterPage({ onImportRemount }: { onImportRemount: () => void }) {
   const detectedCount = detect.detected.scenes.length + detect.detected.houdini.length
 
   /** A failed morph clicked in the report: switch to the scene that produced it
-   *  FIRST (revealing a frame in another scene's grid would scroll to a pose
-   *  that isn't the one that failed), then send the reveal signal. An untagged
-   *  run (unsaved scene / pre-v54 log) names no scene, so it reveals in place. */
+   *  FIRST (the dial that failed is dialed in that scene, and an override-added
+   *  row only exists in its own scene's grid), then send the reveal signal. An
+   *  untagged run (unsaved scene / pre-v54 log) names no scene, so it reveals
+   *  in place. */
   const revealFailure = useCallback(
-    (frame: number, scene: string) => {
+    (key: string, scene: string) => {
       if (scene) sceneSel.selectScene(scene)
-      runLog.revealFailedFrame(frame)
+      runLog.revealFailedMorph(key)
     },
     [sceneSel, runLog],
   )
@@ -532,7 +533,7 @@ function CharacterPage({ onImportRemount }: { onImportRemount: () => void }) {
         <RomRunLogReport
           romRunLog={runLog.romRunLog}
           onDismiss={() => void runLog.dismiss()}
-          onRevealFrame={revealFailure}
+          onRevealMorph={revealFailure}
         />
       )}
 
@@ -669,9 +670,9 @@ function CharacterPage({ onImportRemount }: { onImportRemount: () => void }) {
         patch={patch}
         catalog={catalog}
         presetFrames={presetFrames}
-        failedFrames={runLog.failedFrames}
+        failedMorphKeys={runLog.failedMorphKeys}
         nameErrors={nameErrors}
-        revealFrame={runLog.revealFrame}
+        revealMorph={runLog.revealMorph}
         revealPose={revealPose}
         morphIndex={morphIndex}
         boneIndex={boneIndex}

@@ -166,20 +166,33 @@ backup first.
     ingesting DELETES the transport file, so a user who alt-tabs back mid-batch
     splits one batch across two logs — replacing would drop the first half at
     exactly the moment they looked.
-  - `failedFrames` (the red row markers) is scoped to the SELECTED scene. Not
-    cosmetic: a scene override reorders/inserts/deletes ROM frames, so another
-    scene's frame numbers mark the WRONG rows.
+  - `failedMorphKeys` (the red row markers) matches by MORPH IDENTITY —
+    `morphKey` = `node|prop` (`lib/rom/run-log.ts`) — never by the log's frame
+    numbers: frames are recomputed from row order on every edit, so a stored
+    frame describes the ROM as it was when the run happened, and frame matching
+    kept a POSITION red through deletions/reorders (whatever morph moved into
+    it). Unscoped across scenes by design: a dial is the same dial in every
+    scene's grid, and the retired per-scene scoping (which frame matching
+    FORCED — overrides renumber frames per scene) left the report sitting over
+    an all-clean grid until the failing scene happened to be selected.
+  - The contract identity matching rests on: `logRunFailedMorph` call sites
+    must log the definition's VERBATIM `node`/`prop` (keyDatas carry them
+    verbatim — `nodeName: morph.node` — as does the art-direction path). An
+    entry logged from display labels (`setPropertyByName`, used only for the
+    workflow options, logs `oNode.getLabel()`) silently never marks a row.
   - The merge rule holds on the FAILURE paths too (runtime v65): the generated
     script's `dthWriteFailureLog` (wrong-scene abort, missing runtime,
     unexpected exception) merges per scene instead of truncating with a v1
     record, and export/CSV-delivery failures are filed into the open scene's
     RUN entry (flipping its `ok` and the batch's) — the reader flattens
     `runs[].errors`, so a top-level-only push is invisible to the studio.
-  - A run with `scene: ''` (unsaved scene, or a pre-v54 log) can't be
-    attributed, so it applies to whatever scene is selected — the old behaviour,
-    kept so a log already on disk at upgrade time still reports.
-  - Clicking a failure in the report SELECTS its scene before revealing the
-    frame (route: `revealFailure`).
+  - Scene attribution still matters for the REPORT (findings are listed under
+    the scene that produced them — the frame numbers it shows are per scene)
+    and for the reveal jump: clicking a failure SELECTS its scene first (route:
+    `revealFailure` — an override-added row only exists in its own scene's
+    grid), then scrolls to the first row walking that morph. A run with
+    `scene: ''` (unsaved scene, or a pre-v54 log) names no scene, so it reveals
+    in place.
   - **Four channels, and the split is the export gate** (runtime v79):
     `errors` + `failedMorphs` are counted by `runLogProblemCount`, so they make
     `ApplyDTHCharacter` return false and the generated script skip the export;
