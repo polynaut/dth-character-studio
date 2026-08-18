@@ -404,6 +404,10 @@ export function ImageDialog({
               className="w-20 pr-6"
               suffix="%"
               title="Percent of the picture — positive moves it down"
+              // Frozen with the slider and Reset while a persist is in flight —
+              // the producer already captured its offset, so a value typed now
+              // would be silently dropped when the dialog closes on success.
+              disabled={busy}
             />
             <Button
               variant="ghost"

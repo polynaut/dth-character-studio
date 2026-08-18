@@ -238,7 +238,11 @@ a {
    ONE pan for every character. A per-character correction rides on top of it
    from the `translate` property (`character.imageOffsetY` — see
    lib/avatar-offset), which is why this animation may only ever spend
-   `transform` and `scale`: the two must not land in the same slot. */
+   `transform` and `scale`: the two must not land in the same slot.
+
+   The avatar dialog's "Framed in the app" preview mirrors the resting offset as
+   `HEADER_REST_PAN` (image-dialog's HeaderFramePreview) — retune `from` and that
+   constant together, or the preview lies about the framing it is selling. */
 @keyframes dth-avatar-pan {
   from {
     transform: translateY(11%);
