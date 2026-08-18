@@ -1,5 +1,11 @@
 # @dth/desktop
 
+## 0.83.2
+
+### Patch Changes
+
+- [#896](https://github.com/polynaut/dth-character-studio/pull/896) [`bffc1f8`](https://github.com/polynaut/dth-character-studio/commit/bffc1f879c3aea4dc7f55b2a86807ff31156e7af) Thanks [@polynaut](https://github.com/polynaut)! - The Houdini project card now catches a PoseAsset node reading another export set's CSV. The export always delivers the PoseAsset CSV beside the set it belongs to under the set's own name, so a project whose PoseAsset still points at a different set's CSV — typically an older project wired before its scene grew per-scene ROM overrides — imports the wrong frame layout the moment the scenes diverge, silently. The background scan now reads each PoseAsset's CSV path together with its own network's import, and the card badges the mismatch with the exact path to point the node at. Existing scan results re-earn themselves on the next visit to the character page.
+
 ## 0.83.1
 
 ## 0.83.0

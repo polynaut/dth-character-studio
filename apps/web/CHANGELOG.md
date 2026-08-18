@@ -1,5 +1,19 @@
 # @dth/web
 
+## 0.83.2
+
+### Patch Changes
+
+- [#894](https://github.com/polynaut/dth-character-studio/pull/894) [`025f6d5`](https://github.com/polynaut/dth-character-studio/commit/025f6d5898e5776348c0e6f0b2b197fbb2890aee) Thanks [@polynaut](https://github.com/polynaut)! - Two Runner-batch fixes in the generated Daz scripts (runtime v85). A batch no longer parks behind a dialog nobody is there to click: a ROM that built WITH problems, and a product scan that could not find the DAZ Install Manager manifests folder or write its CSV, each opened a modal over Daz mid-batch and blocked every queued scene behind it — the unattended carriers now tell the runtime nobody is watching, and it reports through the run log and the Daz log instead, while the visible, human-run scripts keep their dialogs. And a failed export can no longer cost the previous good export set: the pre-export sweep now moves the old files aside instead of deleting them, puts them back (PoseAsset CSV included) when the exporter produces nothing or throws, and only drops them once the new set has actually landed. Save the character (or Tools → Refresh assets) after updating to regenerate the scripts.
+
+- [#895](https://github.com/polynaut/dth-character-studio/pull/895) [`6dc1ea4`](https://github.com/polynaut/dth-character-studio/commit/6dc1ea4d58b39f41cf281c0703e6ea3025d740ce) Thanks [@polynaut](https://github.com/polynaut)! - The "last ROM run reported problems" report no longer repeats the same paragraph on every row. A dialed walked morph used to carry a ~330-character explanation in its own line, so three offenders meant three identical essays and the part that actually differs between them — the value, and whether the dial is ERC-driven — was buried at the front of each.
+
+  Each row is now a one-liner (`frame 196 · Genesis8_1Female / PBMBreastsHeavy — dialed at 0.089 - DRIVEN, zero the controlling dial and rebuild`), and the shared explanation is stated once above the list, where it also names where the zeroing happens: in the Daz scene. Needs runtime v86: Tools → Refresh assets after updating, or the next run still writes the old long reasons.
+
+- Updated dependencies [[`025f6d5`](https://github.com/polynaut/dth-character-studio/commit/025f6d5898e5776348c0e6f0b2b197fbb2890aee), [`6dc1ea4`](https://github.com/polynaut/dth-character-studio/commit/6dc1ea4d58b39f41cf281c0703e6ea3025d740ce)]:
+  - @dth/rom@0.83.2
+  - @dth/ui@0.83.2
+
 ## 0.83.1
 
 ### Patch Changes
