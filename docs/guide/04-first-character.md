@@ -96,7 +96,7 @@ holds the two **export switches**, detailed in
   <sub><em>The Daz scripts generated box: the install location and the two export switches.</em></sub>
 </p>
 
-**Export directory** shows where
+**Export directory**, at the bottom of the same box, shows where
 [the export](./05-rom-in-daz.md#what-a-run-exports) lands.
 It's fixed and read-only: `daz-export` inside the character's Houdini folder, next
 to the `.hip` that reads it — see
