@@ -660,7 +660,7 @@ export function HoudiniProjectsField({
           title={
             canGenerate
               ? undefined
-              : 'Set an export directory and a Houdini project folder first (Export directory panel)'
+              : 'This character has no export directory (it has no folder of its own) — move it into a folder first'
           }
           onClick={() => setGenerateOpen(true)}
         >

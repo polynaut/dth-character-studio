@@ -53,7 +53,7 @@ export function ScriptsSection({
         </InfoPopup>
       </h2>
       {scriptsPath ? (
-        // h-9 chip, matching the Export directory chip beside its buttons.
+        // h-9 chip, matching the Export directory chip at the bottom of the panel.
         <DirPathChip
           dir={scriptsPath.dir}
           roots={[scriptsPath.root]}
