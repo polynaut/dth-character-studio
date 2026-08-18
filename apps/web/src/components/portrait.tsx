@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-import { avatarOffsetZoomed } from '#/lib/avatar-offset.ts'
+import { avatarOffsetFrame, avatarOffsetZoomed } from '#/lib/avatar-offset.ts'
 import { resolveImageSrc, resolveScenePreview } from '#/lib/rom/api.ts'
 import { cn } from '@dth/ui'
 
@@ -185,16 +185,22 @@ export function Portrait({
   // Border matches the main header avatar's rest border (#2d2d2d, see
   // .avatar-scroll-shrink) — one border language for every avatar tile.
   return (
-    <div className={cn('overflow-hidden border-2 border-[#2d2d2d] bg-[#262626]', className)}>
+    <div
+      // A size container ONLY when there is an offset to resolve — see
+      // lib/avatar-offset. The frame must stay explicitly sized by `className`.
+      style={avatarOffsetFrame(offsetY)}
+      className={cn('overflow-hidden border-2 border-[#2d2d2d] bg-[#262626]', className)}
+    >
       {src ? (
         <img
           src={src}
           alt=""
-          // The character's own framing nudge. It goes in the `transform` slot,
-          // which the crop below never uses (Tailwind v4 spends `translate` and
-          // `scale`) — so it composes instead of colliding, AND lands inside the
-          // zoom, which is what makes one stored % mean the same fraction of the
-          // picture in a 64px tile and a 224px card alike (lib/avatar-offset).
+          // The character's own framing nudge, in `cqmax` against the frame
+          // above. The `transform` slot is free (Tailwind v4 spends `translate`
+          // and `scale` on the crop) and sits INSIDE the zoom; `cqmax` is the
+          // painted picture's height whatever shape the frame is. Together that
+          // is what makes one stored % mean the same fraction of the picture in
+          // a landscape chip and a portrait card alike (lib/avatar-offset).
           style={avatarOffsetZoomed(offsetY)}
           className={cn(
             'size-full object-cover',
