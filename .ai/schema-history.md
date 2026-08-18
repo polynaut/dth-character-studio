@@ -1041,4 +1041,34 @@ v80 — no unattended carrier opens a modal, and the missing-runtime message sto
       marker along, and an install skipped on that stamp would keep paths
       naming the old root. No schema change, no migration step — regeneration
       reads live settings, so Refresh assets rebakes correctly.
+ 85 — the RUNTIME's end-of-build "problems occurred" warning is
+      unattended-gated. v80 gated the CARRIERS' dialogs, but
+      ApplyDTHCharacter's own tail MessageBox.warning was unconditional, so a
+      ROM that built WITH problems inside a Runner batch still parked a modal
+      over Daz and blocked every queued row (measured 2026-08-18, LaraCroft
+      2-scene export — v0.83.1 shipped v84 before this landed, hence the own
+      bump). The ROM-building unattended carriers (.Bulk_ROM_Export,
+      .Build_ROM_Animation) now pass `bUnattended: true` in the config (set
+      AFTER the scene deltas are diffed, so an override scene can neither
+      carry nor strip it); the runtime prints to the Daz log instead. The
+      visible attended ROM script keeps its modal.
+      The same audit closed the rest of the runtime's unattended modal
+      surface: DthProducts' getInstalledProducts (DIM folder missing/moved -
+      a baked path on an unmounted network drive reaches this on every row)
+      and writeProductsCsv (failed write) now take the caller's `bulk` and
+      log instead. Both are reached from DthScanProductsQuiet, which runs
+      inside EVERY ROM/export row and whose doc comment already promised
+      neither would put up a dialog. Attended runs keep all three dialogs.
+      Also v85: the previous-set sweep before doExport is a MOVE-ASIDE
+      (".dthprev"), not a delete. The destructive clear (v69, the DS4
+      skip-guard) meant any failure AFTER it — exporter exception, plugin
+      refusal, nothing produced — left the set's folder EMPTY (measured
+      2026-08-18 on v0.83.1: a failed re-export deleted the primary set, and
+      the Houdini project's auto-loading PoseAsset CSV with it). Success =
+      the exporter's own .dth landed (return values are deliberately not
+      read) → backups purged; failure → partial output deleted, backups
+      renamed back, problem filed. CSV delivery and the hair pass are gated
+      on the same verdict. DzDir.rename is capability-gated (unmeasured on
+      DS4) with the old destructive remove as fallback — no worse than
+      before.
 ```

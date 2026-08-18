@@ -497,6 +497,23 @@ describe('generateAll — scene overrides folded into the one script', () => {
     ])
   })
 
+  it('keeps the unattended flag OUT of every scene delta', () => {
+    // The runtime applies a delta by key-wise assignment onto
+    // dthCharacterConfig, so a `bUnattended` that leaked into a delta would
+    // silently re-enable the batch-blocking modal for exactly one scene (or,
+    // absent from a delta that replaced the config, strip it). `dsa.ts` sets the
+    // flag AFTER the deltas are diffed for this reason — asserted here on the
+    // carrier the Runner actually executes, which is the only one that has it.
+    const carrier = generateAll(withScene(), {}, FRAMES).find(
+      (f) => f.fileName === '.Build_ROM_Animation.dsa',
+    )!
+    expect(grabObject(carrier.content, 'dthCharacterConfig').bUnattended).toBe(true)
+    const overrides = grabObject(carrier.content, 'dthSceneOverrides')
+    for (const delta of Object.values(overrides)) {
+      expect(Object.keys(delta as object)).not.toContain('bUnattended')
+    }
+  })
+
   it('embeds the MERGED rows as the open scene’s config delta; base rows untouched', () => {
     const files = generateAll(withScene(), {}, FRAMES)
     const script = files[0].content

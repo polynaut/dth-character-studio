@@ -55,7 +55,7 @@ const RUNTIME_ASSETS = [
 // Bump this together with RUNTIME_VERSION whenever a runtime file legitimately
 // changes (this run prints the new value in the failure message).
 const EXPECTED_RUNTIME_HASH =
-  '75ba0c6d5298ce8b9036800be463460df17b16c5acf2a0274cdb2c4664851f7f'
+  '7efd20959251c6459342728d970cab36bd94bf436597ba1b0a64fe9899e55233'
 
 function runtimeHash(): string {
   const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
@@ -976,5 +976,129 @@ describe('kill animation (DthKillAnimation.dsa)', () => {
     expect(kill.dthKillAnimSummary({ cleared: 812, keys: 9431, frames: 617 })).toBe(
       'Removed 9431 keys from 812 properties (617 frames of animation).',
     )
+  })
+})
+
+/* ── The product scan's unattended contract (DthProducts.dsa) ─────────────────
+ *
+ * `DthScanProductsQuiet` runs INSIDE every ROM/export run — including the rows
+ * the Runner drives through a minimized Daz. It sets `bulk` for exactly one
+ * reason, spelled out in its own doc comment: "A missing DIM folder or an
+ * unwritable output dir must not put up a dialog in a minimized Daz." Until
+ * runtime v85 neither of those two functions took the flag, so both did — a
+ * modal in an unattended run waits forever for a click nobody can make and
+ * stops the whole batch, not just the row (see gotchas-daz.md).
+ *
+ * Behavioural, not a text scan: the point is which BRANCH runs, and the failure
+ * paths are the ones no golden and no `MessageBox`-grep over the generated
+ * carriers can reach — a carrier is a thin call into this runtime.
+ */
+interface ProductsModule {
+  getInstalledProducts: (dimManifestPath: string, quiet?: boolean) => Array<unknown>
+  writeProductsCsv: (
+    outputCsvPath: string,
+    matchResults: { matches: Array<unknown>; unmatched: Array<unknown> },
+    sceneName: string,
+    scenePath: string,
+    quiet?: boolean,
+  ) => boolean
+}
+
+const PRODUCTS_EXPORTS = 'getInstalledProducts, writeProductsCsv'
+
+/**
+ * Load DthProducts.dsa with every filesystem call failing — the state both
+ * refusals are reached from — and a MessageBox that records instead of blocking.
+ * `verbose` is injected so the top-level `include(DthUtils)` is skipped (the
+ * same typeof guard the real runtime uses when the wrapper included it first).
+ */
+function loadProducts(): { products: ProductsModule; dialogs: Array<string> } {
+  const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
+  const src = readFileSync(join(dir, 'DthProducts.dsa'), 'utf8')
+  const dialogs: Array<string> = []
+  // Records the TITLE (arg 2) — short, stable, and enough to tell the three
+  // dialogs apart without pinning prose.
+  const box = (_message: unknown, title: unknown) => {
+    dialogs.push(String(title))
+  }
+  class DzDir {
+    constructor(public path: string) {}
+    exists() {
+      return false // the moved folder / unmounted drive this test is about
+    }
+    filePath(name: string) {
+      return `${this.path}/${name}`
+    }
+    mkpath() {
+      return false
+    }
+    entryList() {
+      return []
+    }
+  }
+  class DzFileInfo {
+    constructor(public full: string) {}
+    path() {
+      return this.full.split('/').slice(0, -1).join('/')
+    }
+  }
+  class DzFile {
+    WriteOnly = 2
+    Truncate = 4
+    constructor(public path: string) {}
+    open() {
+      return false // an unwritable output dir
+    }
+    write() {}
+    close() {}
+  }
+  const products = runInNewContext(`${src}\n;({ ${PRODUCTS_EXPORTS} })`, {
+    print: () => {},
+    verbose: () => {},
+    getScriptFileName: () => 'C:/runtime/.DthProducts.dsa',
+    include: () => {
+      throw new Error('the sandbox must not include a sibling runtime')
+    },
+    DzDir,
+    DzFile,
+    DzFileInfo,
+    JSON,
+    MessageBox: { information: box, warning: box, critical: box },
+  }) as ProductsModule
+  return { products, dialogs }
+}
+
+const NO_MATCHES = { matches: [], unmatched: [] }
+
+describe('product scan under the Runner (DthProducts.dsa)', () => {
+  it('opens no dialog when the baked DIM manifests folder is gone', () => {
+    const { products, dialogs } = loadProducts()
+    expect(products.getInstalledProducts('D:/DIM/ManifestFiles', true)).toEqual([])
+    expect(dialogs).toEqual([])
+  })
+
+  it('opens no dialog when no DIM manifests folder was baked in at all', () => {
+    const { products, dialogs } = loadProducts()
+    expect(products.getInstalledProducts('', true)).toEqual([])
+    expect(dialogs).toEqual([])
+  })
+
+  it('opens no dialog when the scan CSV cannot be written', () => {
+    const { products, dialogs } = loadProducts()
+    // false, not a throw: DthScanProducts turns it into one under bulk, which
+    // fails the ROW loudly instead of parking the batch on a modal.
+    expect(products.writeProductsCsv('C:/out/scene.csv', NO_MATCHES, 'Scene', 'C:/s.duf', true))
+      .toBe(false)
+    expect(dialogs).toEqual([])
+  })
+
+  it('still warns the HUMAN who ran the visible Scan_Products script', () => {
+    // Not a ban on dialogs — a rule about who is watching. The attended path
+    // keeps all three, or a hand-run scan fails with nothing on screen.
+    const { products, dialogs } = loadProducts()
+    products.getInstalledProducts('D:/DIM/ManifestFiles')
+    products.getInstalledProducts('')
+    products.writeProductsCsv('C:/out/scene.csv', NO_MATCHES, 'Scene', 'C:/s.duf')
+    expect(dialogs).toEqual(['Directory Not Found', 'DIM Manifests Folder Not Set', 'DTH Product Scan'])
   })
 })

@@ -532,11 +532,20 @@ function ApplyDTHCharacter(config){
 		// click that nobody is there to make.
 		print("ROM run interrupted from DTH Character Studio.");
 	} else if(iProblems > 0){
-		// Short + generic on purpose: the details (which morph, which frame, why)
-		// belong in the studio, which reads the run log back.
-		MessageBox.warning(
-			"Something went wrong while building the ROM.\n\nSwitch back to DTH Character Studio to see what failed.",
-			"DTH Character Studio", "&OK");
+		if(config.bUnattended === true){
+			// The Runner drives this scene inside a Daz nobody is watching - a
+			// modal here waits for a click that never comes and blocks every
+			// row queued behind it (same rule as the generated carriers'
+			// unattended dthFailureDialog). The run log already carries the
+			// details; print is the only safe channel.
+			print("DTH Character Studio: the ROM build reported " + iProblems + " problem(s) - switch to the studio to see what failed.");
+		} else {
+			// Short + generic on purpose: the details (which morph, which frame,
+			// why) belong in the studio, which reads the run log back.
+			MessageBox.warning(
+				"Something went wrong while building the ROM.\n\nSwitch back to DTH Character Studio to see what failed.",
+				"DTH Character Studio", "&OK");
+		}
 	} else if(bFinished) {
 		print("ROM run finished without problems.");
 	}

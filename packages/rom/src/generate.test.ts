@@ -1744,15 +1744,24 @@ describe('exporter integration', () => {
       FRAMES,
     ).content
     // The set's own patterns, nothing else in the folder.
-    expect(content).toContain('dthOldName == dthExportName + ".abc"')
-    expect(content).toContain('dthOldName == dthExportName + "_experimental_rom.fbx"')
-    expect(content).toContain('dthOldName.indexOf(dthExportName + "_Hair_") == 0')
+    expect(content).toContain('dthName == dthExportName + ".abc"')
+    expect(content).toContain('dthName == dthExportName + "_experimental_rom.fbx"')
+    expect(content).toContain('dthName.indexOf(dthExportName + "_Hair_") == 0')
     expect(content).toContain('dthOldRef.indexOf(dthExportName + "_frame_") != 0')
     // Ordering is the point: the clear must run before the exporter does.
     const clearAt = content.indexOf('var dthOldSetDir')
     const exportAt = content.indexOf('dthExportAction.doExport(')
     expect(clearAt).toBeGreaterThan(-1)
     expect(exportAt).toBeGreaterThan(clearAt)
+    // …and (v85) the clear is a MOVE-ASIDE, not a delete: a run that fails
+    // after it must put the previous set back (measured 2026-08-18: a failed
+    // re-export left the set's folder empty and Houdini's auto-loading
+    // PoseAsset CSV gone with it). The restore-or-purge runs AFTER doExport,
+    // keyed on the exporter's own .dth landing.
+    expect(content).toContain('var dthPrevSuffix = ".dthprev";')
+    const finishAt = content.indexOf('dthFinishPreviousSet(dthOldSetDir, !dthExportLanded);')
+    expect(finishAt).toBeGreaterThan(exportAt)
+    expect(content).toContain('the previous export files were put back untouched')
   })
 
   it('files an export failure under the open scene RUN of a v2 log, never only the top level', () => {
@@ -2070,8 +2079,11 @@ describe('exporter integration', () => {
     expect(bulk?.content).toContain('ApplyDTHCharacter(')
     expect(bulk?.content).toContain('doExport')
     expect(bulk?.content).toContain('if (dthRomOk === true) {')
-    // The hair pass rides unconditionally (exportHairAssets forced on).
+    // The hair pass rides unconditionally (exportHairAssets forced on) — but
+    // gated (v85) on the main export having LANDED: over a restored previous
+    // set the grooms would mix one run's hair with another run's body.
     expect(bulk?.content).toContain('Export hair assets too')
+    expect(bulk?.content).toContain('Main export did not land - hair export skipped.')
     expect(bulk?.content).not.toContain('dthBulkExport')
     // Runtime v70: the Runner-driven script settles after the scene load
     // (before the first scripted work) and again after the ROM build (before
