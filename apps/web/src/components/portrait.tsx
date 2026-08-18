@@ -18,7 +18,7 @@ import { cn } from '@dth/ui'
  * URL. Anything else (`data:text/html`, `javascript:`, …) becomes '' and the caller
  * renders the name-initial fallback instead.
  */
-function safeImgSrc(src: string): string {
+export function safeImgSrc(src: string): string {
   return /^(https?:\/\/|data:image\/|blob:)/i.test(src) ? src : ''
 }
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-import { usePortraitSrc } from '#/components/portrait.tsx'
+import { safeImgSrc, usePortraitSrc } from '#/components/portrait.tsx'
 import { avatarOffsetFlat } from '#/lib/avatar-offset.ts'
 import { resolveImageSrc, resolveImageSrcAtSize } from '#/lib/rom/api.ts'
 import { cn } from '@dth/ui'
@@ -20,8 +20,11 @@ function useVariantSrc(image: string, scenePath: string | undefined, renderPx?: 
     }
     let active = true
     const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
+    // Same scheme allowlist as usePortraitSrc: an external branch here returns
+    // the STORED reference unchanged, and `isExternalImage` admits any `data:`
+    // URL — only image-loadable schemes may reach an `<img src>`.
     resolveImageSrcAtSize(image, Math.round(renderPx * dpr))
-      .then((r) => active && setSrc(r))
+      .then((r) => active && setSrc(safeImgSrc(r)))
       .catch(() => active && setSrc(''))
     return () => {
       active = false
@@ -36,7 +39,7 @@ export function useResolvedImage(image: string): string {
   useEffect(() => {
     let active = true
     resolveImageSrc(image)
-      .then((resolved) => active && setSrc(resolved))
+      .then((resolved) => active && setSrc(safeImgSrc(resolved)))
       .catch(() => active && setSrc(''))
     return () => {
       active = false
