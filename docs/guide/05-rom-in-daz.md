@@ -40,9 +40,9 @@ The export is driven by the **DTH Exporter Plugin** (v1.8.1+, installed in
 [step 2](./02-setup.md#daz-studio-plugins)).
 
 <p align="center">
-  <img width="900" alt="character page, export directory section" src="screenshots/character-export-directory.png" />
+  <img width="900" alt="character page, Daz scripts generated box with the Export directory sub-section" src="screenshots/character-scripts-section.png" />
   <br>
-  <sub><em>The export directory section on the character page.</em></sub>
+  <sub><em>The Export directory, at the bottom of the Daz scripts generated box.</em></sub>
 </p>
 
 There is nothing to set up: every character has an **Export directory**, fixed at

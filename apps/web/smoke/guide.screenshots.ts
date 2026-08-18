@@ -476,16 +476,11 @@ test('character-rom-sections', async ({ page }) => {
   await shoot(page, join(OUT, 'character-rom-sections.png'), card(page, 'ROM'))
 })
 
-test('character-export-directory', async ({ page }) => {
-  await openCharacter(page)
-  await shoot(page, join(OUT, 'character-export-directory.png'), card(page, 'Export directory'))
-})
-
 test('character-scripts-section', async ({ page }) => {
   await openCharacter(page)
-  // "Daz scripts generated": the install-location chip + the two export
-  // switches (they moved here from the Export directory panel — they shape the
-  // generated scripts, not the folder).
+  // "Daz scripts generated": the install-location chip, the two export
+  // switches, and the read-only Export directory sub-section (the standalone
+  // Export directory panel folded in here once the directory became derived).
   await shoot(page, join(OUT, 'character-scripts-section.png'), card(page, 'Daz scripts generated'))
 })
 

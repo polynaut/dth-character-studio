@@ -346,8 +346,9 @@ export function buildSeed(opts: SeedOptions = {}): TauriMockSeed {
           houdiniProjects: [P.houdini],
           // The exact export setup a NEW character is created with (matching
           // storage's seedCharacterFolders): the FIXED export root beside the
-          // Daz scenes. The Export directory panel renders populated (read-only
-          // since schema v29), the export switches are live, and Generate
+          // Daz scenes. The Export directory sub-section (bottom of the Daz
+          // scripts generated box, read-only since schema v29) renders
+          // populated, the export switches are live, and Generate
           // project / DTH Export are available.
           exportPath: P.exportDir,
           sceneOverrides: [
