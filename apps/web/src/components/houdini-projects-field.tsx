@@ -980,7 +980,13 @@ function GenerateProjectDialog({
             if (e.key === 'Enter' && name.trim() !== '' && !busy && !taken) void onGenerate()
           }}
         />
-        {taken && (
+        {/* Suppressed while busy: a successful Generate links the new `.hiplc`
+            into `character.houdiniProjects` (and puts it on disk) BEFORE
+            onClose runs, so mid-generate the collision check matches the
+            dialog's own output and the message would flash red on the way out.
+            A real click-time collision still shows — that path returns early
+            and `finally` clears busy. */}
+        {taken && !busy && (
           <p className="mt-1 text-xs text-destructive">
             A project with this name already exists — choose another name, or remove the
             existing project first.
