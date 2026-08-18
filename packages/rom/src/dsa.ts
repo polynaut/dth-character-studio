@@ -1530,6 +1530,13 @@ function buildRomScriptDsa(
   const sceneCsvMap = buildSceneCsvMap(character)
   const sceneSelectBlock =
     Object.keys(sceneConfigMap).length > 0 ? `\n${sceneConfigLookupSnippet(sceneConfigMap)}` : ''
+  // Tells the RUNTIME the run is unattended, so its own end-of-build "problems
+  // occurred" warning prints instead of opening a modal that would block every
+  // row queued behind it (runtime v84 — the carrier's dthFailureDialog was
+  // gated in v80, but the runtime's tail warning wasn't). Set AFTER the scene
+  // deltas are diffed (they must never carry or strip it), and only when true,
+  // so the visible attended script's config — and its modal — stay as they were.
+  if (unattended) config.bUnattended = true
 
   // Optional auto-export: when an export directory is set AND the export runs
   // with the ROM script (the default; the bulk variant forces it), the ROM

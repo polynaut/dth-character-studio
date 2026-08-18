@@ -1041,4 +1041,15 @@ v80 — no unattended carrier opens a modal, and the missing-runtime message sto
       marker along, and an install skipped on that stamp would keep paths
       naming the old root. No schema change, no migration step — regeneration
       reads live settings, so Refresh assets rebakes correctly.
+ 85 — the RUNTIME's end-of-build "problems occurred" warning is
+      unattended-gated. v80 gated the CARRIERS' dialogs, but
+      ApplyDTHCharacter's own tail MessageBox.warning was unconditional, so a
+      ROM that built WITH problems inside a Runner batch still parked a modal
+      over Daz and blocked every queued row (measured 2026-08-18, LaraCroft
+      2-scene export — v0.83.1 shipped v84 before this landed, hence the own
+      bump). The ROM-building unattended carriers (.Bulk_ROM_Export,
+      .Build_ROM_Animation) now pass `bUnattended: true` in the config (set
+      AFTER the scene deltas are diffed, so an override scene can neither
+      carry nor strip it); the runtime prints to the Daz log instead. The
+      visible attended ROM script keeps its modal.
 ```
