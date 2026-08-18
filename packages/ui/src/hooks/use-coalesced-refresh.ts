@@ -33,6 +33,8 @@ export function useCoalescedRefresh(refresh: () => Promise<void>): () => Promise
         againRef.current = false
         // Sequential on purpose — running the follow-up AFTER the in-flight
         // refresh is the entire point (see the header).
+        // Overlapping the two is precisely what this hook exists to prevent.
+        // oxlint-disable-next-line no-await-in-loop
         await refreshRef.current()
       } while (againRef.current)
     } finally {

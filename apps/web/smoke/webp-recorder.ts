@@ -10,6 +10,11 @@
 // WebP replaces the old 256-colour GIF: crisp UI text (lossless) at a fraction
 // of the size.
 
+// Playwright drives a real browser: every action below is ORDERED by
+// definition — a cursor glide is frames in sequence, a scroll-settle loop
+// converges by re-measuring after each nudge. `Promise.all` over these is not a
+// faster version of the same thing, it is a different (broken) script.
+/* oxlint-disable no-await-in-loop */
 import { writeFileSync } from 'node:fs'
 import { PNG } from 'pngjs'
 import sharp from 'sharp'

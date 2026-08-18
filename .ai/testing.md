@@ -33,6 +33,12 @@ anyone looking. `pnpm lint:budget` was exactly that from #694 until it was fixed
 it parsed oxlint's human output, counted 0 on CI, and 0 is under every baseline.
 Nobody noticed for months — the baseline simply stopped moving.
 
+> **That gate no longer exists.** It was retired once the warnings it counted
+> were suppressed at their sites instead; `pnpm lint` now runs `--deny-warnings`
+> over a tree at zero, so there is nothing to count and nothing to keep honest.
+> The rows below are kept as the audit record — the lesson under the table is
+> the part that generalises.
+
 So every other gate was then tested the only way that settles it: **break it on
 purpose and confirm it goes red.** Each probe was reverted immediately; the tree
 was verified clean after every one.
@@ -50,9 +56,9 @@ was verified clean after every one.
 | `changeset` require-real | code change + an EMPTY changeset | ✅ exit 1 (the interesting one — empty does not buy off shipped code) |
 | `changeset` bump-type | new route file + a patch-only changeset | ✅ exit 1, naming the signal |
 | `changeset` bump-type escape hatch | the same, plus `# bump:` in the frontmatter | ✅ exit 0, *"patch is marked deliberate — accepted"* |
-| `lint:budget` | — | ❌ **was inert**; fixed, see `scripts/lint-budget.mjs` |
-| `lint:budget` zero-parse | stubbed the lint command to emit nothing | ✅ exit 1, naming the byte counts |
-| `lint:budget` vanished rule | set a baselined rule to `"off"` in `.oxlintrc.json` | ✅ exit 1 (it printed *"tighten it"* and exited **0** before) |
+| `lint:budget` *(since retired)* | — | ❌ **was inert**; fixed, then replaced by `--deny-warnings` |
+| `lint:budget` zero-parse *(since retired)* | stubbed the lint command to emit nothing | ✅ exit 1, naming the byte counts |
+| `lint:budget` vanished rule *(since retired)* | set a baselined rule to `"off"` in `.oxlintrc.json` | ✅ exit 1 (it printed *"tighten it"* and exited **0** before) |
 
 Ten gates verified to fail when they should. One was rotten — and once fixed it
 was put through the same treatment as the rest.

@@ -150,7 +150,7 @@ export const TRIGGERS = [
     id: 'lint-decisions',
     command: /pnpm\s+lint|oxlint/,
     doc: GOTCHAS_DESKTOP,
-    anchor: 'lint warnings are DECISIONS',
+    anchor: 'The lint tree is at ZERO warnings',
   },
   {
     id: 'cargo-fmt',

@@ -134,6 +134,10 @@ async function runChecked(
   for (const item of items) {
     if (!checked.has(item.key)) continue
     try {
+      // Every item copies into the SAME Unreal project tree (overlapping
+      // Plugins/ and Content/ folders), so these are not independent writes —
+      // and `outcome` reports them in the checklist's order.
+      // oxlint-disable-next-line no-await-in-loop
       const files = await installItem(item, uprojectPath)
       outcome.installed.push(`${item.label} (${files} file${files === 1 ? '' : 's'})`)
       if (item.key === DTH_CONTENT_KEY) outcome.dthInstalled = true
