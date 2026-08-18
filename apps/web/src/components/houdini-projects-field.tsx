@@ -7,6 +7,7 @@ import { HoudiniUtilsPanel } from '#/components/character/houdini-utils-panel.ts
 import { Portrait } from '#/components/portrait.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import { SceneCopyDialog } from '#/components/scene-copy-dialog.tsx'
+import { CardReorderContext, SortableCard } from '#/components/sortable-cards.tsx'
 import {
   Button,
   Input,
@@ -539,6 +540,12 @@ export function HoudiniProjectsField({
     }
   }
 
+  /** A card drag dropped somewhere new — persist the projects' new order
+   *  (the cards render in array order). */
+  function onReorderProjects(next: Array<string>) {
+    void persistPatch({ houdiniProjects: next }, { toast: 'Project order saved' })
+  }
+
   function askRemove(hip: string) {
     setError('')
     // Delete always starts OFF, even for the studio's own copy — that copy can
@@ -606,13 +613,16 @@ export function HoudiniProjectsField({
       {projectDirChip && <p className="mb-3 text-xs">{projectDirChip}</p>}
 
       {hasProjects && (
+        <CardReorderContext ids={projects} onReorder={onReorderProjects}>
         <div className="flex flex-wrap items-start gap-3">
           {projects.map((hip) =>
             missingSet.has(hip) ? (
               // The file is gone on disk (deleted/moved outside the studio) —
               // same dashed-destructive treatment as a missing Daz scene.
+              // Sortable like the healthy cards: a missing entry still holds
+              // its place in the order.
+              <SortableCard key={hip} id={hip}>
               <div
-                key={hip}
                 className="flex items-center gap-3 rounded-lg border border-dashed border-destructive/50 p-3 text-sm text-muted-foreground"
               >
                 <span>
@@ -628,9 +638,10 @@ export function HoudiniProjectsField({
                   Unlink
                 </Button>
               </div>
+              </SortableCard>
             ) : (
+              <SortableCard key={hip} id={hip}>
               <HoudiniCard
-                key={hip}
                 hipPath={hip}
                 avatarSrc={placeholderSrc}
                 warning={warnings.get(normalizePath(hip).toLowerCase()) ?? ''}
@@ -642,9 +653,11 @@ export function HoudiniProjectsField({
                 }
                 onUtils={() => setUtilsFor(hip)}
               />
+              </SortableCard>
             ),
           )}
         </div>
+        </CardReorderContext>
       )}
       <div className={`flex flex-wrap gap-2 ${hasProjects ? 'mt-3' : ''}`}>
         <Button variant="outline" size="sm" disabled={busy} onClick={() => void onAddPick()}>
