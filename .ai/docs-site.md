@@ -102,6 +102,21 @@ runtime dependency:
   keeps all chunks and lets the heading regex reject non-heading ones; the
   per-page ≥1-entry guard exists precisely to catch this class of drift.
 
+## Landing teasers must load eagerly (mask + view-timeline kills `loading=lazy`)
+
+Measured 2026-08-18 (Playwright/Chromium, and live on the deployed site): an
+`<img loading="lazy">` inside `.section-teaser` is **never requested** — not on
+page load, not after scrolling it fully into view. The empty frame still
+renders (the container's `aspect-ratio` reserves the space and the `::after`
+ring draws), so the failure looks like a broken image URL when the URL is fine.
+Isolated by matrix test: the container's `mask-image` fade **combined with**
+the `@supports (animation-timeline: view())` entrance animation makes
+Chromium's lazy-loader treat the img as invisible; either effect alone
+lazy-loads normally. Consequence: the two landing teaser imgs carry no
+`loading` attribute (eager) — don't "optimize" it back on, and any NEW teaser
+img added under that CSS must stay eager too. Guide pages are unaffected
+(`guide.css` has neither mask nor scroll-driven animations).
+
 ## Anchor landing & image layout shift
 
 Deep links (`page.html#section` — hand-shared or from search) used to land
