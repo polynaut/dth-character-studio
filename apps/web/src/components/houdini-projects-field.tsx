@@ -614,49 +614,58 @@ export function HoudiniProjectsField({
 
       {hasProjects && (
         <CardReorderContext ids={projects} onReorder={onReorderProjects}>
-        <div className="flex flex-wrap items-start gap-3">
-          {projects.map((hip) =>
-            missingSet.has(hip) ? (
-              // The file is gone on disk (deleted/moved outside the studio) —
-              // same dashed-destructive treatment as a missing Daz scene.
-              // Sortable like the healthy cards: a missing entry still holds
-              // its place in the order.
-              <SortableCard key={hip} id={hip}>
-              <div
-                className="flex items-center gap-3 rounded-lg border border-dashed border-destructive/50 p-3 text-sm text-muted-foreground"
-              >
-                <span>
-                  <code>{hip.split(/[\\/]/).pop()}</code> is missing on disk — deleted or moved
-                  outside the studio?
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() => askRemove(hip)}
+          <div className="flex flex-wrap items-start gap-3">
+            {projects.map((hip) =>
+              missingSet.has(hip) ? (
+                // The file is gone on disk (deleted/moved outside the studio) —
+                // same dashed-destructive treatment as a missing Daz scene.
+                // Sortable like the healthy cards: a missing entry still holds
+                // its place in the order.
+                //
+                // Its grip cannot take the card's default top-left slot: this is
+                // a compact TEXT row, not the LinkedAssetCard shell, so the one
+                // corner that shell leaves free is where the filename starts
+                // here. It gets a reserved left gutter instead (`pl-9`), centred
+                // — and no drop-shadow: that shadow keeps the glyph legible over
+                // a thumbnail, and over plain card background it only smudges.
+                <SortableCard
+                  key={hip}
+                  id={hip}
+                  gripClass="top-1/2 left-1.5 -translate-y-1/2 drop-shadow-none"
                 >
-                  Unlink
-                </Button>
-              </div>
-              </SortableCard>
-            ) : (
-              <SortableCard key={hip} id={hip}>
-              <HoudiniCard
-                hipPath={hip}
-                avatarSrc={placeholderSrc}
-                warning={warnings.get(normalizePath(hip).toLowerCase()) ?? ''}
-                scanning={isHoudiniProjectScanning(scanning, hip)}
-                onOpen={(e) => void onOpen(hip, e)}
-                onRemove={() => askRemove(hip)}
-                onRename={
-                  insideCharFolder(hip) ? (next) => renameProject(hip, next) : undefined
-                }
-                onUtils={() => setUtilsFor(hip)}
-              />
-              </SortableCard>
-            ),
-          )}
-        </div>
+                  <div className="flex items-center gap-3 rounded-lg border border-dashed border-destructive/50 p-3 pl-9 text-sm text-muted-foreground">
+                    <span>
+                      <code>{hip.split(/[\\/]/).pop()}</code> is missing on disk — deleted or
+                      moved outside the studio?
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => askRemove(hip)}
+                    >
+                      Unlink
+                    </Button>
+                  </div>
+                </SortableCard>
+              ) : (
+                <SortableCard key={hip} id={hip}>
+                  <HoudiniCard
+                    hipPath={hip}
+                    avatarSrc={placeholderSrc}
+                    warning={warnings.get(normalizePath(hip).toLowerCase()) ?? ''}
+                    scanning={isHoudiniProjectScanning(scanning, hip)}
+                    onOpen={(e) => void onOpen(hip, e)}
+                    onRemove={() => askRemove(hip)}
+                    onRename={
+                      insideCharFolder(hip) ? (next) => renameProject(hip, next) : undefined
+                    }
+                    onUtils={() => setUtilsFor(hip)}
+                  />
+                </SortableCard>
+              ),
+            )}
+          </div>
         </CardReorderContext>
       )}
       <div className={`flex flex-wrap gap-2 ${hasProjects ? 'mt-3' : ''}`}>

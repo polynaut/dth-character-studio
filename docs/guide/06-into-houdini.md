@@ -70,6 +70,12 @@ Generate a second or third project and they land in the same houdini folder,
 sharing both `$JOB` and `$HIP` — the
 [layout is the one shown in Build the ROM in Daz](./05-rom-in-daz.md#where-the-houdini-project-fits).
 
+With more than one linked, the cards **re-order by dragging**: hover a card and a
+**grip** appears in its top-left corner (a project missing on disk shows it beside
+the filename) — drag it and the new order is saved with the character, so it holds
+on the DTH Export rows too. One project has nothing to re-order against and gets no
+grip.
+
 Removing a **generated** project asks about its files: **Keep houdini files** on
 unlinks only; off deletes its scene file too. The houdini folder itself always
 stays, and hand-linked projects are always unlink-only.

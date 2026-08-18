@@ -96,6 +96,22 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   stops matching any control the test already hovered/clicked — locate by ROLE
   (accessible name survives the rewrite). Documented in
   `apps/web/smoke/override.smoke.ts`.
+- **A Playwright drag must `scrollIntoViewIfNeeded()` BEFORE it measures, or it
+  drags nothing and says nothing.** `boundingBox()` reports viewport
+  coordinates even for an element below the fold — it happily returns
+  `y: 743` in a 720px-tall viewport — while `mouse.move` CLAMPS to the
+  viewport. So the press lands on whatever is at the clamped point (usually
+  nothing), no sensor ever activates, and the failure surfaces only as "the
+  order did not change": no error, no missed-click warning, nothing pointing at
+  the coordinates. Measured 2026-08-18 while covering the card-reorder grip —
+  `document.elementFromPoint` at the measured spot returning `null` is what
+  named it. Two more things that gesture needs, both dnd-kit's doing: clear the
+  4px activation constraint in its OWN move first (droppables are measured when
+  the drag activates, so one uninterrupted sweep can arrive before there is
+  anything to collide with), and put a beat between moves — a burst of
+  synthetic moves in one task reads as a jump, not a travelling pointer. The
+  worked example is `apps/web/smoke/card-drag-reorder.smoke.ts`; the pose
+  tables' row drag has no smoke and would need the same recipe.
 - **A second `EditableTitle` on a page collides with the header's accessible
   name, and the collision is the DEFAULT, not an edge case.** The button says
   `Rename — <name>`, so making Houdini project cards renamable put two buttons

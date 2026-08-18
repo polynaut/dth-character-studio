@@ -24,6 +24,13 @@ GP/DK geograft as the primary** (*Add anyway* overrides) — then copied into it
 and removing one with **Delete file on disk** ticked also deletes that scene's
 subfolder (saved ROM animations included) and its `daz-export` folder.
 
+**Re-ordering the cards:** hover a card and a **grip** appears in its top-left
+corner — drag it to move that scene along the row. The order is the character's
+own, so it holds everywhere the scenes are listed (the docked bar, the DTH Export
+rows) and survives reloads. The **primary stays first** and has no grip; the extras
+re-order among themselves. With only one extra scene there is nothing to re-order
+against, so no grip appears.
+
 **Replacing the primary** is offered while it is the character's **only** scene:
 its card's folder button browses for a new scene, runs the same validation, then
 swaps it in — the Genitalia section re-derives from the new geograft, detected
