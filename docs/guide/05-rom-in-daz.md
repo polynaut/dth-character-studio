@@ -1,38 +1,43 @@
 # 5 · Build the ROM in Daz Studio
 
-## Run the script
+Nothing here is done by hand: the **DTH Export** button in the character header
+runs the whole round trip unattended — that is the default way to build a ROM.
+The generated scripts it drives can also be run yourself, one scene at a time —
+that workflow is the fold-out at the end of this page:
+[Working with the scripts alone](#working-with-the-scripts-alone).
 
-1. Open the character's scene in Daz Studio — each scene card on the character
-   page has an open menu.
-2. In Daz's **Content Library** pane, browse to
-   **Scripts → DTH-Character-Studio → \<Project\> → \<Character\>**.
-3. Double-click **`ROM_<Name>_G9`**.
+## Run it — DTH Export
 
-<p align="center">
-  <img width="560" alt="daz content library, character script" src="https://github.com/user-attachments/assets/88beba1f-59b7-41da-bb35-a784a58878f9" />
-  <br>
-  <sub><em>The character's ROM script in Daz's Content Library.</em></sub>
-</p>
+1. Press **DTH Export** in the character header.
+2. Check the **Daz scenes** to run — the ones with outstanding work are already
+   ticked — and leave the **Mode** on *ROM + Export*.
+3. Press **Start**.
 
-The script builds the entire ROM on the timeline — every section you enabled, every
-morph on its exact frame — and reports what it did when it finishes. On the way it
-also scans the open scene into the studio's [morph index](./custom-morphs.md), so
-the Parameter-name autocomplete stays current through normal use.
+Daz Studio is opened where you can see it (a running Daz picks the batch up by
+itself), the entire ROM is built on the timeline — every section you enabled,
+every morph on its exact frame — and the export runs straight after. The
+character header shows the run while it lasts and reports when everything is
+done. On the way each scene is also scanned into the studio's
+[morph index](./custom-morphs.md), so the Parameter-name autocomplete stays
+current through normal use.
+
+The panel does more than this page needs — carrying straight on into the linked
+**Houdini projects**, queueing the result for **Unreal**, watching and
+interrupting a run. All of it is on its own page:
+**[The DTH Export batch](./dth-export.md)**.
 
 > [!NOTE]
-> If anything couldn't be applied, the script says so in a dialog at the end and
-> the studio lists the exact failures when you switch back. The ROM's frame count is
-> never affected: a missing morph leaves its frames empty instead of shifting
+> If a morph couldn't be applied, the run's report says so and the studio lists
+> the exact failures on the character page. The ROM's frame count is never
+> affected: a missing morph leaves its frames empty instead of shifting
 > everything after it.
->
-> The scripts also check the **open scene** first. Running a character's ROM,
-> export or scan script while some *other* scene is open does nothing — an error
-> dialog names the open scene and the character's linked scenes instead.
 
-## Direct export (optional, recommended)
+<a id="direct-export-optional-recommended"></a>
 
-Instead of exporting by hand, let the script drive the **DTH Exporter Plugin**
-(v1.8.1+, installed in [step 2](./02-setup.md#daz-studio-plugins)).
+## What a run exports
+
+The export is driven by the **DTH Exporter Plugin** (v1.8.1+, installed in
+[step 2](./02-setup.md#daz-studio-plugins)).
 
 <p align="center">
   <img width="900" alt="character page, export directory section" src="screenshots/character-export-directory.png" />
@@ -41,11 +46,10 @@ Instead of exporting by hand, let the script drive the **DTH Exporter Plugin**
 </p>
 
 There is nothing to set up: every character has an **Export directory**, fixed at
-`daz-export` inside its Houdini folder. Run the ROM script as above and it runs the
-exporter afterwards, writing **`<Name>.abc`**, **`<Name>.dth`** and the **PoseAsset
-CSV** — plus a **reference-skeleton FBX** for each **Bone scale** frame, under a
-`Reference Skeletons` subfolder the CSV already points at. To skip exporting, turn
-off **Run the export with the ROM script** (below) rather than clearing the path.
+`daz-export` inside its Houdini folder. Each scene's run writes **`<Name>.abc`**,
+**`<Name>.dth`** and the **PoseAsset CSV** — plus a **reference-skeleton FBX** for
+each **Bone scale** frame, under a `Reference Skeletons` subfolder the CSV already
+points at.
 
 - Each run **deletes that scene's previous export set first**, so files from an
   earlier layout never linger beside a fresh one. Anything else you keep in the
@@ -117,7 +121,44 @@ than under it. Both still resolve. It falls back to **absolute** paths when ther
 is no linked project yet, when a `.hip` is hand-linked in your own tree, or when
 the export root is outside the character folder.
 
-Two switches in the **Daz scripts generated** box tune the export:
+<details>
+<summary><strong>Working with the scripts alone</strong></summary>
+<table><tr><td>
+
+Everything the batch runs is an ordinary Daz script, installed on Save — you can
+run it yourself, handy for a single scene or when you want to watch every step.
+
+1. Open the character's scene in Daz Studio — each scene card on the character
+   page has an open menu.
+2. In Daz's **Content Library** pane, browse to
+   **Scripts → DTH-Character-Studio → \<Project\> → \<Character\>**.
+3. Double-click **`ROM_<Name>_G9`**.
+
+<p align="center">
+  <img width="560" alt="daz content library, character script" src="https://github.com/user-attachments/assets/88beba1f-59b7-41da-bb35-a784a58878f9" />
+  <br>
+  <sub><em>The character's ROM script in Daz's Content Library.</em></sub>
+</p>
+
+The script builds the ROM and runs the export exactly as the batch would, and
+reports what it did when it finishes — anything that couldn't be applied is named
+in a dialog at the end, and the studio lists the exact failures when you switch
+back.
+
+> [!NOTE]
+> The scripts check the **open scene** first. Running a character's ROM, export
+> or scan script while some *other* scene is open does nothing — an error dialog
+> names the open scene and the character's linked scenes instead.
+>
+> The same check picks the per-scene work: the one `ROM_<Name>_G9.dsa` embeds
+> every scene's [overrides](./advanced.md#per-scene-overrides--edit-to-override)
+> and applies the right ones for whichever scene is **open in Daz** — so open the
+> right scene before running it. A scene with **ROM** overrides also has its own
+> PoseAsset CSV — see
+> [What Save generates](./advanced.md#what-save-generates).
+
+Two switches in the **Daz scripts generated** box tune the scripts (a DTH Export
+run ignores them — the batch always builds and exports everything):
 
 - **Run the export with the ROM script** — on by default, so one
   `ROM_<Name>_G9.dsa` builds the ROM and runs the export. Off, the export splits
@@ -128,25 +169,14 @@ Two switches in the **Daz scripts generated** box tune the export:
   is exported on its own (`<Name>_Hair_<item>_grooms.abc`). Works in both modes;
   scenes without a hair list skip the pass.
 
-## Or have the studio run it — DTH Export
-
-Everything above is the round trip done by hand, one scene at a time. The **DTH
-Export** button in the character header does the whole thing unattended. It has
-its own page: **[The DTH Export batch](./dth-export.md)**.
-
-> [!NOTE]
-> **Running a scene with per-scene overrides?** The one `ROM_<Name>_G9.dsa` embeds
-> every scene's [overrides](./advanced.md#per-scene-overrides--edit-to-override)
-> and applies the right ones for whichever scene is **open in Daz** — so open the
-> right scene before running it. A scene with **ROM** overrides also has its own
-> PoseAsset CSV — see
-> [What Save generates](./advanced.md#what-save-generates).
-
 > [!NOTE]
 > Prefer exporting by hand? Turn off *Run the export with the ROM script* and
 > export with the DTH Exporter as the DazToHue docs describe; the PoseAsset CSV is
 > waiting in
 > [the studio's own folder](./06-into-houdini.md#what-the-studio-gives-you).
+
+</td></tr></table>
+</details>
 
 Two bundled scripts handle scenes the pipeline can't take as they are — a
 geograft hidden under a Golden Palace shell, and an old scene that is nothing but

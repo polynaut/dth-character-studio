@@ -60,7 +60,7 @@ Three Genesis 9 dials sit under the hair items (greyed out on other generations)
   creation, plus the **same GP/DK geograft as the primary**. The primary can't be
   unlinked; extras can. Each scene's open icon is a menu: **Open scene**, **Open
   last ROM** once a
-  [ROM animation](./05-rom-in-daz.md#direct-export-optional-recommended) is saved,
+  [ROM animation](./05-rom-in-daz.md#what-a-run-exports) is saved,
   and **Generate new ROM** when there is none or the saved one is stale.
 - **Houdini projects** — drop `.hip`/`.hiplc` files to link them, or let
   [**Generate project**](./06-into-houdini.md#generate-the-houdini-project-automatically)
@@ -88,7 +88,7 @@ The **Daz scripts generated** box shows where the generated `ROM_…` (and, with
 split export, `Export_…`) scripts install on Save:
 `<My DAZ 3D Library>/Scripts/DTH-Character-Studio/<project>/<character>/`. It also
 holds the two **export switches**, detailed in
-[Build the ROM in Daz](./05-rom-in-daz.md#direct-export-optional-recommended).
+[Working with the scripts alone](./05-rom-in-daz.md#working-with-the-scripts-alone).
 
 <p align="center">
   <img width="900" alt="the Daz scripts generated box — install location and the export switches" src="screenshots/character-scripts-section.png" />
@@ -97,7 +97,7 @@ holds the two **export switches**, detailed in
 </p>
 
 **Export directory** shows where
-[direct export](./05-rom-in-daz.md#direct-export-optional-recommended) lands.
+[the export](./05-rom-in-daz.md#what-a-run-exports) lands.
 It's fixed and read-only: `daz-export` inside the character's Houdini folder, next
 to the `.hip` that reads it — see
 [where the Houdini project fits](./05-rom-in-daz.md#where-the-houdini-project-fits).
