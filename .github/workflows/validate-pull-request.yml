@@ -55,21 +55,16 @@ jobs:
           node .claude/hooks/inject-gotchas.mjs --audit
           node .claude/hooks/inject-gotchas.test.mjs
       - run: pnpm install --frozen-lockfile
-      # oxlint exits non-zero on any ERROR-severity rule, so this fails the check.
-      # Beyond the `correctness` category, .oxlintrc.json promotes a handful of
-      # real-bug rules from warn→error (no-shadow, jsx-no-constructed-context-values,
-      # no-object-type-as-default-prop, no-unnecessary-type-assertion) so they block
-      # PRs. High-count INTENTIONAL patterns (no-await-in-loop, react-markdown
-      # component maps, promise-in-handler) stay advisory warnings on purpose.
-      - name: Lint (oxlint, type-aware — fails on correctness + promoted real-bug rules)
+      # The tree carries ZERO lint warnings, and `--deny-warnings` keeps it there:
+      # any warning, from any rule, fails this check. There is nothing left to
+      # count, so there is no baseline to bump — a pattern this repo uses on
+      # purpose is exempted at the SITE (an `oxlint-disable` with its reason) or
+      # decided in .oxlintrc.json, both of which a reviewer reads in the diff.
+      # Replaced the .lint-baseline.json ratchet, whose per-rule totals were
+      # fungible: swapping a deliberate instance for an accidental one never
+      # moved the number.
+      - name: Lint (oxlint, type-aware — --deny-warnings, so the tree stays at zero)
         run: pnpm lint
-      # Those advisory warnings are decisions, not debt — but a few hundred of
-      # them make a NEW one invisible. The ratchet pins the count PER RULE
-      # (.lint-baseline.json), so an added instance fails here and gets a
-      # deliberate answer: intentional → bump the baseline in the same commit,
-      # otherwise fix it.
-      - name: Lint budget (no new advisory warnings)
-        run: pnpm lint:budget
       - name: Typecheck
         run: pnpm -r typecheck
       - name: Test

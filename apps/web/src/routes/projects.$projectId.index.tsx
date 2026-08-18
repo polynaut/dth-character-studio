@@ -462,6 +462,11 @@ function ProjectCharactersPage() {
     setDeleteError('')
     try {
       for (const character of selectedChars) {
+        // Deletion is destructive and this loop is FAIL-STOP: the first error
+        // leaves the remaining characters untouched and names itself. In
+        // parallel a failure would land after an unknown number of other
+        // deletions had already gone through.
+        // oxlint-disable-next-line no-await-in-loop
         await deleteCharacter({
           data: { projectId, id: character.id, keepDaz: keep, keepHoudini: keep2 },
         })

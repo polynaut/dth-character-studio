@@ -289,8 +289,8 @@ GH_REPO=polynaut/dth-character-studio \
   in four CHANGELOGs, caught only because a human read the version PR (#710).
   It is a heuristic, so it has an escape hatch — a YAML comment in the
   changeset's own frontmatter, which forces the judgement to be made and leaves
-  it where the next reader looks (the same shape as bumping `.lint-baseline.json`
-  for a deliberate lint warning):
+  it where the next reader looks (the same shape as an `oxlint-disable` comment
+  carrying the reason a deliberate lint exception is deliberate):
 
   ```markdown
   ---

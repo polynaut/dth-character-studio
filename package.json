@@ -23,10 +23,8 @@
     "build:guide": "node scripts/build-guide-site.mjs",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
-    "lint": "oxlint --config .oxlintrc.json --type-aware apps packages",
+    "lint": "oxlint --config .oxlintrc.json --type-aware --deny-warnings apps packages",
     "lint:fix": "oxlint --config .oxlintrc.json --type-aware --fix apps packages",
-    "lint:budget": "node scripts/lint-budget.mjs",
-    "lint:budget:update": "node scripts/lint-budget.mjs --update",
     "changeset": "changeset",
     "version-packages": "changeset version && node scripts/dedupe-changelogs.mjs && pnpm install --lockfile-only"
   },

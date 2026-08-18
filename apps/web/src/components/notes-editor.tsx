@@ -1,3 +1,8 @@
+/* The react-markdown `components={{…}}` map below is a map of RENDERERS, which
+   is that library's API — they are not components defined during render in the
+   sense the rule is about (nothing remounts a subtree that owns state). The rule
+   stays an error everywhere else, where it catches the real bug. */
+/* oxlint-disable react/no-unstable-nested-components */
 import { useEffect, useRef, useState } from 'react'
 import Markdown, { defaultUrlTransform } from 'react-markdown'
 import { Check, Pencil } from 'lucide-react'
@@ -231,6 +236,10 @@ export function NotesEditor({
     const snippets: Array<string> = []
     for (const path of paths) {
       try {
+        // `addNoteMedia` reads each dropped file WHOLE into memory (up to
+        // 100 MB, its own cap). One at a time bounds peak memory to one file;
+        // in parallel a multi-file drop would hold all of them at once.
+        // oxlint-disable-next-line no-await-in-loop
         const { markdown } = await addNoteMedia({ data: { projectId, sourcePath: path } })
         // '' = the browser build's no-op — nothing was stored, insert nothing.
         if (markdown) snippets.push(markdown)

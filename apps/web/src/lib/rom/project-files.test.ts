@@ -1,3 +1,7 @@
+// These loops walk table-driven cases over ONE shared fixture (`files.clear()`
+// per case) or assert insertion ORDER — running them together would have the
+// cases overwrite each other's state. Sequential is the test, not an oversight.
+/* oxlint-disable no-await-in-loop */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // --- In-memory fs mock ----------------------------------------------------

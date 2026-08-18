@@ -1,3 +1,8 @@
+/* The react-markdown `components={{…}}` map below is a map of RENDERERS, which
+   is that library's API — they are not components defined during render in the
+   sense the rule is about (nothing remounts a subtree that owns state). The rule
+   stays an error everywhere else, where it catches the real bug. */
+/* oxlint-disable react/no-unstable-nested-components */
 import Markdown from 'react-markdown'
 
 import { openExternal } from '#/lib/desktop.ts'

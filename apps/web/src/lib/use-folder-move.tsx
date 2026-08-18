@@ -28,6 +28,9 @@ export function useFolderMove() {
    *  'done' when the move completed, 'cancelled' when the user cancelled the
    *  dialog. Non-lock errors reject (the caller handles them, e.g. a toast). */
   async function runMove(op: () => Promise<unknown>): Promise<'done' | 'cancelled'> {
+    /* oxlint-disable no-await-in-loop -- a RETRY loop, not an iteration: it runs
+       ONE move, and only goes round again after the user answers the locked-files
+       dialog. There is no set of operations here to run in parallel. */
     for (;;) {
       try {
         await op()
@@ -44,6 +47,7 @@ export function useFolderMove() {
         // retry: loop and re-run op (which re-probes the locks)
       }
     }
+    /* oxlint-enable no-await-in-loop */
   }
 
   const dialog = (

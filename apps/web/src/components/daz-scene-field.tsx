@@ -517,6 +517,9 @@ export function DazSceneField({
       )
       // Freshness (mtime ≥ handoff), not existence: a regenerate OVERWRITES.
       const deadline = Date.now() + 30 * 60_000
+      /* oxlint-disable no-await-in-loop -- a POLL, not an iteration: sleep, ask
+         whether Daz has written the ROM animation yet, stop as soon as it has.
+         Every await here is waiting for the PREVIOUS one to have happened. */
       while (Date.now() < deadline) {
         await new Promise((resolve) => setTimeout(resolve, 3000))
         // Unmounted (navigated away, character switched) — stop silently; Daz
@@ -531,6 +534,7 @@ export function DazSceneField({
           return
         }
       }
+      /* oxlint-enable no-await-in-loop */
       toast.warning('The ROM animation never appeared — check the run in Daz Studio.')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))

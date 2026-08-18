@@ -36,15 +36,26 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   "missing" trailing baker) rather than an error. ALWAYS read the offset from
   the parm; never count from 1. Same 0-based convention as the ROM frame math,
   by coincidence rather than by contract, so don't infer one from the other.
-- **The repo's ~250 lint warnings are DECISIONS, not debt** — `.oxlintrc.json`
-  documents why each rule is advisory (sequential awaits are deliberate fs
-  ordering, `__TAURI_*` globals are the Tauri contract, the react-markdown
-  component maps are nested by design). Don't "clean them up". What that volume
-  *does* break is noticing a NEW one, so `pnpm lint:budget` pins the count PER
-  RULE in `.lint-baseline.json` and CI fails when it grows. Adding an
-  intentional instance = bump the baseline in the SAME commit
-  (`pnpm lint:budget:update`), which forces the judgement to be made rather than
-  absorbed.
+- **The lint tree is at ZERO warnings and `pnpm lint` runs `--deny-warnings`**,
+  so any warning from any rule fails CI. The ~223 that used to sit there were
+  DECISIONS, not debt (sequential awaits are deliberate fs ordering, the
+  react-markdown component maps are that library's API, the map-spreads build
+  new records) — they are now stated where they apply instead of counted:
+  - **A file-level `/* oxlint-disable <rule> */` with a reason** where the
+    pattern is the module's whole shape — every module under `lib/rom/api/` and
+    `lib/rom/storage/` (ordered filesystem work), the Playwright helpers, and
+    the two react-markdown files.
+  - **An `oxlint-disable-next-line` with a reason** at a one-off site. It must
+    be the LAST comment line before the code — "next line" is literal, so a
+    reason written *underneath* the directive silently doesn't apply (measured;
+    it cost four re-runs).
+  - **`"off"` in `.oxlintrc.json`** when the rule simply doesn't fit the
+    codebase (`oxc/no-map-spread`: its fix is to mutate, which is a bug for
+    React state) — better than apologising to it at 13 call sites.
+  Don't "clean up" a suppression by deleting it; the pattern it names is still
+  deliberate. This replaced a `.lint-baseline.json` count ratchet, which was
+  fungible — swapping a deliberate instance for an accidental one left the
+  total unmoved — and which had also been inert on CI for months.
 - **"A `.hip` always holds absolute paths" is FALSE — the real constraint is
   `$JOB`.** A Houdini project can be authored entirely relative, and the
   studio's own Generate project does exactly that (`$JOB/<houdiniSubdir>/

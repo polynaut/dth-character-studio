@@ -27,7 +27,8 @@
 // It is still a heuristic, so it has an escape hatch, and the escape hatch is
 // the point: a YAML comment in the changeset's own frontmatter, which forces
 // the judgement to be made and leaves it where the next reader will see it.
-// Same shape as bumping `.lint-baseline.json` for a deliberate warning.
+// Same shape as an `oxlint-disable` comment carrying the reason a deliberate
+// lint exception is deliberate.
 //
 //   ---
 //   # bump: patch is deliberate — moved an existing command, no new capability

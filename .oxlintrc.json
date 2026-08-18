@@ -27,15 +27,30 @@
     "react/jsx-no-constructed-context-values": "error",
     "typescript/no-unnecessary-type-assertion": "error",
 
-    // perf/suspicious are error categories, but these specific rules flag
-    // high-count INTENTIONAL patterns (see the note in
-    // validate-pull-request.yml) — they stay advisory warnings on purpose:
-    // sequential awaits are deliberate fs ordering, the react-markdown
-    // component maps are nested by design, and the map-spreads keep records
-    // immutable.
-    "no-await-in-loop": "warn",
-    "oxc/no-map-spread": "warn",
-    "react/no-unstable-nested-components": "warn",
+    // These three used to be advisory warnings whose COUNT was pinned in
+    // .lint-baseline.json, because each flags a pattern this repo uses on
+    // purpose in volume. A count is fungible, though — swap a deliberate
+    // instance for an accidental one and the total never moves — so the
+    // judgement now lives at the site that needs it, and the rules have teeth.
+    //
+    // Ordered filesystem work: a step reads or overwrites what the last one
+    // wrote, so `Promise.all` would race them. Scoped off per FILE across
+    // lib/rom/api + lib/rom/storage (where that is the module's whole shape)
+    // and per SITE everywhere else, each with its reason. An `await` in a loop
+    // anywhere else is now an error, which is what it should be.
+    "no-await-in-loop": "error",
+    // Defining a component during render really does remount its subtree — the
+    // rule is right, and it is an error. The two exceptions are the
+    // react-markdown `components={{…}}` maps (notes-editor, release-notes),
+    // where a map of renderers IS the API; both carry a file-level disable.
+    "react/no-unstable-nested-components": "error",
+    // OFF, not suppressed 13 times. Every hit is an immutable derivation —
+    // `xs.map((x) => ({ ...x, extra }))` building NEW records — and the rule's
+    // own fix is to mutate in place (`Object.assign`, direct assignment), which
+    // for React state and for shared records read out of storage is a bug, not
+    // an optimisation. A rule whose advice we will never take is a rule to turn
+    // off, not one to apologise to at every call site.
+    "oxc/no-map-spread": "off",
 
     // A stylesheet import has nothing to assign — that IS the import. Both hits
     // were `main.tsx`'s CSS entry points, so the rule keeps its teeth for an
@@ -51,8 +66,9 @@
     // that silently absorbs the next one.
     //
     // `__sawHome` (#797) is the sixth, and it went unnoticed for three days
-    // because the ratchet meant to catch it was inert on CI (see
-    // scripts/lint-budget.mjs). It argues for itself:
+    // because the count-ratchet meant to catch it was inert on CI — one of the
+    // reasons that ratchet is gone and `pnpm lint` now denies warnings
+    // outright. It argues for itself:
     // `project-window-boot.smoke.ts` asserts that a project window never renders
     // Home first, which needs a flag set from inside the page the instant that
     // route mounts — nothing on the Playwright side can observe a frame that

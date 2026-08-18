@@ -1,3 +1,10 @@
+// Sequential `await` in a loop is this module's normal shape, not an oversight:
+// it is ORDERED filesystem work — a step reads, moves or overwrites what the
+// step before it wrote, and the rule's advice (`Promise.all`) would race those
+// against each other. Scoped off for the file rather than repeated at each
+// loop; a loop here that genuinely CAN run in parallel should use `Promise.all`
+// on its own merits.
+/* oxlint-disable no-await-in-loop */
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { exists } from '@tauri-apps/plugin-fs'
 import { z } from 'zod'

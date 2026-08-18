@@ -1,3 +1,8 @@
+// Playwright drives a real browser: every action below is ORDERED by
+// definition — a cursor glide is frames in sequence, a scroll-settle loop
+// converges by re-measuring after each nudge. `Promise.all` over these is not a
+// faster version of the same thing, it is a different (broken) script.
+/* oxlint-disable no-await-in-loop */
 import { expect, test } from '@playwright/test'
 
 import { P, UPROJECT, buildSeed } from './fixtures.ts'
