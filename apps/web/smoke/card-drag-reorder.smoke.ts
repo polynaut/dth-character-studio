@@ -138,3 +138,42 @@ test('the grip re-orders by KEYBOARD too — space, arrow, space', async ({ page
 
   await expect.poll(() => savedProjects(page)).toEqual([HIP_B, P.houdini])
 })
+
+test('a missing project shows its FILE NAME, and its grip clears that text', async ({ page }) => {
+  // Two things at once, both about the missing-on-disk card — the one card in
+  // these rows that is NOT the LinkedAssetCard shell.
+  //
+  // 1. It names the file by splitting on `[\\/]`, and the path is spelled with
+  //    BACKSLASHES here on purpose: a Windows path is what a Tauri dialog hands
+  //    back (hence `normalizePath` existing at all), and it is the only spelling
+  //    that can tell a correct split from one that only handles `/`.
+  // 2. Its grip cannot take the top-left corner the card shell leaves free —
+  //    that corner is where this row's filename starts. The row reserves a left
+  //    gutter instead, which is a geometric claim, so it is measured: the grip
+  //    must end before the text begins.
+  const missingHip = 'D:\\DTH Projects\\Demo\\Kira\\houdini\\KiraOutfit.hip'
+  const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true })
+  const character = JSON.parse(seed.files[CHAR_JSON]) as { houdiniProjects: Array<string> }
+  character.houdiniProjects = [P.houdini, missingHip]
+  seed.files[CHAR_JSON] = JSON.stringify(character, null, 2)
+  // Deliberately NOT seeded as a file — that is what makes it "missing on disk".
+
+  await page.addInitScript(installTauriMock, seed)
+  await openCharacter(page)
+
+  const missingCard = page
+    .locator('[class*="group/sort"]')
+    .filter({ hasText: 'is missing on disk' })
+  await expect(missingCard).toHaveCount(1)
+
+  // The file name alone — not the path it was split out of.
+  const name = missingCard.locator('code')
+  await expect(name).toHaveText('KiraOutfit.hip')
+
+  // The grip sits in the reserved gutter, left of the text — no overlap.
+  await missingCard.scrollIntoViewIfNeeded()
+  const grip = missingCard.getByRole('button', { name: 'Drag to reorder' })
+  const gripBox = (await grip.boundingBox())!
+  const nameBox = (await name.boundingBox())!
+  expect(gripBox.x + gripBox.width).toBeLessThanOrEqual(nameBox.x)
+})
