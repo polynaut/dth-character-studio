@@ -101,7 +101,14 @@ bytes locally and 47,019 on CI, which is what made this one silently useless.
   every generated ROM/export script emits `DthScanSceneMorphsQuiet` (and
   `DthScanProductsQuiet` with a DIM manifests folder set) and their ORDER relative to the
   wrong-scene guard; plus timeline/validation/daz-csv/product-scan/
-  scene-override tests. **If you change generation, these tests are the spec.**
+  scene-override tests. `dsa-syntax.test.ts` PARSES every generated `.dsa`
+  (`node:vm` `new Script` compiles without running; the emitted DAZ Script is plain ES3-shaped JS) across the
+  export variants: the goldens catch a *change* but re-record whatever was
+  produced, so an unbalanced brace built by string concatenation pins itself and
+  ships, and the only other reader is Daz, where it reads as a row dying at
+  "Loading script". Add a variant whenever the export block gains a new shape --
+  the golden character exercises exactly one of them.
+  **If you change generation, these tests are the spec.**
 - **`apps/web`** — storage/CRUD over an in-memory fs mock, pure helpers,
   `runtime.test.ts` (hash-pins the bundled `.dsa` runtime — intentional runtime
   edits must update it), `preset-frames.test.ts` (frame-alignment invariant),
