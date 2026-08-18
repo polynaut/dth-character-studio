@@ -22,9 +22,9 @@ export const RomEditorSection = memo(function RomEditorSection({
   patch,
   catalog,
   presetFrames,
-  failedFrames,
+  failedMorphKeys,
   nameErrors,
-  revealFrame,
+  revealMorph,
   revealPose,
   morphIndex,
   boneIndex,
@@ -37,10 +37,10 @@ export const RomEditorSection = memo(function RomEditorSection({
   patch: (p: Partial<Character>) => void
   catalog: PoseAssetCatalog
   presetFrames: PresetFrames | null
-  failedFrames?: Set<number>
+  failedMorphKeys?: Set<string>
   /** Save-time name errors by pose id — see PoseTableMeta.nameErrors. */
   nameErrors?: ReadonlyMap<string, { message: string; name: string }>
-  revealFrame: { frame: number; nonce: number } | null
+  revealMorph: { key: string; nonce: number } | null
   revealPose: { section: RomSection; poseId: string; nonce: number } | null
   morphIndex: Array<MorphIndexEntry>
   boneIndex: Array<BoneIndexEntry>
@@ -127,9 +127,9 @@ export const RomEditorSection = memo(function RomEditorSection({
         skinning={characterSkinning(character)}
         catalog={catalog}
         presetFrames={presetFrames}
-        failedFrames={failedFrames}
+        failedMorphKeys={failedMorphKeys}
         nameErrors={nameErrors}
-        revealFrame={revealFrame}
+        revealMorph={revealMorph}
         revealPose={revealPose}
         morphIndex={morphIndex}
         boneIndex={boneIndex}

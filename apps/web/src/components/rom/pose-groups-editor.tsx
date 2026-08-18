@@ -47,7 +47,7 @@ export const PoseGroupsEditor = memo(function PoseGroupsEditor({
   groups,
   gender,
   startFrames,
-  failedFrames,
+  failedMorphKeys,
   nameErrors,
   removable,
   override,
@@ -58,7 +58,7 @@ export const PoseGroupsEditor = memo(function PoseGroupsEditor({
   groups: Array<RomGroup>
   gender: Gender
   startFrames: Map<string, number>
-  failedFrames?: Set<number>
+  failedMorphKeys?: Set<string>
   /** Save-time name errors by pose id — see PoseTableMeta.nameErrors. */
   nameErrors?: ReadonlyMap<string, { message: string; name: string }>
   removable: boolean
@@ -255,7 +255,7 @@ export const PoseGroupsEditor = memo(function PoseGroupsEditor({
             group={group}
             gender={gender}
             startFrame={startFrames.get(group.id) ?? 1}
-            failedFrames={failedFrames}
+            failedMorphKeys={failedMorphKeys}
             nameErrors={nameErrors}
             removable={removable}
             expandedIds={expandedIds}

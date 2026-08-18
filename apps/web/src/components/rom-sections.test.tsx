@@ -7,6 +7,7 @@ afterEach(cleanup)
 
 import { RomSections } from './rom-sections'
 import { applySceneOverride, defaultSections, sceneOverrideSchema } from '@dth/rom'
+import { morphKey } from '#/lib/rom/run-log.ts'
 
 import type { MorphIndexEntry } from '#/lib/rom/api.ts'
 import type { RomSections as RomSectionsModel, SceneOverride } from '@dth/rom'
@@ -1034,5 +1035,77 @@ describe('Clear a custom section', () => {
     dialog = screen.getByRole('dialog')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Clear' }))
     expect(next!.FBM.groups).toEqual([])
+  })
+})
+
+describe('failed-morph row marking (run report)', () => {
+  const FAILED_TITLE = 'This morph failed in the last ROM run — see the report above'
+
+  /** Two FBM poses walking different morphs — the second one is the failure. */
+  function twoPoseSections(): RomSectionsModel {
+    const sections = defaultSections()
+    sections.FBM.enabled = true
+    sections.FBM.groups = [
+      {
+        id: 'g1',
+        label: '',
+        suffix: 'centre',
+        method: 'individual',
+        calculateFrom: 'default',
+        poses: [
+          {
+            id: 'p1',
+            name: 'ArmsMuscular',
+            boneScaleRef: false,
+            morphs: [{ id: 'm1', node: 'Genesis9', prop: 'Arms Muscular', value: 1 }],
+          },
+          {
+            id: 'p2',
+            name: 'BreastsHeavy',
+            boneScaleRef: false,
+            morphs: [{ id: 'm2', node: 'Genesis9', prop: 'PBMBreastsHeavy', value: 1 }],
+          },
+        ],
+      },
+    ]
+    return sections
+  }
+
+  /** Controlled wrapper so a row delete really removes the pose. */
+  function Harness() {
+    const [sections, setSections] = useState(twoPoseSections)
+    return (
+      <RomSections
+        sections={sections}
+        genesis="G9"
+        gender="female"
+        skinning="dqs"
+        catalog={{ folder: '', assets: [], error: null }}
+        presetFrames={{ base: 328, gp: 104, dk: 54, phys: 43 }}
+        failedMorphKeys={new Set([morphKey('Genesis9', 'PBMBreastsHeavy')])}
+        onChange={setSections}
+      />
+    )
+  }
+
+  it('marks the row by the morph it walks, not by its position', () => {
+    render(<Harness />)
+    fireEvent.click(screen.getByText('Full Body'))
+    const marked = screen.getAllByTitle(FAILED_TITLE)
+    expect(marked).toHaveLength(1)
+    expect(marked[0].getAttribute('data-pose-id')).toBe('p2')
+  })
+
+  it('keeps the same morph marked after the row above it is deleted', () => {
+    // The reported regression: the run log stores frame NUMBERS, and matching
+    // rows by their recomputed frame kept the same POSITION red through
+    // deletions — whatever morph had moved into it. Identity matching must
+    // keep the marking on the failing morph's row as the list renumbers.
+    render(<Harness />)
+    fireEvent.click(screen.getByText('Full Body'))
+    fireEvent.click(screen.getAllByLabelText('Remove pose')[0])
+    const marked = screen.getAllByTitle(FAILED_TITLE)
+    expect(marked).toHaveLength(1)
+    expect(marked[0].getAttribute('data-pose-id')).toBe('p2')
   })
 })

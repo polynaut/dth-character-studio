@@ -1,33 +1,27 @@
 import { useCallback, useMemo, useState } from 'react'
 
 import { dismissRomRunLog, fetchRomRunLog } from '#/lib/rom/api.ts'
-import { normalizeSceneKey } from '#/lib/rom/execute-jobs.ts'
+import { morphKey } from '#/lib/rom/run-log.ts'
 import { useRefetchOnFocus } from '@dth/ui'
 
 export type RomRunLog = Awaited<ReturnType<typeof fetchRomRunLog>>
 
 /**
  * The ROM run log written by the Daz-side script (ingested into the studio's
- * own store on read) plus the editor's "reveal frame N" signal for it. The log
- * is re-read whenever the window regains focus, so problems from a run surface
- * the moment the user switches back from Daz to the studio. `failedFrames` is
- * memoized — it feeds the memoized ROM subtree, so its identity may only
- * change when the log does.
+ * own store on read) plus the editor's "reveal this morph" signal for it. The
+ * log is re-read whenever the window regains focus, so problems from a run
+ * surface the moment the user switches back from Daz to the studio.
+ * `failedMorphKeys` is memoized — it feeds the memoized ROM subtree, so its
+ * identity may only change when the log does.
  */
-export function useRomRunLog(
-  projectId: string,
-  characterId: string,
-  initial: RomRunLog,
-  /** The scene the editor currently shows — what `failedFrames` is scoped to. */
-  selectedScene = '',
-) {
+export function useRomRunLog(projectId: string, characterId: string, initial: RomRunLog) {
   const [romRunLog, setRomRunLog] = useState(initial)
   useRefetchOnFocus(() => {
     fetchRomRunLog({ data: { projectId, id: characterId } })
       .then((fresh) => {
         // Content-compare before storing: the refocus fetch re-reads the log on
         // EVERY focus, and a fresh-but-identical object identity would ripple
-        // through `failedFrames` into the memoized ROM subtree for nothing.
+        // through `failedMorphKeys` into the memoized ROM subtree for nothing.
         setRomRunLog((prev: RomRunLog) =>
           JSON.stringify(prev) === JSON.stringify(fresh) ? prev : fresh,
         )
@@ -60,39 +54,37 @@ export function useRomRunLog(
   const hasRunWarnings = !!romRunLog && romRunLog.warnings.length > 0
   const showRunReport = hasRunProblems || hasRunWarnings
   /**
-   * Frames whose morphs failed — the matching editor rows go red — for the
-   * SELECTED scene only.
+   * Identities (`morphKey`) of the morphs that failed anywhere in the last run
+   * — the editor rows CONTAINING one go red, whatever scene is selected.
    *
-   * Scoping is a correctness requirement, not a filter: a scene override can
-   * reorder, insert and delete ROM frames, so frame 40 in the summer scene is a
-   * different pose than frame 40 in the default one. A flat set across every
-   * scene painted the wrong rows red on whichever scene happened to be open.
+   * By identity, not by frame: the log's frame numbers describe the ROM as it
+   * was WHEN IT RAN, while the grid recomputes frames from row order on every
+   * edit — a frame-matched set kept the same POSITION red through deletions
+   * and reorders, whatever morph had moved into it. The `node`/`prop` pair is
+   * the same verbatim string on both sides, so it survives any edit.
    *
-   * A run with NO scene (`''` — an unsaved scene, or a log written by a runtime
-   * older than v54) can't be attributed, so it applies to whatever is selected:
-   * that is the pre-scene-tagging behaviour, and dropping it would silently stop
-   * marking rows for a log that is already on disk at upgrade time.
+   * Deliberately NOT scoped to the selected scene (the frame-matched version
+   * had to be, since overrides renumber frames per scene): a dialed morph is
+   * the same dial in every scene's grid, and scoping left the report visible
+   * over an all-clean grid until the user happened to select the failing scene
+   * — the rows must be red the moment the report is.
    */
-  const failedFrames = useMemo(() => {
+  const failedMorphKeys = useMemo(() => {
     if (!romRunLog || romRunLog.ok) return undefined
-    const key = normalizeSceneKey(selectedScene)
-    const frames = new Set<number>()
-    for (const run of romRunLog.runs) {
-      if (run.scene !== '' && normalizeSceneKey(run.scene) !== key) continue
-      for (const morph of run.failedMorphs) frames.add(morph.frame)
-    }
-    return frames
-  }, [romRunLog, selectedScene])
+    const keys = new Set<string>()
+    for (const morph of romRunLog.failedMorphs) keys.add(morphKey(morph.node, morph.prop))
+    return keys
+  }, [romRunLog])
 
-  // The "reveal frame N" signal a clicked failed morph sends to the ROM editor
-  // (nonce forces the effect to re-fire even for the same frame).
-  const [revealFrame, setRevealFrame] = useState<{ frame: number; nonce: number } | null>(null)
+  // The "reveal this morph" signal a clicked failed morph sends to the ROM
+  // editor (nonce forces the effect to re-fire even for the same morph).
+  const [revealMorph, setRevealMorph] = useState<{ key: string; nonce: number } | null>(null)
   // Clicking a failed morph in the report opens its ROM section and scrolls its
   // row into view (RomSections does the scroll off the nonce change). The
-  // caller selects the run's scene FIRST — revealing a frame in the wrong
-  // scene's grid would scroll to a pose that isn't the one that failed.
-  const revealFailedFrame = useCallback((frame: number) => {
-    setRevealFrame((prev) => ({ frame, nonce: (prev?.nonce ?? 0) + 1 }))
+  // caller selects the run's scene FIRST — the dial that failed is dialed in
+  // THAT scene, and an override-added row only exists in its own scene's grid.
+  const revealFailedMorph = useCallback((key: string) => {
+    setRevealMorph((prev) => ({ key, nonce: (prev?.nonce ?? 0) + 1 }))
   }, [])
 
   return {
@@ -101,8 +93,8 @@ export function useRomRunLog(
     hasRunProblems,
     hasRunWarnings,
     showRunReport,
-    failedFrames,
-    revealFrame,
-    revealFailedFrame,
+    failedMorphKeys,
+    revealMorph,
+    revealFailedMorph,
   }
 }

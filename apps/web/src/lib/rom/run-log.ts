@@ -112,6 +112,20 @@ export interface RomRunLog {
   unreadable?: boolean
 }
 
+/**
+ * Identity of a morph across scenes and edits — the definition's pose morphs
+ * and the log's failed morphs both carry the `node`/`prop` pair verbatim (the
+ * runtime's dialed-walked gate even keys its own dedup as `node|prop`,
+ * `checkDialedWalkedMorphs` in DthUtils.dsa). Frame numbers are computed from
+ * row order at generation time, so a frame stored in a log goes stale the
+ * moment the ROM is edited — matching editor rows by frame marked whatever
+ * POSITION the failure once had, not the morph that failed. The pair doesn't
+ * move. `|` is safe: both halves are Daz names, which never contain it.
+ */
+export function morphKey(node: string, prop: string): string {
+  return `${node}|${prop}`
+}
+
 /** The failed morphs of one raw log record. */
 export function parseFailedMorphs(value: unknown): Array<RomRunFailedMorph> {
   if (!Array.isArray(value)) return []

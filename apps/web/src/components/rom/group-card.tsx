@@ -78,7 +78,7 @@ export const GroupCard = memo(function GroupCard({
   group,
   gender,
   startFrame,
-  failedFrames,
+  failedMorphKeys,
   nameErrors,
   removable = true,
   expandedIds,
@@ -93,7 +93,7 @@ export const GroupCard = memo(function GroupCard({
   group: RomGroup
   gender: Gender
   startFrame: number
-  failedFrames?: Set<number>
+  failedMorphKeys?: Set<string>
   /** Save-time name errors by pose id — see PoseTableMeta.nameErrors. */
   nameErrors?: ReadonlyMap<string, { message: string; name: string }>
   removable?: boolean
@@ -172,7 +172,7 @@ export const GroupCard = memo(function GroupCard({
 
   const meta: PoseTableMeta = {
     startFrame,
-    failedFrames,
+    failedMorphKeys,
     nameErrors,
     showBoneScale,
     locked,

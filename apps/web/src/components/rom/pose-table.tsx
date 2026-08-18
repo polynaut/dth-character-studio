@@ -9,6 +9,7 @@ import type { Row } from '@tanstack/react-table'
 
 import { Button, InfoPopup } from '@dth/ui'
 import { sanitizePoseName } from '@dth/rom'
+import { morphKey } from '#/lib/rom/run-log.ts'
 
 import type { ColumnDef } from '@tanstack/react-table'
 import type { RomPose } from '@dth/rom'
@@ -44,8 +45,11 @@ export interface PoseOverrideMeta {
 
 export interface PoseTableMeta {
   startFrame: number
-  /** Absolute frames whose morphs failed in the last ROM run — rows marked red. */
-  failedFrames?: Set<number>
+  /** Identities (`morphKey`) of the morphs that failed in the last ROM run —
+   *  rows walking one are marked red. By identity, not by frame: the log's
+   *  frame numbers describe the ROM as it was when it ran, and a frame match
+   *  kept the same POSITION red through deletions and reorders. */
+  failedMorphKeys?: Set<string>
   /**
    * Name errors from the last blocked SAVE, by pose id — the duplicate/reserved
    * morph-name checks that only a whole-character pass can see.
@@ -405,10 +409,12 @@ export function SortablePoseRow({
     id: pose.id,
   })
   const visibleCells = row.getVisibleCells()
-  // Marked red when this pose's frame failed in the last ROM run (see the
-  // run report at the top of the page).
-  const absFrame = meta.startFrame + row.index
-  const failed = meta.failedFrames?.has(absFrame) === true
+  // Marked red when this pose walks a morph that failed in the last ROM run
+  // (see the run report at the top of the page). Matched by morph identity,
+  // never by the row's computed frame — see PoseTableMeta.failedMorphKeys.
+  const failedKeys = meta.failedMorphKeys
+  const failed =
+    failedKeys !== undefined && pose.morphs.some((m) => failedKeys.has(morphKey(m.node, m.prop)))
   // Scene-override mode (section not yet whole-owned): a row reads green when it's
   // the override's own added frame, or a base row the user has value-edited. Base
   // rows not yet overridden stay normal and editable — edit one to override it.
@@ -425,7 +431,6 @@ export function SortablePoseRow({
     <>
       <tr
         ref={setNodeRef}
-        id={failed ? `dth-rom-frame-${absFrame}` : undefined}
         data-pose-id={row.original.id}
         style={{ transform: CSS.Transform.toString(transform), transition }}
         title={failed ? 'This morph failed in the last ROM run — see the report above' : undefined}

@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { pickCsvPath, pickDufPath } from '#/lib/desktop.ts'
 import { browseStart, parentDir } from '#/lib/path.ts'
 import { importPosesFromCsv } from '#/lib/rom/api.ts'
+import { morphKey } from '#/lib/rom/run-log.ts'
 
 import { Button, cn, InfoPopup, Input, Modal, OverrideMark, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch } from '@dth/ui'
 import { CsvImportDialog } from '#/components/csv-import-dialog.tsx'
@@ -77,14 +78,14 @@ interface RomSectionsProps {
   /** The selected Daz scene — scopes the Morph-name autocomplete's SCENE-scanned
    *  suggestions (clothing/hair dials) to the ones that scene actually has. */
   scenePath?: string
-  /** Absolute frames whose morphs failed in the last ROM run (from the run log) —
-   *  matching pose rows are marked red. */
-  failedFrames?: Set<number>
+  /** Identities (`morphKey`) of the morphs that failed in the last ROM run
+   *  (from the run log) — pose rows walking one are marked red. */
+  failedMorphKeys?: Set<string>
   /** Save-time name errors by pose id — see PoseTableMeta.nameErrors. */
   nameErrors?: ReadonlyMap<string, { message: string; name: string }>
-  /** Set (with a fresh nonce) to open the section holding `frame` and scroll its
-   *  pose row into view — driven by clicking a failed morph in the run report. */
-  revealFrame?: { frame: number; nonce: number } | null
+  /** Set (with a fresh nonce) to open the section of the first row walking the
+   *  morph and scroll it into view — a clicked failed morph in the run report. */
+  revealMorph?: { key: string; nonce: number } | null
   /** A blocked-save validation error: open its section, scroll the pose row into
    *  view and focus its first empty field. */
   revealPose?: { section: RomSection; poseId: string; nonce: number } | null
@@ -158,9 +159,9 @@ export const RomSections = memo(function RomSections({
   skinning,
   catalog,
   presetFrames,
-  failedFrames,
+  failedMorphKeys,
   nameErrors,
-  revealFrame,
+  revealMorph,
   revealPose,
   morphIndex,
   boneIndex,
@@ -353,10 +354,12 @@ export const RomSections = memo(function RomSections({
   // editor shows a notice and the group editors fall back to a relative count.
   // Memoized on the real inputs — these maps were rebuilt on EVERY page render
   // (and startFrames feeds the memoized group editors, so identity matters).
-  const { startFrames, sectionByFrame } = useMemo(() => {
+  const { startFrames, poseByMorphKey } = useMemo(() => {
     const starts = new Map<string, number>()
-    // Which section holds each absolute frame, for the "reveal a failed morph" jump.
-    const byFrame = new Map<number, RomSection>()
+    // First displayed pose walking each morph identity, for the "reveal a
+    // failed morph" jump. Keyed by `morphKey` — the run log names failures by
+    // node|prop, and unlike a frame number that pair survives row edits.
+    const byMorph = new Map<string, { section: RomSection; poseId: string }>()
     if (presetFrames) {
       let frame = presetFrameCount(displaySections, gender, presetFrames)
       for (const section of ROM_SECTIONS) {
@@ -366,38 +369,44 @@ export const RomSections = memo(function RomSections({
         // if it were on (so the numbers don't collapse to 1 while the user decides what
         // to do with them) — but it must NOT advance the global counter, since a disabled
         // section contributes no frames and mustn't shift the sections after it. Only
-        // enabled sections map into `byFrame` (the run-report jump) + move the counter.
+        // enabled sections map into `byMorph` (a disabled section's rows aren't
+        // walked, so they can't be what failed) + move the counter.
         let cursor = frame
         for (const group of config.groups) {
           starts.set(group.id, cursor)
           if (config.enabled) {
-            for (let i = 0; i < group.poses.length; i++) byFrame.set(cursor + i, section)
+            for (const pose of group.poses) {
+              for (const morph of pose.morphs) {
+                const key = morphKey(morph.node, morph.prop)
+                if (!byMorph.has(key)) byMorph.set(key, { section, poseId: pose.id })
+              }
+            }
           }
           cursor += group.poses.length
         }
         if (config.enabled) frame = cursor
       }
     }
-    return { startFrames: starts, sectionByFrame: byFrame }
+    return { startFrames: starts, poseByMorphKey: byMorph }
   }, [displaySections, gender, presetFrames])
 
-  // A failed morph clicked in the run report: open its section and scroll the row
-  // (which carries id `dth-rom-frame-<abs>`) into view. Two rAFs so the section
-  // body has mounted before we scroll.
+  // A failed morph clicked in the run report: open the section of the first row
+  // walking it and scroll that row (located by its `data-pose-id`) into view.
+  // Two rAFs so the section body has mounted before we scroll.
   useEffect(() => {
-    if (!revealFrame) return
-    const section = sectionByFrame.get(revealFrame.frame)
-    if (!section) return
-    setOpen((o) => ({ ...o, [section]: true }))
+    if (!revealMorph) return
+    const target = poseByMorphKey.get(revealMorph.key)
+    if (!target) return
+    setOpen((o) => ({ ...o, [target.section]: true }))
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
         document
-          .getElementById(`dth-rom-frame-${revealFrame.frame}`)
+          .querySelector(`[data-pose-id="${target.poseId}"]`)
           ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       }),
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [revealFrame?.nonce])
+  }, [revealMorph?.nonce])
 
   // A blocked-save validation error: open the section, scroll the offending pose
   // row into view and focus the field that's actually wrong, so the fix is one
@@ -1043,7 +1052,7 @@ export const RomSections = memo(function RomSections({
                       groups={editorGroups.length > 0 ? editorGroups : flatGroupFallback(section)}
                       gender={gender}
                       startFrames={startFrames}
-                      failedFrames={failedFrames}
+                      failedMorphKeys={failedMorphKeys}
                       nameErrors={nameErrors}
                       removable={false}
                       override={editorOverride}
@@ -1075,7 +1084,7 @@ export const RomSections = memo(function RomSections({
                       groups={editorGroups}
                       gender={gender}
                       startFrames={startFrames}
-                      failedFrames={failedFrames}
+                      failedMorphKeys={failedMorphKeys}
                       nameErrors={nameErrors}
                       removable
                       override={editorOverride}
