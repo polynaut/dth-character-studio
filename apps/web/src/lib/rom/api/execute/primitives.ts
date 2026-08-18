@@ -19,7 +19,6 @@ import {
   EXECUTE_STAMPS_FILE,
   EXPORTER_JOB_FILE,
   RUNNING_JOB_FILE,
-  isReclaimableBatch,
   openSceneJobFileJson,
   parseExecuteStamps,
   parseJobFileJson,
@@ -267,29 +266,6 @@ export async function exporterJobsPending(): Promise<boolean> {
   if (!paths) return false
   try {
     return await exists(paths.pending)
-  } catch {
-    return false
-  }
-}
-
-/**
- * Whether the claimed (`running_`) batch shows REAL work — it parses and is
- * past the untouched state ({@link isReclaimableBatch}). The wait-for-close
- * modal uses it to stand down when a live Daz claims LATE (stuck on a modal
- * Save prompt past the pickup window, or restarted by hand): a batch being
- * worked belongs to the export watch, and a modal inviting the user to kill
- * Daz over it would cost finished scenes. A claimed-but-untouched batch
- * deliberately reads false — from the outside it is indistinguishable from
- * the closing-Daz claim the modal exists to rescue, so the modal keeps
- * waiting; the first row mark flips it. Best-effort false on any read problem.
- */
-export async function exporterJobsWorking(): Promise<boolean> {
-  const paths = await exporterJobFilePaths()
-  if (!paths) return false
-  try {
-    if (!(await exists(paths.running))) return false
-    const parsed = parseJobFileJson(await readTextFile(paths.running))
-    return parsed !== null && !isReclaimableBatch(parsed)
   } catch {
     return false
   }

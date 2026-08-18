@@ -16,6 +16,7 @@ import {
   formatAgo,
   isExportRunFile,
   isReclaimableBatch,
+  classifyPendingHandoff,
   jobFileMayBeLive,
   migratedExportFolder,
   jobFileJson,
@@ -319,6 +320,78 @@ describe('isReclaimableBatch — a batch a CLOSING Daz claimed but never ran', (
     })
     expect(openScene?.type).toBe('open-scene') // the parse itself is fine
     expect(isReclaimableBatch(openScene)).toBe(false)
+  })
+})
+
+describe('classifyPendingHandoff — the wait-for-close modal’s per-tick decision', () => {
+  const batch = (over: Record<string, unknown> = {}) =>
+    parseJobFileJson(
+      JSON.stringify({
+        version: 1,
+        type: 'bulk-export',
+        progress: 0,
+        jobs: [{ scenePath: 'X:\\a.duf', scriptPath: 'X:\\s.dsa', status: 'pending' }],
+        ...over,
+      }),
+    )
+  const worked = () =>
+    batch({
+      progress: 50,
+      jobs: [{ scenePath: 'X:\\a.duf', scriptPath: 'X:\\s.dsa', status: 'done' }],
+    })
+  const base = { pendingExists: false, running: 'absent', progressActive: false, dazRunning: false } as const
+
+  it('waits on an unclaimed handoff while the export Daz process is up', () => {
+    expect(classifyPendingHandoff({ ...base, pendingExists: true, dazRunning: true })).toBe('waiting')
+  })
+
+  it('launches once the process is gone and the handoff is still unclaimed', () => {
+    expect(classifyPendingHandoff({ ...base, pendingExists: true })).toBe('launch')
+  })
+
+  it('is gone when no handoff exists in any form — aborted, or finished and swept', () => {
+    // The screenshot bug: the export finished, the watch deleted the running_
+    // file, and the modal spun forever under the finish toast. 'gone' whatever
+    // the process probe says.
+    expect(classifyPendingHandoff({ ...base, dazRunning: true })).toBe('gone')
+    expect(classifyPendingHandoff(base)).toBe('gone')
+  })
+
+  it('is gone for a finished batch nobody swept yet (progress 100)', () => {
+    expect(
+      classifyPendingHandoff({ ...base, running: batch({ progress: 100 }), dazRunning: true }),
+    ).toBe('gone')
+  })
+
+  it('stands down once the claimed batch shows real work — the export watch owns it', () => {
+    expect(classifyPendingHandoff({ ...base, running: worked(), dazRunning: true })).toBe('working')
+    // Even with the process probe saying "gone": a part-worked batch is the
+    // export watch's dead-run story, never this modal's to relaunch over.
+    expect(classifyPendingHandoff({ ...base, running: worked() })).toBe('working')
+  })
+
+  it('counts progress-LOG activity as work — the one-scene batch whose job file never moves', () => {
+    // The Runner rewrites the job file per ROW and marking a row `running` is
+    // optional — a one-scene batch reads untouched for its entire run. The log
+    // is truncated at pickup, so any line means the batch is really going.
+    expect(
+      classifyPendingHandoff({ ...base, running: batch(), progressActive: true, dazRunning: true }),
+    ).toBe('working')
+  })
+
+  it('keeps waiting on a claimed-but-untouched batch while a Daz is up — the ambiguous state', () => {
+    // Closing Daz's dying claim, or a live Daz still loading the scene —
+    // indistinguishable from outside; the next signal decides.
+    expect(classifyPendingHandoff({ ...base, running: batch(), dazRunning: true })).toBe('waiting')
+  })
+
+  it('launches (via the reclaim) for a claimed-but-untouched batch once the process is gone', () => {
+    expect(classifyPendingHandoff({ ...base, running: batch() })).toBe('launch')
+  })
+
+  it('keeps waiting on a torn read — the next tick parses clean', () => {
+    expect(classifyPendingHandoff({ ...base, running: null })).toBe('waiting')
+    expect(classifyPendingHandoff({ ...base, running: null, dazRunning: true })).toBe('waiting')
   })
 })
 

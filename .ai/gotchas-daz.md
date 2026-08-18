@@ -285,9 +285,20 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   and a 'dead' report disarms the run, silently dropping the finish toast and
   the "Export too" continuation. Two corollaries: "the pending file
   disappeared" NEVER means "claimed and not my problem"; and the wait-for-close
-  modal may only stand down once the claimed batch shows real work
-  (`exporterJobsWorking`) — a live Daz stuck on a modal Save prompt claims
-  late and looks identical to the closing claim until its first row mark.
+  modal may only stand down once the claimed batch shows real work — a live
+  Daz stuck on a modal Save prompt claims late and looks identical to the
+  closing claim until the first work signal. "Real work" must include the
+  VERBOSE PROGRESS LOG, not just the job file (measured 2026-08-18): the
+  Runner rewrites the job file per ROW and marking a row `running` is optional,
+  so a ONE-scene batch reads untouched for its entire run, then the watch
+  deletes it at 100 — the modal's old row-mark-only probe never saw a settle
+  condition and spun forever under the finish toast. The whole per-tick rule is
+  `classifyPendingHandoff` (execute-jobs.ts): terminal 'gone' when the handoff
+  no longer exists in any form, 'working' on a row mark OR a progress-log line,
+  and a LAUNCH is only success once the claim actually happens — the modal
+  relaunches if the launched process dies unclaimed (single-instance forward
+  into a not-quite-dead Daz) and retries a rejected launch every tick instead
+  of hanging settled-but-unresolved.
 - **A `bulk-export` handoff leaves its claimed `running_…json` behind unless
   something watches it to 100** (measured 2026-08-10, first live Import-from-Daz-scene
   run): the Runner renames the job file and marks it done, but DELETING the
