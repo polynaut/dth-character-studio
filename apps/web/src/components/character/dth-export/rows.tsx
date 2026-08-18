@@ -19,6 +19,29 @@ import type { GenesisVersion } from '@dth/rom'
 import type { ExecuteSceneStatus } from '#/lib/rom/api.ts'
 import type { HoudiniRunMode, RunChoice } from '#/lib/rom/execute-jobs.ts'
 
+/** One decision per second: the modal's whole loop is `pendingExportHandoffState`
+ *  (see `classifyPendingHandoff` for the rule) plus what to do about it. */
+const TICK_MS = 1000
+/** Ticks to leave a launch alone before launching again. A launched Daz needs a
+ *  moment to show up in the process probe, and one that forwarded into a
+ *  not-quite-dead single instance needs one to die — relaunching on the very
+ *  next tick would only stack processes on top of both. */
+const RELAUNCH_AFTER_TICKS = 5
+/** Launches to spend before saying so instead. Covers a lingering single
+ *  instance several times over (~20 s at `RELAUNCH_AFTER_TICKS`) and stops well
+ *  short of a once-a-second spawn loop against a Daz that cannot start at all —
+ *  `launchDazForPendingJobs` reports the SPAWN, never that the process lived. */
+const MAX_LAUNCH_ATTEMPTS = 5
+/** Consecutive unreadable claimed-file reads before the modal gives up on it.
+ *  The Runner rewrites the file per row, so a torn read is routine — one that
+ *  is still torn ten seconds later is corrupt or foreign, and nothing here can
+ *  act on it (an unparsed batch is never reclaimable). The export watch owns
+ *  the dead run from there. */
+const UNREADABLE_LIMIT = 10
+/** Consecutive failing ticks before the modal admits it in words. Below this a
+ *  blip is just a tick that gets retried. */
+const PROBLEM_AFTER_FAILURES = 3
+
 export function WaitForDazCloseModal({
   onDone,
   onCancel,
@@ -32,43 +55,71 @@ export function WaitForDazCloseModal({
 }) {
   // 'waiting' = the closing Daz's process is still up (or a claimed batch is in
   // its ambiguous untouched state); 'starting' = this modal launched a Daz and
-  // is holding on until the batch is actually claimed and worked.
-  const [phase, setPhase] = useState<'waiting' | 'starting'>('waiting')
-  const [launchError, setLaunchError] = useState<string | null>(null)
+  // is holding on until the batch is actually claimed and worked; 'stalled' =
+  // it launched all it is willing to and the batch is still unclaimed.
+  const [phase, setPhase] = useState<'waiting' | 'starting' | 'stalled'>('waiting')
+  const [problem, setProblem] = useState<string | null>(null)
   useEffect(() => {
     let active = true
     let settled = false
     let busy = false
     let launched = false
+    let launches = 0
+    let ticksSinceLaunch = 0
+    let unreadable = 0
     let failures = 0
     const finish = (started: boolean) => {
       settled = true
       onDone(started)
     }
-    // One decision per second — `pendingExportHandoffState` reads the handoff's
-    // real state and classifies it (see classifyPendingHandoff for the rule).
-    // Its predecessor here had two failure modes this loop must never regrow:
-    // it settled BEFORE awaiting the launch, so one rejected launch hung the
-    // modal forever with Daz never started; and it had no terminal state, so a
-    // batch that finished (file deleted at 100) left the modal spinning under
-    // the finish toast. Now every tick is caught (an error means "try again
-    // next second", surfaced after repeated failures), a launch is verified by
-    // the claim actually happening — a launch against a not-fully-dead single
-    // instance forwards into it and dies, so 'launch' coming back around after
-    // one simply launches again — and 'gone'/'working' always close the modal.
+    // `pendingExportHandoffState` reads the handoff's real state and classifies
+    // it. Its predecessor here had two failure modes this loop must never
+    // regrow: it settled BEFORE awaiting the launch, so one rejected launch
+    // hung the modal forever with Daz never started; and it had no terminal
+    // state, so a batch that finished (file deleted at 100) left the modal
+    // spinning under the finish toast. So: every tick is caught (a failure
+    // means "try again next second", said out loud after a few), a launch
+    // counts only once the claim actually happens — a launch against a
+    // not-fully-dead single instance forwards into it and dies, so 'launch'
+    // coming back around simply launches again, up to MAX_LAUNCH_ATTEMPTS —
+    // and 'gone'/'working' always close the modal. Every other outcome is
+    // bounded too: this modal must always resolve or say why it can't.
     const tick = async () => {
-      if (busy) return
+      if (busy || settled) return
       busy = true
+      ticksSinceLaunch += 1
+      let stage: 'read' | 'launch' = 'read'
+      let ok = true
       try {
         const state = await pendingExportHandoffState()
         if (!active || settled) return
+        if (state !== 'unreadable') unreadable = 0
         if (state === 'gone') {
           // Aborted, or claimed and already finished — nothing left to start.
           finish(false)
-        } else if (state === 'working') {
+          return
+        }
+        if (state === 'working') {
           // The batch is being worked; it belongs to the export watch now.
           finish(launched)
-        } else if (state === 'launch') {
+          return
+        }
+        if (state === 'unreadable') {
+          unreadable += 1
+          // Not a torn write any more: the file cannot be parsed, so it can
+          // neither be reclaimed nor waited out. Stand down and leave the dead
+          // run to the export watch, which reports it.
+          if (unreadable >= UNREADABLE_LIMIT) finish(false)
+          return
+        }
+        if (state === 'launch') {
+          if (launches >= MAX_LAUNCH_ATTEMPTS) {
+            setPhase('stalled')
+            return
+          }
+          // Give the previous launch its ticks before spending another one.
+          if (launches > 0 && ticksSinceLaunch < RELAUNCH_AFTER_TICKS) return
+          stage = 'launch'
           const started = await launchDazForPendingJobs()
           if (!active || settled) return
           if (!started) {
@@ -77,22 +128,38 @@ export function WaitForDazCloseModal({
             return
           }
           launched = true
-          failures = 0
+          launches += 1
+          ticksSinceLaunch = 0
           setPhase('starting')
-          setLaunchError(null)
         }
         // 'waiting': nothing to do this tick.
       } catch (error) {
+        ok = false
         failures += 1
-        if (failures >= 3 && active && !settled) {
-          setLaunchError(error instanceof Error ? error.message : String(error))
+        const detail = error instanceof Error ? error.message : String(error)
+        if (failures >= PROBLEM_AFTER_FAILURES && active && !settled) {
+          // Which call failed is the whole of what the user can act on — a
+          // launch Daz refuses is a different problem from a job file that
+          // cannot be read, and claiming the first for the second is a lie.
+          setProblem(
+            stage === 'launch'
+              ? `Starting Daz Studio failed — still retrying: ${detail}`
+              : `Checking on the export failed — still retrying: ${detail}`,
+          )
         }
       } finally {
+        // A tick that got through is the only thing that clears a reported
+        // problem: counting failures CONSECUTIVELY is what keeps three
+        // unrelated blips minutes apart from reading as a broken launch.
+        if (ok && active && !settled) {
+          failures = 0
+          setProblem(null)
+        }
         busy = false
       }
     }
     void tick()
-    const id = window.setInterval(() => void tick(), 1000)
+    const id = window.setInterval(() => void tick(), TICK_MS)
     return () => {
       active = false
       window.clearInterval(id)
@@ -104,22 +171,26 @@ export function WaitForDazCloseModal({
     <Modal
       open
       onClose={onCancel}
-      title={phase === 'starting' ? 'Starting Daz Studio…' : 'Waiting for Daz Studio to close…'}
+      title={
+        phase === 'stalled'
+          ? 'Daz Studio isn’t picking the export up'
+          : phase === 'starting'
+            ? 'Starting Daz Studio…'
+            : 'Waiting for Daz Studio to close…'
+      }
       dismissible
     >
       <p className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="size-4 shrink-0 animate-spin" />
+        {phase !== 'stalled' && <Loader2 className="size-4 shrink-0 animate-spin" />}
         <span>
-          {phase === 'starting'
-            ? 'Daz Studio is starting and picks the export up on launch — this closes as soon as the batch begins.'
-            : 'Daz Studio didn’t pick the export up — it’s probably still closing. As soon as the process is gone, Daz Studio starts again by itself and runs the export. Closing this keeps the batch queued (the header button aborts it).'}
+          {phase === 'stalled'
+            ? 'Daz Studio was started several times and keeps exiting before it picks the export up. Starting it by hand should run the batch — its Runner claims the queued export on launch. Closing this keeps the batch queued (the header button aborts it).'
+            : phase === 'starting'
+              ? 'Daz Studio is starting and picks the export up on launch — this closes as soon as the batch begins.'
+              : 'Daz Studio didn’t pick the export up — it’s probably still closing. As soon as the process is gone, Daz Studio starts again by itself and runs the export. Closing this keeps the batch queued (the header button aborts it).'}
         </span>
       </p>
-      {launchError && (
-        <p className="mt-2 text-sm text-destructive">
-          Starting Daz Studio failed — still retrying: {launchError}
-        </p>
-      )}
+      {problem && <p className="mt-2 text-sm text-destructive">{problem}</p>}
     </Modal>
   )
 }

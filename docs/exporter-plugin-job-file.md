@@ -315,17 +315,22 @@ final poll tick, the **reclaim** (see the lifecycle above) takes it back
 first. The dialog then stays up until the batch is actually **claimed and
 worked**: a launch is not success (against a not-fully-dead single instance
 the fresh process forwards into it and dies), so an unclaimed handoff whose
-process disappears again is simply launched again, and a failed launch is
-retried every second (surfaced in the dialog after repeated failures). While
-waiting, the dialog also watches the claimed file: a batch showing real work —
-a row mark, a progress percent, **or a fresh line in the verbose progress log**
-(the job file alone is not enough: the plugin rewrites it per ROW and marking a
-row `running` is optional, so a one-scene batch reads untouched for its entire
-run) — means Daz is alive and working (a modal Save prompt can stall the
-pickup past the wait window) — the dialog stands down and the progress watch
-owns the run. And the dialog always closes itself when the handoff is **gone**
-in every form (aborted, or finished — including finished-and-swept), so it can
-never sit open under the run's finish toast.
+process disappears again is simply launched again — a few seconds apart and a
+handful of times, after which the dialog says Daz keeps exiting instead of
+starting one every second. A failed launch is retried every second (surfaced in
+the dialog after repeated failures). While waiting, the dialog also watches the
+claimed file: a batch showing real work — a row mark, a progress percent, **or a
+fresh line in the verbose progress log while the process is up** (the job file
+alone is not enough: the plugin rewrites it per ROW and marking a row `running`
+is optional, so a one-scene batch reads untouched for its entire run; the
+process condition matters because an untouched batch whose logger has since
+died is the orphaned claim, not a live run) — means Daz is alive and working (a
+modal Save prompt can stall the pickup past the wait window) — the dialog
+stands down and the progress watch owns the run. And the dialog always closes
+itself when the handoff is **gone** in every form (aborted, or finished —
+including finished-and-swept), so it can never sit open under the run's finish
+toast; a claimed file that stays unparseable for ten seconds ends the wait the
+same way, since an unparsed batch can neither be reclaimed nor waited out.
 
 While the un-renamed job file exists the button shows **Abort**: it deletes
 the file and rolls the aborted scenes' handoff stamps back. Once the plugin

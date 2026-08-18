@@ -379,6 +379,21 @@ describe('classifyPendingHandoff — the wait-for-close modal’s per-tick decis
     ).toBe('working')
   })
 
+  it('does NOT let a log line stand the modal down once the process is gone', () => {
+    // A Runner that claimed the batch, wrote its first line and died with the
+    // closing Daz looks exactly like a live one loading a scene — except for
+    // the process probe. The batch is untouched, so relaunching repeats
+    // nothing, while standing down would strand it in the orphaned `running_`
+    // file this whole modal exists to rescue.
+    expect(classifyPendingHandoff({ ...base, running: batch(), progressActive: true })).toBe(
+      'launch',
+    )
+    // A batch that really was worked is still the export watch's, log or no log.
+    expect(classifyPendingHandoff({ ...base, running: worked(), progressActive: true })).toBe(
+      'working',
+    )
+  })
+
   it('keeps waiting on a claimed-but-untouched batch while a Daz is up — the ambiguous state', () => {
     // Closing Daz's dying claim, or a live Daz still loading the scene —
     // indistinguishable from outside; the next signal decides.
@@ -389,9 +404,12 @@ describe('classifyPendingHandoff — the wait-for-close modal’s per-tick decis
     expect(classifyPendingHandoff({ ...base, running: batch() })).toBe('launch')
   })
 
-  it('keeps waiting on a torn read — the next tick parses clean', () => {
-    expect(classifyPendingHandoff({ ...base, running: null })).toBe('waiting')
-    expect(classifyPendingHandoff({ ...base, running: null, dazRunning: true })).toBe('waiting')
+  it("reports a torn read as 'unreadable' — its own class, so the caller can bound it", () => {
+    // Usually the next tick parses clean. A file that never does is corrupt or
+    // foreign and can neither be reclaimed nor waited out, which is why this is
+    // not 'waiting': the modal counts these and gives up instead of spinning.
+    expect(classifyPendingHandoff({ ...base, running: null })).toBe('unreadable')
+    expect(classifyPendingHandoff({ ...base, running: null, dazRunning: true })).toBe('unreadable')
   })
 })
 

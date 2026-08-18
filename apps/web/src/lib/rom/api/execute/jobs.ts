@@ -542,7 +542,7 @@ export async function pendingExportHandoffState(): Promise<PendingHandoffClass> 
         ? parseJobFileJson(await readTextFile(paths.running))
         : 'absent'
     } catch {
-      running = null // unreadable — same as a torn parse, next tick decides
+      running = null // unreadable — same as a torn parse, the caller counts it
     }
   }
   // Only a claimed-but-untouched batch needs the log signal (everything else

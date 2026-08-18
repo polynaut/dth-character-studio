@@ -622,9 +622,18 @@ describe("pendingExportHandoffState — the wait-for-close modal's per-tick stat
     await expect(pendingExportHandoffState()).resolves.toBe('gone')
   })
 
-  it("'waiting' on a torn read — the next tick parses clean", async () => {
+  it("'unreadable' on a torn read — the next tick parses clean, a corrupt one never does", async () => {
     files.set(RUNNING, '{"version":1,"type":"bulk-export","progr')
-    await expect(pendingExportHandoffState()).resolves.toBe('waiting')
+    await expect(pendingExportHandoffState()).resolves.toBe('unreadable')
+  })
+
+  it("'launch' for an untouched claimed batch whose log is alive but whose Daz is gone", async () => {
+    // The dying claim, one log line in: standing down here would strand the
+    // batch in the orphaned `running_` file. Nothing has been worked, so the
+    // reclaim-and-launch repeats nothing.
+    seedClaimedUntouched()
+    files.set('/appdata/export-progress.log', '[5] Ita: Opening scene Ita')
+    await expect(pendingExportHandoffState()).resolves.toBe('launch')
   })
 })
 

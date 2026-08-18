@@ -1433,7 +1433,10 @@ export function DthExportAction({
  * launches again). It stands down when the batch shows real work (a live Daz
  * claimed late — that run belongs to the export watch) and closes on its own
  * when the handoff is gone (aborted, or finished) — so it can never sit under
- * a "DTH Export finished" toast. A failed launch is retried every second and
- * surfaced in the modal after repeated failures. Closing the modal only stops
- * the watch: the batch stays queued (the header button still aborts it).
+ * a "DTH Export finished" toast. Both retries are bounded: the relaunches are
+ * spaced and capped (a Daz that keeps exiting is reported, not started once a
+ * second — the launch command reports the SPAWN, never that the process
+ * lived), and a failed launch is retried every second and named in the modal
+ * after repeated failures. Closing the modal only stops the watch: the batch
+ * stays queued (the header button still aborts it).
  */

@@ -294,11 +294,23 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   deletes it at 100 — the modal's old row-mark-only probe never saw a settle
   condition and spun forever under the finish toast. The whole per-tick rule is
   `classifyPendingHandoff` (execute-jobs.ts): terminal 'gone' when the handoff
-  no longer exists in any form, 'working' on a row mark OR a progress-log line,
-  and a LAUNCH is only success once the claim actually happens — the modal
-  relaunches if the launched process dies unclaimed (single-instance forward
-  into a not-quite-dead Daz) and retries a rejected launch every tick instead
-  of hanging settled-but-unresolved.
+  no longer exists in any form, 'working' on a row mark OR — **only alongside a
+  live process** — a progress-log line, and a LAUNCH is only success once the
+  claim actually happens. That process condition on the log is the same
+  corollary once more: the batch a log line speaks for is UNTOUCHED, so a
+  Runner that claimed it, logged one line and died with the closing Daz is the
+  orphaned-claim strand itself — standing down over it would strand the batch,
+  while relaunching repeats nothing. **Every road out of that modal is
+  bounded** (`WaitForDazCloseModal`, tested loop-side in
+  `wait-for-daz-close.test.tsx`): it relaunches when the launched process dies
+  unclaimed (single-instance forward into a not-quite-dead Daz) but only every
+  5th tick and at most 5 times, then says so rather than spawning a Daz per
+  second at one that cannot start — `launch_daz_studio` reports the SPAWN, never
+  that the process lived; it retries a rejected launch every tick and names
+  WHICH call failed after three consecutive failures; and a claimed file that
+  stays unparseable for 10 ticks ends the wait (`'unreadable'` is its own class
+  for that reason — an unparsed batch is never reclaimable, so nothing there can
+  change) instead of hanging settled-but-unresolved.
 - **A `bulk-export` handoff leaves its claimed `running_…json` behind unless
   something watches it to 100** (measured 2026-08-10, first live Import-from-Daz-scene
   run): the Runner renames the job file and marks it done, but DELETING the
