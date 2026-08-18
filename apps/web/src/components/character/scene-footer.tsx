@@ -7,7 +7,6 @@ import { Button, cn, useModifierHeld } from '@dth/ui'
 import { PrimaryBadge } from '#/components/primary-badge.tsx'
 import { SceneLabel } from '#/components/character/scene-label.tsx'
 
-import type { GenesisVersion } from '@dth/rom'
 
 const stemOf = (p: string) => p.replace(/\\/g, '/').split('/').pop()?.replace(/\.duf$/i, '') ?? ''
 
@@ -45,7 +44,7 @@ export interface SceneDockActions {
 export function SceneFooter({
   show,
   scenes,
-  genesis,
+  offsetY,
   primary,
   selected,
   onSelect,
@@ -54,9 +53,9 @@ export function SceneFooter({
   show: boolean
   /** Every linked scene path (the primary first, then extras). */
   scenes: Array<string>
-  /** The character's generation — Daz frames a G3/G8/G8.1 render higher in the
-   *  tip, so each pill's tile needs its own face lift. */
-  genesis: GenesisVersion
+  /** The character's `imageOffsetY` — its framing nudge, applied to every
+   *  pill's tile (see lib/avatar-offset). */
+  offsetY?: number
   /** The primary scene's path (`character.scenePath`) — gets the "primary" tag. */
   primary: string
   /** The currently selected scene's path (`effectiveScene`) — ringed green. */
@@ -172,7 +171,7 @@ export function SceneFooter({
                   <SceneLabel
                     scenePath={path}
                     name={nameOf(path)}
-                    genesis={genesis}
+                    offsetY={offsetY}
                     accentBar
                     size="lg"
                     subline={isPrimary ? primaryTag : undefined}

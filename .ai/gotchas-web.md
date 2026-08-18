@@ -419,23 +419,56 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   cost two rounds of "the vars aren't working" on #860, and the variable was
   correct throughout (measured in dev AND the minified bundle — `11%` on the
   wrapper and the inherited image, painting `matrix(1,0,0,1,0,27.94)` on a 254px
-  element; 15% / 38.1px for pre-G9). `@property` with `syntax`/`inherits`/
+  element). `@property` with `syntax`/`inherits`/
   `initial-value` gives it a computed value everywhere, which is the actual gap;
   a fallback in the `var()` closes it locally. **This is a note on how to write
   the technique, NOT a reason to avoid it** — the first version of this entry
   said "don't parameterise keyframes", which was the wrong lesson drawn from one
   badly-written instance. (Whether registration also changes what DevTools
   prints is unverified — the resolution gap is the part that is understood.)
-  The avatar pan ended up as two literal keyframe blocks regardless, a local call
-  about four adjacent numbers. **Inspect the ELEMENT, never the keyframe**:
-  `getComputedStyle($0).transform`.
+  The avatar pan ended up as literal percentages regardless. **Inspect the
+  ELEMENT, never the keyframe**: `getComputedStyle($0).transform`.
+- **`translate`, `scale` and `transform` are three separate properties, and
+  which one you land in decides whether a percentage is scaled.** CSS composes
+  them as `translate · rotate · scale · transform`, so `transform` is applied to
+  the element FIRST (innermost — the `scale` property multiplies it) and
+  `translate` LAST (outermost — untouched by it). Measured in Chromium
+  (2026-08-18) on a 133px-tall image at `scale: 2.3`: an added
+  `transform: translateY(10%)` moved it **30.59px** — 10% of the 305.9px PAINTED
+  height — while an added `translate: 0 10%` moved it **13.30px**, 10% of the
+  laid-out height. That is half the mechanism behind `character.imageOffsetY`
+  (lib/avatar-offset): the same stored % has to mean the same fraction of the
+  picture in a 224px header portrait and a 32px scene chip, so it goes in the
+  slot the variant's own zoom multiplies. It also means an avatar crop and a
+  per-character nudge can share an element WITHOUT a merge step — Tailwind v4
+  spends `translate` + `scale` on the crop utilities and leaves `transform` free,
+  which is exactly the slot the offset wants.
+- **A `translateY` percentage is a percentage of the ELEMENT, and under
+  `object-cover` the element is not the picture — use `cqmax`.** A square source
+  in an `object-cover` box paints a square as tall as the box's LONGER side, so
+  in a portrait frame `translateY(n%)` happens to be n% of the picture and in a
+  landscape one it is n% × height/width of it. Shipped exactly that (2026-08-18):
+  `imageOffsetY: 7` measured **7.00%** on the 3:4 scene cards and **4.20%** on
+  the 64×40 landscape chips — the two families disagreed, the correction
+  under-shot in every landscape tile, and it took a human's eye to notice. The
+  fix is `translateY(calc(<n> * 1cqmax))` with `container-type: size` on the
+  frame: `cqmax` is 1% of the LARGER container axis, which IS the painted picture
+  height for both shapes, so the browser computes what a per-variant table would
+  otherwise have to hardcode (and drift from). Re-measured: 7.000% in both.
+  Two costs to know: `container-type: size` brings size containment, so a frame
+  using it must be explicitly sized or it collapses — `Portrait` therefore only
+  emits it when there IS an offset; and the character header cannot use it at
+  all (its `cqmax` would be the 168×224 wrapper, not the 254px image), which is
+  fine because there the element already IS the picture.
+  Pinned by `smoke/avatar-offset.smoke.ts`, which asserts the RATIO — it survives
+  retuning the crops and fails only if the offset stops landing where it should.
 - **Overriding which keyframes an element runs: swap `animation-name`, NEVER the
   `animation` shorthand.** The shorthand resets `animation-timeline` to `auto`,
   which silently takes a scroll-driven element OFF its timeline and freezes it at
-  the resting value — measured on #860 by making exactly that change: all three
-  pre-G9 specs dropped their collapsed-state assertion while the resting one kept
-  passing. (It is the same reason the base rule declares `animation-timeline`
-  AFTER its shorthand.) The trap for the test: an element frozen at rest still
+  the resting value — measured on #860, where a rule that swapped the avatar pan
+  by shorthand froze the portrait while its resting assertion kept passing. (It
+  is the same reason the base rule declares `animation-timeline` AFTER its
+  shorthand.) The trap for the test: an element frozen at rest still
   reports the correct RESTING offset, so a spec that only checks the rest state
   passes over a completely dead animation. Assert both ends — scroll past the
   range and read the transform again.

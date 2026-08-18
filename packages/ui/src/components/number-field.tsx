@@ -10,6 +10,7 @@ export function NumberField({
   percent,
   overridden,
   title,
+  disabled,
 }: {
   value: number
   onCommit: (value: number) => void
@@ -25,6 +26,7 @@ export function NumberField({
   overridden?: boolean
   /** Native tooltip on the input (e.g. "Can be overridden per Daz scene"). */
   title?: string
+  disabled?: boolean
 }) {
   // 0–1 ⇄ 0–100 for the percent mode; toFixed trims the *100 / /100 float noise.
   const format = useCallback(
@@ -41,6 +43,7 @@ export function NumberField({
       className={className}
       overridden={overridden}
       title={title}
+      disabled={disabled}
       value={draft}
       inputMode="decimal"
       onChange={(e) => setDraft(e.target.value)}

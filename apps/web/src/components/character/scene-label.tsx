@@ -3,7 +3,6 @@ import { Tag, cn } from '@dth/ui'
 import { SceneTile } from '#/components/portrait.tsx'
 
 import type { ReactNode } from 'react'
-import type { GenesisVersion } from '@dth/rom'
 
 /**
  * The Daz-green "linked-scene" pill: a small landscape render of the scene's
@@ -19,7 +18,7 @@ import type { GenesisVersion } from '@dth/rom'
 export function SceneLabel({
   scenePath,
   name,
-  genesis,
+  offsetY,
   muted = false,
   fallbackName,
   eyebrow,
@@ -35,9 +34,9 @@ export function SceneLabel({
   scenePath: string
   /** The display label — typically the scene file's stem (original filename). */
   name: string
-  /** The character's generation — Daz frames a G3/G8/G8.1 render higher in the
-   *  tip, so the tile's face lift differs (see SCENE_TILE_SIZES). */
-  genesis?: GenesisVersion
+  /** The character's `imageOffsetY` — its framing nudge, applied on top of the
+   *  tile's own face lift (see lib/avatar-offset). */
+  offsetY?: number
   /** The primary-scene look: greyscale render + plain tile. */
   muted?: boolean
   /** Portrait initial shown when the scene has no tip (defaults to `name`). */
@@ -91,7 +90,7 @@ export function SceneLabel({
         <SceneTile
           scenePath={scenePath}
           name={fallbackName ?? name}
-          genesis={genesis}
+          offsetY={offsetY}
           size={size === 'lg' ? 'md' : 'sm'}
           muted={muted}
         />

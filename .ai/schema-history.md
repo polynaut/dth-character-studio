@@ -206,6 +206,15 @@ of that file ~12k tokens to scroll past.
       a no-op override that would silently pin that scene. The v35 step drops
       exactly those blocks (guarded on `preserve.morphs` still being present,
       so it is idempotent).
+ 36 — ADDED `imageOffsetY` (number, default 0): a per-character vertical
+      framing nudge for every picture of that character, as a signed
+      percentage of the picture itself. Replaces the per-GENERATION tip
+      framing shipped in #860, which was the wrong model — Daz frames a
+      figure by how TALL it is, not by which Genesis it is, so two G9
+      characters of different heights need different crops and no table
+      can predict either. Additive with a zod default, so no migration
+      step: a definition written before this reads back at 0, which IS
+      the framing every character had.
 ```
 
 ## Generated-runtime versions (`RUNTIME_VERSION`)
