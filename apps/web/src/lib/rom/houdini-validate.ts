@@ -131,12 +131,17 @@ export function validateHoudiniProject(
     const first = csvMismatches[0]
     const expected = `${normalizeScanPath(first.dth).slice(0, -'.dth'.length)}_pose_asset.csv`
     const n = csvMismatches.length
+    const [got, want] = contrastNames(first.csv, expected)
     problems.push({
       code: 'csv-mismatch',
       label:
         `${n === 1 ? 'A PoseAsset node reads' : `${n} PoseAsset nodes read`} another export set's CSV ` +
-        `(${baseName(first.csv)} instead of ${baseName(expected)}) — wrong frames the moment the scenes' ` +
-        `ROMs differ. Point it at ${expected}.`,
+        `(${got} instead of ${want}) — wrong frames the moment the scenes' ROMs differ. ` +
+        // Each mismatched node has its OWN sibling target, so a plural label
+        // must not command one path for all of them.
+        (n === 1
+          ? `Point it at ${expected}.`
+          : `Each belongs beside its own network's .dth — the first at ${expected}.`),
     })
   }
 
@@ -190,10 +195,27 @@ function normalizeScanPath(path: string): string {
   return path.trim().replace(/\\/g, '/').toLowerCase()
 }
 
+/** Both paths' file names for the "(got instead of want)" contrast — with the
+ *  parent folder prepended when the file names alone are identical: two sets
+ *  delivering the same base name, or a project moved from an old export root,
+ *  would otherwise read "(x_pose_asset.csv instead of x_pose_asset.csv)". */
+function contrastNames(actual: string, expected: string): [string, string] {
+  const a = baseName(actual)
+  const e = baseName(expected)
+  if (a !== e) return [a, e]
+  return [tailName(actual), tailName(expected)]
+}
+
 /** One path's file name — for the tooltip; the full path is in the label once. */
 function baseName(path: string): string {
   const norm = normalizeScanPath(path)
   return norm.slice(norm.lastIndexOf('/') + 1)
+}
+
+/** The last two segments of a path — `<set folder>/<file>`. */
+function tailName(path: string): string {
+  const parts = normalizeScanPath(path).split('/')
+  return parts.slice(-2).join('/')
 }
 
 /** Basenames, capped — this goes in a tooltip, and a project missing a whole

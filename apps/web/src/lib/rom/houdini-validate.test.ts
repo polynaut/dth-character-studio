@@ -94,6 +94,42 @@ describe('validateHoudiniProject', () => {
     ).toEqual(HEALTHY)
   })
 
+  it('qualifies the contrast with the set folder when the file names alone are identical', () => {
+    // The contract fixture's shape — and the moved-project case: same delivered
+    // base name, wrong set folder. Bare basenames would read
+    // "(kira_pose_asset.csv instead of kira_pose_asset.csv)".
+    const health = validateHoudiniProject(
+      scanned({
+        poseAssets: [
+          {
+            dth: 'd:/chars/kira/houdini/daz-export/kirayoga/kira.dth',
+            csv: 'd:/chars/kira/houdini/daz-export/kiradefault_g9_gp/kira_pose_asset.csv',
+          },
+        ],
+      }),
+      CHAR,
+    )
+    expect(health.ok).toBe(false)
+    expect(health.summary).toContain('kiradefault_g9_gp/kira_pose_asset.csv instead of kirayoga/kira_pose_asset.csv')
+  })
+
+  it("several mismatched nodes are counted, and each is sent to its OWN network's sibling", () => {
+    const health = validateHoudiniProject(
+      scanned({
+        poseAssets: [
+          { dth: 'd:/p/thick/kira_thick.dth', csv: 'd:/p/primary/kira_pose_asset.csv' },
+          { dth: 'd:/p/yoga/kira_yoga.dth', csv: 'd:/p/primary/kira_pose_asset.csv' },
+        ],
+      }),
+      CHAR,
+    )
+    expect(health.ok).toBe(false)
+    expect(health.summary).toContain('2 PoseAsset nodes read')
+    // No single "Point it at" for a plural mismatch — the targets differ.
+    expect(health.summary).toContain("Each belongs beside its own network's .dth")
+    expect(health.summary).toContain('d:/p/thick/kira_thick_pose_asset.csv')
+  })
+
   it('a blank or unwired PoseAsset pair is not a fault — and neither is an old entry without the field', () => {
     // Blank csv is the blank-parms story; '' dth is an unwired network; [] is
     // "not known" (a pre-v7 stored scan, or a DazToHue without the CSV parm).

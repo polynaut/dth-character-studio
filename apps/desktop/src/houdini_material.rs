@@ -195,9 +195,6 @@ pub struct PrefillResult {
     pub backup_path: String,
 }
 
-/// How portable a project's stored file references are.
-///
-/// Computed by the SAME helpers `repath` runs (in dry mode), so the Defaults
 /// One PoseAsset node's CSV parm, paired with the `.dth` its OWN network
 /// imports (both normalized lowercase by the Python; '' = not wired / blank).
 /// The export run delivers the CSV beside the set it belongs to under the
@@ -210,6 +207,9 @@ pub struct PoseAssetCsvInfo {
     pub csv: String,
 }
 
+/// How portable a project's stored file references are.
+///
+/// Computed by the SAME helpers `repath` runs (in dry mode), so the Defaults
 /// tab can never promise a number the action then doesn't deliver.
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
