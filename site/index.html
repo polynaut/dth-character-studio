@@ -139,12 +139,15 @@
       <section class="section" id="why">
         <div class="container">
           <!-- Decorative teaser: top of the real character page, fading out so
-               the heading can ride up into it (see .section-teaser). -->
+               the heading can ride up into it (see .section-teaser).
+               Eager on purpose: Chromium never lazy-loads an img whose frame
+               combines the mask fade with the view-timeline entrance — the
+               loader treats it as invisible and the box stays empty forever
+               (measured 2026-08-18; either effect alone is fine). -->
           <div class="section-teaser" aria-hidden="true">
             <img
               src="https://github.com/polynaut/dth-character-studio/raw/main/docs/guide/screenshots/character-settings.png"
               alt=""
-              loading="lazy"
             />
           </div>
           <h2>One definition. Both sides. <em>Always in sync.</em></h2>
@@ -233,11 +236,11 @@
       <!-- ======================================================= About -->
       <section class="section" id="about">
         <div class="container">
+          <!-- Eager on purpose — same lazy-load blindness as the teaser above. -->
           <div class="section-teaser" aria-hidden="true">
             <img
               src="https://github.com/polynaut/dth-character-studio/raw/main/docs/guide/screenshots/character-rom-sections.png"
               alt=""
-              loading="lazy"
             />
           </div>
           <h2>About</h2>
