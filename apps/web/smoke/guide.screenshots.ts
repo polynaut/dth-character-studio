@@ -1,6 +1,16 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
 
-import { buildSeed, DIM_FOLDER, P, UPROJECT, fakeDll, prime, settle, type SeedOptions } from './fixtures.ts'
+import {
+  buildSeed,
+  DIM_FOLDER,
+  FIXED_TIME,
+  P,
+  UPROJECT,
+  fakeDll,
+  prime,
+  settle,
+  type SeedOptions,
+} from './fixtures.ts'
 
 // Documentation screenshots for docs/guide/*. Reuses the smoke Tauri fake +
 // fixture world (one project "Demo", one character "Kira"). Each `test`
@@ -731,6 +741,14 @@ test('dth-export-running', async ({ page }) => {
   const toast = page.locator('[data-sonner-toast]')
   await toast.first().locator('[data-close-button]').click()
   await expect(toast).toHaveCount(0)
+  // Age the run. `startedAtMs` was stamped `Date.now()` at Start, and the clock
+  // is PINNED (fixtures.ts) — so the Working button read `00:00` beside a bar
+  // at 13% and a scene already exporting, which is a state the real app cannot
+  // be in. Moving the pinned "now" forward is the honest lever: the run really
+  // did start 3m12s of app-time ago. Timers are not faked by setFixedTime, so
+  // ElapsedSince's 1s tick still repaints it.
+  await page.clock.setFixedTime(new Date(FIXED_TIME.getTime() + 192_000))
+  await expect(page.getByRole('button', { name: /Working/ })).toContainText('03:12')
   // `still`: the Working button spins, and a running animation would land on a
   // different frame every regeneration.
   await shootTopThrough(
