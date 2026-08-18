@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest'
 import {
   failedMorphKeysByScene,
   failedMorphKeysForScene,
+  matchLinkedScene,
   mergeRomRunLogs,
   morphKey,
   parseRomRunLogText,
@@ -342,5 +343,23 @@ describe('failedMorphKeysByScene / failedMorphKeysForScene — red rows per SELE
   it('a clean log yields nothing to mark', () => {
     expect(failedMorphKeysByScene(log([sceneRun(SCENE_A, [])]))).toBeUndefined()
     expect(failedMorphKeysForScene(undefined, SCENE_A)).toBeUndefined()
+  })
+})
+
+describe("matchLinkedScene — the report's click resolves the log spelling to the STORED one", () => {
+  // selectScene honors ONLY the stored spelling (linkedScenes.includes is an
+  // exact string match), while the log carries Daz's Scene.getFilename() —
+  // forward slashes. A raw selectScene(run.scene) silently no-oped back to the
+  // primary scene, which under per-scene scoping means the clicked failure's
+  // red rows never appeared at all.
+  const stored = 'D:\\Proj\\Kira\\daz3d\\KiraSummer.duf'
+
+  it('the RAW Daz spelling (forward slashes, different case) finds the stored spelling', () => {
+    expect(matchLinkedScene([SCENE_A, stored], 'd:/proj/kira/daz3d/kirasummer.duf')).toBe(stored)
+  })
+
+  it('an untagged run or an unlinked scene resolves to nothing — reveal in place', () => {
+    expect(matchLinkedScene([SCENE_A, stored], '')).toBeUndefined()
+    expect(matchLinkedScene([SCENE_A], 'D:/proj/Kira/daz3d/Unlinked.duf')).toBeUndefined()
   })
 })

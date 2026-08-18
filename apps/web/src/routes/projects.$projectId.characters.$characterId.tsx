@@ -41,7 +41,7 @@ import { DazSceneField } from '#/components/daz-scene-field.tsx'
 import { HoudiniProjectsField } from '#/components/houdini-projects-field.tsx'
 import { characterFolderDisplay, characterScriptsDisplay } from '#/lib/character-paths.ts'
 import { displayPath, parentDir } from '#/lib/path.ts'
-import { failedMorphKeysForScene } from '#/lib/rom/run-log.ts'
+import { failedMorphKeysForScene, matchLinkedScene } from '#/lib/rom/run-log.ts'
 import { repointCharacterPaths } from '#/lib/rom/storage.ts'
 import { useCharacterDraft } from '#/lib/use-character-draft.ts'
 import { useDetectedFiles } from '#/lib/use-detected-files.ts'
@@ -328,13 +328,16 @@ function CharacterPage({ onImportRemount }: { onImportRemount: () => void }) {
   const detectedCount = detect.detected.scenes.length + detect.detected.houdini.length
 
   /** A failed morph clicked in the report: switch to the scene that produced it
-   *  FIRST (the dial that failed is dialed in that scene, and an override-added
-   *  row only exists in its own scene's grid), then send the reveal signal. An
-   *  untagged run (unsaved scene / pre-v54 log) names no scene, so it reveals
-   *  in place. */
+   *  FIRST (the failure's red rows only show with that scene selected, and an
+   *  override-added row only exists in its own scene's grid), then send the
+   *  reveal signal. The log's scene spelling must be resolved to the STORED one
+   *  (matchLinkedScene) — selectScene honors nothing else, and a raw log
+   *  spelling silently no-oped back to the primary. An untagged run (unsaved
+   *  scene / pre-v54 log) or an unlinked scene reveals in place. */
   const revealFailure = useCallback(
     (key: string, scene: string) => {
-      if (scene) sceneSel.selectScene(scene)
+      const linked = matchLinkedScene(sceneSel.linkedScenes, scene)
+      if (linked) sceneSel.selectScene(linked)
       runLog.revealFailedMorph(key)
     },
     [sceneSel, runLog],

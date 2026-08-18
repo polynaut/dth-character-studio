@@ -180,7 +180,12 @@ backup first.
     `''`) can't be pinned on a scene and marks every grid — the honest
     fallback. The report card can therefore sit over an all-clean grid when a
     non-failing scene is selected; its copy says "with the reporting scene
-    selected", and clicking a failure switches to that scene first.
+    selected", and clicking a failure switches to that scene first — via
+    `matchLinkedScene`, because the log carries Daz's `Scene.getFilename()`
+    spelling (forward slashes) and `selectScene` honors only the character's
+    STORED spelling: a raw `selectScene(run.scene)` silently no-oped back to
+    the primary, and under per-scene scoping that left the clicked failure's
+    red rows unreachable.
   - The contract identity matching rests on: `logRunFailedMorph` call sites
     must log the definition's VERBATIM `node`/`prop` (keyDatas carry them
     verbatim — `nodeName: morph.node` — as does the art-direction path). An

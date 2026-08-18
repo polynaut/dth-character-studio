@@ -176,6 +176,25 @@ export function failedMorphKeysForScene(
   return new Set([...own, ...untagged])
 }
 
+/**
+ * A run's scene resolved to the character's STORED spelling — the only spelling
+ * `selectScene`/`effectiveScene` honor (`linkedScenes.includes` is an exact
+ * string match). The log's spelling is Daz's `Scene.getFilename()` — forward
+ * slashes — while the stored one came from the picker, so on a real Windows
+ * path they never match raw and a raw `selectScene(run.scene)` silently
+ * no-oped back to the primary scene (.ai/gotchas-web.md; same resolution as
+ * `buildExecuteJob`). Undefined when the scene is untagged or no longer linked
+ * — the caller reveals in place instead of falsely switching.
+ */
+export function matchLinkedScene(
+  linkedScenes: ReadonlyArray<string>,
+  scene: string,
+): string | undefined {
+  if (!scene) return undefined
+  const key = normalizeSceneKey(scene)
+  return linkedScenes.find((s) => normalizeSceneKey(s) === key)
+}
+
 /** The failed morphs of one raw log record. */
 export function parseFailedMorphs(value: unknown): Array<RomRunFailedMorph> {
   if (!Array.isArray(value)) return []
