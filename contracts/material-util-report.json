@@ -17,6 +17,16 @@
         "KiraDefault",
         "KiraYoga"
       ],
+      "poseAssets": [
+        {
+          "dth": "d:/chars/kira/houdini/daz-export/kiradefault_g9_gp/kira.dth",
+          "csv": "d:/chars/kira/houdini/daz-export/kiradefault_g9_gp/kira_pose_asset.csv"
+        },
+        {
+          "dth": "d:/chars/kira/houdini/daz-export/kirayoga/kira.dth",
+          "csv": "d:/chars/kira/houdini/daz-export/kiradefault_g9_gp/kira_pose_asset.csv"
+        }
+      ],
       "refs": {
         "collapsible": 131,
         "foreign": 0,
@@ -122,6 +132,7 @@
       "fps": 0.0,
       "imports": [],
       "exportSets": [],
+      "poseAssets": [],
       "refs": {
         "collapsible": 0,
         "foreign": 0,

@@ -156,8 +156,12 @@ export function scanCacheKey(
  *     scan, which is a legitimate value ("no export nodes") and therefore would
  *     have been served forever. A version is owed for a scan that starts
  *     answering CORRECTLY, not only for one that starts answering at all.
+ * 7 — + `poseAssets` (each PoseAsset node's CSV parm, paired with its own
+ *     network's `.dth`). An older entry answers `[]`, which the csv-mismatch
+ *     check correctly treats as "not known" — and without the bump it would
+ *     stay not-known forever, exactly the v2 trap again.
  */
-export const SCAN_ANSWER_VERSION = 6
+export const SCAN_ANSWER_VERSION = 7
 
 /**
  * Fold the installed operator libraries into one comparable string — name, mtime

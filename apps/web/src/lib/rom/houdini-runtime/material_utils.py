@@ -1131,6 +1131,7 @@ def op_scan(request):
             "fps": 0.0,
             "imports": [],
             "exportSets": [],
+            "poseAssets": [],
             # Every key `projectRefInfoSchema` names, because this dict is what a
             # project that FAILS to load ships with. `hipRelative` was missing
             # here and is not defaulted on the zod side, so one unreadable `.hip`
@@ -1154,6 +1155,7 @@ def op_scan(request):
             entry["fps"] = _scene_fps()
             entry["imports"] = _scene_dth_imports()
             entry["exportSets"] = _scene_export_sets()
+            entry["poseAssets"] = _scene_pose_assets()
             entry["refs"] = _project_ref_info(export_dir)
             entry["prefill"] = _prefill_scan()
         except Exception as exc:
@@ -1671,6 +1673,63 @@ def _network_character_name(network):
         if value:
             return value
     return ""
+
+
+def _network_dth(network):
+    """The `.dth` one DazToHue network imports — its import node's
+    `import_character_dtu_file`, expanded and normalized exactly like
+    `_scene_dth_imports` (normpath + lowercase, never realpath: the value is
+    cached for months and must not bake in one machine's mount layout).
+    '' when the network has no wired import node."""
+    for child in network.children():
+        # Same exclusion as everywhere else: `daztohuegroomimport` does NOT
+        # contain `daztohueimport`.
+        if "daztohueimport" not in child.type().name().lower():
+            continue
+        parm = child.parm("import_character_dtu_file")
+        if parm is None:
+            continue
+        try:
+            value = str(parm.evalAsString() or "").strip()
+        except Exception:
+            continue
+        if value:
+            return _norm_path(os.path.normpath(value)).lower()
+    return ""
+
+
+def _scene_pose_assets():
+    """Every PoseAsset node's CSV parm, paired with the `.dth` its OWN network
+    imports — the studio's csv-consistency check reads this.
+
+    The export run always delivers the CSV BESIDE the set it belongs to, under
+    the set's own base name (`<exportName>_pose_asset.csv` — the csvCopyBlock
+    in @dth/rom's dsa.ts), and generation/prefill fill the parm the same way.
+    So a csv parm that is NOT the sibling `<name>_pose_asset.csv` of the
+    network's `.dth` reads another set's CSV — wrong frame layout the moment
+    the scenes diverge, and wrong baked reference paths even while they don't.
+    The pairing is per NETWORK (the poseasset node's parent), because one hip
+    can import several scenes.
+
+    Nodes whose HDA predates the CSV-path parm (DazToHue 2.5) contribute
+    nothing — absence of the parm is a release gap, not a fault. A blank parm
+    is emitted as '' (the blank-parms check owns that story)."""
+    found = []
+    for node in hou.node("/").allSubChildren():
+        if "daztohueposeasset" not in node.type().name().lower():
+            continue
+        parm = node.parm("pose_asset_csv_file_path")
+        if parm is None:
+            continue
+        try:
+            value = str(parm.evalAsString() or "").strip()
+        except Exception:
+            continue
+        csv = _norm_path(os.path.normpath(value)).lower() if value else ""
+        parent = node.parent()
+        dth = _network_dth(parent) if parent is not None else ""
+        found.append({"dth": dth, "csv": csv})
+    return found
 
 
 def _scene_export_sets():
