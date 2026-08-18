@@ -1028,9 +1028,17 @@ v80 — no unattended carrier opens a modal, and the missing-runtime message sto
       that probes the relative answer first and falls back to the studio's
       install root baked in at generation time; the failure report names every
       probed location AND the raw self-reported folder (that self-report was
-      the entire diagnosis). The installed runtime/root scripts get their
-      sibling includes rewritten to the ABSOLUTE install root instead of
-      `../../.<Dep>.dsa` (copyRuntimeFiles), removing their own
-      getScriptFileName() dependence. No schema change, no migration step —
-      regeneration reads live settings, so Refresh assets rebakes correctly.
+      the entire diagnosis). The per-run `.dth_scan_run.dsa` resolves the same
+      way against its own folder (it is a batch row too). The installed
+      runtime/root scripts get their sibling includes rewritten to the ABSOLUTE
+      install root instead of `../../.<Dep>.dsa` (copyRuntimeFiles), removing
+      their own getScriptFileName() dependence — and the two hidden bulk
+      carriers additionally get `scriptDir` BAKED (`__DTH_RUNTIME_DIR__`),
+      because that is how .Scan_Scene_Bulk locates dth_scan_config.json and how
+      the index build derives its content root: the same lie, a data path
+      instead of an include. Because the bake is absolute, the install marker
+      now stamps the destination too — a moved/renamed Daz library carries the
+      marker along, and an install skipped on that stamp would keep paths
+      naming the old root. No schema change, no migration step — regeneration
+      reads live settings, so Refresh assets rebakes correctly.
 ```

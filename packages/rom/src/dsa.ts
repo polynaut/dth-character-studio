@@ -1182,6 +1182,27 @@ var dthRuntimeDir = dthResolveRuntimeDir();`
 }
 
 /**
+ * The whole runtime-locating block for the scan-only carriers (Export_/Groom_):
+ * {@link runtimeDirSnippet} plus the include lines their `indexSync` calls for —
+ * or NOTHING at all, because those two scripts include no runtime unless a scan
+ * is attached. Emitting the parts separately left three blank lines in every
+ * scan-less script, so the whole block (its surrounding blank lines included)
+ * lives or dies together.
+ *
+ * The sentinel is `.DthUtils.dsa` in both cases: it is the first include when
+ * `morphIndexDir` is set, and `.DthProducts.dsa` pulls it in itself otherwise —
+ * and the runtime installs as one set, so any member stands for the root.
+ */
+function runtimeIncludeBlock(runtimeRootAbs: string, indexSync?: IndexSyncOptions): string {
+  const scan = indexSync?.morphIndexDir
+    ? '\ninclude(dthRuntimeDir + "/.DthUtils.dsa");\ninclude(dthRuntimeDir + "/.DthScanMorphs.dsa");'
+    : ''
+  const products = indexSync?.products ? '\ninclude(dthRuntimeDir + "/.DthProducts.dsa");' : ''
+  if (!scan && !products) return ''
+  return `\n${runtimeDirSnippet(runtimeRootAbs, '.DthUtils.dsa')}${scan}${products}\n`
+}
+
+/**
  * The settle helper emitted into every generated ROM/export script (inline —
  * the Export_ scripts don't include the runtime, so nothing shared can carry
  * it): pump Daz's event loop for `nMs` so work queued by the PREVIOUS step (a
@@ -1914,12 +1935,7 @@ export function toExportScriptDsa(
 // Runs the DTH Exporter on the ROM already built on the timeline and delivers
 // the PoseAsset CSV — it does NOT rebuild the ROM. Run it after the ROM script
 // (ROM_${characterScriptName(character)}.dsa) in the same Daz session.
-
-${indexSync?.morphIndexDir || indexSync?.products ? runtimeDirSnippet(runtimeRootAbs, '.DthUtils.dsa') : ''}${indexSync?.morphIndexDir ? `
-include(dthRuntimeDir + "/.DthUtils.dsa");
-include(dthRuntimeDir + "/.DthScanMorphs.dsa");` : ''}${indexSync?.products ? `
-include(dthRuntimeDir + "/.DthProducts.dsa");` : ''}
-
+${runtimeIncludeBlock(runtimeRootAbs, indexSync)}
 var dthProgressLogPath = ${dazJson(progressLogPath)};
 // The studio's interrupt flag for this character — see EXPORT_CANCEL_FILE.
 var dthCancelPath = ${dazJson(cancelFlagPath(metaDirAbs))};
@@ -2070,12 +2086,7 @@ export function toGroomExportScriptDsa(
 // item stays FITTED, as worn), exports its 2-frame Alembic as <Name>_Hair_<item>
 // via the DTH Exporter, restores the scene. Run it on the character's scene with
 // the figure selected; the ROM is NOT needed.
-
-${indexSync?.morphIndexDir || indexSync?.products ? runtimeDirSnippet(runtimeRootAbs, '.DthUtils.dsa') : ''}${indexSync?.morphIndexDir ? `
-include(dthRuntimeDir + "/.DthUtils.dsa");
-include(dthRuntimeDir + "/.DthScanMorphs.dsa");` : ''}${indexSync?.products ? `
-include(dthRuntimeDir + "/.DthProducts.dsa");` : ''}
-
+${runtimeIncludeBlock(runtimeRootAbs, indexSync)}
 ${sceneGuardSnippet(character)}
 ${openSceneFileSnippet()}${romAnimationSourceSnippet(romAnimationSourceMap(character))}
 var dthAction = MainWindow.getActionMgr().findAction("DazToHueExporterAction");

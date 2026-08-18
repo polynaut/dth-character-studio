@@ -6,8 +6,6 @@
 // the PoseAsset CSV — it does NOT rebuild the ROM. Run it after the ROM script
 // (ROM_ElectraG9_G9.dsa) in the same Daz session.
 
-
-
 var dthProgressLogPath = "";
 // The studio's interrupt flag for this character — see EXPORT_CANCEL_FILE.
 var dthCancelPath = "C:/DTH/Project/.dcsmeta/characters/electra-g9/.dth_export_cancel";

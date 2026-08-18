@@ -407,12 +407,35 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   cold-start window, and the misleading "expected at" path (pre-v80 reports)
   sent earlier investigations at the install, which was never broken. WHY the
   API answers a Daz-internal path there is unmeasured (plausibly Daz's own
-  startup scripting still in flight — inference, not fact). Since runtime v84
-  nothing load-bearing trusts it alone: generated scripts probe the relative
-  answer and fall back to the baked install root (`runtimeDirSnippet`,
-  `packages/rom/src/dsa.ts`), installed root/runtime scripts use absolute
-  includes, and the failure report prints the raw self-reported folder so a
-  recurrence carries its own evidence.
+  startup scripting still in flight — inference, not fact).
+
+  Since runtime v84 nothing **a Runner batch row** relies on trusts it alone.
+  That covers two DIFFERENT uses, and the include is only the louder one:
+  - *Finding the runtime.* Generated scripts probe the relative answer and fall
+    back to an install root baked in at generation time (`runtimeDirSnippet`,
+    `packages/rom/src/dsa.ts`); the per-run `.dth_scan_run.dsa` does the same
+    against its own folder (`lib/rom/scan-run.ts`); the installed runtime and
+    root scripts get absolute includes (`copyRuntimeFiles`). The failure report
+    prints the raw self-reported folder, so a recurrence carries its evidence.
+  - *Deriving a data path.* `.Scan_Scene_Bulk.dsa` finds `dth_scan_config.json`
+    through `scriptDir`, and `Build_Genesis_Index*.dsa` derives its content root
+    the same way. Both are batch rows, so both are **baked** at install time
+    (`__DTH_RUNTIME_DIR__`), not read back from the API. A fix that repaired only
+    the includes would have left these failing in the identical window, with the
+    identical misleading message.
+
+  **When adding anything that runs as a batch row, ask which of the two it is** —
+  the trap is that a path derived from `getScriptFileName()` looks nothing like
+  an include and is just as broken. What still trusts it, deliberately: the
+  `OUT*.csv` debug dumps (`DthOptions.dsa`, `DthWorkflow.dsa`), which are off by
+  default and write nothing the studio reads.
+
+  Two consequences worth keeping: the absolute bake means the marker stamp in
+  `copyRuntimeFiles` must include the destination — a moved/renamed Daz library
+  carries the marker inside the folder, and absolute paths, unlike the `../../`
+  form they replaced, do not survive the move. And a script that is *installed*
+  can be baked outright, while a *generated* one still probes relative first, so
+  a relocated install keeps using the runtime sitting beside it.
 - **The stock figure/graft content paths are not what you'd guess** (measured
   2026-07-29 against a real "My DAZ 3D Library"): the G8 base figures are
   `People/Genesis 8 <Sex>/Genesis 8 Basic <Sex>.duf` (not `Genesis 8 <Sex>.duf`), and

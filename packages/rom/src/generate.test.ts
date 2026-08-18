@@ -571,6 +571,113 @@ describe('toCharacterScriptDsa', () => {
   })
 })
 
+// The cold-start include fallback (runtime v84). getScriptFileName() can answer
+// with a Daz-internal path on the first row of a Runner batch in a Daz that is
+// still starting, so every generated script probes the relative location and
+// falls back to the install root baked in HERE, at generation time. The goldens
+// pin one already-clean root; these pin the normalization and the wiring, which
+// a golden of a single tidy value cannot.
+describe('the baked runtime-root fallback', () => {
+  const baked = (content: string): string =>
+    /var dthBakedRuntimeDir = "([^"]*)";/.exec(content)?.[1] ?? '<absent>'
+
+  it('forward-slashes the Windows root and drops a trailing separator', () => {
+    // What the host actually hands over: a `join()`ed Windows path. DzFile/DzDir
+    // want '/', and the probe concatenates `+ "/.DthWorkflow.dsa"` rather than
+    // joining — a surviving trailing slash would probe a `//` path.
+    const content = toCharacterScriptDsa(
+      makeCharacter(),
+      {},
+      FRAMES,
+      'D:\\lib\\Electra',
+      {},
+      {},
+      undefined,
+      '',
+      undefined,
+      '',
+      'D:\\DAZ 3D\\My DAZ 3D Library\\Scripts\\DTH-Character-Studio\\',
+    ).content
+    expect(baked(content)).toBe('D:/DAZ 3D/My DAZ 3D Library/Scripts/DTH-Character-Studio')
+    expect(content).toContain('(new DzFile(dthBakedRuntimeDir + "/.DthWorkflow.dsa")).exists()')
+  })
+
+  it('bakes an EMPTY root in a pure/web context, which switches the fallback off', () => {
+    // No host = no install root to promise. The resolver must then behave
+    // exactly as it did before v84 rather than probe "" and resolve "/.Dth…".
+    const content = toCharacterScriptDsa(makeCharacter()).content
+    expect(baked(content)).toBe('')
+    expect(content).toContain('if (dthBakedRuntimeDir != "" &&')
+  })
+
+  it('reaches EVERY carrier generateAll emits, not just the ROM script', () => {
+    // The bug fires on the first row of a Runner BATCH — the bulk carriers are
+    // the ones that actually meet it. A root wired only into the ROM script
+    // would look fixed in the golden and still fail in the field.
+    const products = {
+      dimManifestPath: '',
+      outputDir: 'C:/out',
+      dazLibraryFolder: '',
+      characterId: 'test',
+      characterName: 'Electra G9',
+      genesis: 'G9',
+    }
+    const character = makeCharacter({
+      exportPath: 'X:\\exports',
+      exportWithRomScript: false,
+      sceneOverrides: [
+        { scenePath: 'X:\\scenes\\Karen.duf', rom: {}, hair: [{ nodeLabel: 'Cap' }] },
+      ],
+    })
+    const root = 'C:/Lib/Scripts/DTH-Character-Studio'
+    const files = generateAll(
+      character,
+      {},
+      FRAMES,
+      'D:\\lib\\Electra',
+      undefined,
+      { dimManifestPath: '', outputDir: 'C:/out', dazLibraryFolder: '' },
+      {},
+      {},
+      'D:\\lib\\Electra',
+      '',
+      { morphIndexDir: 'C:/idx', products },
+      '',
+      root,
+    )
+    const dsa = files.filter((f) => f.fileName.endsWith('.dsa'))
+    // Named, not counted: the point is that the BULK carriers (the rows that
+    // actually meet the cold start) and the scan scripts are covered, and a
+    // count would still pass if one of them silently stopped being emitted.
+    expect(dsa.map((f) => f.fileName).sort()).toEqual([
+      '.Build_ROM_Animation.dsa',
+      '.Bulk_Export_Only.dsa',
+      '.Bulk_ROM_Export.dsa',
+      'Export_ElectraG9_G9.dsa',
+      'Export_Hair_ElectraG9_G9.dsa',
+      'ROM_ElectraG9_G9.dsa',
+      'Scan_Products_ElectraG9.dsa',
+    ])
+    for (const file of dsa) {
+      expect(file.content, file.fileName).toContain(`var dthBakedRuntimeDir = "${root}";`)
+    }
+  })
+
+  it('emits no runtime block at all in a scan-less Export_ script', () => {
+    // Export_/Groom_ include the runtime only for a scan. With none attached
+    // there is nothing to resolve — and no stray blank lines where the block
+    // would have been (the shape the goldens pin).
+    const content = toExportScriptDsa(
+      makeCharacter({ exportPath: 'X:/exports' }),
+      FRAMES,
+      'D:\\lib\\Electra',
+    ).content
+    expect(content).not.toContain('dthRuntimeDir')
+    expect(content).not.toContain('dthBakedRuntimeDir')
+    expect(content).not.toMatch(/\n\n\n/)
+  })
+})
+
 describe('toScanProductsScriptDsa', () => {
   const opts = {
     dimManifestPath: 'E:\\DAZ 3D\\Install Manager\\ManifestFiles',

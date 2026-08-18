@@ -20,12 +20,14 @@
 //
 // The output path is baked in by the studio when it installs this script.
 
-var sSelfDir = new DzFileInfo(getScriptFileName()).path();
-var dir_self = new DzDir(sSelfDir);
+// dir_self only shapes the include lines for the install-time rewrite; the
+// content root below comes from the studio's baked path, not from
+// getScriptFileName() (see Scan_Scene_Bulk.dsa).
+var dir_self = new DzDir(new DzFileInfo(getScriptFileName()).path());
 include(dir_self.filePath(".DthUtils.dsa"));
 include(dir_self.filePath(".DthScanMorphs.dsa"));
 
 DthBuildGenesisIndex({
 	outDir: "__DTH_APPDATA_DIR__",
-	scriptDir: String(sSelfDir)
+	scriptDir: "__DTH_RUNTIME_DIR__"
 });

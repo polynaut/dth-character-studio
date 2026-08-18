@@ -25,12 +25,16 @@
 // in by the studio when it installs this script.
 
 // .DthUtils.dsa MUST come first: .DthProducts.dsa pulls it in itself when it
-// isn't loaded yet, and its include is rewritten for a character script two
-// folders down - from this root-level script that path would resolve outside
-// the library. Loading utils first makes that include a no-op (it guards on
-// `typeof verbose`).
-var sSelfDir = new DzFileInfo(getScriptFileName()).path();
-var dir_self = new DzDir(sSelfDir);
+// isn't loaded yet, and loading utils first makes that include a no-op (it
+// guards on `typeof verbose`) instead of a second load of the same file.
+//
+// dir_self is kept only so the include lines keep the shape the install-time
+// rewrite matches - it repoints each ".Dep.dsa" to the ABSOLUTE installed path,
+// which DzDir.filePath() passes through unchanged. Nothing here may trust
+// getScriptFileName(): on the first row of a Runner batch in a cold-started Daz
+// it answers with a Daz-internal path (see runtime-install.ts), and this script
+// IS such a first row. The studio bakes the real root in below.
+var dir_self = new DzDir(new DzFileInfo(getScriptFileName()).path());
 include(dir_self.filePath(".DthUtils.dsa"));
 include(dir_self.filePath(".DthScanMorphs.dsa"));
 include(dir_self.filePath(".DthProducts.dsa"));
@@ -121,5 +125,8 @@ function DthScanSceneBulk(config) {
 
 DthScanSceneBulk({
 	outDir: "__DTH_APPDATA_DIR__",
-	scriptDir: String(sSelfDir)
+	// Baked by the studio at install time, NOT derived from getScriptFileName():
+	// this is where dth_scan_config.json sits, and a cold-start lie would make
+	// the row fail "scan config missing" pointing at Daz's own install tree.
+	scriptDir: "__DTH_RUNTIME_DIR__"
 });

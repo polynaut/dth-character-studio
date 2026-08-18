@@ -895,6 +895,74 @@ describe('copyRuntimeFiles', () => {
     expect(files.get(`${root}/.dth-runtime-installed`)).toBe(marker)
   })
 
+  // Runtime v84. Every include is anchored to the ABSOLUTE install root instead
+  // of climbing `../../` from getScriptFileName(), which on the first row of a
+  // Runner batch in a cold-started Daz answers with a Daz-internal path. The
+  // rewrite is the entire install half of that fix and had no test at all.
+  it('anchors every runtime include to the ABSOLUTE root, in both script families', async () => {
+    await storage.copyRuntimeFiles(root)
+
+    // A RUNTIME file's bare sibling reference ("DthUtils.dsa" — the shape the
+    // sources use, since inside an include() dir_self is the INVOKING script's
+    // folder, not this file's).
+    const workflow = files.get(`${root}/.DthWorkflow.dsa`) as string
+    expect(workflow).toContain(`"${root}/.DthUtils.dsa"`)
+    expect(workflow).not.toContain('"../../.DthUtils.dsa"')
+    expect(workflow).not.toContain('filePath ("DthUtils.dsa")')
+
+    // A ROOT-LEVEL script's already-dot-prefixed reference (".DthUtils.dsa").
+    // Same anchoring, different search string — a rewrite that handled only the
+    // first family would leave these resolving through the lying API.
+    const bulk = files.get(`${root}/.Scan_Scene_Bulk.dsa`) as string
+    expect(bulk).toContain(`"${root}/.DthUtils.dsa"`)
+    expect(bulk).toContain(`"${root}/.DthProducts.dsa"`)
+    expect(bulk).not.toContain('filePath(".DthUtils.dsa")')
+
+    // No file may still be walking up out of the root.
+    for (const [path, content] of files) {
+      if (typeof content === 'string' && path.endsWith('.dsa')) {
+        expect(content, path).not.toContain('../../.Dth')
+      }
+    }
+  })
+
+  it('bakes the install root into the bulk carriers’ scriptDir', async () => {
+    await storage.copyRuntimeFiles(root)
+
+    // scriptDir is how .Scan_Scene_Bulk finds dth_scan_config.json and how the
+    // index build derives its content root. Both run as Runner batch rows — the
+    // one place getScriptFileName() is known to lie — so it is baked, not
+    // derived. A leftover token would make the path literally "__DTH_RUNTIME_DIR__".
+    for (const name of ['.Scan_Scene_Bulk.dsa', '.Build_Genesis_Index_Bulk.dsa']) {
+      const content = files.get(`${root}/${name}`) as string
+      expect(content, name).toContain(`scriptDir: "${root}"`)
+      expect(content, name).not.toContain('__DTH_RUNTIME_DIR__')
+      expect(content, name).not.toContain('scriptDir: String(sSelfDir)')
+    }
+    // The visible twin gets it too — one source of truth for the content root.
+    expect(files.get(`${root}/Build_Genesis_Index.dsa`)).toContain(`scriptDir: "${root}"`)
+  })
+
+  it('reinstalls when the install MOVED, even though the marker travelled with it', async () => {
+    // The v84 bake is absolute, so a marker blind to the destination is now a
+    // silent breakage: renaming or moving the Daz library carries
+    // `.dth-runtime-installed` along inside the folder, the stamp still matches,
+    // the existence probe still passes — and every baked path names the OLD
+    // root. The `../../` form this replaced survived the move; absolute cannot.
+    await storage.copyRuntimeFiles(root)
+    const moved = '/daz-moved/Scripts/DTH-Character-Studio'
+    for (const [path, content] of [...files]) {
+      if (path.startsWith(`${root}/`)) files.set(path.replace(root, moved), content)
+    }
+    expect(files.get(`${moved}/.DthWorkflow.dsa`)).toContain(`"${root}/.DthUtils.dsa"`)
+
+    await storage.copyRuntimeFiles(moved)
+
+    expect(files.get(`${moved}/.DthWorkflow.dsa`)).toContain(`"${moved}/.DthUtils.dsa"`)
+    expect(files.get(`${moved}/.DthWorkflow.dsa`)).not.toContain(`"${root}/.DthUtils.dsa"`)
+    expect(files.get(`${moved}/.Scan_Scene_Bulk.dsa`)).toContain(`scriptDir: "${moved}"`)
+  })
+
   it('installs Build_Genesis_Index with app-data baked in, and sweeps the retired Scan_Morphs wrappers', async () => {
     // An install from before the merge: the four per-generation wrappers sit
     // visible at the root. They'd still run against the new runtime, so the
