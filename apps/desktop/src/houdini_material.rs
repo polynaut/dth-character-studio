@@ -137,6 +137,13 @@ pub struct MaterialScanProject {
     /// "writes nothing".
     #[serde(default)]
     pub export_sets: Vec<String>,
+    /// Every PoseAsset node's CSV parm, paired with the `.dth` its OWN network
+    /// imports — the studio's csv-consistency check reads this (the export
+    /// delivers the CSV beside the set it belongs to, so the two must be
+    /// siblings). `#[serde(default)]` for the same reason as `imports`: empty
+    /// means "not known", never "no PoseAsset nodes".
+    #[serde(default)]
+    pub pose_assets: Vec<PoseAssetCsvInfo>,
     /// What a repath would do to this project's stored file references.
     pub refs: ProjectRefInfo,
     /// Which DazToHue parms the studio could fill here, and which this
@@ -186,6 +193,18 @@ pub struct PrefillResult {
     pub skipped_set: Vec<String>,
     /// Pre-prefill backup (empty for a dry run, and when nothing changed).
     pub backup_path: String,
+}
+
+/// One PoseAsset node's CSV parm, paired with the `.dth` its OWN network
+/// imports (both normalized lowercase by the Python; '' = not wired / blank).
+/// The export run delivers the CSV beside the set it belongs to under the
+/// set's own base name, so the studio's csv-consistency check flags a csv
+/// that is not the `.dth`'s sibling `<name>_pose_asset.csv`.
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PoseAssetCsvInfo {
+    pub dth: String,
+    pub csv: String,
 }
 
 /// How portable a project's stored file references are.

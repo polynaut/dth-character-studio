@@ -478,6 +478,15 @@ export const materialScanProjectSchema = z.object({
    *  never reached) — never "writes nothing": a reader that treated it as the
    *  latter would quietly decide a run produces no export set at all. */
   exportSets: z.array(z.string()).default([]),
+  /** Every PoseAsset node's CSV parm, paired with the `.dth` its OWN network
+   *  imports (both normalized lowercase; '' = not wired / blank). The export
+   *  run always delivers the CSV beside the set it belongs to under the set's
+   *  own base name, so a csv that is not the `.dth`'s sibling
+   *  `<name>_pose_asset.csv` reads another set's CSV — the csv-mismatch
+   *  check (`houdini-validate.ts`) compares exactly this. Defaulted: empty
+   *  means "not known" (a pre-field stored entry, or an HDA without the CSV
+   *  parm — DazToHue 2.5), never "no PoseAsset nodes". */
+  poseAssets: z.array(z.object({ dth: z.string(), csv: z.string() })).default([]),
   /** What a repath would do to this project's stored file references. */
   refs: projectRefInfoSchema,
   /** Which DazToHue parms the studio could fill here, and which this DazToHue

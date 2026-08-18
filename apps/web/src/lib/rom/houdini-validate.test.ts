@@ -25,6 +25,7 @@ function scanned(over: Partial<MaterialScanProject> = {}): MaterialScanProject {
     fps: 30,
     imports: [],
     exportSets: [],
+    poseAssets: [],
     refs: { collapsible: 0, foreign: 0, broken: [], hipRelative: [], missingTextures: [] },
     prefill: { fillable: [], missing: [] },
     ...over,
@@ -52,6 +53,93 @@ describe('validateHoudiniProject', () => {
     )
     expect(health.problems.map((p) => p.code)).toEqual(['unreadable'])
     expect(health.summary).toContain('hython exited 1')
+  })
+
+  it("flags a PoseAsset reading another export set's CSV — the stale-project case", () => {
+    // The user's measured case: a project generated for the THICK scene before
+    // per-scene overrides existed, its PoseAsset still pointed at the primary
+    // set's CSV. Wrong frames the moment the scenes' ROMs diverge, wrong baked
+    // reference paths even before.
+    const health = validateHoudiniProject(
+      scanned({
+        poseAssets: [
+          {
+            dth: 'd:/proj/kira/houdini/daz-export/thick/kira_thick.dth',
+            csv: 'd:/proj/kira/houdini/daz-export/primary/kira_pose_asset.csv',
+          },
+        ],
+      }),
+      CHAR,
+    )
+    expect(health.ok).toBe(false)
+    expect(health.problems.map((p) => p.code)).toEqual(['csv-mismatch'])
+    expect(health.summary).toContain('d:/proj/kira/houdini/daz-export/thick/kira_thick_pose_asset.csv')
+  })
+
+  it("a PoseAsset reading its own network's sibling CSV is healthy — spelling differences included", () => {
+    expect(
+      validateHoudiniProject(
+        scanned({
+          poseAssets: [
+            {
+              // Backslashes + case survive an old stored entry; the check
+              // re-normalizes rather than trusting the store.
+              dth: 'D:\\proj\\Kira\\houdini\\daz-export\\thick\\Kira_Thick.dth',
+              csv: 'd:/proj/kira/houdini/daz-export/thick/kira_thick_pose_asset.csv',
+            },
+          ],
+        }),
+        CHAR,
+      ),
+    ).toEqual(HEALTHY)
+  })
+
+  it('qualifies the contrast with the set folder when the file names alone are identical', () => {
+    // The contract fixture's shape — and the moved-project case: same delivered
+    // base name, wrong set folder. Bare basenames would read
+    // "(kira_pose_asset.csv instead of kira_pose_asset.csv)".
+    const health = validateHoudiniProject(
+      scanned({
+        poseAssets: [
+          {
+            dth: 'd:/chars/kira/houdini/daz-export/kirayoga/kira.dth',
+            csv: 'd:/chars/kira/houdini/daz-export/kiradefault_g9_gp/kira_pose_asset.csv',
+          },
+        ],
+      }),
+      CHAR,
+    )
+    expect(health.ok).toBe(false)
+    expect(health.summary).toContain('kiradefault_g9_gp/kira_pose_asset.csv instead of kirayoga/kira_pose_asset.csv')
+  })
+
+  it("several mismatched nodes are counted, and each is sent to its OWN network's sibling", () => {
+    const health = validateHoudiniProject(
+      scanned({
+        poseAssets: [
+          { dth: 'd:/p/thick/kira_thick.dth', csv: 'd:/p/primary/kira_pose_asset.csv' },
+          { dth: 'd:/p/yoga/kira_yoga.dth', csv: 'd:/p/primary/kira_pose_asset.csv' },
+        ],
+      }),
+      CHAR,
+    )
+    expect(health.ok).toBe(false)
+    expect(health.summary).toContain('2 PoseAsset nodes read')
+    // No single "Point it at" for a plural mismatch — the targets differ.
+    expect(health.summary).toContain("Each belongs beside its own network's .dth")
+    expect(health.summary).toContain('d:/p/thick/kira_thick_pose_asset.csv')
+  })
+
+  it('a blank or unwired PoseAsset pair is not a fault — and neither is an old entry without the field', () => {
+    // Blank csv is the blank-parms story; '' dth is an unwired network; [] is
+    // "not known" (a pre-v7 stored scan, or a DazToHue without the CSV parm).
+    expect(
+      validateHoudiniProject(
+        scanned({ poseAssets: [{ dth: '', csv: 'd:/x_pose_asset.csv' }, { dth: 'd:/x.dth', csv: '' }] }),
+        CHAR,
+      ),
+    ).toEqual(HEALTHY)
+    expect(validateHoudiniProject(scanned({ poseAssets: [] }), CHAR)).toEqual(HEALTHY)
   })
 
   it('catches a $JOB pointing somewhere else — the copied-project case', () => {

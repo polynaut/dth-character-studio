@@ -39,6 +39,7 @@ export interface HoudiniProjectProblem {
     | 'job-differs'
     | 'fps-differs'
     | 'broken-refs'
+    | 'csv-mismatch'
     | 'hip-relative'
     | 'blank-parms'
     | 'missing-textures'
@@ -109,6 +110,41 @@ export function validateHoudiniProject(
     })
   }
 
+  // The PoseAsset CSV must be the sibling `<name>_pose_asset.csv` of the
+  // `.dth` its OWN network imports: the export run always delivers the CSV
+  // beside the set it belongs to under the set's base name (csvCopyBlock in
+  // @dth/rom's dsa.ts), and the delivered CSV bakes per-set reference paths —
+  // so a PoseAsset reading another set's CSV gets that set's frame layout the
+  // moment the scenes' ROMs diverge (a per-scene override), and that set's
+  // baked paths even while they don't. This is what catches an older project
+  // still pointed at the primary scene's CSV after its scene grew overrides.
+  // A blank csv is the blank-parms story; an unwired network ('' dth) is
+  // unjudgeable; an empty list means "not known" (old stored scan, or a
+  // DazToHue without the CSV parm) — never "consistent".
+  const csvMismatches = project.poseAssets.filter((pair) => {
+    const dth = normalizeScanPath(pair.dth)
+    const csv = normalizeScanPath(pair.csv)
+    if (dth === '' || csv === '' || !dth.endsWith('.dth')) return false
+    return csv !== `${dth.slice(0, -'.dth'.length)}_pose_asset.csv`
+  })
+  if (csvMismatches.length > 0) {
+    const first = csvMismatches[0]
+    const expected = `${normalizeScanPath(first.dth).slice(0, -'.dth'.length)}_pose_asset.csv`
+    const n = csvMismatches.length
+    const [got, want] = contrastNames(first.csv, expected)
+    problems.push({
+      code: 'csv-mismatch',
+      label:
+        `${n === 1 ? 'A PoseAsset node reads' : `${n} PoseAsset nodes read`} another export set's CSV ` +
+        `(${got} instead of ${want}) — wrong frames the moment the scenes' ROMs differ. ` +
+        // Each mismatched node has its OWN sibling target, so a plural label
+        // must not command one path for all of them.
+        (n === 1
+          ? `Point it at ${expected}.`
+          : `Each belongs beside its own network's .dth — the first at ${expected}.`),
+    })
+  }
+
   if (project.refs.hipRelative.length > 0) {
     // NOT broken — these resolve today. They are flagged because `$HIP` encodes
     // the scene's DEPTH (move the .hip one folder down and every one of them
@@ -151,6 +187,35 @@ export function validateHoudiniProject(
   }
 
   return finish(problems)
+}
+
+/** The scan's own normalization (material_utils.py `_norm_path` + lowercase),
+ *  re-applied defensively: stored entries predate any TS-side guarantees. */
+function normalizeScanPath(path: string): string {
+  return path.trim().replace(/\\/g, '/').toLowerCase()
+}
+
+/** Both paths' file names for the "(got instead of want)" contrast — with the
+ *  parent folder prepended when the file names alone are identical: two sets
+ *  delivering the same base name, or a project moved from an old export root,
+ *  would otherwise read "(x_pose_asset.csv instead of x_pose_asset.csv)". */
+function contrastNames(actual: string, expected: string): [string, string] {
+  const a = baseName(actual)
+  const e = baseName(expected)
+  if (a !== e) return [a, e]
+  return [tailName(actual), tailName(expected)]
+}
+
+/** One path's file name — for the tooltip; the full path is in the label once. */
+function baseName(path: string): string {
+  const norm = normalizeScanPath(path)
+  return norm.slice(norm.lastIndexOf('/') + 1)
+}
+
+/** The last two segments of a path — `<set folder>/<file>`. */
+function tailName(path: string): string {
+  const parts = normalizeScanPath(path).split('/')
+  return parts.slice(-2).join('/')
 }
 
 /** Basenames, capped — this goes in a tooltip, and a project missing a whole
