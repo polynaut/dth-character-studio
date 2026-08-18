@@ -192,6 +192,20 @@ of that file ~12k tokens to scroll past.
       dialed non-zero at frame 0 FAILS its frames loudly at build time
       instead (runtime v82's `checkDialedWalkedMorphs`). Removals are
       zod-stripped — no migration step.
+ 35 — REMOVED "Preserve morphs after ROM loading": the base `preserveMorphs`
+      list, its per-scene half (`sceneOverride.preserve.morphs`) and the
+      `preserveMorphSchema` row type. The DTH release the studio targets holds
+      those morph values across the ROM load itself, so the studio-side restore
+      pass (runtime v83 drops `restorePreservedMorphs`) is dead weight — and it
+      FLATTENED each listed morph's whole animation to keepValue, so keeping it
+      would go on overwriting anything a later stage keyed. `preserveNodeTransforms`
+      (memorize-before / restore-after, a different mechanism) is untouched.
+      The removals are zod-stripped, but the step is NOT skippable: a `preserve`
+      block armed by the MORPH half alone carried a COPY of the base node list,
+      which post-removal reads as "override the node list with today's base" —
+      a no-op override that would silently pin that scene. The v35 step drops
+      exactly those blocks (guarded on `preserve.morphs` still being present,
+      so it is idempotent).
 ```
 
 ## Generated-runtime versions (`RUNTIME_VERSION`)
@@ -995,4 +1009,13 @@ v80 — no unattended carrier opens a modal, and the missing-runtime message sto
       channel (keying destroys the evidence), and still applies the morph.
       Both legs are exercised for real in the sandbox harness
       (dialed-walked-gate.test.ts).
+ 83 — `restorePreservedMorphs` is GONE, with the `preserveMorphs` option and
+      the `findNodeByNameOrLabel` helper only it used (schema v35 carries the
+      field removal). The targeted DTH release holds those morph values across
+      the ROM load itself. The pass ran last in the build (v74) and flattened
+      each listed morph's animation to keepValue, so its removal is visible in
+      exactly one place: a morph that was BOTH preserved and posed as a ROM
+      frame now keeps its posed keys instead of ending flat.
+      `preserveNodeTransforms` (memorizeNodeTransforms / restoreNodeTransforms)
+      is untouched.
 ```

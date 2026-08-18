@@ -386,7 +386,7 @@ The persisted `Character` shape is versioned (`CHARACTER_SCHEMA_VERSION` in
    the next Save). Add the field to that ONE helper. Still separate: the
    create-flow prefill — `fillSectionsFrom` (`apps/web/src/lib/fill-sections.ts`)
    plus the `prefillExtras` copy in `api/characters.ts`, which copies only
-   `jcmMorphMods`/`preserveMorphs`/`preserveNodeTransforms` (no path
+   `jcmMorphMods`/`preserveNodeTransforms` (no path
    fields). `sceneOverrides` (which
    carries each scene's hair since schema v24) is the existing example — grep it to find every site. (Regression fixed: `moveCharacter`
    used to repoint only `scenePath`, orphaning extra scenes/grooms/overrides on a

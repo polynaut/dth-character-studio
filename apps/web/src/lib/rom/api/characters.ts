@@ -142,7 +142,6 @@ const createInput = z.object({
   prefillExtras: z
     .object({
       jcmRules: z.boolean().default(false),
-      preserveMorphs: z.boolean().default(false),
       preserveNodeTransforms: z.boolean().default(false),
     })
     .optional(),
@@ -188,7 +187,6 @@ export async function createCharacter({ data }: { data: unknown }): Promise<Char
       sections = fillSectionsFrom(sections, source.sections, picked)
       const want = input.prefillExtras
       if (want?.jcmRules) prefillExtras.jcmMorphMods = source.jcmMorphMods
-      if (want?.preserveMorphs) prefillExtras.preserveMorphs = source.preserveMorphs
       if (want?.preserveNodeTransforms)
         prefillExtras.preserveNodeTransforms = source.preserveNodeTransforms
     }

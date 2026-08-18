@@ -32,10 +32,6 @@ var options = {
 	gpRomPath: null,
 	dkRomPath: null,
 	physRomPath: null,
-	// Morphs to preserve after ROM loading; an optional `node` scopes the lookup
-	// to that scene node ('' / absent = figure root, runtime v74).
-	// Example: [{ name: "body_ctrl_BreastsUp-Down", keepValue: 1, node: "" }]
-	preserveMorphs: [],
 	// Node transforms to preserve after ROM loading. Example: [{ nodeLabel: "Left Eye" }]
 	preserveNodeTransforms: [],
 	jcmMorphMods: [],

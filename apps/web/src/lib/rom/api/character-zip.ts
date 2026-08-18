@@ -307,7 +307,6 @@ const importChoicesInput = z.object({
   sections: z.array(romSectionSchema),
   extras: z.object({
     jcmRules: z.boolean(),
-    preserveMorphs: z.boolean(),
     preserveNodeTransforms: z.boolean(),
   }),
   /** Zip scene paths (as the zip's definition stores them) to restore. Must

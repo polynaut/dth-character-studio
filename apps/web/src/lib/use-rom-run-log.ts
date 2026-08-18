@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 
 import { dismissRomRunLog, fetchRomRunLog } from '#/lib/rom/api.ts'
-import { dropSceneRuns, morphKey } from '#/lib/rom/run-log.ts'
+import { dropSceneRuns, failedMorphKeysByScene } from '#/lib/rom/run-log.ts'
 import { useRefetchOnFocus } from '@dth/ui'
 
 export type RomRunLog = Awaited<ReturnType<typeof fetchRomRunLog>>
@@ -11,8 +11,9 @@ export type RomRunLog = Awaited<ReturnType<typeof fetchRomRunLog>>
  * own store on read) plus the editor's "reveal this morph" signal for it. The
  * log is re-read whenever the window regains focus, so problems from a run
  * surface the moment the user switches back from Daz to the studio.
- * `failedMorphKeys` is memoized — it feeds the memoized ROM subtree, so its
- * identity may only change when the log does.
+ * `failedMorphsByScene` is memoized — it feeds (via the route's per-selected-
+ * scene derivation) the memoized ROM subtree, so its identity may only change
+ * when the log does.
  */
 export function useRomRunLog(projectId: string, characterId: string, initial: RomRunLog) {
   const [romRunLog, setRomRunLog] = useState(initial)
@@ -79,27 +80,22 @@ export function useRomRunLog(projectId: string, characterId: string, initial: Ro
   const hasRunWarnings = !!romRunLog && romRunLog.warnings.length > 0
   const showRunReport = hasRunProblems || hasRunWarnings
   /**
-   * Identities (`morphKey`) of the morphs that failed anywhere in the last run
-   * — the editor rows CONTAINING one go red, whatever scene is selected.
+   * Failed-morph identities (`morphKey`) bucketed by the scene whose run
+   * reported them — the route derives the SELECTED scene's red-row set from
+   * this ({@link failedMorphKeysForScene}), so the primary's failures no
+   * longer mark the same rows red in every other scene's grid (a failure is a
+   * per-scene fact: the gate read THAT scene's dial values).
    *
    * By identity, not by frame: the log's frame numbers describe the ROM as it
    * was WHEN IT RAN, while the grid recomputes frames from row order on every
    * edit — a frame-matched set kept the same POSITION red through deletions
    * and reorders, whatever morph had moved into it. The `node`/`prop` pair is
    * the same verbatim string on both sides, so it survives any edit.
-   *
-   * Deliberately NOT scoped to the selected scene (the frame-matched version
-   * had to be, since overrides renumber frames per scene): a dialed morph is
-   * the same dial in every scene's grid, and scoping left the report visible
-   * over an all-clean grid until the user happened to select the failing scene
-   * — the rows must be red the moment the report is.
    */
-  const failedMorphKeys = useMemo(() => {
-    if (!romRunLog || romRunLog.ok) return undefined
-    const keys = new Set<string>()
-    for (const morph of romRunLog.failedMorphs) keys.add(morphKey(morph.node, morph.prop))
-    return keys
-  }, [romRunLog])
+  const failedMorphsByScene = useMemo(
+    () => (romRunLog && !romRunLog.ok ? failedMorphKeysByScene(romRunLog) : undefined),
+    [romRunLog],
+  )
 
   // The "reveal this morph" signal a clicked failed morph sends to the ROM
   // editor (nonce forces the effect to re-fire even for the same morph).
@@ -119,7 +115,7 @@ export function useRomRunLog(projectId: string, characterId: string, initial: Ro
     hasRunProblems,
     hasRunWarnings,
     showRunReport,
-    failedMorphKeys,
+    failedMorphsByScene,
     revealMorph,
     revealFailedMorph,
   }

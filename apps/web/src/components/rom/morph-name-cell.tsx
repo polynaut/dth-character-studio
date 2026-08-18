@@ -57,7 +57,7 @@ export function MorphNameCell({
   onCommit: (prop: string) => void
   onPick: (entry: MorphIndexEntry) => void
   /** Override the input's look — defaults to the borderless table-cell style;
-   *  the preserve-morph list passes a bordered form-field class. */
+   *  the frame-0 morph list passes a bordered form-field class. */
   inputClassName?: string
   disabled?: boolean
 }) {

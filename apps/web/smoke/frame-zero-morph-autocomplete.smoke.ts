@@ -3,9 +3,9 @@ import { expect, test } from '@playwright/test'
 import { P, buildSeed } from './fixtures.ts'
 import { installTauriMock } from './tauri-mock.ts'
 
-// The "Preserve morphs after ROM loading" name field uses the same scanned-morph
-// autocomplete as the ROM editor's Morph-name column.
-test('preserve morphs: the name field autocompletes from the scanned morph index', async ({
+// The "Morphs set at frame 0" name field (Advanced options panel) uses the same
+// scanned-morph autocomplete as the ROM editor's Morph-name column.
+test('frame-0 morphs: the name field autocompletes from the scanned morph index', async ({
   page,
 }) => {
   const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true })
@@ -14,13 +14,17 @@ test('preserve morphs: the name field autocompletes from the scanned morph index
   await page.getByRole('link', { name: /Kira/ }).click()
   await expect(page.getByText(/custom ROM frames/)).toBeVisible()
 
-  // The preserve-morph name field is the combobox in the Advanced-options section
-  // (the node field beside it is a plain textbox).
-  const advanced = page
+  // The frame-0 list starts empty on the demo character — add a row, then type in
+  // its name field (the only combobox in the Advanced options section; the node
+  // transforms beside it are plain inputs).
+  const frameZero = page
     .locator('section')
     .filter({ has: page.getByRole('heading', { name: 'Advanced options' }) })
-  const field = advanced.getByRole('combobox').first()
-  await field.scrollIntoViewIfNeeded()
+  const add = frameZero.getByRole('button', { name: 'Add morph', exact: true })
+  await add.scrollIntoViewIfNeeded()
+  await add.click()
+
+  const field = frameZero.getByRole('combobox').first()
   await field.click()
   await field.fill('glute')
 

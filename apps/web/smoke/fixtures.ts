@@ -118,9 +118,8 @@ const JCM_MODS = [
     ],
   },
 ]
-/** Realistic "Preserve morphs after ROM loading" + "Preserve node transforms"
- *  examples (from the DazToHue script options) for the Advanced-options shot. */
-const PRESERVE_MORPHS = [{ name: 'body_ctrl_BreastsUp-Down', keepValue: 1 }]
+/** Realistic "Preserve node transforms" examples (from the DazToHue script
+ *  options) for the Advanced-options shot. */
 const PRESERVE_NODES = [{ nodeLabel: 'Left Eye' }, { nodeLabel: 'Right Eye' }]
 
 /** The GEN section enabled in preset mode (Golden Palace, female) with one
@@ -339,7 +338,6 @@ export function buildSeed(opts: SeedOptions = {}): TauriMockSeed {
           projectPath: P.project,
           sections: { FBM: FBM_SECTION, GEN: GEN_SECTION },
           jcmMorphMods: JCM_MODS,
-          preserveMorphs: PRESERVE_MORPHS,
           preserveNodeTransforms: PRESERVE_NODES,
           // A linked Houdini project + the "Hair items live in the Daz scenes"
           // feature: hair lives on each scene's per-scene record (schema v24 —

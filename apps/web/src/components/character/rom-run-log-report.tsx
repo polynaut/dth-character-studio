@@ -90,10 +90,10 @@ export function RomRunLogReport({
       {romRunLog.failedMorphs.length > 0 && (
         <p className="mt-3 text-sm">
           These morphs could not be applied — their frames stay in the ROM (empty), so the rest
-          of the character is unaffected. Every row in the ROM sections below that walks one of
-          them is marked red. Click one to jump to it — the studio switches to the scene that
-          reported it first — then fix the morph name or add the missing content, Save, and
-          re-run.
+          of the character is unaffected. With the reporting scene selected, every row in the
+          ROM sections below that walks one of them is marked red. Click one to jump to it —
+          the studio switches to that scene first — then fix the morph name or add the missing
+          content, Save, and re-run.
         </p>
       )}
 

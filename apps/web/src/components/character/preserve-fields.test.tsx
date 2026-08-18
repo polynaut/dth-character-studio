@@ -9,7 +9,6 @@ import { PreserveFields } from './preserve-fields'
 import { useSceneSelection } from '#/lib/use-scene-selection.ts'
 import { characterSchema, defaultSections } from '@dth/rom'
 import type { Character } from '@dth/rom'
-import type { MorphIndexEntry } from '#/lib/rom/api.ts'
 
 const PRIMARY = 'D:\\s\\Primary.duf'
 const BEACH = 'D:\\s\\Beach.duf'
@@ -24,7 +23,7 @@ function makeCharacter(overrides: Partial<Character> = {}): Character {
     updatedAt: now,
     scenePath: PRIMARY,
     extraScenes: [BEACH],
-    preserveMorphs: [{ name: 'body_ctrl_BreastsUp-Down', keepValue: 0.6 }],
+    preserveNodeTransforms: [{ nodeLabel: 'Left Eye' }],
     sections: defaultSections(),
     ...overrides,
   })
@@ -32,15 +31,7 @@ function makeCharacter(overrides: Partial<Character> = {}): Character {
 
 /** Wires PreserveFields to the real useSceneSelection so an edit round-trips the
  *  implicit-override writer exactly as the character route does. */
-const NO_INDEX: Array<MorphIndexEntry> = []
-
-function Harness({
-  initial,
-  morphIndex = NO_INDEX,
-}: {
-  initial: Character
-  morphIndex?: Array<MorphIndexEntry>
-}) {
+function Harness({ initial }: { initial: Character }) {
   const [character, setCharacter] = useState(initial)
   const patch = (p: Partial<Character>) => setCharacter((c) => ({ ...c, ...p }))
   const sceneSel = useSceneSelection(character, patch)
@@ -54,7 +45,6 @@ function Harness({
         overrideEligible={sceneSel.overrideEligible}
         sceneOverride={sceneSel.sceneOverride}
         writePreserve={sceneSel.writePreserve}
-        morphIndex={morphIndex}
       />
     </div>
   )
@@ -64,35 +54,33 @@ function Harness({
 const isMuted = (el: HTMLElement) => el.className.split(/\s+/).includes('text-muted-foreground')
 
 describe('PreserveFields per-scene override', () => {
-  it('editing a hold value on a non-primary scene arms the list override', () => {
+  it('editing a node label on a non-primary scene arms the list override', () => {
     render(<Harness initial={makeCharacter()} />)
     fireEvent.click(screen.getByText('select-beach'))
     expect(screen.queryByTitle(RESET)).toBeNull()
 
-    const input = screen.getByDisplayValue('60') as HTMLInputElement
-    fireEvent.change(input, { target: { value: '70' } })
-    fireEvent.blur(input)
+    const input = screen.getByDisplayValue('Left Eye') as HTMLInputElement
+    fireEvent.change(input, { target: { value: 'Right Eye' } })
 
     expect(screen.queryByTitle(RESET)).not.toBeNull()
   })
 
-  it('adding a morph on a non-primary scene arms the list override', () => {
+  it('adding a node on a non-primary scene arms the list override', () => {
     render(<Harness initial={makeCharacter()} />)
     fireEvent.click(screen.getByText('select-beach'))
-    fireEvent.click(screen.getByText('Add morph'))
+    fireEvent.click(screen.getByText('Add node'))
     expect(screen.queryByTitle(RESET)).not.toBeNull()
   })
 
   it('the override survives switching away from and back to the scene', () => {
     render(<Harness initial={makeCharacter()} />)
     fireEvent.click(screen.getByText('select-beach'))
-    const input = screen.getByDisplayValue('60') as HTMLInputElement
-    fireEvent.change(input, { target: { value: '70' } })
-    fireEvent.blur(input)
+    const input = screen.getByDisplayValue('Left Eye') as HTMLInputElement
+    fireEvent.change(input, { target: { value: 'Right Eye' } })
 
     fireEvent.click(screen.getByText('select-primary'))
     fireEvent.click(screen.getByText('select-beach'))
-    expect(screen.getByDisplayValue('70')).not.toBeNull()
+    expect(screen.getByDisplayValue('Right Eye')).not.toBeNull()
     expect(screen.queryByTitle(RESET)).not.toBeNull()
   })
 
@@ -110,17 +98,16 @@ describe('PreserveFields per-scene override', () => {
   it('an inherited row reads muted on a non-primary scene, plain on the primary', () => {
     render(<Harness initial={makeCharacter()} />)
     // Primary scene → not overridable → no mute.
-    expect(isMuted(screen.getByDisplayValue('60'))).toBe(false)
+    expect(isMuted(screen.getByDisplayValue('Left Eye'))).toBe(false)
 
     // Non-primary, still inherited → the "can override, not yet" muted tell.
     fireEvent.click(screen.getByText('select-beach'))
-    expect(isMuted(screen.getByDisplayValue('60'))).toBe(true)
+    expect(isMuted(screen.getByDisplayValue('Left Eye'))).toBe(true)
 
     // Overridden → the mute drops (the green border takes over).
-    const input = screen.getByDisplayValue('60') as HTMLInputElement
-    fireEvent.change(input, { target: { value: '70' } })
-    fireEvent.blur(input)
-    expect(isMuted(screen.getByDisplayValue('70'))).toBe(false)
+    const input = screen.getByDisplayValue('Left Eye') as HTMLInputElement
+    fireEvent.change(input, { target: { value: 'Right Eye' } })
+    expect(isMuted(screen.getByDisplayValue('Right Eye'))).toBe(false)
   })
 
   it('arms even when the scene already carries an override entry (identity armed)', () => {
@@ -142,49 +129,8 @@ describe('PreserveFields per-scene override', () => {
     })
     render(<Harness initial={initial} />)
     fireEvent.click(screen.getByText('select-beach'))
-    const input = screen.getByDisplayValue('60') as HTMLInputElement
-    fireEvent.change(input, { target: { value: '70' } })
-    fireEvent.blur(input)
-    expect(screen.queryByTitle(RESET)).not.toBeNull()
-  })
-
-  it('picking a suggestion fills the Item scope with the node the dial lives on', () => {
-    // The index KNOWS the node; before v32 the pick dropped it and the runtime
-    // searched the figure root — where a clothing dial never exists. The scope
-    // is a read-only chip: the pick is its ONLY setter.
-    render(
-      <Harness
-        initial={makeCharacter()}
-        morphIndex={[{ node: 'Boots', nodeLabel: 'Boots', label: 'Expand All', name: 'ExpandAll' }]}
-      />,
-    )
-    // The unscoped row reads as the fallback, not as an editable field.
-    expect(screen.getByText('Figure')).not.toBeNull()
-
-    const name = screen.getByDisplayValue('body_ctrl_BreastsUp-Down') as HTMLInputElement
-    fireEvent.focus(name)
-    fireEvent.change(name, { target: { value: 'expandall' } })
-    fireEvent.mouseDown(screen.getByRole('option'))
-
-    expect(screen.getByDisplayValue('ExpandAll')).not.toBeNull()
-    // The info row under the field mirrors the picked suggestion: the node
-    // badge plus the Daz UI name (re-looked-up in the index, not stored).
-    expect(screen.getByText('Boots')).not.toBeNull()
-    expect(screen.getByText(/Daz UI name: Expand All/)).not.toBeNull()
-  })
-
-  it('clearing the Item scope (chip ✕) on a non-primary scene arms the list override', () => {
-    const initial = makeCharacter({
-      preserveMorphs: [{ name: 'body_ctrl_BreastsUp-Down', keepValue: 0.6, node: 'Boots' }],
-    })
-    render(<Harness initial={initial} />)
-    fireEvent.click(screen.getByText('select-beach'))
-    expect(screen.queryByTitle(RESET)).toBeNull()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Clear the item scope' }))
-    // The scope dropped back to the figure root…
-    expect(screen.getByText('Figure')).not.toBeNull()
-    // …and the row now differs from the base, so the override armed.
+    const input = screen.getByDisplayValue('Left Eye') as HTMLInputElement
+    fireEvent.change(input, { target: { value: 'Right Eye' } })
     expect(screen.queryByTitle(RESET)).not.toBeNull()
   })
 

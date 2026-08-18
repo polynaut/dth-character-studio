@@ -3,6 +3,15 @@ import { CHARACTER_SCHEMA_VERSION, ROM_SECTIONS, SECTION_MODES, defaultSections,
 
 import type { RomSection } from './types'
 
+/** Order-independent key for a preserve-node-transform list — the same multiset
+ *  compare the editor uses to decide whether a per-scene list differs from the
+ *  base (`preserveNodesKey` in the web layer). The v35 step needs it on RAW
+ *  pre-zod data, so it tolerates junk rows. */
+function nodeLabelsKey(list: unknown): string {
+  if (!Array.isArray(list)) return '[]'
+  return JSON.stringify(list.map((n) => String(n?.nodeLabel ?? '')).sort())
+}
+
 /**
  * Character-JSON migration framework.
  *
@@ -317,6 +326,32 @@ export const characterMigrations: Record<
         override.frameZero === undefined
       )
     })
+    return data
+  },
+  // v35 — "Preserve morphs after ROM loading" is gone (the DTH release the studio
+  // now targets holds those values across the ROM itself), so `preserveMorphs`
+  // and the per-scene `preserve.morphs` half both go. zod strips the keys — what
+  // it CANNOT do is notice that a `preserve` block armed ONLY by a morph
+  // divergence now says "override the node-transform list with… the base list",
+  // which is a no-op override that would silently PIN that scene to today's base
+  // list. So drop such a block here, on the raw object: it is armed by PRESENCE,
+  // and the UI's own writer would never have written it.
+  // Idempotent: only records that still carry `preserve.morphs` are touched.
+  35: (data) => {
+    if (Array.isArray(data.sceneOverrides)) {
+      const baseNodes = Array.isArray(data.preserveNodeTransforms)
+        ? nodeLabelsKey(data.preserveNodeTransforms)
+        : nodeLabelsKey([])
+      for (const override of data.sceneOverrides) {
+        if (!override || typeof override !== 'object') continue
+        const preserve = override.preserve
+        if (!preserve || typeof preserve !== 'object' || !('morphs' in preserve)) continue
+        delete preserve.morphs
+        const nodes = Array.isArray(preserve.nodeTransforms) ? preserve.nodeTransforms : []
+        if (nodeLabelsKey(nodes) === baseNodes) delete override.preserve
+      }
+    }
+    delete data.preserveMorphs
     return data
   },
   // ── TEMPLATES — copy one, set N = the new CHARACTER_SCHEMA_VERSION ──────────

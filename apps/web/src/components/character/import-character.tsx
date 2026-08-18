@@ -181,11 +181,7 @@ function ImportCharacterWizard({
   const [checked, setChecked] = useState<ReadonlySet<RomSection>>(
     () => new Set(offered.filter((section) => section !== 'RET')),
   )
-  const [extras, setExtras] = useState({
-    jcmRules: true,
-    preserveMorphs: true,
-    preserveNodeTransforms: true,
-  })
+  const [extras, setExtras] = useState({ jcmRules: true, preserveNodeTransforms: true })
   const [scenes, setScenes] = useState<ReadonlySet<string>>(
     () => new Set(summary.scenes.map((scene) => scene.path)),
   )
@@ -200,12 +196,10 @@ function ImportCharacterWizard({
 
   const offeredExtras = [
     ...(zip.jcmMorphMods.length > 0 ? (['jcmRules'] as const) : []),
-    ...(zip.preserveMorphs.length > 0 ? (['preserveMorphs'] as const) : []),
     ...(zip.preserveNodeTransforms.length > 0 ? (['preserveNodeTransforms'] as const) : []),
   ]
   const extraLabels = {
     jcmRules: `Modify JCM frames (${zip.jcmMorphMods.length})`,
-    preserveMorphs: `Preserve morphs (${zip.preserveMorphs.length})`,
     preserveNodeTransforms: `Preserve node transforms (${zip.preserveNodeTransforms.length})`,
   } as const
 
@@ -233,7 +227,7 @@ function ImportCharacterWizard({
     onConfirm({
       name: nameTrimmed,
       sections,
-      extras: forceAll ? { jcmRules: true, preserveMorphs: true, preserveNodeTransforms: true } : extras,
+      extras: forceAll ? { jcmRules: true, preserveNodeTransforms: true } : extras,
       scenes: summary.scenes
         .filter((scene) => scene.primary || scenes.has(scene.path))
         .map((scene) => scene.path),

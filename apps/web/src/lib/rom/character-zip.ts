@@ -183,7 +183,7 @@ export interface CharacterZipImportChoices {
    *  config (RET rides with JCM — the caller resolves that, like Fill). */
   sections: Array<RomSection>
   /** The Fill wizard's "Also copy" extras, zip's when true / target's when not. */
-  extras: { jcmRules: boolean; preserveMorphs: boolean; preserveNodeTransforms: boolean }
+  extras: { jcmRules: boolean; preserveNodeTransforms: boolean }
   /** Zip scenes to restore. Must include the zip's primary (when it has one);
    *  the target's existing scenes are always wiped. */
   scenes: Array<string>
@@ -250,7 +250,6 @@ export function mergeImportedCharacter(opts: {
     sceneOverrides: zip.sceneOverrides.filter((o) => sceneKeys.has(lowerKey(o.scenePath))),
     imageScene: sceneKeys.has(lowerKey(zip.imageScene)) ? zip.imageScene : '',
     jcmMorphMods: choices.extras.jcmRules ? zip.jcmMorphMods : target.jcmMorphMods,
-    preserveMorphs: choices.extras.preserveMorphs ? zip.preserveMorphs : target.preserveMorphs,
     preserveNodeTransforms: choices.extras.preserveNodeTransforms
       ? zip.preserveNodeTransforms
       : target.preserveNodeTransforms,
