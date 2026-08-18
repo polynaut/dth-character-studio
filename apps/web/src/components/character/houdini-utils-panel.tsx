@@ -88,6 +88,7 @@ import {
   nodeLabel,
   pickedSlots,
   sectionCountOf,
+  sourceCharacterCandidates,
   utilsToast,
 } from './houdini-utils/shared.ts'
 import type {
@@ -382,9 +383,8 @@ export function HoudiniUtilsPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, targetsKey])
 
-  // Candidate source characters: everything the studio can reach that actually
-  // HAS a Houdini project, minus this character (copying onto itself is refused
-  // by the api anyway, and offering it invites the mistake).
+  // Candidate source characters: sourceCharacterCandidates — this character's
+  // OTHER projects included, minus the drawer's own target.
   // Templates are per project and only exist when attachments are enabled — an
   // empty list simply means the picker doesn't offer that route.
   useEffect(() => {
@@ -397,11 +397,9 @@ export function HoudiniUtilsPanel({
   useEffect(() => {
     if (!open) return
     void fetchAllCharacters()
-      .then((all) =>
-        setOthers(all.filter((c) => c.id !== character.id && c.houdiniProjects.length > 0)),
-      )
+      .then((all) => setOthers(sourceCharacterCandidates(all, character.id, targetHip)))
       .catch(() => setOthers([]))
-  }, [open, character.id])
+  }, [open, character.id, targetHip])
 
   // Reset everything when the drawer closes, so the next open starts clean.
   useEffect(() => {

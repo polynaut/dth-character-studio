@@ -25,7 +25,7 @@ import type {
   OcclusionSection,
   SkeletonSection,
 } from '#/lib/rom/api.ts'
-import { normalizePath } from '#/lib/path.ts'
+import { normalizePath, normalizePathLower } from '#/lib/path.ts'
 
 /** Label + rationale for each transferable part of a skeleton setup. The
  *  sections are the node's own tabs, so they read the same here as in Houdini. */
@@ -315,3 +315,23 @@ export interface ScanState {
 
 export const EMPTY_SCAN: ScanState = { loading: false, error: '', projects: [] }
 
+
+/** The "Character from the studio…" source picker's candidate list: every
+ *  character that still has a Houdini project to offer — the CURRENT character
+ *  included, so a setup can be copied between two of its own projects. What
+ *  gets taken out is the drawer's own TARGET project, from every candidate's
+ *  list (copying a project onto itself is refused by the api anyway, and
+ *  offering it invites the mistake). The current character sorts first: its
+ *  other projects are the closest-at-hand source. */
+export function sourceCharacterCandidates<
+  C extends { id: string; houdiniProjects: Array<string> },
+>(all: Array<C>, currentCharacterId: string, targetHip: string): Array<C> {
+  const targetKey = normalizePathLower(targetHip)
+  return all
+    .map((c) => ({
+      ...c,
+      houdiniProjects: c.houdiniProjects.filter((hip) => normalizePathLower(hip) !== targetKey),
+    }))
+    .filter((c) => c.houdiniProjects.length > 0)
+    .sort((a, b) => Number(b.id === currentCharacterId) - Number(a.id === currentCharacterId))
+}
