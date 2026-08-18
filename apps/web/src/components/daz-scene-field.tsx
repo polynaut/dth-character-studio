@@ -13,6 +13,7 @@ import { PrimaryBadge } from '#/components/primary-badge.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import type { SceneDockActions } from '#/components/character/scene-footer.tsx'
 import { SceneCopyDialog } from '#/components/scene-copy-dialog.tsx'
+import { CardReorderContext, SortableCard } from '#/components/sortable-cards.tsx'
 import dazLogo from '#/assets/daz-logo.png'
 import {
   copyDazScene,
@@ -1008,6 +1009,12 @@ export function DazSceneField({
   // documented route around the replace-primary gate — a pre-ticked delete
   // destroys exactly the file the user means to keep. A linked-in-place scene
   // additionally locks the toggle off entirely (deleteFileDisabled below).
+  /** A card drag dropped somewhere new — persist the extra scenes' new order
+   *  (the cards render in array order; the primary stays first, unsortable). */
+  function onReorderScenes(next: Array<string>) {
+    void persistPatch({ extraScenes: next }, { toast: 'Scene order saved' })
+  }
+
   function askRemove(scene: string) {
     setError('')
     // Unconditionally OFF — the whole why lives in the comment above. (This
@@ -1410,90 +1417,92 @@ export function DazSceneField({
                 on disk and repoints every linked scene. A div, not a <p> — the
                 floating panel is a div, invalid inside a paragraph. */}
             <div className="mb-2 text-xs">{sceneDirChip}</div>
-            <div ref={cardsRef} className="flex flex-wrap items-stretch gap-3">
-              {ready ? (
-                <div className="relative">
-                  <SceneCard
-                    scenePath={character.scenePath}
-                    name={character.name}
-                    genesis={character.genesis}
-                    onOpen={(e) => onOpenClick(character.scenePath, e)}
-                    onRename={
-                      insideCharFolder(character.scenePath)
-                        ? (next) => renameLinkedScene(character.scenePath, next)
-                        : undefined
-                    }
-                    onReplace={busy ? undefined : () => void onReplacePick()}
-                    replaceDisabled={replaceBlocked}
-                    replaceReason={replaceReason}
-                    primary
-                    selected={selectedScene !== undefined ? selectedScene === character.scenePath : undefined}
-                    onSelect={onSelectScene ? () => onSelectScene(character.scenePath) : undefined}
-                    pathChip={sceneLocationChip(character.scenePath)}
-                  />
-                  {menuFor === character.scenePath && (
-                    <SceneOpenMenu
-                      onOpenScene={() => {
-                        setMenuFor(null)
-                        void onOpen(character.scenePath)
-                      }}
-                      onOpenRom={() => {
-                        setMenuFor(null)
-                        void onOpen(romAnimationPath(character.scenePath))
-                      }}
-                      onGenerateRom={() => void onGenerateRom(character.scenePath)}
-                      romExists={romMenuState(character.scenePath).exists}
-                      romStale={romMenuState(character.scenePath).stale}
-                      forceGenerate={ctrlHeld}
-                      generating={generatingRom === character.scenePath}
-                      onClose={() => setMenuFor(null)}
+            <CardReorderContext ids={character.extraScenes} onReorder={onReorderScenes}>
+              <div ref={cardsRef} className="flex flex-wrap items-stretch gap-3">
+                {ready ? (
+                  <div className="relative">
+                    <SceneCard
+                      scenePath={character.scenePath}
+                      name={character.name}
+                      genesis={character.genesis}
+                      onOpen={(e) => onOpenClick(character.scenePath, e)}
+                      onRename={
+                        insideCharFolder(character.scenePath)
+                          ? (next) => renameLinkedScene(character.scenePath, next)
+                          : undefined
+                      }
+                      onReplace={busy ? undefined : () => void onReplacePick()}
+                      replaceDisabled={replaceBlocked}
+                      replaceReason={replaceReason}
+                      primary
+                      selected={selectedScene !== undefined ? selectedScene === character.scenePath : undefined}
+                      onSelect={onSelectScene ? () => onSelectScene(character.scenePath) : undefined}
+                      pathChip={sceneLocationChip(character.scenePath)}
                     />
-                  )}
-                </div>
-              ) : (
-                <div className="flex items-center gap-3 rounded-lg border border-dashed border-destructive/50 p-3 py-8 text-sm text-muted-foreground">
-                  Primary scene missing.
-                  <Button variant="outline" size="sm" disabled={busy} onClick={() => void onPick()}>
-                    <Link2 /> Relink
-                  </Button>
-                </div>
-              )}
-              {character.extraScenes.map((scene) => (
-                <div key={scene} className="relative">
-                  <SceneCard
-                    scenePath={scene}
-                    name={character.name}
-                    genesis={character.genesis}
-                    onOpen={(e) => onOpenClick(scene, e)}
-                    onRename={
-                      insideCharFolder(scene) ? (next) => renameLinkedScene(scene, next) : undefined
-                    }
-                    onRemove={() => askRemove(scene)}
-                    selected={selectedScene !== undefined ? selectedScene === scene : undefined}
-                    onSelect={onSelectScene ? () => onSelectScene(scene) : undefined}
-                    pathChip={sceneLocationChip(scene)}
-                  />
-                  {menuFor === scene && (
-                    <SceneOpenMenu
-                      onOpenScene={() => {
-                        setMenuFor(null)
-                        void onOpen(scene)
-                      }}
-                      onOpenRom={() => {
-                        setMenuFor(null)
-                        void onOpen(romAnimationPath(scene))
-                      }}
-                      onGenerateRom={() => void onGenerateRom(scene)}
-                      romExists={romMenuState(scene).exists}
-                      romStale={romMenuState(scene).stale}
-                      forceGenerate={ctrlHeld}
-                      generating={generatingRom === scene}
-                      onClose={() => setMenuFor(null)}
+                    {menuFor === character.scenePath && (
+                      <SceneOpenMenu
+                        onOpenScene={() => {
+                          setMenuFor(null)
+                          void onOpen(character.scenePath)
+                        }}
+                        onOpenRom={() => {
+                          setMenuFor(null)
+                          void onOpen(romAnimationPath(character.scenePath))
+                        }}
+                        onGenerateRom={() => void onGenerateRom(character.scenePath)}
+                        romExists={romMenuState(character.scenePath).exists}
+                        romStale={romMenuState(character.scenePath).stale}
+                        forceGenerate={ctrlHeld}
+                        generating={generatingRom === character.scenePath}
+                        onClose={() => setMenuFor(null)}
+                      />
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3 rounded-lg border border-dashed border-destructive/50 p-3 py-8 text-sm text-muted-foreground">
+                    Primary scene missing.
+                    <Button variant="outline" size="sm" disabled={busy} onClick={() => void onPick()}>
+                      <Link2 /> Relink
+                    </Button>
+                  </div>
+                )}
+                {character.extraScenes.map((scene) => (
+                  <SortableCard key={scene} id={scene}>
+                    <SceneCard
+                      scenePath={scene}
+                      name={character.name}
+                      genesis={character.genesis}
+                      onOpen={(e) => onOpenClick(scene, e)}
+                      onRename={
+                        insideCharFolder(scene) ? (next) => renameLinkedScene(scene, next) : undefined
+                      }
+                      onRemove={() => askRemove(scene)}
+                      selected={selectedScene !== undefined ? selectedScene === scene : undefined}
+                      onSelect={onSelectScene ? () => onSelectScene(scene) : undefined}
+                      pathChip={sceneLocationChip(scene)}
                     />
-                  )}
-                </div>
-              ))}
-            </div>
+                    {menuFor === scene && (
+                      <SceneOpenMenu
+                        onOpenScene={() => {
+                          setMenuFor(null)
+                          void onOpen(scene)
+                        }}
+                        onOpenRom={() => {
+                          setMenuFor(null)
+                          void onOpen(romAnimationPath(scene))
+                        }}
+                        onGenerateRom={() => void onGenerateRom(scene)}
+                        romExists={romMenuState(scene).exists}
+                        romStale={romMenuState(scene).stale}
+                        forceGenerate={ctrlHeld}
+                        generating={generatingRom === scene}
+                        onClose={() => setMenuFor(null)}
+                      />
+                    )}
+                  </SortableCard>
+                ))}
+              </div>
+            </CardReorderContext>
             <Button
               variant="outline"
               size="sm"
