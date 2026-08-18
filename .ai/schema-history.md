@@ -1100,8 +1100,8 @@ v80 — no unattended carrier opens a modal, and the missing-runtime message sto
       scripted doExport over its own previous output skipped the ROM walk and
       rewrote a static frame), so the generated script calls doExport with
       the previous set left in place — exactly the condition that tests the
-      plugin fix. The fixed DLL is installed locally, NOT yet verified live;
-      the removal itself is that verification. Also gone with the sweep: the
+      plugin fix, verified live 2026-08-18: a re-export over an existing set
+      ran the real ROM walk with the fixed DLL. Also gone with the sweep: the
       .dth-landed success verdict and its gating of CSV delivery + hair pass
       (they were only meaningful while the sweep guaranteed the .dth name
       absent before doExport), and the stale-file side benefit (renamed hair

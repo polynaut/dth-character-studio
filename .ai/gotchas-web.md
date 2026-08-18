@@ -544,8 +544,8 @@ and the Unreal install button. If a spec has to hold a modifier:
   this from runtime v69 (delete the set's own name patterns before
   `doExport`) and v85 (move-aside + restore-on-failure); the exporter PLUGIN
   itself was fixed on 2026-08-18 and both guards were removed again in runtime
-  v87 — the fixed DLL was installed locally that day but NOT yet verified
-  live. Two consequences of the removal: a DS4 machine running an exporter
+  v87 — verified live the same day: a re-export over an existing set ran the
+  real ROM walk with the fixed DLL. Two consequences of the removal: a DS4 machine running an exporter
   build older than the fix regresses to silent static exports, and the
   sweep's side benefit is gone too — a renamed hair item's grooms and an
   outdated frame layout's reference skeletons linger beside a fresh set
