@@ -29,7 +29,7 @@ it updates itself too.
 > everything that **drives Daz Studio** (the [DTH Export batch](./dth-export.md),
 > [Tools → Scan & index](./tools.md#tab-1--scan-amp-index), the bundled
 > [Runner plugin](./02-setup.md#daz-studio-plugins)); the **DTH Exporter Plugin**
-> and so [direct export](./05-rom-in-daz.md#direct-export-optional-recommended) and
+> and so [the export](./05-rom-in-daz.md#what-a-run-exports) and
 > the [bone-scale reference skeletons](./custom-morphs.md); everything that
 > **drives Houdini** through `hython`
 > ([Generate project](./06-into-houdini.md#generate-the-houdini-project-automatically),

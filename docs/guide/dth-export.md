@@ -31,7 +31,7 @@ what their run does:
 | Mode | What runs |
 | --- | --- |
 | **ROM + Export** | the full run — a fresh ROM, the saved ROM animation scene, and the export of everything (skeletal mesh and hair) |
-| **ROM only** | build the ROM and save the [`rom-animations` scene](./05-rom-in-daz.md#direct-export-optional-recommended); no export |
+| **ROM only** | build the ROM and save the [`rom-animations` scene](./05-rom-in-daz.md#what-a-run-exports); no export |
 | **Export only** | export the saved ROM animations as they stand, without rebuilding. Pre-selects the scenes whose ROM animation is newer than their last export; skips scenes that have none |
 | **Skip Daz — use last exports** | nothing runs in Daz — the Houdini projects work off each scene's last export on disk. Scenes that never delivered an export are kept out |
 

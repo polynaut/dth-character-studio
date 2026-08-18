@@ -17,8 +17,8 @@ to Houdini.
 2. [One-time setup](./02-setup.md) — wire up the DTH release and the Exporter Plugin
 3. [Your first project](./03-first-project.md)
 4. [Your first character](./04-first-character.md) — define it, get its Daz scripts
-5. [Build the ROM in Daz Studio](./05-rom-in-daz.md) — with optional direct export
-6. [The DTH Export batch](./dth-export.md) — or let the studio run the whole round trip
+5. [Build the ROM in Daz Studio](./05-rom-in-daz.md) — one press of **DTH Export**
+6. [The DTH Export batch](./dth-export.md) — every choice in the panel, watching and interrupting runs
 7. [Into Houdini](./06-into-houdini.md)
 
 ## Optional & advanced
