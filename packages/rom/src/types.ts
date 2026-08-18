@@ -577,7 +577,7 @@ export const sceneOverrideSchema = z.object({
   /** Per-scene "Modify JCM frames" rules — present = armed, a full replacement
    *  of the base `jcmMorphMods` (empty = "no JCM mods for this scene"). */
   jcm: z.array(jcmMorphModSchema).optional(),
-  /** Per-scene "Add morphs on frame 0" list — present = armed, a full
+  /** Per-scene "Morphs set at frame 0" list — present = armed, a full
    *  replacement of the base `frameZeroMorphs` (empty = "add nothing here"). */
   frameZero: z.array(frameZeroMorphSchema).optional(),
 })

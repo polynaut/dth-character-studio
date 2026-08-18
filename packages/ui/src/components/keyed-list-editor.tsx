@@ -6,7 +6,7 @@ import { Button } from '../primitives/button.tsx'
 
 /**
  * An editable list of homogeneous rows — the "N of these, add/remove freely"
- * pattern (preserve-morphs, preserve-node-transforms, …). Owns the list plumbing
+ * pattern (frame-0 morphs, preserve-node-transforms, …). Owns the list plumbing
  * (immutable set-at / remove-at, the per-row delete button, the add button) so a
  * caller only describes ONE row via `children`, instead of re-writing the
  * `.map(...mi === i ? {...} : m)` / `.filter(...)` boilerplate per field.
