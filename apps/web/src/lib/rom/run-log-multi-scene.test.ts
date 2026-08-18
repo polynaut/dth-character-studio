@@ -340,6 +340,19 @@ describe('failedMorphKeysByScene / failedMorphKeysForScene — red rows per SELE
     )
   })
 
+  it("a character with NO scene ('' selected) sees the untagged bucket once — and no tagged one", () => {
+    // effectiveScene is '' when the character links no scene at all. The
+    // accessor's '' branch is its own code path: the untagged bucket IS `own`
+    // (must not merge with itself), and a tagged run's failures stay out —
+    // that scene's grid is not the one on screen.
+    const byScene = failedMorphKeysByScene(
+      log([sceneRun('', ['BreastPreset01']), sceneRun(SCENE_A, ['PBMBreastsHeavy'])]),
+    )
+    expect(failedMorphKeysForScene(byScene, '')).toEqual(
+      new Set([morphKey('Genesis8_1Female', 'BreastPreset01')]),
+    )
+  })
+
   it('a clean log yields nothing to mark', () => {
     expect(failedMorphKeysByScene(log([sceneRun(SCENE_A, [])]))).toBeUndefined()
     expect(failedMorphKeysForScene(undefined, SCENE_A)).toBeUndefined()
