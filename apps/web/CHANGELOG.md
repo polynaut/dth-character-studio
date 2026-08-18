@@ -1,5 +1,19 @@
 # @dth/web
 
+## 0.83.0
+
+
+### Patch Changes
+
+- [#882](https://github.com/polynaut/dth-character-studio/pull/882) [`cf6e78b`](https://github.com/polynaut/dth-character-studio/commit/cf6e78ba32424d1f72ef04834db214e02089ddfa) Thanks [@polynaut](https://github.com/polynaut)! - Fix the "Waiting for Daz Studio to close…" flow: the studio now reliably starts Daz Studio itself once the closing process is gone — a failed launch is retried every second (and surfaced in the dialog after repeated failures), and a launch that dies against a not-fully-dead Daz instance is detected and relaunched instead of being reported as success. The dialog also can no longer get stuck open: it stands down as soon as the batch shows real work (including progress-log activity, which the old check missed for one-scene batches) and always closes itself once the batch finished or was aborted — the contradictory "export finished + still waiting for Daz to close" state is gone. Every other way out is bounded too: the relaunches are spaced and capped (a Daz that keeps exiting is reported instead of started once a second), a job file that stays unreadable ends the wait, and the retry message now names whether the launch or the status check is what failed.
+
+- [#886](https://github.com/polynaut/dth-character-studio/pull/886) [`a158c5c`](https://github.com/polynaut/dth-character-studio/commit/a158c5c54e93f7f2d26827964274e9569ea0e983) Thanks [@polynaut](https://github.com/polynaut)! - Starting a new ROM run now clears the previous run's report instead of leaving it over a live progress bar. The red "Errors in the last ROM run" button and the red ROM rows used to disappear only when Daz eventually wrote a new log, so they sat there for the whole run. A run now retires exactly the scenes it re-runs — a **DTH Export** batch its selection, **"Generate new ROM"** the one scene it rebuilds — so the findings of a scene the run never opens survive, because nothing else is going to rewrite them. An **Export only** run retires nothing at all: it rebuilds no ROM, so the report still describes the ROM it is exporting. Both halves clear together, on disk as well as on screen — which also stops old failures from being merged into the new run's report (the run log merges per scene) and from being re-raised by the character page's on-focus refetch.
+
+- [#884](https://github.com/polynaut/dth-character-studio/pull/884) [`83851f5`](https://github.com/polynaut/dth-character-studio/commit/83851f57995a09420574d5c10f48cc15342b68a0) Thanks [@polynaut](https://github.com/polynaut)! - Failed-morph red rows are now scoped to the scene whose run reported them: selecting another Daz scene no longer shows the primary scene's failures as red rows in its grid. A failure is a per-scene fact — the dialed-walked gate reads the dial values of the scene the row ran in. An untagged run (unsaved scene, or a pre-v54 log) still marks every scene's grid, since it cannot be pinned on one. Clicking a failure in the run report now actually switches to the scene that reported it: the log's path spelling (Daz's forward slashes) is resolved to the linked scene's stored spelling first — the raw path silently fell back to the primary scene.
+- Updated dependencies [[`18ae7c5`](https://github.com/polynaut/dth-character-studio/commit/18ae7c521f01a6275e355b88bb6165388b7eff3e)]:
+  - @dth/rom@0.83.0
+  - @dth/ui@0.83.0
+
 ## 0.82.1
 
 ### Patch Changes
