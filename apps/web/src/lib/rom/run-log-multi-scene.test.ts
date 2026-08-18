@@ -5,7 +5,14 @@ import { runInNewContext } from 'node:vm'
 
 import { describe, expect, it } from 'vitest'
 
-import { mergeRomRunLogs, parseRomRunLogText, unreadableRomRunLog } from './run-log.ts'
+import {
+  failedMorphKeysByScene,
+  failedMorphKeysForScene,
+  mergeRomRunLogs,
+  morphKey,
+  parseRomRunLogText,
+  unreadableRomRunLog,
+} from './run-log.ts'
 
 /**
  * MULTI-SCENE run logs (the DTH Export bulk batch).
@@ -268,5 +275,72 @@ describe('run-log parsing + per-scene merge (studio side)', () => {
     const merged = mergeRomRunLogs(stored, unreadableRomRunLog())
     expect(merged.unreadable).toBe(true)
     expect(merged.runs).toHaveLength(1)
+  })
+})
+
+describe('failedMorphKeysByScene / failedMorphKeysForScene — red rows per SELECTED scene', () => {
+  /** One scene's run with named failed dials (distinct per scene, unlike the
+   *  merge tests' fixed 'X' — WHICH morph failed WHERE is the point here). */
+  const sceneRun = (scene: string, props: Array<string>) => ({
+    scene,
+    sceneName: scene.split('/').pop()?.replace(/\.duf$/, '') ?? '',
+    finishedAt: 'now',
+    finishedAtMs: 1,
+    ok: props.length === 0,
+    errors: [],
+    failedMorphs: props.map((prop) => ({
+      frame: 1,
+      node: 'Genesis8_1Female',
+      prop,
+      reason: 'dialed at 0.089',
+    })),
+  })
+  const log = (runs: Array<unknown>) =>
+    parseRomRunLogText(JSON.stringify({ logVersion: 2, runs }))
+
+  it("buckets failures by the scene whose run reported them — the primary's do not bleed into the THICK grid", () => {
+    // The 2026-08-18 report: the primary's failures stayed red with the other
+    // scene selected — but the gate read the PRIMARY's dial values, which say
+    // nothing about the other scene.
+    const byScene = failedMorphKeysByScene(
+      log([sceneRun(SCENE_A, ['PBMBreastsHeavy']), sceneRun(SCENE_B, [])]),
+    )
+    expect(failedMorphKeysForScene(byScene, SCENE_A)).toEqual(
+      new Set([morphKey('Genesis8_1Female', 'PBMBreastsHeavy')]),
+    )
+    expect(failedMorphKeysForScene(byScene, SCENE_B)).toBeUndefined()
+  })
+
+  it('the accessor normalizes the RAW stored spelling — backslashes and case still match', () => {
+    // The character stores the path Windows-style; the log writes what Daz
+    // reported. The map is keyed by normalizeSceneKey, so the accessor must
+    // normalize — a raw .get() misses on every real Windows path.
+    const byScene = failedMorphKeysByScene(log([sceneRun(SCENE_A, ['ShapeTHIGHSBIG'])]))
+    const raw = SCENE_A.replace(/\//g, '\\').toUpperCase()
+    expect(failedMorphKeysForScene(byScene, raw)).toEqual(
+      new Set([morphKey('Genesis8_1Female', 'ShapeTHIGHSBIG')]),
+    )
+  })
+
+  it("an UNTAGGED run (unsaved scene / v1 log) can't be pinned — it marks every scene's grid", () => {
+    const byScene = failedMorphKeysByScene(
+      log([sceneRun('', ['BreastPreset01']), sceneRun(SCENE_A, ['PBMBreastsHeavy'])]),
+    )
+    // Merged into a scene that has its own failures…
+    expect(failedMorphKeysForScene(byScene, SCENE_A)).toEqual(
+      new Set([
+        morphKey('Genesis8_1Female', 'PBMBreastsHeavy'),
+        morphKey('Genesis8_1Female', 'BreastPreset01'),
+      ]),
+    )
+    // …and standing alone in one that has none.
+    expect(failedMorphKeysForScene(byScene, SCENE_B)).toEqual(
+      new Set([morphKey('Genesis8_1Female', 'BreastPreset01')]),
+    )
+  })
+
+  it('a clean log yields nothing to mark', () => {
+    expect(failedMorphKeysByScene(log([sceneRun(SCENE_A, [])]))).toBeUndefined()
+    expect(failedMorphKeysForScene(undefined, SCENE_A)).toBeUndefined()
   })
 })

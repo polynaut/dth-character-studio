@@ -166,15 +166,21 @@ backup first.
     ingesting DELETES the transport file, so a user who alt-tabs back mid-batch
     splits one batch across two logs — replacing would drop the first half at
     exactly the moment they looked.
-  - `failedMorphKeys` (the red row markers) matches by MORPH IDENTITY —
-    `morphKey` = `node|prop` (`lib/rom/run-log.ts`) — never by the log's frame
-    numbers: frames are recomputed from row order on every edit, so a stored
-    frame describes the ROM as it was when the run happened, and frame matching
-    kept a POSITION red through deletions/reorders (whatever morph moved into
-    it). Unscoped across scenes by design: a dial is the same dial in every
-    scene's grid, and the retired per-scene scoping (which frame matching
-    FORCED — overrides renumber frames per scene) left the report sitting over
-    an all-clean grid until the failing scene happened to be selected.
+  - The red row markers match by MORPH IDENTITY — `morphKey` = `node|prop`
+    (`lib/rom/run-log.ts`) — never by the log's frame numbers: frames are
+    recomputed from row order on every edit, so a stored frame describes the
+    ROM as it was when the run happened, and frame matching kept a POSITION red
+    through deletions/reorders (whatever morph moved into it). Scoped to the
+    SELECTED scene (`failedMorphKeysByScene` → `failedMorphKeysForScene`, the
+    normalizing accessor): a failure is a per-scene fact — the dialed-walked
+    gate reads the dial values of the scene the row RAN in, so the primary's
+    "dialed at 0.089" says nothing about an extra scene's grid, and the brief
+    unscoped version (#880) kept the THICK scene red over rows its run never
+    accused (2026-08-18). An UNTAGGED run (unsaved scene / pre-v54 log, scene
+    `''`) can't be pinned on a scene and marks every grid — the honest
+    fallback. The report card can therefore sit over an all-clean grid when a
+    non-failing scene is selected; its copy says "with the reporting scene
+    selected", and clicking a failure switches to that scene first.
   - The contract identity matching rests on: `logRunFailedMorph` call sites
     must log the definition's VERBATIM `node`/`prop` (keyDatas carry them
     verbatim — `nodeName: morph.node` — as does the art-direction path). An

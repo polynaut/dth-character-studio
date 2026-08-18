@@ -48,7 +48,9 @@ export interface PoseTableMeta {
   /** Identities (`morphKey`) of the morphs that failed in the last ROM run —
    *  rows walking one are marked red. By identity, not by frame: the log's
    *  frame numbers describe the ROM as it was when it ran, and a frame match
-   *  kept the same POSITION red through deletions and reorders. */
+   *  kept the same POSITION red through deletions and reorders. Already scoped
+   *  to the SELECTED scene by the page (failedMorphKeysForScene) — a failure
+   *  belongs to the scene whose run reported it. */
   failedMorphKeys?: Set<string>
   /**
    * Name errors from the last blocked SAVE, by pose id — the duplicate/reserved

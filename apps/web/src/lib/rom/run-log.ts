@@ -126,6 +126,56 @@ export function morphKey(node: string, prop: string): string {
   return `${node}|${prop}`
 }
 
+/**
+ * The failed morphs' identities ({@link morphKey}), bucketed by the SCENE whose
+ * run reported them (`normalizeSceneKey`; `''` = an untagged run — an unsaved
+ * scene, or a v1 log that predates scene tagging). Undefined when the log has
+ * nothing failed to mark.
+ *
+ * Per scene because a failure is a per-scene fact: the gate reads the DIAL
+ * VALUES of the scene the row ran in, so "PBMBreastsHeavy dialed at 0.089" in
+ * the primary scene says nothing about the THICK scene, where the same dial
+ * may be clean — one shared set kept the other scene's grid red over rows the
+ * report never accused (2026-08-18). Consumers go through
+ * {@link failedMorphKeysForScene}, never `.get()` on this map directly.
+ */
+export function failedMorphKeysByScene(log: RomRunLog): Map<string, Set<string>> | undefined {
+  const byScene = new Map<string, Set<string>>()
+  for (const run of log.runs) {
+    if (run.failedMorphs.length === 0) continue
+    const sceneKey = run.scene ? normalizeSceneKey(run.scene) : ''
+    let keys = byScene.get(sceneKey)
+    if (!keys) {
+      keys = new Set()
+      byScene.set(sceneKey, keys)
+    }
+    for (const morph of run.failedMorphs) keys.add(morphKey(morph.node, morph.prop))
+  }
+  return byScene.size > 0 ? byScene : undefined
+}
+
+/**
+ * The red-row marker set for ONE scene's grid: that scene's bucket plus the
+ * untagged `''` bucket — a failure that names no scene cannot be pinned on one,
+ * and hiding it everywhere would un-mark a real problem, so it marks every
+ * scene's grid (the honest fallback). Undefined when nothing applies.
+ *
+ * Normalizes `scenePath` HERE, at the accessor — the map is keyed by
+ * `normalizeSceneKey` and callers hold the character's stored spelling, which
+ * on a real Windows path never matches raw (.ai/gotchas-web.md).
+ */
+export function failedMorphKeysForScene(
+  byScene: Map<string, Set<string>> | undefined,
+  scenePath: string,
+): Set<string> | undefined {
+  if (!byScene) return undefined
+  const own = byScene.get(scenePath ? normalizeSceneKey(scenePath) : '')
+  const untagged = scenePath ? byScene.get('') : undefined
+  if (!own) return untagged
+  if (!untagged) return own
+  return new Set([...own, ...untagged])
+}
+
 /** The failed morphs of one raw log record. */
 export function parseFailedMorphs(value: unknown): Array<RomRunFailedMorph> {
   if (!Array.isArray(value)) return []
