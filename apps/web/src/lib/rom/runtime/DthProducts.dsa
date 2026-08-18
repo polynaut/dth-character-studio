@@ -164,8 +164,28 @@ function productFolderKey(p) {
   var parts = seg.split("/");
   if (parts.length < 2 || !parts[0] || !parts[1]) return "";
   var vendor = parts[0];
-  if (vendor === "daz 3d" || vendor === "daz" || vendor === "daz3d") return ""; // base, not product-specific
+  if (isDazBaseVendor(vendor)) {
+    // The base-figure data root ("data/DAZ 3D/Genesis 8/Female/Morphs/<Vendor>/
+    // <Product>/…") is not product-specific itself, but it is the STANDARD install
+    // location for figure morphs — the vendor/product pair sits after "Morphs/",
+    // not after "data/". Only paths that keep vendor/product/file after the morphs
+    // segment qualify; anything shallower stays base content.
+    var mi = seg.indexOf("/morphs/");
+    if (mi !== -1) {
+      var mparts = seg.substring(mi + 8).split("/");
+      if (mparts.length >= 3 && mparts[0] && mparts[1] && !isDazBaseVendor(mparts[0])) {
+        return mparts[0] + "/" + mparts[1];
+      }
+    }
+    return "";
+  }
   return vendor + "/" + parts[1];
+}
+
+// The vendor folder names that mean "DAZ base content", not a product-specific
+// vendor. Callers pass LOWERCASED names.
+function isDazBaseVendor(vendor) {
+  return vendor === "daz 3d" || vendor === "daz" || vendor === "daz3d";
 }
 
 // Turn a possibly content-relative source path ("/data/…") into an absolute
@@ -511,27 +531,70 @@ function readAssetInfoFromFile(sourceFile) {
   return result;
 }
 
-// Read asset_info trying the path as given, then resolved under the content library.
-// Node/morph source files are usually content-relative ("/data/…"), which DzFile
-// can't open directly — resolving them under the library is what actually recovers
-// the vendor's real author + revision. Returns { author, revision }, '' for missing.
-function readAssetInfo(dazLibraryFolder, sourceFile) {
+// Read asset_info trying the path as given, then resolved under each mapped content
+// directory. Node/morph source files are usually content-relative ("/data/…"), which
+// DzFile can't open directly — resolving them under the library that actually holds
+// the file is what recovers the vendor's real author + revision. Returns
+// { author, revision }, '' for missing.
+function readAssetInfo(contentDirs, sourceFile) {
   var result = readAssetInfoFromFile(sourceFile);
-  if ((!result.author || !result.revision) && dazLibraryFolder) {
-    var resolved = resolveContentPath(dazLibraryFolder, sourceFile);
-    if (resolved && resolved !== sourceFile) {
-      var alt = readAssetInfoFromFile(resolved);
-      if (!result.author) result.author = alt.author;
-      if (!result.revision) result.revision = alt.revision;
-    }
+  for (var i = 0; i < contentDirs.length; i++) {
+    if (result.author && result.revision) break;
+    var resolved = resolveContentPath(contentDirs[i], sourceFile);
+    if (!resolved || resolved === sourceFile) continue;
+    var alt = readAssetInfoFromFile(resolved);
+    if (!result.author) result.author = alt.author;
+    if (!result.revision) result.revision = alt.revision;
   }
   return result;
 }
 
+// Every DAZ-format content directory this Daz install has mapped, the studio's
+// configured library first. The scan runs INSIDE Daz, so Daz itself is the
+// authority on where content lives — a product installed to a second mapped
+// library (a network drive, a split library) is invisible to a walk of the one
+// studio-configured folder. Deduped case-insensitively; never throws (a missing
+// content manager just leaves the studio-supplied folder).
+function getContentDirectories(dazLibraryFolder) {
+  var dirs = [];
+  var seen = {};
+  function add(p) {
+    var s = String(p || "").replace(/\\/g, "/").replace(/\/+$/g, "");
+    if (!s) return;
+    var key = s.toLowerCase();
+    if (hasOwn(seen, key)) return;
+    seen[key] = true;
+    dirs.push(s);
+  }
+  add(dazLibraryFolder);
+  try {
+    var mgr = App.getContentMgr();
+    if (mgr && typeof mgr.getNumContentDirectories === "function") {
+      var n = mgr.getNumContentDirectories();
+      for (var i = 0; i < n; i++) add(mgr.getContentDirectoryPath(i));
+    }
+  } catch (e) {
+    // no content manager (or a scripting API gap) — the studio's folder stands alone
+  }
+  return dirs;
+}
+
 // Read a product's content-metadata .dsx (e.g. Runtime/Support/<vendor>_<n>_<name>.dsx)
-// under the DAZ content library to recover the artist (and version when present).
-// Returns { artist, version } with '' for whatever isn't available.
-function readSupportMetadata(dazLibraryFolder, supportFile) {
+// under each mapped content directory to recover the artist (and version when
+// present). Returns { artist, version } with '' for whatever isn't available.
+function readSupportMetadata(contentDirs, supportFile) {
+  var result = { artist: "", version: "" };
+  if (!supportFile) return result;
+  for (var i = 0; i < contentDirs.length; i++) {
+    var one = readSupportMetadataFromDir(contentDirs[i], supportFile);
+    if (!result.artist && one.artist) result.artist = one.artist;
+    if (!result.version && one.version) result.version = one.version;
+    if (result.artist && result.version) break;
+  }
+  return result;
+}
+
+function readSupportMetadataFromDir(dazLibraryFolder, supportFile) {
   var result = { artist: "", version: "" };
   if (!dazLibraryFolder || !supportFile) return result;
   // The manifest path is "Content/Runtime/Support/…"; "Content/" maps onto the
@@ -593,7 +656,7 @@ function findRepresentativeDsf(folder) {
 // + revision) — that's the real vendor version and works for unofficial products
 // too; the DIM content-metadata .dsx is a fallback for the artist. Mutates the
 // shared product objects in place; each product enriched once.
-function enrichMatchedProducts(matches, dazLibraryFolder) {
+function enrichMatchedProducts(matches, contentDirs) {
   var enriched = {};
   for (var i = 0; i < matches.length; i++) {
     var product = matches[i].product;
@@ -601,13 +664,13 @@ function enrichMatchedProducts(matches, dazLibraryFolder) {
     if (!product || enriched[product.name]) continue;
 
     // 1) The asset's embedded metadata (most reliable; covers unofficial products).
-    var info = readAssetInfo(dazLibraryFolder, asset ? asset.sourceFile : "");
+    var info = readAssetInfo(contentDirs, asset ? asset.sourceFile : "");
     // 1b) If the matched asset gave nothing (e.g. a geograft node with no readable
     // source file), read a representative data file from the product's own manifest
     // file list — recovers the real author/revision for DIM products regardless.
     if ((!info.author || !info.revision) && product.files && product.files.length) {
       for (var fIdx = 0; fIdx < product.files.length && fIdx < 5; fIdx++) {
-        var pInfo = readAssetInfo(dazLibraryFolder, product.files[fIdx]);
+        var pInfo = readAssetInfo(contentDirs, product.files[fIdx]);
         if (!info.author && pInfo.author) info.author = pInfo.author;
         if (!info.revision && pInfo.revision) info.revision = pInfo.revision;
         if (info.author && info.revision) break;
@@ -631,8 +694,8 @@ function enrichMatchedProducts(matches, dazLibraryFolder) {
     }
 
     // 2) Fall back to the DIM content metadata for the artist if still unknown.
-    if ((product.artist === "Unknown" || !product.artist) && dazLibraryFolder && product.supportFile) {
-      var meta = readSupportMetadata(dazLibraryFolder, product.supportFile);
+    if ((product.artist === "Unknown" || !product.artist) && product.supportFile) {
+      var meta = readSupportMetadata(contentDirs, product.supportFile);
       if (meta.artist) product.artist = meta.artist;
       if (meta.version && (product.version === "Unknown" || !product.version)) {
         product.version = meta.version;
@@ -646,13 +709,13 @@ function enrichMatchedProducts(matches, dazLibraryFolder) {
 // Recover author + revision for the UNMATCHED assets from their own source files,
 // so unofficial products (not in DIM, hence unmatched) still show an artist and
 // version. Mutates each asset, adding `artist` and `version`.
-function enrichUnmatchedAssets(unmatched, dazLibraryFolder) {
+function enrichUnmatchedAssets(unmatched, contentDirs) {
   for (var i = 0; i < unmatched.length; i++) {
     var a = unmatched[i];
     a.artist = "";
     a.version = "";
     if (!a.sourceFile) continue;
-    var info = readAssetInfo(dazLibraryFolder, a.sourceFile);
+    var info = readAssetInfo(contentDirs, a.sourceFile);
     a.artist = info.author;
     a.version = info.revision;
   }
@@ -792,22 +855,28 @@ function parseLocalUserMetadata(path, fileName) {
   }
 }
 
-function getLocalUserProducts(dazLibraryFolder) {
+function getLocalUserProducts(contentDirs) {
   var products = [];
-  if (!dazLibraryFolder) return products;
-  var supportPath =
-    String(dazLibraryFolder).replace(/\\/g, "/").replace(/\/+$/g, "") + "/Runtime/Support";
-  var supportDir = new DzDir(supportPath);
-  if (!supportDir.exists()) return products;
+  var seenNames = {};
+  for (var d = 0; d < contentDirs.length; d++) {
+    var supportPath = contentDirs[d] + "/Runtime/Support";
+    var supportDir = new DzDir(supportPath);
+    if (!supportDir.exists()) continue;
 
-  var entries = supportDir.entryList();
-  for (var e = 0; e < entries.length; e++) {
-    var entry = String(entries[e]);
-    var lower = entry.toLowerCase();
-    if (lower.indexOf("local_user_") !== 0) continue;
-    if (lower.lastIndexOf(".dsx") !== lower.length - 4) continue;
-    var product = parseLocalUserMetadata(supportPath + "/" + entry, entry);
-    if (product) products.push(product);
+    var entries = supportDir.entryList();
+    for (var e = 0; e < entries.length; e++) {
+      var entry = String(entries[e]);
+      var lower = entry.toLowerCase();
+      if (lower.indexOf("local_user_") !== 0) continue;
+      if (lower.lastIndexOf(".dsx") !== lower.length - 4) continue;
+      var product = parseLocalUserMetadata(supportPath + "/" + entry, entry);
+      if (!product) continue;
+      // The same product installed into two mapped libraries: first one wins.
+      var nameKey = product.name.toLowerCase();
+      if (hasOwn(seenNames, nameKey)) continue;
+      seenNames[nameKey] = true;
+      products.push(product);
+    }
   }
   print("Found " + products.length + " locally-installed (LOCAL_USER) products");
   return products;
@@ -820,63 +889,99 @@ function getLocalUserProducts(dazLibraryFolder) {
 // owns the folder or name), and carry productType "Content folder" so the studio can
 // warn that they're not properly installed (no SKU/version/updates). The vendor folder
 // is the artist; SKU/version are unknown.
-function getContentFolderProducts(dazLibraryFolder, realProducts) {
+function getContentFolderProducts(contentDirs, realProducts) {
   var products = [];
-  if (!dazLibraryFolder) return products;
-  try {
-    var dataRoot =
-      String(dazLibraryFolder).replace(/\\/g, "/").replace(/\/+$/g, "") + "/data";
-    var dataDir = new DzDir(dataRoot);
-    if (!dataDir.exists()) return products;
 
-    // Folder keys + names already covered by real products, so we don't duplicate them.
-    var realNames = {};
-    var realFolders = {};
-    for (var r = 0; r < realProducts.length; r++) {
-      realNames[String(realProducts[r].name).toLowerCase()] = true;
-      var rf = realProducts[r].folders;
-      if (rf) for (var rk = 0; rk < rf.length; rk++) realFolders[rf[rk]] = true;
+  // Folder keys + names already covered by real products, so we don't duplicate them.
+  var realNames = {};
+  var realFolders = {};
+  for (var r = 0; r < realProducts.length; r++) {
+    realNames[String(realProducts[r].name).toLowerCase()] = true;
+    var rf = realProducts[r].folders;
+    if (rf) for (var rk = 0; rk < rf.length; rk++) realFolders[rf[rk]] = true;
+  }
+  // The same vendor/product folder present in two mapped libraries (or under two
+  // figures' Morphs roots): first one wins.
+  var synthSeen = {};
+
+  function subdirs(path) {
+    var dir = new DzDir(path);
+    if (!dir.exists()) return [];
+    var raw = typeof dir.getSubdirList === "function" ? dir.getSubdirList() : dir.entryList();
+    var names = [];
+    for (var i = 0; i < raw.length; i++) {
+      var name = String(raw[i]);
+      if (name === "." || name === "..") continue;
+      if (!new DzDir(path + "/" + name).exists()) continue; // dirs only
+      names.push(name);
     }
+    return names;
+  }
 
-    var vendors =
-      typeof dataDir.getSubdirList === "function" ? dataDir.getSubdirList() : dataDir.entryList();
-    for (var v = 0; v < vendors.length; v++) {
-      var vendor = String(vendors[v]);
-      if (vendor === "." || vendor === "..") continue;
-      var vlow = vendor.toLowerCase();
-      if (vlow === "daz 3d" || vlow === "daz" || vlow === "daz3d") continue; // base content
-      var vendorPath = dataRoot + "/" + vendor;
-      var vendorDir = new DzDir(vendorPath);
-      if (!vendorDir.exists()) continue;
-      var prods =
-        typeof vendorDir.getSubdirList === "function"
-          ? vendorDir.getSubdirList()
-          : vendorDir.entryList();
-      for (var p = 0; p < prods.length; p++) {
-        var prod = String(prods[p]);
-        if (prod === "." || prod === "..") continue;
-        if (!new DzDir(vendorPath + "/" + prod).exists()) continue; // dirs only
-        var folderKey = vlow + "/" + prod.toLowerCase();
-        if (realFolders[folderKey] || realNames[prod.toLowerCase()]) continue;
-        products.push({
-          name: prod,
-          sku: "",
-          artist: vendor,
-          version: "",
-          installDate: "",
-          productType: "Content folder",
-          description: "",
-          manifestFile: "",
-          supportFile: "",
-          files: [],
-          folders: [folderKey],
-          contentFolder: vendorPath + "/" + prod,
-          synthesized: true,
-        });
+  function addSynth(vendor, prod, fullPath) {
+    var folderKey = vendor.toLowerCase() + "/" + prod.toLowerCase();
+    if (hasOwn(synthSeen, folderKey)) return;
+    synthSeen[folderKey] = true;
+    if (realFolders[folderKey] || realNames[prod.toLowerCase()]) return;
+    products.push({
+      name: prod,
+      sku: "",
+      artist: vendor,
+      version: "",
+      installDate: "",
+      productType: "Content folder",
+      description: "",
+      manifestFile: "",
+      supportFile: "",
+      files: [],
+      folders: [folderKey],
+      contentFolder: fullPath,
+      synthesized: true,
+    });
+  }
+
+  for (var d = 0; d < contentDirs.length; d++) {
+    try {
+      var dataRoot = contentDirs[d] + "/data";
+      var vendors = subdirs(dataRoot);
+      for (var v = 0; v < vendors.length; v++) {
+        var vendor = vendors[v];
+        var vendorPath = dataRoot + "/" + vendor;
+        if (isDazBaseVendor(vendor.toLowerCase())) {
+          // The base-figure root ("data/DAZ 3D/Genesis 8/Female/Morphs/<Vendor>/
+          // <Product>") is base content, but its Morphs folders are the STANDARD
+          // install location for figure morphs — a hand-installed morph product
+          // (no DIM manifest, no LOCAL_USER metadata) exists ONLY there. Walk
+          // data/<daz>/<generation>/<figure>/Morphs/<Vendor>/<Product>, matching
+          // the vendor/product keys productFolderKey extracts from morph paths.
+          var gens = subdirs(vendorPath);
+          for (var g = 0; g < gens.length; g++) {
+            var genPath = vendorPath + "/" + gens[g];
+            var figures = subdirs(genPath);
+            for (var f = 0; f < figures.length; f++) {
+              var morphsPath = genPath + "/" + figures[f] + "/Morphs";
+              var morphVendors = subdirs(morphsPath);
+              for (var mv = 0; mv < morphVendors.length; mv++) {
+                var morphVendor = morphVendors[mv];
+                if (isDazBaseVendor(morphVendor.toLowerCase())) continue; // official base morphs
+                var morphVendorPath = morphsPath + "/" + morphVendor;
+                var morphProds = subdirs(morphVendorPath);
+                for (var mp = 0; mp < morphProds.length; mp++) {
+                  addSynth(morphVendor, morphProds[mp], morphVendorPath + "/" + morphProds[mp]);
+                }
+              }
+            }
+          }
+          continue;
+        }
+        var prods = subdirs(vendorPath);
+        for (var p = 0; p < prods.length; p++) {
+          addSynth(vendor, prods[p], vendorPath + "/" + prods[p]);
+        }
       }
+    } catch (e) {
+      print("Content-folder products (" + contentDirs[d] + "): " + e);
     }
-  } catch (e) {
-    print("Content-folder products: " + e);
   }
   print("Synthesized " + products.length + " content-folder products");
   return products;
@@ -1026,6 +1131,18 @@ function findProductMatches(usedAssets, installedProducts, knownGenesisVersion, 
     matchedProduct = findFileIndexMatch(asset, fileIndex, sceneGenesisVersion);
     if (matchedProduct) {
       matchMethod = "File Match";
+    }
+
+    // Source-folder match: the asset's own .dsf lives under a product's
+    // vendor/product folder. Catches what the exact file index can't hold — a
+    // big morph pack's manifest file list is capped at 60, and a morph installed
+    // under the base figure's Morphs/<Vendor>/<Product> root only identifies its
+    // product through that folder pair.
+    if (!matchedProduct) {
+      matchedProduct = findSourceFolderMatch(asset, folderIndex, sceneGenesisVersion);
+      if (matchedProduct) {
+        matchMethod = "Folder Match";
+      }
     }
 
     // Texture-folder match: the node's own texture lives under a product's
@@ -1288,6 +1405,21 @@ function findFileIndexMatch(asset, fileIndex, sceneGenesisVersion) {
   if (!key) return null;
   var product = fileIndex[key];
   if (!product) return null;
+  if (sceneGenesisVersion && productIsWrongGenesisVersion(product.name, sceneGenesisVersion)) {
+    return null;
+  }
+  return product;
+}
+
+// Match an asset by the vendor/product folder of its own source file against the
+// folders a real product installs — the folder-level analogue of the exact file
+// match. Same wrong-generation defence as the file match: the folder pair is
+// product-specific, but a shared folder name across generations must not pull a
+// wrong-generation product in.
+function findSourceFolderMatch(asset, folderIndex, sceneGenesisVersion) {
+  var key = productFolderKey(asset.sourceFile || "");
+  if (!key || !hasOwn(folderIndex, key)) return null;
+  var product = folderIndex[key];
   if (sceneGenesisVersion && productIsWrongGenesisVersion(product.name, sceneGenesisVersion)) {
     return null;
   }
@@ -1979,7 +2111,8 @@ function writeUnmatchedDiagnostic(diagPath, matchResults, usedAssets) {
 //   characterId, characterName, genesis (identity, embedded by the studio)
 //   dimManifestPath   — DAZ Install Manager ManifestFiles folder (may be '')
 //   outputDir         — folder the per-scene CSV is written into
-//   dazLibraryFolder  — DAZ content library root, for artist/version metadata (may be '')
+//   dazLibraryFolder  — DAZ content library root (may be ''). Seeds the content-
+//                       directory list; Daz's own mapped directories are added.
 //   bulk              — true when running unattended under the Runner (Tools → Scan
 //                       project): no dialogs (a modal in a minimized Daz is an
 //                       invisible dead stop for the whole batch), the summary goes
@@ -2016,10 +2149,16 @@ function DthScanProducts(config) {
     print("No used assets found in the current scene.");
   }
 
+  // Every mapped content directory, not just the studio-configured library —
+  // Daz itself knows where content actually lives (network drives, split
+  // libraries), and manual installs to a second library are invisible otherwise.
+  var contentDirs = getContentDirectories(config.dazLibraryFolder);
+  print("Content directories: " + (contentDirs.length ? contentDirs.join("; ") : "(none)"));
+
   var installedProducts = getInstalledProducts(config.dimManifestPath, bulk);
   // Add manually-installed products (LOCAL_USER metadata) so non-DIM content can
   // match too — these are absent from DIM's ManifestFiles.
-  var localProducts = getLocalUserProducts(config.dazLibraryFolder);
+  var localProducts = getLocalUserProducts(contentDirs);
   if (localProducts.length) {
     installedProducts = installedProducts.concat(localProducts);
   }
@@ -2034,8 +2173,9 @@ function DthScanProducts(config) {
   );
 
   // Last-resort recognition for manual installs with no DIM/LOCAL_USER metadata:
-  // synthesize products from the content library's data/<Vendor>/<Product> folders.
-  var contentFolderProducts = getContentFolderProducts(config.dazLibraryFolder, installedProducts);
+  // synthesize products from each library's data/<Vendor>/<Product> folders and
+  // the base-figure Morphs/<Vendor>/<Product> roots.
+  var contentFolderProducts = getContentFolderProducts(contentDirs, installedProducts);
 
   var matchResults = findProductMatches(
     usedAssets,
@@ -2049,8 +2189,8 @@ function DthScanProducts(config) {
   // Fill in artist/version: matched products from the matched asset's metadata
   // (DIM content metadata as a fallback), unmatched assets from their own files —
   // the latter is how unofficial products (absent from DIM) still get a version.
-  enrichMatchedProducts(matchResults.matches, config.dazLibraryFolder);
-  enrichUnmatchedAssets(matchResults.unmatched, config.dazLibraryFolder);
+  enrichMatchedProducts(matchResults.matches, contentDirs);
+  enrichUnmatchedAssets(matchResults.unmatched, contentDirs);
 
   // Report any nodes still unmatched, with the data that would place them (parent,
   // textures, children), so a stubborn case is diagnosable from real values.

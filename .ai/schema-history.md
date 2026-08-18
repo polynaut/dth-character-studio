@@ -1103,4 +1103,23 @@ v80 — no unattended carrier opens a modal, and the missing-runtime message sto
       on a matching `v<N>` marker and the script header reads current, so the
       second one never reaches an install that already has the first.
       No schema change, no migration step.
+ 88 — product scan matches hand-installed morphs and second-library content.
+      Three changes to DthProducts.dsa, motivated by a real library where a
+      manually-installed morph ("GC BodyMorph", no DIM manifest, no LOCAL_USER
+      metadata, installed under the base-figure Morphs root) sat unmatched: (1) `productFolderKey` learns the
+      STANDARD morph install layout — for a path under the base-figure root
+      ("data/DAZ 3D/Genesis 8/Female/Morphs/<Vendor>/<Product>/…") the
+      vendor/product pair sits after "Morphs/", not after "data/", so those
+      paths no longer collapse to "" (base content); (2) content-folder
+      synthesis walks those Morphs/<Vendor>/<Product> roots too, and BOTH
+      walks now cover every content directory Daz has mapped
+      (`App.getContentMgr()`), not just the one studio-configured library —
+      LOCAL_USER metadata and artist/version enrichment likewise read all
+      mapped directories; (3) a new "Folder Match" places an asset whose own
+      source file lives under a REAL product's vendor/product folder — the
+      folder-level analogue of the exact file match, for files the manifest's
+      60-file cap dropped (big morph packs) and for DIM-installed morphs under
+      the base-figure root. NOT v87: the open DS4 skip-guard revert (#901)
+      claimed that number while this was built — same two-runtimes-one-number
+      trap as v85/#894. No schema change, no migration step.
 ```

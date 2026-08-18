@@ -468,6 +468,17 @@ surface as a banner + add wizard instead of waiting for a manual pick/drop.
   per-project toggle now decides ONLY whether the character page shows the
   Products tab. Both `generateCharacterFiles` (which emits the scan config +
   `Scan_Products_<Name>.dsa`) and `fetchProjectScanPlan` read the folder.
+- **Matching sees every mapped content directory, and the base-figure Morphs
+  roots (runtime v88).** `DthProducts.dsa` asks Daz itself
+  (`App.getContentMgr()`) for the mapped content directories — the
+  studio-supplied `dazLibraryFolder` only seeds the list — and its
+  content-folder synthesis also walks
+  `data/DAZ 3D/<generation>/<figure>/Morphs/<Vendor>/<Product>` (the STANDARD
+  home of installed morphs, which the vendor walk skips as base content).
+  `productFolderKey` extracts the vendor/product pair after `Morphs/` for such
+  paths, and a "Folder Match" ties an asset's own source file to a real
+  product's folders (for files past the manifest's 60-file cap). The matchers
+  are VM-tested over an in-memory tree in `runtime.test.ts`.
 - **The results are per SCENE, in `products.json`.** `lib/rom/character-products.ts`
   owns the file shape and `withScans` — a pickup REPLACES the scenes it carries
   and leaves the rest, the same rule the ROM run log follows. Storing the merged
