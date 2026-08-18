@@ -390,6 +390,23 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   reinstall on save and keeps running the older bundled runtime — Tools → Refresh
   assets (which passes `force`) is what actually replaces it. A second fix inside
   the same unreleased version bump therefore looks like "my change had no effect".
+- **Two PRs must never claim the same `RUNTIME_VERSION`** — and the collision is
+  invisible to git. Both branches change `84` to `85` on the same line, so the
+  merge is CLEAN; the goldens agree; nothing conflicts except the runtime hash
+  (which reads as ordinary rebase noise). What ships is one version number over
+  two different runtimes, and `copyRuntimeFiles` skips the install on a matching
+  `v<N>` marker while the generated header `// DTH-Runtime: v<N>` equals
+  `RUNTIME_VERSION`, so the second change never reaches an install that already
+  took the first and nothing anywhere reads as stale — no pulse, no prompt, and
+  the changeset's "run Refresh assets" is a note the user has no reason to act
+  on. Unfixable in the field afterwards: the only repair is another bump.
+  Measured 2026-08-18 — #894 took v85 while #895 sat in review holding v85, and
+  the release order between them was a coin flip. **So re-check the constant
+  against `origin/main` before opening the PR and again before merging, not just
+  when you write it**; if it is taken, take the next number (a skipped number
+  costs nothing — versions only have to be monotonic) and renumber the
+  schema-history entry with it. `git log -S'RUNTIME_VERSION = <n>'` will not warn
+  you: it answers about history, and the branch you are racing has none yet.
 - **A Daz Content Library tile is just a same-named PNG beside the file** —
   `<base name>.png` at **91×91** for the tile, `<base name>.tip.png` at **256×256**
   for the hover preview (both verified against the stock `Genesis 9.png` /

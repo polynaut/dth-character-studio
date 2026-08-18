@@ -33,7 +33,7 @@ interface RunLogEntry {
   sceneName: string
   ok: boolean
   errors: Array<string>
-  failedMorphs: Array<{ frame: number; node: string; prop: string; reason: string }>
+  failedMorphs: Array<{ frame: number; node: string; prop: string; reason: string; kind?: string }>
 }
 
 interface UtilsModule {
@@ -151,6 +151,32 @@ describe('run log across a multi-scene bulk export', () => {
     expect(b?.failedMorphs.map((m) => m.prop)).toEqual(['JacketFlare'])
     expect(b?.failedMorphs.map((m) => m.frame)).toEqual([40])
     expect(runs.find((r) => r.scene === SCENE_C)?.ok).toBe(true)
+  })
+
+  it('reads `kind` when present and defaults it to "" for a pre-v86 log', () => {
+    // `kind` groups rows that share one explanation, so the report can state it
+    // ONCE instead of on every row (runtime v86). Logs written before v86 put
+    // that explanation inside each reason and carry no kind — they must parse,
+    // and must NOT gain an explainer that would then be said twice.
+    const text = JSON.stringify({
+      ok: false,
+      runs: [
+        {
+          scene: SCENE_A,
+          ok: false,
+          errors: [],
+          warnings: [],
+          failedMorphs: [
+            { frame: 12, node: 'Genesis9', prop: 'New', reason: 'dialed at 0.3', kind: 'dialed-walked' },
+            { frame: 13, node: 'Genesis9', prop: 'Old', reason: 'a whole paragraph' },
+            { frame: 14, node: 'Genesis9', prop: 'Junk', reason: 'x', kind: 7 },
+          ],
+        },
+      ],
+    })
+
+    const morphs = parseRomRunLogText(text)?.failedMorphs ?? []
+    expect(morphs.map((m) => m.kind)).toEqual(['dialed-walked', '', ''])
   })
 
   it('tags every run with the scene it ran in, so the UI can attribute it', () => {

@@ -5,6 +5,8 @@ import { runInNewContext } from 'node:vm'
 
 import { describe, expect, it } from 'vitest'
 
+import { DIALED_WALKED_KIND } from './run-log.ts'
+
 /**
  * The dialed-walked-morph gate (runtime v82) — what it FAILS and what it spares.
  *
@@ -36,6 +38,8 @@ interface FailedMorph {
   node: string
   prop: string
   reason: string
+  /** Groups rows that share one explanation — see run-log.ts (runtime v86). */
+  kind: string
 }
 
 interface RunLog {
@@ -209,7 +213,33 @@ describe('checkDialedWalkedMorphs — the frameDatas leg', () => {
     const root = fakeNode('Genesis9', [driven])
     const { log } = gate(root, [walkFrame(400, 'Genesis9', 'body_bs_LegsLength')])
 
-    expect(log.failedMorphs[0].reason).toContain('DRIVEN - zero the controlling dial')
+    // The dial the user can SEE is not the one to zero, so this is the one
+    // thing the row must say beyond the value.
+    expect(log.failedMorphs[0].reason).toContain('DRIVEN, zero the controlling dial')
+  })
+
+  it('keeps the reason a ONE-LINER and moves the shared "why" to the kind', () => {
+    // Every offender used to repeat the same paragraph — why a walked morph
+    // must sit at 0, and that its shape still reaches Unreal — which buried the
+    // only part that differs between rows. The studio states that once, keyed
+    // on `kind`; the reason says what is wrong with THIS dial and stops.
+    const undriven = new FakeProp('body_bs_LegsLength', 0.3, 0)
+    const root = fakeNode('Genesis9', [undriven])
+    const { log } = gate(root, [walkFrame(400, 'Genesis9', 'body_bs_LegsLength')])
+
+    const { reason, kind } = log.failedMorphs[0]
+    expect(reason).toBe('dialed at 0.3 - zero it and rebuild')
+    // Against the EXPORTED constant, never a copy of the literal: the studio
+    // renders the shared explainer on `kind === DIALED_WALKED_KIND`, and the
+    // runtime hardcodes its own string. Nothing else joins those two — a
+    // rename on either side would just stop the explainer from ever showing,
+    // silently. This assertion is that join.
+    expect(kind).toBe(DIALED_WALKED_KIND)
+    // The shared half must be GONE from the row, not merely shortened.
+    expect(reason).not.toContain('FBX')
+    expect(reason).not.toContain('alembic')
+    expect(reason).not.toContain('generated morph')
+    expect(reason.length).toBeLessThan(60)
   })
 
   it('does not fail an unresolvable prop — applyKeyData owns that report', () => {
@@ -243,6 +273,9 @@ describe('applyArtDirectionData — the art-direction leg of the gate', () => {
     expect(log.failedMorphs).toHaveLength(1)
     expect(log.failedMorphs[0].frame).toBe(596) // startFrame + art frame
     expect(log.failedMorphs[0].reason).toContain('dialed at 0.4')
+    // Same kind as the frameDatas leg — both legs are one finding to the user,
+    // so both must reach the ONE explainer the report states.
+    expect(log.failedMorphs[0].kind).toBe(DIALED_WALKED_KIND)
     expect(utils.runLogProblemCount()).toBe(1)
     // The build continues: the sawtooth is still keyed (floor 0, spike 0.8) —
     // only the EXPORT is gated, so one run reports every offender.

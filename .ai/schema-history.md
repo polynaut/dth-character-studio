@@ -1071,4 +1071,27 @@ v80 — no unattended carrier opens a modal, and the missing-runtime message sto
       on the same verdict. DzDir.rename is capability-gated (unmeasured on
       DS4) with the old destructive remove as fallback — no worse than
       before.
+ 86 — a failedMorphs entry carries `kind`, and dialedWalkedReason is a
+      ONE-LINER. The dialed-walked reason was a ~330-character paragraph, and
+      every offender repeated it verbatim: three dialed morphs meant three
+      identical essays in the studio's report, with the only part that differs
+      between them (the value, and whether the dial is ERC-driven) buried at
+      the front of each. The row now says just that much ("dialed at 0.089 -
+      DRIVEN, zero the controlling dial and rebuild"); the shared half - why a
+      walked morph must sit at 0, and that its shape still reaches Unreal
+      through the generated morph - is stated ONCE by the report, keyed on the
+      new `kind: "dialed-walked"` (DialedWalkedExplainer, mirroring the
+      existing KeyProblemExplainer). `kind` is absent in every log written
+      before this bump and parses to `""`, which is right: those rows carry
+      the explanation inline, so they get no explainer and it is never said
+      twice. Every OTHER failed morph reason was already a one-liner
+      ("property not found") and is untouched. The literal is mirrored -
+      `DIALED_WALKED_KIND` (run-log.ts) and the string DthUtils.dsa logs - so
+      the sandbox gate test asserts the runtime's value against the exported
+      constant rather than a copy of it. NOT v85: #894 took that number for a
+      DIFFERENT runtime while this sat in review, and two runtimes sharing one
+      number is unfixable in the field - `copyRuntimeFiles` skips the install
+      on a matching `v<N>` marker and the script header reads current, so the
+      second one never reaches an install that already has the first.
+      No schema change, no migration step.
 ```
