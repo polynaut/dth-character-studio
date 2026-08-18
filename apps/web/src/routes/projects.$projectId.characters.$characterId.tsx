@@ -706,8 +706,8 @@ function CharacterPage({ onImportRemount }: { onImportRemount: () => void }) {
         <h2 className="mb-3 flex w-fit items-center gap-1 text-xl font-semibold">
           Advanced options
           <InfoPopup label="Advanced options — more information">
-            Preserve morphs &amp; node transforms —{' '}
-            <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/04-first-character.html#advanced-options--preserve-morphs--node-transforms">
+            Preserve node transforms —{' '}
+            <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/04-first-character.html#advanced-options--preserve-node-transforms">
               open the guide
             </GuideLink>
           </InfoPopup>
@@ -718,8 +718,6 @@ function CharacterPage({ onImportRemount }: { onImportRemount: () => void }) {
           overrideEligible={sceneSel.overrideEligible}
           sceneOverride={sceneSel.sceneOverride}
           writePreserve={sceneSel.writePreserve}
-          morphIndex={morphIndex}
-          scenePath={sceneSel.effectiveScene}
         />
       </section>
 

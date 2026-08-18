@@ -1515,8 +1515,8 @@ function applyKeyData(oNodeRoot, keyData, overrideFrameIdx){
  * `oNodes` whose last key ends before `iBoundaryFrame` at a value different
  * from its frame-0 value, key that frame-0 value at `iBoundaryFrame` — the
  * same "next frame back to base" every non-final pose gets from the sawtooth.
- * Morphs already back at their frame-0 value are untouched, so flattened
- * preserved morphs and dials set once at frame 0 stay as they are. */
+ * Morphs already back at their frame-0 value are untouched, so dials set once
+ * at frame 0 stay as they are. */
 /**
  * Snapshot every morph's value on the given nodes into a name→value map, taken
  * BEFORE any ROM preset is loaded (right after ApplyInitialValues). The base-ROM
@@ -1951,67 +1951,6 @@ function getTransformKeyframes(oNode) {
     }
     frames.sort(function(a, b) { return a - b; });
     return frames;
-}
-
-// Resolves a node under (or being) oNodeRoot by internal name OR label — the
-// same match applyKeyData uses for a ROM pose morph's stored node. Returns
-// null when nothing in the tree answers to the name.
-function findNodeByNameOrLabel(oNodeRoot, sNode) {
-    if (oNodeRoot.getName() == sNode || oNodeRoot.getLabel() == sNode)
-        return oNodeRoot;
-    var oNode = oNodeRoot.findNodeChild(sNode, true);
-    if (!oNode)
-        oNode = oNodeRoot.findNodeChildByLabel(sNode, true);
-    return oNode;
-}
-
-// Restores morphs specified in options.preserveMorphs to their keepValue
-// preserveMorphs format: [{ name: "body_ctrl_BreastsUp-Down", keepValue: 1, node: "" }, ...]
-// A row's `node` (runtime v74) scopes the lookup to that scene node (matched by
-// internal name or label); '' / absent searches the figure root — the only
-// place this function ever looked before the field existed.
-function restorePreservedMorphs(oNodeRoot, preserveMorphs) {
-    if (!preserveMorphs || preserveMorphs.length === 0) {
-        return;
-    }
-
-    for (var i = 0; i < preserveMorphs.length; i++) {
-        var config = preserveMorphs[i];
-        if (!config.name) continue;
-
-        var oNode = oNodeRoot;
-        if (config.node) {
-            oNode = findNodeByNameOrLabel(oNodeRoot, config.node);
-            if (!oNode) {
-                print("WARNING: preserved morph node not found:", config.node, "(morph:", config.name + ")");
-                continue;
-            }
-        }
-
-        var oProp = oNode.findProperty(config.name);
-        if (!oProp) {
-            oProp = oNode.findPropertyByLabel(config.name);
-        }
-        if (!oProp) {
-            oProp = getMorphPropFromNode(oNode, config.name);
-        }
-
-        if (oProp) {
-            // Set all keyframes to keepValue (flattens the animation to constant)
-            var numKeys = oProp.getNumKeys();
-            if (numKeys > 0) {
-                for (var k = 0; k < numKeys; k++) {
-                    var keyTime = oProp.getKeyTime(k);
-                    oProp.setValue(keyTime, config.keepValue);
-                }
-            } else {
-                oProp.setValue(config.keepValue);
-            }
-            print("Restored preserved morph:", config.name, "to", config.keepValue);
-        } else {
-            print("WARNING: Could not find preserved morph:", config.name);
-        }
-    }
 }
 
 // Applies options.frameZeroMorphs — [{ name: "Expand All", value: 1, node: "" }, ...] —

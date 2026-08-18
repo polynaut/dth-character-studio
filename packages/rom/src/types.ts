@@ -426,17 +426,6 @@ export function flatSectionGroupId(section: RomSection): string {
   return `flat-${section}`
 }
 
-/** A morph value held (restored) after the ROM load — name + the value to keep.
- *  `node` (schema v32) scopes the lookup to one scene node (matched by internal
- *  name or label, like a ROM pose morph's `node`); `''` = the figure root, the
- *  only place the runtime ever searched before the field existed. */
-export const preserveMorphSchema = z.object({
-  name: z.string().max(MAX_NAME_LENGTH),
-  keepValue: z.number(),
-  node: z.string().max(MAX_NAME_LENGTH).default(''),
-})
-export type PreserveMorph = z.infer<typeof preserveMorphSchema>
-
 /**
  * A morph set + keyed at FRAME 0 of the ROM — name + the value to set. With
  * `node` empty the runtime applies it on EVERY node of the figure tree that
@@ -578,11 +567,10 @@ export const sceneOverrideSchema = z.object({
       applyUE5TearUV: z.boolean().default(false),
     })
     .optional(),
-  /** Per-scene "preserve after ROM loading" lists — present = armed, a full
-   *  replacement of the base lists (empty = "preserve nothing"). */
+  /** Per-scene "preserve node transforms after ROM loading" list — present =
+   *  armed, a full replacement of the base list (empty = "preserve nothing"). */
   preserve: z
     .object({
-      morphs: z.array(preserveMorphSchema).default([]),
       nodeTransforms: z.array(preserveNodeTransformSchema).default([]),
     })
     .optional(),
@@ -825,7 +813,7 @@ export function jcmMorphModForRuntime(mod: JcmMorphMod): {
  * step — is `.ai/schema-history.md`. Bumping this means adding the entry there,
  * in the same commit.
  */
-export const CHARACTER_SCHEMA_VERSION = 34
+export const CHARACTER_SCHEMA_VERSION = 35
 
 /**
  * Version of the generated **script runtime** — the bundled DTH `.dsa` runtime
@@ -844,7 +832,7 @@ export const CHARACTER_SCHEMA_VERSION = 34
  * step — is `.ai/schema-history.md`. Bumping this means adding the entry there,
  * in the same commit.
  */
-export const RUNTIME_VERSION = 82
+export const RUNTIME_VERSION = 83
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a
@@ -1032,9 +1020,6 @@ export const characterSchema = z.object({
    *  ROM build, so DTH's Lacrimal Fluid material lines up without the manual
    *  Surfaces-tab step. No-op on non-G9 figures (no UE5 tear UV ships for them). */
   applyUE5TearUV: z.boolean().default(false),
-  /** Morph values restored after ROM loading (e.g. breast position). A row's
-   *  `node` (v32) scopes the lookup to one scene node; '' = figure root. */
-  preserveMorphs: z.array(preserveMorphSchema).default([]),
   /** Node transforms memorized before and restored after ROM loading (e.g. eyes). */
   preserveNodeTransforms: z.array(preserveNodeTransformSchema).default([]),
   /** Morphs set + keyed at frame 0 of the ROM (schema v28) — applied on every

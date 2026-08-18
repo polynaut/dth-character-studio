@@ -27,19 +27,16 @@ export interface FillTarget {
  *  sit inert on the target). Each is a wholesale replacement when checked. */
 const EXTRA_LABELS = {
   jcmRules: 'Modify JCM frames',
-  preserveMorphs: 'Preserve morphs',
   preserveNodeTransforms: 'Preserve node transforms',
 } as const
 export type FillExtra = keyof typeof EXTRA_LABELS
 
-/** Which extras the source has anything to offer for. The two preserve lists
- *  are offered separately, mirroring the Advanced-options editor. (The G9
- *  strength dials are deliberately NOT an extra — two visible values the user
- *  copies by hand when wanted.) */
+/** Which extras the source has anything to offer for. (The G9 strength dials are
+ *  deliberately NOT an extra — two visible values the user copies by hand when
+ *  wanted.) */
 function offeredExtras(source: Character): Array<FillExtra> {
   const out: Array<FillExtra> = []
   if (source.jcmMorphMods.length > 0) out.push('jcmRules')
-  if (source.preserveMorphs.length > 0) out.push('preserveMorphs')
   if (source.preserveNodeTransforms.length > 0) out.push('preserveNodeTransforms')
   return out
 }
@@ -47,7 +44,6 @@ function offeredExtras(source: Character): Array<FillExtra> {
 function extraSummary(extra: FillExtra, source: Character): string {
   const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
   if (extra === 'jcmRules') return plural(source.jcmMorphMods.length, 'rule')
-  if (extra === 'preserveMorphs') return plural(source.preserveMorphs.length, 'morph')
   return plural(source.preserveNodeTransforms.length, 'node transform')
 }
 
@@ -125,21 +121,15 @@ export function FillFromCharacterDialog({
     // EXCEPT JCM: it's usually the stock preset base, so copying it is an
     // opt-in (and RET mirrors it). RET is never in the set: it has no checkbox
     // of its own (it rides with JCM, exactly like the editor's tied enable
-    // toggle). The two preserve lists start UNCHECKED: they're the most
-    // target-specific tuning (which morphs/nodes to hold depends on this
-    // character's own setup), so copying them is a deliberate opt-in.
+    // toggle). The preserve-node-transform list starts UNCHECKED: it's the most
+    // target-specific tuning (which nodes to hold depends on this character's
+    // own setup), so copying it is a deliberate opt-in.
     setChecked(
       new Set(
         filledSections(c.sections).filter((section) => section !== 'RET' && section !== 'JCM'),
       ),
     )
-    setExtras(
-      new Set(
-        offeredExtras(c).filter(
-          (extra) => extra !== 'preserveMorphs' && extra !== 'preserveNodeTransforms',
-        ),
-      ),
-    )
+    setExtras(new Set(offeredExtras(c).filter((extra) => extra !== 'preserveNodeTransforms')))
     setStep('sections')
   }
 
@@ -169,7 +159,6 @@ export function FillFromCharacterDialog({
       sections: fillSectionsFrom(target.sections, source.sections, picked),
     }
     if (extras.has('jcmRules')) patch.jcmMorphMods = structuredClone(source.jcmMorphMods)
-    if (extras.has('preserveMorphs')) patch.preserveMorphs = structuredClone(source.preserveMorphs)
     if (extras.has('preserveNodeTransforms'))
       patch.preserveNodeTransforms = structuredClone(source.preserveNodeTransforms)
     onFill(patch, {
@@ -178,7 +167,6 @@ export function FillFromCharacterDialog({
       picked,
       extras: {
         jcmRules: extras.has('jcmRules'),
-        preserveMorphs: extras.has('preserveMorphs'),
         preserveNodeTransforms: extras.has('preserveNodeTransforms'),
       },
     })

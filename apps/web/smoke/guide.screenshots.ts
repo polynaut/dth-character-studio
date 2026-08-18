@@ -743,7 +743,7 @@ test('dth-export-running', async ({ page }) => {
 
 test('character-advanced-options', async ({ page }) => {
   await openCharacter(page)
-  // "Advanced options" is a plain always-open section now (preserve morphs + node
+  // "Advanced options" is a plain always-open section now (preserve node
   // transforms) — no longer a collapsible <details>. Frame just its card (title →
   // last field) so the shot leads with the "Advanced options" heading.
   await shootStrip(

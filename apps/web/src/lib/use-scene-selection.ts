@@ -3,7 +3,7 @@ import { useCallback, useState } from 'react'
 import { sceneOverrideSchema, sceneRecordEmpty } from '@dth/rom'
 import type { Character, SceneOverride } from '@dth/rom'
 
-import { frameZeroMorphsKey, preserveMorphsKey, preserveNodesKey } from './preserve-diff.ts'
+import { frameZeroMorphsKey, preserveNodesKey } from './preserve-diff.ts'
 
 /**
  * The character editor's page-local Daz-scene selection (the scene cards) and the
@@ -81,34 +81,26 @@ export function useSceneSelection(character: Character, patch: (p: Partial<Chara
   )
 
   /**
-   * Write the per-scene preserve lists (morphs / node transforms) under the same
-   * implicit-override model. The `preserve` block exists exactly while a list
+   * Write the per-scene preserve-node-transform list under the same
+   * implicit-override model. The `preserve` block exists exactly while the list
    * differs from the base — compared as a canonical MULTISET keyed by the natural
-   * identity (morph name+value / node label), so reordering never spuriously arms
-   * it, yet renaming a row to duplicate another base key still counts as a
-   * divergence (a plain Set misses that and would revert the edit). Untouched
-   * rows equal the base, so they never read as overridden. No-op on the primary
-   * scene (edits there go to the base).
+   * identity (node label), so reordering never spuriously arms it, yet renaming a
+   * row to duplicate another base key still counts as a divergence (a plain Set
+   * misses that and would revert the edit). Untouched rows equal the base, so they
+   * never read as overridden. No-op on the primary scene (edits there go to the
+   * base).
    */
   const writePreserve = useCallback(
-    (next: {
-      morphs?: NonNullable<SceneOverride['preserve']>['morphs']
-      nodeTransforms?: NonNullable<SceneOverride['preserve']>['nodeTransforms']
-    }) => {
+    (next: { nodeTransforms: NonNullable<SceneOverride['preserve']>['nodeTransforms'] }) => {
       if (!overrideEligible) return
-      const baseMorphs = character.preserveMorphs
       const baseNodes = character.preserveNodeTransforms
+      const same = preserveNodesKey(next.nodeTransforms) === preserveNodesKey(baseNodes)
       const existing = character.sceneOverrides.find((o) => o.scenePath === effectiveScene)
-      const start = existing?.preserve ?? { morphs: baseMorphs, nodeTransforms: baseNodes }
-      const merged = { ...start, ...next }
-      const morphsSame = preserveMorphsKey(merged.morphs) === preserveMorphsKey(baseMorphs)
-      const nodesSame = preserveNodesKey(merged.nodeTransforms) === preserveNodesKey(baseNodes)
       const record = existing ?? sceneOverrideSchema.parse({ scenePath: effectiveScene })
-      writeRecord({ ...record, preserve: morphsSame && nodesSame ? undefined : merged })
+      writeRecord({ ...record, preserve: same ? undefined : next })
     },
     [
       character.sceneOverrides,
-      character.preserveMorphs,
       character.preserveNodeTransforms,
       effectiveScene,
       overrideEligible,
@@ -118,7 +110,7 @@ export function useSceneSelection(character: Character, patch: (p: Partial<Chara
 
   /**
    * Write the per-scene "Add morphs on frame 0" list under the same
-   * implicit-override model as the preserve lists: the `frameZero` block exists
+   * implicit-override model as the preserve list: the `frameZero` block exists
    * exactly while the list differs from the base (compared as the same canonical
    * multiset), and an otherwise-empty record is dropped. No-op on the primary
    * scene (edits there go to the base).
@@ -150,7 +142,7 @@ export function useSceneSelection(character: Character, patch: (p: Partial<Chara
     sceneOverride,
     /** Implicit-override writer for the Genesis-9 dials (see above). */
     writeIdentity,
-    /** Implicit-override writer for the preserve lists (see above). */
+    /** Implicit-override writer for the preserve-node-transform list (see above). */
     writePreserve,
     /** Implicit-override writer for the frame-0 morph list (see above). */
     writeFrameZero,

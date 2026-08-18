@@ -218,17 +218,6 @@ function ApplyDTHWorkflow(options){
 	// COMPLETE ROM, so an interrupted one ends here instead.
 	if(dthStopHere("during the custom frames")) return false;
 
-	/** ****************************************************************/
-	// Restore preserved morphs LAST, after every key-laying stage (v74). The
-	// pass FLATTENS each listed morph's whole animation to keepValue, so it
-	// must outlast the last stage that can key one — it used to run right
-	// after the base preset load, and any later block re-keyed over the
-	// preserved value (the G8.1 Physics block keys the breast dials to 100%,
-	// which is exactly the report that moved it: a 60% hold showing 100%).
-	// It also ran only inside the JCM branch, so a base-less ROM never
-	// preserved anything at all.
-	restorePreservedMorphs(oNodeRoot, options.preserveMorphs);
-
 	if( options["bWriteDebugCSV"] ){
 		printCSV(successFrameDatas, options["successCSV"]);
 		printCSV(failedFrameDatas, options["failCSV"]);
@@ -419,9 +408,9 @@ function ApplyPhysics(options, oNodeRoot, startFrame){
 
 	// No per-block setLinearInterp (v78) — see the note in ApplyDK9. On THIS
 	// node it also mattered for correctness: a mid-build frame-0 key on the
-	// figure lands before restoreNodeTransforms / resetFrameDatasAtFrame /
-	// restorePreservedMorphs run, which made a preserved morph's frame-0 value
-	// depend on whether the Physics block was enabled.
+	// figure lands before restoreNodeTransforms / resetFrameDatasAtFrame run,
+	// which made a frame-0 value depend on whether the Physics block was
+	// enabled.
 	return true;
 }
 
@@ -492,7 +481,7 @@ function ApplyDTHCharacter(config){
 		"FACsDetailStrength", "FlexionStrength", "presetFrames",
 		"jcmRomPath", "mouthRomPath", "gpRomPath", "dkRomPath", "physRomPath",
 		"aGPFenceOffsets", "aDK9FenceOffsets",
-		"preserveMorphs", "preserveNodeTransforms", "jcmMorphMods", "frameZeroMorphs"
+		"preserveNodeTransforms", "jcmMorphMods", "frameZeroMorphs"
 	];
 	for(var i = 0; i < keys.length; i++){
 		if(config[keys[i]] !== undefined) options[keys[i]] = config[keys[i]];

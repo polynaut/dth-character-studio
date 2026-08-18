@@ -34,7 +34,7 @@ function sourceCharacter(): CharacterWithProject {
     },
   ]
   c.jcmMorphMods = [{ id: 'r1', boneLabel: 'Left Thigh Bend', axis: 'XRotate', drives: [] }]
-  c.preserveMorphs = [{ name: 'BreastsGone', keepValue: 1, node: '' }]
+  c.preserveNodeTransforms = [{ nodeLabel: 'Left Eye' }]
   c.facsDetailStrength = 0.8
   return { ...c, projectId: 'X:/projects/default', projectName: 'Default' }
 }
@@ -64,31 +64,28 @@ describe('FillFromCharacterDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Kira' }))
 
     // Step 2: the filled sections; JCM rules pre-checked, the preserve list
-    // offered but starting UNCHECKED (its node-transform sibling isn't offered
-    // at all — the source has none). The strength dials are never an extra.
+    // offered but starting UNCHECKED. The strength dials are never an extra.
     expect(screen.getByText('Expressions')).toBeTruthy()
     expect(screen.getByText('Modify JCM frames')).toBeTruthy()
     expect(screen.queryByText('Strength dials')).toBeNull()
-    expect(screen.getByText('Preserve morphs')).toBeTruthy()
-    expect(screen.queryByText('Preserve node transforms')).toBeNull()
+    expect(screen.getByText('Preserve node transforms')).toBeTruthy()
 
     // JCM starts UNCHECKED (copying the base ROM config is an opt-in) — check
-    // it here so the fill covers all four. Opt the preserve-morph list in too.
+    // it here so the fill covers all four. Opt the preserve list in too.
     fireEvent.click(screen.getByText('Joint Corrective'))
-    fireEvent.click(screen.getByText('Preserve morphs'))
+    fireEvent.click(screen.getByText('Preserve node transforms'))
     fireEvent.click(screen.getByRole('button', { name: 'Fill from character' }))
     expect(patch!.sections.EXP.groups[0].poses[0].name).toBe('Smile')
     expect(patch!.jcmMorphMods).toHaveLength(1)
     expect(patch!.facsDetailStrength).toBeUndefined()
-    expect(patch!.preserveMorphs).toEqual([{ name: 'BreastsGone', keepValue: 1, node: '' }])
-    expect(patch!.preserveNodeTransforms).toBeUndefined()
+    expect(patch!.preserveNodeTransforms).toEqual([{ nodeLabel: 'Left Eye' }])
     // RET/JCM/FAC are enabled preset sections in the stock defaults, so the
     // source offers them as filled alongside its custom EXP.
     expect(picked).toMatchObject({
       id: 'src-1',
       name: 'Kira',
       picked: ['RET', 'JCM', 'FAC', 'EXP'],
-      extras: { jcmRules: true, preserveMorphs: true, preserveNodeTransforms: false },
+      extras: { jcmRules: true, preserveNodeTransforms: true },
     })
   })
 
@@ -110,7 +107,7 @@ describe('FillFromCharacterDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Fill from character' }))
     expect(patch!.jcmMorphMods).toBeUndefined()
     expect(patch!.facsDetailStrength).toBeUndefined()
-    expect(patch!.preserveMorphs).toBeUndefined()
+    expect(patch!.preserveNodeTransforms).toBeUndefined()
     expect(patch!.sections!.EXP.groups).toHaveLength(1)
   })
 
