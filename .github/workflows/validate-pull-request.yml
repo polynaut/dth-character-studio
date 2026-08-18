@@ -58,8 +58,9 @@ jobs:
       # The tree carries ZERO lint warnings, and `--deny-warnings` keeps it there:
       # any warning, from any rule, fails this check. There is nothing left to
       # count, so there is no baseline to bump — a pattern this repo uses on
-      # purpose is exempted at the SITE (an `oxlint-disable` with its reason) or
-      # decided in .oxlintrc.json, both of which a reviewer reads in the diff.
+      # purpose is exempted at the SITE, or for the FILE when that is the
+      # module's whole shape (an `oxlint-disable` carrying its reason), or
+      # decided in .oxlintrc.json — all of which a reviewer reads in the diff.
       # Replaced the .lint-baseline.json ratchet, whose per-rule totals were
       # fungible: swapping a deliberate instance for an accidental one never
       # moved the number.

@@ -38,6 +38,12 @@
     // lib/rom/api + lib/rom/storage (where that is the module's whole shape)
     // and per SITE everywhere else, each with its reason. An `await` in a loop
     // anywhere else is now an error, which is what it should be.
+    // The file-level form is a trade, not a free win: inside those 24 files the
+    // rule is off, so a NEW accidental instance there is invisible to CI. It is
+    // bought for a reason that is readable at the top of the file it applies
+    // to — which a per-rule count in a shared JSON never was. One-offs take
+    // `disable-next-line` instead, and the header only goes on a file once it
+    // actually has such a loop.
     "no-await-in-loop": "error",
     // Defining a component during render really does remount its subtree — the
     // rule is right, and it is an error. The two exceptions are the

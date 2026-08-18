@@ -37,14 +37,16 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   the parm; never count from 1. Same 0-based convention as the ROM frame math,
   by coincidence rather than by contract, so don't infer one from the other.
 - **The lint tree is at ZERO warnings and `pnpm lint` runs `--deny-warnings`**,
-  so any warning from any rule fails CI. The ~223 that used to sit there were
+  so any warning from any rule fails CI. The 221 that used to sit there were
   DECISIONS, not debt (sequential awaits are deliberate fs ordering, the
   react-markdown component maps are that library's API, the map-spreads build
   new records) — they are now stated where they apply instead of counted:
   - **A file-level `/* oxlint-disable <rule> */` with a reason** where the
-    pattern is the module's whole shape — every module under `lib/rom/api/` and
-    `lib/rom/storage/` (ordered filesystem work), the Playwright helpers, and
-    the two react-markdown files.
+    pattern is the module's whole shape: 24 of the 50 modules under
+    `lib/rom/api/` + `lib/rom/storage/` (ordered filesystem work), three
+    Playwright files, two table-driven test files, and the two react-markdown
+    files. NOT those directories wholesale — the header goes on a file only
+    once it actually has such a loop.
   - **An `oxlint-disable-next-line` with a reason** at a one-off site. It must
     be the LAST comment line before the code — "next line" is literal, so a
     reason written *underneath* the directive silently doesn't apply (measured;
@@ -52,10 +54,18 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   - **`"off"` in `.oxlintrc.json`** when the rule simply doesn't fit the
     codebase (`oxc/no-map-spread`: its fix is to mutate, which is a bug for
     React state) — better than apologising to it at 13 call sites.
+  A file-level disable is a real trade, not a free win: inside those files the
+  rule is OFF, so a NEW accidental instance there is invisible to CI and only a
+  reviewer catches it. Prefer `disable-next-line` when the pattern is a one-off.
   Don't "clean up" a suppression by deleting it; the pattern it names is still
   deliberate. This replaced a `.lint-baseline.json` count ratchet, which was
   fungible — swapping a deliberate instance for an accidental one left the
-  total unmoved — and which had also been inert on CI for months.
+  total unmoved — and which had also been inert on CI for months. (The 221:
+  184 `no-await-in-loop` + 24 `no-unstable-nested-components` + 13
+  `no-map-spread`, measured by neutering every directive and re-linting —
+  exactly the baseline's per-rule sums. The three rules that were never
+  baselined report 0 today, so `--deny-warnings` covers them going forward
+  rather than cleaning anything up.)
 - **"A `.hip` always holds absolute paths" is FALSE — the real constraint is
   `$JOB`.** A Houdini project can be authored entirely relative, and the
   studio's own Generate project does exactly that (`$JOB/<houdiniSubdir>/
