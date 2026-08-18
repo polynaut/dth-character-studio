@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 
 import { dismissRomRunLog, fetchRomRunLog } from '#/lib/rom/api.ts'
-import { morphKey } from '#/lib/rom/run-log.ts'
+import { dropSceneRun, morphKey } from '#/lib/rom/run-log.ts'
 import { useRefetchOnFocus } from '@dth/ui'
 
 export type RomRunLog = Awaited<ReturnType<typeof fetchRomRunLog>>
@@ -32,6 +32,34 @@ export function useRomRunLog(projectId: string, characterId: string, initial: Ro
         // on every refocus — keep the last log; the next focus retries.
       })
   }, [projectId, characterId])
+
+  /**
+   * Forget the last run's report on the spot — no API call.
+   *
+   * For the DTH Export handoff, which has ALREADY dropped both run-log files
+   * from disk (`executeCharacterJobs` → `clearRomRunLogFiles`). Starting a run
+   * must clear the previous one's red banner and red morph rows immediately,
+   * rather than leaving them under a live progress bar until Daz writes a new
+   * log. Local-only on purpose: re-deleting files the handoff just deleted
+   * would be a second round trip for nothing, and the refocus refetch now
+   * reads an empty store anyway, so the state cannot come back.
+   */
+  const forget = useCallback(() => setRomRunLog(null), [])
+
+  /**
+   * Forget ONE scene's findings — the same deal as {@link forget}, for the
+   * single-scene rebuild ("Generate new ROM" on a scene card), whose handoff
+   * has already dropped that scene's entry from disk (`clearSceneRunLog`).
+   *
+   * Per scene because that rebuild re-runs one scene: the other scenes'
+   * findings still stand, and nothing is coming to rewrite them. `dropSceneRun`
+   * hands the same object back when the scene had no entry, so a rebuild of an
+   * unreported scene leaves the log's identity — and with it the memoized ROM
+   * subtree — untouched.
+   */
+  const forgetScene = useCallback((scenePath: string) => {
+    setRomRunLog((prev: RomRunLog) => (prev ? dropSceneRun(prev, scenePath) : prev))
+  }, [])
 
   const dismiss = useCallback(async () => {
     setRomRunLog(null)
@@ -90,6 +118,8 @@ export function useRomRunLog(projectId: string, characterId: string, initial: Ro
   return {
     romRunLog,
     dismiss,
+    forget,
+    forgetScene,
     hasRunProblems,
     hasRunWarnings,
     showRunReport,

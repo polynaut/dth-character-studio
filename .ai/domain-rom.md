@@ -166,6 +166,34 @@ backup first.
     ingesting DELETES the transport file, so a user who alt-tabs back mid-batch
     splits one batch across two logs — replacing would drop the first half at
     exactly the moment they looked.
+  - **The merge is why a starting run RETIRES the previous report** — and the
+    two handoffs retire different amounts of it (`api/run-log-store.ts`, a leaf
+    module so `api/execute/jobs.ts` stays out of an import cycle through
+    `characters.ts` → `generate.ts`). Without this, the merge folds the last
+    run's failures into the new run's report — a scene the new run doesn't
+    touch stays failed forever — and the character page's focus refetch
+    re-raises the old red banner (and the red morph rows) while the new run is
+    still working.
+    - **DTH Export** (`executeCharacterJobs`) supersedes the whole report:
+      `clearRomRunLogFiles` deletes BOTH files as an arming step beside the
+      interrupt flag and the progress log. On screen: `useRomRunLog().forget`,
+      from `DthExportAction`'s `onExported`.
+    - **"Generate new ROM"** (`generateRomAnimation`, the scene card's menu)
+      re-runs ONE scene, so it may only retire that scene: `clearSceneRunLog`
+      rewrites both files through the pure `dropSceneRun` (drop the entry,
+      re-derive `ok` + the flattened views; delete the file when nothing is
+      left). Wiping it would throw away findings for scenes that have nothing
+      coming to rewrite them. On screen: `useRomRunLog().forgetScene`, from
+      `DazSceneField`'s `onRomRebuildStarted`. Keying by the SOURCE scene is
+      correct because `ApplyDTHCharacter` writes the run log BEFORE the
+      generated script's save-as repoints the open scene.
+    - `dropSceneRun` returns the same object when the scene has no entry — the
+      "nothing changed" signal both the store (skip the write) and the hook
+      (keep the memoized ROM subtree) rely on. It also drops an `unreadable`
+      log whole (a broken FILE, not a scene) and leaves untagged `scene: ''`
+      runs (v1 logs, unsaved scenes) for the wholesale clear.
+    - The finish report is unaffected either way — `scriptRunFailures` only
+      counts entries written since the handoff.
   - `failedMorphKeys` (the red row markers) matches by MORPH IDENTITY —
     `morphKey` = `node|prop` (`lib/rom/run-log.ts`) — never by the log's frame
     numbers: frames are recomputed from row order on every edit, so a stored

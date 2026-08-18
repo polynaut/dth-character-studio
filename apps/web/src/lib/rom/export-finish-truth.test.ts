@@ -112,7 +112,13 @@ vi.mock('@tauri-apps/plugin-fs', () => ({
 
 import { CHARACTER_SCHEMA_VERSION, characterSchema, defaultSections, ROM_RUN_LOG_FILE } from '@dth/rom'
 import * as storage from './storage'
-import { dismissExportRun, executeCharacterJobs, fetchExportRunProgress } from './api/execute'
+import {
+  dismissExportRun,
+  executeCharacterJobs,
+  fetchExportRunProgress,
+  generateRomAnimation,
+} from './api/execute'
+import { fetchRomRunLog } from './api/characters.ts'
 import { EXPORTER_JOB_FILE, RUNNING_JOB_FILE, scriptFailureLines, tidyRunErrors } from './execute-jobs'
 import { LAST_ROM_RUN_FILE } from './character-internals.ts'
 
@@ -384,5 +390,111 @@ describe('scriptFailureLines', () => {
       'S2: boom',
       '…and 3 more',
     ])
+  })
+})
+
+describe('a handoff retires the PREVIOUS run report', () => {
+  it('drops both run-log files, so the old failures cannot outlive the run', async () => {
+    // The state the user sees: a red "errors in the last ROM run" banner and
+    // red morph rows from the run before. Starting a new run must end them —
+    // on disk as well as on screen, because the character page re-reads these
+    // files on every window focus.
+    await storage.createProjectManifest(PROJECT, 'P')
+    writeRunLog(LAST_ROM_RUN_FILE, [sceneRun(SCENE, false, -60_000, ['an old problem'])])
+    writeRunLog(ROM_RUN_LOG_FILE, [sceneRun(SCENE, false, -60_000, ['an old problem'])])
+
+    await armRun()
+
+    expect(files.has(`${META}/${LAST_ROM_RUN_FILE}`)).toBe(false)
+    expect(files.has(`${META}/${ROM_RUN_LOG_FILE}`)).toBe(false)
+  })
+
+  it('the cleared store cannot merge into the new run’s report', async () => {
+    // `fetchRomRunLog` merges the transport into the store BY SCENE. Scene B's
+    // old failure would otherwise ride along into a run that only touched
+    // scene A, and the banner would never clear.
+    await storage.createProjectManifest(PROJECT, 'P')
+    writeRunLog(LAST_ROM_RUN_FILE, [sceneRun(SCENE_B, false, -60_000, ['an old problem'])])
+
+    await armRun([SCENE])
+    batchFinished([{ scene: SCENE }])
+    writeRunLog(ROM_RUN_LOG_FILE, [sceneRun(SCENE, true, 500)])
+
+    const run = await fetchExportRunProgress('c1')
+
+    if (run?.state !== 'finished') throw new Error('not finished')
+    expect(run.scriptFailures).toEqual([])
+    expect(await fetchRomRunLog({ data: { projectId: PROJECT, id: 'c1' } })).toMatchObject({
+      ok: true,
+      runs: [{ scene: SCENE, ok: true }],
+    })
+  })
+})
+
+describe('a SINGLE-SCENE rebuild retires only that scene', () => {
+  /** Seed the project + character + both scenes + the ROM-build script, without
+   *  handing anything off — "Generate new ROM" is its own flow. */
+  async function seedForRebuild(): Promise<void> {
+    await storage.createProjectManifest(PROJECT, 'P')
+    const character = characterSchema.parse({
+      id: 'c1',
+      name: 'Ita',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      sections: defaultSections(),
+      scenePath: SCENE,
+      extraScenes: [SCENE_B],
+      exportPath: '/exports',
+    })
+    addDir(`${PROJECT}/Ita`)
+    files.set(
+      `${PROJECT}/Ita/Ita.json`,
+      JSON.stringify({ ...character, schemaVersion: CHARACTER_SCHEMA_VERSION }),
+    )
+    files.set(SCENE, 'DUF')
+    files.set(SCENE_B, 'DUF')
+    files.set(`${SCRIPTS_ROOT}/P/Ita/.Build_ROM_Animation.dsa`, 'SCRIPT')
+  }
+
+  it('drops its own scene from the store and LEAVES the other scene’s findings', async () => {
+    await seedForRebuild()
+    writeRunLog(LAST_ROM_RUN_FILE, [
+      sceneRun(SCENE, false, -60_000, ['scene A failed']),
+      sceneRun(SCENE_B, false, -60_000, ['scene B failed']),
+    ])
+
+    await generateRomAnimation({ data: { projectId: PROJECT, id: 'c1', scenePath: SCENE } })
+
+    // Wiping the log here would throw away B's findings for good — nothing is
+    // going to re-run B and rewrite them.
+    const log = await fetchRomRunLog({ data: { projectId: PROJECT, id: 'c1' } })
+    expect(log?.runs.map((r) => r.scene)).toEqual([SCENE_B])
+    expect(log?.errors).toEqual(['scene B failed'])
+    expect(log?.ok).toBe(false)
+  })
+
+  it('deletes the file outright when its scene was the only one in it', async () => {
+    await seedForRebuild()
+    writeRunLog(LAST_ROM_RUN_FILE, [sceneRun(SCENE, false, -60_000, ['scene A failed'])])
+
+    await generateRomAnimation({ data: { projectId: PROJECT, id: 'c1', scenePath: SCENE } })
+
+    expect(files.has(`${META}/${LAST_ROM_RUN_FILE}`)).toBe(false)
+    expect(await fetchRomRunLog({ data: { projectId: PROJECT, id: 'c1' } })).toBeNull()
+  })
+
+  it('reaches the un-ingested TRANSPORT too, so the next ingest cannot revive it', async () => {
+    await seedForRebuild()
+    // The user never tabbed back after the last run, so the Daz-written file is
+    // still sitting there waiting to be merged in.
+    writeRunLog(ROM_RUN_LOG_FILE, [
+      sceneRun(SCENE, false, -60_000, ['scene A failed']),
+      sceneRun(SCENE_B, false, -60_000, ['scene B failed']),
+    ])
+
+    await generateRomAnimation({ data: { projectId: PROJECT, id: 'c1', scenePath: SCENE } })
+
+    const log = await fetchRomRunLog({ data: { projectId: PROJECT, id: 'c1' } })
+    expect(log?.runs.map((r) => r.scene)).toEqual([SCENE_B])
   })
 })

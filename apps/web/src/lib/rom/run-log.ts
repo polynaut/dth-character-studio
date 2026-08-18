@@ -245,6 +245,42 @@ export function mergeRomRunLogs(stored: RomRunLog, fresh: RomRunLog): RomRunLog 
   }
 }
 
+/**
+ * The log with ONE scene's run removed, aggregates recomputed — `null` when
+ * that leaves nothing worth keeping (the caller deletes the file / clears the
+ * banner), and the SAME object back when the scene had no entry, so an identity
+ * check is a valid "nothing changed" test (the memoized ROM subtree depends on
+ * the log's identity — see `useRomRunLog`).
+ *
+ * The per-scene counterpart to wiping the log outright, for the single-scene
+ * rebuild ("Generate new ROM" on a scene card): it re-runs exactly one scene,
+ * so it may only retire that scene's verdict. The batch handoff, which re-runs
+ * whatever the user selected and supersedes the whole report, drops both files
+ * instead (`clearRomRunLogFiles`).
+ *
+ * An `unreadable` log is dropped whole: it describes a broken FILE, not a
+ * scene's result, so there is no per-scene entry to keep — and the run about to
+ * start writes a fresh one. A v1 log (pre-runtime-v54) and a run from an
+ * unsaved scene both sit under scene `''` and so match no real scene path;
+ * they survive here and are cleared by the batch handoff.
+ */
+export function dropSceneRun(log: RomRunLog, scenePath: string): RomRunLog | null {
+  if (log.unreadable) return null
+  const key = normalizeSceneKey(scenePath)
+  const runs = log.runs.filter((r) => normalizeSceneKey(r.scene) !== key)
+  if (runs.length === log.runs.length) return log
+  if (runs.length === 0) return null
+  return {
+    ...log,
+    ok: runs.every((r) => r.ok),
+    runs,
+    errors: runs.flatMap((r) => r.errors),
+    warnings: runs.flatMap((r) => r.warnings),
+    failedMorphs: runs.flatMap((r) => r.failedMorphs),
+    keyProblems: runs.flatMap((r) => r.keyProblems),
+  }
+}
+
 /** An existing-but-corrupt log still surfaces as a problem instead of throwing. */
 export function unreadableRomRunLog(): RomRunLog {
   const message =

@@ -304,6 +304,7 @@ export function DazSceneField({
   cardsRef,
   dockActionsRef,
   onScenesRemoved,
+  onRomRebuildStarted,
 }: {
   projectId: string
   character: Character
@@ -335,6 +336,12 @@ export function DazSceneField({
    *  a plain unlink as well as a delete — in both the user has just said what
    *  that file is to this character. */
   onScenesRemoved?: (paths: Array<string>) => void
+  /** A "Generate new ROM" handoff went out for this scene — the page drops THAT
+   *  SCENE's findings from the last run report (the handoff already dropped
+   *  them from disk), so its red rows can't outlive the run that produced
+   *  them. Per scene: the rebuild re-runs one scene and supersedes nothing
+   *  else. */
+  onRomRebuildStarted?: (scenePath: string) => void
 }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -498,6 +505,9 @@ export function DazSceneField({
       const { romPath, dazWasRunning, startedAt } = await generateRomAnimation({
         data: { projectId, id: character.id, scenePath: scene },
       })
+      // The handoff is out and this scene is being rebuilt — its verdict from
+      // the last run is history (and already gone from disk).
+      onRomRebuildStarted?.(scene)
       toast.success(
         dazWasRunning
           ? 'Daz Studio is building the ROM animation — it opens by itself once saved.'

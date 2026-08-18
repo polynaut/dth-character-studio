@@ -88,6 +88,7 @@ export function EditorHeader({
   folderMove,
   hasRunProblems,
   hasRunWarnings = false,
+  onRunStarted,
   dazLibraryConfigured,
   unrealProjects = NO_UNREAL_PROJECTS,
 }: {
@@ -104,6 +105,10 @@ export function EditorHeader({
   /** The run exported but reported warnings — the same button, amber, and only
    *  when there are no errors to out-rank it. */
   hasRunWarnings?: boolean
+  /** A DTH Export handoff went out — drop the PREVIOUS run's report, so its
+   *  button above and the red ROM rows can't outlive the run that produced
+   *  them. */
+  onRunStarted?: () => void
   /** “My DAZ 3D Library” is set (DTH Export needs it for the job file + scripts). */
   dazLibraryConfigured: boolean
   /** The project's linked `.uproject`s — the DTH Export panel's third leg. */
@@ -343,6 +348,7 @@ export function EditorHeader({
             dazLibraryConfigured={dazLibraryConfigured}
             unrealProjects={unrealProjects}
             onPipeline={setExportPipeline}
+            onRunStarted={onRunStarted}
           />
           <HeaderActions draft={draft} />
         </div>

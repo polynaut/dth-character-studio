@@ -5,7 +5,7 @@ import { runInNewContext } from 'node:vm'
 
 import { describe, expect, it } from 'vitest'
 
-import { mergeRomRunLogs, parseRomRunLogText, unreadableRomRunLog } from './run-log.ts'
+import { dropSceneRun, mergeRomRunLogs, parseRomRunLogText, unreadableRomRunLog } from './run-log.ts'
 
 /**
  * MULTI-SCENE run logs (the DTH Export bulk batch).
@@ -268,5 +268,70 @@ describe('run-log parsing + per-scene merge (studio side)', () => {
     const merged = mergeRomRunLogs(stored, unreadableRomRunLog())
     expect(merged.unreadable).toBe(true)
     expect(merged.runs).toHaveLength(1)
+  })
+})
+
+// --- Retiring ONE scene's verdict (the single-scene "Generate new ROM") ------
+
+describe('dropSceneRun — a rebuild retires the scene it re-runs, and only that one', () => {
+  const run = (scene: string, frames: Array<number>) => ({
+    scene,
+    sceneName: scene.split('/').pop()?.replace(/\.duf$/, '') ?? '',
+    finishedAt: 'now',
+    finishedAtMs: 1,
+    ok: frames.length === 0,
+    errors: frames.length > 0 ? [`${frames.length} morph(s) failed`] : [],
+    failedMorphs: frames.map((frame) => ({ frame, node: 'Genesis9', prop: 'X', reason: 'missing' })),
+  })
+  const log = (...runs: Array<ReturnType<typeof run>>) =>
+    parseRomRunLogText(JSON.stringify({ logVersion: 2, runs }))
+
+  it('drops that scene and recomputes the flattened view', () => {
+    const next = dropSceneRun(log(run(SCENE_A, [12]), run(SCENE_B, [40])), SCENE_A)
+
+    expect(next?.runs.map((r) => r.scene)).toEqual([SCENE_B])
+    // The flattened view is what paints the banner and the red rows — it must
+    // lose A's findings with A, not just the runs[] entry.
+    expect(next?.failedMorphs.map((m) => m.frame)).toEqual([40])
+    expect(next?.errors).toHaveLength(1)
+    expect(next?.ok).toBe(false)
+  })
+
+  it('re-derives `ok` — dropping the only failing scene leaves a clean log', () => {
+    const next = dropSceneRun(log(run(SCENE_A, [12]), run(SCENE_B, [])), SCENE_A)
+
+    expect(next?.ok).toBe(true)
+    expect(next?.failedMorphs).toEqual([])
+  })
+
+  it('null when nothing is left — the caller deletes the file and the banner', () => {
+    expect(dropSceneRun(log(run(SCENE_A, [12])), SCENE_A)).toBeNull()
+  })
+
+  it('hands the SAME object back for a scene it does not hold', () => {
+    // The identity IS the contract: `useRomRunLog` feeds this log into a
+    // memoized ROM subtree, and the store skips its write on it.
+    const before = log(run(SCENE_B, [40]))
+    expect(dropSceneRun(before, SCENE_A)).toBe(before)
+  })
+
+  it('matches by KEY, so a separator/case difference still drops', () => {
+    const next = dropSceneRun(
+      log(run(SCENE_A, [12]), run(SCENE_B, [40])),
+      SCENE_A.replace(/[/]/g, '\\').toUpperCase(),
+    )
+    expect(next?.runs.map((r) => r.scene)).toEqual([SCENE_B])
+  })
+
+  it('drops an unreadable log whole — it describes a broken FILE, not a scene', () => {
+    expect(dropSceneRun(unreadableRomRunLog(), SCENE_A)).toBeNull()
+  })
+
+  it('leaves an untagged (v1 / unsaved-scene) run alone — it names no scene', () => {
+    // Pre-runtime-v54 logs and runs from an unsaved scene both sit under ''.
+    // A rebuild of a named scene cannot claim to have superseded them; the
+    // batch handoff's wholesale clear is what retires those.
+    const v1 = parseRomRunLogText(JSON.stringify({ ok: false, errors: ['old'], failedMorphs: [] }))
+    expect(dropSceneRun(v1, SCENE_A)).toBe(v1)
   })
 })

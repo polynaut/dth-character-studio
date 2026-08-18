@@ -112,6 +112,7 @@ export function DthExportAction({
   dazLibraryConfigured,
   unrealProjects = NO_UNREAL_PROJECTS,
   onPipeline,
+  onRunStarted,
 }: {
   projectId: string
   character: Character
@@ -126,6 +127,10 @@ export function DthExportAction({
    *  up so the header can render {@link ExportPipelinePanel} ABOVE the whole
    *  button cluster (this component only owns its own buttons). Null = no run. */
   onPipeline?: (view: ExportPipelineView | null) => void
+  /** A handoff just went out — the page drops the PREVIOUS run's report (the
+   *  red banner + the red morph rows), whose files the handoff already deleted
+   *  from disk. */
+  onRunStarted?: () => void
 }) {
   const [open, setOpen] = useState(false)
   // null = not yet checked (renders as the normal export button).
@@ -1310,6 +1315,12 @@ export function DthExportAction({
           onExported={(run) => {
             // A new run supersedes the previous outcome (see dismissFinishToasts).
             dismissFinishToasts()
+            // …including the previous ROM run's report. The handoff has already
+            // dropped both run-log files (executeCharacterJobs), so this is the
+            // on-screen half: the red "errors in the last ROM run" banner and
+            // the red morph rows go the moment the new run appears, instead of
+            // hanging over a live progress bar until Daz writes a fresh log.
+            onRunStarted?.()
             runReportRef.current = null
             resetUnrealLeg()
             // A new run is never born interrupted — and the handoff itself
