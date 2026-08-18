@@ -78,16 +78,19 @@ import type { Character } from '@dth/rom'
 
 import {
   EMPTY_SCAN,
+  FLAT_SOURCE_LIMIT,
   FOLDER_KIND_UI,
   FOLDER_KINDS,
   SECTION_LABELS,
   backupsIn,
   fileName,
+  hipStem,
   isFolderKind,
   nodeKey,
   nodeLabel,
   pickedSlots,
   sectionCountOf,
+  sourceCharacterCandidates,
   utilsToast,
 } from './houdini-utils/shared.ts'
 import type {
@@ -382,9 +385,8 @@ export function HoudiniUtilsPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, targetsKey])
 
-  // Candidate source characters: everything the studio can reach that actually
-  // HAS a Houdini project, minus this character (copying onto itself is refused
-  // by the api anyway, and offering it invites the mistake).
+  // Candidate source characters: sourceCharacterCandidates — this character's
+  // OTHER projects included, minus the drawer's own target.
   // Templates are per project and only exist when attachments are enabled — an
   // empty list simply means the picker doesn't offer that route.
   useEffect(() => {
@@ -397,11 +399,9 @@ export function HoudiniUtilsPanel({
   useEffect(() => {
     if (!open) return
     void fetchAllCharacters()
-      .then((all) =>
-        setOthers(all.filter((c) => c.id !== character.id && c.houdiniProjects.length > 0)),
-      )
+      .then((all) => setOthers(sourceCharacterCandidates(all, character.id, targetHip)))
       .catch(() => setOthers([]))
-  }, [open, character.id])
+  }, [open, character.id, targetHip])
 
   // Reset everything when the drawer closes, so the next open starts clean.
   useEffect(() => {
@@ -420,6 +420,11 @@ export function HoudiniUtilsPanel({
   }, [open])
 
   const sourceCharacter = others.find((c) => c.id === sourceCharacterId)
+  // Few enough studio projects and the picker goes FLAT — one entry per
+  // project, no character hop. Past the limit the flat list scrolls past
+  // usefulness and the two-level character → project layout takes over.
+  const flatSourceChoices =
+    others.reduce((n, c) => n + c.houdiniProjects.length, 0) <= FLAT_SOURCE_LIMIT
   const activeSourceHip = sourceMode === 'browse' ? browsedHip : sourceHip
 
   // Scanning the chosen source project is a separate (and equally slow) trip —
@@ -1241,28 +1246,7 @@ export function HoudiniUtilsPanel({
               )}
 
               <div className="mb-3 flex flex-wrap items-center gap-2">
-                <Select
-                  value={sourceCharacterId}
-                  onValueChange={(value) => {
-                    setSourceMode('studio')
-                    setSourceCharacterId(value)
-                    const next = others.find((c) => c.id === value)
-                    setSourceHip(next?.houdiniProjects[0] ?? '')
-                  }}
-                >
-                  <SelectTrigger className="w-64">
-                    <SelectValue placeholder="Character from the studio…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {others.map((c) => (
-                      <SelectItem key={`${c.projectId}|${c.id}`} value={c.id}>
-                        {c.name} — {c.projectName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                {sourceCharacter && sourceCharacter.houdiniProjects.length > 1 && (
+                {flatSourceChoices ? (
                   <Select
                     value={sourceMode === 'studio' ? sourceHip : ''}
                     onValueChange={(value) => {
@@ -1270,17 +1254,63 @@ export function HoudiniUtilsPanel({
                       setSourceHip(value)
                     }}
                   >
-                    <SelectTrigger className="w-72">
-                      <SelectValue placeholder="Project…" />
+                    <SelectTrigger className="w-80">
+                      <SelectValue placeholder="Houdini project from the studio…" />
                     </SelectTrigger>
                     <SelectContent>
-                      {sourceCharacter.houdiniProjects.map((hip) => (
-                        <SelectItem key={hip} value={hip}>
-                          {fileName(hip)}
-                        </SelectItem>
-                      ))}
+                      {others.flatMap((c) =>
+                        c.houdiniProjects.map((hip) => (
+                          <SelectItem key={`${c.projectId}|${c.id}|${hip}`} value={hip}>
+                            {hipStem(hip)} — {c.projectName}
+                          </SelectItem>
+                        )),
+                      )}
                     </SelectContent>
                   </Select>
+                ) : (
+                  <>
+                    <Select
+                      value={sourceCharacterId}
+                      onValueChange={(value) => {
+                        setSourceMode('studio')
+                        setSourceCharacterId(value)
+                        const next = others.find((c) => c.id === value)
+                        setSourceHip(next?.houdiniProjects[0] ?? '')
+                      }}
+                    >
+                      <SelectTrigger className="w-64">
+                        <SelectValue placeholder="Character from the studio…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {others.map((c) => (
+                          <SelectItem key={`${c.projectId}|${c.id}`} value={c.id}>
+                            {c.name} — {c.projectName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    {sourceCharacter && sourceCharacter.houdiniProjects.length > 1 && (
+                      <Select
+                        value={sourceMode === 'studio' ? sourceHip : ''}
+                        onValueChange={(value) => {
+                          setSourceMode('studio')
+                          setSourceHip(value)
+                        }}
+                      >
+                        <SelectTrigger className="w-72">
+                          <SelectValue placeholder="Project…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {sourceCharacter.houdiniProjects.map((hip) => (
+                            <SelectItem key={hip} value={hip}>
+                              {fileName(hip)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </>
                 )}
 
                 {/* Same action as the picker: drag a `.hip` out of Explorer
