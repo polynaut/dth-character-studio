@@ -1,5 +1,28 @@
 # @dth/web
 
+## 0.84.0
+
+### Minor Changes
+
+- [#903](https://github.com/polynaut/dth-character-studio/pull/903) [`0d09cc8`](https://github.com/polynaut/dth-character-studio/commit/0d09cc87af5551a570b26ad73cd7696e5c857167) Thanks [@polynaut](https://github.com/polynaut)! - The character image dialog gains a **vertical offset**: a slider (plus a number box and a Reset) that moves that character's picture up or down in every avatar and scene thumbnail in the app at once. Daz frames a figure in the previews it renders according to how tall that figure is, so a short or tall character comes out sitting high or low in the square and every crop of it misses the face by the same amount — one number now fixes all of them. The dialog shows two previews side by side while you tune: the stored square image, and how the character header will frame it.
+
+  The value is a percentage of the picture itself rather than a pixel nudge, which is what lets a single setting land the same crop in the 224px header portrait and in a 32px scene chip. It defaults to 0 — the framing every character already had — so nothing moves until you move it.
+
+  This replaces the per-Genesis-generation framing shipped in 0.83.0, which was the wrong model: the generation was never what decided it. Every character is back on one default crop, corrected per character where it needs correcting.
+
+- [#898](https://github.com/polynaut/dth-character-studio/pull/898) [`9333041`](https://github.com/polynaut/dth-character-studio/commit/9333041154b2f74817a86dd2d8accb903f502c8e) Thanks [@polynaut](https://github.com/polynaut)! - The Daz scene cards and the Houdini project cards can now be re-ordered by drag-and-drop: a grip appears in a card's top-left corner on hover, and dropping it persists the new order with the character (the cards render in array order, so the order survives reloads and is what every list derived from it shows — the docked scene bar, the DTH Export rows). For Daz scenes the primary card keeps its place — it stays first and isn't draggable; the extra scenes re-order among themselves. A Houdini entry whose file is missing on disk still holds — and can still be moved to — its place in the order.
+
+  A card with nothing to re-order against (a single Houdini project, a single extra scene) shows no grip at all, rather than one that cannot move anything. The grip is operable by keyboard as well as pointer.
+
+### Patch Changes
+
+- [#899](https://github.com/polynaut/dth-character-studio/pull/899) [`ffcd7da`](https://github.com/polynaut/dth-character-studio/commit/ffcd7da818f2086900730c0e344ad0d8ff834df7) Thanks [@polynaut](https://github.com/polynaut)! - The read-only Export directory info now lives at the bottom of the "Daz scripts generated" panel instead of its own panel. The three places that pointed at the old panel now say what to actually do: a character with no folder of its own has no export directory and nothing can be "set" there — move it into a folder (the DTH Export button's hint, the Generate project button's hint, and the DTH Export precondition error).
+
+- [#902](https://github.com/polynaut/dth-character-studio/pull/902) [`08ff043`](https://github.com/polynaut/dth-character-studio/commit/08ff0436d503b93905a25b6f5948a249151f3621) Thanks [@polynaut](https://github.com/polynaut)! - The Houdini Utils "Copy from" source picker now offers the character you are on, so a setup can be copied between two of its own projects; only the drawer's own target project is left out. With 15 or fewer studio projects to offer, the picker is flat — one entry per Houdini project, named like the cards; above that it keeps the two-level character → project layout.
+- Updated dependencies [[`0d09cc8`](https://github.com/polynaut/dth-character-studio/commit/0d09cc87af5551a570b26ad73cd7696e5c857167)]:
+  - @dth/rom@0.84.0
+  - @dth/ui@0.84.0
+
 ## 0.83.2
 
 ### Patch Changes
