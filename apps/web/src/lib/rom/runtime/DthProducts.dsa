@@ -660,36 +660,46 @@ function enrichUnmatchedAssets(unmatched, dazLibraryFolder) {
 
 // dimManifestPath is supplied by the studio (an app-global setting). May be '':
 // the scan then warns and reports every asset as unmatched.
-function getInstalledProducts(dimManifestPath) {
+//
+// bQuiet: the caller's `bulk` — true when the Runner drives this inside a Daz
+// nobody is watching. BOTH refusals below are reachable there (the manifests
+// folder is baked at generation time, so a moved folder or an unmounted network
+// drive lands here on every row), and a modal in an unattended run blocks the
+// whole batch on a click nobody can make. The log is the only safe channel.
+function getInstalledProducts(dimManifestPath, bQuiet) {
   print("=== DAZ Install Manager Product Lister ===");
 
   var products = [];
 
   if (!dimManifestPath) {
     print("ERROR: no DIM manifest folder configured.");
-    MessageBox.information(
-      "No DAZ Install Manager manifests folder is configured.\n\nSet it in DTH " +
-        "Character Studio: Settings > General > 'DAZ Install Manager " +
-        "manifests folder', then regenerate this character's scripts.\n\nThe " +
-        "scan will run, but every asset will be reported as unmatched.",
-      "DIM Manifests Folder Not Set",
-      "&OK"
-    );
+    if (!bQuiet) {
+      MessageBox.information(
+        "No DAZ Install Manager manifests folder is configured.\n\nSet it in DTH " +
+          "Character Studio: Settings > General > 'DAZ Install Manager " +
+          "manifests folder', then regenerate this character's scripts.\n\nThe " +
+          "scan will run, but every asset will be reported as unmatched.",
+        "DIM Manifests Folder Not Set",
+        "&OK"
+      );
+    }
     return [];
   }
 
   var dimDir = new DzDir(dimManifestPath);
   if (!dimDir.exists()) {
     print("ERROR: DIM manifest directory not found at: " + dimManifestPath);
-    MessageBox.information(
-      "DIM manifest directory not found:\n" +
-        dimManifestPath +
-        "\n\nFix the path in DTH Character Studio: Settings > General > " +
-        "'DAZ Install Manager manifests folder', then regenerate this " +
-        "character's scripts.",
-      "Directory Not Found",
-      "&OK"
-    );
+    if (!bQuiet) {
+      MessageBox.information(
+        "DIM manifest directory not found:\n" +
+          dimManifestPath +
+          "\n\nFix the path in DTH Character Studio: Settings > General > " +
+          "'DAZ Install Manager manifests folder', then regenerate this " +
+          "character's scripts.",
+        "Directory Not Found",
+        "&OK"
+      );
+    }
     return [];
   }
 
@@ -1756,7 +1766,11 @@ function sceneSlug(name) {
 // interesting unmatched assets to a fixed-column CSV the studio reads back. The
 // first data row records the scanned scene (name + path) so the studio can
 // attribute every product/asset to the outfit it was found in.
-function writeProductsCsv(outputCsvPath, matchResults, sceneName, scenePath) {
+//
+// bQuiet: the caller's `bulk` — a failed write must not open a modal in an
+// unattended run (it would block every queued row). The caller already turns a
+// false return into a THROW there, so the row fails loudly instead.
+function writeProductsCsv(outputCsvPath, matchResults, sceneName, scenePath, bQuiet) {
   var productInfo = {};
   var order = [];
   for (var i = 0; i < matchResults.matches.length; i++) {
@@ -1870,11 +1884,13 @@ function writeProductsCsv(outputCsvPath, matchResults, sceneName, scenePath) {
   }
 
   print("DTH Product Scan ERROR: could not write " + outputCsvPath);
-  MessageBox.warning(
-    "Could not write the product scan CSV to:\n" + outputCsvPath,
-    "DTH Product Scan",
-    "&OK"
-  );
+  if (!bQuiet) {
+    MessageBox.warning(
+      "Could not write the product scan CSV to:\n" + outputCsvPath,
+      "DTH Product Scan",
+      "&OK"
+    );
+  }
   return false;
 }
 
@@ -2000,7 +2016,7 @@ function DthScanProducts(config) {
     print("No used assets found in the current scene.");
   }
 
-  var installedProducts = getInstalledProducts(config.dimManifestPath);
+  var installedProducts = getInstalledProducts(config.dimManifestPath, bulk);
   // Add manually-installed products (LOCAL_USER metadata) so non-DIM content can
   // match too — these are absent from DIM's ManifestFiles.
   var localProducts = getLocalUserProducts(config.dazLibraryFolder);
@@ -2045,7 +2061,7 @@ function DthScanProducts(config) {
     ".txt";
   writeUnmatchedDiagnostic(diagPath, matchResults, usedAssets);
 
-  var ok = writeProductsCsv(outputCsvPath, matchResults, sceneName, scenePath);
+  var ok = writeProductsCsv(outputCsvPath, matchResults, sceneName, scenePath, bulk);
   // Under the Runner the studio's panel owns the outcome: log it, and let a
   // failed write fail the ROW rather than passing as a silent success.
   if (bulk) {

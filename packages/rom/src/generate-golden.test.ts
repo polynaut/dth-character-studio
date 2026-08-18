@@ -209,4 +209,33 @@ describe('generated artifacts (golden)', () => {
       expect(file.content).toMatch(/MessageBox\./)
     })
   }
+
+  /**
+   * The BLIND SPOT in the rule above, and the second half of the same contract.
+   *
+   * Scanning a carrier's own text can only ever see the dialogs the GENERATOR
+   * wrote. A carrier is a thin call into the shipped runtime, and the runtime is
+   * a second modal surface the scan is structurally blind to — which is how
+   * `ApplyDTHCharacter`'s end-of-build "problems occurred" `MessageBox` survived
+   * the v80 gating and parked a real batch (measured 2026-08-18). The runtime
+   * cannot know who is watching, so the carrier has to TELL it: `bUnattended` in
+   * the baked config, read by the runtime's tail (`DthWorkflow.dsa`).
+   *
+   * Pinned by name rather than left to the goldens: a golden re-recorded without
+   * reading the diff would drop this key silently, and the symptom is a hung Daz
+   * that looks like a hung `include()`.
+   */
+  const romBuildingCarriers = ['.Bulk_ROM_Export.dsa', '.Build_ROM_Animation.dsa']
+  for (const name of romBuildingCarriers) {
+    it(`tells the runtime it is unattended in ${name} — the runtime's own modal is invisible to the scan above`, () => {
+      const file = files.find((f) => f.fileName === name)
+      expect(file, `${name} is missing from generateAll`).toBeDefined()
+      expect(file?.content).toContain('"bUnattended": true')
+    })
+  }
+  it('leaves the flag OFF the visible ROM script — a human is watching that one', () => {
+    const visible = files.find((f) => f.fileName === 'ROM_ElectraG9_G9.dsa')
+    expect(visible, 'the visible ROM script is missing from generateAll').toBeDefined()
+    expect(visible?.content).not.toContain('bUnattended')
+  })
 })

@@ -239,6 +239,33 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   carrier able to hang a run. `unattended` is its own flag for that reason. The
   same flag existed on the export script but reached only the export BLOCK, so
   the two guards that fire FIRST (wrong scene, no figure) could still block.
+- **The carrier is not the whole modal surface — the RUNTIME it calls is the
+  other half, and the carrier test is structurally blind to it.** The
+  `generate-golden.test.ts` rule above greps the GENERATED text, so it can only
+  ever see dialogs `dsa.ts` wrote. A carrier is a thin call into the shipped
+  runtime, and the runtime cannot know who is watching: it opens whatever
+  `MessageBox` its own code says to. Measured 2026-08-18 (v0.83.1, runtime v84):
+  a 2-scene LaraCroft batch parked on `ApplyDTHCharacter`'s end-of-build
+  "Something went wrong while building the ROM" box — every carrier passed the
+  no-modal test, and scene 2 sat behind scene 1's dialog anyway. Same audit in
+  the same session found `DthProducts.dsa` doing it twice more (`getInstalledProducts`
+  on a DIM folder that moved or sits on an unmounted network drive, and
+  `writeProductsCsv` on a failed write) — reached from `DthScanProductsQuiet`,
+  which runs inside EVERY ROM/export row and whose own doc comment already
+  promised neither would.
+  So the rule has two halves: the carrier text carries no `MessageBox`, **and
+  every runtime entry point a carrier can reach takes a "nobody is watching"
+  flag and honours it on every branch that can refuse.** The flag is
+  `config.bUnattended` for `ApplyDTHCharacter` (baked by `dsa.ts`, set AFTER the
+  per-scene deltas are diffed so an override scene can neither carry nor strip
+  it) and `config.bulk` for the scans. **Audit by reachability, not by file:**
+  grep `MessageBox\.` across `apps/web/src/lib/rom/runtime/` and, for each hit,
+  ask whether an unattended entry point can reach it — a flag that stops at the
+  entry function and never reaches the helper it calls is the recurring shape
+  (v85 threaded it two levels down for exactly that reason). The runtime half is
+  pinned behaviourally in `runtime.test.ts` (the `.dsa` loaded into a VM sandbox
+  with a recording `MessageBox`), because no text scan over generated carriers
+  can reach it.
 - **A count is not a finding.** The same run reported its 4 bad keys with no
   node, no dial, no key index and no frame — the pass had every one of them in
   hand and threw them away. Nothing could be chased without patching the runtime

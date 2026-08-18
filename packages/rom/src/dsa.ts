@@ -1601,8 +1601,9 @@ function buildRomScriptDsa(
     Object.keys(sceneConfigMap).length > 0 ? `\n${sceneConfigLookupSnippet(sceneConfigMap)}` : ''
   // Tells the RUNTIME the run is unattended, so its own end-of-build "problems
   // occurred" warning prints instead of opening a modal that would block every
-  // row queued behind it (runtime v84 — the carrier's dthFailureDialog was
-  // gated in v80, but the runtime's tail warning wasn't). Set AFTER the scene
+  // row queued behind it (runtime v85 — the carrier's dthFailureDialog was
+  // gated in v80, but ApplyDTHCharacter's tail warning wasn't: gating the
+  // carrier TEXT never reached the runtime it include()s). Set AFTER the scene
   // deltas are diffed (they must never carry or strip it), and only when true,
   // so the visible attended script's config — and its modal — stay as they were.
   if (unattended) config.bUnattended = true

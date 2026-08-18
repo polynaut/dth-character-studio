@@ -1052,6 +1052,13 @@ v80 — no unattended carrier opens a modal, and the missing-runtime message sto
       AFTER the scene deltas are diffed, so an override scene can neither
       carry nor strip it); the runtime prints to the Daz log instead. The
       visible attended ROM script keeps its modal.
+      The same audit closed the rest of the runtime's unattended modal
+      surface: DthProducts' getInstalledProducts (DIM folder missing/moved -
+      a baked path on an unmounted network drive reaches this on every row)
+      and writeProductsCsv (failed write) now take the caller's `bulk` and
+      log instead. Both are reached from DthScanProductsQuiet, which runs
+      inside EVERY ROM/export row and whose doc comment already promised
+      neither would put up a dialog. Attended runs keep all three dialogs.
       Also v85: the previous-set sweep before doExport is a MOVE-ASIDE
       (".dthprev"), not a delete. The destructive clear (v69, the DS4
       skip-guard) meant any failure AFTER it — exporter exception, plugin
