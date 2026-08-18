@@ -522,144 +522,35 @@ ${refDirBlock}
     }
 `
     : ''
-  // Clear THIS set's previous output before the exporter runs. Measured
-  // 2026-08-11 (DS4 exporter plugin 2.0.2, DS 4.24): a scripted doExport whose
-  // output files already exist SKIPS the per-frame ROM walk and rewrites them
-  // as a single static frame — fresh mtimes, rest-pose content, no error
-  // anywhere (26 s and an 8 MB Alembic against the same scene's 3.5 min and
-  // 332 MB into an empty folder). Deleting the old set first forces the real
-  // walk; DS6 never skipped, and a fresh set also stops stale files (a renamed
-  // hair item's grooms, a changed frame layout's reference skeletons)
-  // lingering beside it. Only the set's OWN name patterns are removed —
-  // anything else in the folder (a user's zip, another scene's set) is not
-  // ours to touch. DzFile.remove + DzDir.entryList are the runtime's own
-  // DS4-proven idioms (DthProducts.dsa).
-  const clearPreviousSetBlock = `    // Runtime v85: the sweep MOVES the previous set aside (".dthprev" suffix)
-    // instead of deleting it. The DS4 skip-guard above only needs the expected
-    // output NAMES absent before doExport; deleting outright meant a run that
-    // failed AFTER this sweep — an exporter exception, a plugin refusal — left
-    // the set's folder EMPTY (measured 2026-08-18: a failed re-export deleted
-    // the primary set, and the Houdini project's auto-loading PoseAsset CSV
-    // with it). dthFinishPreviousSet below gives the set back on failure and
-    // drops the backups on success. DzDir.rename is capability-gated (its
-    // presence is unmeasured on DS4): where it is missing or refuses, the old
-    // destructive remove keeps the skip-guard intact — no worse than before.
-    var dthPrevSuffix = ".dthprev";
-    var dthOwnSetFile = function (dthName) {
-        return dthName == dthExportName + ".dth" ||
-            dthName == dthExportName + ".abc" ||
-            dthName == dthExportName + ".fbx" ||
-            dthName == dthExportName + "_base.fbx" ||
-            dthName == dthExportName + "_experimental_rom.fbx" ||
-            dthName == dthExportName + "_pose_asset.csv" ||
-            (dthName.indexOf(dthExportName + "_Hair_") == 0 && dthName.indexOf("_grooms.abc") > 0);
-    };
-    var dthMoveAside = function (dthDirObj, dthName) {
-        var dthPrevName = dthName + dthPrevSuffix;
-        // A backup a FAILED run left behind is superseded the moment a live
-        // file exists again - the live file is the newer good state.
-        if (dthDirObj.exists(dthPrevName)) new DzFile(dthDirObj.absoluteFilePath(dthPrevName)).remove();
-        if (typeof dthDirObj.rename == "function" && dthDirObj.rename(dthName, dthPrevName)) return true;
-        return new DzFile(dthDirObj.absoluteFilePath(dthName)).remove();
-    };
-    // Success => purge this set's backups; failure => delete partial new
-    // output and rename the backups back. Only THIS set's names are touched.
-    var dthFinishPreviousSet = function (dthDirObj, dthRestore) {
-        if (!dthDirObj.exists()) return;
-        var dthNames = dthDirObj.entryList();
-        for (var dthFi = 0; dthFi < dthNames.length; dthFi++) {
-            var dthPrevName = String(dthNames[dthFi]);
-            var dthCut = dthPrevName.length - dthPrevSuffix.length;
-            if (dthCut <= 0 || dthPrevName.substring(dthCut) != dthPrevSuffix) continue;
-            var dthLiveName = dthPrevName.substring(0, dthCut);
-            if (dthLiveName.indexOf(dthExportName) != 0) continue;
-            if (dthRestore) {
-                if (dthDirObj.exists(dthLiveName)) new DzFile(dthDirObj.absoluteFilePath(dthLiveName)).remove();
-                if (typeof dthDirObj.rename == "function") dthDirObj.rename(dthPrevName, dthLiveName);
-            } else {
-                new DzFile(dthDirObj.absoluteFilePath(dthPrevName)).remove();
-            }
-        }
-    };
-    var dthOldSetDir = new DzDir(dthExportDir);
-    var dthOldRefDir = new DzDir(dthExportDir + "/Reference Skeletons");
-    if (dthOldSetDir.exists()) {
-        var dthOldNames = dthOldSetDir.entryList();
-        var dthCleared = 0;
-        for (var dthCi = 0; dthCi < dthOldNames.length; dthCi++) {
-            var dthOldName = String(dthOldNames[dthCi]);
-            if (!dthOwnSetFile(dthOldName)) continue;
-            if (dthMoveAside(dthOldSetDir, dthOldName)) dthCleared++;
-        }
-        if (dthOldRefDir.exists()) {
-            var dthOldRefs = dthOldRefDir.entryList();
-            for (var dthCr = 0; dthCr < dthOldRefs.length; dthCr++) {
-                var dthOldRef = String(dthOldRefs[dthCr]);
-                if (dthOldRef.indexOf(dthExportName + "_frame_") != 0) continue;
-                if (dthMoveAside(dthOldRefDir, dthOldRef)) dthCleared++;
-            }
-        }
-        if (dthCleared > 0) print("Moved " + dthCleared + " previous export file(s) aside in " + dthExportDir);
-    }`
   // The export call + CSV delivery. With groom items listed it is wrapped in the
   // hide bracket below; without any, the emitted script is unchanged. The name
   // is the run-time dthExportName (scene-suffixed), never the bare base name;
   // the reference frames are the OPEN scene's (see refFramesBlock above).
-  const exportCore = `${clearPreviousSetBlock}
-${refFramesBlock}${
+  const exportCore = `${refFramesBlock}${
     // Start markers carry the percent ALREADY reached — the meter must not
     // jump ahead of finished work, only the status text moves.
     progressPcts ? `\n    dthProgressLog(${progressPcts.begin}, "exporting character");` : ''
   }
-    try {
-        dthExportAction.doExport(dthExportDir, dthExportName, dthRefFrames, false);
-    } catch (dthExpErr) {
-        dthExportThrew = dthExpErr;
-    }
-    // The exporter's own primary output landing is the success signal — its
-    // return value is deliberately not read (every Daz build disagrees about
-    // return values; same posture as the scene save-as above). Success drops
-    // the backups the sweep took; failure deletes any partial new output and
-    // puts the previous set back, so a failed run never costs the last good
-    // export (measured 2026-08-18: it used to leave the folder empty).
-    dthExportLanded = dthExportThrew === null && new DzFile(dthOldSetDir.absoluteFilePath(dthExportName + ".dth")).exists();
-    dthFinishPreviousSet(dthOldSetDir, !dthExportLanded);
-    dthFinishPreviousSet(dthOldRefDir, !dthExportLanded);
-    if (dthExportThrew !== null) throw dthExportThrew;
-    if (!dthExportLanded) {
-        dthExportAlert("The DTH Exporter produced no " + dthExportName + ".dth - the previous export files were put back untouched.\\n\\nCheck Daz's log for the exporter's own error, then run the export again.");
-    } else {${
-      progressPcts ? `\n        dthProgressLog(${progressPcts.character}, "character exported");` : ''
+    dthExportAction.doExport(dthExportDir, dthExportName, dthRefFrames, false);${
+      progressPcts ? `\n    dthProgressLog(${progressPcts.character}, "character exported");` : ''
     }${
       progressPcts && csvCopyBlock.trim()
-        ? `\n        dthProgressLog(${progressPcts.character}, "delivering PoseAsset CSV");`
+        ? `\n    dthProgressLog(${progressPcts.character}, "delivering PoseAsset CSV");`
         : ''
     }
-${indentLines(csvCopyBlock)}${
+${csvCopyBlock}${
       progressPcts && csvCopyBlock.trim()
-        ? `\n        dthProgressLog(${progressPcts.csv}, "PoseAsset CSV delivered");`
+        ? `\n    dthProgressLog(${progressPcts.csv}, "PoseAsset CSV delivered");`
         : ''
-    }
     }`
   const groomMap = groomSceneMap(character)
   const indentBlock = indentLines
-  // Declared OUTSIDE the export core: with grooms the core runs inside the
-  // dthRunExport function, and the hair pass — which must not run over a
-  // failed main export — reads the verdict after that function returns.
-  const exportPrelude = `    var dthExportThrew = null;
-    var dthExportLanded = false;
-`
   // "Export hair assets too": the Export_Hair per-item pass appended after the
   // main export, inside the groom bracket (it needs this scene's labels). The
   // figure resolves under its OWN name — the standalone Export_ script already
   // declares `dthFig`, and this block must work in both carriers.
   const hairPassCore = `        // Export hair assets too: the Export_Hair pass, right after the main
-        // export — same action, same (scene-resolved) export dir. Gated on
-        // the main export having LANDED: over a restored previous set the
-        // grooms would mix one run's hair with another run's body.
-        if (!dthExportLanded) {
-            print("Main export did not land - hair export skipped.");
-        } else {${
+        // export — same action, same (scene-resolved) export dir.${
           progressPcts
             ? `\n        dthProgressLog(${csvCopyBlock.trim() ? progressPcts.csv : progressPcts.character}, "exporting hair items");`
             : ''
@@ -670,15 +561,14 @@ ${indentBlock(indentBlock(figureAutoSelectSnippet(character.genesis, 'dthHairFig
         } else {
 ${indentBlock(indentBlock(indentBlock(hairExportLoopSnippet(character, { fig: 'dthHairFig', action: 'dthExportAction', hideTree: 'dthGroomHideTree', hidden: 'dthGroomHidden' }).trimEnd())))}
         }${progressPcts ? `\n        dthProgressLog(${progressPcts.hair}, "hair items exported");` : ''}
-        }
 `
   // `exportHairAssets` decides whether the pass ships at all — the bulk
   // script forces the toggle on before building, so it always carries it.
   const hairPassBlock = character.exportHairAssets ? hairPassCore : ''
   const exportBody =
     Object.keys(groomMap).length === 0
-      ? `${exportPrelude}${exportCore}`
-      : `${exportPrelude}    // Hair items must stay OUT of the export. HIDE the item + all its
+      ? exportCore
+      : `    // Hair items must stay OUT of the export. HIDE the item + all its
     // children (the script equivalent of Ctrl+clicking the eye icon) and restore
     // the exact per-node flags after. The DTH Exporter Plugin unparents any hidden
     // child node before exporting and reparents it after, so hiding excludes it

@@ -1094,4 +1094,18 @@ v80 — no unattended carrier opens a modal, and the missing-runtime message sto
       on a matching `v<N>` marker and the script header reads current, so the
       second one never reaches an install that already has the first.
       No schema change, no migration step.
+ 87 — the DS4 skip-guard sweep is REMOVED: no pre-export clear, no
+      move-aside, no restore. The DTH Exporter plugin itself was fixed on
+      2026-08-18 to handle existing output files (the v69 measurement: a
+      scripted doExport over its own previous output skipped the ROM walk and
+      rewrote a static frame), so the generated script calls doExport with
+      the previous set left in place — exactly the condition that tests the
+      plugin fix. The fixed DLL is installed locally, NOT yet verified live;
+      the removal itself is that verification. Also gone with the sweep: the
+      .dth-landed success verdict and its gating of CSV delivery + hair pass
+      (they were only meaningful while the sweep guaranteed the .dth name
+      absent before doExport), and the stale-file side benefit (renamed hair
+      items' grooms / outdated reference skeletons linger again). Runtime
+      files unchanged — the bump only makes Refresh assets regenerate the
+      scripts on disk. No schema change, no migration step.
 ```

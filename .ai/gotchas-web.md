@@ -540,12 +540,16 @@ and the Unreal install button. If a spec has to hold a modifier:
   sample identical (8 MB instead of 332 MB for the same 240-frame scene).
   Fresh mtimes, clean run log, no error on any channel — the only tells are
   the file size and the missing frame walk. Into an EMPTY folder the same
-  build exports correctly, and DS6's build never skipped. Since runtime v69
-  the export block deletes the set's own name patterns (`<name>.dth/.abc/
-  .fbx`, `_base`/`_experimental_rom.fbx`, `_pose_asset.csv`,
-  `_Hair_*_grooms.abc`, `Reference Skeletons/<name>_frame_*`) before calling
-  `doExport`, which both forces the real walk and stops stale grooms/reference
-  skeletons from outliving a rename or a frame-layout change. Verification
+  build exports correctly, and DS6's build never skipped. The studio guarded
+  this from runtime v69 (delete the set's own name patterns before
+  `doExport`) and v85 (move-aside + restore-on-failure); the exporter PLUGIN
+  itself was fixed on 2026-08-18 and both guards were removed again in runtime
+  v87 — the fixed DLL was installed locally that day but NOT yet verified
+  live. Two consequences of the removal: a DS4 machine running an exporter
+  build older than the fix regresses to silent static exports, and the
+  sweep's side benefit is gone too — a renamed hair item's grooms and an
+  outdated frame layout's reference skeletons linger beside a fresh set
+  again. Verification
   pattern that caught it: hython `alembicTimeRange` + a two-frame
   `pointFloatAttribValues('P')` compare (set the Alembic SOP's `frame` parm
   explicitly — `hou.setFrame` alone does not re-cook the packed prims).

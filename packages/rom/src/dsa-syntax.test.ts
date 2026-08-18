@@ -19,9 +19,10 @@ import type { Character, RomGroup, RomSections } from './types'
  *
  * That gap is widest exactly where `dsa.ts` builds nesting by string
  * concatenation across VARIANTS, because the golden character only exercises
- * one of them. Runtime v85's export rework is the case in point: it wrapped the
- * export core and the hair pass in new `if (!dthExportLanded) { … } else { … }`
- * brackets, in a groom bracket that the golden character has no grooms to emit.
+ * one of them. Runtime v85's export rework was the case in point: it wrapped
+ * the export core and the hair pass in success-verdict brackets (removed again
+ * in v87 with the DS4 skip-guard sweep), inside a groom bracket that the
+ * golden character has no grooms to emit.
  *
  * `new Script` is the check — the emitted DAZ Script is plain ES3-shaped JS, so
  * a host parser is a real syntax check on it. `node:vm` COMPILES without
@@ -106,7 +107,7 @@ describe('generated DAZ Script parses', () => {
     // report the uncovered path as covered.
     const script = generateAll(make({ ...withHair, exportHairAssets: true }), {}, FRAMES)[0]
     expect(script.content).toContain('dthGroomHideTree')
-    expect(script.content).toContain('dthExportLanded')
+    expect(script.content).toContain('dthRunExport')
   })
 
   it('would actually FAIL on a broken script', () => {
