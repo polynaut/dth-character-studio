@@ -3,8 +3,8 @@ import { expect, test } from '@playwright/test'
 import { P, buildSeed } from './fixtures.ts'
 import { installTauriMock } from './tauri-mock.ts'
 
-// The "Add morphs on frame 0" name field uses the same scanned-morph autocomplete
-// as the ROM editor's Morph-name column.
+// The "Morphs set at frame 0" name field (Advanced options panel) uses the same
+// scanned-morph autocomplete as the ROM editor's Morph-name column.
 test('frame-0 morphs: the name field autocompletes from the scanned morph index', async ({
   page,
 }) => {
@@ -15,10 +15,11 @@ test('frame-0 morphs: the name field autocompletes from the scanned morph index'
   await expect(page.getByText(/custom ROM frames/)).toBeVisible()
 
   // The frame-0 list starts empty on the demo character — add a row, then type in
-  // its name field (the only combobox in the section).
+  // its name field (the only combobox in the Advanced options section; the node
+  // transforms beside it are plain inputs).
   const frameZero = page
     .locator('section')
-    .filter({ has: page.getByRole('heading', { name: 'Add morphs on frame 0' }) })
+    .filter({ has: page.getByRole('heading', { name: 'Advanced options' }) })
   const add = frameZero.getByRole('button', { name: 'Add morph', exact: true })
   await add.scrollIntoViewIfNeeded()
   await add.click()

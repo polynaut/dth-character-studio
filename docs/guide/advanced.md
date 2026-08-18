@@ -2,8 +2,8 @@
 
 Two optional power features: **multiple Daz scenes** on one character (outfits,
 per-scene hair, per-scene overrides), and the **Modify JCM frames** grid.
-(Preserve node transforms are covered in
-[Your first character](./04-first-character.md#advanced-options--preserve-node-transforms).)
+(The Advanced options panel — morphs on frame 0, preserve node transforms — is
+covered in [Your first character](./04-first-character.md#advanced-options).)
 
 ## Multiple Daz scenes — outfits & hair variants
 
@@ -68,7 +68,7 @@ Import** node.
 ### Per-scene overrides — edit to override
 
 Beyond hair, almost everything on the character page can differ **per scene**: the
-**identity dials**, the **Advanced options** preserve list, and the **whole ROM**
+**identity dials**, the **Advanced options** lists, and the **whole ROM**
 — every section's mode, preset asset, GEN art direction, custom-JCM path, frames
 and groups, plus the **Modify JCM frames** grid. There is no override switch: on a
 non-primary scene you **edit the field, and a value that differs from the primary

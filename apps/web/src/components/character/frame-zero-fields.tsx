@@ -13,8 +13,11 @@ const MORPH_FIELD_CLASS =
   'h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs outline-none transition-[color,box-shadow] focus:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50 md:text-sm dark:bg-input/30'
 
 /**
- * The "Add morphs on frame 0" list editor — morph name + an optional item
- * scope + the value it is set (and keyed) to at frame 0 of the ROM. With no
+ * The "Morphs set at frame 0" list editor — the TOP of the character editor's
+ * Advanced options panel, where the retired "Preserve morphs after ROM
+ * loading" list sat (schema v35 / runtime v83). Each row is a morph name + an
+ * optional item scope + the value it is set (and keyed) to at frame 0 of the
+ * ROM. With no
  * item scope the generated script applies the row on EVERY node of the figure
  * tree that carries the morph, so one row like a clothing "Expand All" reaches
  * whichever outfit pieces the open scene wears; a scoped row lands only on
@@ -82,72 +85,71 @@ export function FrameZeroFields({
 
   return (
     <MorphIndexProvider morphIndex={morphIndex} scenePath={scenePath}>
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <div>
-          <Label
-            className={cn(
-              'mb-2 flex w-fit items-center gap-2',
-              overrideLabelClass(listOverridden, overrideEligible),
-            )}
-          >
-            Morphs set at frame 0
-            {/* Handle only in override context — nothing to override on the primary. */}
-            {overrideEligible && <OverrideMark overridden={listOverridden} onReset={resetList} />}
-          </Label>
-          <KeyedListEditor
-            items={morphs}
-            onChange={setMorphs}
-            newItem={() => ({ name: '', value: 1, node: '' })}
-            addLabel="Add morph"
-            // items-start: the info row under the name field makes the left
-            // column two lines tall — the value + remove stay on the input line.
-            rowClassName="mb-2 flex items-start gap-2"
-            emptyHint="No morphs on frame 0 yet."
-          >
-            {(item, set, index) => {
-              const isOv = morphOverridden(index)
-              return (
-                <>
-                  <div className="min-w-0 flex-1">
-                    <MorphNameCell
-                      value={item.name}
-                      inputClassName={cn(
-                        MORPH_FIELD_CLASS,
-                        inheritedRow(isOv) && 'text-muted-foreground',
-                        isOv &&
-                          'border-daz-green focus:border-daz-green focus-visible:ring-daz-green/50',
-                      )}
-                      onCommit={(name) => set({ ...item, name })}
-                      // A pick takes the node along with the internal name (the
-                      // suggestion knows which item the dial lives on) — the ✕
-                      // on the info row goes back to "every item carrying it".
-                      onPick={(entry) => set({ ...item, name: entry.name, node: entry.node })}
-                    />
-                    <MorphNodeInfo
-                      name={item.name}
-                      node={item.node}
-                      fallback="All items"
-                      fallbackTitle="Applied on every item carrying the morph — pick a suggestion to scope it to one item"
-                      scopedTitle={`Applied only on "${item.node}" (set by the picked suggestion)`}
-                      muted={inheritedRow(isOv)}
-                      onClear={() => set({ ...item, node: '' })}
-                    />
-                  </div>
-                  <NumberField
-                    className={cn(
-                      'w-24 pr-6 text-right tabular-nums',
+      {/* One list of the Advanced options panel — the ROUTE owns the layout. */}
+      <div>
+        <Label
+          className={cn(
+            'mb-2 flex w-fit items-center gap-2',
+            overrideLabelClass(listOverridden, overrideEligible),
+          )}
+        >
+          Morphs set at frame 0
+          {/* Handle only in override context — nothing to override on the primary. */}
+          {overrideEligible && <OverrideMark overridden={listOverridden} onReset={resetList} />}
+        </Label>
+        <KeyedListEditor
+          items={morphs}
+          onChange={setMorphs}
+          newItem={() => ({ name: '', value: 1, node: '' })}
+          addLabel="Add morph"
+          // items-start: the info row under the name field makes the left
+          // column two lines tall — the value + remove stay on the input line.
+          rowClassName="mb-2 flex items-start gap-2"
+          emptyHint="No morphs on frame 0 yet."
+        >
+          {(item, set, index) => {
+            const isOv = morphOverridden(index)
+            return (
+              <>
+                <div className="min-w-0 flex-1">
+                  <MorphNameCell
+                    value={item.name}
+                    inputClassName={cn(
+                      MORPH_FIELD_CLASS,
                       inheritedRow(isOv) && 'text-muted-foreground',
+                      isOv &&
+                        'border-daz-green focus:border-daz-green focus-visible:ring-daz-green/50',
                     )}
-                    percent
-                    overridden={isOv}
-                    value={item.value}
-                    onCommit={(value) => set({ ...item, value })}
+                    onCommit={(name) => set({ ...item, name })}
+                    // A pick takes the node along with the internal name (the
+                    // suggestion knows which item the dial lives on) — the ✕
+                    // on the info row goes back to "every item carrying it".
+                    onPick={(entry) => set({ ...item, name: entry.name, node: entry.node })}
                   />
-                </>
-              )
-            }}
-          </KeyedListEditor>
-        </div>
+                  <MorphNodeInfo
+                    name={item.name}
+                    node={item.node}
+                    fallback="All items"
+                    fallbackTitle="Applied on every item carrying the morph — pick a suggestion to scope it to one item"
+                    scopedTitle={`Applied only on "${item.node}" (set by the picked suggestion)`}
+                    muted={inheritedRow(isOv)}
+                    onClear={() => set({ ...item, node: '' })}
+                  />
+                </div>
+                <NumberField
+                  className={cn(
+                    'w-24 pr-6 text-right tabular-nums',
+                    inheritedRow(isOv) && 'text-muted-foreground',
+                  )}
+                  percent
+                  overridden={isOv}
+                  value={item.value}
+                  onCommit={(value) => set({ ...item, value })}
+                />
+              </>
+            )
+          }}
+        </KeyedListEditor>
       </div>
     </MorphIndexProvider>
   )

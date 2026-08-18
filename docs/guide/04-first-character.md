@@ -103,22 +103,7 @@ to the `.hip` that reads it — see
 [where the Houdini project fits](./05-rom-in-daz.md#where-the-houdini-project-fits).
 
 <details>
-<summary><strong>Add morphs on frame 0</strong></summary>
-<table><tr><td>
-
-Morphs dialed once at **frame 0** of the ROM. With no item scope — the labels
-under the field reading **All items** — a row lands on *every* node carrying the
-morph, so a clothing **Expand All** reaches whichever outfit pieces the open scene
-wears. Picking a suggestion instead scopes the row to the item its dial lives on
-(✕ returns it to every item), which is what a fit value meant for one item needs.
-A scene without the morph — or the item — skips it. Overridable
-[per Daz scene](./advanced.md#per-scene-overrides--edit-to-override).
-
-</td></tr></table>
-</details>
-
-<details>
-<summary><strong>Advanced options — preserve node transforms</strong></summary>
+<summary><strong>Advanced options</strong></summary>
 <table><tr><td>
 
 <p align="center">
@@ -129,11 +114,18 @@ A scene without the morph — or the item — skips it. Overridable
 
 Not needed for a working ROM:
 
+- **Morphs set at frame 0** — dialed once at **frame 0** of the ROM. With no item
+  scope — the labels under the field reading **All items** — a row lands on
+  *every* node carrying the morph, so a clothing **Expand All** reaches whichever
+  outfit pieces the open scene wears. Picking a suggestion instead scopes the row
+  to the item its dial lives on (✕ returns it to every item), which is what a fit
+  value meant for one item needs. A scene without the morph — or the item — skips
+  it.
 - **Preserve node transforms** — the listed node's transform is memorized before
   the ROM loads and restored after, so posed nodes (the eyes, say) keep their
   orientation. Enter the **node's label** as it appears in Daz.
 
-The list is [overridable per scene](./advanced.md#per-scene-overrides--edit-to-override).
+Both lists are [overridable per scene](./advanced.md#per-scene-overrides--edit-to-override).
 
 > Morph values no longer need a list of their own: current DazToHue releases hold
 > them across the ROM load by themselves, so the old *Preserve morphs after ROM

@@ -66,40 +66,39 @@ export function PreserveFields({
   // as overridden, so the LABEL goes white + green handle on its own.
   const inheritedRow = (isOv: boolean) => overrideEligible && !isOv
 
+  // One list of the Advanced options panel — the ROUTE owns the layout.
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-      <div>
-        <Label
-          className={cn(
-            'mb-2 flex w-fit items-center gap-2',
-            overrideLabelClass(nodesOverridden, overrideEligible),
-          )}
-        >
-          Preserve node transforms
-          {/* Handle only in override context — nothing to override on the primary. */}
-          {overrideEligible && <OverrideMark overridden={nodesOverridden} onReset={resetNodes} />}
-        </Label>
-        <KeyedListEditor
-          items={nodes}
-          onChange={setNodes}
-          newItem={() => ({ nodeLabel: '' })}
-          addLabel="Add node"
-          rowClassName="mb-2 flex items-start gap-2"
-          emptyHint="No node transforms yet."
-        >
-          {(item, set, index) => {
-            const isOv = nodeOverridden(index)
-            return (
-              <Input
-                value={item.nodeLabel}
-                overridden={isOv}
-                className={cn(inheritedRow(isOv) && 'text-muted-foreground')}
-                onChange={(e) => set({ nodeLabel: e.target.value })}
-              />
-            )
-          }}
-        </KeyedListEditor>
-      </div>
+    <div>
+      <Label
+        className={cn(
+          'mb-2 flex w-fit items-center gap-2',
+          overrideLabelClass(nodesOverridden, overrideEligible),
+        )}
+      >
+        Preserve node transforms
+        {/* Handle only in override context — nothing to override on the primary. */}
+        {overrideEligible && <OverrideMark overridden={nodesOverridden} onReset={resetNodes} />}
+      </Label>
+      <KeyedListEditor
+        items={nodes}
+        onChange={setNodes}
+        newItem={() => ({ nodeLabel: '' })}
+        addLabel="Add node"
+        rowClassName="mb-2 flex items-start gap-2"
+        emptyHint="No node transforms yet."
+      >
+        {(item, set, index) => {
+          const isOv = nodeOverridden(index)
+          return (
+            <Input
+              value={item.nodeLabel}
+              overridden={isOv}
+              className={cn(inheritedRow(isOv) && 'text-muted-foreground')}
+              onChange={(e) => set({ nodeLabel: e.target.value })}
+            />
+          )
+        }}
+      </KeyedListEditor>
     </div>
   )
 }

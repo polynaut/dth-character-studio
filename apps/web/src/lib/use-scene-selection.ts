@@ -109,7 +109,7 @@ export function useSceneSelection(character: Character, patch: (p: Partial<Chara
   )
 
   /**
-   * Write the per-scene "Add morphs on frame 0" list under the same
+   * Write the per-scene "Morphs set at frame 0" list under the same
    * implicit-override model as the preserve list: the `frameZero` block exists
    * exactly while the list differs from the base (compared as the same canonical
    * multiset), and an otherwise-empty record is dropped. No-op on the primary
