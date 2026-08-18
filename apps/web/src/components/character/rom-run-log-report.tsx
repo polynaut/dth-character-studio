@@ -3,7 +3,7 @@ import { CircleX, TriangleAlert, X } from 'lucide-react'
 import { Button } from '@dth/ui'
 
 import type { RomRunKeyProblem, RomRunLog, RomRunSceneRun } from '#/lib/rom/api.ts'
-import { morphKey } from '#/lib/rom/run-log.ts'
+import { DIALED_WALKED_KIND, morphKey } from '#/lib/rom/run-log.ts'
 
 /**
  * The report the studio shows for the last Daz-side ROM run — errors, warnings,
@@ -92,9 +92,13 @@ export function RomRunLogReport({
           These morphs could not be applied — their frames stay in the ROM (empty), so the rest
           of the character is unaffected. With the reporting scene selected, every row in the
           ROM sections below that walks one of them is marked red. Click one to jump to it —
-          the studio switches to that scene first — then fix the morph name or add the missing
-          content, Save, and re-run.
+          the studio switches to that scene first — then fix what its line names, Save, and
+          re-run.
         </p>
+      )}
+
+      {romRunLog.failedMorphs.some((m) => m.kind === DIALED_WALKED_KIND) && (
+        <DialedWalkedExplainer />
       )}
 
       {romRunLog.keyProblems.length > 0 && <KeyProblemExplainer />}
@@ -127,6 +131,32 @@ function KeyProblemExplainer() {
       between pose frames on those channels differs, which a PoseAsset export does not sample.
       Each one names its node, dial and frame so you can open the scene and look. The list is
       capped per kind; the message above it carries the exact total.
+    </p>
+  )
+}
+
+/**
+ * The half every dialed-walked offender shares, said once (runtime v86).
+ *
+ * The runtime used to put this whole paragraph in EVERY row's reason, so three
+ * offenders meant three identical essays and the only thing that differed
+ * between them — the value, and whether the dial is driven — was buried at the
+ * front of each. The rows are one-liners now and the shared half lives here.
+ *
+ * It also carries what the banner above cannot: these rows are fixed in the
+ * DAZ SCENE, not in the studio. The banner's “fix what its line names, Save,
+ * and re-run” is the sequence for a bad morph NAME — there is nothing to save
+ * here, the dial is zeroed in Daz and the ROM re-run.
+ */
+function DialedWalkedExplainer() {
+  return (
+    <p className="mt-3 text-sm">
+      The dials marked <em>dialed at …</em> below are{' '}
+      <strong>walked by the ROM but not at 0 in the scene</strong>. A walked morph has to start
+      at 0: the exported FBX base drops it while the alembic keeps it, so the two drift apart.
+      Fix these <strong>in the Daz scene</strong> — zero the dial (the CONTROLLING dial when the
+      row says DRIVEN), save the scene, and re-run. Zeroing loses nothing: the shape still
+      reaches Unreal through the generated morph, at full range.
     </p>
   )
 }

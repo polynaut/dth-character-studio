@@ -16,8 +16,26 @@ export interface RomRunFailedMorph {
   frame: number
   node: string
   prop: string
+  /** What is wrong with THIS dial — a one-liner. Anything the offenders share
+   *  belongs in the report's per-{@link kind} explainer, not repeated here. */
   reason: string
+  /** Groups entries that share an explanation, so the report can state it once
+   *  above the list (runtime v86). `''` = no shared explanation; the reason
+   *  stands alone. Absent in logs written before v86, hence the tolerant parse.
+   *  The one kind so far is `dialed-walked` — see `dialedWalkedReason` in
+   *  `runtime/DthUtils.dsa`, which is the other half of this contract. */
+  kind: string
 }
+
+/** The failed morphs that share an explanation the report states ONCE, keyed on
+ *  {@link RomRunFailedMorph.kind}. The runtime hardcodes the same string
+ *  (`logRunFailedMorph(…, "dialed-walked")` in `runtime/DthUtils.dsa`) and
+ *  nothing at runtime joins the two — a rename on either side would just stop
+ *  the explainer from ever rendering, silently. So the join is a TEST:
+ *  `dialed-walked-gate.test.ts` boots the shipped `DthUtils.dsa` in a sandbox
+ *  and asserts the kind it logs against THIS constant, on both legs of the
+ *  gate. Change one side and that test says so. */
+export const DIALED_WALKED_KIND = 'dialed-walked'
 
 /**
  * ONE key the Daz-side LINEAR interpolation pass could not stamp, named well
@@ -205,6 +223,10 @@ export function parseFailedMorphs(value: unknown): Array<RomRunFailedMorph> {
       node: typeof entry.node === 'string' ? entry.node : '',
       prop: typeof entry.prop === 'string' ? entry.prop : '',
       reason: typeof entry.reason === 'string' ? entry.reason : '',
+      // Absent in every log written before runtime v86 — those rows carried the
+      // shared explanation inline, so no kind means no explainer, which is
+      // exactly right for them.
+      kind: typeof entry.kind === 'string' ? entry.kind : '',
     }
   })
 }

@@ -74,10 +74,18 @@ function logRunKeyProblem(oCounts, oEntry){
 }
 
 /** One morph/property that couldn't be applied — the frame slot stays, only
- *  this morph is missing, and the studio lists it after the run. */
-function logRunFailedMorph(iFrame, sNode, sProp, sReason){
+ *  this morph is missing, and the studio lists it after the run.
+ *
+ *  `sKind` (optional) groups entries that share an explanation, so the studio
+ *  can state it ONCE above the list instead of repeating it on every row: the
+ *  reason string stays a one-liner naming what is wrong with THIS dial, and the
+ *  common "why" and "what to do" live in the report's per-kind explainer. Omit
+ *  it for a reason that is self-explanatory on its own ("property not found").
+ *  Kinds in use: "dialed-walked" (see dialedWalkedReason). */
+function logRunFailedMorph(iFrame, sNode, sProp, sReason, sKind){
 	DTH_RUN_LOG.failedMorphs.push({
-		frame: iFrame, node: String(sNode), prop: String(sProp), reason: String(sReason)
+		frame: iFrame, node: String(sNode), prop: String(sProp), reason: String(sReason),
+		kind: sKind ? String(sKind) : ""
 	});
 	print("FAILED MORPH: frame", iFrame, "-", sNode, "/", sProp, "-", sReason);
 }
@@ -1286,12 +1294,17 @@ function dialedWalkedVerdict(oProp){
 	return { value: fValue, driven: bDriven };
 }
 
+/** A ONE-LINER: what is wrong with THIS dial and nothing else.
+ *
+ *  Every offender carries the same "why" (a walked morph must sit at 0 or the
+ *  FBX base and the alembic drift apart) and the same fix, and repeating that
+ *  paragraph on every row buried the one thing that differs between them - the
+ *  value and whether the dial is driven. The shared half is stated ONCE by the
+ *  studio's report, keyed on the "dialed-walked" kind these entries carry. */
 function dialedWalkedReason(oBad){
 	return "dialed at " + (Math.round(oBad.value * 1000) / 1000) +
-		" in the scene - a walked morph must be at 0, or the exported FBX base " +
-		"loses it while the alembic keeps it (the shapes drift). Zero the dial" +
-		(oBad.driven ? " (it is DRIVEN - zero the controlling dial)" : "") +
-		" and rebuild; its shape reaches Unreal through the generated morph instead.";
+		(oBad.driven ? " - DRIVEN, zero the controlling dial" : " - zero it") +
+		" and rebuild";
 }
 
 function checkDialedWalkedMorphs(oNodeRoot, frameDatas){
@@ -1339,7 +1352,8 @@ function checkDialedWalkedMorphs(oNodeRoot, frameDatas){
 				oSeen[sKey] = oVerdict;
 			}
 			if(oSeen[sKey]){
-				logRunFailedMorph(keyData.frameIdx, keyData.nodeName, keyData.propName, dialedWalkedReason(oSeen[sKey]));
+				logRunFailedMorph(keyData.frameIdx, keyData.nodeName, keyData.propName,
+					dialedWalkedReason(oSeen[sKey]), "dialed-walked");
 				iFailed++;
 			}
 		}
@@ -2450,7 +2464,8 @@ function applyArtDirectionData(jsonData, oNodeRoot, startFrame) {
             var sDialKey = morph.node + "|" + morph.prop;
             if (oDialSeen[sDialKey] === undefined) oDialSeen[sDialKey] = dialedWalkedVerdict(oProp);
             if (oDialSeen[sDialKey]) {
-                logRunFailedMorph(absoluteFrame, morph.node, morph.prop, dialedWalkedReason(oDialSeen[sDialKey]));
+                logRunFailedMorph(absoluteFrame, morph.node, morph.prop,
+                    dialedWalkedReason(oDialSeen[sDialKey]), "dialed-walked");
             }
 
             // Apply the morph value at this frame using sawtooth pattern
