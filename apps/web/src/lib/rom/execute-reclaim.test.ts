@@ -173,10 +173,10 @@ import {
   executeCharacterJobs,
   ExporterJobFilesChangedError,
   exporterJobFilesSignature,
-  exporterJobsWorking,
   fetchExportRunProgress,
   fetchExporterJobFiles,
   launchDazForPendingJobs,
+  pendingExportHandoffState,
 } from './api/execute'
 import { EXPORTER_JOB_FILE, RUNNING_JOB_FILE, jobFileJson } from './execute-jobs'
 
@@ -560,24 +560,80 @@ describe('fetchExportRunProgress — detects the reclaimable state, defers to th
   })
 })
 
-describe("exporterJobsWorking — the wait-for-close modal's stand-down probe", () => {
-  it('false without a claimed batch', async () => {
-    await expect(exporterJobsWorking()).resolves.toBe(false)
+describe("pendingExportHandoffState — the wait-for-close modal's per-tick state", () => {
+  it("'gone' with no handoff on disk — the modal closes instead of spinning forever", async () => {
+    // The screenshot bug: the export finished, the watch deleted the running_
+    // file, Daz stayed open — and the modal sat under the finish toast.
+    dazRunning = true
+    await expect(pendingExportHandoffState()).resolves.toBe('gone')
   })
 
-  it('false for a claimed-but-untouched batch (indistinguishable from the closing claim)', async () => {
+  it("'waiting' on an unclaimed handoff while the export Daz process is up", async () => {
+    files.set(PENDING, jobFileJson([{ scenePath: SCENE, scriptPath: SCRIPT }]))
+    dazRunning = true
+    await expect(pendingExportHandoffState()).resolves.toBe('waiting')
+  })
+
+  it("'launch' once the process is gone and the handoff is still unclaimed", async () => {
+    files.set(PENDING, jobFileJson([{ scenePath: SCENE, scriptPath: SCRIPT }]))
+    await expect(pendingExportHandoffState()).resolves.toBe('launch')
+  })
+
+  it("'waiting' for a claimed-but-untouched batch while a Daz is up (the ambiguous state)", async () => {
     seedClaimedUntouched()
-    await expect(exporterJobsWorking()).resolves.toBe(false)
+    dazRunning = true
+    await expect(pendingExportHandoffState()).resolves.toBe('waiting')
   })
 
-  it('true once the batch shows real work — the export watch owns it now', async () => {
+  it("'launch' for a claimed-but-untouched batch once the process is gone — the reclaim's cue", async () => {
+    seedClaimedUntouched()
+    await expect(pendingExportHandoffState()).resolves.toBe('launch')
+  })
+
+  it("'working' once the batch shows real work — the export watch owns it now", async () => {
     seedClaimedWorked()
-    await expect(exporterJobsWorking()).resolves.toBe(true)
+    dazRunning = true
+    await expect(pendingExportHandoffState()).resolves.toBe('working')
   })
 
-  it('false on a torn read — keep waiting, the next tick parses clean', async () => {
+  it("'working' for an untouched claimed batch whose progress LOG is alive", async () => {
+    // The Runner rewrites the job file per ROW (marking a row `running` is
+    // optional in the contract) — a one-scene batch reads untouched for its
+    // whole run. The verbose log is truncated at pickup, so any line means the
+    // batch is really going, and the modal must stand down instead of inviting
+    // the user to kill Daz over it.
+    seedClaimedUntouched()
+    files.set('/appdata/export-progress.log', '[5] Ita: Opening scene Ita')
+    dazRunning = true
+    await expect(pendingExportHandoffState()).resolves.toBe('working')
+  })
+
+  it("'gone' for a finished batch nobody swept yet (progress 100)", async () => {
+    files.set(
+      RUNNING,
+      JSON.stringify({
+        version: 1,
+        type: 'bulk-export',
+        progress: 100,
+        jobs: [{ scenePath: SCENE, scriptPath: SCRIPT, status: 'done' }],
+      }),
+    )
+    dazRunning = true
+    await expect(pendingExportHandoffState()).resolves.toBe('gone')
+  })
+
+  it("'unreadable' on a torn read — the next tick parses clean, a corrupt one never does", async () => {
     files.set(RUNNING, '{"version":1,"type":"bulk-export","progr')
-    await expect(exporterJobsWorking()).resolves.toBe(false)
+    await expect(pendingExportHandoffState()).resolves.toBe('unreadable')
+  })
+
+  it("'launch' for an untouched claimed batch whose log is alive but whose Daz is gone", async () => {
+    // The dying claim, one log line in: standing down here would strand the
+    // batch in the orphaned `running_` file. Nothing has been worked, so the
+    // reclaim-and-launch repeats nothing.
+    seedClaimedUntouched()
+    files.set('/appdata/export-progress.log', '[5] Ita: Opening scene Ita')
+    await expect(pendingExportHandoffState()).resolves.toBe('launch')
   })
 })
 

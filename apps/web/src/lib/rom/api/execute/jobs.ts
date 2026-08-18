@@ -17,6 +17,7 @@ import {
   EXPORT_MODES,
   HOUDINI_RUN_MODES,
   RUNNING_JOB_FILE,
+  classifyPendingHandoff,
   executeSceneSignature,
   jobFileJson,
   isReclaimableBatch,
@@ -31,7 +32,13 @@ import {
 import { BUILD_ROM_ANIMATION_SCRIPT, cancelFlagPath, sceneExportName } from '@dth/rom'
 import { sceneDthPath } from '../../houdini-jobs'
 import { charScopeInput, joinPath } from '../core'
-import type { ExecuteStamp, ExecuteStamps, ExporterJob } from '../../execute-jobs'
+import type {
+  ExecuteStamp,
+  ExecuteStamps,
+  ExporterJob,
+  ExporterJobFile,
+  PendingHandoffClass,
+} from '../../execute-jobs'
 import type { Character } from '@dth/rom'
 
 import {
@@ -40,6 +47,7 @@ import {
   assertHandoffOwned,
   characterScenesRoot,
   dazStudioRunningNative,
+  exportDazStudioRunning,
   exporterJobFilePaths,
   launchDazSceneless,
   loadCharacter,
@@ -50,6 +58,7 @@ import {
 } from './primitives.ts'
 import {
   clearCancelFlag,
+  readExportProgressState,
   resetExportProgressLog,
   runOwner,
   writeExportRunSidecar,
@@ -508,6 +517,47 @@ export async function reclaimOrphanedBatch(paths: { pending: string; running: st
   } catch {
     return false
   }
+}
+
+/**
+ * The wait-for-Daz-to-close modal's per-tick answer: read the handoff's actual
+ * state and classify it ({@link classifyPendingHandoff} — the rule itself, with
+ * every input and outcome, is documented there). This wrapper only gathers the
+ * inputs: the two job-file names, the claimed file's parse, the verbose
+ * progress log, and the EXPORT install's process probe (the install that has to
+ * restart to run the batch — an unscoped probe kept the modal spinning forever
+ * whenever another Daz was open, see {@link DazRunningScope}).
+ */
+export async function pendingExportHandoffState(): Promise<PendingHandoffClass> {
+  if (!isTauri()) return 'gone'
+  const paths = await exporterJobFilePaths()
+  if (!paths) return 'gone'
+  // A blipped existence check reads as "still there": waiting one more tick is
+  // free, while a false "gone" would dismiss the modal over a live handoff.
+  const pendingExists = await exists(paths.pending).catch(() => true)
+  let running: ExporterJobFile | 'absent' | null = 'absent'
+  if (!pendingExists) {
+    try {
+      running = (await exists(paths.running))
+        ? parseJobFileJson(await readTextFile(paths.running))
+        : 'absent'
+    } catch {
+      running = null // unreadable — same as a torn parse, the caller counts it
+    }
+  }
+  // Only a claimed-but-untouched batch needs the log signal (everything else
+  // classifies without it); readExportProgressState is null for an absent OR
+  // empty log, and the handoff truncated the log, so any line postdates it.
+  const progressActive =
+    !pendingExists && running !== 'absent' && running !== null && isReclaimableBatch(running)
+      ? (await readExportProgressState()) !== null
+      : false
+  return classifyPendingHandoff({
+    pendingExists,
+    running,
+    progressActive,
+    dazRunning: await exportDazStudioRunning(),
+  })
 }
 
 export const generateRomInput = charScopeInput.extend({

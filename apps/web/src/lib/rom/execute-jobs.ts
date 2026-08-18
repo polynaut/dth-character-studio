@@ -622,6 +622,82 @@ export function isReclaimableBatch(parsed: ExporterJobFile | null): boolean {
   return parsed.jobs.every((job) => job.status === 'pending')
 }
 
+/**
+ * What the wait-for-Daz-to-close modal should do THIS tick — the whole decision
+ * in one pure function ({@link classifyPendingHandoff}).
+ *
+ * - `'waiting'` — a handoff is still there and a Daz process is up (the closing
+ *   one, or a fresh one that hasn't claimed yet). Do nothing, ask again.
+ * - `'launch'` — a handoff is still there and no Daz process is. Start one
+ *   (`launchDazForPendingJobs`, which also reclaims an orphaned claim first).
+ * - `'working'` — a claimed batch shows real work. The run belongs to the
+ *   export watch now; the modal stands down.
+ * - `'gone'` — no handoff left at all (aborted, or claimed and finished).
+ *   Nothing to launch, nothing to wait for.
+ * - `'unreadable'` — the claimed file is there but does not parse. Normally a
+ *   torn read (the Runner rewrites it per row) and the next tick settles it —
+ *   but a file that stays unparseable is corrupt or foreign, and NOTHING here
+ *   can act on it (an unparsed batch is never reclaimable). Kept distinct from
+ *   `'waiting'` for exactly that reason: the caller counts it and gives up
+ *   rather than spinning forever on a state that cannot change.
+ */
+export type PendingHandoffClass = 'waiting' | 'launch' | 'working' | 'gone' | 'unreadable'
+
+/**
+ * Classify a pending export handoff for the wait-for-close modal.
+ *
+ * The predecessor of this rule (`exporterJobsWorking`) had no terminal state:
+ * it could only ever say "stand down" once a claimed batch showed a row mark or
+ * a progress percent — but the Runner rewrites the job file per ROW, marking a
+ * row `running` is OPTIONAL in the contract, and the export watch DELETES the
+ * file at 100. A one-scene batch therefore read "untouched" for its entire run
+ * and "absent" after it, and the modal spun forever under the finish toast.
+ * This classifier closes both holes: progress-LOG activity counts as work while
+ * a process is up to have written it (the Runner truncates the log at pickup,
+ * so any line postdates the claim), and a handoff that no longer exists is
+ * `'gone'`, not "keep waiting".
+ *
+ * The one deliberately ambiguous state survives: a claimed-but-untouched batch
+ * with a Daz process up is EITHER a closing Daz's dying claim (the rescue this
+ * modal exists for) or a live Daz that claimed late and is still loading the
+ * scene — indistinguishable from outside, so the answer stays `'waiting'` and
+ * the next signal (a log line, a row mark, the process exit) decides.
+ */
+export function classifyPendingHandoff(input: {
+  /** The un-renamed job file still exists — the handoff is unclaimed. */
+  pendingExists: boolean
+  /** The claimed (`running_`) file: `'absent'`, the parsed batch, or null for
+   *  an unreadable/torn read (decide next tick). Only consulted when the
+   *  pending file is gone. */
+  running: ExporterJobFile | 'absent' | null
+  /** The verbose progress log has lines — real work under way even while the
+   *  job file still reads untouched (see the doc block above). Only believed
+   *  alongside a live process: the batch it speaks for is untouched, so a line
+   *  from a Runner that has since died must not stand the modal down. */
+  progressActive: boolean
+  /** A Daz Studio process of the export install is up. */
+  dazRunning: boolean
+}): PendingHandoffClass {
+  const { pendingExists, running, progressActive, dazRunning } = input
+  if (!pendingExists) {
+    if (running === 'absent') return 'gone' // aborted, or finished and swept
+    if (running === null) return 'unreadable' // torn mid-rewrite, or corrupt
+    if (running.progress >= 100) return 'gone' // finished; the sweep is the watch's
+    if (!isReclaimableBatch(running)) return 'working'
+    // A log line only means work while a process is there to have written it.
+    // The batch is UNTOUCHED here (progress 0, every row pending), so the one
+    // thing standing down would buy is the orphaned-claim strand this modal
+    // exists to prevent — a Runner that claimed, logged its first line and died
+    // with the closing Daz looks exactly like this. With the process gone, fall
+    // through to the reclaim-and-launch instead: nothing has been worked, so
+    // relaunching costs nothing and repeats nothing.
+    if (progressActive && dazRunning) return 'working' // claimed late, scene loading
+    // Claimed but untouched: the dying-claim rescue case — fall through to the
+    // process probe like an unclaimed handoff.
+  }
+  return dazRunning ? 'waiting' : 'launch'
+}
+
 /** Which of the two job-file names is on disk: the one the studio writes, or
  *  the `running_` one the Runner renamed it to (the rename IS the claim). */
 export type JobFileKind = 'pending' | 'running'

@@ -33,7 +33,6 @@ export {
   characterScenesRoot,
   exportDazStudioRunning,
   exporterJobsPending,
-  exporterJobsWorking,
   openSceneInRunningDaz,
 } from './execute/primitives.ts'
 
@@ -55,6 +54,7 @@ export {
   fetchExecuteScenes,
   generateRomAnimation,
   launchDazForPendingJobs,
+  pendingExportHandoffState,
 } from './execute/jobs.ts'
 export type { ExecuteJobsSummary, ExecuteSceneStatus } from './execute/jobs.ts'
 

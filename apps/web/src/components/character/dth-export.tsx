@@ -1426,10 +1426,17 @@ export function DthExportAction({
  * The handoff was written while Daz Studio was still SHUTTING DOWN (the
  * process lingers after close, its Runner never claims the batch, and a fresh
  * launch would die against the dying single instance). This modal watches the
- * process and, the moment it is really gone, starts Daz itself — the pending
- * job file is then picked up on launch. It also stands down (no relaunch) when
- * a LIVE Daz claims late and actually starts working the batch — that run
- * belongs to the export watch. Closing the modal only stops the watch: the
- * batch stays queued (the header button still aborts it), and it vanishes on
- * its own when the batch gets claimed after all or is aborted.
+ * process and, the moment it is really gone, starts Daz itself — then stays up
+ * until the batch is actually CLAIMED and worked (a launch against a
+ * not-fully-dead instance forwards into it and dies, so an unverified launch
+ * used to strand the batch behind a "Daz Studio started" toast; now it simply
+ * launches again). It stands down when the batch shows real work (a live Daz
+ * claimed late — that run belongs to the export watch) and closes on its own
+ * when the handoff is gone (aborted, or finished) — so it can never sit under
+ * a "DTH Export finished" toast. Both retries are bounded: the relaunches are
+ * spaced and capped (a Daz that keeps exiting is reported, not started once a
+ * second — the launch command reports the SPAWN, never that the process
+ * lived), and a failed launch is retried every second and named in the modal
+ * after repeated failures. Closing the modal only stops the watch: the batch
+ * stays queued (the header button still aborts it).
  */
