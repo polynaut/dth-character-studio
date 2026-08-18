@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { sourceCharacterCandidates } from './shared.ts'
+import { hipStem, sourceCharacterCandidates } from './shared.ts'
 
 describe('sourceCharacterCandidates', () => {
   const char = (id: string, ...houdiniProjects: Array<string>) => ({ id, houdiniProjects })
@@ -43,5 +43,13 @@ describe('sourceCharacterCandidates', () => {
       'X:/target.hiplc',
     )
     expect(result.map((c) => c.id)).toEqual(['me', 'a', 'b'])
+  })
+})
+
+describe('hipStem', () => {
+  it('is the file name with the extension off, dotfiles kept whole', () => {
+    expect(hipStem('X:/lara/houdini/LaraCroft_G81_TEST.hiplc')).toBe('LaraCroft_G81_TEST')
+    expect(hipStem('LaraCroft.v2.hip')).toBe('LaraCroft.v2')
+    expect(hipStem('.hidden')).toBe('.hidden')
   })
 })

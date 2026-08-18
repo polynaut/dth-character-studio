@@ -181,6 +181,20 @@ export function fileName(path: string): string {
   return path.split(/[\\/]/).pop() ?? path
 }
 
+/** The card-title form of a Houdini project path: file name, extension off —
+ *  the same reading the project card's heading gives, so the source picker
+ *  and the cards name a project identically. */
+export function hipStem(path: string): string {
+  const name = fileName(path)
+  const dot = name.lastIndexOf('.')
+  return dot > 0 ? name.slice(0, dot) : name
+}
+
+/** Up to this many studio Houdini projects, the source picker lists them FLAT
+ *  (one entry per project); above it, the list would scroll past usefulness,
+ *  so it switches to the two-level character → project layout. */
+export const FLAT_SOURCE_LIMIT = 15
+
 /** The source slots a run will actually install — every one when none is picked. */
 export function pickedSlots(
   node: MaterialNodeInfo,
