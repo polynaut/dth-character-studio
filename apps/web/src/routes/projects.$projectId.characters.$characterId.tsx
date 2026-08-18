@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createFileRoute, notFound, useRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
 
@@ -41,6 +41,7 @@ import { DazSceneField } from '#/components/daz-scene-field.tsx'
 import { HoudiniProjectsField } from '#/components/houdini-projects-field.tsx'
 import { characterFolderDisplay, characterScriptsDisplay } from '#/lib/character-paths.ts'
 import { displayPath, parentDir } from '#/lib/path.ts'
+import { failedMorphKeysForScene, matchLinkedScene } from '#/lib/rom/run-log.ts'
 import { repointCharacterPaths } from '#/lib/rom/storage.ts'
 import { useCharacterDraft } from '#/lib/use-character-draft.ts'
 import { useDetectedFiles } from '#/lib/use-detected-files.ts'
@@ -307,10 +308,18 @@ function CharacterPage({ onImportRemount }: { onImportRemount: () => void }) {
     }
   }, [])
   // The ROM run log + the "reveal failed morph" signal for the editor. Failures
-  // mark rows by morph identity (node|prop), so they are red whatever scene is
-  // selected and survive row edits — a frame number only describes the ROM as
-  // it was when the run happened.
+  // mark rows by morph identity (node|prop), so they survive row edits — a
+  // frame number only describes the ROM as it was when the run happened — and
+  // they are scoped to the scene whose run reported them (a failure is a
+  // per-scene fact; the SELECTED scene's set is derived below).
   const runLog = useRomRunLog(projectId, initial.id, initialRomRunLog)
+  // The SELECTED scene's red-row set: its own bucket plus the untagged runs'
+  // (an unsaved scene / pre-v54 log names no scene, so those mark everywhere).
+  // Memoized — it feeds the memoized ROM subtree via RomEditorSection.
+  const failedMorphKeys = useMemo(
+    () => failedMorphKeysForScene(runLog.failedMorphsByScene, sceneSel.effectiveScene),
+    [runLog.failedMorphsByScene, sceneSel.effectiveScene],
+  )
 
   // New files saved into the character's folder (unlinked scenes/.hips) —
   // rescanned on focus; a banner offers the add wizard (lib/use-detected-files).
@@ -319,13 +328,16 @@ function CharacterPage({ onImportRemount }: { onImportRemount: () => void }) {
   const detectedCount = detect.detected.scenes.length + detect.detected.houdini.length
 
   /** A failed morph clicked in the report: switch to the scene that produced it
-   *  FIRST (the dial that failed is dialed in that scene, and an override-added
-   *  row only exists in its own scene's grid), then send the reveal signal. An
-   *  untagged run (unsaved scene / pre-v54 log) names no scene, so it reveals
-   *  in place. */
+   *  FIRST (the failure's red rows only show with that scene selected, and an
+   *  override-added row only exists in its own scene's grid), then send the
+   *  reveal signal. The log's scene spelling must be resolved to the STORED one
+   *  (matchLinkedScene) — selectScene honors nothing else, and a raw log
+   *  spelling silently no-oped back to the primary. An untagged run (unsaved
+   *  scene / pre-v54 log) or an unlinked scene reveals in place. */
   const revealFailure = useCallback(
     (key: string, scene: string) => {
-      if (scene) sceneSel.selectScene(scene)
+      const linked = matchLinkedScene(sceneSel.linkedScenes, scene)
+      if (linked) sceneSel.selectScene(linked)
       runLog.revealFailedMorph(key)
     },
     [sceneSel, runLog],
@@ -670,7 +682,7 @@ function CharacterPage({ onImportRemount }: { onImportRemount: () => void }) {
         patch={patch}
         catalog={catalog}
         presetFrames={presetFrames}
-        failedMorphKeys={runLog.failedMorphKeys}
+        failedMorphKeys={failedMorphKeys}
         nameErrors={nameErrors}
         revealMorph={runLog.revealMorph}
         revealPose={revealPose}

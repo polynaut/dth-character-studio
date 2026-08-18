@@ -79,7 +79,9 @@ interface RomSectionsProps {
    *  suggestions (clothing/hair dials) to the ones that scene actually has. */
   scenePath?: string
   /** Identities (`morphKey`) of the morphs that failed in the last ROM run
-   *  (from the run log) — pose rows walking one are marked red. */
+   *  (from the run log) — pose rows walking one are marked red. The caller
+   *  passes the SELECTED scene's set (failedMorphKeysForScene): a failure is a
+   *  per-scene fact, so another scene's grid must not go red over it. */
   failedMorphKeys?: Set<string>
   /** Save-time name errors by pose id — see PoseTableMeta.nameErrors. */
   nameErrors?: ReadonlyMap<string, { message: string; name: string }>
