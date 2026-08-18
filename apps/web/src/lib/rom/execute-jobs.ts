@@ -762,6 +762,36 @@ export function jobSceneForMode(mode: ExportMode, scenePath: string): string {
 }
 
 /**
+ * Which scenes' ROM verdict a starting DTH Export run RETIRES — the one rule
+ * the disk half (`clearSceneRunLogs`, from the handoff) and the on-screen half
+ * (`useRomRunLog().forgetScenes`, from the panel's `onExported`) both read, so
+ * the report the user sees and the report on disk cannot disagree.
+ *
+ * A run retires exactly what it supersedes:
+ *
+ * - The scenes it RUNS, and no others. A batch is a user-made selection, so
+ *   wiping the whole report would throw away findings for scenes this run never
+ *   opens — and nothing is coming to rewrite them, because nothing is going to
+ *   re-run them. (Same reason the single-scene rebuild retires one scene.)
+ * - Plus the untagged `''` entries — a v1 log (pre-runtime-v54) or a run from
+ *   an unsaved scene. They name no scene, so no future run can ever replace
+ *   them: left alone they would pin the red banner through every clean run
+ *   from here on.
+ * - NOTHING for `export-only`, which rebuilds no ROM (it exports the SAVED ROM
+ *   animation as it stands). The ROM verdict it would be deleting still
+ *   describes the ROM it is about to export — including the failed-morph rows
+ *   the user is meant to act on — and a clean export writes no run log to
+ *   replace it with.
+ */
+export function scenesRetiredByRun(
+  mode: ExportMode,
+  scenes: ReadonlyArray<string>,
+): Array<string> {
+  if (mode === 'export-only') return []
+  return [...scenes, '']
+}
+
+/**
  * Scene key → the export-dir-RELATIVE FOLDER that scene exports into: just
  * `<scene's export subfolder>`, from the SAME subfolder map the generated
  * export block embeds (falling back to the scene-file stem exactly like the

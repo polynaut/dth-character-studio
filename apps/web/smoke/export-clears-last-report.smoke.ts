@@ -16,6 +16,10 @@ import type { Page } from '@playwright/test'
 // goes with it — the character page re-reads the log on every window focus (the
 // user is about to alt-tab to Daz), and the ingest merges per scene, so a
 // surviving store would put the old failures straight back.
+//
+// PER SCENE on both paths (`scenesRetiredByRun`): a run retires the scenes it
+// re-runs and nothing else, so findings for a scene it never opens survive —
+// nothing is coming to rewrite those.
 
 const DAZ_INSTALL = 'C:/Program Files/DAZ 3D/DAZStudio4'
 const SCRIPTS_ROOT = `${P.dazLib}/Scripts/DTH-Character-Studio`
@@ -106,6 +110,40 @@ test('“Generate new ROM” retires ONLY the scene it rebuilds', async ({ page 
   await page.getByRole('button', { name: /Generate new ROM/ }).click()
 
   // The report SURVIVES — narrowed to the scene that was not rebuilt.
+  await expect(page.getByRole('heading', { name: /reported 2 problems$/ })).toBeVisible()
+  await expect.poll(() => storedLogScenes(page)).toEqual([P.scene2])
+})
+
+test('a DTH Export batch retires only the scenes it RUNS', async ({ page }) => {
+  // The batch is a selection, so it supersedes a selection. Unticking the extra
+  // scene has to leave that scene's findings standing — nothing else is going
+  // to re-run it and rewrite them.
+  const seed = buildSeed({
+    activeProjectFile: P.dcsp,
+    demo: true,
+    extraScene: true,
+    dazInstallFolder: DAZ_INSTALL,
+  })
+  seed.files[`${SCRIPTS_ROOT}/Demo/Kira/.Bulk_ROM_Export.dsa`] = '// bulk-export fixture'
+  seed.files[STORED_LOG] = failedRunLog(P.scene, P.scene2)
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+
+  // Both scenes are reporting: one error + one failed morph each.
+  await expect(
+    page.getByRole('heading', { name: /reported 4 problems across 2 scenes/ }),
+  ).toBeVisible()
+
+  const dialog = page.getByRole('dialog')
+  await page.getByRole('button', { name: 'DTH Export' }).click()
+  await dialog.getByRole('checkbox', { name: /Export KiraSummertide/ }).uncheck()
+  await page.getByRole('button', { name: 'Start' }).click()
+
+  await expect.poll(() => hasFile(page, PENDING_JOB)).toBe(true)
+  // The report SURVIVES — narrowed to the scene the batch left alone, on screen
+  // and in the store the focus refetch reads.
   await expect(page.getByRole('heading', { name: /reported 2 problems$/ })).toBeVisible()
   await expect.poll(() => storedLogScenes(page)).toEqual([P.scene2])
 })

@@ -246,28 +246,30 @@ export function mergeRomRunLogs(stored: RomRunLog, fresh: RomRunLog): RomRunLog 
 }
 
 /**
- * The log with ONE scene's run removed, aggregates recomputed — `null` when
- * that leaves nothing worth keeping (the caller deletes the file / clears the
- * banner), and the SAME object back when the scene had no entry, so an identity
- * check is a valid "nothing changed" test (the memoized ROM subtree depends on
- * the log's identity — see `useRomRunLog`).
+ * The log with the named scenes' runs removed, aggregates recomputed — `null`
+ * when that leaves nothing worth keeping (the caller deletes the file / clears
+ * the banner), and the SAME object back when none of them had an entry, so an
+ * identity check is a valid "nothing changed" test (the memoized ROM subtree
+ * depends on the log's identity — see `useRomRunLog`).
  *
- * The per-scene counterpart to wiping the log outright, for the single-scene
- * rebuild ("Generate new ROM" on a scene card): it re-runs exactly one scene,
- * so it may only retire that scene's verdict. The batch handoff, which re-runs
- * whatever the user selected and supersedes the whole report, drops both files
- * instead (`clearRomRunLogFiles`).
+ * A run retires exactly the verdicts it supersedes, which is per SCENE on both
+ * paths: the single-scene rebuild ("Generate new ROM" on a scene card) re-runs
+ * one scene, and a DTH Export batch re-runs the scenes the user ticked — a
+ * scene neither one touches keeps its findings, because nothing is coming to
+ * rewrite them. Which scenes a batch retires is `scenesRetiredByRun`
+ * (`execute-jobs.ts`), the one rule both the store and the screen read.
  *
  * An `unreadable` log is dropped whole: it describes a broken FILE, not a
  * scene's result, so there is no per-scene entry to keep — and the run about to
  * start writes a fresh one. A v1 log (pre-runtime-v54) and a run from an
- * unsaved scene both sit under scene `''` and so match no real scene path;
- * they survive here and are cleared by the batch handoff.
+ * unsaved scene both sit under scene `''`, so they are retired only by a caller
+ * that passes `''` — which a ROM-rebuilding batch does, or they would pin the
+ * report through every future run.
  */
-export function dropSceneRun(log: RomRunLog, scenePath: string): RomRunLog | null {
+export function dropSceneRuns(log: RomRunLog, scenePaths: ReadonlyArray<string>): RomRunLog | null {
   if (log.unreadable) return null
-  const key = normalizeSceneKey(scenePath)
-  const runs = log.runs.filter((r) => normalizeSceneKey(r.scene) !== key)
+  const keys = new Set(scenePaths.map(normalizeSceneKey))
+  const runs = log.runs.filter((r) => !keys.has(normalizeSceneKey(r.scene)))
   if (runs.length === log.runs.length) return log
   if (runs.length === 0) return null
   return {

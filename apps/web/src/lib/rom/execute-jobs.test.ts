@@ -11,6 +11,7 @@ import {
   jobSceneForMode,
   jobScriptForMode,
   jobStepsForMode,
+  scenesRetiredByRun,
   expectedSceneExportFolders,
   parseExportProgressLog,
   formatAgo,
@@ -488,6 +489,33 @@ describe('job rows per export mode — which hidden script, on which scene file'
     expect(jobSceneForMode('export-only', scene)).toBe(
       'X:/proj/Electra/daz3d/primary/rom-animations/Electra_ROM.duf',
     )
+  })
+})
+
+describe('which scenes a starting run retires from the last report', () => {
+  const A = 'X:/proj/Electra/daz3d/Electra.duf'
+  const B = 'X:/proj/Electra/daz3d/Electra_Yoga.duf'
+
+  it('the scenes it re-runs — never the whole report', () => {
+    // A batch is a SELECTION. Retiring more would destroy findings for a scene
+    // this run never opens, and nothing is coming to rewrite them.
+    expect(scenesRetiredByRun('rom-export', [A])).toContain(A)
+    expect(scenesRetiredByRun('rom-export', [A])).not.toContain(B)
+    expect(scenesRetiredByRun('rom-only', [A, B])).toEqual(expect.arrayContaining([A, B]))
+  })
+
+  it('plus the untagged entry — no future run can ever replace it', () => {
+    // A v1 log (pre-runtime-v54) or a run from an unsaved scene sits under ''.
+    // Nothing writes an entry that names no scene, so left alone it would pin
+    // the red banner through every clean run from here on.
+    expect(scenesRetiredByRun('rom-export', [A])).toContain('')
+  })
+
+  it('NOTHING for export-only — it rebuilds no ROM to supersede', () => {
+    // It exports the saved ROM animation as it stands: the ROM verdict still
+    // describes what is being exported, and a clean export writes no run log
+    // to replace it with.
+    expect(scenesRetiredByRun('export-only', [A, B])).toEqual([])
   })
 })
 

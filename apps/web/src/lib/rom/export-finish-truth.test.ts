@@ -110,7 +110,13 @@ vi.mock('@tauri-apps/plugin-fs', () => ({
   },
 }))
 
-import { CHARACTER_SCHEMA_VERSION, characterSchema, defaultSections, ROM_RUN_LOG_FILE } from '@dth/rom'
+import {
+  CHARACTER_SCHEMA_VERSION,
+  characterSchema,
+  defaultSections,
+  romAnimationPath,
+  ROM_RUN_LOG_FILE,
+} from '@dth/rom'
 import * as storage from './storage'
 import {
   dismissExportRun,
@@ -393,8 +399,8 @@ describe('scriptFailureLines', () => {
   })
 })
 
-describe('a handoff retires the PREVIOUS run report', () => {
-  it('drops both run-log files, so the old failures cannot outlive the run', async () => {
+describe('a handoff retires the previous run report for the scenes it RE-RUNS', () => {
+  it('drops them from both files, so the old failures cannot outlive the run', async () => {
     // The state the user sees: a red "errors in the last ROM run" banner and
     // red morph rows from the run before. Starting a new run must end them —
     // on disk as well as on screen, because the character page re-reads these
@@ -410,11 +416,11 @@ describe('a handoff retires the PREVIOUS run report', () => {
   })
 
   it('the cleared store cannot merge into the new run’s report', async () => {
-    // `fetchRomRunLog` merges the transport into the store BY SCENE. Scene B's
-    // old failure would otherwise ride along into a run that only touched
-    // scene A, and the banner would never clear.
+    // `fetchRomRunLog` merges the transport into the store BY SCENE, so the
+    // scene's own old failure would otherwise ride along into the run that
+    // just re-ran it and the banner would never clear.
     await storage.createProjectManifest(PROJECT, 'P')
-    writeRunLog(LAST_ROM_RUN_FILE, [sceneRun(SCENE_B, false, -60_000, ['an old problem'])])
+    writeRunLog(LAST_ROM_RUN_FILE, [sceneRun(SCENE, false, -60_000, ['an old problem'])])
 
     await armRun([SCENE])
     batchFinished([{ scene: SCENE }])
@@ -428,6 +434,72 @@ describe('a handoff retires the PREVIOUS run report', () => {
       ok: true,
       runs: [{ scene: SCENE, ok: true }],
     })
+  })
+
+  it('LEAVES a scene the batch does not run — nothing is coming to rewrite it', async () => {
+    // A batch is a selection. Wiping the whole report would destroy findings
+    // for a scene this run never opens, exactly like the single-scene rebuild
+    // below refuses to.
+    await storage.createProjectManifest(PROJECT, 'P')
+    writeRunLog(LAST_ROM_RUN_FILE, [
+      sceneRun(SCENE, false, -60_000, ['scene A failed']),
+      sceneRun(SCENE_B, false, -60_000, ['scene B failed']),
+    ])
+
+    await armRun([SCENE])
+
+    const log = await fetchRomRunLog({ data: { projectId: PROJECT, id: 'c1' } })
+    expect(log?.runs.map((r) => r.scene)).toEqual([SCENE_B])
+    expect(log?.errors).toEqual(['scene B failed'])
+  })
+
+  it('retires the untagged run too — no future run can ever replace it', async () => {
+    // A v1 log (pre-runtime-v54) or a run from an unsaved scene sits under ''.
+    // Left alone it would pin the red banner through every clean run from here
+    // on, because nothing writes an entry that names no scene.
+    await storage.createProjectManifest(PROJECT, 'P')
+    writeRunLog(LAST_ROM_RUN_FILE, [sceneRun('', false, -60_000, ['an untagged old problem'])])
+
+    await armRun([SCENE])
+
+    expect(files.has(`${META}/${LAST_ROM_RUN_FILE}`)).toBe(false)
+  })
+
+  it('an EXPORT-ONLY run retires nothing — it rebuilds no ROM', async () => {
+    // "Export only" exports the SAVED ROM animation as it stands. The failed
+    // morphs in the report still describe the ROM it is about to export, and a
+    // clean export writes no run log to replace them with — so wiping them
+    // would lose the report for good, over a run that changed nothing.
+    await storage.createProjectManifest(PROJECT, 'P')
+    const character = characterSchema.parse({
+      id: 'c1',
+      name: 'Ita',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      sections: defaultSections(),
+      scenePath: SCENE,
+      exportPath: '/exports',
+    })
+    addDir(`${PROJECT}/Ita`)
+    files.set(
+      `${PROJECT}/Ita/Ita.json`,
+      JSON.stringify({ ...character, schemaVersion: CHARACTER_SCHEMA_VERSION }),
+    )
+    files.set(SCENE, 'DUF')
+    // Its own carrier, and the saved ROM animation its job row opens.
+    files.set(`${SCRIPTS_ROOT}/P/Ita/.Bulk_Export_Only.dsa`, 'SCRIPT')
+    files.set(romAnimationPath(SCENE), 'DUF')
+    writeRunLog(LAST_ROM_RUN_FILE, [
+      sceneRun(SCENE, false, -60_000, ['a morph could not be applied']),
+    ])
+
+    await executeCharacterJobs({
+      data: { projectId: PROJECT, id: 'c1', scenes: [SCENE], mode: 'export-only' },
+    })
+
+    const log = await fetchRomRunLog({ data: { projectId: PROJECT, id: 'c1' } })
+    expect(log?.runs.map((r) => r.scene)).toEqual([SCENE])
+    expect(log?.errors).toEqual(['a morph could not be applied'])
   })
 })
 

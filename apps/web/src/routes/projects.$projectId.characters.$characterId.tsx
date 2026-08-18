@@ -519,7 +519,7 @@ function CharacterPage({ onImportRemount }: { onImportRemount: () => void }) {
         folderMove={folderMove}
         hasRunProblems={runLog.hasRunProblems}
         hasRunWarnings={runLog.hasRunWarnings}
-        onRunStarted={runLog.forget}
+        onRunStarted={runLog.forgetScenes}
       />
 
       {/* The editor body is isolated with `contain: layout paint`: when the sticky
@@ -608,7 +608,7 @@ function CharacterPage({ onImportRemount }: { onImportRemount: () => void }) {
                   onSelectScene={sceneSel.selectScene}
                   dockActionsRef={sceneDockActions}
                   onScenesRemoved={detect.answerFor}
-                  onRomRebuildStarted={runLog.forgetScene}
+                  onRomRebuildStarted={runLog.forgetScenes}
                 />
                 <SceneLock locked={!sceneLinked}>
                   <HoudiniProjectsField

@@ -29,10 +29,11 @@ import {
   parseJobFileJson,
   romAnimationPath,
   sceneExportFolderRel,
+  scenesRetiredByRun,
 } from '../../execute-jobs'
 import { BUILD_ROM_ANIMATION_SCRIPT, cancelFlagPath, sceneExportName } from '@dth/rom'
 import { sceneDthPath } from '../../houdini-jobs'
-import { clearRomRunLogFiles, clearSceneRunLog } from '../run-log-store.ts'
+import { clearSceneRunLogs } from '../run-log-store.ts'
 import { charScopeInput, joinPath } from '../core'
 import type {
   ExecuteStamp,
@@ -370,14 +371,16 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
   const metaDir = storage.characterMetaDir(project.path, location.relFolder, id)
   const cancelPath = cancelFlagPath(metaDir)
   await clearCancelFlag(cancelPath)
-  // The PREVIOUS run's report dies with the handoff — same arming step as the
-  // two above. Not cosmetic: `fetchRomRunLog` MERGES the Daz transport into the
-  // store per scene, so a surviving store would fold the old failures into this
-  // run's report, and the focus refetch would re-raise the old red banner (and
-  // the red morph rows) while the new run is still working. The finish report
-  // is unaffected — `scriptRunFailures` only counts entries written since this
-  // handoff.
-  await clearRomRunLogFiles(metaDir)
+  // The previous run's verdict for the scenes THIS batch re-runs dies with the
+  // handoff — same arming step as the two above, and per scene for the same
+  // reason the single-scene rebuild is (`scenesRetiredByRun` holds the rule,
+  // and says an export-only run retires nothing at all). Not cosmetic:
+  // `fetchRomRunLog` MERGES the Daz transport into the store per scene, so a
+  // surviving store would fold the old failures into this run's report, and the
+  // focus refetch would re-raise the old red banner (and the red morph rows)
+  // while the new run is still working. The finish report is unaffected —
+  // `scriptRunFailures` only counts entries written since this handoff.
+  await clearSceneRunLogs(metaDir, scenesRetiredByRun(mode, scenes))
   await storage.writeTextFileAtomic(jobFile, jobFileJson(jobs, 'bulk-export', progressLogPath))
 
   // Arm the watch: the run's identity only — all live state (progress,
@@ -630,12 +633,20 @@ export async function generateRomAnimation({
   await resetExportProgressLog().catch(() => {})
   // Retire THIS SCENE's verdict from the last run — the banner and the red ROM
   // rows must not outlive the run that produced them (the on-screen half is
-  // `useRomRunLog().forgetScene`, from the scene card). Per scene, not the
-  // whole log like the batch handoff: this rebuild re-runs one scene, and the
-  // findings of the scenes it doesn't touch have nothing coming to replace
-  // them. The script keys its entry by the SOURCE scene — it writes the run log
-  // inside `ApplyDTHCharacter`, before the save-as repoints the open scene.
-  await clearSceneRunLog(storage.characterMetaDir(project.path, location.relFolder, id), scene)
+  // `useRomRunLog().forgetScenes`, from the scene card). One scene, because
+  // that is all this rebuild re-runs: the findings of the scenes it doesn't
+  // touch have nothing coming to replace them. The script keys its entry by the
+  // SOURCE scene — it writes the run log inside `ApplyDTHCharacter`, before the
+  // save-as repoints the open scene.
+  //
+  // BEFORE the job file lands, not after: a Daz that is already up polls for it
+  // and can be writing its own run log within the second — clearing afterwards
+  // would race the new run's verdict away. The cost is the two-window race
+  // below (`assertHandoffOwned`), where the window that loses has already
+  // dropped this scene's verdict for a run it never got to start; the winner's
+  // run rewrites it anyway, so the loser only loses a report it was told to
+  // retire.
+  await clearSceneRunLogs(storage.characterMetaDir(project.path, location.relFolder, id), [scene])
   const jobJson = jobFileJson([{ scenePath: scene, scriptPath }])
   await storage.writeTextFileAtomic(paths.pending, jobJson)
   // Both windows can pass the exists-checks above — the read-back decides who
