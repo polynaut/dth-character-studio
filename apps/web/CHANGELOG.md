@@ -1,5 +1,26 @@
 # @dth/web
 
+## 0.85.0
+
+### Minor Changes
+
+- [#907](https://github.com/polynaut/dth-character-studio/pull/907) [`712a4f8`](https://github.com/polynaut/dth-character-studio/commit/712a4f86a639af536eb155ec45253e3873159766) Thanks [@polynaut](https://github.com/polynaut)! - The Daz product scan now recognises **hand-installed content the old matchers could never see** (runtime v95), so far fewer used assets land in "unmatched". The gaps closed — each verified against a real library's scan diagnostics:
+
+  - **Morphs installed under the figure's own data root** — the standard `data/DAZ 3D/Genesis 8/Female/Morphs/<Vendor>/<Product>/` layout — were written off wholesale as base DAZ content. The scan now synthesises a content-folder product for each such folder, and because a morph often exposes **no source file at all** to the scan APIs, it also matches a morph to the morph _file_ named like it — searching real products' DIM manifests, real products' installed Morphs folders, and the synthesised folders, preferring the scene's own Genesis generation when vendors ship the same filename for several.
+  - **Flat texture folders** (`Runtime/textures/<Product>/<file>.jpg`, common for freebie outfits) produced garbage folder keys — the filename was mistaken for the product segment. The folder alone is now the key, and an unmatched item's own texture folder becomes a product **on demand**, grouping sibling parts (Backpack, Boots, Gloves…) under the one folder product they share. Nested unowned texture folders (`Textures/<Vendor>/<Product>/`) work the same way, with the vendor as artist.
+  - **Every content directory Daz has mapped** is scanned, not just the one library configured in Settings — network drives and split libraries included. Local-install metadata and artist/version enrichment read all of them too.
+  - A new **Folder Match** places an asset whose own source file lives under a real product's `<Vendor>/<Product>` folder — catching morphs from big packs whose exact file fell off the DIM manifest's capped file index. The basename matcher keeps **every** morph filename from a manifest (Shape Shift lists 166 — the old cap dropped the one that mattered).
+  - **Morphs dialed on fitted items** (clothing, hair, geografts) are no longer matched independently — they're the item's own fit morphs or auto-follow projections, always part of the product that brought the item, and matching them produced false positives on generic names like `Expand_All`.
+
+  Re-scan a scene (or just run the next export) to see previously unmatched assets resolve; Tools → Refresh assets regenerates the scan scripts on the new runtime.
+
+### Patch Changes
+
+- [#906](https://github.com/polynaut/dth-character-studio/pull/906) [`f5d835f`](https://github.com/polynaut/dth-character-studio/commit/f5d835fc9683beec84d90989907d97baeb621712) Thanks [@polynaut](https://github.com/polynaut)! - DTH Export runs no longer pause at the start of each step (runtime v88). The generated Daz scripts used to sleep ~1 second after the Runner's scene load and again between the ROM build and the exporter — up to ~2 seconds of artificial wait per scene, added as a precaution rather than against any measured failure. The Runner's job contract already has it drain Daz's event loop after opening a scene (docs/exporter-plugin-job-file.md), so the pauses bought nothing. Save the character (or Tools → Refresh assets) to regenerate scripts already on disk; older scripts keep the old pauses until regenerated.
+- Updated dependencies [[`712a4f8`](https://github.com/polynaut/dth-character-studio/commit/712a4f86a639af536eb155ec45253e3873159766), [`f5d835f`](https://github.com/polynaut/dth-character-studio/commit/f5d835fc9683beec84d90989907d97baeb621712)]:
+  - @dth/rom@0.85.0
+  - @dth/ui@0.85.0
+
 ## 0.84.0
 
 ### Minor Changes
