@@ -945,18 +945,40 @@ describe('schema v19 — stable ids on pose + art-direction morph rows (additive
 //     })
 //   })
 
-// v25 added `exportHairAssets` (run the hair export right after the main export
-// in the carrying script) — additive with a false default, so there is no
-// migrate step; zod fills it when reading an older definition.
-describe('characterSchema — v25 exportHairAssets (additive)', () => {
+// v38 removed BOTH export-shape toggles — `exportWithRomScript` (v5) and
+// `exportHairAssets` (v25). The visible scripts are always the three separate
+// ones now, so there is no shape left to store. Removed fields need no migrate
+// step; zod strips the retired keys when reading an older definition.
+describe('characterSchema — v38 export-shape toggles removed', () => {
   const base = { id: 'c1', name: 'Electra', createdAt: '2026-01-01', updatedAt: '2026-01-01' }
 
-  it('fills exportHairAssets with false for a v24-shaped definition', () => {
-    expect(characterSchema.parse({ ...base, schemaVersion: 24 }).exportHairAssets).toBe(false)
+  it('strips both retired toggles from a v37-shaped definition', () => {
+    const parsed = characterSchema.parse(
+      migrateCharacterData({
+        ...base,
+        schemaVersion: 37,
+        exportPath: 'X:/exports/electra',
+        exportWithRomScript: false,
+        exportHairAssets: true,
+      }),
+    )
+    expect('exportWithRomScript' in parsed).toBe(false)
+    expect('exportHairAssets' in parsed).toBe(false)
+    // The export itself is untouched — only the SHAPE choice went away.
+    expect(parsed.exportPath).toBe('X:/exports/electra')
   })
 
-  it('round-trips a stored true', () => {
-    expect(characterSchema.parse({ ...base, exportHairAssets: true }).exportHairAssets).toBe(true)
+  it('strips them whichever way they were stored (no value survives as behaviour)', () => {
+    const parsed = characterSchema.parse(
+      migrateCharacterData({
+        ...base,
+        schemaVersion: 37,
+        exportWithRomScript: true,
+        exportHairAssets: false,
+      }),
+    )
+    expect('exportWithRomScript' in parsed).toBe(false)
+    expect('exportHairAssets' in parsed).toBe(false)
   })
 })
 

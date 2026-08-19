@@ -207,40 +207,50 @@ describe('generated script artwork', () => {
     }
   })
 
-  it('gives the ROM script different artwork depending on whether the export rides along', async () => {
+  it('gives the ROM and Export scripts DIFFERENT artwork — one tile per job', async () => {
     await setup()
     const c = seedCharacter({ exportPath: 'D:/exports' })
 
     await generateCharacterFiles({ data: { projectId: LIB, id: c.id } })
-    const withExport = png('ROM_Kira_G9.png')
 
-    // Split the export off: same file NAME, different script, different tile.
-    patchOnDisk(c, { exportWithRomScript: false })
-    await generateCharacterFiles({ data: { projectId: LIB, id: c.id } })
-    const romOnly = png('ROM_Kira_G9.png')
-
-    expect(withExport).toBeDefined()
-    expect(romOnly).toBeDefined()
-    expect(romOnly).not.toEqual(withExport)
+    // Since v38 both scripts always exist together, so both tiles must too —
+    // and they must not be the same image, or the Content Library shows two
+    // identical entries for two different jobs.
+    const rom = png('ROM_Kira_G9.png')
+    const exportTile = png('Export_Kira_G9.png')
+    expect(rom).toBeDefined()
+    expect(exportTile).toBeDefined()
+    expect(exportTile).not.toEqual(rom)
   })
 
-  it("retires a split export's artwork when the export moves back into the ROM script", async () => {
+  it("retires the export script's artwork when the export dir goes away", async () => {
     await setup()
-    const c = seedCharacter({ exportPath: 'D:/exports', exportWithRomScript: false })
+    const c = seedCharacter({ exportPath: 'D:/exports' })
 
     await generateCharacterFiles({ data: { projectId: LIB, id: c.id } })
     // The standalone script and its artwork exist…
     expect(files.has(`${SCRIPTS}/Export_Kira_G9.dsa`)).toBe(true)
     expect(png('Export_Kira_G9.png')).toBeDefined()
     expect(png('Export_Kira_G9.tip.png')).toBeDefined()
+    // …as do ALL THREE hidden bulk carriers, which the export dir gates too.
+    expect(files.has(`${SCRIPTS}/.Bulk_ROM_Export.dsa`)).toBe(true)
+    expect(files.has(`${SCRIPTS}/.Bulk_Export_Only.dsa`)).toBe(true)
+    expect(files.has(`${SCRIPTS}/.Bulk_Hair_Export.dsa`)).toBe(true)
 
-    // …and go away with the script when the export rides the ROM script again.
-    patchOnDisk(c, { exportWithRomScript: true })
+    // …and go away with the script once there is nowhere to export to. The
+    // export dir is the ONLY thing gating them now that the toggle is gone.
+    patchOnDisk(c, { exportPath: '' })
     await generateCharacterFiles({ data: { projectId: LIB, id: c.id } })
 
     expect(files.has(`${SCRIPTS}/Export_Kira_G9.dsa`)).toBe(false)
     expect(png('Export_Kira_G9.png')).toBeUndefined()
     expect(png('Export_Kira_G9.tip.png')).toBeUndefined()
+    // All three bulk carriers go with it. `.Bulk_Export_Only.dsa` used to be
+    // missing from the sweep's candidate list and survived here — a hidden
+    // script left on disk with the cleared export dir still baked into it.
+    expect(files.has(`${SCRIPTS}/.Bulk_ROM_Export.dsa`)).toBe(false)
+    expect(files.has(`${SCRIPTS}/.Bulk_Export_Only.dsa`)).toBe(false)
+    expect(files.has(`${SCRIPTS}/.Bulk_Hair_Export.dsa`)).toBe(false)
     // The ROM script's own artwork survived that same sweep.
     expect(png('ROM_Kira_G9.png')).toBeDefined()
   })

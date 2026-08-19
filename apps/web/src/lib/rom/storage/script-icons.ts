@@ -15,8 +15,6 @@ import type { GeneratedFile, ScriptIcon } from '@dth/rom'
 // bundles them as base64 data URLs (no asset fetch under the strict CSP).
 import romIcon from '../script-icons/rom.png?inline'
 import romTip from '../script-icons/rom.tip.png?inline'
-import romExportIcon from '../script-icons/rom-export.png?inline'
-import romExportTip from '../script-icons/rom-export.tip.png?inline'
 import exportIcon from '../script-icons/export.png?inline'
 import exportTip from '../script-icons/export.tip.png?inline'
 import exportHairIcon from '../script-icons/export-hair.png?inline'
@@ -33,13 +31,12 @@ import { dataUrlBytes, join } from './fs'
  * pair's names are derived from the script's, never stored.
  *
  * Which artwork a script gets is decided in the pure core (the `icon` tag on a
- * {@link GeneratedFile}) because it follows a generation rule the core owns:
- * a ROM script that also runs the export looks different from one that doesn't,
- * and that is exactly the `exportWithRomScript` split. Only the bytes live here.
+ * {@link GeneratedFile}) because it follows a generation rule the core owns —
+ * which job the script does. One tile per job: the visible scripts do one each
+ * (build the ROM / export / export the grooms). Only the bytes live here.
  */
 const SCRIPT_ICONS: Record<ScriptIcon, { tile: string; tip: string }> = {
   rom: { tile: romIcon, tip: romTip },
-  'rom-export': { tile: romExportIcon, tip: romExportTip },
   export: { tile: exportIcon, tip: exportTip },
   'export-hair': { tile: exportHairIcon, tip: exportHairTip },
   'scan-products': { tile: scanProductsIcon, tip: scanProductsTip },

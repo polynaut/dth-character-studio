@@ -1,11 +1,10 @@
 import { DirPathChip } from '#/components/dir-path-chip.tsx'
 import { PathCode, tallPathChipClass } from '#/components/path-code.tsx'
 import { GuideLink } from '#/components/guide-link.tsx'
-import { InfoPopup, Switch } from '@dth/ui'
+import { InfoPopup } from '@dth/ui'
 import { displayPath } from '#/lib/path.ts'
 
 import type { RootedDir } from '#/lib/character-paths.ts'
-import type { PersistCharacterPatch } from '#/lib/use-character-draft.ts'
 import type { Character } from '@dth/rom'
 
 /** The guide's direct-export section — the single source of truth for how the
@@ -15,12 +14,14 @@ const EXPORT_GUIDE_URL =
   'https://polynaut.github.io/dth-character-studio/guide/05-rom-in-daz.html#direct-export-optional-recommended'
 
 /**
- * The "Daz scripts generated" pane: where the generated
- * ROM_/Export_ scripts install in the Daz library, so the user knows where to
- * find/run them in Daz — or the setup notice while no library is set. The two
- * export switches live here (they shape WHICH scripts generate and what the
- * export pass covers); like every export setting they persist + regenerate
- * immediately via `persistPatch`, so the on-disk scripts never lag the toggle.
+ * The "Daz scripts generated" pane: where the generated ROM_/Export_/
+ * Export_Hair_ scripts install in the Daz library, so the user knows where to
+ * find and run them in Daz — or the setup notice while no library is set.
+ *
+ * Purely informational: there is nothing to choose here. Every visible script
+ * does ONE job (ROM_ builds the ROM, Export_ runs the exporter, Export_Hair_
+ * exports the grooms) and all of them generate whenever they apply, so the pane
+ * that used to carry the two export-shape switches now just says where they land.
  *
  * The "Export directory" sub-section lives at the bottom: read-only since
  * schema v29, the directory is DERIVED (`<character>/<houdini subfolder>/
@@ -31,14 +32,10 @@ const EXPORT_GUIDE_URL =
 export function ScriptsSection({
   character,
   scriptsPath,
-  saving,
-  persistPatch,
 }: {
   character: Character
   /** From lib/character-paths.ts; null until "My DAZ 3D Library" is set. */
   scriptsPath: RootedDir | null
-  saving: boolean
-  persistPatch: PersistCharacterPatch
 }) {
   const exportSet = character.exportPath.trim() !== ''
 
@@ -47,8 +44,15 @@ export function ScriptsSection({
       <h2 className="mb-3 flex w-fit items-center gap-1 text-xl font-semibold">
         Daz scripts generated
         <InfoPopup label="Daz scripts generated — more information">
-          Where the generated Daz script installs in your DAZ library on Save — open it in Daz to
-          build the ROM{exportSet ? ' and run the export' : ''}.{' '}
+          Where the generated Daz scripts install in your DAZ library on Save. Open{' '}
+          <code>ROM_…</code> in Daz to build the ROM
+          {exportSet ? (
+            <>
+              , then <code>Export_…</code> to export it and <code>Export_Hair_…</code> for the
+              grooms — one script per job, so a re-export never rebuilds the ROM
+            </>
+          ) : null}
+          .{' '}
           <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/04-first-character.html#save--generate" />
         </InfoPopup>
       </h2>
@@ -64,47 +68,6 @@ export function ScriptsSection({
           Set “My DAZ 3D Library” in Settings to install the character script.
         </p>
       )}
-      <div className="mt-4 flex items-center gap-3">
-        <Switch
-          checked={character.exportWithRomScript}
-          disabled={!exportSet || saving}
-          onCheckedChange={(exportWithRomScript) =>
-            void persistPatch(
-              { exportWithRomScript },
-              {
-                toast: exportWithRomScript
-                  ? 'Combined ROM + export script'
-                  : 'Separate ROM and Export scripts',
-              },
-            )
-          }
-        />
-        <span className={`text-sm${exportSet ? '' : ' text-muted-foreground'}`}>
-          Run the export with the ROM script
-        </span>
-      </div>
-      <div className="mt-4 flex items-center gap-3">
-        <Switch
-          checked={character.exportHairAssets}
-          disabled={!exportSet || saving}
-          onCheckedChange={(exportHairAssets) =>
-            void persistPatch(
-              { exportHairAssets },
-              {
-                toast: exportHairAssets
-                  ? 'Hair assets export with the main export — script regenerated'
-                  : 'Hair export off — script regenerated',
-              },
-            )
-          }
-        />
-        <span
-          className={`text-sm${exportSet ? '' : ' text-muted-foreground'}`}
-          title="After the main export, each of the open scene's hair items is exported on its own (the Export_Hair pass) — in the combined ROM script and the split Export script alike"
-        >
-          Export hair assets too
-        </span>
-      </div>
       <div className="mt-5 border-t pt-4">
         <h3 className="mb-3 flex w-fit items-center gap-1 text-xl font-semibold">
           Export directory

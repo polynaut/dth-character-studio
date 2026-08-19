@@ -148,21 +148,29 @@ back.
 > PoseAsset CSV — see
 > [What Save generates](./advanced.md#what-save-generates).
 
-Two switches in the **Daz scripts generated** box tune the scripts (a DTH Export
-run ignores them — the batch always builds and exports everything):
+Each generated script does **one job**, so you run only the part you need (and a
+re-export never costs you another ROM build). With an Export directory set you
+get, in the order you run them:
 
-- **Run the export with the ROM script** — on by default, so one
-  `ROM_<Name>_G9.dsa` builds the ROM and runs the export. Off, the export splits
-  into its own **`Export_<Name>_G9.dsa`** — run it after the ROM script in the
-  same Daz session, handy for re-exporting without rebuilding the ROM.
-- **Export hair assets too** — right after the main export, each of the open
-  scene's [hair items](./advanced.md#hair-items--per-scene-kept-out-of-the-export)
-  is exported on its own (`<Name>_Hair_<item>_grooms.abc`). Works in both modes;
-  scenes without a hair list skip the pass.
+- **`ROM_<Name>_G9.dsa`** — builds the ROM on the timeline. That's all it does.
+- **`Export_<Name>_G9.dsa`** — runs the DTH Exporter over the ROM already on the
+  timeline and delivers the PoseAsset CSV. Run it after the ROM script, in the
+  same Daz session. To re-export later, run just this one.
+- **`Export_Hair_<Name>_G9.dsa`** — exports each of the open scene's
+  [hair items](./advanced.md#hair-items--per-scene-kept-out-of-the-export) on its
+  own (`<Name>_Hair_<item>_grooms.abc`). Only generated when the character lists
+  hair items.
+
+Each gets its own **Content Library icon**, so they're easy to tell apart in Daz.
+
+> [!TIP]
+> The **DTH Export** button does all three in one unattended batch — it runs its
+> own hidden script rather than these. Use these when you want to drive Daz by
+> hand, or to redo one step.
 
 > [!NOTE]
-> Prefer exporting by hand? Turn off *Run the export with the ROM script* and
-> export with the DTH Exporter as the DazToHue docs describe; the PoseAsset CSV is
+> Prefer exporting entirely by hand? Just run `ROM_<Name>_G9.dsa` and then export
+> with the DTH Exporter as the DazToHue docs describe; the PoseAsset CSV is
 > waiting in
 > [the studio's own folder](./06-into-houdini.md#what-the-studio-gives-you).
 

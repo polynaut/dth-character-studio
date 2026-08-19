@@ -370,9 +370,10 @@ export async function readScriptRuntimeInfo(
 ): Promise<ScriptRuntimeInfo | null> {
   const dir = studioCharScriptsDir(dazLibraryFolder, projectName, character.name)
   const base = characterScriptName(character)
-  // The main ROM script is either combined (`<base>.dsa`) or, when the export is
-  // split out, `ROM_<base>.dsa`. Either carries the runtime marker in its header
-  // and, when armed, the embedded `dthProductScanConfig` scan block.
+  // The main ROM script is `ROM_<base>.dsa`; `<base>.dsa` is the pre-rename flat
+  // name a long-untouched library can still hold. Either carries the runtime
+  // marker in its header and, when armed, the embedded `dthProductScanConfig`
+  // scan block.
   for (const name of [`${base}.dsa`, `ROM_${base}.dsa`]) {
     const path = join(dir, name)
     if (await exists(path)) {

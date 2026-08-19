@@ -90,15 +90,13 @@ describe('scan-on-export (indexSync)', () => {
     }
   })
 
-  it('the SPLIT Export_ and the groom script scan too (the fixture blind spot)', () => {
-    // The derived loop above only covers what the default fixture emits —
-    // exportWithRomScript stays true there, so the standalone Export_ script
-    // (and the groom script, which needs a hair list) never appeared in it and
-    // their indexSync wiring escaped the very test built to catch new
-    // variants. Pin them explicitly.
+  it('the standalone Export_ and the groom script scan too (the fixture blind spot)', () => {
+    // The derived loop above only covers what the default fixture emits — the
+    // groom script needs a hair list, so it never appeared in it and its
+    // indexSync wiring escaped the very test built to catch new variants.
+    // Pin it (and the Export_ script beside it) explicitly.
     const files = generateAll(
       character({
-        exportWithRomScript: false,
         sceneOverrides: [
           { scenePath: 'D:/proj/Kira/daz3d/Kira.duf', rom: {}, hair: [{ nodeLabel: 'Kira Hair' }] },
         ],

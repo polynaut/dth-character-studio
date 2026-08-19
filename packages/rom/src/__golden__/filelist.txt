@@ -1,4 +1,5 @@
 ROM_ElectraG9_G9.dsa
+Export_ElectraG9_G9.dsa
 .Bulk_ROM_Export.dsa
 .Bulk_Export_Only.dsa
 .Bulk_Hair_Export.dsa

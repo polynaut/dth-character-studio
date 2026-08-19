@@ -129,8 +129,9 @@ import type { RomPaths } from './resolve'
 import type { ArtDirectionFrame, Character, Morph } from './types'
 
 /**
- * The `.dsa` generators: the self-contained character/ROM script, the split
- * Export script, the groom (hair) export, the product scan — plus the
+ * The `.dsa` generators: the ROM script, the standalone Export script, the
+ * groom (hair) export, the product scan (plus the Runner's hidden bulk
+ * carriers, which are the same builders in their `bulk` shape) — plus the
  * generateAll entry point that pairs them with the
  * PoseAsset CSV (csv.ts). Formats are taken from real files in
  * soltude/DazToHue-Scripts (ElectraG9_FBMs.json / .csv, DthWorkflowElectraG9.dsa)
@@ -314,8 +315,8 @@ export function cancelFlagPath(metaDirAbs?: string): string {
 
 /**
  * The per-item hair (groom) export loop — the heart of the Export_Hair flow,
- * shared verbatim by the standalone `Export_Hair_…` script and the inline
- * "export hair assets too" pass (`exportHairAssets`) inside the export block.
+ * shared verbatim by the standalone `Export_Hair_…` script — the visible
+ * carrier — and the inline pass the bulk carriers put behind the main export.
  * For every label in `dthGroomLabels` it hides every OTHER wearable (the item
  * stays fitted), selects the figure, runs the exporter's documented
  * `doExportAlembicGroomPoses(path, name, false)` (a 2-arg call crashes Daz —
@@ -380,9 +381,9 @@ print("Hair items exported: " + dthGroomLabels.length);
  * is set. The CSV copy is included only when the source folder is known
  * (`metaDirAbs`); the export ALWAYS nests under the open scene's own subfolder
  * ({@link sceneExportSubfolders} — resolved by the embedded map at run time).
- * The Export_Hair per-item pass rides right after the main export (same
- * action, same resolved dir) when `exportHairAssets` is on — the bulk script
- * forces that toggle before building, so it always carries the pass.
+ * The Export_Hair per-item pass rides right after the main export (same action,
+ * same resolved dir) when `hairPass` is on — which is the Runner's hidden bulk
+ * carriers only. The visible scripts keep hair in its own `Export_Hair_…`.
  */
 function buildExportBlock(
   character: Character,
@@ -425,6 +426,15 @@ function buildExportBlock(
    *  the reached percents so the meter never runs ahead). Omitted = the
    *  block logs no progress (manual/legacy carriers). */
   progressPcts?: { begin: number; character: number; csv: number; hair: number },
+  /**
+   * Inline the Export_Hair per-item pass behind the main export. TRUE only for
+   * the Runner's hidden bulk carriers, which must do the whole job in one
+   * unattended pass. The VISIBLE scripts never inline it — hair is its own
+   * `Export_Hair_…` script there, which is the whole point of the three-script
+   * split. (Even when inlined the pass still obeys the per-scene "Export hair
+   * items" switch at run time; this only decides whether it ships at all.)
+   */
+  hairPass = false,
 ): string {
   const exportDir = character.exportPath.trim()
   if (!exportDir) return ''
@@ -657,11 +667,11 @@ ${indentLines(csvCopyBlock)}${
   const exportPrelude = `    var dthExportThrew = null;
     var dthExportLanded = false;
 `
-  // "Export hair assets too": the Export_Hair per-item pass appended after the
-  // main export, inside the groom bracket (it needs this scene's labels). The
-  // figure resolves under its OWN name — the standalone Export_ script already
-  // declares `dthFig`, and this block must work in both carriers.
-  const hairPassCore = `        // Export hair assets too: the Export_Hair pass, right after the main
+  // The Export_Hair per-item pass appended after the main export, inside the
+  // groom bracket (it needs this scene's labels). The figure resolves under its
+  // OWN name — the standalone Export_ script already declares `dthFig`, and
+  // this block has to work in either carrier.
+  const hairPassCore = `        // The hair pass: the Export_Hair per-item export, right after the main
         // export — same action, same (scene-resolved) export dir. Per-scene
         // switch first ("Export hair items", off by default on non-primary
         // scenes), then gated on the main export having LANDED: over a
@@ -684,9 +694,10 @@ ${indentBlock(indentBlock(indentBlock(hairExportLoopSnippet(character, { fig: 'd
         }${progressPcts ? `\n        dthProgressLog(${progressPcts.hair}, "hair items exported");` : ''}
         }
 `
-  // `exportHairAssets` decides whether the pass ships at all — the bulk
-  // script forces the toggle on before building, so it always carries it.
-  const hairPassBlock = character.exportHairAssets ? hairPassCore : ''
+  // `hairPass` decides whether the pass ships at all: only the Runner's hidden
+  // bulk carriers inline it (one unattended pass does the whole job). The
+  // visible Export_ script leaves hair to the standalone `Export_Hair_…`.
+  const hairPassBlock = hairPass ? hairPassCore : ''
   const exportBody =
     Object.keys(groomMap).length === 0
       ? `${exportPrelude}${exportCore}`
@@ -701,13 +712,18 @@ ${indentBlock(indentBlock(indentBlock(hairExportLoopSnippet(character, { fig: 'd
     // different hair); a scene without an entry exports as-is.
     var dthRunExport = function () {
 ${indentBlock(indentBlock(exportCore))}    };
-${groomSceneLookupSnippet(groomMap)}
+${groomSceneLookupSnippet(groomMap)}${
+          hairPass
+            ? `
     // The per-scene "Export hair items" switch, resolved for the OPEN scene
     // like the labels above. Only the hair PASS asks — the hide bracket below
     // keeps hiding the items either way (they must stay out of the main
-    // export regardless of whether they also export on their own).
+    // export regardless of whether they also export on their own) — so it is
+    // emitted only where that pass is, which is the bulk carriers.
     var dthHairExportByScene = ${dazJson(hairExportScenes(character))};
-    var dthHairExportOn = dthHairExportByScene[dthGroomScene] === true;
+    var dthHairExportOn = dthHairExportByScene[dthGroomScene] === true;`
+            : ''
+        }
 ${hideTreeSnippet('dthGroomHideTree', 'dthGroomHidden')}
     if (dthGroomLabels.length == 0) {
         print("No hair list for the open scene - exporting as-is.");
@@ -765,7 +781,7 @@ ${hairPassBlock}    }
   // Runner's unattended carriers have — without it a bulk run on a Daz that
   // cannot export completes every scene, exports nothing, and says nothing.
   // Written here rather than through the runtime's logRunError because the
-  // split Export_ carriers don't include the runtime at all.
+  // Export_ carriers don't include the runtime at all.
   //
   // The DIALOG only when a human ran it. A modal inside a Runner carrier warns
   // nobody and blocks the batch on a click that never comes.
@@ -1070,8 +1086,9 @@ function buildSceneConfigMap(
  * Scene → PoseAsset-CSV-name for every linked scene that overrides the ROM (and
  * so has its own scene-suffixed CSV, built from the merged sections). Keyed by
  * the open scene's normalized path, matching {@link buildSceneConfigMap}. The
- * export block (in the combined ROM script AND the split Export_ script)
- * resolves the CSV to deliver through this; an identity/groom-only scene isn't
+ * export block (the standalone Export_ script and the hidden bulk carriers —
+ * since v38 the ROM script carries no export) resolves the CSV to deliver
+ * through this; an identity/groom-only scene isn't
  * here and rides the base CSV. Public: the studio's export watch derives each
  * scene's expected delivered-CSV path from the same lookup.
  */
@@ -1368,11 +1385,11 @@ function dthCancelRequested() {
 /**
  * The hidden BULK variant ({@link BULK_ROM_EXPORT_SCRIPT}) the DTH Character
  * Studio Runner executes on job-file runs (the studio's DTH Export button):
- * the SAME one-script build with both export toggles FORCED on — it always
- * builds the ROM and always exports, skeleton/mesh and every hair asset,
- * no matter what "Run the export with the ROM script" / "Export hair assets
- * too" say (those govern the visible per-character scripts only). One builder
- * ({@link toCharacterScriptDsa}'s), so the two can never drift; dot-prefixed
+ * the SAME one-script build in its `bulk` shape — it always builds the ROM and
+ * always exports, skeleton/mesh and every hair asset, in one unattended pass.
+ * That is what `bulk` MEANS now: the visible per-character scripts are always
+ * the three separate ones, and this carrier is the only one that combines them.
+ * One builder ({@link toCharacterScriptDsa}'s), so the two can never drift; dot-prefixed
  * so Daz's Content Library never shows it. Only meaningful with an export dir
  * — generateAll emits it exactly then.
  */
@@ -1398,7 +1415,7 @@ export function toBulkRomExportScriptDsa(
   runtimeRootAbs = '',
 ): GeneratedFile {
   return buildRomScriptDsa(
-    { ...character, exportWithRomScript: true, exportHairAssets: true },
+    character,
     true,
     romPaths,
     frames,
@@ -1417,8 +1434,9 @@ export function toBulkRomExportScriptDsa(
 /**
  * The hidden ROM-ONLY variant ({@link BUILD_ROM_ANIMATION_SCRIPT}) the Runner
  * executes for a scene card's "Open and Generate ROM Animation": the same
- * one-script build with the export forced OFF — it builds the ROM and (runtime
- * v42) saves the reopenable `rom-animations/<stem>_ROM.duf`, nothing else.
+ * one-script build in its NON-bulk shape, which carries no export — it builds
+ * the ROM and (runtime v42) saves the reopenable
+ * `rom-animations/<stem>_ROM.duf`, nothing else.
  * One builder ({@link toCharacterScriptDsa}'s), so it can never drift from the
  * visible ROM script; needs no export directory (the save doesn't either).
  */
@@ -1442,7 +1460,7 @@ export function toBuildRomAnimationScriptDsa(
   runtimeRootAbs = '',
 ): GeneratedFile {
   const file = buildRomScriptDsa(
-    { ...character, exportWithRomScript: false, exportHairAssets: false },
+    character,
     false,
     romPaths,
     frames,
@@ -1616,14 +1634,15 @@ function buildRomScriptDsa(
   // so the visible attended script's config — and its modal — stay as they were.
   if (unattended) config.bUnattended = true
 
-  // Optional auto-export: when an export directory is set AND the export runs
-  // with the ROM script (the default; the bulk variant forces it), the ROM
-  // build is followed by a DTH Exporter run. Split off (exportWithRomScript
-  // false), the visible ROM script carries no export — that's the standalone
-  // Export_ script's job.
+  // The auto-export rides the ROM build in the BULK carrier only — the one the
+  // Runner executes unattended, which has to do the whole job in one pass. The
+  // VISIBLE `ROM_…` script builds the ROM and stops: exporting is the standalone
+  // `Export_…` script's job, and grooming the `Export_Hair_…` one's. That split
+  // is unconditional now (it used to be the `exportWithRomScript` toggle), so a
+  // re-export never costs a ROM rebuild.
   const exportDir = character.exportPath.trim()
   const exportBlock =
-    exportDir && character.exportWithRomScript !== false
+    exportDir && bulk
       ? `            // Export to the DTH pipeline via the Exporter Plugin (v1.8.1+).
 ${buildExportBlock(
   character,
@@ -1639,6 +1658,9 @@ ${buildExportBlock(
   // runtime order: the CSV delivery sits inside the export core, the hair
   // pass runs after it.
   progressLogPath ? { begin: 40, character: 60, csv: 80, hair: 100 } : undefined,
+  // This block only exists in the bulk carrier now, and that carrier always
+  // exports hair too.
+  true,
 )
   .split('\n')
   .map((line) => (line ? `            ${line}` : line))
@@ -1649,9 +1671,10 @@ ${buildExportBlock(
     ? `// DTH BULK ROM+Export for ${commentSafe(character.name)} (${character.genesis}) — generated by DTH Character Studio${character.studioVersion ? ` v${commentSafe(character.studioVersion)}` : ''}.
 // Executed by the DTH Character Studio Runner plugin on job-file runs (the
 // studio's DTH Export button): always builds the ROM and always exports —
-// skeleton/mesh AND every hair asset — no matter the "Run the export with the
-// ROM script" / "Export hair assets too" toggles (those govern the visible
-// per-character scripts only). Dot-prefixed: hidden from the Content Library.`
+// skeleton/mesh AND every hair asset — in ONE unattended pass. The visible
+// per-character scripts are the three separate ones (ROM_ / Export_ /
+// Export_Hair_); this carrier is the only one that does everything at once.
+// Dot-prefixed: hidden from the Content Library.`
     : `// DTH ROM for ${commentSafe(character.name)} (${character.genesis}) — generated by DTH Character Studio${character.studioVersion ? ` v${commentSafe(character.studioVersion)}` : ''}.`
 
   const content = `// DAZ Studio version 4.22.0.16 filetype DAZ Script
@@ -1966,17 +1989,17 @@ ${exportBlock}        }` : ''}
     fileName: `ROM_${baseName}.dsa`,
     content,
     target: 'daz',
-    // The tile says which of the two this script is, since the file name can't:
-    // ROM_ alone always builds the ROM, but it may or may not also export.
-    icon: exportBlock !== '' ? 'rom-export' : 'rom',
+    // Always the plain ROM tile: this script builds the ROM and nothing else
+    // now, so there is no combined variant left for the artwork to distinguish.
+    icon: 'rom',
   }
 }
 
 /**
  * The standalone Export script (`Export_<Name>_<Genesis>.dsa`) — runs the DTH
  * Exporter on the ROM already built on the timeline and delivers the PoseAsset
- * CSV, without rebuilding the (slow) ROM. Generated only when an export dir is
- * set and `exportWithRomScript` is false. Native Daz API only — no runtime
+ * CSV, without rebuilding the (slow) ROM. Generated whenever an export dir is
+ * set — the export is ALWAYS its own script now. Native Daz API only — no runtime
  * include — so it must run after the ROM_ script in the same Daz session.
  * The `dthFig` figure auto-select comes from dz-snippets
  * ({@link figureAutoSelectSnippet}).
@@ -2005,6 +2028,10 @@ export function toExportScriptDsa(
    *  fallback for the one measured way getScriptFileName() lies; see
    *  {@link runtimeDirSnippet}. '' = no fallback (pure/web contexts). */
   runtimeRootAbs = '',
+  /** Inline the hair pass behind the main export — see {@link buildExportBlock}.
+   *  Only the Runner's export-only bulk twin sets it; the VISIBLE Export_ script
+   *  leaves hair to the standalone `Export_Hair_…`. */
+  hairPass = false,
 ): GeneratedFile {
   const content = `// DAZ Studio version 4.22.0.16 filetype DAZ Script
 
@@ -2050,6 +2077,7 @@ ${indentLines(indexSyncSnippet(indexSync))}${buildExportBlock(
     // The 4-step scale (open 25 / character 50 / CSV 75 / hair 100) the
     // export-only job rows declare — no ROM step in this carrier.
     progressLogPath ? { begin: 25, character: 50, csv: 75, hair: 100 } : undefined,
+    hairPass,
   )
   .split('\n')
   .map((line) => (line ? `    ${line}` : line))
@@ -2097,7 +2125,7 @@ export function toBulkExportOnlyScriptDsa(
   runtimeRootAbs = '',
 ): GeneratedFile {
   const built = toExportScriptDsa(
-    { ...character, exportHairAssets: true },
+    character,
     frames,
     metaDirAbs,
     scenesRootAbs,
@@ -2108,6 +2136,8 @@ export function toBulkExportOnlyScriptDsa(
     sceneFrames,
     progressLogPath,
     runtimeRootAbs,
+    // …and it does the WHOLE export in one pass, hair included.
+    true,
   )
   // Hidden (dot-prefixed) → the Content Library never shows it: no tile.
   return { fileName: BULK_EXPORT_ONLY_SCRIPT, content: built.content, target: 'daz' }
@@ -2354,8 +2384,8 @@ if (dthSceneLinkErr) {
 
 /**
  * The files written on save: the one self-contained character script (Daz) and
- * the PoseAsset CSV (Houdini), plus the optional split Export_ script and the
- * per-character product-scan script. Everything the character script needs (FBM
+ * the PoseAsset CSV (Houdini), plus the Export_ script (whenever an export dir
+ * is set) and the per-character product-scan script. Everything the character script needs (FBM
  * frames, art direction) is inlined via {@link buildFbmData} /
  * {@link buildArtDirectionData}. Every linked scene is served by the ONE
  * character script (it selects the open scene's overrides at run time); a
@@ -2403,12 +2433,15 @@ export function generateAll(
    *  {@link runtimeDirSnippet}. '' = no fallback (pure/web contexts). */
   runtimeRootAbs = '',
 ): Array<GeneratedFile> {
-  // With an export dir and exportWithRomScript off, the export is split into a
-  // standalone Export_ script alongside the ROM_ script.
-  const split = character.exportPath.trim() !== '' && character.exportWithRomScript === false
-  // Groom lists + an export dir -> also the standalone groom (.abc) script.
-  const groom =
-    character.exportPath.trim() !== '' && Object.keys(groomSceneMap(character)).length > 0
+  // An export dir means the standalone Export_ script, always: the visible
+  // scripts are one job each (ROM_ builds, Export_ exports, Export_Hair_ grooms),
+  // never a combined one. The gate is the export dir alone now — the shape used
+  // to be the `exportWithRomScript` toggle.
+  const exportSet = character.exportPath.trim() !== ''
+  // …and hair items on top of that -> also the standalone groom (.abc) script.
+  // Still gated on the LABELS: a character with no hair listed anywhere has
+  // nothing for that script to export, so it would only be a dead tile.
+  const groom = exportSet && Object.keys(groomSceneMap(character)).length > 0
   const era = poseAssetCsvEra(dthReleaseVersion ?? '')
   const sceneKey = (scenePath: string) => scenePath.trim().replace(/\\/g, '/').toLowerCase()
   // A scene whose FRAME layout differs gets its OWN PoseAsset CSV from the merged
@@ -2440,7 +2473,7 @@ export function generateAll(
       progressLogPath,
       runtimeRootAbs,
     ),
-    ...(split
+    ...(exportSet
       ? [
           toExportScriptDsa(
             character,
@@ -2450,9 +2483,7 @@ export function generateAll(
             false,
             hipRefPrefix,
             // The v55 contract — every ROM/export run scans the scene — holds
-            // for the SPLIT export too; omitting it here was the one carrier
-            // the coverage test's fixture (exportWithRomScript default-true)
-            // could not see.
+            // for the standalone export too.
             indexSync,
             sceneFrames,
             progressLogPath,
@@ -2462,7 +2493,7 @@ export function generateAll(
       : []),
     // The hidden bulk script the Runner executes on DTH Export runs — always
     // ROM + always full export, so it only exists WITH an export dir.
-    ...(character.exportPath.trim() !== ''
+    ...(exportSet
       ? [
           toBulkRomExportScriptDsa(
             character,

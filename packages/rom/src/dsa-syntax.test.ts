@@ -84,9 +84,10 @@ describe('generated DAZ Script parses', () => {
   const variants: Array<[string, Character]> = [
     ['no export at all', make({ exportPath: '' })],
     ['export, no grooms', make()],
-    ['grooms + the hair pass', make({ ...withHair, exportHairAssets: true })],
-    ['grooms, hair pass off', make({ ...withHair, exportHairAssets: false })],
-    ['export split off the ROM script', make({ exportWithRomScript: false })],
+    // The hair pass ships in the hidden bulk carriers only (schema v38), and
+    // generateAll emits those whenever an export dir is set — so this fixture
+    // covers both the passless visible scripts and the carriers that inline it.
+    ['grooms (hair pass rides the bulk carriers)', make(withHair)],
   ]
 
   for (const [name, character] of variants) {
@@ -100,13 +101,18 @@ describe('generated DAZ Script parses', () => {
     })
   }
 
-  it('the groom variants really do emit the groom bracket', () => {
+  it('the groom variant really does emit the groom bracket AND the hair pass', () => {
     // Guards the guard: `hair` hangs off a SCENE OVERRIDE, not the character, so
-    // a wrong fixture shape would parse three identical no-groom scripts and
-    // report the uncovered path as covered.
-    const script = generateAll(make({ ...withHair, exportHairAssets: true }), {}, FRAMES)[0]
-    expect(script.content).toContain('dthGroomHideTree')
-    expect(script.content).toContain('dthExportLanded')
+    // a wrong fixture shape would parse identical no-groom scripts and report
+    // the uncovered path as covered. The bracket lives in the export block, so
+    // it is the Export_/bulk scripts that carry it — never the ROM_ one.
+    const files = generateAll(make(withHair), {}, FRAMES)
+    const standalone = files.find((f) => f.fileName.startsWith('Export_'))
+    expect(standalone?.content).toContain('dthGroomHideTree')
+    expect(standalone?.content).toContain('dthExportLanded')
+    const bulk = files.find((f) => f.fileName === '.Bulk_ROM_Export.dsa')
+    expect(bulk?.content).toContain('dthGroomHideTree')
+    expect(bulk?.content).toContain('doExportAlembicGroomPoses')
   })
 
   it('would actually FAIL on a broken script', () => {

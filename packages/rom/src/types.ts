@@ -824,7 +824,7 @@ export function jcmMorphModForRuntime(mod: JcmMorphMod): {
  * step — is `.ai/schema-history.md`. Bumping this means adding the entry there,
  * in the same commit.
  */
-export const CHARACTER_SCHEMA_VERSION = 37
+export const CHARACTER_SCHEMA_VERSION = 38
 
 /**
  * Version of the generated **script runtime** — the bundled DTH `.dsa` runtime
@@ -843,7 +843,7 @@ export const CHARACTER_SCHEMA_VERSION = 37
  * step — is `.ai/schema-history.md`. Bumping this means adding the entry there,
  * in the same commit.
  */
-export const RUNTIME_VERSION = 97
+export const RUNTIME_VERSION = 98
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a
@@ -1093,24 +1093,14 @@ export const characterSchema = z.object({
    * treating '' as "no export".
    */
   exportPath: z.string().max(MAX_PATH_LENGTH).default(''),
-  /**
-   * When `exportPath` is set, whether the auto-export runs inside the ROM script
-   * (`true`, the default — one combined `<Name>_<Genesis>.dsa`) or is split into
-   * a separate `Export_<Name>_<Genesis>.dsa` that only runs the exporter +
-   * delivers the CSV, leaving `ROM_<Name>_<Genesis>.dsa` to build the ROM. Split
-   * lets you re-export without rebuilding the (slow) ROM. No effect without an
-   * export path.
-   */
-  exportWithRomScript: z.boolean().default(true),
-  /**
-   * When `exportPath` is set, also run the hair (groom) export right after the
-   * main DTH export — the Export_Hair per-item alembic pass, inlined into
-   * whichever script carries the export (the combined ROM script, or the split
-   * `Export_…` script). Only scenes with a hair list export grooms; the
-   * standalone `Export_Hair_…` script keeps being generated regardless. No
-   * effect without an export path.
-   */
-  exportHairAssets: z.boolean().default(false),
+  // NOTE: the two export-shape toggles used to live here — `exportWithRomScript`
+  // (v5: run the export inside the ROM script vs. split it off) and
+  // `exportHairAssets` (v25: inline the hair pass behind the main export). Both
+  // are gone as of v38: the visible scripts are ALWAYS the three separate ones
+  // (`ROM_…` builds only, `Export_…` exports only, `Export_Hair_…` grooms only),
+  // so there is no shape left to choose. The Runner's hidden bulk carriers still
+  // do everything in one pass — that is a property of those builders now
+  // (`toBulkRomExportScriptDsa` / `toBulkExportOnlyScriptDsa`), not a stored flag.
   /**
    * The DTH release the PoseAsset CSV was last generated for (e.g. "2.4.3"); ''
    * when never generated, or generated with no DTH release configured. The CSV is

@@ -558,8 +558,8 @@ describe('generateAll — scene overrides folded into the one script', () => {
     expect(csv.indexOf('GluteSize')).toBeLessThan(csv.indexOf('BodyTone'))
   })
 
-  it('splits ONE Export_ script (not per-scene) when the character splits its export', () => {
-    const files = generateAll(withScene({ exportPath: 'D:\\export', exportWithRomScript: false }), {}, FRAMES)
+  it('emits ONE Export_ script for the character, never one per scene', () => {
+    const files = generateAll(withScene({ exportPath: 'D:\\export' }), {}, FRAMES)
     expect(files.map((f) => f.fileName)).toEqual([
       'ROM_ElectraG9_G9.dsa',
       'Export_ElectraG9_G9.dsa',
@@ -572,9 +572,15 @@ describe('generateAll — scene overrides folded into the one script', () => {
     ])
   })
 
-  it('the combined script selects the scene CSV by open scene', () => {
-    const script = generateAll(withScene({ exportPath: 'D:\\export' }), {}, FRAMES, 'C:\\project\\Electra')[0]
-      .content
+  it('the Export_ script selects the scene CSV by open scene', () => {
+    // The export block lives in the standalone Export_ script since v38 — the
+    // ROM_ one builds only, so it carries no scene→CSV lookup at all.
+    const script = generateAll(
+      withScene({ exportPath: 'D:\\export' }),
+      {},
+      FRAMES,
+      'C:\\project\\Electra',
+    ).find((f) => f.fileName === 'Export_ElectraG9_G9.dsa')!.content
     // The export block's scene→CSV lookup carries the override CSV, keyed by scene,
     // while the base name stays the default every other scene rides.
     expect(script).toContain('dthCsvByScene')
@@ -827,7 +833,9 @@ describe('generateAll — scene overrides folded into the one script', () => {
       sceneOverrides: [reordered],
     })
     const files = generateAll(character, {}, FRAMES)
-    const script = files[0].content
+    // The reference-frame list rides the EXPORT block, so it is the Export_
+    // script that carries it (v38).
+    const script = files.find((f) => f.fileName === 'Export_ElectraG9_G9.dsa')!.content
     // Base: GluteSize at 329; the reordering scene: at 328.
     expect(script).toContain('var dthRefFrames = "329";')
     expect(script).toContain(`"${sceneKey}": "328"`)

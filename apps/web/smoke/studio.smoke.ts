@@ -128,8 +128,11 @@ test('project window: character editor measures, edits and saves both artifacts'
   // so `$HIP` — the `.hip`'s own folder — reaches it with no `..`, which is
   // also what Houdini's own picker writes. Pins the emit decision end-to-end:
   // the manifest's default 'hip' style + the fixture's linked .hip inside the
-  // character folder reach the emitted script.
-  expect(dsa).toContain('"$HIP/daz-export"')
+  // character folder reach the emitted script. That script is the standalone
+  // `Export_…` one since v38 — the ROM script carries no export at all.
+  const exportDsa = await fileContent(page, `${P.scriptsDir}/Export_Kira_G9.dsa`)
+  expect(exportDsa).toContain('"$HIP/daz-export"')
+  expect(dsa).not.toContain('dthExportAction.doExport(')
   // …and the same funnel swept the retired junction feature's leftovers,
   // probing exactly where the old versions planted them (beside the linked
   // .hip here) — nothing to remove in the fixture world, but the sweep-on-
@@ -175,18 +178,20 @@ test('project window: inline rename moves the folder and regenerates the script'
   // class #647 fixed for junctions (an absolute link target still pointing
   // into the old "Kira" tree) structurally can't recur with relative paths —
   // but the ROOT the prefix replaces must still track the move.
-  const novaDsa = await fileContent(
+  // Both of those live in the EXPORT script since v38 — and it had to follow
+  // the rename into the new folder just as the ROM script did.
+  const novaExport = await fileContent(
     page,
-    `${P.dazLib}/Scripts/DTH-Character-Studio/Demo/Nova/ROM_Nova_G9.dsa`,
+    `${P.dazLib}/Scripts/DTH-Character-Studio/Demo/Nova/Export_Nova_G9.dsa`,
   )
-  expect(novaDsa).toContain(`var dthRefRootAbs = "${novaFolder}/houdini/daz-export";`)
-  expect(novaDsa).toContain('"$HIP/daz-export"')
+  expect(novaExport).toContain(`var dthRefRootAbs = "${novaFolder}/houdini/daz-export";`)
+  expect(novaExport).toContain('"$HIP/daz-export"')
   // The app's own folder for this character followed the rename, and the script
   // reads its CSV from the new one — a stale path here would make every export
   // report "PoseAsset CSV not found" while the file sat under the old name.
   const novaMeta = `${P.project}/.dcsmeta/characters/Nova`
   expect(written).toContain(`${novaMeta}/Nova_pose_asset.csv`)
-  expect(novaDsa).toContain(`var dthCsvSrcDir = new DzDir("${novaMeta}");`)
+  expect(novaExport).toContain(`var dthCsvSrcDir = new DzDir("${novaMeta}");`)
 
   expect(await unhandledCommands(page)).toEqual([])
 })
