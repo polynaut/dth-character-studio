@@ -7,6 +7,19 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
 - **Never create a webview window from a synchronous `#[tauri::command]`** — it
   deadlocks (white frozen window). Use `#[tauri::command(async)]` and
   `tauri::async_runtime::spawn` (the single-instance handler does this).
+- **`pnpm dev:desktop` cannot run while the INSTALLED build is open** — and the
+  failure names neither cause nor culprit. `tauri_plugin_single_instance` keys
+  on the app identifier (`com.polynaut.dthcharacterstudio`, tauri.conf.json),
+  which the dev build and the release build SHARE: the second launch hands its
+  argv to the first and exits immediately. What you see is the dev exe
+  returning at once and `tauri dev` tearing the Vite server down after it —
+  `ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL ... Exit status 4294967295` — with the
+  only real evidence being a new window that quietly opened in the RELEASE app.
+  Measured 2026-08-19. It bites in either order, so testing a dev build means
+  quitting the installed one first; `Get-Process dth-character-studio` tells
+  you in one line (the release lives under `AppData\Local\DTH Character
+  Studio\`). Not to be confused with the OTHER dev-time collision, a second
+  checkout holding port 4330/4331 — that one Vite reports itself.
 - **Houdini runs a `456.py` on HOUDINI_SCRIPT_PATH for the startup EMPTY scene
   too, not only for a loaded `.hip`** — measured 2026-08-11 on the first
   headless "Export too" run: hython started, the empty initial scene triggered

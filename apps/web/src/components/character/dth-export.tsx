@@ -24,6 +24,7 @@ import { holdBusyCursor } from '#/lib/busy-cursor.ts'
 import {
   dazTaskCards,
   houdiniTaskCards,
+  type HoudiniNetworkMemo,
   runPercent,
   unrealTaskCards,
 } from '#/lib/rom/export-cards.ts'
@@ -402,15 +403,26 @@ export function DthExportAction({
         dazFinished,
         progressNow?.state === 'running',
       ),
-      ...armed.houdini.flatMap((hip, index) =>
-        houdiniTaskCards(
+      ...armed.houdini.flatMap((hip, index) => {
+        const running =
+          hip.label === houdiniActive && houdiniNow?.state === 'running' ? houdiniNow : null
+        // Remember what the run says while it is saying it — this is the only
+        // moment the network list exists, and the rows need it after.
+        if (running && running.total > 0) {
+          hipNetworkMemoRef.current[hip.path] = {
+            total: running.total,
+            networks: running.networks,
+          }
+        }
+        return houdiniTaskCards(
           hip,
           index,
-          hip.label === houdiniActive && houdiniNow?.state === 'running' ? houdiniNow : null,
+          running,
           hip.label === houdiniActive && houdiniNow !== null,
           houdiniDone,
-        ),
-      ),
+          hipNetworkMemoRef.current[hip.path],
+        )
+      }),
       // Last, because it happens last: the send waits for every Houdini project
       // to finish. One row per export set per project — two characters going
       // into one project are two import jobs, and the list says so.
@@ -523,6 +535,17 @@ export function DthExportAction({
    * Houdini": the run knows, minutes later, and the scan knew all along.
    */
   const hipSetsRef = useRef<Record<string, Array<string>>>({})
+  /**
+   * What each project's own run said about its networks, kept past the end of
+   * that project's turn — keyed by `.hip` path.
+   *
+   * `houdiniNow` only ever describes the ACTIVE project, and the end report
+   * keeps a summary line per project rather than its network list, so a
+   * finished project had nothing to build rows from and fell back to a single
+   * project row. The rows went 1 → N → 1: a two-project run that really
+   * exported four networks showed two rows for the whole thing.
+   */
+  const hipNetworkMemoRef = useRef<Record<string, HoudiniNetworkMemo>>({})
   useEffect(() => {
     let active = true
     void fetchCachedHoudiniScans({ data: { projectId, id: character.id } })
