@@ -28,6 +28,7 @@ function scan(sceneName: string, products: Array<string>, scenePath = ''): Produ
       productType: '',
       matchMethod: 'File Match',
       contentFolder: '',
+      matchedFiles: '',
       usage: '',
       usedBy: '',
       scenes: [],

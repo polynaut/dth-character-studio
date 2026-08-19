@@ -1179,4 +1179,16 @@ v80 — no unattended carrier opens a modal, and the missing-runtime message sto
       productRecordSchema — additive zod default, no character-schema bump;
       merge keeps the first non-empty folder so an old scan can't blank it).
       No schema change, no migration step.
+ 93 — a folder-level match records its concrete EVIDENCE FILES, shown in the
+      product's expanded row ("Matched by file:"). The match itself already
+      holds them: the .dsf a basename listing found, the texture map that
+      keyed a folder product, the asset's own source file when that keyed it
+      (resolved under the mapped content dir that holds it, via a DzFile
+      exists probe; keyword-only matches carry none — inventing a path would
+      be worse than showing none). Travels as a NEW TRAILING CSV column
+      (matched_files; old parsers ignore it, the new parser defaults '') into
+      `matchedFiles` on productRecordSchema (additive zod default), unioned
+      across scenes on merge. Capped at 8 files / ~1800 chars per product so
+      the cell stays under the parse bound. No schema change, no migration
+      step.
 ```

@@ -55,7 +55,7 @@ const RUNTIME_ASSETS = [
 // Bump this together with RUNTIME_VERSION whenever a runtime file legitimately
 // changes (this run prints the new value in the failure message).
 const EXPECTED_RUNTIME_HASH =
-  'f2992af856217ef472500dbaae0e682ff309545e42b4f0f34470af55e8dc308c'
+  '9258c8ac677f0825a9a6099ce0f97f8a226a7a16d8046c56fb1041c774068be5'
 
 function runtimeHash(): string {
   const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
@@ -1128,7 +1128,7 @@ interface MatchingModule {
     genesis: number,
     synth: Array<Record<string, unknown>>,
   ) => {
-    matches: Array<{ product: { name: string }; method: string }>
+    matches: Array<{ product: { name: string }; method: string; file?: string }>
     unmatched: Array<{ name: string }>
   }
   parseManifestFile: (
@@ -1384,6 +1384,11 @@ describe('morph matching end-to-end (DthProducts.dsa)', () => {
     expect(result.matches).toHaveLength(1)
     expect(result.matches[0].method).toBe('Content Folder Match')
     expect(result.matches[0].product.name).toBe('GC Bodymorph')
+    // The evidence file: the morph's own source file keyed the folder match
+    // (content-relative here — no content dir was passed to resolve it under).
+    expect(result.matches[0].file).toBe(
+      '/data/DAZ 3D/Genesis 8/Female/Morphs/guhzcoituz/GC Bodymorph/GC BodyMorph.dsf',
+    )
   })
 
   it('folder-matches a morph to a REAL product whose capped file list dropped it', () => {
@@ -1794,7 +1799,17 @@ describe('content folder in the CSV (DthProducts.dsa)', () => {
     }
     const ok = mod.writeProductsCsv(
       'C:/out/scene.csv',
-      { matches: [{ asset, product: folderProduct, method: 'Content Folder Match' }], unmatched: [] },
+      {
+        matches: [
+          {
+            asset,
+            product: folderProduct,
+            method: 'Content Folder Match',
+            file: 'D:/Lib/Runtime/textures/GC Lara Croft COD/Backpack.jpg',
+          },
+        ],
+        unmatched: [],
+      },
       'LaraCroft_G8_1_THICK',
       'D:/scenes/LaraCroft_G8_1_THICK.duf',
       true,
@@ -1806,5 +1821,8 @@ describe('content folder in the CSV (DthProducts.dsa)', () => {
     expect(scan.products[0].name).toBe('GC Lara Croft COD')
     expect(scan.products[0].matchMethod).toBe('Content Folder Match')
     expect(scan.products[0].contentFolder).toBe('D:/Lib/Runtime/textures/GC Lara Croft COD')
+    expect(scan.products[0].matchedFiles).toBe(
+      'D:/Lib/Runtime/textures/GC Lara Croft COD/Backpack.jpg',
+    )
   })
 })

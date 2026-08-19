@@ -832,7 +832,7 @@ export const CHARACTER_SCHEMA_VERSION = 36
  * step — is `.ai/schema-history.md`. Bumping this means adding the entry there,
  * in the same commit.
  */
-export const RUNTIME_VERSION = 92
+export const RUNTIME_VERSION = 93
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a
@@ -943,6 +943,10 @@ export const productRecordSchema = z.object({
    *  folder it was identified from, so the user can see where it lives. '' for
    *  products backed by real metadata (DIM manifest / LOCAL_USER). */
   contentFolder: z.string().max(MAX_PATH_LENGTH).default(''),
+  /** The concrete evidence files behind a folder-level match ("; "-joined,
+   *  capped): the .dsf a basename match found, the texture map that keyed a
+   *  folder product. '' when the match rested on metadata or keywords. */
+  matchedFiles: z.string().max(MAX_JOINED_LENGTH).default(''),
   /** The Daz scene(s)/outfit(s) this product was found in — basenames of the open
    *  scene file(s) that were scanned (e.g. "KiraDefault_G9_GP"). A character can
    *  have several scenes; the studio merges per-scene scans and lists every scene a
