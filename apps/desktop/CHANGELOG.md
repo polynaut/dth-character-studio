@@ -1,5 +1,21 @@
 # @dth/desktop
 
+## 0.86.0
+
+### Minor Changes
+
+- [#914](https://github.com/polynaut/dth-character-studio/pull/914) [`086d577`](https://github.com/polynaut/dth-character-studio/commit/086d5772b06e99b5c0411d7cfb0a6943c8306e03) Thanks [@polynaut](https://github.com/polynaut)! - Generated Houdini projects now get their **timeline range set from the Alembic file itself** — the same routine DazToHue's Import node runs when it loads a character (read the Alembic's own start/end frames, set the playbar, re-cook the import, back to frame 0). The generation re-runs it deliberately at the end, because the HDA's own trigger is best-effort and never fires when the Daz export hasn't produced the file yet — and the confirmation now names the frames the saved scene actually plays.
+
+  The project health check learned the same fact: the scan reads the playbar next to what the project's own Alembic says it should be, and a scene still on Houdini's default 1–240 over a longer ROM gets a "Needs attention" badge — part of the ROM would sit outside the timeline. **Utils → Repair project settings** repairs it in the same run as `$JOB` and the FPS (one file open, one backup, one save), writing whatever the Alembic answers at 30 fps. A project with no Alembic to read yet — generated before its Daz export — is reported as such and left alone, never guessed at.
+
+- [#924](https://github.com/polynaut/dth-character-studio/pull/924) [`04af875`](https://github.com/polynaut/dth-character-studio/commit/04af875ad2b60cd3bf66a00feb95f8b3a0e3d207) Thanks [@polynaut](https://github.com/polynaut)! - The two export-shape switches in **Daz scripts generated** — _Run the export with the ROM script_ and _Export hair assets too_ — are **gone**, and the generated Daz scripts are now always the three separate ones: **`ROM_…` builds the ROM**, **`Export_…` runs the exporter and delivers the PoseAsset CSV**, **`Export_Hair_…` exports the grooms**. One job per script, so re-exporting never costs another ROM build and there is no combination left to get wrong. `Export_…` is generated whenever an Export directory is set; `Export_Hair_…` whenever the character lists hair items. The panel that held the switches is now purely informational — it says where the scripts land and where they deliver.
+
+  **The DTH Export button is unchanged.** It runs its own hidden bulk script, which still builds and exports everything — skeleton, mesh and every hair asset — in one unattended pass, and still honours the per-scene _Export hair items_ switch. Those carriers' bodies are byte-identical to before apart from their version stamp and a few comment lines.
+
+  **If you drive Daz by hand**, the ROM script no longer exports: run `ROM_…`, then `Export_…` in the same Daz session (and `Export_Hair_…` for grooms). `Export_…` still hides the character's hair items around its export, so grooms stay out of the main artifacts exactly as before. Character schema v38 drops both stored toggles and runtime v98 reshapes the scripts, so **Tools → Refresh assets** regenerates every installed script into the new layout — the combined ROM script is replaced in place, and the retired `rom-export` Content Library tile gives way to the plain ROM one.
+
+- [#925](https://github.com/polynaut/dth-character-studio/pull/925) [`d083435`](https://github.com/polynaut/dth-character-studio/commit/d083435fd116f957afe6cd18cb9c03a9abdd155c) Thanks [@polynaut](https://github.com/polynaut)! - DTH Export gains a "Hair items only" Daz mode: it exports each selected scene's hair items on their own (one Alembic per item) and nothing else — no ROM build, no skeleton/mesh export, no CSV. The scene list shows only the scenes whose "Export hair items" switch is on, all pre-checked; like ROM only, the run stops after Daz. Generation now emits a fourth hidden Runner carrier, `.Bulk_Hair_Export.dsa` (runtime v97) — the standalone Export_Hair pass run unattended — and the script sweep also retires the export-only carrier when the export dir is cleared (it used to linger).
+
 ## 0.85.0
 
 ### Patch Changes
