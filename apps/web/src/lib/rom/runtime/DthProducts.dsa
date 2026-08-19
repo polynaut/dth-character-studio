@@ -152,10 +152,15 @@ function normalizeContentPath(p) {
 function productFolderKey(p) {
   var s = String(p || "").toLowerCase().replace(/\\/g, "/");
   var seg = "";
+  var fromTextures = false;
   var ti = s.indexOf("/textures/");
-  if (ti !== -1) seg = s.substring(ti + 10);
-  else if (s.indexOf("textures/") === 0) seg = s.substring(9);
-  else {
+  if (ti !== -1) {
+    seg = s.substring(ti + 10);
+    fromTextures = true;
+  } else if (s.indexOf("textures/") === 0) {
+    seg = s.substring(9);
+    fromTextures = true;
+  } else {
     var di = s.indexOf("/data/");
     if (di !== -1) seg = s.substring(di + 6);
     else if (s.indexOf("data/") === 0) seg = s.substring(5);
@@ -164,6 +169,15 @@ function productFolderKey(p) {
   var parts = seg.split("/");
   if (parts.length < 2 || !parts[0] || !parts[1]) return "";
   var vendor = parts[0];
+  if (/\.[a-z0-9]{2,4}$/.test(parts[1])) {
+    // A FILE where the product folder should be. A flat TEXTURE layout
+    // ("Runtime/Textures/GC Lara Croft COD/Backpack.jpg" — common for freebies)
+    // names the product by that one folder, so the folder alone is the key; a
+    // flat data layout identifies nothing (the old two-segment key here was
+    // "<folder>/<file.jpg>" garbage that could never match).
+    if (!fromTextures || isDazBaseVendor(vendor)) return "";
+    return vendor;
+  }
   if (isDazBaseVendor(vendor)) {
     // The base-figure data root ("data/DAZ 3D/Genesis 8/Female/Morphs/<Vendor>/
     // <Product>/…") is not product-specific itself, but it is the STANDARD install
@@ -918,7 +932,7 @@ function getContentFolderProducts(contentDirs, realProducts) {
     return names;
   }
 
-  function addSynth(vendor, prod, fullPath) {
+  function addSynth(vendor, prod, fullPath, morphRoot) {
     var folderKey = vendor.toLowerCase() + "/" + prod.toLowerCase();
     if (hasOwn(synthSeen, folderKey)) return;
     synthSeen[folderKey] = true;
@@ -937,6 +951,9 @@ function getContentFolderProducts(contentDirs, realProducts) {
       folders: [folderKey],
       contentFolder: fullPath,
       synthesized: true,
+      // A product under a figure's Morphs root holds the morph .dsf files
+      // themselves — the basename matcher lists exactly these folders.
+      morphRoot: morphRoot === true,
     });
   }
 
@@ -967,7 +984,7 @@ function getContentFolderProducts(contentDirs, realProducts) {
                 var morphVendorPath = morphsPath + "/" + morphVendor;
                 var morphProds = subdirs(morphVendorPath);
                 for (var mp = 0; mp < morphProds.length; mp++) {
-                  addSynth(morphVendor, morphProds[mp], morphVendorPath + "/" + morphProds[mp]);
+                  addSynth(morphVendor, morphProds[mp], morphVendorPath + "/" + morphProds[mp], true);
                 }
               }
             }
@@ -1603,10 +1620,90 @@ function findContentFolderMatch(asset, synthFolderIndex, synthKeywordMap, skinFo
   return best;
 }
 
+// Synthesize a product ON DEMAND from an unmatched node's own texture folder.
+// The folder provably exists (the texture loaded from it) and is named for the
+// product, so no filesystem walk is needed. Handles both layouts: nested
+// ("Textures/LilFlameIV/SaltBikini/…" → product "SaltBikini" by LilFlameIV) and
+// FLAT ("Textures/GC Lara Croft COD/Backpack.jpg" → product "GC Lara Croft COD",
+// artist unknown — common for freebies). `key` is productFolderKey(rawPath);
+// the raw path supplies the original casing for the product name.
+function textureFolderProduct(rawPath, key) {
+  var s = String(rawPath).replace(/\\/g, "/");
+  var low = s.toLowerCase();
+  var ti = low.indexOf("/textures/");
+  var seg = "";
+  var segStart = -1;
+  if (ti !== -1) segStart = ti + 10;
+  else if (low.indexOf("textures/") === 0) segStart = 9;
+  if (segStart === -1) return null;
+  seg = s.substring(segStart);
+  var parts = seg.split("/");
+  var flat = key.indexOf("/") === -1;
+  if (flat ? parts.length < 2 : parts.length < 3) return null; // need a file below the named folder(s)
+  var name = flat ? parts[0] : parts[1];
+  var artist = flat ? "" : parts[0];
+  var depth = flat ? 1 : 2;
+  var folder = s.substring(0, segStart) + parts.slice(0, depth).join("/");
+  return {
+    name: name,
+    sku: "",
+    artist: artist,
+    version: "",
+    installDate: "",
+    productType: "Content folder",
+    description: "",
+    manifestFile: "",
+    supportFile: "",
+    files: [],
+    folders: [key],
+    contentFolder: folder,
+    synthesized: true,
+  };
+}
+
+// Basename → product index over the synthesized MORPH-root products' own folders.
+// A morph modifier often exposes NO source file at all (measured on a
+// hand-installed G8.1 morph: getAssetUri / getAssetFileInfo / getAssetId all
+// empty, while the Parameter Settings dialog happily shows the .dsf), so the only
+// evidence left is that a Morphs/<Vendor>/<Product> folder holds a file named
+// like the morph. Bounded per product so a giant folder can't spin.
+function buildMorphFileIndex(synthProducts) {
+  var index = {};
+  for (var i = 0; i < synthProducts.length; i++) {
+    var sp = synthProducts[i];
+    if (!sp.morphRoot || !sp.contentFolder) continue;
+    var queue = [sp.contentFolder];
+    var visited = 0;
+    var taken = 0;
+    while (queue.length && visited < 20 && taken < 80) {
+      var dirPath = queue.shift();
+      visited++;
+      var d = new DzDir(dirPath);
+      if (!d.exists()) continue;
+      var entries = d.entryList();
+      for (var e = 0; e < entries.length; e++) {
+        var name = String(entries[e]);
+        if (name === "." || name === "..") continue;
+        var low = name.toLowerCase();
+        if (/\.(dsf|duf)$/.test(low)) {
+          var bk = manifestFileKey(name);
+          if (bk && !hasOwn(index, bk)) {
+            index[bk] = sp;
+            taken++;
+          }
+        } else if (new DzDir(dirPath + "/" + name).exists()) {
+          queue.push(dirPath + "/" + name);
+        }
+      }
+    }
+  }
+  return index;
+}
+
 // Run the content-folder last-resort over the still-unmatched assets, indexing the
 // synthesized products by folder key and by name keyword. Returns the leftover list.
 function matchContentFolderProducts(unmatched, matches, synthProducts, skinFolders) {
-  if (!synthProducts || !synthProducts.length) return unmatched;
+  synthProducts = synthProducts || [];
   var synthFolderIndex = {};
   var synthKeywordMap = {};
   for (var i = 0; i < synthProducts.length; i++) {
@@ -1625,10 +1722,39 @@ function matchContentFolderProducts(unmatched, matches, synthProducts, skinFolde
     }
   }
 
+  var morphFileIndex = null; // built lazily — only when an unmatched morph needs it
+
   var still = [];
   for (var u = 0; u < unmatched.length; u++) {
     var asset = unmatched[u];
     var prod = findContentFolderMatch(asset, synthFolderIndex, synthKeywordMap, skinFolders);
+
+    // A node whose textures live in a folder nothing owns: that folder IS the
+    // product's own texture folder, so synthesize a product from it on the spot.
+    // The get-or-create through synthFolderIndex is what groups sibling parts
+    // (Backpack, Boots, Gloves…) under the ONE folder product they share.
+    if (!prod && asset.type === "Node" && asset.textures) {
+      for (var t = 0; t < asset.textures.length && !prod; t++) {
+        var tk = productFolderKey(asset.textures[t]);
+        if (!tk || skinFolders[tk] || hasOwn(synthFolderIndex, tk)) continue;
+        var np = textureFolderProduct(asset.textures[t], tk);
+        if (np) {
+          synthFolderIndex[tk] = np;
+          prod = np;
+        }
+      }
+    }
+
+    // A morph with no source file: find a synthesized morph-root folder holding
+    // a .dsf named like it.
+    if (!prod && asset.type === "Morph") {
+      if (morphFileIndex === null) morphFileIndex = buildMorphFileIndex(synthProducts);
+      var mkeys = nodeFileKeys(asset);
+      for (var km = 0; km < mkeys.length && !prod; km++) {
+        if (hasOwn(morphFileIndex, mkeys[km])) prod = morphFileIndex[mkeys[km]];
+      }
+    }
+
     if (prod) {
       matches.push({ asset: asset, product: prod, method: "Content Folder Match" });
     } else {

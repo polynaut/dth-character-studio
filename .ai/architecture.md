@@ -479,6 +479,19 @@ surface as a banner + add wizard instead of waiting for a manual pick/drop.
   paths, and a "Folder Match" ties an asset's own source file to a real
   product's folders (for files past the manifest's 60-file cap). The matchers
   are VM-tested over an in-memory tree in `runtime.test.ts`.
+- **The last resort works from the asset's own evidence (runtime v89) —
+  measured on a real library where v88 still left 9 unmatched.** A morph
+  frequently exposes NO source file to the scan APIs (`getAssetUri` /
+  `getAssetFileInfo` / `getAssetId` all empty while Parameter Settings shows
+  the .dsf), so `matchContentFolderProducts` lists the synthesized morph-root
+  folders (`morphRoot: true`, bounded BFS) and matches a morph to the folder
+  holding a .dsf named like it. FLAT texture layouts
+  (`Runtime/textures/<Product>/<file>.jpg`) key by the folder alone (the old
+  two-segment key swallowed the filename), and an unmatched node's unowned
+  texture folder becomes a product ON DEMAND (`textureFolderProduct`, no
+  filesystem walk — the loaded texture proves the folder), get-or-created
+  through the folder index so sibling parts group under one product. Skin
+  folders stay excluded throughout.
 - **The results are per SCENE, in `products.json`.** `lib/rom/character-products.ts`
   owns the file shape and `withScans` — a pickup REPLACES the scenes it carries
   and leaves the rest, the same rule the ROM run log follows. Storing the merged

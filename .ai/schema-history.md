@@ -1122,4 +1122,23 @@ v80 — no unattended carrier opens a modal, and the missing-runtime message sto
       the base-figure root. NOT v87: the open DS4 skip-guard revert (#901)
       claimed that number while this was built — same two-runtimes-one-number
       trap as v85/#894. No schema change, no migration step.
+ 89 — product scan closes the three gaps a REAL v88 rescan still showed (same
+      library; evidence: the stored products.json + the _diagnostic files).
+      (1) Morph modifiers can expose NO source file at all — measured: every
+      unmatched asset stored sourceFile "", while Daz's Parameter Settings
+      shows the .dsf — so the v88 folder-key fix had nothing to key on; the
+      last resort now LISTS the synthesized morph-root folders and matches a
+      morph to the folder holding a .dsf named like it (basename index,
+      bounded). (2) FLAT texture layouts ("Runtime/textures/GC Lara Croft COD/
+      Backpack.jpg") made productFolderKey swallow the FILENAME as the product
+      segment ("gc lara croft cod/backpack.jpg" — garbage); a file where the
+      product folder should be now yields the single-folder key for texture
+      paths and "" for data paths. (3) A node whose textures live in a folder
+      NOTHING owns gets a product synthesized on demand from that folder
+      (nested → name+artist, flat → name only) — no filesystem walk, the
+      texture's existence proves the folder; the get-or-create groups sibling
+      parts (Backpack/Boots/Gloves/Holster/Shorts) under one product. v89 not
+      88 because a dev install had already stamped the v88 marker — a second
+      iteration inside one number never reinstalls (gotchas-daz.md).
+      No schema change, no migration step.
 ```
