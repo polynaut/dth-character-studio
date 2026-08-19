@@ -863,6 +863,148 @@ def _scene_fps():
         return 0.0
 
 
+# --- the timeline range, from the Alembic ------------------------------------
+#
+# The DazToHue Import node sets the playbar from the Alembic file itself: read
+# the Alembic SOP's "Alembic SOP Info" rows for "Start Frame" / "End Frame",
+# `hou.playbar.setFrameRange(fstart, fend)`, force-cook the cache, back to
+# frame 0. That routine is REPRODUCED here from the node's own Python (shared
+# by mrpdean, 2026-08-19) — it is the vendor's definition of the right
+# timeline, and like the FPS it only runs when the HDA loads the files, which
+# a headless generation and a stale project never did. The scan reads both
+# sides of the comparison; `op_defaults` applies the routine when they differ.
+
+
+def _dth_import_nodes():
+    """The scene's DazToHue Import nodes (never the groom variant) — the same
+    match `_scene_dth_imports` makes, returning the nodes instead of their
+    `.dth` paths."""
+    found = []
+    for node in hou.node("/").allSubChildren():
+        name = node.type().name().lower()
+        if "daztohueimport" in name and "groom" not in name:
+            found.append(node)
+    return found
+
+
+def _import_alembic_sop(import_node):
+    """The Alembic SOP inside one Import network — the node whose info tree
+    carries the file's own frame range.
+
+    Found by TYPE (a built-in `alembic` SOP carrying a `fileName` parm), not by
+    the internal path the vendor snippet uses (`alembic_import_hack/
+    alembic_cache`): the HDA is black-boxed and its internal names are nobody's
+    contract, while the node type is Houdini's own. The named path is still
+    preferred when it exists — it is the exact node the vendor code cooks.
+    """
+    try:
+        named = import_node.node("alembic_import_hack/alembic_cache")
+    except Exception:
+        named = None
+    if named is not None:
+        return named
+    try:
+        children = import_node.allSubChildren()
+    except Exception:
+        return None
+    for child in children:
+        try:
+            if child.type().name().lower() == "alembic" and child.parm("fileName") is not None:
+                return child
+        except Exception:
+            continue
+    return None
+
+
+def _alembic_frame_range(abc):
+    """`(start, end)` as the Alembic SOP's own info reports it, or None.
+
+    None covers every "nothing to read" case the vendor routine guards or
+    implies: no node, a blank `fileName`, a file the SOP cannot load (its info
+    tree then has no "Alembic SOP Info" branch), or rows without both frames.
+    A non-forced cook first: an uncooked SOP has no info tree to read, and
+    cooking an already-cooked one is a no-op.
+    """
+    if abc is None:
+        return None
+    parm = abc.parm("fileName")
+    if parm is None:
+        return None
+    try:
+        if not str(parm.eval() or "").strip():
+            return None
+    except Exception:
+        return None
+    try:
+        abc.cook()
+    except Exception:
+        pass
+    try:
+        branches = abc.infoTree().branches()
+        if "Alembic SOP Info" not in branches:
+            return None
+        fstart = fend = None
+        for row in branches["Alembic SOP Info"].rows():
+            if row[0] == "Start Frame":
+                fstart = row[1]
+            if row[0] == "End Frame":
+                fend = row[1]
+        if fstart is None or fend is None:
+            return None
+        return (float(fstart), float(fend))
+    except Exception:
+        return None
+
+
+def _timeline_info():
+    """Both sides of the timeline-range check, for the scan.
+
+    `start`/`end` are the scene's playbar; `abcStart`/`abcEnd` what the Import
+    network's Alembic file says they should be. Each side carries its own
+    `known` flag and every reader treats unknown as UNKNOWN, never as wrong —
+    the same rule as `$JOB` and the FPS. The Alembic side reads the FIRST
+    import network that answers: one network per project is the generated
+    layout, and a second one shares the one playbar anyway.
+    """
+    info = {"start": 0.0, "end": 0.0, "known": False, "abcStart": 0.0, "abcEnd": 0.0, "abcKnown": False}
+    try:
+        start, end = hou.playbar.frameRange()
+        info["start"] = float(start)
+        info["end"] = float(end)
+        info["known"] = True
+    except Exception:
+        pass
+    for node in _dth_import_nodes():
+        rng = _alembic_frame_range(_import_alembic_sop(node))
+        if rng is not None:
+            info["abcStart"], info["abcEnd"] = rng
+            info["abcKnown"] = True
+            break
+    return info
+
+
+def _apply_alembic_timeline():
+    """Run the vendor timeline routine on the first Import network that can
+    answer: set the playbar to the Alembic's range, force-cook the cache,
+    back to frame 0. Returns `(start, end)` when it ran, None when nothing
+    could be read (which is not an error — a project generated before the Daz
+    export has no file to read yet)."""
+    for node in _dth_import_nodes():
+        abc = _import_alembic_sop(node)
+        rng = _alembic_frame_range(abc)
+        if rng is None:
+            continue
+        fstart, fend = rng
+        hou.playbar.setFrameRange(fstart, fend)
+        try:
+            abc.cook(force=True)
+        except Exception:
+            pass
+        hou.setFrame(0.0)
+        return (fstart, fend)
+    return None
+
+
 def _network_box_label(node):
     """Title of the network box the node sits in, or ''.
 
@@ -1145,6 +1287,17 @@ def op_scan(request):
                 "missingTextures": [],
             },
             "prefill": {"fillable": [], "missing": []},
+            # Present even for a project that fails to load — a missing key here
+            # fails serde BEFORE zod's defaults can save it, and one unreadable
+            # `.hip` once took the whole report down that way (`hipRelative`).
+            "timeline": {
+                "start": 0.0,
+                "end": 0.0,
+                "known": False,
+                "abcStart": 0.0,
+                "abcEnd": 0.0,
+                "abcKnown": False,
+            },
         }
         try:
             _load(path)
@@ -1158,6 +1311,7 @@ def op_scan(request):
             entry["poseAssets"] = _scene_pose_assets()
             entry["refs"] = _project_ref_info(export_dir)
             entry["prefill"] = _prefill_scan()
+            entry["timeline"] = _timeline_info()
         except Exception as exc:
             entry["ok"] = False
             entry["error"] = str(exc).strip() or exc.__class__.__name__
@@ -2041,6 +2195,12 @@ def op_repath(request):
 #: repair that then reports "already correct".
 FPS_EPSILON = 0.001
 
+#: Same contract as `FPS_EPSILON`, for the playbar range: the exact complement
+#: of `sameFrame` in `lib/rom/houdini-defaults.ts`. Frame ranges are floats in
+#: Houdini (a `frameRange()` read makes the JSON round trip), so an exact `==`
+#: would be the wrong kind of strict.
+FRAME_EPSILON = 0.001
+
 
 def op_defaults(request):
     """Repoint each project's `$JOB`, and put its timeline on the studio's FPS.
@@ -2054,6 +2214,15 @@ def op_defaults(request):
     ABSOLUTE. And a scene left on Houdini's own default 24 fps puts every
     imported ROM frame between two of its own, while the PoseAsset CSV names
     frame numbers generated at 30.
+
+    The playbar RANGE is the third value of this kind (v0.86): the DazToHue
+    Import node sets it from the Alembic file itself when it loads one, so a
+    stale project — or one generated before the Daz export existed — plays a
+    default 1–240 over a ROM that is hundreds of frames long. Unlike `$JOB` and
+    the FPS the right value is not the caller's to send: it is read off the
+    project's own Alembic (`_alembic_frame_range`) and applied by the vendor's
+    own routine (`_apply_alembic_timeline` — set the range, force-cook the
+    cache, back to frame 0).
 
     They travel together because they are one file open, one backup, one save —
     and each is compared separately, so a project needing only one gets only
@@ -2090,6 +2259,11 @@ def op_defaults(request):
             "changed": False,
             "changedJob": False,
             "changedFps": False,
+            "previousStart": 0.0,
+            "previousEnd": 0.0,
+            "start": 0.0,
+            "end": 0.0,
+            "changedRange": False,
             "backupPath": "",
         }
         if not want:
@@ -2126,7 +2300,30 @@ def op_defaults(request):
                 result["changedFps"] = True
             else:
                 result["fps"] = current_fps
-            result["changed"] = result["changedJob"] or result["changedFps"]
+            # The playbar range, judged like the other two: both sides have to
+            # be KNOWN (the playbar readable, an Alembic answering) before a
+            # difference means anything. An unknown side skips the repair —
+            # a project generated before its Daz export has no file to read,
+            # and that is not a fault of the scene's range.
+            timeline = _timeline_info()
+            result["previousStart"] = timeline["start"]
+            result["previousEnd"] = timeline["end"]
+            result["start"] = timeline["start"]
+            result["end"] = timeline["end"]
+            if (
+                timeline["known"]
+                and timeline["abcKnown"]
+                and (
+                    abs(timeline["start"] - timeline["abcStart"]) >= FRAME_EPSILON
+                    or abs(timeline["end"] - timeline["abcEnd"]) >= FRAME_EPSILON
+                )
+            ):
+                result["changedRange"] = True
+                result["start"] = timeline["abcStart"]
+                result["end"] = timeline["abcEnd"]
+            result["changed"] = (
+                result["changedJob"] or result["changedFps"] or result["changedRange"]
+            )
             if not result["changed"]:
                 results.append(result)
                 continue
@@ -2136,12 +2333,26 @@ def op_defaults(request):
                     hou.putenv("JOB", want)
                 if result["changedFps"]:
                     hou.setFps(want_fps)
+                # AFTER the FPS: the Alembic SOP's Start/End rows are frames at
+                # the CURRENT rate, so an FPS change re-times them — which is
+                # also why an FPS repair re-runs the routine even when the range
+                # matched at the old rate. What was APPLIED (re-read at the new
+                # rate) is what is reported, not the plan made at the old one.
+                if result["changedRange"] or (result["changedFps"] and timeline["abcKnown"]):
+                    applied = _apply_alembic_timeline()
+                    if applied is not None:
+                        result["start"], result["end"] = applied
+                        result["changedRange"] = (
+                            abs(applied[0] - result["previousStart"]) >= FRAME_EPSILON
+                            or abs(applied[1] - result["previousEnd"]) >= FRAME_EPSILON
+                        )
                 hou.hipFile.save(path)
         except Exception as exc:
             result["ok"] = False
             result["changed"] = False
             result["changedJob"] = False
             result["changedFps"] = False
+            result["changedRange"] = False
             result["error"] = str(exc).strip() or exc.__class__.__name__
         results.append(result)
     return {"op": "defaults", "projects": [], "targets": [], "defaults": results, "dryRun": dry_run}

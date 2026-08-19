@@ -262,6 +262,14 @@ Part of the domain reference — `.ai/domain.md` is the index.
   at generation time, and the node ships its own "Auto-Populate Skinned
   Shapes" button for exactly that job. Applied parms come back as the
   report's third segment (`prefilled` on `GeneratedHoudiniProject`).
+  The script's tail re-runs the Import node's own TIMELINE routine (v0.86 —
+  playbar range from the Alembic's `Alembic SOP Info` Start/End rows,
+  force-cook, frame 0; the node's Python, shared by mrpdean) because the
+  `.dth` callback that normally triggers it is best-effort and skipped when
+  the export hasn't run; the range read back is the report's FIFTH segment
+  (`range` on `GeneratedHoudiniProject`, null = no Alembic to read — normal
+  for a pre-export generation). Full story + the scan/badge/repair legs:
+  `domain-rom.md` → "The rate those frame numbers mean".
 - **The Unreal leg** (v0.75): the project window's footer bar links
   `.uproject` files; each card's install button opens a DIALOG, not a one-shot
   copy: DTH content (`install_unreal_dth` — the release's

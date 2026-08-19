@@ -73,6 +73,28 @@ What `hou.setFps` does to keyframes in an ALREADY animated scene is Houdini
 behaviour this repo has not measured — the repair says so, and takes its rolling
 backup first.
 
+The playbar **RANGE** is the same story one value later (v0.86). The Import
+node sets the playbar from the Alembic FILE itself when it loads one — mrpdean
+shared the node's own Python (2026-08-19): read the Alembic SOP's
+`Alembic SOP Info` rows for `Start Frame`/`End Frame`,
+`hou.playbar.setFrameRange(fstart, fend)`, force-cook
+`alembic_import_hack/alembic_cache`, `hou.setFrame(0)`. Unlike the FPS the
+right value is not the studio's to state — it is whatever the project's own
+Alembic answers (and those Start/End rows are frames AT THE CURRENT FPS, so
+the FPS write comes first and re-times them). The studio reproduces the
+routine in two places that must stay in step: the tail of
+`create_houdini_project` (houdini.rs — generation re-runs it deliberately,
+because the `.dth` callback is best-effort and skipped when the export hasn't
+run) and `_apply_alembic_timeline` (material_utils.py — `op_defaults` beside
+`$JOB`/FPS). The Alembic SOP is found by TYPE (`alembic` with a `fileName`
+parm) with the vendor's named path preferred; `op_scan` reports both sides as
+`timeline` (each with its own `known` flag — a project with no Alembic yet is
+UNKNOWN, never wrong); `validateHoudiniProject` badges `timeline-differs`;
+`timelineRangeDiffers` (houdini-defaults.ts) is the ONE comparison shared by
+badge, Defaults row and repair queue. NOT yet verified in a live hython run —
+`hou.playbar.*` headless is per docs, and the info-tree read needs a non-forced
+cook first (both marked in the code).
+
 ## Generated artifacts (per character)
 
 `generateAll()` (`packages/rom/src/generate.ts`) returns `{fileName, content, target: 'daz'|'houdini'}`:

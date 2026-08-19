@@ -37,7 +37,7 @@ import {
   revealPath,
   scanCharacterHoudiniProjects,
 } from '#/lib/rom/api.ts'
-import { DTH_FPS, formatFps, sameFps } from '#/lib/rom/houdini-defaults.ts'
+import { DTH_FPS, formatFps, formatFrameRange, sameFps } from '#/lib/rom/houdini-defaults.ts'
 import { isHoudiniProjectScanning } from '#/lib/rom/houdini-scan-progress.ts'
 import { useHoudiniScanning } from '#/lib/use-houdini-scanning.ts'
 import { pickHipPath } from '#/lib/desktop.ts'
@@ -736,12 +736,17 @@ export function HoudiniProjectsField({
           houdiniDir={houdiniDir}
           houdiniSubdir={houdiniSubdir}
           onClose={() => setGenerateOpen(false)}
-          onGenerated={async (scenePath, networkAdded, visibleTypes, prefilled, fps, dazScenePath) => {
+          onGenerated={async (scenePath, networkAdded, visibleTypes, prefilled, fps, range, dazScenePath) => {
             // The timeline is only ever CLAIMED when hython read it back at 30
             // — the generation reports the scene's own `hou.fps()`, not the
             // value it asked for, so a Houdini that refused the call never
-            // shows up as a success (it gets the warning below instead).
-            const timeline = sameFps(fps) ? `, timeline at ${DTH_FPS} fps` : ''
+            // shows up as a success (it gets the warning below instead). Same
+            // rule for the range: it names the playbar the SAVED scene
+            // reports, set from the Alembic file's own frames; no range means
+            // no Alembic to read yet (generated before the Daz export), which
+            // is normal and claims nothing.
+            const frames = range ? `, frames ${formatFrameRange(range.start, range.end)}` : ''
+            const timeline = sameFps(fps) ? `, timeline at ${DTH_FPS} fps${frames}` : frames
             // The scene is IN the confirmation: a character with several
             // scenes gets one project each, and "which one did I just make?"
             // is otherwise only answerable by opening the project.
@@ -872,6 +877,10 @@ function GenerateProjectDialog({
     prefilled: Array<string>,
     /** The FPS the saved scene reports (0 = hython could not answer). */
     fps: number,
+    /** The playbar range the saved scene reports after the Alembic timeline
+     *  routine ran (null = no Alembic to read yet — generated before the Daz
+     *  export, which is normal, not a failure). */
+    range: { start: number; end: number } | null,
     /** The Daz scene the new network imports — named in the confirmation, so
      *  "which scene is this project for?" is answered after the fact too, not
      *  only in the dialog that has since closed. */
@@ -941,6 +950,7 @@ function GenerateProjectDialog({
         result.visibleTypes,
         result.prefilled,
         result.fps,
+        result.range,
         dazScenePath,
       )
       onClose()

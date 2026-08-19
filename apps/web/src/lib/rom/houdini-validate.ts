@@ -1,4 +1,11 @@
-import { DTH_FPS, formatFps, sameFolder, sameFps } from './houdini-defaults.ts'
+import {
+  DTH_FPS,
+  formatFps,
+  formatFrameRange,
+  sameFolder,
+  sameFps,
+  timelineRangeDiffers,
+} from './houdini-defaults.ts'
 
 import type { MaterialScanProject } from './api/native-types.ts'
 
@@ -38,6 +45,7 @@ export interface HoudiniProjectProblem {
     | 'job-unknown'
     | 'job-differs'
     | 'fps-differs'
+    | 'timeline-differs'
     | 'broken-refs'
     | 'csv-mismatch'
     | 'hip-relative'
@@ -99,6 +107,23 @@ export function validateHoudiniProject(
     problems.push({
       code: 'fps-differs',
       label: `The timeline runs at ${formatFps(project.fps)} fps instead of ${DTH_FPS} — the ROM is one pose per frame at ${DTH_FPS}.`,
+    })
+  }
+
+  // The playbar RANGE, same family and same rule: the Import node sets it from
+  // the Alembic file itself when it loads one (its own routine, per mrpdean),
+  // so a difference marks a project where that never ran — a playbar still on
+  // Houdini's 1–240 over a ROM that is hundreds of frames long. Judged only
+  // when BOTH sides were read (`timelineRangeDiffers` is false on any unknown):
+  // an old stored scan has no field, and a project whose Daz export hasn't run
+  // has no Alembic to compare against — neither is a fault.
+  if (timelineRangeDiffers(project.timeline)) {
+    const t = project.timeline
+    problems.push({
+      code: 'timeline-differs',
+      label:
+        `The playbar runs ${formatFrameRange(t.start, t.end)} but the Alembic holds frames ` +
+        `${formatFrameRange(t.abcStart, t.abcEnd)} — part of the ROM sits outside the timeline.`,
     })
   }
 

@@ -734,8 +734,9 @@ export function HoudiniUtilsPanel({
     }
   }
 
-  /** Projects whose `$JOB` differs from the character folder, or whose timeline
-   *  is not the pipeline's 30 fps — what a repair would actually write. A
+  /** Projects whose `$JOB` differs from the character folder, whose timeline
+   *  is not the pipeline's 30 fps, or whose playbar range differs from what
+   *  their own Alembic file says — what a repair would actually write. A
    *  project the scan couldn't read is never queued: those values are unknown,
    *  not wrong. */
   const staleSettingProjects = useMemo(
@@ -1053,10 +1054,14 @@ export function HoudiniUtilsPanel({
           // something nobody touched.
           const jobs = result.defaults.filter((d) => d.ok && d.changedJob).length
           const fpsFixed = result.defaults.filter((d) => d.ok && d.changedFps).length
+          const rangeFixed = result.defaults.filter((d) => d.ok && d.changedRange).length
           const parts = [
             jobs > 0 ? `$JOB on ${jobs} project${jobs === 1 ? '' : 's'}` : '',
             fpsFixed > 0
               ? `the timeline on ${fpsFixed} project${fpsFixed === 1 ? '' : 's'}`
+              : '',
+            rangeFixed > 0
+              ? `the frame range on ${rangeFixed} project${rangeFixed === 1 ? '' : 's'}`
               : '',
           ].filter(Boolean)
           utilsToast.success(
@@ -1066,7 +1071,7 @@ export function HoudiniUtilsPanel({
           )
           setDefaultsOpen(false)
         }
-        // The files changed on disk — their scanned $JOB and FPS are now stale.
+        // The files changed on disk — their scanned $JOB, FPS and range are now stale.
         void scanTargets()
       }
     } catch (error) {
@@ -1671,7 +1676,7 @@ export function HoudiniUtilsPanel({
                 !charFolder
                   ? 'The character folder could not be resolved'
                   : staleSettingProjects.length === 0
-                    ? 'Nothing differs — this project already points $JOB at the character folder and runs at 30 fps'
+                    ? 'Nothing differs — this project already points $JOB at the character folder, runs at 30 fps and plays the Alembic’s own frame range'
                     : undefined
               }
               onClick={() => {
@@ -1828,10 +1833,11 @@ export function HoudiniUtilsPanel({
         >
           <div className="space-y-2 text-sm">
             <p>
-              Put <code>$JOB</code> on <strong>{displayPath(charFolder)}</strong> and the
-              timeline on <strong>{DTH_FPS} fps</strong> in{' '}
+              Put <code>$JOB</code> on <strong>{displayPath(charFolder)}</strong>, the timeline
+              on <strong>{DTH_FPS} fps</strong> and the playbar on the{' '}
+              <strong>Alembic file&apos;s own frame range</strong> in{' '}
               <strong>{staleSettingProjects.length}</strong> project
-              {staleSettingProjects.length === 1 ? '' : 's'} — whichever of the two actually
+              {staleSettingProjects.length === 1 ? '' : 's'} — whichever of the three actually
               differs there.
             </p>
             <ul className="max-h-32 list-inside list-disc overflow-y-auto text-xs text-muted-foreground">
@@ -1863,6 +1869,16 @@ export function HoudiniUtilsPanel({
             already holds animation, how it treats those keys is Houdini&apos;s behaviour and
             not something this studio has measured — the run backs each project up first, and
             a failed one can be put straight back from the report.
+          </p>
+
+          {/* The range half is the vendor's own logic, named so the user knows
+              nothing bespoke touches their scene — and the no-Alembic case is
+              stated because "left alone" is the surprising outcome. */}
+          <p className="rounded-md border p-3 text-xs text-muted-foreground">
+            The playbar range is read off the project&apos;s own exported Alembic file and
+            applied the way DazToHue&apos;s Import node does it — set the range, re-cook the
+            import, back to frame 0. A project whose Daz export hasn&apos;t produced that file
+            yet has nothing to read and is left alone.
           </p>
 
           <p className="text-xs text-muted-foreground">

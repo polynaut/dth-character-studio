@@ -242,16 +242,19 @@ pub struct CreateHoudiniProjectRequest {
     pub fps: f64,
 }
 
-/// Returns `"<created>|<visible>|<prefilled>|<fps>"`: `Shelf/<tool>` when the
+/// Returns `"<created>|<visible>|<prefilled>|<fps>|<range>"`: `Shelf/<tool>` when the
 /// shelf tool built the network ('none' when it couldn't — the scene saved
 /// empty, `$JOB` still baked), every DazToHue-ish node type hython could see
 /// across ALL categories (comma-joined, 'none' when zero) — the UI surfaces the
 /// list so a missing network is diagnosable (otls not loading vs the shelf
 /// tool failing headless) — the `node.parm` names the prefill actually
 /// set (comma-joined, 'none' when zero: parms missing on an older HDA are
-/// skipped one by one, never an error), and the FPS the saved scene ACTUALLY
+/// skipped one by one, never an error), the FPS the saved scene ACTUALLY
 /// carries, read back off `hou.fps()` rather than echoing the request ('none'
-/// when hython could not answer).
+/// when hython could not answer), and the playbar range the saved scene
+/// carries after the Alembic timeline routine ran — `<start>-<end>`, read back
+/// off `hou.playbar.frameRange()`; 'none' when there was no Alembic to read
+/// (a project generated before its Daz export) or the routine could not run.
 #[tauri::command(async)]
 pub fn create_houdini_project(request: CreateHoudiniProjectRequest) -> Result<String, String> {
     let escape = |s: &str| s.replace('\\', "/").replace('\'', "\\'");
@@ -433,11 +436,72 @@ pub fn create_houdini_project(request: CreateHoudiniProjectRequest) -> Result<St
             "                                pass\n",
             "except Exception:\n",
             "    pass\n",
+            // The timeline range, LAST and guaranteed: the Import node sets the
+            // playbar from the Alembic file itself when its `.dth` callback
+            // loads one (the routine below IS that node's own Python, shared by
+            // mrpdean 2026-08-19) — but the callback is best-effort and skipped
+            // outright when the export hasn't run yet, so the generation re-runs
+            // the routine deliberately rather than trusting it happened. Read
+            // the Alembic SOP's own Start/End Frame rows, put the playbar on
+            // them, force-cook the cache, back to frame 0. A project with no
+            // Alembic to read (generated before the Daz export) skips cleanly —
+            // the scan's timeline check picks it up later. Kept in step with
+            // `_apply_alembic_timeline` (material_utils.py), which is the same
+            // routine for EXISTING projects.
+            "range_report = ''\n",
+            "try:\n",
+            "    if added:\n",
+            "        for top in new:\n",
+            "            if range_report:\n",
+            "                break\n",
+            "            for node in [top] + list(top.allSubChildren()):\n",
+            "                t = node.type().name().lower()\n",
+            "                if 'daztohueimport' not in t or 'groom' in t:\n",
+            "                    continue\n",
+            "                abc = node.node('alembic_import_hack/alembic_cache')\n",
+            "                if abc is None:\n",
+            "                    for child in node.allSubChildren():\n",
+            "                        if child.type().name().lower() == 'alembic' and child.parm('fileName') is not None:\n",
+            "                            abc = child\n",
+            "                            break\n",
+            "                if abc is None or abc.parm('fileName') is None:\n",
+            "                    continue\n",
+            "                if not str(abc.parm('fileName').eval() or '').strip():\n",
+            "                    continue\n",
+            "                try:\n",
+            "                    abc.cook()\n",
+            "                except Exception:\n",
+            "                    pass\n",
+            "                branches = abc.infoTree().branches()\n",
+            "                if 'Alembic SOP Info' not in branches:\n",
+            "                    continue\n",
+            "                fstart = fend = None\n",
+            "                for row in branches['Alembic SOP Info'].rows():\n",
+            "                    if row[0] == 'Start Frame':\n",
+            "                        fstart = row[1]\n",
+            "                    if row[0] == 'End Frame':\n",
+            "                        fend = row[1]\n",
+            "                if fstart is None or fend is None:\n",
+            "                    continue\n",
+            "                hou.playbar.setFrameRange(float(fstart), float(fend))\n",
+            "                try:\n",
+            "                    abc.cook(force=True)\n",
+            "                except Exception:\n",
+            "                    pass\n",
+            "                hou.setFrame(0.0)\n",
+            // Read BACK off the playbar, not echoed from the file: what the UI
+            // reports is the scene's own answer, same rule as the FPS above.
+            "                s, e = hou.playbar.frameRange()\n",
+            "                range_report = str(float(s)) + '-' + str(float(e))\n",
+            "                break\n",
+            "except Exception:\n",
+            "    pass\n",
             "hou.hipFile.save('{scene}')\n",
             "print('DTH_NETWORK=' + (added or 'none'))\n",
             "print('DTH_TYPES=' + (','.join(visible) or 'none'))\n",
             "print('DTH_PREFILL=' + (','.join(prefilled) or 'none'))\n",
             "print('DTH_FPS=' + str(scene_fps))\n",
+            "print('DTH_RANGE=' + (range_report or 'none'))\n",
         ),
         job = escape(&request.job_dir),
         scene = escape(&request.scene_path),
@@ -496,11 +560,12 @@ pub fn create_houdini_project(request: CreateHoudiniProjectRequest) -> Result<St
             .unwrap_or_else(|| "none".to_string())
     };
     Ok(format!(
-        "{}|{}|{}|{}",
+        "{}|{}|{}|{}|{}",
         marker("DTH_NETWORK="),
         marker("DTH_TYPES="),
         marker("DTH_PREFILL="),
-        marker("DTH_FPS=")
+        marker("DTH_FPS="),
+        marker("DTH_RANGE=")
     ))
 }
 

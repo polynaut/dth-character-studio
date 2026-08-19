@@ -119,6 +119,54 @@ describe('defaultsRowsFor — the timeline row', () => {
   })
 })
 
+describe('defaultsRowsFor — the range row', () => {
+  const rowFor = (timeline: Parameters<typeof defaultsRowsFor>[0]['timeline']) =>
+    defaultsRowsFor({ job: ITA, timeline }, ITA).find((row) => row.key === 'range')
+
+  it('is absent when the scan has no timeline field at all', () => {
+    // An older stored scan predates the field entirely — same rule as the FPS.
+    expect(rowFor(undefined)).toBeUndefined()
+  })
+
+  it("flags a playbar still on Houdini's default over a longer Alembic, and is actionable", () => {
+    const row = rowFor({ start: 1, end: 240, known: true, abcStart: 0, abcEnd: 981, abcKnown: true })
+    expect(row?.status).toBe('differs')
+    expect(row?.current).toBe('1 – 240')
+    expect(row?.expected).toContain('0 – 981')
+    expect(row?.actionable).toBe(true)
+  })
+
+  it('reports a matching range as matching, float noise included', () => {
+    const row = rowFor({
+      start: 0,
+      end: 981.0000001,
+      known: true,
+      abcStart: 0,
+      abcEnd: 981,
+      abcKnown: true,
+    })
+    expect(row?.status).toBe('matches')
+    expect(row?.matches).toBe(true)
+  })
+
+  it('calls a missing Alembic unknown — and NOT actionable, with the reason', () => {
+    // A project generated before its Daz export has no file to read the range
+    // off; there is nothing to write, and the row says what to do instead.
+    const row = rowFor({ start: 1, end: 240, known: true, abcStart: 0, abcEnd: 0, abcKnown: false })
+    expect(row?.status).toBe('unknown')
+    expect(row?.verdict).toBe('no Alembic to read it from yet')
+    expect(row?.actionable).toBe(false)
+    expect(row?.reason).toContain('Daz export')
+  })
+
+  it('calls an unreadable playbar unknown, not different', () => {
+    const row = rowFor({ start: 0, end: 0, known: false, abcStart: 0, abcEnd: 981, abcKnown: true })
+    expect(row?.status).toBe('unknown')
+    expect(row?.verdict).toBe('could not be read')
+    expect(row?.current).toBe('')
+  })
+})
+
 describe('projectsNeedingRepair', () => {
   const projects = [
     { hipPath: `${ITA_HIP_DIR}/PlaygroundAssets_Ita.hiplc`, ok: true, job: ITA_STALE_JOB },
@@ -164,6 +212,39 @@ describe('projectsNeedingRepair', () => {
   it('never queues a project whose FPS could not be read', () => {
     expect(
       projectsNeedingRepair([{ hipPath: 'a.hiplc', ok: true, job: ITA, fps: 0 }], ITA),
+    ).toEqual([])
+  })
+
+  it('queues a project whose only fault is the playbar range — and skips an unknown one', () => {
+    // Same independence as the FPS: the range alone is enough to open the file,
+    // and an unknown side (no Alembic yet, old stored scan) is never queued.
+    expect(
+      projectsNeedingRepair(
+        [
+          {
+            hipPath: 'a.hiplc',
+            ok: true,
+            job: ITA,
+            fps: 30,
+            timeline: { start: 1, end: 240, known: true, abcStart: 0, abcEnd: 981, abcKnown: true },
+          },
+        ],
+        ITA,
+      ),
+    ).toEqual(['a.hiplc'])
+    expect(
+      projectsNeedingRepair(
+        [
+          {
+            hipPath: 'a.hiplc',
+            ok: true,
+            job: ITA,
+            fps: 30,
+            timeline: { start: 1, end: 240, known: true, abcStart: 0, abcEnd: 0, abcKnown: false },
+          },
+        ],
+        ITA,
+      ),
     ).toEqual([])
   })
 

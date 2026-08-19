@@ -160,8 +160,12 @@ export function scanCacheKey(
  *     network's `.dth`). An older entry answers `[]`, which the csv-mismatch
  *     check correctly treats as "not known" — and without the bump it would
  *     stay not-known forever, exactly the v2 trap again.
+ * 8 — + `timeline` (the playbar range beside the Alembic file's own range —
+ *     the Import node's timeline routine, per mrpdean). An older entry
+ *     defaults both sides to unknown, which the range check correctly treats
+ *     as "not known" — and without the bump it would stay not-known forever.
  */
-export const SCAN_ANSWER_VERSION = 7
+export const SCAN_ANSWER_VERSION = 8
 
 /**
  * Fold the installed operator libraries into one comparable string — name, mtime

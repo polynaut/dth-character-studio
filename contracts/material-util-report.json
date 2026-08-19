@@ -122,7 +122,15 @@
             }
           ]
         }
-      ]
+      ],
+      "timeline": {
+        "start": 1.0,
+        "end": 240.0,
+        "known": true,
+        "abcStart": 0.0,
+        "abcEnd": 981.0,
+        "abcKnown": true
+      }
     },
     {
       "hipPath": "D:/chars/Gone/houdini/Gone.hiplc",
@@ -140,8 +148,19 @@
         "hipRelative": [],
         "missingTextures": []
       },
-      "prefill": { "fillable": [], "missing": [] },
-      "nodes": []
+      "prefill": {
+        "fillable": [],
+        "missing": []
+      },
+      "nodes": [],
+      "timeline": {
+        "start": 0.0,
+        "end": 0.0,
+        "known": false,
+        "abcStart": 0.0,
+        "abcEnd": 0.0,
+        "abcKnown": false
+      }
     }
   ],
   "targets": [
@@ -211,6 +230,11 @@
       "changed": true,
       "changedJob": true,
       "changedFps": true,
+      "previousStart": 1.0,
+      "previousEnd": 240.0,
+      "start": 0.0,
+      "end": 981.0,
+      "changedRange": true,
       "backupPath": "D:/chars/Ita/houdini/backup/Ita_dthbak.hiplc"
     },
     {
@@ -224,6 +248,11 @@
       "changed": false,
       "changedJob": false,
       "changedFps": false,
+      "previousStart": 0.0,
+      "previousEnd": 981.0,
+      "start": 0.0,
+      "end": 981.0,
+      "changedRange": false,
       "backupPath": ""
     },
     {
@@ -237,6 +266,11 @@
       "changed": true,
       "changedJob": false,
       "changedFps": true,
+      "previousStart": 1.0,
+      "previousEnd": 240.0,
+      "start": 1.0,
+      "end": 240.0,
+      "changedRange": false,
       "backupPath": "D:/chars/Ita/houdini/backup/Ita_Dance_dthbak.hiplc"
     }
   ],
