@@ -30,6 +30,7 @@
 // `api/execute` before the split is still exported here, unchanged.
 
 export {
+  MultipleDazInstancesError,
   characterScenesRoot,
   exportDazStudioRunning,
   exporterJobsPending,

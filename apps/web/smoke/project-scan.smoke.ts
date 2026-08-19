@@ -237,6 +237,29 @@ test('scan project: from Home the base pass still runs, the scene passes are off
   expect(await unhandledCommands(page)).toEqual([])
 })
 
+test('scan project: two Daz Studios open — the handoff refuses with the close-one dialog', async ({
+  page,
+}) => {
+  const seed = buildSeed({ demo: true, dazInstallFolder: DAZ_INSTALL })
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await openScanTab(page)
+
+  // Two `DAZStudio.exe` processes = two installations open side by side (each
+  // install is single-instance) — the state every batch handoff refuses.
+  await page.evaluate(() => {
+    ;(window as any).__tauriMock.dazInstances = 2
+  })
+  await startButton(page).click()
+
+  await expect(page.getByRole('dialog', { name: /More than one Daz Studio/ })).toBeVisible()
+  // Refused BEFORE anything touched disk: no job file went out.
+  expect(await fileContent(page, PENDING_JOB)).toBeNull()
+  await page.getByRole('button', { name: 'Got it' }).click()
+  await expect(page.getByRole('dialog')).toBeHidden()
+  expect(await unhandledCommands(page)).toEqual([])
+})
+
 test('scan project: reports the finished batch with a toast on the Tools panel', async ({
   page,
 }) => {

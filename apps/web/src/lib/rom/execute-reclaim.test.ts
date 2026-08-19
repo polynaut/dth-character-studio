@@ -18,6 +18,9 @@ const files = new Map<string, string>()
 const dirs = new Set<string>()
 
 let dazRunning = false
+/** Running `DAZStudio.exe` processes — 2+ = two installations open side by
+ *  side (each install is single-instance), the state every handoff refuses. */
+let dazInstances = 1
 const launches: Array<string> = []
 /** Every `installFolder` a `daz_studio_running` call asked about, in order. */
 const dazRunningAsked: Array<string> = []
@@ -65,6 +68,9 @@ vi.mock('@tauri-apps/api/core', () => ({
       // the answer.
       dazRunningAsked.push(args?.installFolder ?? '')
       return dazRunning
+    }
+    if (cmd === 'daz_studio_instance_count') {
+      return dazInstances
     }
     if (cmd === 'launch_daz_studio') {
       launches.push(cmd)
@@ -172,6 +178,7 @@ import {
   dismissExportRun,
   executeCharacterJobs,
   ExporterJobFilesChangedError,
+  MultipleDazInstancesError,
   exporterJobFilesSignature,
   fetchExportRunProgress,
   fetchExporterJobFiles,
@@ -218,6 +225,7 @@ beforeEach(async () => {
   lockedForRemove.clear()
   stalledRemoves.clear()
   dazRunning = false
+  dazInstances = 1
   // Awaited: the dismiss also retires the run sidecar, and a test that seeds
   // one by hand must not race that delete. (The app never has to — the chain
   // orders a delete against a following handoff by itself.)
@@ -241,10 +249,9 @@ function seedExportOnlyInstall(): void {
   )
 }
 
-/** Seed the project + character + scene + generated script, hand the batch off
- *  (arming the export watch), then claim it the way the Runner does — ONE
- *  rename of the pending file. Leaves the batch claimed-but-untouched. */
-async function armClaimedRun(): Promise<void> {
+/** Seed the project + character + scene + generated script — everything a
+ *  handoff needs on disk, without handing anything off yet. */
+async function seedCharacter(): Promise<void> {
   await storage.createProjectManifest(PROJECT, 'P')
   const character = characterSchema.parse({
     id: 'c1',
@@ -262,6 +269,13 @@ async function armClaimedRun(): Promise<void> {
   )
   files.set(SCENE, 'DUF')
   files.set(SCRIPT, 'SCRIPT')
+}
+
+/** Seed the character, hand the batch off (arming the export watch), then
+ *  claim it the way the Runner does — ONE rename of the pending file. Leaves
+ *  the batch claimed-but-untouched. */
+async function armClaimedRun(): Promise<void> {
+  await seedCharacter()
   // Daz not running → the handoff launches it and returns without the pickup
   // wait; the in-memory watch (activeRun) is armed for this character.
   await executeCharacterJobs({
@@ -318,6 +332,42 @@ describe('WHICH Daz each caller asks about', () => {
     ).rejects.toThrow(/working through a batch/)
 
     expect(dazRunningAsked).toEqual([''])
+  })
+})
+
+// Two Daz installations open side by side (a DS4 next to a DS6) both host a
+// Runner watching the SAME job file — a batch handed off in that state runs in
+// whichever Daz notices first, and two live batches would fight over the one
+// `running_` claim file and the one progress log. Each install is
+// single-instance, so a plain process count is the whole detection.
+describe('the multi-instance guard — several Daz Studios open at once', () => {
+  it('refuses the handoff before anything touched disk', async () => {
+    await seedCharacter()
+    // A finished batch's leftover file: the handoff normally sweeps it. The
+    // guard must fire FIRST — a refused run changes nothing on disk.
+    seedClaimedWorked()
+    files.set(RUNNING, files.get(RUNNING)!.replace('"progress":50', '"progress":100'))
+    dazInstances = 2
+
+    await expect(
+      executeCharacterJobs({
+        data: { projectId: PROJECT, id: 'c1', scenes: [SCENE], mode: 'rom-export' },
+      }),
+    ).rejects.toThrow(MultipleDazInstancesError)
+
+    expect(files.has(PENDING)).toBe(false)
+    expect(files.has(RUNNING)).toBe(true)
+    expect(launches).toHaveLength(0)
+  })
+
+  it('a broken probe never blocks — unknown reads as one Daz', async () => {
+    await seedCharacter()
+    // Not a number the schema accepts → the probe fails → assume a single Daz.
+    dazInstances = Number.NaN
+    await executeCharacterJobs({
+      data: { projectId: PROJECT, id: 'c1', scenes: [SCENE], mode: 'rom-export' },
+    })
+    expect(files.has(PENDING)).toBe(true)
   })
 })
 

@@ -161,6 +161,7 @@ pub fn run() {
             uninstall::uninstall_daz,
             github::app_release_tags,
             daz::daz_studio_running,
+            daz::daz_studio_instance_count,
             daz::run_daz_script,
             daz::launch_daz_studio,
             foreground::focus_app_window,

@@ -336,6 +336,19 @@ While the un-renamed job file exists the button shows **Abort**: it deletes
 the file and rolls the aborted scenes' handoff stamps back. Once the plugin
 RENAMES the file, aborting is over.
 
+**Several Daz Studios open at once → the handoff refuses.** Two installations
+open side by side (a DS4 next to a DS6 — each install is single-instance, so
+2+ `DAZStudio.exe` processes means 2+ installations) both host a Runner
+watching the SAME job file. The claim rename is exclusive, so one batch never
+runs twice — but WHICH Daz runs it is whichever noticed first, and the
+`running_` claim file and the verbose progress log exist ONCE (a Runner
+picking up a new batch treats any existing `running_` file as stale litter
+and deletes it — a live peer's included). So every studio-side handoff writer
+(export, ROM build, project scan, scene scan) counts the Daz processes first
+(`daz_studio_instance_count` → `assertSingleDazInstance`, before any arming
+step touches disk) and, on 2+, refuses with a dialog telling the user to close
+all but one. A failed probe never blocks — unknown reads as "one Daz".
+
 ## Interrupting a claimed batch (studio-side today, plugin-side optional)
 
 A claimed batch cannot be stopped through this contract: the plugin owns the

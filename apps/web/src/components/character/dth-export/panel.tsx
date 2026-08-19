@@ -23,6 +23,7 @@ import {
 import dthLogo from '#/assets/dth-logo.webp'
 import { RunnerGateNotice } from '#/components/runner-gate-notice.tsx'
 import {
+  MultipleDazInstancesError,
   executeCharacterJobs,
   fetchCachedHoudiniScans,
   fetchExecuteScenes,
@@ -31,6 +32,7 @@ import {
   fetchUnrealSendPlan,
   fileExists,
 } from '#/lib/rom/api.ts'
+import { MultipleDazModal } from '#/components/multiple-daz-modal.tsx'
 import {
   hipsForSelectedScenes,
   normalizeSceneKey,
@@ -129,6 +131,9 @@ export function DthExportPanel({
    */
   const [scenesTouched, setScenesTouched] = useState(false)
   const [busy, setBusy] = useState(false)
+  // The handoff found several Daz Studios open — a dialog, not a toast, since
+  // the user has to go close one before Start can work (see MultipleDazModal).
+  const [multiDaz, setMultiDaz] = useState(false)
   // The Daz Mode dropdown. The ref mirrors it for the scene probe (kicked off
   // at mount), which seeds the pre-selection whenever it lands.
   const [mode, setMode] = useState<RunChoice>('rom-export')
@@ -731,7 +736,8 @@ export function DthExportPanel({
           : `Started Daz Studio — ${count} ${what}.`,
       )
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error))
+      if (error instanceof MultipleDazInstancesError) setMultiDaz(true)
+      else toast.error(error instanceof Error ? error.message : String(error))
     } finally {
       setBusy(false)
     }
@@ -1058,6 +1064,7 @@ export function DthExportPanel({
           </div>
         )}
       </div>
+      <MultipleDazModal open={multiDaz} onClose={() => setMultiDaz(false)} />
     </SidePanel>
   )
 }

@@ -43,6 +43,7 @@ import {
   OPEN_SCENE_PICKUP_TIMEOUT_MS,
   OPEN_SCENE_POLL_MS,
   assertHandoffOwned,
+  assertSingleDazInstance,
   dazStudioRunningNative,
   exporterJobFilePaths,
   launchDazSceneless,
@@ -292,6 +293,9 @@ export async function startProjectScan({ data }: { data: unknown }): Promise<Pro
 
   const paths = await exporterJobFilePaths()
   if (!paths) throw new Error('Set “My DAZ 3D Library” in Settings first.')
+  // Several Daz Studios open side by side would race for this handoff — refuse
+  // before any arming step touches disk (see assertSingleDazInstance).
+  await assertSingleDazInstance()
   if (await exists(paths.pending)) {
     throw new Error('A batch is already waiting for Daz Studio — let it start (or abort it) first.')
   }
@@ -551,6 +555,9 @@ export async function startSceneScan({ data }: { data: unknown }): Promise<Scene
 
   const paths = await exporterJobFilePaths()
   if (!paths) throw new Error('Set “My DAZ 3D Library” in Settings first.')
+  // Several Daz Studios open side by side would race for this handoff — refuse
+  // before any arming step touches disk (see assertSingleDazInstance).
+  await assertSingleDazInstance()
   if (await exists(paths.pending)) {
     throw new Error('An export batch is waiting for Daz Studio — let it start (or abort it) first.')
   }

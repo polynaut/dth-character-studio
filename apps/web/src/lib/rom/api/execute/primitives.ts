@@ -156,6 +156,45 @@ export async function dazStudioRunningNative(
 }
 
 /**
+ * The refusal every batch handoff throws when MORE THAN ONE Daz Studio is up.
+ * Its own class so the UI can put a real dialog behind it (the generic catch
+ * paths show a toast) — see `MultipleDazModal`.
+ */
+export class MultipleDazInstancesError extends Error {
+  constructor() {
+    super(
+      'More than one Daz Studio is running — each watches for DTH jobs, so this run would start in whichever grabs it first. Close all but one Daz Studio, then try again.',
+    )
+    this.name = 'MultipleDazInstancesError'
+  }
+}
+
+/**
+ * Refuse a job-file handoff while several Daz Studios are open side by side
+ * (a DS4 next to a DS6). Each installation is single-instance — a second
+ * launch of the same install forwards into the running one and exits — so a
+ * plain process COUNT is the whole detection: 2+ `DAZStudio.exe` processes =
+ * 2+ installations, every one hosting a Runner that races for the same job
+ * file. The claim (`running_` rename) is exclusive, so a batch never runs
+ * twice — but WHICH Daz runs it is whichever noticed first, and the claim
+ * file and the verbose progress log exist ONCE, so a second live batch
+ * clobbers the first's bookkeeping (the Runner treats any existing `running_`
+ * file as stale litter and deletes it on pickup).
+ *
+ * Called BEFORE a handoff's arming steps (stale-file sweep, progress-log
+ * truncation, run-log retirement), so a refused run changes nothing on disk.
+ * A failed probe never blocks: unknown reads as "one Daz", because the cost
+ * of being wrong there is only the pre-existing race, while blocking on a
+ * broken probe would refuse every export on that machine.
+ */
+export async function assertSingleDazInstance(): Promise<void> {
+  const count = await invoke('daz_studio_instance_count')
+    .then((raw) => z.number().int().parse(raw))
+    .catch(() => 0)
+  if (count >= 2) throw new MultipleDazInstancesError()
+}
+
+/**
  * Whether the installation that runs export batches is up — the wait-for-Daz-to-
  * close modal's poll ({@link launchDazForPendingJobs} is what it calls once this
  * goes false). Exported because that modal lives in the character UI, and asking

@@ -186,6 +186,11 @@ export interface TauriMockState {
    *  the fake a specific Studio — how a spec reproduces "DS6 is open, the batch
    *  belongs to DS4" (see daz-launch-activated.smoke.ts). */
   dazRunningFolder?: string
+  /** What `daz_studio_instance_count` reports — how many `DAZStudio.exe`
+   *  processes are up. Unset = 1: one Daz, the state every handoff accepts
+   *  (2+ = two installations open side by side → the handoff refuses with the
+   *  close-one dialog; see assertSingleDazInstance). */
+  dazInstances?: number
   /** Let every command held on a `holdPaths` path proceed, and stop holding. */
   releaseHeld: () => void
   /** Mutable: the answer `houdini_running` gives from now on. */
@@ -696,6 +701,10 @@ export function installTauriMock(seed: TauriMockSeed): void {
         const flat = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
         return flat(asked) === flat(where)
       }
+      case 'daz_studio_instance_count':
+        // One Daz unless a spec says otherwise — 2+ makes every batch handoff
+        // refuse with the close-one dialog (see assertSingleDazInstance).
+        return Number((window as any).__tauriMock?.dazInstances ?? 1)
       case 'launch_daz_studio':
         // Nothing to start. The batch is claimed by the Runner INSIDE Daz,
         // which this fake does not impersonate — a spec plays that part by

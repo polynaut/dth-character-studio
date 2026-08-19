@@ -3,9 +3,11 @@ import { Ban, ChevronDown, ChevronRight, FileWarning, Loader2, ScanSearch } from
 import { toast } from 'sonner'
 
 import { Button, InfoPopup, Label, useArmedWatch, useCoalescedRefresh, useRefetchOnFocus } from '@dth/ui'
+import { MultipleDazModal } from '#/components/multiple-daz-modal.tsx'
 import { SceneTile } from '#/components/portrait.tsx'
 import { RunnerGateNotice } from '#/components/runner-gate-notice.tsx'
 import {
+  MultipleDazInstancesError,
   PROJECT_SCAN_RUN,
   abortProjectScanRun,
   fetchExportRunProgress,
@@ -65,6 +67,9 @@ export function ProjectScanSection({
   dazLibraryConfigured: boolean
 }) {
   const [starting, setStarting] = useState(false)
+  // The scan handoff found several Daz Studios open — a dialog, not a toast,
+  // since the user has to go close one first (see MultipleDazModal).
+  const [multiDaz, setMultiDaz] = useState(false)
   // The run's watch phase: 'pending' = job file written, not yet claimed
   // (abortable); 'running' = the Runner renamed it and works the batch.
   const [phase, setPhase] = useState<'idle' | 'pending' | 'running'>('idle')
@@ -221,7 +226,8 @@ export function ProjectScanSection({
       )
       await refresh()
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e))
+      if (e instanceof MultipleDazInstancesError) setMultiDaz(true)
+      else toast.error(e instanceof Error ? e.message : String(e))
     } finally {
       setStarting(false)
     }
@@ -525,6 +531,7 @@ export function ProjectScanSection({
         </p>
       )}
       {runner?.blocked && <RunnerGateNotice gate={runner} subject="The project scan runs" />}
+      <MultipleDazModal open={multiDaz} onClose={() => setMultiDaz(false)} />
     </section>
   )
 }

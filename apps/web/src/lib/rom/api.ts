@@ -184,6 +184,7 @@ export {
   ExporterJobFilesChangedError,
   exporterJobFilesSignature,
   exportDazStudioRunning,
+  MultipleDazInstancesError,
   exporterJobsPending,
   fetchExecuteScenes,
   fetchExporterJobFiles,

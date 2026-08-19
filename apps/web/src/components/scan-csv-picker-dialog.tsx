@@ -6,12 +6,14 @@ import { Button, Modal } from '@dth/ui'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import { PathCode } from '#/components/path-code.tsx'
 import {
+  MultipleDazInstancesError,
   abortSceneScan,
   fetchSceneScanProgress,
   listScanFrameCsvs,
   sceneWearables,
   startSceneScan,
 } from '#/lib/rom/api.ts'
+import { MultipleDazModal } from '#/components/multiple-daz-modal.tsx'
 import { SceneValidationTable } from '#/components/scene-compat.tsx'
 import { sceneCompatFailed, sceneScanRows } from '#/lib/scene-compat.ts'
 import { pickDufPath } from '#/lib/desktop.ts'
@@ -91,6 +93,9 @@ export function ScanCsvPickerDialog({
   /** Ticks while a run is out, so the wait can say more the longer it lasts. */
   const [waitedMs, setWaitedMs] = useState(0)
   const [scanError, setScanError] = useState('')
+  // The scan handoff found several Daz Studios open — a dialog, not an inline
+  // error, since the user has to go close one first (see MultipleDazModal).
+  const [multiDaz, setMultiDaz] = useState(false)
   /** Between the click and the handoff being claimed — see onStartScan. */
   const [starting, setStarting] = useState(false)
   const rows = sceneScanRows(sceneScan, character)
@@ -149,7 +154,8 @@ export function ScanCsvPickerDialog({
       })
       setRun(started)
     } catch (error) {
-      setScanError(error instanceof Error ? error.message : String(error))
+      if (error instanceof MultipleDazInstancesError) setMultiDaz(true)
+      else setScanError(error instanceof Error ? error.message : String(error))
     } finally {
       setStarting(false)
     }
@@ -360,6 +366,7 @@ export function ScanCsvPickerDialog({
           </Button>
         </FileDropZone>
       </div>
+      <MultipleDazModal open={multiDaz} onClose={() => setMultiDaz(false)} />
     </Modal>
   )
 }
