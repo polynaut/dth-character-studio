@@ -3,8 +3,10 @@ import { Sparkles } from 'lucide-react'
 
 import { Button, InfoPopup, MultiSelect, OverrideMark, cn, overrideLabelClass, useRefetchOnFocus } from '@dth/ui'
 import { groomBadge, groomPillClass } from '#/components/character/groom-kind.tsx'
-import { autoExportHair, detectedHairLabels, groomCandidates } from '#/lib/groom-detect.ts'
+import { autoExportHair, detectedHairLabels, groomCandidates, hairDrift } from '#/lib/groom-detect.ts'
+import { watchPaths } from '#/lib/fs-watch.ts'
 import { labelsKey } from '#/lib/preserve-diff.ts'
+import { normalizeSceneKey } from '#/lib/rom/execute-jobs.ts'
 import {
   MIN_GROOM_EXPORTER_VERSION,
   exporterSupportsGroomHide,
@@ -15,6 +17,7 @@ import {
 import * as api from '#/lib/rom/api.ts'
 
 import type { Character } from '@dth/rom'
+import type { StopWatching } from '#/lib/fs-watch.ts'
 import type { SceneWearable } from '#/lib/rom/api/native-types.ts'
 
 /**
@@ -45,8 +48,9 @@ export function GroomFields({
   /** The Daz install folder (from settings) — used to read the installed
    *  Exporter Plugin's DLL version and warn when it's too old for hide-only groom. */
   dazInstallFolder: string
-  /** True while a non-primary Daz scene is selected — only scopes the "unlisted
-   *  hair would ride into the export" warning to outfit scenes. */
+  /** True while a non-primary Daz scene is selected — gates the override
+   *  glyph/reset (the primary has nothing to override). The drift warnings
+   *  are NOT scoped by it: every scene's list is judged against its scene. */
   overrideEligible: boolean
 }) {
   const [wearables, setWearables] = useState<Array<SceneWearable>>([])
@@ -107,6 +111,37 @@ export function GroomFields({
     })
   }, [selectedScene])
 
+  // …and when the scene FILE changes on disk (reported 2026-08-19): saving the
+  // scene in Daz while this window never loses focus — side-by-side monitors —
+  // re-fires no focus event, and the warnings kept judging the old wearables.
+  // The scene's FOLDER is watched, not the file: a replace-style save (write
+  // temp, rename over) silently drops a watch pinned to the file itself, and
+  // the folder watch works under either save style. Best-effort by the fs-watch
+  // stance — unwatched (plain browser, NAS share), the focus refetch above
+  // stays the feature's carrier, exactly as before.
+  useEffect(() => {
+    if (!selectedScene) return
+    let disposed = false
+    let stop: StopWatching | null = null
+    const key = normalizeSceneKey(selectedScene)
+    void watchPaths([selectedScene.replace(/[\\/][^\\/]*$/, '')], (changed) => {
+      if (!changed.some((path) => normalizeSceneKey(path) === key)) return
+      void api.sceneWearables({ data: { scenePath: selectedScene } }).then((result) => {
+        if (disposed) return
+        setWearables(result.items)
+        setScanned(result.error === '')
+      })
+    }).then((stopper) => {
+      if (!stopper) return
+      if (disposed) stopper()
+      else stop = stopper
+    })
+    return () => {
+      disposed = true
+      stop?.()
+    }
+  }, [selectedScene])
+
   const nodes = character.sceneOverrides.find((o) => o.scenePath === selectedScene)?.hair ?? []
   // Hair rides the scene's record: replace its `hair` list, minting the record
   // when the scene has none yet and dropping it again when nothing else lives on
@@ -150,17 +185,22 @@ export function GroomFields({
   // shared heuristic (groom-detect), same one creation pre-selects from.
   const candidates = groomCandidates(wearables)
   const knownLabels = new Set(wearables.map((wearable) => wearable.label))
-  const missing = scanned ? listed.filter((label) => !knownLabels.has(label)) : []
   const sceneName = selectedScene.split(/[\\/]/).pop()?.replace(/\.duf$/i, '') ?? ''
   const exporterTooOld = hasGroom && !exporterSupportsGroomHide(exporterVersion)
 
-  // Detected hair the scene's list doesn't cover would ride into the ROM export.
-  // Flagged on an outfit (non-primary) scene, where the brought-along hair most
-  // often isn't listed yet.
+  // Both directions of list-vs-scene drift, the shared rule (groom-detect):
+  // a listed label the scene lost stops the export; detected hair the list
+  // doesn't cover rides into it. Only from a SUCCESSFUL scan — drift computed
+  // against a failed read would flag every listed item as gone.
+  const { missing, unlisted: unlistedHair } = scanned
+    ? hairDrift(listed, wearables)
+    : { missing: [], unlisted: [] }
   const detectedHair = detectedHairLabels(wearables)
-  const listedSet = new Set(listed)
-  const unlistedHair = scanned ? detectedHair.filter((label) => !listedSet.has(label)) : []
-  const hairMismatch = overrideEligible && unlistedHair.length > 0
+  // On EVERY scene, the primary included (it was outfit-scenes-only at first,
+  // on the "the primary was seeded complete at creation" reasoning — which
+  // holds right up until the user re-styles the scene in Daz and saves, the
+  // reported shape: the new hair rode into the export with no warning).
+  const hairMismatch = unlistedHair.length > 0
 
   return (
     <div className="group/ovr max-w-xl">

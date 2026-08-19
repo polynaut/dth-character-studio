@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { autoExportHair, detectedHairLabels, groomCandidates, seedSceneHair } from './groom-detect.ts'
+import { autoExportHair, detectedHairLabels, groomCandidates, hairDrift, seedSceneHair } from './groom-detect.ts'
 
 import type { SceneWearable } from '#/lib/rom/api/native-types.ts'
 
@@ -124,6 +124,34 @@ describe('seedSceneHair', () => {
     // claim the scene has no hair.
     expect(seedSceneHair('X:\\a.duf', scan([], 'scene unreadable'), [])).toBeNull()
     expect(seedSceneHair('X:\\a.duf', scan(hairy, 'scene unreadable'), [])).toBeNull()
+  })
+})
+
+describe('hairDrift', () => {
+  it('reports both directions: listed-but-gone and detected-but-unlisted', () => {
+    const items = [w('new-wig', 'Nova Ponytail Hair'), w('crop-top', 'MM Crop Top')]
+    expect(hairDrift(['CHT Sevenly Hair'], items)).toEqual({
+      missing: ['CHT Sevenly Hair'],
+      unlisted: ['Nova Ponytail Hair'],
+    })
+  })
+
+  it('is quiet when the list matches the scene', () => {
+    const items = [w('cht-sevenly', 'CHT Sevenly Hair'), w('crop-top', 'MM Crop Top')]
+    expect(hairDrift(['CHT Sevenly Hair'], items)).toEqual({ missing: [], unlisted: [] })
+  })
+
+  it('a listed NON-hair label still counts as present — only its absence drifts', () => {
+    // The user may deliberately hide a non-hair-ish wearable; the scene
+    // containing it is fine, the scene losing it is the warning.
+    const items = [w('crop-top', 'MM Crop Top')]
+    expect(hairDrift(['MM Crop Top'], items)).toEqual({ missing: [], unlisted: [] })
+    expect(hairDrift(['MM Crop Top'], [])).toEqual({ missing: ['MM Crop Top'], unlisted: [] })
+  })
+
+  it('an empty list on a scene with hair is all drift, no missing', () => {
+    const items = [w('cht-sevenly', 'CHT Sevenly Hair')]
+    expect(hairDrift([], items)).toEqual({ missing: [], unlisted: ['CHT Sevenly Hair'] })
   })
 })
 
