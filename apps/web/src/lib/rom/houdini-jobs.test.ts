@@ -465,6 +465,16 @@ describe('houdiniRunStateFrom', () => {
       error: '',
       cancelled: false,
       problems: [],
+      // The finished state keeps the per-network list with every status FINAL
+      // — the task cards' only accurate source at exactly the moment the
+      // running state (their previous one) disappears. Counts alone can say
+      // "2 ok, 1 skipped" but not WHICH, and the last running-state poll
+      // almost always misses the closing node's entry.
+      networks: [
+        { label: '/obj/a', status: 'ok' },
+        { label: '/obj/b', status: 'ok' },
+        { label: '/obj/c', status: 'skipped' },
+      ],
     })
   })
 
