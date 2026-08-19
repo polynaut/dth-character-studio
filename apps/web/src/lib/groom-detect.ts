@@ -59,6 +59,31 @@ export function detectedHairLabels(items: Array<SceneWearable>): Array<string> {
 }
 
 /**
+ * How a scene's stored hair list has DRIFTED from what the scene now contains
+ * — the user keeps editing scenes in Daz long after listing their hair, and
+ * both directions of the mismatch are silent failures at export time:
+ * `missing` are listed labels the scene no longer carries (the generated
+ * script STOPS the export on a label it cannot find), `unlisted` is detected
+ * hair the list doesn't cover (it would ride into the export). One rule,
+ * shared by the editor's warnings and the DTH Export dialog's pre-flight, so
+ * the two can never disagree about what counts as drift.
+ *
+ * Callers gate on a SUCCESSFUL scan themselves — computing drift from a
+ * failed read would fabricate "gone from the scene" about every listed item.
+ */
+export function hairDrift(
+  listed: ReadonlyArray<string>,
+  items: Array<SceneWearable>,
+): { missing: Array<string>; unlisted: Array<string> } {
+  const known = new Set(items.map((wearable) => wearable.label))
+  const listedSet = new Set(listed)
+  return {
+    missing: listed.filter((label) => !known.has(label)),
+    unlisted: detectedHairLabels(items).filter((label) => !listedSet.has(label)),
+  }
+}
+
+/**
  * THE single rule for pre-selecting a newly linked scene's hair — used by every
  * way a scene reaches a character: creation (api/characters), the first link of
  * a primary, ADDING an extra scene, REPLACING the primary, and RELINKING a
