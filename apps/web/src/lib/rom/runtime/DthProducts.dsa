@@ -1119,13 +1119,7 @@ function genesisVersionFromString(g) {
   return 0;
 }
 
-function findProductMatches(
-  usedAssets,
-  installedProducts,
-  knownGenesisVersion,
-  contentFolderProducts,
-  contentDirs
-) {
+function findProductMatches(usedAssets, installedProducts, knownGenesisVersion, contentFolderProducts) {
   var matches = [];
   var unmatched = [];
 
@@ -1288,8 +1282,7 @@ function findProductMatches(
     contentFolderProducts,
     skinFolders,
     installedProducts,
-    sceneGenesisVersion,
-    contentDirs
+    sceneGenesisVersion
   );
 
   // Structural attribution passes, run to a FIXPOINT. Each can create a match that
@@ -1761,19 +1754,10 @@ function squashName(s) {
 // Bounded per folder so a giant morph pack can't spin.
 function buildMorphFileIndex(installedProducts, synthProducts, sceneGenesisVersion) {
   var index = {};
-  // `file` is the concrete evidence file where one is known (a folder listing
-  // yields the absolute path; manifest keys carry none) — surfaced to the user
-  // so a folder-derived match can show WHICH installed file identified it.
-  function add(baseKey, product, method, seg, gen, file) {
+  function add(baseKey, product, method, seg, gen) {
     if (!baseKey) return;
     if (!hasOwn(index, baseKey)) index[baseKey] = [];
-    index[baseKey].push({
-      product: product,
-      method: method,
-      seg: squashName(seg),
-      gen: gen,
-      file: file || "",
-    });
+    index[baseKey].push({ product: product, method: method, seg: squashName(seg), gen: gen });
   }
   function segOfKey(folderKey) {
     var si = String(folderKey || "").indexOf("/");
@@ -1836,7 +1820,7 @@ function buildMorphFileIndex(installedProducts, synthProducts, sceneGenesisVersi
         if (name === "." || name === "..") continue;
         var low = name.toLowerCase();
         if (/\.(dsf|duf)$/.test(low)) {
-          add(manifestFileKey(name), owner, method, seg, gen, dirPath + "/" + name);
+          add(manifestFileKey(name), owner, method, seg, gen);
           taken++;
         } else if (new DzDir(dirPath + "/" + name).exists()) {
           queue.push(dirPath + "/" + name);
@@ -1845,41 +1829,6 @@ function buildMorphFileIndex(installedProducts, synthProducts, sceneGenesisVersi
     }
   }
   return index;
-}
-
-// The concrete file behind a folder-level match, for display. The asset's own
-// source file when it keyed the match (resolved under the mapped content
-// directory that actually holds it), else the texture map that did. '' when the
-// match rested on keywords alone — no file evidence exists then, and inventing
-// a path would be worse than showing none.
-function folderMatchEvidence(asset, product, contentDirs) {
-  var folders = {};
-  if (product.folders) {
-    for (var i = 0; i < product.folders.length; i++) folders[product.folders[i]] = true;
-  }
-  var sk = productFolderKey(asset.sourceFile || "");
-  if (sk && hasOwn(folders, sk)) return resolveSourceEvidence(asset.sourceFile, contentDirs);
-  if (asset.textures) {
-    for (var t = 0; t < asset.textures.length; t++) {
-      var tk = productFolderKey(asset.textures[t]);
-      if (tk && hasOwn(folders, tk)) return String(asset.textures[t]);
-    }
-  }
-  return "";
-}
-
-function resolveSourceEvidence(src, contentDirs) {
-  var s = String(src || "").replace(/\\/g, "/");
-  if (!s) return "";
-  if (/^[a-z]:\//i.test(s)) return s; // already absolute
-  for (var i = 0; i < contentDirs.length; i++) {
-    var p = resolveContentPath(contentDirs[i], s);
-    try {
-      var f = new DzFile(p);
-      if (typeof f.exists === "function" && f.exists()) return p;
-    } catch (e) {}
-  }
-  return s; // content-relative, unresolved — still names the file
 }
 
 // Pick the best basename candidate for a morph: generation fit outweighs the
@@ -1915,12 +1864,10 @@ function matchContentFolderProducts(
   synthProducts,
   skinFolders,
   installedProducts,
-  sceneGenesisVersion,
-  contentDirs
+  sceneGenesisVersion
 ) {
   synthProducts = synthProducts || [];
   installedProducts = installedProducts || [];
-  contentDirs = contentDirs || [];
   var synthFolderIndex = {};
   var synthKeywordMap = {};
   for (var i = 0; i < synthProducts.length; i++) {
@@ -1946,9 +1893,7 @@ function matchContentFolderProducts(
   for (var u = 0; u < unmatched.length; u++) {
     var asset = unmatched[u];
     var method = "Content Folder Match";
-    var evidence = "";
     var prod = findContentFolderMatch(asset, synthFolderIndex, synthKeywordMap, skinFolders);
-    if (prod) evidence = folderMatchEvidence(asset, prod, contentDirs);
 
     // A node whose textures live in a folder nothing owns: that folder IS the
     // product's own texture folder, so synthesize a product from it on the spot.
@@ -1962,7 +1907,6 @@ function matchContentFolderProducts(
         if (np) {
           synthFolderIndex[tk] = np;
           prod = np;
-          evidence = String(asset.textures[t]); // the map that keyed the product
         }
       }
     }
@@ -1978,12 +1922,11 @@ function matchContentFolderProducts(
       if (hit) {
         prod = hit.product;
         method = hit.method;
-        evidence = hit.file;
       }
     }
 
     if (prod) {
-      matches.push({ asset: asset, product: prod, method: method, file: evidence });
+      matches.push({ asset: asset, product: prod, method: method });
     } else {
       still.push(asset);
     }
@@ -2262,30 +2205,8 @@ function writeProductsCsv(outputCsvPath, matchResults, sceneName, scenePath, bQu
     var match = matchResults.matches[i];
     var key = match.product.name;
     if (!productInfo[key]) {
-      productInfo[key] = {
-        product: match.product,
-        methods: [],
-        roles: [],
-        assets: [],
-        matchedFiles: [],
-      };
+      productInfo[key] = { product: match.product, methods: [], roles: [], assets: [] };
       order.push(key);
-    }
-    // The concrete evidence file behind a folder-level match (the .dsf a
-    // basename match found, the texture map that keyed a folder product) —
-    // shown so the user can see WHICH installed files identified the product.
-    // Capped by count and joined length: the cell must stay well under the
-    // studio's parse bound.
-    if (match.file) {
-      var fileEntry = String(match.file);
-      var filesSoFar = productInfo[key].matchedFiles;
-      if (
-        filesSoFar.indexOf(fileEntry) === -1 &&
-        filesSoFar.length < 8 &&
-        filesSoFar.join("; ").length + fileEntry.length < 1800
-      ) {
-        filesSoFar.push(fileEntry);
-      }
     }
     if (productInfo[key].methods.indexOf(match.method) === -1) {
       productInfo[key].methods.push(match.method);
@@ -2309,11 +2230,11 @@ function writeProductsCsv(outputCsvPath, matchResults, sceneName, scenePath, bQu
 
   var lines = [];
   lines.push(
-    "row_type,name,sku,artist,version,product_type,match_method,technical_name,asset_type,source_file,usage,used_by,matched_files"
+    "row_type,name,sku,artist,version,product_type,match_method,technical_name,asset_type,source_file,usage,used_by"
   );
   // The scene this scan analysed — name in col 1, full path in col 2.
   lines.push(
-    ["scene", csvField(sceneName || ""), csvField(scenePath || ""), "", "", "", "", "", "", "", "", "", ""].join(",")
+    ["scene", csvField(sceneName || ""), csvField(scenePath || ""), "", "", "", "", "", "", "", "", ""].join(",")
   );
 
   for (var o = 0; o < order.length; o++) {
@@ -2330,13 +2251,9 @@ function writeProductsCsv(outputCsvPath, matchResults, sceneName, scenePath, bQu
         csvField(info.methods.join("; ")),
         "",
         "",
-        // A folder-derived product carries the folder it was identified from
-        // (in the otherwise-unused source_file column), so the studio can show
-        // WHERE a Content Folder Match came from. '' for manifest products.
-        csvField(p.contentFolder || ""),
+        "",
         csvField(info.roles.join("; ")),
-        csvField(info.assets.join("; ")),
-        csvField(info.matchedFiles.join("; "))
+        csvField(info.assets.join("; "))
       ].join(",")
     );
   }
@@ -2560,8 +2477,7 @@ function DthScanProducts(config) {
     usedAssets,
     installedProducts,
     genesisVersionFromString(config.genesis),
-    contentFolderProducts,
-    contentDirs
+    contentFolderProducts
   );
   print("Matched products (raw): " + matchResults.matches.length);
   print("Unmatched assets: " + matchResults.unmatched.length);

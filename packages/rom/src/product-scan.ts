@@ -123,13 +123,8 @@ export function parseProductScanCsv(text: string): ParsedProductScanCsv {
         version: (cols[4] ?? '').trim(),
         productType: (cols[5] ?? '').trim(),
         matchMethod: (cols[6] ?? '').trim(),
-        // Product rows carry the identifying folder of a Content Folder Match
-        // in the otherwise-unused source_file column, and the evidence files
-        // behind folder-level matches in a trailing matched_files column.
-        contentFolder: (cols[9] ?? '').trim(),
         usage: (cols[10] ?? '').trim(),
         usedBy: (cols[11] ?? '').trim(),
-        matchedFiles: (cols[12] ?? '').trim(),
         scenes: [],
       })
     } else if (kind === 'asset') {
@@ -182,10 +177,6 @@ export function mergeProductScans(scans: Array<ProductScan>): MergedProductScan 
         // view shows every morph/node that found it in any scanned scene.
         existing.usedBy = unionJoined(existing.usedBy, p.usedBy)
         existing.usage = unionJoined(existing.usage, p.usage)
-        existing.matchedFiles = unionJoined(existing.matchedFiles, p.matchedFiles)
-        // A scan from an older runtime carries no folder — keep the first
-        // non-empty one rather than letting "first wins" blank it.
-        if (!existing.contentFolder && p.contentFolder) existing.contentFolder = p.contentFolder
       } else {
         productByKey.set(key, { ...p, scenes: [scene] })
       }

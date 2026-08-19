@@ -1173,22 +1173,17 @@ v80 — no unattended carrier opens a modal, and the missing-runtime message sto
       capped `files` list, and the folder listing budget is 40 dirs/400 files.
       v91 not 90: the dev install had stamped v90 (same reinstall trap).
       No schema change, no migration step.
- 92 — a folder-derived product's CSV row carries the identifying folder in the
-      otherwise-unused source_file column, so the Products tab can show WHERE
-      a "Content Folder Match" came from (expanded row, `contentFolder` on
-      productRecordSchema — additive zod default, no character-schema bump;
-      merge keeps the first non-empty folder so an old scan can't blank it).
-      No schema change, no migration step.
- 93 — a folder-level match records its concrete EVIDENCE FILES, shown in the
-      product's expanded row ("Matched by file:"). The match itself already
-      holds them: the .dsf a basename listing found, the texture map that
-      keyed a folder product, the asset's own source file when that keyed it
-      (resolved under the mapped content dir that holds it, via a DzFile
-      exists probe; keyword-only matches carry none — inventing a path would
-      be worse than showing none). Travels as a NEW TRAILING CSV column
-      (matched_files; old parsers ignore it, the new parser defaults '') into
-      `matchedFiles` on productRecordSchema (additive zod default), unioned
-      across scenes on merge. Capped at 8 files / ~1800 chars per product so
-      the cell stays under the parse bound. No schema change, no migration
-      step.
+ 92 — RETRACTED before any release (reverted in 94): the product row carried
+      its content folder in the source_file column, shown on the Products tab.
+ 93 — RETRACTED before any release (reverted in 94): a folder-level match
+      recorded its evidence files in a trailing matched_files CSV column,
+      listed in the product's expanded row.
+ 94 — reverts 92 + 93 at the user's request: the CSV is back to the v91
+      12-column shape (no contentFolder / matchedFiles anywhere — runtime,
+      parser, schema, UI). The number still moves FORWARD because the dev
+      machine's install marker and generated scripts are stamped v92/v93:
+      the reinstall trigger is an equality check but script staleness is
+      `runtimeVersion < app.runtime`, so shipping a smaller number would
+      leave those scripts reading as fresh forever. Runtime CONTENT is
+      byte-identical to v91. No schema change, no migration step.
 ```
