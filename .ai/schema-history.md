@@ -228,6 +228,12 @@ of that file ~12k tokens to scroll past.
       does NOT touch the hide-only groom bracket — hair stays out of the main
       export either way. Additive + optional, so no migration step: a pre-v37
       record reads back with the field absent and the defaults live.
+      The field is also AUTO-decided on every hair-list change of a non-primary
+      scene (`autoExportHair`, web lib/groom-detect.ts — the editor's list and
+      add-scene seeding both route through it): hair differing from the
+      primary's arms it (`true`), a full match (or an emptied list) clears it
+      back to the default. The scene cards' badge row carries a hair glyph
+      (lit/dimmed) showing the effective state.
 ```
 
 ## Generated-runtime versions (`RUNTIME_VERSION`)

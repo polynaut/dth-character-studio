@@ -170,3 +170,55 @@ test('scan this scene: with Daz Products on, the product pass carries this scene
 
   expect(await unhandledCommands(page)).toEqual([])
 })
+
+test('hair glyph on every card + the automatic switch follows hair edits', async ({ page }) => {
+  const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true, extraScene: true })
+  await page.addInitScript(installTauriMock, seed)
+  await openCharacter(page)
+
+  const onIcons = page.getByRole('img', { name: 'Hair export on for this scene' })
+  const offIcons = page.getByRole('img', { name: 'Hair export off for this scene' })
+  // The badge row's glyph on every card: primary defaults ON, the outfit OFF.
+  await expect(onIcons).toHaveCount(1)
+  await expect(offIcons).toHaveCount(1)
+
+  // Select the outfit scene (the SELECT cover button — see override.smoke on
+  // the position) and EDIT its hair list: Select-all re-sets the same one-item
+  // list, which is an edit all the same, and it differs from the primary's —
+  // the export arms automatically and the glyph lights up.
+  await page
+    .getByRole('button', { name: 'KiraSummertide_G9_GP', exact: true })
+    .click({ position: { x: 40, y: 52 } })
+  await page.getByRole('button', { name: 'Select all detected hair items' }).click()
+  await expect(onIcons).toHaveCount(2)
+  await expect(offIcons).toHaveCount(0)
+
+  // Save persists the armed switch (hair edits ride the draft, not an
+  // immediate persist).
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect
+    .poll(async () => {
+      const saved = JSON.parse((await fileContent(page, `${P.charFolder}/Kira.json`))!) as {
+        sceneOverrides: Array<{ scenePath: string; exportHair?: boolean }>
+      }
+      return saved.sceneOverrides.find((o) => o.scenePath === P.scene2)?.exportHair
+    })
+    .toBe(true)
+
+  // Reset copies the primary's list back — a FULL match, so the switch falls
+  // back to its default (off for an extra scene) and the glyph dims again.
+  await page.getByRole('button', { name: "Reset to the primary scene's hair" }).click()
+  await expect(offIcons).toHaveCount(1)
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect
+    .poll(async () => {
+      const saved = JSON.parse((await fileContent(page, `${P.charFolder}/Kira.json`))!) as {
+        sceneOverrides: Array<{ scenePath: string; exportHair?: boolean; hair: Array<{ nodeLabel: string }> }>
+      }
+      const record = saved.sceneOverrides.find((o) => o.scenePath === P.scene2)
+      return { exportHair: record?.exportHair, hair: record?.hair }
+    })
+    .toEqual({ exportHair: undefined, hair: [{ nodeLabel: 'CHT Sevenly Hair' }] })
+
+  expect(await unhandledCommands(page)).toEqual([])
+})
