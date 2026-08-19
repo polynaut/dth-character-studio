@@ -291,12 +291,23 @@ export function LinkedAssetCard({
           // The span carries the tooltip: a DISABLED button emits no hover
           // events, so a title on it alone would never appear — and the whole
           // point of disabling this one is that the reason must be readable.
-          <span className="pointer-events-auto inline-flex" title={replaceTitle}>
+          // It ALSO carries the hover-reveal: on the button itself the
+          // primitive's `disabled:opacity-50` (class + :disabled) out-specifies
+          // `opacity-0`, so a disabled replace sat dimmed-but-visible at rest.
+          // Hiding via the parent sidesteps the cascade fight — and on card
+          // hover the 50% still reads as the disabled cue. `focus-within`
+          // stands in for the siblings' `focus-visible` (the focus lands on
+          // the child button; a disabled button takes no focus anyway).
+          <span
+            className="pointer-events-auto inline-flex opacity-0 transition-opacity group-hover/card:opacity-100 focus-within:opacity-100"
+            title={replaceTitle}
+          >
             <Button
               variant="ghost"
               size="icon-sm"
-              // Same adornment recipe as the remove button above.
-              className="group/repl pointer-events-auto border border-transparent opacity-0 transition-opacity group-hover/card:opacity-100 focus-visible:opacity-100 hover:border-white/20 hover:bg-[#333] hover:shadow-sm dark:hover:bg-[#333]"
+              // Same adornment recipe as the remove button above — minus the
+              // reveal, which lives on the wrapping span (see above).
+              className="group/repl pointer-events-auto border border-transparent hover:border-white/20 hover:bg-[#333] hover:shadow-sm dark:hover:bg-[#333]"
               title={replaceTitle}
               aria-label={replaceTitle}
               disabled={replaceDisabled}
