@@ -23,6 +23,17 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   the current head keeps red "cancelled" required checks. Only ever approve or
   re-run the NEWEST run; for a cancelled current head,
   `gh run rerun <run-id> --failed` re-runs just the killed jobs.
+- **A CI cache saved from a PR run is invisible to every OTHER PR** — GitHub
+  scopes it to that PR's merge ref; only default-branch caches are visible to
+  all PR runs. So a PR-job `actions/cache` save is a guaranteed lose twice
+  over: every fresh PR still cold-misses (rust rebuilt ~5.5 min, Chromium
+  re-downloaded ~47 s — both measured), and each PR piles its own duplicate
+  entry against the repo's 10 GB cap, evicting useful caches. The shape that
+  works, twice now in `validate-pull-request.yml`: a main-push-only warming
+  job SAVES (the `rust` job's main run, the `playwright-cache` job), PR jobs
+  only RESTORE (`actions/cache/restore`). The key computation must be
+  byte-identical between the saver and the restorers — a mismatch fails
+  SILENTLY as eternal misses, which look exactly like the pre-warming state.
 - **`github-actions[bot]` cannot create releases on this repo** (403 "Resource
   not accessible by integration" despite `contents: write`). The publish job runs
   on the `RELEASE_PAT` secret — if publishing ever 403s/401s again, **check the
