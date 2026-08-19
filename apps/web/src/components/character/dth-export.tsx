@@ -56,6 +56,7 @@ import {
   NO_UNREAL_PROJECTS,
   capitalizeStatus,
   dismissFinishToasts,
+  exportWarningToast,
 } from './dth-export/progress.tsx'
 import { WaitForDazCloseModal } from './dth-export/rows.tsx'
 import { DthExportPanel } from './dth-export/panel.tsx'
@@ -108,6 +109,28 @@ import { DthExportPanel } from './dth-export/panel.tsx'
  * impossible; both are gone now that it isn't. Clearing a job file nothing will
  * ever finish stays available where housekeeping belongs — Settings → App Data.
  */
+
+/**
+ * Marks a WARNING among the plain strings of a run sidecar's `reportLines` —
+ * the only channel a reloaded window inherits earlier legs through. A finished
+ * leg's warnings ride there as `⚠ <project>: <complaint>` so the adopting
+ * window can put them back into warning toasts instead of folding an amber
+ * fact into its summary body. An older build reading a newer sidecar renders
+ * the line verbatim, prefix and all — legible, just unsplit.
+ */
+const CARRIED_WARNING_PREFIX = '⚠ '
+
+/**
+ * A carried warning's `<project>: <complaint>` body — without saying one name
+ * twice. `run.problems` entries already lead with the node's scene (or its
+ * path — see `houdiniRunStateFrom`), and a single-scene project usually names
+ * scene and `.hip` alike, so blindly prefixing the project produced
+ * `Kira: Kira: No bone scale reference found` (measured in the leg-reload
+ * smoke). The project prefix is only added when it says something new.
+ */
+function labelledWarning(label: string, problem: string): string {
+  return problem.startsWith(`${label}: `) ? problem : `${label}: ${problem}`
+}
 
 export function DthExportAction({
   projectId,
@@ -447,7 +470,18 @@ export function DthExportAction({
    */
   const runReportRef = useRef<{
     daz?: { total: number; failed: number; errors: Array<string>; elapsedMs?: number }
-    houdini: Array<{ line: string; failed: boolean; elapsedMs?: number }>
+    /** `warnings` are the HDA pre-flight complaints 456.py answered "Continue
+     *  anyway?" to — WARNING toasts of their own at the end, never lines in
+     *  the report body: "the export worked" and "this network has problems"
+     *  are different messages in different states, and one toast wearing a
+     *  green checkmark over both was read as neither. */
+    houdini: Array<{
+      line: string
+      failed: boolean
+      elapsedMs?: number
+      label?: string
+      warnings?: Array<string>
+    }>
     /**
      * Pre-formatted lines INHERITED from a window that watched earlier legs and
      * is gone (a reload — see the adopt effect). Emitted verbatim ahead of this
@@ -661,9 +695,18 @@ export function DthExportAction({
     let totalKnown = true
     // Legs an earlier window watched, restored from the run plan — they lead,
     // because they happened first. Their timings died with that window, so a
-    // restored run reports no total.
+    // restored run reports no total. Warning entries (see
+    // CARRIED_WARNING_PREFIX) are split back out for the toast loop below —
+    // they are not report lines in any window.
+    const carriedWarnings: Array<string> = []
     if (report.carried?.length) {
-      lines.push(...report.carried)
+      for (const line of report.carried) {
+        if (line.startsWith(CARRIED_WARNING_PREFIX)) {
+          carriedWarnings.push(line.slice(CARRIED_WARNING_PREFIX.length))
+        } else {
+          lines.push(line)
+        }
+      }
       anyFailed ||= report.carriedFailed === true
       totalKnown = false
     }
@@ -697,6 +740,19 @@ export function DthExportAction({
       lines.push('Stopped on request — anything not listed above did not run.')
     }
     const body = lines.join('\n') || undefined
+    // The warnings go up FIRST, the report LAST, so the run's outcome is the
+    // newest — and topmost — toast. Each warning is its own toast in its own
+    // state: a network's pre-flight complaint next to a green summary was
+    // read as neither (the checkmark said done, the body asked "Continue
+    // anyway?" about a question 456.py had answered minutes earlier).
+    for (const problem of carriedWarnings) {
+      exportWarningToast('Exported with warnings', problem)
+    }
+    for (const leg of report.houdini) {
+      for (const problem of leg.warnings ?? []) {
+        exportWarningToast(`${leg.label ?? 'Houdini'}: exported with warnings`, problem)
+      }
+    }
     if (interrupted) exportFinishToast('info', title, body)
     else if (anyFailed) exportFinishToast('warning', title, body)
     else exportFinishToast('success', title, body)
@@ -726,6 +782,9 @@ export function DthExportAction({
           // Everything the end report will need that this project's own leg
           // won't produce — INCLUDING lines already inherited from a window
           // before this one, or a second reload would drop the first's legs.
+          // Finished legs' warnings ride as ⚠-prefixed entries so an adopting
+          // window can put them back into warning toasts (see
+          // CARRIED_WARNING_PREFIX).
           reportLines: [
             ...(report?.carried ?? []),
             ...(report?.daz
@@ -734,7 +793,12 @@ export function DthExportAction({
                   ...report.daz.errors,
                 ]
               : []),
-            ...(report?.houdini.map((leg) => leg.line) ?? []),
+            ...(report?.houdini.flatMap((leg) => [
+              leg.line,
+              ...(leg.warnings ?? []).map(
+                (problem) => `${CARRIED_WARNING_PREFIX}${labelledWarning(leg.label ?? 'Houdini', problem)}`,
+              ),
+            ]) ?? []),
           ],
           anyFailed:
             report?.carriedFailed === true ||
@@ -1010,15 +1074,27 @@ export function DthExportAction({
         run.summary || 'nothing to export (details: .dth_houdini_console.log in the character folder)'
       const took = run.elapsedMs !== undefined ? ` in ${formatElapsed(run.elapsedMs)}` : ''
       // The HDA's pre-flight check asks "Continue anyway?" and 456.py answers
-      // Yes — so the run report is the only place its complaints are ever
-      // seen, and the result file holding them is deleted as this run ends.
-      const detail = [run.error, ...run.problems].filter(Boolean).join(' · ')
+      // Yes — so this run is the only place its complaints are ever seen, and
+      // the result file holding them is deleted as this run ends. They become
+      // WARNING toasts of their own beside the final report, never lines in
+      // its body: "the export worked" and "this network has problems" are
+      // different messages in different states, and one toast wearing a green
+      // checkmark over both read as neither. tidyRunErrors strips the
+      // already-answered question and collapses per-node repeats (one dialog
+      // often fires per export node); the summary line only notes they exist.
+      const warnings = tidyRunErrors(run.problems)
+      const detail = [run.error, warnings.length > 0 ? 'finished with warnings' : '']
+        .filter(Boolean)
+        .join(' · ')
+      const label = currentHipRef.current || 'Houdini'
       const report = runReportRef.current
       if (report) {
         report.houdini.push({
-          line: `${currentHipRef.current || 'Houdini'}: ${summary}${run.cancelled ? ' — interrupted' : ''}${took}${detail ? ` — ${detail}` : ''}`,
+          line: `${label}: ${summary}${run.cancelled ? ' — interrupted' : ''}${took}${detail ? ` — ${detail}` : ''}`,
           failed: run.failed > 0 || Boolean(run.error),
           elapsedMs: run.elapsedMs,
+          label,
+          warnings,
         })
       }
       // More projects waiting their turn — the next one starts now that the
@@ -1057,6 +1133,11 @@ export function DthExportAction({
         } else {
           toast.success(`Houdini export finished — ${summary}${took}.`, options)
         }
+        // This leg IS the whole report here — its warnings ride beside it, in
+        // their own state, exactly as emitFinalReport does for a full run.
+        for (const problem of warnings) {
+          exportWarningToast(`${label}: exported with warnings`, problem)
+        }
       }
       return
     }
@@ -1075,12 +1156,20 @@ export function DthExportAction({
       const done = report
         ? [
             // Inherited legs first — a reloaded window's run can die too, and
-            // what already finished must not be lost with it.
-            ...(report.carried ?? []),
+            // what already finished must not be lost with it. Carried warnings
+            // keep their content but drop the marker: on a DEAD run everything
+            // folds into the one error toast, where the prefix is noise.
+            ...(report.carried ?? []).map((line) =>
+              line.startsWith(CARRIED_WARNING_PREFIX)
+                ? line.slice(CARRIED_WARNING_PREFIX.length)
+                : line,
+            ),
             ...(report.daz
               ? [`Daz: ${report.daz.total - report.daz.failed}/${report.daz.total} exported`]
               : []),
-            ...report.houdini.map((leg) => leg.line),
+            // Same rule for this window's own finished legs: the death toast
+            // is the last place their warnings can surface, so they fold in.
+            ...report.houdini.flatMap((leg) => [leg.line, ...(leg.warnings ?? [])]),
           ].join('\n')
         : ''
       // Say WHY when the console log says why. "Houdini is no longer running"

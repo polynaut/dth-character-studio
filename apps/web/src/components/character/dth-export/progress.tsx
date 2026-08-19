@@ -41,6 +41,27 @@ export const HOUDINI_TOAST_ID = 'dth-houdini-finished'
 export function dismissFinishToasts() {
   toast.dismiss(EXPORT_TOAST_ID)
   toast.dismiss(HOUDINI_TOAST_ID)
+  for (const id of warningToastIds.splice(0)) toast.dismiss(id)
+}
+
+/** The warning toasts currently on screen — remembered so
+ *  {@link dismissFinishToasts} can take them down with the report they belong
+ *  to. Unlike the report they have no fixed id: each warning is its own toast
+ *  and must not replace the summary or its siblings. */
+const warningToastIds: Array<string | number> = []
+
+/**
+ * One WARNING toast per complaint the run answered on the user's behalf.
+ *
+ * The finish report used to carry these inside its own body, which put an
+ * amber fact under a green checkmark: "export worked" and "this network has
+ * problems" are different messages in different states, so each gets its own
+ * toast (the report stays the run's outcome; a warning never sours it, and a
+ * green summary never buries it). Sticky for the same reason the report is —
+ * the user is away in Daz/Houdini for most of a run — and dismissed with it.
+ */
+export function exportWarningToast(title: string, description: string): void {
+  warningToastIds.push(toast.warning(title, { duration: Infinity, description }))
 }
 
 /**

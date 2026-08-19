@@ -311,10 +311,16 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
   await houdiniReportsDone(page)
   await expect(page.getByText(/DTH Export finished/)).toBeVisible({ timeout: 15_000 })
   await expect(page.getByText(/Daz: 1\/1 scene exported/)).toBeVisible()
-  await expect(page.getByText(/Kira: 1 exported/)).toBeVisible()
-  // The HDA's pre-flight complaint reaches the user inside that report. 456.py
-  // answers its "Continue anyway?" with Yes, so this is its ONLY surface — and
-  // the file holding it is deleted immediately below.
+  // The summary NOTES the warnings without carrying them — the leg line stays
+  // one line, and the report keeps its own (success) state.
+  await expect(page.getByText(/Kira: 1 exported.*finished with warnings/)).toBeVisible()
+  // The HDA's pre-flight complaint reaches the user as its OWN warning toast
+  // beside the report, in its own state. 456.py answers its "Continue anyway?"
+  // with Yes, so this is its ONLY surface — and the result file holding it is
+  // deleted immediately below. "Export worked" and "this network complained"
+  // are different messages; welding them into one green toast is how a run
+  // full of warnings wore a checkmark.
+  await expect(page.getByText('Kira: exported with warnings')).toBeVisible()
   await expect(page.getByText(/No bone scale reference found/)).toBeVisible()
 
   // THE POINT: the handoff cleans up after itself. Both files used to be left
