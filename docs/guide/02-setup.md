@@ -142,24 +142,15 @@ Daz Studio it finds:
 3. Press **Install / update all**. Only what is pending is copied; when everything
    is current the button becomes **Reinstall all**.
 
-   **Daz must be closed** — a running Daz Studio locks its loaded plugin DLLs. Daz
-   usually sits in an admin-protected folder on `C:`; when it does, the app tells
-   you to reopen DTH Character Studio as administrator and install again.
+   **Daz must be closed** — a running Daz Studio locks its loaded plugin DLLs,
+   and administrator rights do nothing for that; close every Daz Studio window
+   and install again.
 
-   <p align="center">
-     <img width="594" alt="Administrator rights notice" src="https://github.com/user-attachments/assets/39eb5538-ac57-478f-9b1d-2cfa533a736d" />
-     <br>
-     <sub><em>The app warns when installing into Program Files needs admin rights.</em></sub>
-   </p>
-
-   <p align="center">
-     <img width="623" alt="Open the studio as administrator" src="https://github.com/user-attachments/assets/aaf9403b-7f7a-4b1c-8214-ddba2991587a" />
-     <br>
-     <sub><em>Open DTH Character Studio as administrator to install into a protected folder.</em></sub>
-   </p>
-
-   Once the elevated install succeeds, take the **Restart normally** offer:
-   Windows silently blocks drag-and-drop from Explorer into an elevated window.
+   **Daz in a protected folder?** Daz usually sits under `Program Files` on `C:`.
+   When the copy needs administrator rights, the panel says so and offers
+   **Install with administrator rights** — the studio borrows them for that copy
+   alone: one Windows permission prompt, no restart, and the app window stays
+   unelevated, so drag-and-drop and your mapped network drives keep working.
 
 ## Unreal Engine Plugins
 
