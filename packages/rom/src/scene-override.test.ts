@@ -7,8 +7,10 @@ import {
   clonePose,
   mergeSceneOverride,
   romPoseEqual,
+  sceneHairExportEnabled,
   sceneOverrideBuildsRom,
   sceneOverrideSlug,
+  sceneRecordEmpty,
 } from './scene-override'
 import { characterSchema, defaultSections, flatSectionGroupId, sceneOverrideSchema } from './types'
 
@@ -980,5 +982,61 @@ describe('generateAll — scene overrides folded into the one script', () => {
     const delta = grabObject(script, 'dthSceneOverrides')[sceneKey]
     expect(delta.dkRomPath).toBe('X:/poses/DK.duf') // host-resolved path reached the delta
     expect(delta.presetFrames.dk).toBe(60) // scene's own block frames, not the base's 54
+  })
+})
+
+describe('sceneHairExportEnabled — the per-scene "Export hair items" switch (v37)', () => {
+  const primary = 'D:\\s\\Primary.duf'
+  const extra = 'D:\\s\\Beach.duf'
+
+  it('defaults ON for the primary scene, OFF for an extra scene', () => {
+    const character = makeCharacter({ scenePath: primary, extraScenes: [extra] })
+    expect(sceneHairExportEnabled(character, primary)).toBe(true)
+    expect(sceneHairExportEnabled(character, extra)).toBe(false)
+  })
+
+  it('a stored choice wins over the default, both ways', () => {
+    const character = makeCharacter({
+      scenePath: primary,
+      extraScenes: [extra],
+      sceneOverrides: [
+        makeOverride({ scenePath: primary, exportHair: false }),
+        makeOverride({ scenePath: extra, exportHair: true }),
+      ],
+    })
+    expect(sceneHairExportEnabled(character, primary)).toBe(false)
+    expect(sceneHairExportEnabled(character, extra)).toBe(true)
+  })
+
+  it('matches records by the normalized scene key (slashes + case)', () => {
+    const character = makeCharacter({
+      scenePath: primary,
+      extraScenes: [extra],
+      sceneOverrides: [makeOverride({ scenePath: 'd:/s/beach.duf', exportHair: true })],
+    })
+    expect(sceneHairExportEnabled(character, extra)).toBe(true)
+    // The primary check normalizes too — a forward-slash query still reads ON.
+    expect(sceneHairExportEnabled(character, 'd:/s/primary.duf')).toBe(true)
+  })
+
+  it('an empty scene path is never "the primary"', () => {
+    const character = makeCharacter({ scenePath: '' })
+    expect(sceneHairExportEnabled(character, '')).toBe(false)
+  })
+
+  it('a record holding ONLY the switch is not empty, and still arms nothing', () => {
+    const record = makeOverride({ scenePath: extra, exportHair: true })
+    expect(sceneRecordEmpty(record)).toBe(false)
+    // Like hair, the switch rides the record without activating an override.
+    const character = makeCharacter({
+      scenePath: primary,
+      extraScenes: [extra],
+      sceneOverrides: [record],
+    })
+    expect(activeSceneOverrides(character)).toEqual([])
+  })
+
+  it('sceneRecordEmpty still drops a record carrying nothing', () => {
+    expect(sceneRecordEmpty(makeOverride({ scenePath: extra }))).toBe(true)
   })
 })

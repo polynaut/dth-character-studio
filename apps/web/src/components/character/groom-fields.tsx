@@ -3,7 +3,7 @@ import { Sparkles } from 'lucide-react'
 
 import { Button, InfoPopup, MultiSelect, OverrideMark, cn, overrideLabelClass, useRefetchOnFocus } from '@dth/ui'
 import { groomBadge, groomPillClass } from '#/components/character/groom-kind.tsx'
-import { detectedHairLabels, groomCandidates } from '#/lib/groom-detect.ts'
+import { autoExportHair, detectedHairLabels, groomCandidates } from '#/lib/groom-detect.ts'
 import { labelsKey } from '#/lib/preserve-diff.ts'
 import {
   MIN_GROOM_EXPORTER_VERSION,
@@ -116,6 +116,16 @@ export function GroomFields({
     const record = {
       ...(existing ?? sceneOverrideSchema.parse({ scenePath: selectedScene })),
       hair: next,
+    }
+    // A NON-primary scene's hair edit re-decides its "Export hair items"
+    // switch from the list itself (`autoExportHair`): differing hair arms the
+    // export, matching the primary again (or emptying the list) falls back to
+    // the default. The primary's own edits never touch the switch — its
+    // default is ON and its list IS the base the others compare against.
+    if (selectedScene !== character.scenePath) {
+      const primary =
+        character.sceneOverrides.find((o) => o.scenePath === character.scenePath)?.hair ?? []
+      record.exportHair = autoExportHair(primary, next)
     }
     const others = character.sceneOverrides.filter((o) => o.scenePath !== selectedScene)
     patch({ sceneOverrides: sceneRecordEmpty(record) ? others : [...others, record] })
