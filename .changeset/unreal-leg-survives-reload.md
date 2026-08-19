@@ -1,4 +1,8 @@
 ---
+# bump: patch is deliberate — adoptUnrealImports is internal plumbing for a
+# bug fix (the leg forgetting its state on reload), not a new user capability:
+# it restores what the run already promised, exactly like the sidecar restores
+# the other two legs.
 '@dth/web': patch
 ---
 
