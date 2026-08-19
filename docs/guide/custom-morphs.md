@@ -102,10 +102,10 @@ Skeletons` subfolder of your export directory, and the CSV gets its path filled 
 </p>
 
 > [!NOTE]
-> **Bone scale only acts when the export actually runs.** With *Run the export
-> with the ROM script* off (and no split `Export_…` run), a ticked Bone scale is a
-> no-op — you export the reference skeletons yourself. Turn the export back on and
-> it becomes live, no re-ticking needed.
+> **Bone scale only acts when the export actually runs.** Building the ROM alone
+> leaves a ticked Bone scale a no-op — the reference-skeleton FBXs are written by
+> the export. Run `Export_<Name>_G9.dsa` (or the DTH Export button) and it
+> becomes live, no re-ticking needed.
 
 Only **GEN** and **FBM** poses can be reference frames — the two categories
 DazToHue supports reference skeletons in. DTH's own

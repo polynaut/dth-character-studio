@@ -885,11 +885,14 @@ Part of the domain reference — `.ai/domain.md` is the index.
   the CSV references — the 1:1 mapping is test-pinned.
 - **Bulk runs** (runtime v40): every job-file row points at the character's
   hidden `.Bulk_ROM_Export.dsa` (`BULK_ROM_EXPORT_SCRIPT`,
-  `toBulkRomExportScriptDsa` — the combined script with `exportWithRomScript` +
-  `exportHairAssets` FORCED on; generated whenever an export dir is set,
+  `toBulkRomExportScriptDsa` — the ROM builder in its `bulk` shape, which is
+  what `bulk` MEANS since schema v38: build the ROM, export, and run the hair
+  pass in ONE unattended run. Generated whenever an export dir is set,
   dot-prefixed so the Content Library hides it, swept when the dir clears).
-  It always builds the ROM and always exports everything; the toggles govern
-  only the visible per-character scripts. The v38 `bulk-export` script
+  This is the ONLY carrier that combines the jobs — the visible per-character
+  scripts are always the three separate ones (`ROM_…` builds, `Export_…`
+  exports, `Export_Hair_…` grooms), and the per-item hair pass is inlined
+  nowhere else. The v38 `bulk-export` script
   argument is RETIRED — arguments passed through `DzScript::execute` never
   reached `getArguments()` (measured; the Runner now executes plainly). The
   job file (contract v2) is JSON — `{version, type, progress, jobs[]}`, plus a

@@ -105,6 +105,17 @@ function goldenCharacter(): Character {
     scenePath: 'C:/DTH/Project/assets/characters/Electra G9/daz3d/Electra.duf',
     extraScenes: ['C:/DTH/Project/assets/characters/Electra G9/daz3d/Electra_Yoga.duf'],
     exportPath: 'C:/DTH/Export/Electra',
+    // A hair list, so the groom paths are pinned too: the hide bracket the
+    // Export_ script wraps around its export, the per-item pass the bulk
+    // carriers inline behind theirs, and the standalone Export_Hair_ script.
+    // (The header above always claimed groom coverage; until v38 the fixture
+    // carried no hair, so all three went unpinned.)
+    sceneOverrides: [
+      {
+        scenePath: 'C:/DTH/Project/assets/characters/Electra G9/daz3d/Electra.duf',
+        hair: [{ nodeLabel: 'dForce Ponytail' }],
+      },
+    ],
   })
 }
 

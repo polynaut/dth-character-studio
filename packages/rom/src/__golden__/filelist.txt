@@ -1,6 +1,8 @@
 ROM_ElectraG9_G9.dsa
+Export_ElectraG9_G9.dsa
 .Bulk_ROM_Export.dsa
 .Bulk_Export_Only.dsa
 .Build_ROM_Animation.dsa
+Export_Hair_ElectraG9_G9.dsa
 Scan_Products_ElectraG9.dsa
 ElectraG9_pose_asset.csv

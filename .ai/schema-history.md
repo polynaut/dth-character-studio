@@ -234,6 +234,21 @@ of that file ~12k tokens to scroll past.
       primary's arms it (`true`), a full match (or an emptied list) clears it
       back to the default. The scene cards' badge row carries a hair glyph
       (lit/dimmed) showing the effective state.
+ 38 — REMOVED both export-SHAPE toggles: `exportWithRomScript` (v5) and
+      `exportHairAssets` (v25). The visible scripts are now ALWAYS the three
+      separate ones — `ROM_…` builds the ROM, `Export_…` runs the exporter and
+      delivers the CSV, `Export_Hair_…` exports the grooms — one job each, so
+      there is no shape left to store and a re-export never costs a ROM
+      rebuild. Removed fields, so no migration step: zod strips the retired
+      keys on read (`migrate.test.ts` pins both). What survives the removal:
+      the EXPORT DIR still gates the export pair (no dir → neither script) and
+      hair LABELS still gate the groom script (no hair anywhere → no dead
+      tile), and the per-scene `exportHair` switch (v37) is untouched — it
+      gates the pass inside the bulk carriers, which is now the only place
+      that pass is inlined. The `rom-export` Content Library tile went with
+      the combined script it marked (`ScriptIcon` in csv.ts, artwork deleted);
+      the ROM script keeps its plain `rom` tile. Runtime v97 carries the
+      generated-script side.
 ```
 
 ## Generated-runtime versions (`RUNTIME_VERSION`)
@@ -1200,4 +1215,22 @@ v96 — the export block's hair pass gains a per-scene runtime gate: beside the
       NB: this number collides with what #901 (still open) reserved — per the
       monotonic rule its revert must now land on a number > 96.
       No migration step; schema v37 rides the same release.
+v97 — generated-script change only (runtime files untouched): the visible
+      scripts split one job each. `ROM_…` no longer carries an export block at
+      ALL (it ends at the ROM build + the rom-animations save, and its progress
+      log falls back to the 2-step 50/100 scale); `Export_…` is emitted
+      whenever an export dir is set rather than only when the retired
+      `exportWithRomScript` was off; the per-item hair pass is inlined ONLY in
+      the hidden bulk carriers, which is also the only place the v96
+      `dthHairExportByScene` gate is now emitted. The bulk carriers'
+      bodies are otherwise byte-identical to v96 (golden diff: the version
+      stamp and the header comment) — a DTH Export run is unchanged.
+      Behavior note for MANUAL runs: the ROM script used to export too, so a
+      hand-run now needs `Export_…` afterwards (and `Export_Hair_…` for
+      grooms). The `Export_…` script still HIDES hair around its export, so
+      grooms stay out of the main artifacts as before. Bumped so Refresh
+      assets regenerates every installed script into the three-script shape.
+      Pairs with schema v38 (both export-shape toggles removed).
+      NB: still above the > 96 floor #901's revert must clear — it must now
+      land on a number > 97.
 ```

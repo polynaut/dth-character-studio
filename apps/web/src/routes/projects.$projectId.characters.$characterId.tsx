@@ -735,12 +735,7 @@ function CharacterPage({ onImportRemount }: { onImportRemount: () => void }) {
         </div>
       </section>
 
-      <ScriptsSection
-        character={character}
-        scriptsPath={scriptsPath}
-        saving={draft.saving}
-        persistPatch={draft.persistPatch}
-      />
+      <ScriptsSection character={character} scriptsPath={scriptsPath} />
       </SceneLock>
 
       {/* NOT inside the lock: Delete must stay reachable for an abandoned

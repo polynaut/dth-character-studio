@@ -200,11 +200,12 @@ Press **Save**. Every save regenerates the character's files:
   [Into Houdini](./06-into-houdini.md#what-the-studio-gives-you) to grab it by
   hand.
 
-Two more appear **only when their feature is on**: **`Export_<Name>_G9.dsa`** (when
-an Export directory is set *and* *Run the export with the ROM script* is off), and
-**`Export_Hair_<Name>_G9.dsa`** (when the character lists
-[hair items](./advanced.md#hair-items--per-scene-kept-out-of-the-export)). Each gets
-its own **Content Library icon**, so you can tell them apart in Daz.
+Two more appear **when they apply**: **`Export_<Name>_G9.dsa`** (whenever an
+Export directory is set) and **`Export_Hair_<Name>_G9.dsa`** (when the character
+lists [hair items](./advanced.md#hair-items--per-scene-kept-out-of-the-export)).
+Every script does one job — the ROM script builds, the Export script exports, the
+Hair script grooms — and each gets its own **Content Library icon**, so you can
+tell them apart in Daz.
 
 A character with [per-scene ROM overrides](./advanced.md#rom-overrides) additionally
 gets per-scene PoseAsset CSVs — see

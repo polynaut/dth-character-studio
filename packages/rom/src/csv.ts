@@ -57,16 +57,18 @@ export const GENERATION_TEMPLATE_CSV: Partial<Record<GenesisVersion, string>> = 
 /**
  * Which Content Library artwork a generated Daz script carries. The KIND is
  * decided here, in the core, because it follows a generation rule the core
- * already owns — whether the export block is inlined into the ROM script or
- * split into its own — while the image bytes belong to the host (see
- * `SCRIPT_ICONS` in the web storage layer).
+ * already owns — which job a visible script does — while the image bytes belong
+ * to the host (see `SCRIPT_ICONS` in the web storage layer). One tile per job:
+ * the three visible scripts do one each.
+ *
+ * (There used to be a `rom-export` tile for the combined ROM+export script the
+ * `exportWithRomScript` toggle produced. The toggle is gone and the export is
+ * always its own script, so that tile has nothing left to mark.)
  */
 export type ScriptIcon =
-  /** ROM script that also runs the export (`exportWithRomScript`, the default). */
-  | 'rom-export'
-  /** ROM script alone: no export dir, or the export was split off. */
+  /** The `ROM_…` script: builds the ROM, exports nothing. */
   | 'rom'
-  /** The standalone `Export_…` script of a split export. */
+  /** The standalone `Export_…` script. */
   | 'export'
   /** The standalone `Export_Hair_…` groom (.abc) script. */
   | 'export-hair'

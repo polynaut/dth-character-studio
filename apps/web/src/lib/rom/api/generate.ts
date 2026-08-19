@@ -542,14 +542,18 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
       // below — otherwise the sweep, which lists the same names as candidates,
       // would delete the tiles the line above just produced.
       const writtenIcons = await storage.writeScriptIcons(charDir, dazFiles)
-      // Drop the other script variant when the combined/split choice changed, and
-      // the scan script when Daz Products is turned off: keep only the .dsa names
-      // just written (<base>, ROM_<base>, Export_<base>, Scan_Products_<slug>).
+      // Drop the scripts this character no longer generates — the export pair
+      // when its export dir is cleared, the hair script when its last hair item
+      // goes, the scan script when Daz Products is turned off: keep only the
+      // .dsa names just written (<base>, ROM_<base>, Export_<base>,
+      // Scan_Products_<slug>). The pre-v38 COMBINED ROM script needs nothing
+      // from the sweep — it had this same `ROM_<base>` name, so the ROM-only
+      // script and its plain tile simply overwrite it in place.
       // Scene-override scripts sweep the same way — the candidates of every
       // stored override minus what was just written, so disabling an override
       // (or unlinking its scene) retires its scripts. Each icon-bearing script
-      // name contributes its artwork twins as candidates too, so turning the
-      // split (or hair export) off retires that script's tiles with it.
+      // name contributes its artwork twins as candidates too, so a retired
+      // script takes its tiles with it.
       const dazBase = characterScriptName(character)
       const iconBearing = [
         `ROM_${dazBase}.dsa`,

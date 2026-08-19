@@ -117,20 +117,14 @@ if (dthSelPath == null || (dthSelPath != "" && !dthMatchesAsset(dthSelPath))) {
 }
 var dthSceneLinkErr = dthSceneLinkError();
 if (dthSceneLinkErr) {
-    // No modal: the Runner drives this one. `unattended` used to reach only
-    // the export block below, so the two guards that fire FIRST — and that a
-    // batch is most likely to hit — could still stop everything on a dialog.
-    print("DTH Character Studio: " + dthSceneLinkErr);
+    MessageBox.critical(dthSceneLinkErr, "DTH Character Studio", "&OK");
 } else if (dthCancelRequested()) {
     // Interrupted before this row's turn — skip the scene and say so (the
     // bulk carrier's twin; see the ROM script's branch for why it must speak).
     print("DTH Character Studio: the export was interrupted - this scene was skipped.");
     dthProgressLog(100, "skipped - the export was interrupted");
 } else if (!dthFig) {
-    // print only: this carrier has no dthWriteFailureLog (that lives in the ROM
-    // script), and the Runner's progress log below is what the studio reads.
-    print("DTH Character Studio: no G9 figure found in the scene - nothing was exported.");
-    dthProgressLog(100, "no figure found - nothing was exported");
+    MessageBox.critical("No G9 figure found in the scene - load the character's scene and re-run.", "DTH Character Studio", "&OK");
 } else {
     var dthExportLogPath = "C:/DTH/Project/.dcsmeta/characters/electra-g9/dth_rom_run_log.json";
     // Append a problem to the studio's run log, preserving whatever the ROM run
@@ -189,6 +183,7 @@ if (dthSceneLinkErr) {
     var dthExportAlert = function (dthAlertMsg) {
         print(dthAlertMsg);
         dthExportLogProblem(dthAlertMsg);
+        MessageBox.critical(dthAlertMsg, "DTH Character Studio", "&OK");
     };
     var dthExportAction = MainWindow.getActionMgr().findAction("DazToHueExporterAction");
     if (!dthExportAction) {
@@ -362,13 +357,6 @@ if (dthSceneLinkErr) {
         var dthGroomByScene = {"c:/dth/project/assets/characters/electra g9/daz3d/electra.duf":["dForce Ponytail"]};
         var dthGroomScene = dthOpenSceneFile.split("\\").join("/").toLowerCase();
         var dthGroomLabels = dthGroomByScene[dthGroomScene] || [];
-        // The per-scene "Export hair items" switch, resolved for the OPEN scene
-        // like the labels above. Only the hair PASS asks — the hide bracket below
-        // keeps hiding the items either way (they must stay out of the main
-        // export regardless of whether they also export on their own) — so it is
-        // emitted only where that pass is, which is the bulk carriers.
-        var dthHairExportByScene = {"c:/dth/project/assets/characters/electra g9/daz3d/electra.duf":true};
-        var dthHairExportOn = dthHairExportByScene[dthGroomScene] === true;
         var dthGroomHidden = [];
         var dthGroomHideTree = function (oNode) {
             if (!oNode) return;
@@ -406,107 +394,6 @@ if (dthSceneLinkErr) {
                     try { dthGroomHidden[dthGr].setVisible(true); } catch (eR) {}
                 }
                 print("Hair nodes shown again: " + dthGroomHidden.length);
-            }
-            // The hair pass: the Export_Hair per-item export, right after the main
-            // export — same action, same (scene-resolved) export dir. Per-scene
-            // switch first ("Export hair items", off by default on non-primary
-            // scenes), then gated on the main export having LANDED: over a
-            // restored previous set the grooms would mix one run's hair with
-            // another run's body.
-            if (!dthHairExportOn) {
-                print("Hair export is switched off for this scene - skipped.");
-            } else if (!dthExportLanded) {
-                print("Main export did not land - hair export skipped.");
-            } else {
-            var dthHairFig = Scene.getPrimarySelection();
-            while (dthHairFig && dthHairFig.getNodeParent()) dthHairFig = dthHairFig.getNodeParent();
-            var dthAssetFiles = ["genesis9.dsf"];
-            var dthAssetPath = function (oNode) {
-                try {
-                    if (oNode && typeof oNode.getAssetUri == "function") {
-                        var dthUri = oNode.getAssetUri();
-                        return String(dthUri && typeof dthUri.getFilePath == "function" ? dthUri.getFilePath() : dthUri).toLowerCase();
-                    }
-                    // DS6 has no getAssetUri() method - the assetUri PROPERTY is how the
-                    // runtime's auto-select succeeds there (measured; do not drop this).
-                    if (oNode && oNode.assetUri != undefined) return String(oNode.assetUri).toLowerCase();
-                } catch (eA) {}
-                return "";
-            };
-            var dthMatchesAsset = function (sPath) {
-                for (var dthAi = 0; dthAi < dthAssetFiles.length; dthAi++) {
-                    if (sPath.indexOf("/" + dthAssetFiles[dthAi]) >= 0 || sPath == dthAssetFiles[dthAi]) return true;
-                }
-                return false;
-            };
-            // The unreadable-asset tolerance applies ONLY to actual figures - a selected
-            // non-figure (a prop, Environment Options, ...) must never be accepted.
-            var dthFigIsFigure = dthHairFig && (dthHairFig.inherits("DzFigure") || dthHairFig.inherits("DzSkeleton"));
-            var dthSelPath = dthFigIsFigure ? dthAssetPath(dthHairFig) : null;
-            if (dthSelPath == null || (dthSelPath != "" && !dthMatchesAsset(dthSelPath))) {
-                // No/non-figure/wrong-asset selection - find the scene's G9 figure
-                // by ASSET identity (labels are user-renamable; the source .dsf is not).
-                var dthFound = null;
-                for (var dthFi = 0; dthFi < Scene.getNumNodes(); dthFi++) {
-                    var dthCand = Scene.getNode(dthFi);
-                    if (!dthCand || dthCand.getNodeParent()) continue;
-                    if (!dthCand.inherits("DzFigure") && !dthCand.inherits("DzSkeleton")) continue;
-                    if (dthMatchesAsset(dthAssetPath(dthCand))) { dthFound = dthCand; break; }
-                }
-                if (dthFound) {
-                    print("Auto-selected the G9 figure: " + dthFound.getLabel());
-                    Scene.selectAllNodes(false);
-                    dthFound.select(true);
-                    Scene.setPrimarySelection(dthFound);
-                }
-                // A wrong selection never survives - no match means fail loud downstream.
-                dthHairFig = dthFound;
-            }
-            if (!dthHairFig) {
-                print("No G9 figure found - hair export skipped.");
-            } else {
-                // Filename-safe slug for a hair item label (same rule as characterSlug).
-                function dthHairSlug(s) {
-                    var out = "";
-                    for (var dthSi = 0; dthSi < s.length; dthSi++) {
-                        var dthC = s.charAt(dthSi);
-                        if ((dthC >= "A" && dthC <= "Z") || (dthC >= "a" && dthC <= "z") || (dthC >= "0" && dthC <= "9") || dthC == "_") out += dthC;
-                    }
-                    return out || "Hair";
-                }
-                // Export EACH hair item ON ITS OWN: keep only that item (+ the Genesis
-                // body-part figures) fitted, HIDE every other wearable INCLUDING the other
-                // hair items (plugin 2.0+ skips hidden nodes), export as "<Name>_Hair_<item>",
-                // restore the exact flags — repeat per item.
-                for (var dthHxI = 0; dthHxI < dthGroomLabels.length; dthHxI++) {
-                    var dthKeepLabel = dthGroomLabels[dthHxI];
-                    dthGroomHidden = [];
-                    for (var dthHxN = 0; dthHxN < Scene.getNumNodes(); dthHxN++) {
-                        var dthHxNode = Scene.getNode(dthHxN);
-                        if (!dthHxNode || typeof dthHxNode.getFollowTarget != "function") continue;
-                        var dthHxT = dthHxNode.getFollowTarget();
-                        if (!dthHxT || String(dthHxT.getLabel()) != String(dthHairFig.getLabel())) continue;
-                        var dthHxLabel = String(dthHxNode.getLabel());
-                        // Keep the body-part figures (eyes/mouth/tear ride with the body)
-                        // and THIS hair item; hide everything else.
-                        if (dthHxLabel.indexOf("Genesis") == 0 || dthHxLabel == dthKeepLabel) continue;
-                        dthGroomHideTree(dthHxNode);
-                    }
-                    Scene.selectAllNodes(false);
-                    dthHairFig.select(true);
-                    Scene.setPrimarySelection(dthHairFig);
-                    try {
-                        var dthHairName = "ElectraG9_Hair_" + dthHairSlug(dthKeepLabel);
-                        dthExportAction.doExportAlembicGroomPoses(dthExportDir, dthHairName, false);
-                        print("Hair exported: " + dthKeepLabel + " -> " + dthHairName);
-                    } finally {
-                        for (var dthHxR = 0; dthHxR < dthGroomHidden.length; dthHxR++) {
-                            try { dthGroomHidden[dthHxR].setVisible(true); } catch (eR) {}
-                        }
-                    }
-                }
-                print("Hair items exported: " + dthGroomLabels.length);
-            }
             }
         }
         }
