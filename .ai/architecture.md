@@ -469,7 +469,7 @@ surface as a banner + add wizard instead of waiting for a manual pick/drop.
   Products tab. Both `generateCharacterFiles` (which emits the scan config +
   `Scan_Products_<Name>.dsa`) and `fetchProjectScanPlan` read the folder.
 - **Matching sees every mapped content directory, and the base-figure Morphs
-  roots (runtime v88).** `DthProducts.dsa` asks Daz itself
+  roots (runtime v95).** `DthProducts.dsa` asks Daz itself
   (`App.getContentMgr()`) for the mapped content directories — the
   studio-supplied `dazLibraryFolder` only seeds the list — and its
   content-folder synthesis also walks
@@ -479,23 +479,25 @@ surface as a banner + add wizard instead of waiting for a manual pick/drop.
   paths, and a "Folder Match" ties an asset's own source file to a real
   product's folders (for files past the manifest's 60-file cap). The matchers
   are VM-tested over an in-memory tree in `runtime.test.ts`.
-- **The last resort works from the asset's own evidence (runtime v89) —
-  measured on a real library where v88 still left 9 unmatched.** A morph
+- **The last resort works from the asset's own evidence (v95, same release) —
+  measured on a real library where the first iteration still left 9 unmatched.** A morph
   frequently exposes NO source file to the scan APIs (`getAssetUri` /
   `getAssetFileInfo` / `getAssetId` all empty while Parameter Settings shows
   the .dsf), so `matchContentFolderProducts` matches a morph to the morph FILE
-  named like it (`buildMorphFileIndex` / `matchMorphByFile`, v90): real
+  named like it (`buildMorphFileIndex` / `matchMorphByFile`): real
   products' manifest morph files ("Manifest Match"), real products' owned
   Morphs folders listed on disk via hidden `ownedBy` records — for files past
   the manifest's 60-file cap ("Folder Match") — and the synthesized morph-root
   folders (`morphRoot: true`, bounded BFS, "Content Folder Match"). Candidates
   are ranked: generation fit (vendors ship same-named morph files per
   generation) outweighs the parameter-path hint (a morph's Path often names
-  its product). Real caps sized from real packs (v91): `parseManifestFile`
-  keeps every morph basename as `morphKeys` beside the 60-capped `files`
-  (Shape Shift lists 166), and the folder listing budget is 40 dirs/400 files.
-  CHILD-NODE morphs are never collected at all (v91): a morph dialed on a
-  fitted item is the item's own fit morph or an auto-follow projection —
+  its product). Real caps sized from real packs: `parseManifestFile`
+  keeps every morph basename as `morphKeys` (each with its own file’s
+  generation tag, `morphGens`) beside the 60-capped `files` (Shape Shift
+  lists 166), and the folder listing budget is 40 dirs/400 files.
+  CHILD-NODE morphs are never collected at all: a node with a follow target
+  contributes none whatever its name (a geograft is routinely named for the
+  figure), and a morph dialed on a fitted item is the item's own fit morph or an auto-follow projection —
   matching them independently produced false positives on generic basenames
   ("Expand_All") — so `getUsedAssets` takes morphs only from root nodes and
   Genesis figures. FLAT texture layouts

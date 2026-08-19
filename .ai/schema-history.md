@@ -1103,87 +1103,68 @@ v80 — no unattended carrier opens a modal, and the missing-runtime message sto
       on a matching `v<N>` marker and the script header reads current, so the
       second one never reaches an install that already has the first.
       No schema change, no migration step.
- 88 — product scan matches hand-installed morphs and second-library content.
-      Three changes to DthProducts.dsa, motivated by a real library where a
-      manually-installed morph ("GC BodyMorph", no DIM manifest, no LOCAL_USER
-      metadata, installed under the base-figure Morphs root) sat unmatched: (1) `productFolderKey` learns the
-      STANDARD morph install layout — for a path under the base-figure root
-      ("data/DAZ 3D/Genesis 8/Female/Morphs/<Vendor>/<Product>/…") the
-      vendor/product pair sits after "Morphs/", not after "data/", so those
-      paths no longer collapse to "" (base content); (2) content-folder
-      synthesis walks those Morphs/<Vendor>/<Product> roots too, and BOTH
-      walks now cover every content directory Daz has mapped
-      (`App.getContentMgr()`), not just the one studio-configured library —
-      LOCAL_USER metadata and artist/version enrichment likewise read all
-      mapped directories; (3) a new "Folder Match" places an asset whose own
-      source file lives under a REAL product's vendor/product folder — the
-      folder-level analogue of the exact file match, for files the manifest's
-      60-file cap dropped (big morph packs) and for DIM-installed morphs under
-      the base-figure root. NOT v87: the open DS4 skip-guard revert (#901)
-      claimed that number while this was built — same two-runtimes-one-number
-      trap as v85/#894. No schema change, no migration step.
- 89 — product scan closes the three gaps a REAL v88 rescan still showed (same
-      library; evidence: the stored products.json + the _diagnostic files).
-      (1) Morph modifiers can expose NO source file at all — measured: every
-      unmatched asset stored sourceFile "", while Daz's Parameter Settings
-      shows the .dsf — so the v88 folder-key fix had nothing to key on; the
-      last resort now LISTS the synthesized morph-root folders and matches a
-      morph to the folder holding a .dsf named like it (basename index,
-      bounded). (2) FLAT texture layouts ("Runtime/textures/GC Lara Croft COD/
-      Backpack.jpg") made productFolderKey swallow the FILENAME as the product
-      segment ("gc lara croft cod/backpack.jpg" — garbage); a file where the
-      product folder should be now yields the single-folder key for texture
-      paths and "" for data paths. (3) A node whose textures live in a folder
-      NOTHING owns gets a product synthesized on demand from that folder
-      (nested → name+artist, flat → name only) — no filesystem walk, the
-      texture's existence proves the folder; the get-or-create groups sibling
-      parts (Backpack/Boots/Gloves/Holster/Shorts) under one product. v89 not
-      88 because a dev install had already stamped the v88 marker — a second
-      iteration inside one number never reinstalls (gotchas-daz.md).
+v88 — the v71 `dthSettle(1000)` pauses are REMOVED (helper and all three call
+      sites): the bulk ROM carrier no longer sleeps after the scene load, and
+      no carrier sleeps between the ROM build and the exporter — a DTH Export
+      paid up to ~2 s of artificial wait per scene. The pauses were
+      precautionary from the start (#795 added them without a measured
+      failure they fixed; "own precautions aren't evidence"), and every real
+      settling problem since was solved by its own targeted fix, not by the
+      sleep. If a scene-load race ever DOES surface, re-add a wait gated on
+      the actual condition being waited for, not a fixed timer. NOT v87:
+      PR #901 (open when this bump was written) holds that number for the DS4
+      sweep revert, and per the gotcha (`gotchas-daz.md`, measured on
+      #894/#895) the collision is INVISIBLE to git — both branches make the
+      identical `86 → 87` edit, so the merge is clean and nothing forces the
+      second lander to renumber. Skipping to 88 costs nothing (staleness is
+      `runtimeVersion < app.runtime`, so versions only have to be monotonic
+      and a gap is harmless if #901 never lands).
       No schema change, no migration step.
- 90 — a no-source-file morph belonging to a REAL product finds its way home.
-      The v89 basename matcher searched only SYNTHESIZED morph folders, but an
-      owned folder (e.g. Zev0/Shape Shift, manifest-backed) is excluded from
-      synthesis — so "Waist Shape" (real .dsf under the G8F Morphs root,
-      exposing no source file to the scan APIs) stayed unmatched. The basename
-      index now spans three sources: every installed product's manifest
-      morph-file list ("Manifest Match"), the real-owned Morphs folders listed
-      on disk via hidden ownedBy records (for files the manifest's 60-file cap
-      dropped — "Folder Match"), and the synthesized folders as before.
-      Candidates are RANKED, not first-wins: generation fit (the G8 file over
-      the G3 file for the same basename — vendors ship same-named morphs per
-      generation) outweighs the parameter-path hint (a morph's Path often
-      names its product: "Actor/Waist/Real World/Shape Shift/Waist").
-      v90 not 89: the dev install had stamped v89 (same reinstall trap as 88).
+v95 — the product scan matches hand-installed morphs, flat texture folders
+      and every mapped content directory. Four diagnosis rounds against ONE
+      real library (each fixing what the previous round's REAL rescan still
+      showed; evidence: the stored products.json + _diagnostic files), folded
+      into one released number:
+      (1) `productFolderKey` learns the STANDARD morph install layout — under
+      the base-figure root ("data/DAZ 3D/Genesis 8/Female/Morphs/<Vendor>/
+      <Product>/…") the vendor/product pair sits after "Morphs/", not after
+      "data/", so those paths no longer collapse to "" (base content). FLAT
+      texture layouts ("Runtime/textures/GC Lara Croft COD/Backpack.jpg") key
+      by the folder alone (the old two-segment key swallowed the filename).
+      (2) Content-folder synthesis walks the Morphs/<Vendor>/<Product> roots
+      too, and BOTH walks cover every content directory Daz has mapped
+      (`App.getContentMgr()`), not just the studio-configured library;
+      LOCAL_USER pickup and artist/version enrichment read all of them.
+      (3) A morph modifier can expose NO source file at all (measured:
+      getAssetUri / getAssetFileInfo / getAssetId all empty while Parameter
+      Settings shows the .dsf), so the last resort matches a morph to a morph
+      FILE named like it, over three ranked sources: real products' manifest
+      morph files ("Manifest Match" — `parseManifestFile` keeps EVERY morph
+      basename as `morphKeys` beside the 60-capped `files` list, each with
+      ITS OWN file's generation tag in `morphGens`; Shape Shift lists 166
+      files across G3+G8 and "Waist Shape.dsf" is #163), real products' owned
+      Morphs folders listed on disk via hidden ownedBy records ("Folder
+      Match", 40-dir/400-file budget), and the synthesized morph-root folders
+      ("Content Folder Match"). Generation fit is judged per FILE and
+      case-immune (a manifest's raw "Genesis 8" spelling counts), and
+      outweighs the parameter-path hint.
+      (4) CHILD-NODE morphs are never matched independently — a morph dialed
+      on a fitted item is the item's own fit morph or an auto-follow
+      projection (a generic "Expand_All" fit morph on a bikini basename-
+      matched an unrelated outfit's manifest). A node with a FOLLOW TARGET
+      never contributes morphs whatever its name ("Genesis 8 Female
+      Genitalia" is a geograft, not the figure); otherwise morphs come from
+      root nodes and Genesis figures (a grouped figure keeps its morphs).
+      (5) An unmatched node's unowned texture folder becomes a product ON
+      DEMAND (nested → name+artist, flat → name only), get-or-created so
+      sibling parts group under one product; skin folders stay excluded.
+      NOT 88–94: dev-install iterations stamped those numbers while this was
+      built (88–91 the four rounds; 92/93 a content-folder + matched-files
+      display retracted on request; 94 the retraction — content-wise v91),
+      and released v88 went to the settle-pause removal (#906) mid-
+      development. The reinstall trigger is an equality check but script
+      staleness is `runtimeVersion < app.runtime`, so the released number
+      must exceed every dev-stamped one or those installs read as fresh
+      forever. #901 (open) must land on a number > 95.
       No schema change, no migration step.
- 91 — two measured fixes from the v90 real rescan. (1) CHILD-NODE morphs are
-      never matched independently: a morph dialed on a fitted item (clothing,
-      hair, geograft) is the item's own fit morph or an auto-follow projection
-      of a figure morph — always part of the product that brought the node —
-      and matching them produced a real false positive (a generic "Expand_All"
-      fit morph on a bikini basename-matched an unrelated outfit's manifest)
-      plus one projected duplicate of every figure morph per fitted item.
-      getUsedAssets collects morphs only from root nodes and Genesis figures
-      (a grouped figure keeps its morphs). (2) The basename matcher's caps
-      were smaller than real packs: Shape Shift's manifest lists 166 morph
-      files and its ONE folder holds them all — "Waist Shape.dsf" is #163,
-      past both the manifest's 60-file cap and the folder listing's 80-file
-      cap, so it stayed unmatched. parseManifestFile now keeps the basename
-      KEYS of every morph file (`morphKeys`, ≤500, short strings) beside the
-      capped `files` list, and the folder listing budget is 40 dirs/400 files.
-      v91 not 90: the dev install had stamped v90 (same reinstall trap).
-      No schema change, no migration step.
- 92 — RETRACTED before any release (reverted in 94): the product row carried
-      its content folder in the source_file column, shown on the Products tab.
- 93 — RETRACTED before any release (reverted in 94): a folder-level match
-      recorded its evidence files in a trailing matched_files CSV column,
-      listed in the product's expanded row.
- 94 — reverts 92 + 93 at the user's request: the CSV is back to the v91
-      12-column shape (no contentFolder / matchedFiles anywhere — runtime,
-      parser, schema, UI). The number still moves FORWARD because the dev
-      machine's install marker and generated scripts are stamped v92/v93:
-      the reinstall trigger is an equality check but script staleness is
-      `runtimeVersion < app.runtime`, so shipping a smaller number would
-      leave those scripts reading as fresh forever. Runtime CONTENT is
-      byte-identical to v91. No schema change, no migration step.
 ```

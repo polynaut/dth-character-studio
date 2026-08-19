@@ -3,7 +3,7 @@
 '@dth/rom': minor
 ---
 
-The Daz product scan now recognises **hand-installed content the old matchers could never see** (runtime v94), so far fewer used assets land in "unmatched". The gaps closed — each verified against a real library's scan diagnostics:
+The Daz product scan now recognises **hand-installed content the old matchers could never see** (runtime v95), so far fewer used assets land in "unmatched". The gaps closed — each verified against a real library's scan diagnostics:
 
 - **Morphs installed under the figure's own data root** — the standard `data/DAZ 3D/Genesis 8/Female/Morphs/<Vendor>/<Product>/` layout — were written off wholesale as base DAZ content. The scan now synthesises a content-folder product for each such folder, and because a morph often exposes **no source file at all** to the scan APIs, it also matches a morph to the morph *file* named like it — searching real products' DIM manifests, real products' installed Morphs folders, and the synthesised folders, preferring the scene's own Genesis generation when vendors ship the same filename for several.
 - **Flat texture folders** (`Runtime/textures/<Product>/<file>.jpg`, common for freebie outfits) produced garbage folder keys — the filename was mistaken for the product segment. The folder alone is now the key, and an unmatched item's own texture folder becomes a product **on demand**, grouping sibling parts (Backpack, Boots, Gloves…) under the one folder product they share. Nested unowned texture folders (`Textures/<Vendor>/<Product>/`) work the same way, with the vendor as artist.

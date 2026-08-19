@@ -284,6 +284,23 @@ describe('ImageDialog vertical offset', () => {
     expect(screen.getByRole('button', { name: 'Reset' })).toHaveProperty('disabled', true)
   })
 
+  it('freezes all three offset controls while the persist is in flight', async () => {
+    // A value typed DURING a persist would be silently dropped when the dialog
+    // closes on success (the producer captured its offset at commit) — so the
+    // box must freeze with the slider and Reset, not stay editable.
+    let finish!: (v: null) => void
+    const onApply = vi.fn(() => new Promise<null>((r) => (finish = r)))
+    render(<ImageDialog {...baseProps} offsetY={4} onApply={onApply} />)
+    fireEvent.change(offsetSlider(), { target: { value: '6' } })
+    apply()
+    await waitFor(() => expect(onApply).toHaveBeenCalledTimes(1))
+    expect(offsetSlider().disabled).toBe(true)
+    expect(screen.getByTitle(/Percent of the picture/)).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Reset' })).toHaveProperty('disabled', true)
+    finish(null) // let the in-flight persist settle so nothing leaks past the test
+    await waitFor(() => expect(offsetSlider().disabled).toBe(false))
+  })
+
   it('clamps a typed value before it is saved — zod would reject anything past ±50', async () => {
     // Asserted on the COMMITTED value, not the slider: the track clamps its own
     // rendering regardless, so reading it back would pass over a missing clamp.

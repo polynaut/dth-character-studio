@@ -2085,22 +2085,14 @@ describe('exporter integration', () => {
     expect(bulk?.content).toContain('Export hair assets too')
     expect(bulk?.content).toContain('Main export did not land - hair export skipped.')
     expect(bulk?.content).not.toContain('dthBulkExport')
-    // Runtime v70: the Runner-driven script settles after the scene load
-    // (before the first scripted work) and again after the ROM build (before
-    // the exporter starts) — both through the emitted dthSettle helper.
-    expect(bulk?.content).toContain('function dthSettle(')
-    expect(bulk?.content).toContain('// scripted work touches it.\n        dthSettle(1000);')
-    expect(bulk?.content).toContain('// a beat before the exporter starts.\n            dthSettle(1000);')
-    // The VISIBLE ROM script runs interactively in an already-open scene — it
-    // settles before its export but never after a "load".
-    const visible = generateAll(character, {}, FRAMES, 'D:\\lib\\Electra').find(
-      (f) => f.fileName === 'ROM_Electra_G9.dsa',
-    )
-    expect(visible?.content).not.toContain('// scripted work touches it.')
+    // Runtime v88: the v71 dthSettle pauses are gone — no generated carrier
+    // sleeps at the automation seams anymore (they cost up to ~2 s per scene
+    // and never had a measured failure behind them).
+    expect(bulk?.content).not.toContain('dthSettle')
     const exportOnly = generateAll(character, {}, FRAMES, 'D:\\lib\\Electra').find(
       (f) => f.fileName === '.Bulk_Export_Only.dsa',
     )
-    expect(exportOnly?.content).toContain('dthSettle(1000);')
+    expect(exportOnly?.content).not.toContain('dthSettle')
     // No export dir → no bulk script at all (DTH Export needs one anyway).
     const files = generateAll(withReferencePose({ name: 'Electra' }), {}, FRAMES)
     expect(files.map((f) => f.fileName)).toEqual([

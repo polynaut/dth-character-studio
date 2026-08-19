@@ -55,7 +55,7 @@ const RUNTIME_ASSETS = [
 // Bump this together with RUNTIME_VERSION whenever a runtime file legitimately
 // changes (this run prints the new value in the failure message).
 const EXPECTED_RUNTIME_HASH =
-  'e0f1d30f4bd370db044c2028db0fe8e9872d43023cc4f428c2c81c89dd001874'
+  '333441f53757a05447294d714848d4973af5cf3a047748a97e156a499d56d438'
 
 function runtimeHash(): string {
   const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
@@ -1133,7 +1133,7 @@ interface MatchingModule {
   }
   parseManifestFile: (
     path: string,
-  ) => { name: string; files: Array<string>; morphKeys: Array<string> } | null
+  ) => { name: string; files: Array<string>; morphKeys: Array<string>; morphGens: Array<number> } | null
   getUsedAssets: () => Array<{ type: string; name: string }>
 }
 
@@ -1625,6 +1625,10 @@ describe('big morph packs past the caps (DthProducts.dsa)', () => {
     expect(product?.files).toHaveLength(60)
     expect(product?.morphKeys).toHaveLength(70)
     expect(product?.morphKeys).toContain('waistshape')
+    // Every key carries ITS OWN file's generation tag, read case-immune from
+    // the manifest's raw "Genesis 8" spelling.
+    expect(product?.morphGens).toHaveLength(70)
+    expect(product?.morphGens?.every((g: number) => g === 8)).toBe(true)
   })
 
   it('manifest-matches a morph whose file fell past the 60-file cap', () => {
@@ -1654,6 +1658,60 @@ describe('big morph packs past the caps (DthProducts.dsa)', () => {
         },
       ],
       [shapeShift],
+      8.1,
+      [],
+    )
+    expect(result.unmatched).toEqual([])
+    expect(result.matches[0].method).toBe('Manifest Match')
+    expect(result.matches[0].product.name).toBe('Shape Shift')
+  })
+
+  it('ranks by EACH file\'s generation, not the manifest\'s first sample', () => {
+    // One manifest lists both generations' copies (the real Shape Shift shape):
+    // the G3 copy sorts first, so a single morphSample would tag every key G3
+    // — and the raw "Genesis 8" casing must not defeat the check either. The
+    // morph's parameter path names neither product, so generation fit is the
+    // only signal; the wrong-generation product comes FIRST in the index to
+    // catch a first-wins tie.
+    const { findProductMatches } = loadMatching()
+    const wrongGen = {
+      name: 'Slim Shapes for Genesis 3',
+      sku: '11111-1',
+      artist: 'Other',
+      version: '1.0',
+      productType: 'Morphs',
+      files: [],
+      folders: ['other/slim shapes'],
+      morphKeys: ['waistshape'],
+      morphGens: [3],
+      morphSample: 'Content/data/DAZ 3D/Genesis 3/Female/Morphs/Other/Slim Shapes/Waist Shape.dsf',
+    }
+    const shapeShift = {
+      name: 'Shape Shift',
+      sku: '45723-1',
+      artist: 'Zev0',
+      version: '1.0',
+      productType: 'Morphs',
+      files: [],
+      folders: ['zev0/shape shift'],
+      morphKeys: ['bellydiameter', 'waistshape'],
+      morphGens: [3, 8], // the G3 belly file is listed first — per-key tags matter
+      morphSample: 'Content/data/DAZ 3D/Genesis 3/Female/Morphs/Zev0/Shape Shift/Belly Diameter.dsf',
+    }
+    const result = findProductMatches(
+      [
+        {
+          type: 'Morph',
+          name: 'Waist Shape',
+          technicalName: 'Waist Shape',
+          details: 'Value: -0.167',
+          value: -0.167,
+          sourceFile: '',
+          path: 'Actor/Waist/Real World/Waist',
+          textures: [],
+        },
+      ],
+      [wrongGen, shapeShift],
       8.1,
       [],
     )
@@ -1749,5 +1807,52 @@ describe('child-node morphs are the node product\'s own (DthProducts.dsa)', () =
     const morphs = assets.filter((a) => a.type === 'Morph').map((a) => a.name)
     expect(morphs).toEqual(['GC BodyMorph']) // the figure's copy only
     expect(assets.filter((a) => a.type === 'Node')).toHaveLength(2)
+  })
+
+  it('a FOLLOWING item never contributes morphs, even named after the figure', () => {
+    // Geografts are routinely named for the figure ("Genesis 8 Female
+    // Genitalia") — the genesis-name exception must not re-admit their
+    // projected morphs. A follow target outranks any name: following = fitted.
+    const channel = (v: number) => ({ getValue: () => v, getPath: () => 'Actor/Fit' })
+    const dzMorph = (name: string, v: number) => ({
+      inherits: (c: string) => c === 'DzMorph',
+      getValueChannel: () => channel(v),
+      getName: () => name,
+      getLabel: () => name,
+    })
+    const node = (
+      label: string,
+      name: string,
+      parent: unknown,
+      morphs: Array<unknown>,
+      followTarget: unknown = null,
+    ) => ({
+      getLabel: () => label,
+      getName: () => name,
+      className: () => 'DzNode',
+      getNodeParent: () => parent,
+      getFollowTarget: () => followTarget,
+      getObject: () => ({
+        getNumModifiers: () => morphs.length,
+        getModifier: (i: number) => morphs[i],
+        getCurrentShape: () => null,
+      }),
+    })
+    const figure = node('Genesis 8.1 Female', 'Genesis8_1Female', null, [
+      dzMorph('GC BodyMorph', 0.2),
+    ])
+    const graft = node(
+      'Genesis 8 Female Genitalia',
+      'Genesis8FemaleGenitalia',
+      figure,
+      [dzMorph('GC BodyMorph', 0.2)], // an auto-follow projection
+      figure, // fitted: it follows the figure
+    )
+    const mod = loadMatching([], undefined, [], { sceneNodes: [figure, graft] })
+    const morphs = mod
+      .getUsedAssets()
+      .filter((a) => a.type === 'Morph')
+      .map((a) => a.name)
+    expect(morphs).toEqual(['GC BodyMorph']) // the figure's copy only
   })
 })

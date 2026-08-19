@@ -257,12 +257,19 @@ function getUsedAssets() {
     // a product of their own. Matching them independently produced false
     // positives (a generic "Expand_All" fit morph on a bikini basename-matched
     // an unrelated outfit's manifest) and duplicate projected copies of every
-    // figure morph. Collect morphs only from root nodes and Genesis figures
-    // (the figure keeps its morphs even when the user grouped it).
+    // figure morph. A FITTED item (it follows a figure) never contributes
+    // morphs, whatever it is named — "Genesis 8 Female Genitalia" is a
+    // geograft, not the figure. Otherwise collect from root nodes and Genesis
+    // figures (the figure keeps its morphs even when the user grouped it).
+    var followTarget = null;
+    try {
+      if (typeof node.getFollowTarget == "function") followTarget = node.getFollowTarget();
+    } catch (eFollow) { /* no follow API on this build — the name rule decides */ }
     var collectMorphs =
-      !parentNode ||
-      nodeName.toLowerCase().indexOf("genesis") !== -1 ||
-      nodeLabel.toLowerCase().indexOf("genesis") !== -1;
+      !followTarget &&
+      (!parentNode ||
+        nodeName.toLowerCase().indexOf("genesis") !== -1 ||
+        nodeLabel.toLowerCase().indexOf("genesis") !== -1);
 
     var obj = collectMorphs ? node.getObject() : null;
     if (obj) {
@@ -490,12 +497,18 @@ function parseManifestFile(manifestPath) {
     // a big pack installs past #60 (measured: Shape Shift lists 166 —
     // "Waist Shape.dsf" is #163), and a no-source-file morph is matched by
     // exactly those basenames. Keep the basename KEYS of every morph file
-    // separately — short strings, cheap — plus one sample path for the
-    // generation ranking.
+    // separately — short strings, cheap — each with ITS OWN file's generation
+    // tag (a pack like Shape Shift lists G3 and G8 copies in ONE manifest, so
+    // a single sample path would mis-rank half the keys), plus one sample path
+    // for the product-segment ranking hint.
     var morphKeys = [];
+    var morphGens = [];
     for (var mK = 0; mK < morphFiles.length && morphKeys.length < 500; mK++) {
       var mkKey = manifestFileKey(morphFiles[mK]);
-      if (mkKey) morphKeys.push(mkKey);
+      if (mkKey) {
+        morphKeys.push(mkKey);
+        morphGens.push(pathGenerationOf(morphFiles[mK]));
+      }
     }
     var morphSample = morphFiles.length ? morphFiles[0] : "";
 
@@ -526,6 +539,7 @@ function parseManifestFile(manifestPath) {
         files: dataFiles,
         folders: folders,
         morphKeys: morphKeys,
+        morphGens: morphGens,
         morphSample: morphSample,
       };
     }
@@ -1721,18 +1735,33 @@ function textureFolderProduct(rawPath, key) {
   };
 }
 
+// The Genesis generation a content path names (9/8/3/2, 0 when none) — case-
+// immune, so a manifest's raw "Genesis 8" spelling and a lowercased folder-walk
+// path read the same.
+function pathGenerationOf(p) {
+  var low = String(p || "").toLowerCase();
+  if (low.indexOf("genesis 9") !== -1) return 9;
+  if (low.indexOf("genesis 8") !== -1) return 8;
+  if (low.indexOf("genesis 3") !== -1) return 3;
+  if (low.indexOf("genesis 2") !== -1) return 2;
+  return 0;
+}
+
+// Does a generation tag fit the scene's figure? Genesis 8 content serves both
+// 8 and 8.1 scenes (8.1 lives under the "Genesis 8" data root).
+function generationFitsScene(gen, v) {
+  if (!gen || !v) return false;
+  if (gen === 8) return v === 8 || v === 8.1;
+  return gen === v;
+}
+
 // Does a content path belong to the scene's Genesis generation's figure root?
 // Used only to RANK basename candidates — vendors ship same-named morph files
 // for several generations (Shape Shift installs a "Waist Shape.dsf" under both
 // the G3 and the G8 Morphs roots), and the file under the scene's own figure
 // root is the one actually loaded.
-function pathMatchesGenesis(lowPath, v) {
-  if (!v) return false;
-  if (v === 9) return lowPath.indexOf("genesis 9") !== -1;
-  if (v === 8 || v === 8.1) return lowPath.indexOf("genesis 8") !== -1;
-  if (v === 3) return lowPath.indexOf("genesis 3") !== -1;
-  if (v === 2) return lowPath.indexOf("genesis 2") !== -1;
-  return false;
+function pathMatchesGenesis(path, v) {
+  return generationFitsScene(pathGenerationOf(path), v);
 }
 
 // Normalise for containment checks against a morph's parameter path: lowercase,
@@ -1772,9 +1801,17 @@ function buildMorphFileIndex(installedProducts, synthProducts, sceneGenesisVersi
     var product = installedProducts[p];
     if (product.morphKeys && product.morphKeys.length) {
       var sSeg = segOfKey(productFolderKey(product.morphSample));
-      var sGen = pathMatchesGenesis(String(product.morphSample || ""), sceneGenesisVersion);
+      // Generation fit is PER FILE (morphGens rides beside morphKeys): one
+      // manifest can list the same basename for several generations, and only
+      // the copy under the scene's figure root should collect the gen bonus.
+      var gens = product.morphGens && product.morphGens.length === product.morphKeys.length
+        ? product.morphGens
+        : null;
       for (var mk = 0; mk < product.morphKeys.length; mk++) {
-        add(product.morphKeys[mk], product, "Manifest Match", sSeg, sGen);
+        var mkGen = gens
+          ? generationFitsScene(gens[mk], sceneGenesisVersion)
+          : pathMatchesGenesis(product.morphSample, sceneGenesisVersion);
+        add(product.morphKeys[mk], product, "Manifest Match", sSeg, mkGen);
       }
       continue;
     }
