@@ -567,18 +567,13 @@ export function DthExportAction({
   const unrealWatchRef = useRef('')
 
   /** One send line, typed by what happened so the toast layer never has to
-   *  sniff its own strings: `queued` = clean (silent — the rows carry it),
-   *  `skipped` = queued but with sets dropped (warning), `refused` = nothing
-   *  queued (error). The `line` itself still rides the final report as text;
-   *  `warning` is the toast-shaped version of a skip — ONLY the drop, because
-   *  a warning that repeats the queue reads as the queue having failed
-   *  (measured 2026-08-19: "queued for workflow3d — LaraClassic (not in that
-   *  project yet…" was read as LaraClassic not being in the project, on a
-   *  send that worked). */
+   *  sniff its own strings: `queued` = clean, `skipped` = queued but with
+   *  sets dropped, `refused` = nothing queued. The `line` rides the final
+   *  report as text; which kinds TOAST is {@link emitUnrealSendToasts}'s
+   *  decision. */
   interface UnrealSendLine {
     kind: 'queued' | 'skipped' | 'refused'
     line: string
-    warning?: string
   }
 
   /**
@@ -648,8 +643,6 @@ export function DthExportAction({
                 // The report line carries both halves; the sentence break keeps
                 // the skip from reading as a clause about the QUEUED sets.
                 line: `Unreal: queued for ${name} — ${sets}. Not sent (never imported there): ${started.skipped.join(', ')} — make the first import in Unreal itself.`,
-                // The toast says ONLY the drop — the queue is the rows' story.
-                warning: `Unreal: not sent to ${name} — ${started.skipped.join(', ')}: never imported there, and the send is re-import only. Make the first import in Unreal itself; runs refresh it from then on.`,
               }
             : { kind: 'queued', line: `Unreal: queued for ${name} — ${sets}` }
         } catch (error) {
@@ -674,19 +667,27 @@ export function DthExportAction({
   }
 
   /**
-   * Toasts for the send, by outcome — and a CLEAN queue gets none. Queuing is
-   * mid-run news, and the run's own task rows + status line already say it
-   * ("a toast repeating the progress bar", reported 2026-08-19); the leg's
-   * real report is {@link unrealOutcomeToast}, when the editor answers. What
-   * still speaks here is what the rows cannot carry: a refusal is an ERROR
-   * (it used to ride a blue (i) over a still-spinning row, reading as a
-   * shrug), and a dropped set is a WARNING — silent, the run would read as
-   * "everything reached Unreal" about a set that never went.
+   * Toasts for the send — and ONLY a refusal speaks. Queuing is mid-run news
+   * the task rows + status line already carry ("a toast repeating the
+   * progress bar", reported 2026-08-19); the leg's real report is
+   * {@link unrealOutcomeToast}, when the editor answers. A refusal is an
+   * ERROR: it used to ride a blue (i) over a still-spinning row, reading as
+   * a shrug.
+   *
+   * A `skipped` entry toasts NOTHING here, deliberately. Both callers are
+   * "use last exports" sends, whose whole promise — stated on the panel row
+   * ("Already has what this run sends") — is refreshing what that project
+   * already holds; the export folder holding MORE than that is the steady
+   * state, not a drop from the promise, and warning about it fired on every
+   * repeat send about variants the user keeps out of that project on purpose
+   * (reported twice, 2026-08-19: "again…"/"we don't need that toast"). The
+   * run's scope stays visible — only what goes gets a task row — and a set a
+   * real EXPORT run produced that then didn't land still rides the final
+   * report, which is the case where the drop is genuine news.
    */
   function emitUnrealSendToasts(lines: Array<UnrealSendLine>) {
-    for (const { kind, line, warning } of lines) {
+    for (const { kind, line } of lines) {
       if (kind === 'refused') toast.error(line, { duration: Infinity })
-      else if (kind === 'skipped') exportWarningToast(warning ?? line)
     }
   }
 

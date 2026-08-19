@@ -348,12 +348,12 @@ test('ONE task row per re-import — and a set the project never held is dropped
   await expect(rows.filter({ hasText: 'KiraDefault' })).toContainText('Re-import · DemoGame')
   await expect(rows.filter({ hasText: 'KiraSummertide' })).toHaveCount(0)
 
-  // The drop is SAID — silently skipping a set would read as "everything
-  // reached Unreal" — and the warning carries ONLY the drop: repeating the
-  // queue in it made the queued set read as the one that was refused.
-  await expect(page.getByText(/not sent to DemoGame — KiraSummertide/)).toBeVisible({
-    timeout: 15_000,
-  })
+  // NO warning about the dropped set on a "use last exports" send: refreshing
+  // what the project holds is that run's whole promise (the panel row said
+  // so), and the folder holding more is the steady state — a warning here
+  // fired on every repeat send about variants kept out of that project on
+  // purpose. The scope is the rows: KiraSummertide simply has none.
+  await expect(page.getByText(/not sent/i)).toHaveCount(0)
 
   // The status line carries the leg's newest word — one line, not a transcript.
   await expect(page.locator('[data-export-status]')).toContainText(
