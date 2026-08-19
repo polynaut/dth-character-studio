@@ -120,6 +120,18 @@ import { DthExportPanel } from './dth-export/panel.tsx'
  */
 const CARRIED_WARNING_PREFIX = '⚠ '
 
+/**
+ * A carried warning's `<project>: <complaint>` body — without saying one name
+ * twice. `run.problems` entries already lead with the node's scene (or its
+ * path — see `houdiniRunStateFrom`), and a single-scene project usually names
+ * scene and `.hip` alike, so blindly prefixing the project produced
+ * `Kira: Kira: No bone scale reference found` (measured in the leg-reload
+ * smoke). The project prefix is only added when it says something new.
+ */
+function labelledWarning(label: string, problem: string): string {
+  return problem.startsWith(`${label}: `) ? problem : `${label}: ${problem}`
+}
+
 export function DthExportAction({
   projectId,
   character,
@@ -784,7 +796,7 @@ export function DthExportAction({
             ...(report?.houdini.flatMap((leg) => [
               leg.line,
               ...(leg.warnings ?? []).map(
-                (problem) => `${CARRIED_WARNING_PREFIX}${leg.label ?? 'Houdini'}: ${problem}`,
+                (problem) => `${CARRIED_WARNING_PREFIX}${labelledWarning(leg.label ?? 'Houdini', problem)}`,
               ),
             ]) ?? []),
           ],

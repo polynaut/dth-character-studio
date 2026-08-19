@@ -67,9 +67,12 @@ async function openMidLeg(
 }
 
 /** Stand in for 456.py finishing the project it was working on. */
-async function houdiniReportsDone(page: import('@playwright/test').Page) {
+async function houdiniReportsDone(
+  page: import('@playwright/test').Page,
+  problems: Array<string> = [],
+) {
   await page.evaluate(
-    ([result]) => {
+    ([result, probs]) => {
       ;((window as any).__tauriMock.files as Map<string, string>).set(result, JSON.stringify({
         version: 1,
         state: 'done',
@@ -81,13 +84,13 @@ async function houdiniReportsDone(page: import('@playwright/test').Page) {
             type: 'daztohueexport',
             scene: 'Kira',
             status: 'ok',
-            problems: [],
+            problems: probs,
             seconds: 9.5,
           },
         ],
       }))
     },
-    [HOUDINI_RESULT],
+    [HOUDINI_RESULT, problems] as const,
   )
 }
 
@@ -129,7 +132,11 @@ test('a reload mid-Houdini-leg keeps watching, and the QUEUED project still runs
 
   // THE POINT: when this project finishes, the queued one starts — that is
   // what a reload used to drop on the floor, with no error anywhere.
-  await houdiniReportsDone(page)
+  // It finishes WITH a pre-flight complaint: the plan rewritten for the queued
+  // leg must carry it as a `⚠ `-prefixed report line (the encode half of the
+  // carried-warning contract — the decode half is pinned in the one-report
+  // spec below), or a reload between legs silently drops the warning.
+  await houdiniReportsDone(page, ['No bone scale reference found'])
   // Poll the LAUNCH, not the job file: the job file is seeded (the run was
   // already in flight), so it proves nothing about the queue moving on.
   await expect
@@ -145,6 +152,11 @@ test('a reload mid-Houdini-leg keeps watching, and the QUEUED project still runs
       { timeout: 20_000 },
     )
     .toContain(HOUDINI_2)
+  // The rewritten plan carries the finished leg's warning in the sidecar's
+  // string-array wire form: `⚠ <project>: <complaint>`.
+  await expect
+    .poll(() => fileContent(page, RUN_PLAN))
+    .toContain('⚠ Kira: No bone scale reference found')
 })
 
 test('the restored run still delivers ONE report, naming the legs it never saw', async ({
@@ -162,7 +174,14 @@ test('the restored run still delivers ONE report, naming the legs it never saw',
     startedAtMs: Date.now() - 120_000,
     remaining: [],
     sceneScope: [P.scene],
-    reportLines: ['Daz: 1/1 scene exported in 2m 03s'],
+    // The Daz line AND a finished leg's warning, exactly as the gone window
+    // encoded them (see CARRIED_WARNING_PREFIX in dth-export.tsx) — the decode
+    // half of the carried-warning contract; the encode half is pinned in the
+    // queued-project spec above.
+    reportLines: [
+      'Daz: 1/1 scene exported in 2m 03s',
+      '⚠ KiraFirst: No bone scale reference found',
+    ],
     anyFailed: false,
   })
   await expect(page.getByRole('button', { name: /Working/ })).toBeVisible({ timeout: 15_000 })
@@ -171,6 +190,12 @@ test('the restored run still delivers ONE report, naming the legs it never saw',
   await expect(page.getByText(/DTH Export finished/)).toBeVisible({ timeout: 15_000 })
   await expect(page.getByText(/Daz: 1\/1 scene exported in 2m 03s/)).toBeVisible()
   await expect(page.getByText(/Kira: 1 exported/)).toBeVisible()
+  // The carried warning is a WARNING toast of its own in the adopting window —
+  // never a line in the (green) report body, and never rendered with its wire
+  // prefix.
+  await expect(page.getByText('Exported with warnings')).toBeVisible()
+  await expect(page.getByText('KiraFirst: No bone scale reference found')).toBeVisible()
+  await expect(page.getByText(/⚠/)).toHaveCount(0)
   // The plan dies with the run — a later reload must not adopt a finished one.
   await expect.poll(() => fileContent(page, RUN_PLAN)).toBeNull()
 })
