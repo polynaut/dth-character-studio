@@ -65,6 +65,20 @@ export function exportWarningToast(title: string, description: string): void {
 }
 
 /**
+ * The Unreal leg's own finish line — the run's LAST word, landing minutes
+ * after the run report fired (the editor answers on its own clock), so it is
+ * a sticky toast of its own: writing it under {@link EXPORT_TOAST_ID} would
+ * REPLACE the report it belongs beside. Tracked like the warnings, so a new
+ * run or the editor unmounting sweeps it with the rest.
+ */
+export function unrealOutcomeToast(
+  kind: 'success' | 'warning' | 'error',
+  title: string,
+): void {
+  warningToastIds.push(toast[kind](title, { duration: Infinity }))
+}
+
+/**
  * The ONE way to raise the export run's finish report.
  *
  * Five paths end a run, all writing the same sticky toast id — and sonner
