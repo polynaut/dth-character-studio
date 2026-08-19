@@ -150,9 +150,9 @@ function SceneCard({
       }
       extra={
         // Stacked rows under the title: the path chip always second, the badge
-        // row third — the hair glyph FIRST (lit = the DTH Export flow exports
-        // this scene's hair items, dimmed = it doesn't; the Scene utils switch
-        // decides), then the PRIMARY label on the primary card. The chip is
+        // row third — the PRIMARY label first on the primary card, then the
+        // hair glyph (lit = the DTH Export flow exports this scene's hair
+        // items, dimmed = it doesn't; the Scene utils switch decides). The chip is
         // interactive (copy / Alt-reveal / edit-to-move) — the card's extra
         // block sits ABOVE the cover button (LinkedAssetCard), so its clicks
         // are its own and never select/open the card. The chip's 1px offset is
@@ -160,6 +160,12 @@ function SceneCard({
         <span className="flex flex-col items-start gap-2">
           {pathChip && <span className="relative top-[1px]">{pathChip}</span>}
           <span className="flex items-center gap-1.5">
+            {primary && (
+              <PrimaryBadge
+                dense
+                title="The character's primary scene — it can't be unlinked; the folder button replaces it with another scene, while it is the only one linked"
+              />
+            )}
             <span
               title={
                 hairExportOn
@@ -176,12 +182,6 @@ function SceneCard({
             >
               <Waves className="size-4" aria-hidden />
             </span>
-            {primary && (
-              <PrimaryBadge
-                dense
-                title="The character's primary scene — it can't be unlinked; the folder button replaces it with another scene, while it is the only one linked"
-              />
-            )}
           </span>
         </span>
       }
