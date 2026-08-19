@@ -415,6 +415,11 @@ export type HoudiniRunState =
        *  with Yes, so this is the ONLY place those warnings ever surface — and
        *  the result file they came from is deleted right after this snapshot. */
       problems: Array<string>
+      /** Every network with its FINAL status — the running state's list, held
+       *  through the finish. The counts above can say "1 ok, 1 failed" but not
+       *  WHICH; the task cards need which, and they need it precisely at the
+       *  moment the running state (their previous source) disappears. */
+      networks: Array<{ label: string; status: 'ok' | 'skipped' | 'failed' | 'waiting' }>
       /** The run stopped because the studio interrupted it — the counts are
        *  real, but they are not the whole batch. */
       cancelled: boolean
@@ -566,6 +571,10 @@ export function houdiniRunStateFrom(
   return {
     state: 'finished',
     ...counts,
+    // Same list the running state carried, now with every status final —
+    // 456.py resolves every node before writing `done` (unreached ones are
+    // `skipped` on an interrupt), so nothing here should still be `waiting`.
+    networks: houdiniNetworks(result),
     summary: houdiniResultSummary(result),
     cancelled: result.cancelled,
     error: result.state === 'failed' ? result.error || 'the run failed in Houdini' : result.error,
