@@ -622,12 +622,44 @@ export function DthExportAction({
             : `Unreal: queued for ${name} — ${sets}`
         } catch (error) {
           // A refusal here (no bridge, no export) must not read as an export
-          // failure: the Houdini leg is done and its output is on disk.
+          // failure: the Houdini leg is done and its output is on disk. But it
+          // must land in this target's ROWS — they were published as pending
+          // work, and with no job ever written nothing else advances them, so
+          // they spun "active" at 0% forever (measured 2026-08-19, against a
+          // bridge a `p4 clean` had deleted).
+          const armed = pipelineRef.current
+          const target = armed?.unreal.find((one) => one.path === uprojectPath)
+          if (target) target.failed = true
+          unrealStatusRef.current = `Unreal; not queued for ${name}`
           return `Unreal: not queued for ${name} — ${error instanceof Error ? error.message : String(error)}`
         }
       }),
     )
     return lines
+  }
+
+  /**
+   * One toast per send line, styled by its outcome. A refused send used to
+   * ride the same blue (i) toast as a queued one — "Runner is not installed"
+   * under an info icon, over a still-spinning row, reads as a shrug, not a
+   * failure. And the "open the editor" hint belongs ONLY to lines that queued
+   * something: a line that queued nothing must not tell the user to open an
+   * editor that would do nothing with it.
+   */
+  function emitUnrealSendToasts(lines: Array<string>) {
+    for (const line of lines) {
+      // The prefix is `sendToUnreal`'s own catch-branch spelling — built and
+      // read in the same function's orbit, never user text.
+      if (line.startsWith('Unreal: not queued')) {
+        toast.error(line, { duration: Infinity })
+      } else {
+        toast.info(line, {
+          duration: Infinity,
+          description:
+            'The bridge imports it when that project is open in Unreal — open the editor if it is closed.',
+        })
+      }
+    }
   }
 
   /** This run was interrupted — the fact the END-OF-RUN report needs, kept
@@ -998,9 +1030,7 @@ export function DthExportAction({
       if (run.unrealProjects.length > 0 && failedTotal < run.total) {
         unrealTargetsRef.current = run.unrealProjects
         unrealSetsRef.current = run.unrealSets
-        void sendToUnreal().then((lines) => {
-          if (lines.length > 0) toast.info(lines.join('\n'), { duration: Infinity })
-        })
+        void sendToUnreal().then(emitUnrealSendToasts)
       }
       return
     }
@@ -1505,14 +1535,10 @@ export function DthExportAction({
             }
             publishPipeline(null, null)
             void sendToUnreal().then((lines) => {
+              // Re-publish AFTER the send: a refused target marked its rows
+              // failed, and this is what turns them red instead of spinning.
               publishPipeline(null, null)
-              if (lines.length > 0) {
-                toast.info(lines.join('\n'), {
-                  duration: Infinity,
-                  description:
-                    'The bridge imports it when that project is open in Unreal — open the editor if it is closed.',
-                })
-              }
+              emitUnrealSendToasts(lines)
             })
           }}
         />
