@@ -349,13 +349,30 @@ test('ONE task row per re-import — and a set the project never held is dropped
   await expect(rows.filter({ hasText: 'KiraSummertide' })).toHaveCount(0)
 
   // The drop is SAID — silently skipping a set would read as "everything
-  // reached Unreal".
-  await expect(page.getByText(/not sent: KiraSummertide/)).toBeVisible({ timeout: 15_000 })
+  // reached Unreal" — and the warning carries ONLY the drop: repeating the
+  // queue in it made the queued set read as the one that was refused.
+  await expect(page.getByText(/not sent to DemoGame — KiraSummertide/)).toBeVisible({
+    timeout: 15_000,
+  })
 
   // The status line carries the leg's newest word — one line, not a transcript.
   await expect(page.locator('[data-export-status]')).toContainText(
     /Unreal; queued for DemoGame/,
   )
+
+  // The bridge claims the job and says `running` before the (blocking) work —
+  // the panel must move off "waiting" then, not sit on it until the outcome.
+  await page.evaluate((dir: string) => {
+    const mock = (window as any).__tauriMock
+    mock.files.delete(`${dir}/Saved/DTHStudio/job.json`)
+    mock.files.set(
+      `${dir}/Saved/DTHStudio/result.json`,
+      JSON.stringify({ version: 4, state: 'running', error: '', imports: [] }),
+    )
+  }, UPROJECT_DIR)
+  await expect(page.locator('[data-export-status]')).toContainText(/DemoGame is importing/, {
+    timeout: 15_000,
+  })
 
   // …and when the editor finally answers, the outcome ENDS the run: a sticky
   // toast of its own, and the panel goes with the work it was showing — it

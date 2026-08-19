@@ -569,10 +569,16 @@ export function DthExportAction({
   /** One send line, typed by what happened so the toast layer never has to
    *  sniff its own strings: `queued` = clean (silent — the rows carry it),
    *  `skipped` = queued but with sets dropped (warning), `refused` = nothing
-   *  queued (error). The `line` itself still rides the final report as text. */
+   *  queued (error). The `line` itself still rides the final report as text;
+   *  `warning` is the toast-shaped version of a skip — ONLY the drop, because
+   *  a warning that repeats the queue reads as the queue having failed
+   *  (measured 2026-08-19: "queued for workflow3d — LaraClassic (not in that
+   *  project yet…" was read as LaraClassic not being in the project, on a
+   *  send that worked). */
   interface UnrealSendLine {
     kind: 'queued' | 'skipped' | 'refused'
     line: string
+    warning?: string
   }
 
   /**
@@ -614,9 +620,18 @@ export function DthExportAction({
           // seconds is the bridge's poll (1s) with room for a slow start; the
           // api refuses when anything is already running.
           window.setTimeout(() => {
-            void openUnrealForPendingJob({ data: { uprojectPath } }).catch(() => {
-              // queued either way — a failed launch is not a failed send
-            })
+            void openUnrealForPendingJob({ data: { uprojectPath } })
+              .then((launched) => {
+                // The status line says what is actually happening — an editor
+                // takes a while to come up, and "waiting for the editor to
+                // pick the job up" over a splash screen reads as stuck.
+                if (!launched || unrealWatchRef.current !== uprojectPath) return
+                unrealStatusRef.current = `Unreal; opening ${name} — the import starts on its own once the editor is up`
+                publishPipeline(progressRef.current, houdiniRef.current)
+              })
+              .catch(() => {
+                // queued either way — a failed launch is not a failed send
+              })
           }, 5000)
           // The status line gets the same news the report will, as it happens.
           unrealStatusRef.current = `Unreal; queued for ${name} — waiting for the editor to pick the job up`
@@ -630,7 +645,11 @@ export function DthExportAction({
           return started.skipped.length > 0
             ? {
                 kind: 'skipped',
-                line: `Unreal: queued for ${name} — ${sets} (not in that project yet, so not sent: ${started.skipped.join(', ')} — make the first import in Unreal itself)`,
+                // The report line carries both halves; the sentence break keeps
+                // the skip from reading as a clause about the QUEUED sets.
+                line: `Unreal: queued for ${name} — ${sets}. Not sent (never imported there): ${started.skipped.join(', ')} — make the first import in Unreal itself.`,
+                // The toast says ONLY the drop — the queue is the rows' story.
+                warning: `Unreal: not sent to ${name} — ${started.skipped.join(', ')}: never imported there, and the send is re-import only. Make the first import in Unreal itself; runs refresh it from then on.`,
               }
             : { kind: 'queued', line: `Unreal: queued for ${name} — ${sets}` }
         } catch (error) {
@@ -665,9 +684,9 @@ export function DthExportAction({
    * "everything reached Unreal" about a set that never went.
    */
   function emitUnrealSendToasts(lines: Array<UnrealSendLine>) {
-    for (const { kind, line } of lines) {
+    for (const { kind, line, warning } of lines) {
       if (kind === 'refused') toast.error(line, { duration: Infinity })
-      else if (kind === 'skipped') exportWarningToast(line)
+      else if (kind === 'skipped') exportWarningToast(warning ?? line)
     }
   }
 
@@ -879,6 +898,20 @@ export function DthExportAction({
     if (!uprojectPath) return
     const state = await fetchUnrealImportProgress({ data: { uprojectPath } }).catch(() => null)
     setUnrealState(state)
+    // The claim is news, and the panel must SAY it: the bridge writes a
+    // `running` result before the work, but nothing here re-published, so the
+    // line sat on "waiting for the editor to pick the job up" through the
+    // whole import and then jumped to the outcome (measured 2026-08-19). The
+    // freeze is named because it is real: the import blocks Unreal's game
+    // thread for minutes, and an unresponsive editor over a "waiting" line
+    // reads as a hang.
+    if (state?.state === 'running') {
+      const running = `Unreal; ${stemOf(uprojectPath)} is importing — the editor freezes while the DazToHue pipeline runs`
+      if (unrealStatusRef.current !== running) {
+        unrealStatusRef.current = running
+        publishPipeline(progressRef.current, houdiniRef.current)
+      }
+    }
     if (state?.state !== 'finished') return
     unrealWatchRef.current = ''
     const what = state.reimported ? 're-imported' : 'imported'
