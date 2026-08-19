@@ -13,6 +13,7 @@ import { GuideLink } from '#/components/guide-link.tsx'
 import { PrimaryBadge } from '#/components/primary-badge.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import type { SceneDockActions } from '#/components/character/scene-footer.tsx'
+import { DazSceneUtilsPanel } from '#/components/character/daz-scene-utils-panel.tsx'
 import { SceneCopyDialog } from '#/components/scene-copy-dialog.tsx'
 import { CardReorderContext, SortableCard } from '#/components/sortable-cards.tsx'
 import dazLogo from '#/assets/daz-logo.png'
@@ -75,6 +76,7 @@ function SceneCard({
   onReplace,
   replaceDisabled,
   replaceReason,
+  onUtils,
   primary,
   selected,
   onSelect,
@@ -99,6 +101,9 @@ function SceneCard({
   replaceDisabled?: boolean
   /** Tooltip for the replace button; the REASON when it is disabled. */
   replaceReason?: string
+  /** Opens the scene's Utils drawer (scans + the per-scene hair-export switch)
+   *  — the 🔧 in the card's corner cluster, like the Houdini cards'. */
+  onUtils?: () => void
   /** The character's original creation scene — gets a "primary" badge and is not
    *  unlinkable (the caller omits onRemove and passes onReplace instead). */
   primary?: boolean
@@ -170,6 +175,11 @@ function SceneCard({
       onReplace={onReplace}
       replaceDisabled={replaceDisabled}
       replaceTitle={replaceReason ?? 'Replace with another Daz scene…'}
+      onUtils={onUtils}
+      // "Scene utils", not "Utils": the accessible name is how tests (and
+      // screen readers) tell this drawer's button apart from the Houdini
+      // cards' "Utils — …" on the same page.
+      utilsTitle="Scene utils — scans + hair export for this scene"
       selected={selected}
       onSelect={onSelect}
     />
@@ -307,6 +317,7 @@ export function DazSceneField({
   dockActionsRef,
   onScenesRemoved,
   onRomRebuildStarted,
+  dazProductsEnabled,
 }: {
   projectId: string
   character: Character
@@ -345,8 +356,14 @@ export function DazSceneField({
    *  supersedes nothing else. An array because it is the same "these scenes are
    *  history" signal the DTH Export handoff sends for its whole selection. */
   onRomRebuildStarted?: (scenePaths: ReadonlyArray<string>) => void
+  /** The project's "Daz Products" opt-in — threaded into the scene Utils drawer
+   *  so its product-scan button can explain itself instead of failing. */
+  dazProductsEnabled: boolean
 }) {
   const [busy, setBusy] = useState(false)
+  // The scene whose Utils drawer is open ('' = closed) — the path IS the scope,
+  // like the Houdini cards' drawer.
+  const [utilsFor, setUtilsFor] = useState('')
   const [error, setError] = useState('')
   // A scene click while Daz is already running: the studio can't switch a running
   // Daz's scene, so this holds the clicked scene path to drive the warning dialog.
@@ -1439,6 +1456,7 @@ export function DazSceneField({
                       onReplace={busy ? undefined : () => void onReplacePick()}
                       replaceDisabled={replaceBlocked}
                       replaceReason={replaceReason}
+                      onUtils={() => setUtilsFor(character.scenePath)}
                       primary
                       selected={selectedScene !== undefined ? selectedScene === character.scenePath : undefined}
                       onSelect={onSelectScene ? () => onSelectScene(character.scenePath) : undefined}
@@ -1482,6 +1500,7 @@ export function DazSceneField({
                         insideCharFolder(scene) ? (next) => renameLinkedScene(scene, next) : undefined
                       }
                       onRemove={() => askRemove(scene)}
+                      onUtils={() => setUtilsFor(scene)}
                       selected={selectedScene !== undefined ? selectedScene === scene : undefined}
                       onSelect={onSelectScene ? () => onSelectScene(scene) : undefined}
                       pathChip={sceneLocationChip(scene)}
@@ -1710,6 +1729,23 @@ export function DazSceneField({
         </Modal>
       )}
       <MultipleDazModal open={multiDaz} onClose={() => setMultiDaz(false)} />
+
+      {/* Mounted only while open, like the Houdini Utils drawer — the drawer
+          probes the Runner and the scan plan on mount. Guarded against the
+          scene unlinking underneath it (the drawer's scope would be gone). */}
+      {utilsFor && [character.scenePath, ...character.extraScenes].includes(utilsFor) && (
+        <DazSceneUtilsPanel
+          open
+          character={character}
+          // The drawer acts on THIS scene alone — `utilsFor` is the card whose
+          // Utils button was pressed, and it is the drawer's entire scope.
+          targetScene={utilsFor}
+          projectId={projectId}
+          persistPatch={persistPatch}
+          dazProductsEnabled={dazProductsEnabled}
+          onClose={() => setUtilsFor('')}
+        />
+      )}
     </FileDropZone>
   )
 }

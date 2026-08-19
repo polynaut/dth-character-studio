@@ -215,6 +215,19 @@ of that file ~12k tokens to scroll past.
       can predict either. Additive with a zod default, so no migration
       step: a definition written before this reads back at 0, which IS
       the framing every character had.
+ 37 — ADDED `sceneOverrides[].exportHair` (boolean, OPTIONAL — deliberately no
+      zod default): the per-scene "Export hair items" switch in the Daz scene
+      cards' Utils drawer, gating the DTH Export flow's per-item hair pass for
+      that scene (runtime v96 carries the generated-script side). ABSENT means
+      "the default": ON for the primary scene, OFF for every extra scene —
+      resolved by `sceneHairExportEnabled` (scene-override.ts), and the editor
+      stores the field only while the choice differs from that default, so
+      promoting a scene to primary later re-reads the default rather than a
+      frozen copy. Like `hair` it rides the record without arming the override
+      (`activeSceneOverrides` ignores it; `sceneRecordEmpty` counts it), and it
+      does NOT touch the hide-only groom bracket — hair stays out of the main
+      export either way. Additive + optional, so no migration step: a pre-v37
+      record reads back with the field absent and the defaults live.
 ```
 
 ## Generated-runtime versions (`RUNTIME_VERSION`)
@@ -1167,4 +1180,18 @@ v95 — the product scan matches hand-installed morphs, flat texture folders
       must exceed every dev-stamped one or those installs read as fresh
       forever. #901 (open) must land on a number > 95.
       No schema change, no migration step.
+v96 — the export block's hair pass gains a per-scene runtime gate: beside the
+      groom map it embeds `dthHairExportByScene` (normalized scene key → the
+      `sceneHairExportEnabled` answer, one entry per groom-map scene) and the
+      pass opens with `if (!dthHairExportOn) { …skipped }`. Pairs with schema
+      v37 (`sceneOverrides[].exportHair`, the "Export hair items" switch in the
+      Daz scene Utils drawer): primary defaults ON, extras OFF. Behavior note —
+      before this, a DTH Export batch exported EVERY scene's hair items (the
+      bulk carriers force `exportHairAssets` on), so extra scenes with hair now
+      need their switch flipped ON to keep exporting; the hide-only groom
+      bracket and the standalone `Export_Hair_…` script are deliberately
+      untouched (the manual script stays the ungated escape hatch).
+      NB: this number collides with what #901 (still open) reserved — per the
+      monotonic rule its revert must now land on a number > 96.
+      No migration step; schema v37 rides the same release.
 ```

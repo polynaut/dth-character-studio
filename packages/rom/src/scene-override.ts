@@ -27,8 +27,32 @@ export function sceneRecordEmpty(override: SceneOverride): boolean {
     override.identity === undefined &&
     override.preserve === undefined &&
     override.jcm === undefined &&
-    override.frameZero === undefined
+    override.frameZero === undefined &&
+    override.exportHair === undefined
   )
+}
+
+/** One scene lookup key — the normalization every scene-keyed map in the
+ *  generated scripts uses (forward slashes, lowercased). */
+function sceneKeyOf(scenePath: string): string {
+  return scenePath.trim().replace(/\\/g, '/').toLowerCase()
+}
+
+/**
+ * Whether the DTH Export flow exports `scenePath`'s hair items — the record's
+ * stored `exportHair` when the user made a choice, else the default: ON for
+ * the primary scene, OFF for every extra scene (schema v37). ONE rule for the
+ * editor's switch and generation's per-scene gate ({@link hairExportScenes} in
+ * dsa.ts), so what the switch shows is what the script does. Only the EXPORT
+ * pass asks here — the hide-only groom bracket ignores it.
+ */
+export function sceneHairExportEnabled(
+  character: Pick<Character, 'scenePath' | 'sceneOverrides'>,
+  scenePath: string,
+): boolean {
+  const key = sceneKeyOf(scenePath)
+  const record = character.sceneOverrides.find((o) => sceneKeyOf(o.scenePath) === key)
+  return record?.exportHair ?? (key !== '' && key === sceneKeyOf(character.scenePath))
 }
 
 /**

@@ -558,6 +558,17 @@ export const sceneOverrideSchema = z.object({
    * pre-v24 character-level `groomScenes` map.
    */
   hair: z.array(z.object({ nodeLabel: z.string().max(MAX_NAME_LENGTH) })).default([]),
+  /**
+   * Whether the DTH Export flow exports this scene's hair items (the per-item
+   * `Export_Hair` pass after the main export). ABSENT = the default — on for
+   * the PRIMARY scene, off for every extra scene — so the field is stored only
+   * while the user's choice differs from that default (schema v37; the same
+   * present-iff-divergent shape as the panels). Like `hair` it rides the
+   * record without arming the override, and it only gates the EXPORT pass —
+   * the hide-only groom bracket keeps hiding the items either way. The
+   * effective answer for a scene is {@link sceneHairExportEnabled}.
+   */
+  exportHair: z.boolean().optional(),
   /** Per-scene GENESIS-9 identity dials (FACS detail / flexion / UE5 tear UV) —
    *  present = armed, replacing the base character's three fields. */
   identity: z
@@ -813,7 +824,7 @@ export function jcmMorphModForRuntime(mod: JcmMorphMod): {
  * step — is `.ai/schema-history.md`. Bumping this means adding the entry there,
  * in the same commit.
  */
-export const CHARACTER_SCHEMA_VERSION = 36
+export const CHARACTER_SCHEMA_VERSION = 37
 
 /**
  * Version of the generated **script runtime** — the bundled DTH `.dsa` runtime
@@ -832,7 +843,7 @@ export const CHARACTER_SCHEMA_VERSION = 36
  * step — is `.ai/schema-history.md`. Bumping this means adding the entry there,
  * in the same commit.
  */
-export const RUNTIME_VERSION = 95
+export const RUNTIME_VERSION = 96
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a
