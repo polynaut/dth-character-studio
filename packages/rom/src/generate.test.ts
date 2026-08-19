@@ -1755,6 +1755,46 @@ describe('exporter integration', () => {
     expect(content).toContain('the previous export files were put back untouched')
   })
 
+  it('an existing .dthprev is the LAST GOOD COPY — the corpse beside it is dropped, not it', () => {
+    // Measured 2026-08-19: the DTH Exporter aborted with "Could not create
+    // alembic archive", leaving a 0-byte .dth and a 29 MB fragment of an
+    // 807 MB Alembic — and, because the run died before its finish step, the
+    // real set still parked as .dthprev. `dthMoveAside` used to DELETE that
+    // backup to make room for the fragment, on the theory that a live file is
+    // always the newer good state. The next export would have destroyed the
+    // only surviving copy.
+    const content = toExportScriptDsa(
+      withReferencePose({ name: 'Electra', exportPath: 'X:/exports/e' }),
+      FRAMES,
+    ).content
+    // The guard: backup present -> remove the LIVE name, and return before the
+    // rename that would overwrite the backup.
+    expect(content).toContain('if (dthDirObj.exists(dthPrevName)) {')
+    expect(content).toContain(
+      'return new DzFile(dthDirObj.absoluteFilePath(dthName)).remove();',
+    )
+    // …and the old wording must be gone, or the next reader re-derives it.
+    expect(content).not.toContain('the live file is the newer good state')
+    expect(content).not.toContain(
+      'if (dthDirObj.exists(dthPrevName)) new DzFile(dthDirObj.absoluteFilePath(dthPrevName)).remove();',
+    )
+  })
+
+  it('a hair backup is not mistaken for live output — .dthprev cannot stack', () => {
+    // `dthOwnSetFile` matched the hair alembics on a SUBSTRING, so
+    // "<name>_Hair_X_grooms.abc.dthprev" matched too and got parked AGAIN. The
+    // measured project carried .dthprev.dthprev and
+    // .dthprev.dthprev.dthprev.dthprev copies and no live hair alembic at all.
+    const content = toExportScriptDsa(
+      withReferencePose({ name: 'Electra', exportPath: 'X:/exports/e' }),
+      FRAMES,
+    ).content
+    expect(content).toContain('dthEndsWith(dthName, "_grooms.abc")')
+    expect(content).not.toContain('dthName.indexOf("_grooms.abc") > 0')
+    // The helper is an END test, not "contains".
+    expect(content).toContain('return dthAt >= 0 && dthName.lastIndexOf(dthTail) == dthAt;')
+  })
+
   it('files an export failure under the open scene RUN of a v2 log, never only the top level', () => {
     // The studio's reader flattens runs[].errors and ANDs runs[].ok whenever a
     // v2 log exists — a top-level-only errors push is invisible to it, which is

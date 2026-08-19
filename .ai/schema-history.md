@@ -1247,4 +1247,31 @@ v98 — generated-script change only (runtime files untouched): the visible
       NB: this entry was written as v97 while #925 was still open; #925 landed
       first and took that number, so it moved to 98. #901's revert must now
       land on a number > 98.
+v99 — the export set's ".dthprev" backup stops eating itself, and stops
+      eating the last good copy.
+      TWO fixes in `clearPreviousSetBlock`, both measured 2026-08-19 on a real
+      project whose DTH Exporter aborted with "Could not create alembic
+      archive":
+      (1) `dthMoveAside` DELETED an existing `<name>.dthprev` before parking
+      the current file, on the theory that "the live file is the newer good
+      state". After a run that DIED that is exactly backwards — the live files
+      were a 0-byte `.dth` and a 29 MB fragment of an 807 MB Alembic, and the
+      next export would have destroyed the real 807 MB backup to park them. An
+      existing backup now MEANS the previous run never finished (it neither
+      purged nor restored), so the backup is kept and the corpse is dropped.
+      (2) `dthOwnSetFile` matched the hair alembics with a SUBSTRING test
+      (`indexOf("_grooms.abc") > 0`), which also matched their own
+      `_grooms.abc.dthprev` backups — so every run parked the previous backup
+      again. The same project carried `.dthprev.dthprev` and
+      `.dthprev.dthprev.dthprev.dthprev` copies and no live hair alembic at
+      all. Now an END-of-name test (`dthEndsWith`; this engine has no
+      String.endsWith). Existing stacked litter clears itself on the next
+      successful export, which purges every `.dthprev`-suffixed file of the set.
+      Also: the block's RATIONALE changed without its behaviour changing. It
+      was born as the DS4 skip-guard (a doExport over existing files skipped
+      the ROM walk); that plugin bug is fixed, which is what #901 proposed
+      deleting the whole block over. It stays because the backup it takes is
+      the only reason the measured incident above was recoverable — so #901's
+      premise holds for the guard and not for the parking.
+      No schema change, no migration step. Bumped so Refresh assets reinstalls.
 ```
