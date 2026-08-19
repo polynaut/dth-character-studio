@@ -64,9 +64,9 @@ export function detectedHairLabels(items: Array<SceneWearable>): Array<string> {
  * both directions of the mismatch are silent failures at export time:
  * `missing` are listed labels the scene no longer carries (the generated
  * script STOPS the export on a label it cannot find), `unlisted` is detected
- * hair the list doesn't cover (it would ride into the export). One rule,
- * shared by the editor's warnings and the DTH Export dialog's pre-flight, so
- * the two can never disagree about what counts as drift.
+ * hair the list doesn't cover (it would ride into the export). One rule, so
+ * every consumer judges drift identically — today that's the editor's two
+ * warnings (groom-fields); an export-time pre-flight would call this too.
  *
  * Callers gate on a SUCCESSFUL scan themselves — computing drift from a
  * failed read would fabricate "gone from the scene" about every listed item.

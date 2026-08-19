@@ -114,8 +114,9 @@ export function GroomFields({
   // …and when the scene FILE changes on disk (reported 2026-08-19): saving the
   // scene in Daz while this window never loses focus — side-by-side monitors —
   // re-fires no focus event, and the warnings kept judging the old wearables.
-  // The scene's FOLDER is watched, not the file: Daz saves by replace, which
-  // drops a watch pinned to the file itself. Best-effort by the fs-watch
+  // The scene's FOLDER is watched, not the file: a replace-style save (write
+  // temp, rename over) silently drops a watch pinned to the file itself, and
+  // the folder watch works under either save style. Best-effort by the fs-watch
   // stance — unwatched (plain browser, NAS share), the focus refetch above
   // stays the feature's carrier, exactly as before.
   useEffect(() => {
