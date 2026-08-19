@@ -504,6 +504,39 @@ export function houdiniRunLooksDead(
 }
 
 /**
+ * A finished result that claims NOTHING went wrong — no failed node, no
+ * run-level error, a clean `done`. This is the shape of the false success,
+ * and the ONE place {@link houdiniRunStateFrom} consults the console log for:
+ * a result already reporting a failure explains itself.
+ */
+function houdiniResultClaimsClean(result: HoudiniResult): boolean {
+  return (
+    result.state === 'done' &&
+    !result.error &&
+    result.nodes.every((node) => node.status !== 'failed')
+  )
+}
+
+/**
+ * Whether this poll should spend a file read on the console log before calling
+ * {@link houdiniRunStateFrom} — the api layer's read guard, kept here for the
+ * same reason as {@link houdiniRunLooksDead}: two copies of the condition
+ * would drift, and the failure would be silent. Two cases earn the read: a
+ * DEAD run (the log is its only witness), and a finished run claiming to be
+ * clean (the log is what catches the false success — a backstop that is never
+ * fed its channel is no backstop, which is exactly how the first version of
+ * this fix shipped dead). A live run, or a finished one already reporting a
+ * failure, explains itself — no read on the 2.5 s poll.
+ */
+export function houdiniConsoleWorthReading(
+  result: HoudiniResult | null,
+  houdiniRunning: boolean,
+): boolean {
+  if (houdiniRunLooksDead(result, houdiniRunning)) return true
+  return result !== null && houdiniResultClaimsClean(result)
+}
+
+/**
  * Every network of the running project, in run order: named from the run's own
  * target list, `status` filled in as each finishes.
  *
@@ -596,6 +629,13 @@ export function houdiniRunStateFrom(
   }
   const counts = { ok: 0, skipped: 0, failed: 0 }
   for (const node of result.nodes) counts[node.status] += 1
+  // A run that reports NO failure of any kind — node, run-level state or
+  // error — but whose console carries a traceback is the shape of the false
+  // success: say so rather than let the toast's green checkmark stand alone.
+  // A result already reporting a failure explains itself, and this would just
+  // repeat it. Same predicate the api layer's read guard uses, so the one
+  // case that needs the console is exactly the one that got the file read.
+  const swallowed = houdiniResultClaimsClean(result) ? houdiniConsoleFailure(consoleText) : ''
   return {
     state: 'finished',
     ...counts,
@@ -612,14 +652,9 @@ export function houdiniRunStateFrom(
       ...result.nodes.flatMap((node) =>
         node.problems.map((problem) => `${node.scene || node.node}: ${problem}`),
       ),
-      // A run that reports NO failure but whose console carries a traceback is
-      // the shape of the false success: say so rather than let the toast's
-      // green checkmark stand alone. Only when nothing already failed — past
-      // that the run is reporting a problem on its own and this would just
-      // repeat it.
-      ...(counts.failed === 0 && houdiniConsoleFailure(consoleText)
+      ...(swallowed
         ? [
-            `Houdini logged an error this run did not attribute to a node — check the console log: ${houdiniConsoleFailure(consoleText)}`,
+            `Houdini logged an error this run did not attribute to a node — check the console log: ${swallowed}`,
           ]
         : []),
     ],

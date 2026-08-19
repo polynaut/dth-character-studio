@@ -10,6 +10,7 @@ import {
   houdiniDeathReason,
   houdiniRunLooksDead,
   houdiniConsoleFailure,
+  houdiniConsoleWorthReading,
   houdiniRunStateFrom,
   parseHoudiniResult,
   sceneDthPath,
@@ -638,6 +639,38 @@ describe('houdiniRunLooksDead — the guard that decides the log is worth a read
   })
 })
 
+describe('houdiniConsoleWorthReading — the api layer feeds the console to the right polls', () => {
+  const res = (over: Record<string, unknown>) =>
+    parseHoudiniResult(JSON.stringify({ state: 'running', total: 2, done: 1, ...over }))
+
+  it('reads for a dead-looking run, never on the live 2.5s poll', () => {
+    expect(houdiniConsoleWorthReading(null, false)).toBe(true)
+    expect(houdiniConsoleWorthReading(res({}), false)).toBe(true)
+    expect(houdiniConsoleWorthReading(res({}), true)).toBe(false)
+    expect(houdiniConsoleWorthReading(null, true)).toBe(false)
+  })
+
+  it('reads for a finished run CLAIMING to be clean — the false-success shape', () => {
+    // The backstop's whole channel: a backstop that is never fed its input is
+    // no backstop, which is exactly how the first version of this fix shipped
+    // — houdiniRunStateFrom knew what to look for, and the api layer's read
+    // guard (dead runs only) never handed it the console.
+    const clean = res({ state: 'done', done: 2, nodes: [{ node: '/obj/a', status: 'ok' }] })
+    expect(houdiniConsoleWorthReading(clean, false)).toBe(true)
+    expect(houdiniConsoleWorthReading(clean, true)).toBe(true)
+  })
+
+  it('skips the read when the run already reported a failure — it explains itself', () => {
+    expect(
+      houdiniConsoleWorthReading(
+        res({ state: 'done', nodes: [{ node: '/obj/a', status: 'failed' }] }),
+        true,
+      ),
+    ).toBe(false)
+    expect(houdiniConsoleWorthReading(res({ state: 'failed', error: 'boom' }), true)).toBe(false)
+  })
+})
+
 describe('houdiniRunFilesToClear — the handoff cleans up after itself', () => {
   const paths = { jobPath: 'X:/p/Kira/.dth_houdini_job.json', resultPath: 'X:/p/Kira/.dth_houdini_result.json' }
 
@@ -722,6 +755,14 @@ describe('the false success — a finished run whose console carries a traceback
     // line would just say the same thing twice in the same toast.
     const state = houdiniRunStateFrom(finished(['ok', 'failed']), false, CONSOLE)
     expect(state.state === 'finished' ? state.problems : ['x']).toEqual([])
+    // Same for a RUN-LEVEL failure (456.py's own crash writes state 'failed'):
+    // the error field carries it, and the backstop would just echo the log
+    // line that error came from.
+    const crashed = parseHoudiniResult(
+      JSON.stringify({ state: 'failed', error: 'Traceback (most recent call last)…', nodes: [] }),
+    )!
+    const failedState = houdiniRunStateFrom(crashed, false, CONSOLE)
+    expect(failedState.state === 'finished' ? failedState.problems : ['x']).toEqual([])
   })
 
   it('a Houdini WARNING is not an error — the hud-button line must not trip it', () => {
