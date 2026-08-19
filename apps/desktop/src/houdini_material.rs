@@ -149,6 +149,37 @@ pub struct MaterialScanProject {
     /// Which DazToHue parms the studio could fill here, and which this
     /// DazToHue version doesn't carry at all.
     pub prefill: ProjectPrefillInfo,
+    /// The scene's playbar range next to what the Import network's Alembic
+    /// file says it should be. The DazToHue Import node sets the playbar from
+    /// the Alembic itself when it loads one (its own routine, shared by
+    /// mrpdean) — so like the FPS, a wrong value marks a project where that
+    /// load never ran. `#[serde(default)]`: a scan stored before this field
+    /// existed is a legitimate old entry, and "unknown" there is never a fault.
+    #[serde(default)]
+    pub timeline: TimelineInfo,
+}
+
+/// Both sides of the timeline-range check (per project, from the scan pass).
+///
+/// Each side carries its OWN `known` flag, and every reader treats unknown as
+/// UNKNOWN, never as "differs" — the same rule as `$JOB` and the FPS. The
+/// Alembic side is unknown for a project generated before its Daz export ran:
+/// there is no file to read yet, and that is not a fault of the scene.
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimelineInfo {
+    /// The playbar range the scene carries.
+    pub start: f64,
+    pub end: f64,
+    /// Whether the playbar could be read at all.
+    pub known: bool,
+    /// The range the Import network's Alembic file reports for itself
+    /// (`Alembic SOP Info` → Start/End Frame — frames at the scene's current
+    /// FPS).
+    pub abc_start: f64,
+    pub abc_end: f64,
+    /// Whether an Alembic answered (file present and readable).
+    pub abc_known: bool,
 }
 
 /// The Generate-project wiring, as it applies to a project that already exists.
@@ -352,6 +383,24 @@ pub struct HoudiniDefaultsResult {
     /// happened rather than claiming both.
     pub changed_job: bool,
     pub changed_fps: bool,
+    /// The playbar range the scene carried before the run (0/0 = unreadable,
+    /// left alone). `#[serde(default)]` on the range fields: they arrived in
+    /// v0.86 and a defaulted 0 reads as "unknown" everywhere, never as wrong.
+    #[serde(default)]
+    pub previous_start: f64,
+    #[serde(default)]
+    pub previous_end: f64,
+    /// The playbar range it carries now — for a dry run, what it WOULD carry
+    /// (the Alembic file's own range, re-read at apply time on a real run).
+    #[serde(default)]
+    pub start: f64,
+    #[serde(default)]
+    pub end: f64,
+    /// Whether the run re-timed the playbar to the Alembic's range (the
+    /// vendor's own Import-node routine: set the range, force-cook the cache,
+    /// back to frame 0).
+    #[serde(default)]
+    pub changed_range: bool,
     /// Where the pre-repair state was backed up (empty for a dry run, and for
     /// a project that needed no change).
     pub backup_path: String,

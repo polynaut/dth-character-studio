@@ -446,6 +446,26 @@ export const houdiniRefreshResultSchema = z.object({
   backupPath: z.string(),
 })
 
+/** Both sides of the timeline-range check for one scanned `.hip`. Each side
+ *  carries its OWN `known` flag and every reader treats unknown as UNKNOWN,
+ *  never as "differs" — the same rule as `$JOB` and the FPS. The Alembic side
+ *  is unknown for a project generated before its Daz export ran: there is no
+ *  file to read yet, and that is not a fault of the scene. */
+export const timelineInfoSchema = z.object({
+  /** The playbar range the scene carries. */
+  start: z.number(),
+  end: z.number(),
+  /** Whether the playbar could be read at all. */
+  known: z.boolean(),
+  /** The range the Import network's Alembic file reports for itself
+   *  (`Alembic SOP Info` → Start/End Frame — frames at the scene's current
+   *  FPS). */
+  abcStart: z.number(),
+  abcEnd: z.number(),
+  /** Whether an Alembic answered (file present and readable). */
+  abcKnown: z.boolean(),
+})
+
 /** One scanned `.hip` (`ok: false` = unreadable; the scan itself still succeeds). */
 export const materialScanProjectSchema = z.object({
   hipPath: z.string(),
@@ -492,6 +512,22 @@ export const materialScanProjectSchema = z.object({
   /** Which DazToHue parms the studio could fill here, and which this DazToHue
    *  version doesn't carry at all. */
   prefill: projectPrefillInfoSchema,
+  /** The scene's playbar range next to what the Import network's Alembic file
+   *  says it should be — the DazToHue Import node sets the playbar from the
+   *  Alembic itself when it loads one (per mrpdean, its own routine), so like
+   *  the FPS a wrong value marks a project where that load never ran.
+   *  Defaulted whole: a STORED scan written before this field existed is a
+   *  legitimate old entry, and each side's `known:false` reads as "unknown"
+   *  everywhere — never as "differs", so an old cache entry can never produce
+   *  a badge or queue a repair. */
+  timeline: timelineInfoSchema.default({
+    start: 0,
+    end: 0,
+    known: false,
+    abcStart: 0,
+    abcEnd: 0,
+    abcKnown: false,
+  }),
 })
 
 /** What the `defaults` operation did (or would do) to one project's `$JOB` and
@@ -524,6 +560,19 @@ export const houdiniDefaultsResultSchema = z.object({
    *  happened instead of claiming both. */
   changedJob: z.boolean().default(false),
   changedFps: z.boolean().default(false),
+  /** The playbar range the scene carried before the run (0/0 = unreadable,
+   *  left alone). Defaulted: the range fields arrived in v0.86, and 0 reads as
+   *  "unknown" everywhere, never as wrong. */
+  previousStart: z.number().default(0),
+  previousEnd: z.number().default(0),
+  /** The playbar range it carries now — for a dry run, what it WOULD carry
+   *  (the Alembic file's own range, re-read at apply time on a real run). */
+  start: z.number().default(0),
+  end: z.number().default(0),
+  /** Whether the run re-timed the playbar to the Alembic's range (the vendor's
+   *  own Import-node routine: set the range, force-cook the cache, back to
+   *  frame 0). */
+  changedRange: z.boolean().default(false),
   /** Pre-repair backup (empty for a dry run, and when nothing changed). */
   backupPath: z.string(),
 })
@@ -631,6 +680,7 @@ export type MaterialSlotInfo = z.infer<typeof materialSlotInfoSchema>
 export type MaterialNodeInfo = z.infer<typeof materialNodeInfoSchema>
 export type MaterialSectionResult = z.infer<typeof materialSectionResultSchema>
 export type MaterialScanProject = z.infer<typeof materialScanProjectSchema>
+export type TimelineInfo = z.infer<typeof timelineInfoSchema>
 export type MaterialTransferTarget = z.infer<typeof materialTransferTargetSchema>
 export type HoudiniDefaultsResult = z.infer<typeof houdiniDefaultsResultSchema>
 export type ProjectRefInfo = z.infer<typeof projectRefInfoSchema>

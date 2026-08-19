@@ -28,6 +28,9 @@ function scanned(over: Partial<MaterialScanProject> = {}): MaterialScanProject {
     poseAssets: [],
     refs: { collapsible: 0, foreign: 0, broken: [], hipRelative: [], missingTextures: [] },
     prefill: { fillable: [], missing: [] },
+    // The schema's own default — what an entry stored before the field existed
+    // parses to: both sides unknown.
+    timeline: { start: 0, end: 0, known: false, abcStart: 0, abcEnd: 0, abcKnown: false },
     ...over,
   }
 }
@@ -174,6 +177,54 @@ describe('validateHoudiniProject', () => {
     expect(validateHoudiniProject(scanned({ fps: 30.0000001 }), CHAR).ok).toBe(true)
     // …but a real broadcast rate IS one: 29.97 is not 30.
     expect(validateHoudiniProject(scanned({ fps: 29.97 }), CHAR).ok).toBe(false)
+  })
+
+  it("catches a playbar range that differs from the Alembic file's own", () => {
+    // The stale-project case: the Import node sets the playbar from the
+    // Alembic when it LOADS one (per mrpdean), so a scene still on Houdini's
+    // default 1–240 over a 981-frame ROM is a scene where that never ran —
+    // part of the ROM sits outside the timeline.
+    const health = validateHoudiniProject(
+      scanned({
+        timeline: { start: 1, end: 240, known: true, abcStart: 0, abcEnd: 981, abcKnown: true },
+      }),
+      CHAR,
+    )
+    expect(health.ok).toBe(false)
+    expect(health.problems.map((p) => p.code)).toEqual(['timeline-differs'])
+    expect(health.summary).toContain('1 – 240')
+    expect(health.summary).toContain('0 – 981')
+  })
+
+  it('an unknown timeline side is never a fault', () => {
+    // Both-unknown is the factory default (an old stored entry). An Alembic
+    // that could not be read is a project generated before its Daz export —
+    // there is nothing to compare against, and that is not a fault of the
+    // scene's range. Float noise on a matching range is not a difference.
+    expect(validateHoudiniProject(scanned(), CHAR).ok).toBe(true)
+    expect(
+      validateHoudiniProject(
+        scanned({
+          timeline: { start: 1, end: 240, known: true, abcStart: 0, abcEnd: 0, abcKnown: false },
+        }),
+        CHAR,
+      ).ok,
+    ).toBe(true)
+    expect(
+      validateHoudiniProject(
+        scanned({
+          timeline: {
+            start: 0,
+            end: 981.0000001,
+            known: true,
+            abcStart: 0,
+            abcEnd: 981,
+            abcKnown: true,
+          },
+        }),
+        CHAR,
+      ).ok,
+    ).toBe(true)
   })
 
   it('reports unresolved import paths and blank parms, and names them', () => {

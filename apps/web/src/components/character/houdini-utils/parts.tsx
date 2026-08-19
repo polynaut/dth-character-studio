@@ -17,7 +17,7 @@ import type {
   NodeKind,
   ProjectPrefillInfo,
 } from '#/lib/rom/api.ts'
-import { DTH_FPS, defaultsRowsFor, formatFps } from '#/lib/rom/houdini-defaults.ts'
+import { DTH_FPS, defaultsRowsFor, formatFps, formatFrameRange } from '#/lib/rom/houdini-defaults.ts'
 import { mergeTouchCount, surfaceLabel } from '#/lib/rom/houdini-material-merge.ts'
 import type { SurfaceMergePlan } from '#/lib/rom/houdini-material-merge.ts'
 import { displayPath } from '#/lib/path.ts'
@@ -595,6 +595,12 @@ export function DefaultsReport({
                 {entry.changedFps && (
                   <p>
                     {formatFps(entry.previousFps) || '—'} fps → {formatFps(entry.fps)} fps
+                  </p>
+                )}
+                {entry.changedRange && (
+                  <p>
+                    frames {formatFrameRange(entry.previousStart, entry.previousEnd)} →{' '}
+                    {formatFrameRange(entry.start, entry.end)}
                   </p>
                 )}
                 {!entry.changed && <p>Already correct — left untouched.</p>}

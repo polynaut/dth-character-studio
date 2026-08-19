@@ -381,6 +381,14 @@ export interface GeneratedHoudiniProject {
    *  `hou.fps()` after the set, never the value we asked for, so the caller can
    *  report a fact. `0` = hython could not answer. */
   fps: number
+  /** The playbar range the saved scene carries after the Alembic timeline
+   *  routine ran (the Import node's own logic — range from the Alembic's
+   *  Start/End Frame info, cache force-cooked, back to frame 0 — re-run by the
+   *  generation because the HDA's own trigger is best-effort). READ BACK off
+   *  `hou.playbar.frameRange()`, same rule as `fps`. `null` = it didn't run:
+   *  no Alembic to read yet (generated before the Daz export — normal, not a
+   *  failure) or an older hython report. */
+  range: { start: number; end: number } | null
 }
 
 export async function generateHoudiniProject({
@@ -507,7 +515,7 @@ export async function generateHoudiniProject({
   })
 
   // zod-parsed, not a bare invoke<T>() cast (primitive
-  // "<created>|<visible>|<prefilled>|<fps>" report — no fixture needed).
+  // "<created>|<visible>|<prefilled>|<fps>|<range>" report — no fixture needed).
   const report = z.string().parse(
     await invoke('create_houdini_project', {
       request: {
@@ -525,7 +533,7 @@ export async function generateHoudiniProject({
       },
     }),
   )
-  const [created = 'none', visible = 'none', prefilledRaw = 'none', fpsRaw = 'none'] =
+  const [created = 'none', visible = 'none', prefilledRaw = 'none', fpsRaw = 'none', rangeRaw = 'none'] =
     report.split('|')
   return {
     scenePath,
@@ -535,7 +543,23 @@ export async function generateHoudiniProject({
     // An older report (or a hython that could not answer) has no fourth field —
     // 0 reads as "unknown" everywhere, never as "wrong".
     fps: Number.parseFloat(fpsRaw) || 0,
+    // "<start>-<end>", the playbar read back AFTER the Alembic timeline routine
+    // ran (the Import node's own logic, re-run by the generation because the
+    // HDA's trigger is best-effort). null = it didn't run: no Alembic to read
+    // yet (generated before the Daz export — normal), or an older report.
+    range: parseFrameRange(rangeRaw),
   }
+}
+
+/** The generation report's `<range>` field — `"<start>-<end>"` (floats, the
+ *  scene's own playbar) or 'none'. Split on the LAST dash: a negative start
+ *  frame would put one first. */
+function parseFrameRange(raw: string): { start: number; end: number } | null {
+  const at = raw.lastIndexOf('-')
+  if (at <= 0) return null
+  const start = Number.parseFloat(raw.slice(0, at))
+  const end = Number.parseFloat(raw.slice(at + 1))
+  return Number.isFinite(start) && Number.isFinite(end) ? { start, end } : null
 }
 
 const removeInput = charScopeInput.extend({

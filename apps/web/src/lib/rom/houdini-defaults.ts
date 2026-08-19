@@ -62,9 +62,54 @@ export function formatFps(value: number): string {
   return Number.isFinite(value) ? String(Math.round(value * 1000) / 1000) : ''
 }
 
+/** Both sides of the playbar-range check, as the scan reports them
+ *  (`timelineInfoSchema`). Each side carries its own `known` flag; unknown is
+ *  never treated as "differs". */
+export interface ScannedTimeline {
+  /** The playbar range the scene carries. */
+  start: number
+  end: number
+  known: boolean
+  /** What the Import network's Alembic file says the range should be. */
+  abcStart: number
+  abcEnd: number
+  abcKnown: boolean
+}
+
+/** Whether two frame numbers are the same — the exact complement of
+ *  `FRAME_EPSILON` in material_utils.py, same contract as `sameFps`: the
+ *  studio decides what to queue, the Python decides whether to write, and the
+ *  two must agree or the drawer offers a repair that reports "already
+ *  correct". */
+export function sameFrame(a: number, b: number): boolean {
+  return Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) < 0.001
+}
+
+/** How a frame number reads on screen — `981` rather than `981.0` (Houdini
+ *  reports the playbar as floats). */
+export function formatFrame(value: number): string {
+  return formatFps(value)
+}
+
+/** Whether a scanned playbar range DIFFERS from what the project's own Alembic
+ *  file says it should be. False whenever either side is unknown — a project
+ *  generated before its Daz export has no file to read, and that is not a
+ *  fault of the scene's range. ONE computation shared by the badge
+ *  (`validateHoudiniProject`), the Defaults rows and the repair queue, so the
+ *  three can never disagree about the same scan. */
+export function timelineRangeDiffers(timeline: ScannedTimeline | undefined): boolean {
+  if (!timeline || !timeline.known || !timeline.abcKnown) return false
+  return !sameFrame(timeline.start, timeline.abcStart) || !sameFrame(timeline.end, timeline.abcEnd)
+}
+
+/** A playbar range on screen: `1 – 981`. */
+export function formatFrameRange(start: number, end: number): string {
+  return `${formatFrame(start)} – ${formatFrame(end)}`
+}
+
 /** A per-project setting the studio can check, and sometimes repair. */
 export interface DefaultsRow {
-  key: 'job' | 'fps' | 'csv'
+  key: 'job' | 'fps' | 'range' | 'csv'
   label: string
   /** What the scene carries today ('' when the scan could not read it). */
   current: string
@@ -120,6 +165,10 @@ export function defaultsRowsFor(
      *  project it could not open) and the row reads `unknown` — never
      *  `differs`, which would offer to write over something nobody read. */
     fps?: number
+    /** The playbar range beside what the Alembic says — absent on a scan
+     *  stored before the field existed, which reads `unknown`, never
+     *  `differs`. */
+    timeline?: ScannedTimeline
     prefill?: { fillable: ReadonlyArray<string>; missing: ReadonlyArray<string> }
   },
   charFolder: string,
@@ -157,6 +206,40 @@ export function defaultsRowsFor(
       // Repaired by the same run as `$JOB` — one file open, one backup.
       actionable: true,
       reason: '',
+    })
+  }
+  // The playbar range — the third scene-state value of the family, and the one
+  // whose right answer the studio does NOT know itself: it is whatever the
+  // project's own Alembic file says (the Import node's routine, per mrpdean).
+  // Reported only once the scan carries the field at all; "the Alembic could
+  // not be read" is its own kind of unknown, spelled per row like the others.
+  const timeline = scanned.timeline
+  if (timeline) {
+    const differs = timelineRangeDiffers(timeline)
+    const rangeStatus = !timeline.known || !timeline.abcKnown ? 'unknown' : differs ? 'differs' : 'matches'
+    rows.push({
+      key: 'range',
+      label: 'Timeline range (frames)',
+      current: timeline.known ? formatFrameRange(timeline.start, timeline.end) : '',
+      expected: timeline.abcKnown
+        ? `${formatFrameRange(timeline.abcStart, timeline.abcEnd)} (the Alembic’s own range)`
+        : 'the Alembic’s own range',
+      status: rangeStatus,
+      verdict: !timeline.known
+        ? 'could not be read'
+        : !timeline.abcKnown
+          ? 'no Alembic to read it from yet'
+          : differs
+            ? 'differs'
+            : 'matches',
+      matches: rangeStatus === 'matches',
+      // Repaired by the same run as `$JOB` and the FPS — one file open, one
+      // backup — but only when an Alembic answered; without one there is
+      // nothing to write.
+      actionable: timeline.abcKnown,
+      reason: timeline.abcKnown
+        ? ''
+        : 'Run the Daz export first — the range is read off the exported Alembic file.',
     })
   }
   // The PoseAsset CSV path — reported only once the scan has an opinion about
@@ -286,18 +369,25 @@ export function planRepath(
 }
 
 /**
- * The projects a repair would actually write — those whose `$JOB` or FPS
- * differs.
+ * The projects a repair would actually write — those whose `$JOB`, FPS or
+ * playbar range differs.
  *
- * A project the scan could not read, or that reported no `$JOB`/no FPS at all,
- * is never queued for THAT value: it is UNKNOWN, not wrong, and writing one
- * would be a guess over something nobody managed to look at. The two are judged
- * independently, so a project with a correct `$JOB` and a 24 fps timeline is
- * still queued — one run opens the file once and fixes whichever of the two is
- * actually off (`op_defaults` compares each before it writes).
+ * A project the scan could not read, or that reported no `$JOB`/no FPS/no
+ * readable range at all, is never queued for THAT value: it is UNKNOWN, not
+ * wrong, and writing one would be a guess over something nobody managed to
+ * look at. The three are judged independently, so a project with a correct
+ * `$JOB` and a 24 fps timeline is still queued — one run opens the file once
+ * and fixes whichever is actually off (`op_defaults` compares each before it
+ * writes).
  */
 export function projectsNeedingRepair(
-  projects: ReadonlyArray<{ hipPath: string; ok: boolean; job: string; fps?: number }>,
+  projects: ReadonlyArray<{
+    hipPath: string
+    ok: boolean
+    job: string
+    fps?: number
+    timeline?: ScannedTimeline
+  }>,
   charFolder: string,
 ): Array<string> {
   return projects
@@ -305,7 +395,8 @@ export function projectsNeedingRepair(
       if (!p.ok) return false
       const staleJob = p.job.trim() !== '' && !sameFolder(p.job, charFolder)
       const staleFps = p.fps !== undefined && p.fps > 0 && !sameFps(p.fps)
-      return staleJob || staleFps
+      const staleRange = timelineRangeDiffers(p.timeline)
+      return staleJob || staleFps || staleRange
     })
     .map((project) => project.hipPath)
 }

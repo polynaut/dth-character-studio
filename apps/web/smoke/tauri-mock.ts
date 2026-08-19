@@ -133,6 +133,14 @@ export interface TauriMockSeed {
    *  project reads as the pipeline's 30 — i.e. nothing to repair, which is what
    *  keeps the General tab quiet in every spec that isn't about this. */
   materialFps?: Record<string, number>
+  /** The playbar range beside the Alembic's own, per `.hip` path. Omit and the
+   *  project reads healthy (both sides known and equal), same posture as the
+   *  FPS — a spec that wants the range check to complain seeds a differing
+   *  pair. */
+  materialTimeline?: Record<
+    string,
+    { start: number; end: number; known: boolean; abcStart: number; abcEnd: number; abcKnown: boolean }
+  >
   /** What the DazToHue shelf's "Refresh Assets" answered for a project, per
    *  `.hip` path. The real op executes a shelf tool that nothing here can
    *  impersonate, so a spec states the outcome; omit and the tool ran and the
@@ -789,6 +797,17 @@ export function installTauriMock(seed: TauriMockSeed): void {
               // quiet unless a spec seeds them.
               refs: { collapsible: 0, foreign: 0, broken: [], hipRelative: []  },
               prefill: { fillable: [], missing: [] },
+              // The playbar range beside the Alembic's own — healthy (equal,
+              // both known) unless a spec seeds a differing pair, same posture
+              // as the FPS above.
+              timeline: seed.materialTimeline?.[norm(hipPath)] ?? {
+                start: 0,
+                end: 981,
+                known: true,
+                abcStart: 0,
+                abcEnd: 981,
+                abcKnown: true,
+              },
               hipDir: norm(hipPath).replace(/\/[^/]*$/, ''),
             })),
           }
@@ -867,7 +886,22 @@ export function installTauriMock(seed: TauriMockSeed): void {
                 previousJob !== '' && previousJob.toLowerCase() !== t.jobDir.toLowerCase()
               const changedFps =
                 wantFps > 0 && previousFps > 0 && Math.abs(previousFps - wantFps) >= 0.001
-              const changed = changedJob || changedFps
+              // The range, judged like the real op: both sides known, and the
+              // repair writes the Alembic's own values — nothing the caller
+              // sent.
+              const tl = seed.materialTimeline?.[norm(t.hipPath)] ?? {
+                start: 0,
+                end: 981,
+                known: true,
+                abcStart: 0,
+                abcEnd: 981,
+                abcKnown: true,
+              }
+              const changedRange =
+                tl.known &&
+                tl.abcKnown &&
+                (Math.abs(tl.start - tl.abcStart) >= 0.001 || Math.abs(tl.end - tl.abcEnd) >= 0.001)
+              const changed = changedJob || changedFps || changedRange
               return {
                 hipPath: t.hipPath,
                 ok: true,
@@ -876,9 +910,14 @@ export function installTauriMock(seed: TauriMockSeed): void {
                 job: changedJob ? t.jobDir : previousJob,
                 previousFps,
                 fps: changedFps ? wantFps : previousFps,
+                previousStart: tl.start,
+                previousEnd: tl.end,
+                start: changedRange ? tl.abcStart : tl.start,
+                end: changedRange ? tl.abcEnd : tl.end,
                 changed,
                 changedJob,
                 changedFps,
+                changedRange,
                 backupPath: changed ? backupFor(t.hipPath) : '',
               }
             }),

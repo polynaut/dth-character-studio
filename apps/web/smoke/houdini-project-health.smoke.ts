@@ -85,6 +85,25 @@ test('a project on Houdini’s own 24 fps is flagged on its card', async ({ page
   await expect(badge).toHaveAttribute('title', /timeline runs at 24 fps instead of 30/)
 })
 
+test('a playbar that does not match the Alembic is flagged on its card', async ({ page }) => {
+  // The Import node sets the playbar from the Alembic file when it LOADS one
+  // (per mrpdean) — so a scene still on Houdini's default 1–240 over a longer
+  // ROM is a scene where that never ran, and part of the ROM sits outside the
+  // timeline. A stored scan WITHOUT the field (every entry from before v0.86)
+  // must stay quiet — that is pinned by 'a wired project shows no badge', whose
+  // fixture carries no `timeline` at all.
+  await openWithStore(
+    page,
+    scan({
+      timeline: { start: 1, end: 240, known: true, abcStart: 0, abcEnd: 981, abcKnown: true },
+    }),
+  )
+
+  const badge = page.getByText('Needs attention')
+  await expect(badge).toBeVisible()
+  await expect(badge).toHaveAttribute('title', /playbar runs 1 – 240 but the Alembic holds frames 0 – 981/)
+})
+
 test('a stored scan from before the FPS was read is not flagged', async ({ page }) => {
   // The compatibility case: an entry written by an older build carries no `fps`
   // at all, which reads as 0 = nobody looked. Badging that would invent a fault
