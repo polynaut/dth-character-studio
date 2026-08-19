@@ -1103,4 +1103,21 @@ v80 — no unattended carrier opens a modal, and the missing-runtime message sto
       on a matching `v<N>` marker and the script header reads current, so the
       second one never reaches an install that already has the first.
       No schema change, no migration step.
+v88 — the v71 `dthSettle(1000)` pauses are REMOVED (helper and all three call
+      sites): the bulk ROM carrier no longer sleeps after the scene load, and
+      no carrier sleeps between the ROM build and the exporter — a DTH Export
+      paid up to ~2 s of artificial wait per scene. The pauses were
+      precautionary from the start (#795 added them without a measured
+      failure they fixed; "own precautions aren't evidence"), and every real
+      settling problem since was solved by its own targeted fix, not by the
+      sleep. If a scene-load race ever DOES surface, re-add a wait gated on
+      the actual condition being waited for, not a fixed timer. NOT v87:
+      PR #901 (open when this bump was written) holds that number for the DS4
+      sweep revert, and per the gotcha (`gotchas-daz.md`, measured on
+      #894/#895) the collision is INVISIBLE to git — both branches make the
+      identical `86 → 87` edit, so the merge is clean and nothing forces the
+      second lander to renumber. Skipping to 88 costs nothing (staleness is
+      `runtimeVersion < app.runtime`, so versions only have to be monotonic
+      and a gap is harmless if #901 never lands).
+      No schema change, no migration step.
 ```
