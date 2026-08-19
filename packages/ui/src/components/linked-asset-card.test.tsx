@@ -20,6 +20,19 @@ function renderCard(props: Partial<Parameters<typeof LinkedAssetCard>[0]> = {}) 
   )
 }
 
+describe('LinkedAssetCard control cluster', () => {
+  it('orders the cluster destructive-to-primary: bin, replace, utils, open', () => {
+    // The order IS the safety feature: the bin (unlink) sits farthest from the
+    // always-present open icon — the one button every card visit targets — so a
+    // hurried open never grazes the destructive action. DOM order is visual
+    // order here (one flex row, no reordering classes), so asserting the
+    // accessible names in sequence pins both.
+    renderCard({ onRemove: vi.fn(), onReplace: vi.fn(), onUtils: vi.fn() })
+    const names = screen.getAllByRole('button').map((b) => b.getAttribute('aria-label'))
+    expect(names).toEqual(['Remove', 'Replace', 'Utils', 'Open in Houdini'])
+  })
+})
+
 describe('LinkedAssetCard busy', () => {
   it('shows no busy indicator at rest', () => {
     const { container } = renderCard({ barClass: 'bg-houdini-orange' })

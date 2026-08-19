@@ -323,9 +323,9 @@ export function LinkedAssetCard({
         {cornerOpens ? (
           // Selectable / icon-only mode: the corner icon is the ONLY open target
           // — a real sibling Button (same ghost icon-sm size/shape/hover as the
-          // remove button so the two align), never nested inside the main card
-          // button (a focusable interactive descendant is invalid HTML and the
-          // outer accessible name swallows the inner label).
+          // cluster's hover buttons so the row aligns), never nested inside the
+          // main card button (a focusable interactive descendant is invalid HTML
+          // and the outer accessible name swallows the inner label).
           <Button
             variant="ghost"
             size="icon-sm"
