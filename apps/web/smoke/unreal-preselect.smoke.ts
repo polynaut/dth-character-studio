@@ -357,7 +357,10 @@ test('ONE task row per re-import — and a set the project never held is dropped
     /Unreal; queued for DemoGame/,
   )
 
-  // …and when the editor finally answers, the outcome becomes that line.
+  // …and when the editor finally answers, the outcome ENDS the run: a sticky
+  // toast of its own, and the panel goes with the work it was showing — it
+  // used to become the status line of a bar that then sat at 100% forever
+  // (measured 2026-08-19, the first live in-place re-import).
   await page.evaluate((dir: string) => {
     const mock = (window as any).__tauriMock
     mock.files.delete(`${dir}/Saved/DTHStudio/job.json`)
@@ -378,10 +381,10 @@ test('ONE task row per re-import — and a set the project never held is dropped
       }),
     )
   }, UPROJECT_DIR)
-  await expect(page.locator('[data-export-status]')).toContainText(
-    /Unreal; re-imported 1 asset in .Game.Characters.Kira/,
+  await expect(page.getByText(/Unreal: re-imported 1 asset in .Game.Characters.Kira/)).toBeVisible(
     { timeout: 15_000 },
   )
+  await expect(rows).toHaveCount(0)
 })
 
 test('the just-re-import run needs no Daz-mode change: no scenes + Skip Houdini starts the send', async ({
@@ -426,9 +429,11 @@ test('the just-re-import run needs no Daz-mode change: no scenes + Skip Houdini 
   await expect(start).toBeEnabled()
   await start.click()
 
-  // The run IS the send: the job queues for the editor, and no Daz batch was
-  // handed off (the finish toast machinery reports the Unreal line alone).
-  await expect(page.getByText(/Unreal: queued for DemoGame/)).toBeVisible()
+  // The run IS the send: the task row + status line carry the queue — a clean
+  // queue raises NO toast (that would repeat the progress bar; the leg's one
+  // toast is its outcome, when the editor answers).
+  await expect(page.locator('[data-export-status]')).toContainText(/Unreal; queued for DemoGame/)
+  await expect(page.getByText(/Unreal: queued for DemoGame/)).toHaveCount(0)
 })
 
 test('nothing claims the job and no editor is running — the studio opens the project', async ({
@@ -472,7 +477,8 @@ test('nothing claims the job and no editor is running — the studio opens the p
   await dialog.getByRole('checkbox', { name: 'Send to DemoGame' }).check()
   await dialog.getByRole('button', { name: 'Start' }).click()
 
-  await expect(page.getByText(/Unreal: queued for DemoGame/)).toBeVisible()
+  // The queue shows in the run's own status line — no toast for a clean queue.
+  await expect(page.locator('[data-export-status]')).toContainText(/Unreal; queued for DemoGame/)
   // Nothing claims it (no editor in the fake world), so after the grace period
   // the project is handed to the OS the same way a `.hip` or `.duf` is.
   await expect

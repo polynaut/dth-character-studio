@@ -57,6 +57,7 @@ import {
   capitalizeStatus,
   dismissFinishToasts,
   exportWarningToast,
+  unrealOutcomeToast,
 } from './dth-export/progress.tsx'
 import { WaitForDazCloseModal } from './dth-export/rows.tsx'
 import { DthExportPanel } from './dth-export/panel.tsx'
@@ -565,6 +566,15 @@ export function DthExportAction({
   }
   const unrealWatchRef = useRef('')
 
+  /** One send line, typed by what happened so the toast layer never has to
+   *  sniff its own strings: `queued` = clean (silent — the rows carry it),
+   *  `skipped` = queued but with sets dropped (warning), `refused` = nothing
+   *  queued (error). The `line` itself still rides the final report as text. */
+  interface UnrealSendLine {
+    kind: 'queued' | 'skipped' | 'refused'
+    line: string
+  }
+
   /**
    * Hand what the run just exported to the selected Unreal projects, and say so
    * in the end report.
@@ -576,13 +586,13 @@ export function DthExportAction({
    * whenever it is next open (the character page's panel is where a live
    * import is followed).
    */
-  async function sendToUnreal(): Promise<Array<string>> {
+  async function sendToUnreal(): Promise<Array<UnrealSendLine>> {
     const targets = unrealTargetsRef.current
     unrealTargetsRef.current = []
     if (targets.length === 0) return []
     unrealSentRef.current = true
     const lines = await Promise.all(
-      targets.map(async (uprojectPath) => {
+      targets.map(async (uprojectPath): Promise<UnrealSendLine> => {
         const name = stemOf(uprojectPath)
         try {
           const started = await startUnrealImport({
@@ -618,8 +628,11 @@ export function DthExportAction({
           // read as "everything reached Unreal" about a set that was dropped
           // because that project has never held it (re-import only).
           return started.skipped.length > 0
-            ? `Unreal: queued for ${name} — ${sets} (not in that project yet, so not sent: ${started.skipped.join(', ')} — make the first import in Unreal itself)`
-            : `Unreal: queued for ${name} — ${sets}`
+            ? {
+                kind: 'skipped',
+                line: `Unreal: queued for ${name} — ${sets} (not in that project yet, so not sent: ${started.skipped.join(', ')} — make the first import in Unreal itself)`,
+              }
+            : { kind: 'queued', line: `Unreal: queued for ${name} — ${sets}` }
         } catch (error) {
           // A refusal here (no bridge, no export) must not read as an export
           // failure: the Houdini leg is done and its output is on disk. But it
@@ -631,7 +644,10 @@ export function DthExportAction({
           const target = armed?.unreal.find((one) => one.path === uprojectPath)
           if (target) target.failed = true
           unrealStatusRef.current = `Unreal; not queued for ${name}`
-          return `Unreal: not queued for ${name} — ${error instanceof Error ? error.message : String(error)}`
+          return {
+            kind: 'refused',
+            line: `Unreal: not queued for ${name} — ${error instanceof Error ? error.message : String(error)}`,
+          }
         }
       }),
     )
@@ -639,26 +655,19 @@ export function DthExportAction({
   }
 
   /**
-   * One toast per send line, styled by its outcome. A refused send used to
-   * ride the same blue (i) toast as a queued one — "Runner is not installed"
-   * under an info icon, over a still-spinning row, reads as a shrug, not a
-   * failure. And the "open the editor" hint belongs ONLY to lines that queued
-   * something: a line that queued nothing must not tell the user to open an
-   * editor that would do nothing with it.
+   * Toasts for the send, by outcome — and a CLEAN queue gets none. Queuing is
+   * mid-run news, and the run's own task rows + status line already say it
+   * ("a toast repeating the progress bar", reported 2026-08-19); the leg's
+   * real report is {@link unrealOutcomeToast}, when the editor answers. What
+   * still speaks here is what the rows cannot carry: a refusal is an ERROR
+   * (it used to ride a blue (i) over a still-spinning row, reading as a
+   * shrug), and a dropped set is a WARNING — silent, the run would read as
+   * "everything reached Unreal" about a set that never went.
    */
-  function emitUnrealSendToasts(lines: Array<string>) {
-    for (const line of lines) {
-      // The prefix is `sendToUnreal`'s own catch-branch spelling — built and
-      // read in the same function's orbit, never user text.
-      if (line.startsWith('Unreal: not queued')) {
-        toast.error(line, { duration: Infinity })
-      } else {
-        toast.info(line, {
-          duration: Infinity,
-          description:
-            'The bridge imports it when that project is open in Unreal — open the editor if it is closed.',
-        })
-      }
+  function emitUnrealSendToasts(lines: Array<UnrealSendLine>) {
+    for (const { kind, line } of lines) {
+      if (kind === 'refused') toast.error(line, { duration: Infinity })
+      else if (kind === 'skipped') exportWarningToast(line)
     }
   }
 
@@ -872,8 +881,6 @@ export function DthExportAction({
     setUnrealState(state)
     if (state?.state !== 'finished') return
     unrealWatchRef.current = ''
-    // The outcome becomes the status line, like every other leg's — and it
-    // lands minutes after the run's toast, so this is where it is read.
     const what = state.reimported ? 're-imported' : 'imported'
     const landed = `${what} ${state.assets} asset${state.assets === 1 ? '' : 's'}${
       state.destination ? ` in ${state.destination}` : ''
@@ -882,12 +889,16 @@ export function DthExportAction({
     // reports `done` as long as one landed, so "some worked, some didn't" is a
     // real state — and it used to be reported as unqualified success, which is
     // the one thing this leg must never do.
-    unrealStatusRef.current = !state.error
-      ? `Unreal; ${landed}`
-      : state.sets > 0
-        ? `Unreal; ${landed} — but ${state.error}`
-        : `Unreal; import failed — ${state.error}`
-    publishPipeline(progressRef.current, houdiniRef.current)
+    //
+    // The outcome is a sticky toast, and it ENDS the run: this leg is always
+    // the run's last, so its answer is the moment the panel has nothing left
+    // to show. It used to become the status line of a panel that then sat at
+    // 100% forever (measured 2026-08-19, the first live in-place re-import) —
+    // done work with no way to be done.
+    if (!state.error) unrealOutcomeToast('success', `Unreal: ${landed}.`)
+    else if (state.sets > 0) unrealOutcomeToast('warning', `Unreal: ${landed} — but ${state.error}`)
+    else unrealOutcomeToast('error', `Unreal: import failed — ${state.error}`)
+    clearPipeline()
     void dismissUnrealImport({ data: { uprojectPath } })
   }
 
@@ -1023,14 +1034,27 @@ export function DthExportAction({
       } else {
         exportFinishToast('success', `DTH Export finished — ${scenes} exported${took}.`)
       }
-      // No Houdini continuation — the run ends here, and its cards with it.
-      // A SKIP run still has its third leg: no Houdini means the send happens
-      // now, off the exports already on disk, instead of after a queue.
+      // No Houdini continuation — the Daz cards end here. A SKIP run still has
+      // its third leg: no Houdini means the send happens now, off the exports
+      // already on disk, instead of after a queue.
       clearPipeline()
       if (run.unrealProjects.length > 0 && failedTotal < run.total) {
         unrealTargetsRef.current = run.unrealProjects
         unrealSetsRef.current = run.unrealSets
-        void sendToUnreal().then(emitUnrealSendToasts)
+        // The send is still the run: its rows + the bar carry it (the clean
+        // queue toasts nothing — see emitUnrealSendToasts), and the outcome
+        // toast ends it — the same shape as the Unreal-only run. Without this
+        // the leg was invisible from the file write until the editor answered.
+        pipelineRef.current = {
+          daz: [],
+          houdini: [],
+          unreal: unrealTargetsFrom(run.unrealProjects, run.unrealSets, undefined),
+        }
+        publishPipeline(null, null)
+        void sendToUnreal().then((lines) => {
+          publishPipeline(null, null)
+          emitUnrealSendToasts(lines)
+        })
       }
       return
     }
@@ -1142,7 +1166,7 @@ export function DthExportAction({
       // if it were the run. `onInterrupt` already drops the targets in the
       // window that asked; this covers the run RESTORED into a window that
       // didn't (adoptHoudiniRun re-arms them from the plan).
-      const unrealLines = run.cancelled ? [] : await sendToUnreal()
+      const unrealLines = (run.cancelled ? [] : await sendToUnreal()).map((one) => one.line)
       if (report) {
         if (unrealLines.length > 0) report.unreal = unrealLines
         emitFinalReport()
