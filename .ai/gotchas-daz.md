@@ -365,6 +365,25 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   When the studio LAUNCHED Daz itself the wait can't apply — a cold start
   outlasts it — so that path owes the user an abort instead
   (`abortProjectScanRun`, `abortSceneScan`), including on dialog dismissal.
+- **Two Daz installations open side by side both work the job queue** (observed
+  2026-08-19: a DS4 and a DS6 open together, successive batches distributed to
+  whichever Runner noticed first — "jobs run in both, in parallel"). Both
+  Runners watch the SAME `Scripts/DTH-Character-Studio/` folder of the shared
+  library, and the job file is flavor-agnostic. The claim rename is exclusive,
+  so one batch never runs twice — but the `running_` claim file and the verbose
+  progress log exist ONCE, and a Runner picking up a new batch deletes any
+  existing `running_` file as stale litter (a live peer's included), so two
+  live batches garble each other's progress/finish bookkeeping. Detection is a
+  plain process COUNT: each install is single-instance (a second same-install
+  launch forwards and exits), so 2+ `DAZStudio.exe` processes = 2+
+  installations — no path reading, which also sidesteps the unreadable-path
+  problem of an elevated Daz. Every batch handoff writer (export, ROM build,
+  project scan, scene scan) calls `assertSingleDazInstance` BEFORE any arming
+  step touches disk and surfaces the refusal as a dialog (`MultipleDazModal`),
+  not a toast — the user has to go close a Daz, and a failed probe never
+  blocks. The interactive `open-scene` handoff is deliberately NOT guarded:
+  with two Dazs the scene just opens in whichever grabs it, which is
+  nondeterministic but harmless.
 - **A destructive confirm built on a focus-refreshed readout is confirming a
   SNAPSHOT, not the file.** `useRefetchOnFocus` re-reads on mount and window
   focus — and nothing else — so a readout stays as it was for as long as the

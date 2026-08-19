@@ -206,9 +206,9 @@ Renaming a project
 (`storage.renameManifestFile`) and calls `sync_renamed_project_window` to
 live-re-title + re-pin every open window on the old file (no close/reopen).
 
-**FFI surface: 54 commands** (count re-verified 2026-08-16 — it read "52", which
-had drifted by one BEFORE `install_dth_plugins_elevated` was added; count it,
-don't trust it) registered in `generate_handler!` — installs
+**FFI surface: 56 commands** (count re-verified 2026-08-19 — it read "54" while
+55 were registered, drifted again; count it, don't trust it) registered in
+`generate_handler!` — installs
 (`install_dth_release/plugin/daz_assets/daz_merge/houdini_presets/unreal_dth`,
 plus `install_unreal_plugin` and `install_dth_plugins_elevated` — the same plugin
 copy, run by an elevated helper process; see elevate.rs), the Unreal side (`unreal_engine_installs` — HKLM
@@ -221,8 +221,13 @@ scans (`list_daz_assets`, `scan_duf_files`, `pose_asset_frames`,
 `release_project_window` — the last unpins a window after its project is deleted
 so it continues as a Home window; the home window opens via the native menu's
 Rust-side `open_home_window_impl`, no command), Daz bridge
-(`daz_studio_running`/`run_daz_script`/`launch_daz_studio`/`focus_app_window`/
-`minimize_app_window` —
+(`daz_studio_running`/`daz_studio_instance_count`/`run_daz_script`/
+`launch_daz_studio`/`focus_app_window`/`minimize_app_window` —
+`daz_studio_instance_count` is the multi-install detector: each install is
+single-instance, so 2+ `DAZStudio.exe` processes = 2+ installations open side
+by side, and every handoff writer refuses that state
+(`assertSingleDazInstance`, api/execute) because their Runners race for the one
+job file;
 `launch_daz_studio` starts a scene-less Daz for the Execute job-file handoff,
 see `docs/exporter-plugin-job-file.md`, and **which Daz it starts** is its own
 rule — below; `daz_studio_running` takes that same install folder, `''` = any;

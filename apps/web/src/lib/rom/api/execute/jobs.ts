@@ -55,6 +55,7 @@ import {
   OPEN_SCENE_PICKUP_TIMEOUT_MS,
   OPEN_SCENE_POLL_MS,
   assertHandoffOwned,
+  assertSingleDazInstance,
   characterScenesRoot,
   dazStudioRunningNative,
   exportDazStudioRunning,
@@ -340,6 +341,9 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
   }
   const scriptsRoot = storage.studioScriptsDir(settings.dazLibraryFolder)
   const jobFile = joinPath(scriptsRoot, EXPORTER_JOB_FILE)
+  // Several Daz Studios open side by side would race for this handoff — refuse
+  // before any arming step touches disk (see assertSingleDazInstance).
+  await assertSingleDazInstance()
   // A leftover `running_` file (a finished batch nobody watched, or a dead
   // one) would block the Runner's rename — the studio owns its cleanup. But a
   // LIVE batch — sub-100 with Daz still up (another window's export, or a
@@ -622,6 +626,9 @@ export async function generateRomAnimation({
   }
   const paths = await exporterJobFilePaths()
   if (!paths) throw new Error('Set “My DAZ 3D Library” in Settings first.')
+  // Several Daz Studios open side by side would race for this handoff — refuse
+  // before any arming step touches disk (see assertSingleDazInstance).
+  await assertSingleDazInstance()
   // One global job file, one batch at a time — never clobber an export handoff.
   if (await exists(paths.pending)) {
     throw new Error('An export batch is waiting for Daz Studio — let it start (or abort it) first.')

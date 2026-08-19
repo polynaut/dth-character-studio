@@ -49,6 +49,29 @@ pub fn daz_studio_running(install_folder: String) -> bool {
     }
 }
 
+/// How many Daz Studio processes are running, whatever their installation.
+///
+/// Each installation is single-instance — a second launch of the same install
+/// forwards into the running one and exits — so a count of 2+ means 2+
+/// INSTALLATIONS are open side by side (a DS4 next to a DS6). Every one of
+/// them hosts a Runner watching the same `Scripts/DTH-Character-Studio/` job
+/// file, so a batch handed off in that state runs in whichever Daz notices
+/// first, and two live batches would fight over the one `running_` claim file
+/// and the one progress log. The handoff writers refuse on 2+ and tell the
+/// user to close all but one (`assertSingleDazInstance`, api/execute).
+// `(async)`: enumerates processes — off the main thread, like every probe here.
+#[tauri::command(async)]
+pub fn daz_studio_instance_count() -> u32 {
+    #[cfg(windows)]
+    {
+        crate::procs::running_exe_paths(DAZ_EXE).len() as u32
+    }
+    #[cfg(not(windows))]
+    {
+        0
+    }
+}
+
 /// Whether the executable at `exe` was started from `folder` — the test that
 /// tells a running DS4 from a running DS6 when both are `DAZStudio.exe`.
 ///

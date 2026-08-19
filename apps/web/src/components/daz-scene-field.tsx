@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 
 import { DirPathChip, displayDirOf } from '#/components/dir-path-chip.tsx'
 import { FolderMoveChip } from '#/components/folder-move-chip.tsx'
+import { MultipleDazModal } from '#/components/multiple-daz-modal.tsx'
 import { PathCode, tallPathChipClass } from '#/components/path-code.tsx'
 import { Portrait } from '#/components/portrait.tsx'
 import { Button, InfoPopup, Input, Label, LinkedAssetCard, Modal, RemoveAssetDialog, useModifierHeld, useRefetchOnFocus } from '@dth/ui'
@@ -17,6 +18,7 @@ import { CardReorderContext, SortableCard } from '#/components/sortable-cards.ts
 import dazLogo from '#/assets/daz-logo.png'
 import {
   copyDazScene,
+  MultipleDazInstancesError,
   dazStudioRunning,
   deleteFiles,
   fetchCharactersWithProblems,
@@ -461,6 +463,9 @@ export function DazSceneField({
     return { exists, stale: exists && !romReadySet.has(scene) }
   }
   const [generatingRom, setGeneratingRom] = useState('')
+  // The ROM handoff found several Daz Studios open — a dialog, not a toast,
+  // since the user has to go close one first (see MultipleDazModal).
+  const [multiDaz, setMultiDaz] = useState(false)
   // onGenerateRom's poll can run for up to 30 minutes — without a cancellation
   // flag it outlives this component and auto-opens the ROM scene in Daz long
   // after the user navigated away. Cleared on unmount (and re-armed on mount,
@@ -537,7 +542,8 @@ export function DazSceneField({
       /* oxlint-enable no-await-in-loop */
       toast.warning('The ROM animation never appeared — check the run in Daz Studio.')
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err))
+      if (err instanceof MultipleDazInstancesError) setMultiDaz(true)
+      else toast.error(err instanceof Error ? err.message : String(err))
     } finally {
       setGeneratingRom('')
     }
@@ -1703,6 +1709,7 @@ export function DazSceneField({
           </div>
         </Modal>
       )}
+      <MultipleDazModal open={multiDaz} onClose={() => setMultiDaz(false)} />
     </FileDropZone>
   )
 }
