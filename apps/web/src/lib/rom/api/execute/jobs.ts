@@ -38,7 +38,12 @@ import {
   sceneExportFolderRel,
   scenesRetiredByRun,
 } from '../../execute-jobs'
-import { BUILD_ROM_ANIMATION_SCRIPT, cancelFlagPath, sceneExportName } from '@dth/rom'
+import {
+  BUILD_ROM_ANIMATION_SCRIPT,
+  cancelFlagPath,
+  sceneExportName,
+  sceneHairExportEnabled,
+} from '@dth/rom'
 import { sceneDthPath } from '../../houdini-jobs'
 import { clearSceneRunLogs } from '../run-log-store.ts'
 import { charScopeInput, joinPath } from '../core'
@@ -97,6 +102,10 @@ export interface ExecuteSceneStatus {
    *  — the file a Houdini network imports). What "Houdini only" runs on; rows
    *  without one are disabled in that mode (nothing to rely on). */
   exportExists: boolean
+  /** The scene's effective "Export hair items" switch (`sceneHairExportEnabled`
+   *  — primary defaults on, extras off, the stored override wins). "Hair items
+   *  only" lists and pre-checks exactly these scenes. */
+  hairExport: boolean
 }
 
 /**
@@ -134,6 +143,7 @@ export async function fetchExecuteScenes({ data }: { data: unknown }): Promise<A
       // delivered file alone, so its on-disk presence is that mode's gate.
       const dth = sceneDthPath(character, key, scenesRootAbs)
       const exportExists = dth !== '' && (await mtimeOf(dth)) > 0
+      const hairExport = sceneHairExportEnabled(character, scenePath)
       let info: Awaited<ReturnType<typeof stat>>
       try {
         info = await stat(scenePath)
@@ -146,6 +156,7 @@ export async function fetchExecuteScenes({ data }: { data: unknown }): Promise<A
           romExists: romMtime > 0,
           romUnexported,
           exportExists,
+          hairExport,
         }
       }
       const prev = stored.scenes[key]
@@ -162,6 +173,7 @@ export async function fetchExecuteScenes({ data }: { data: unknown }): Promise<A
         romExists: romMtime > 0,
         romUnexported,
         exportExists,
+        hairExport,
       }
     }),
   )
@@ -297,11 +309,25 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
   // ROM only writes no fresh export — an export continuation would re-consume
   // the PREVIOUS `.dth`s while the report reads as the new ROM's round trip.
   // The dialog forces `skip` there; this is the loud backstop against any
-  // other caller.
-  if (mode === 'rom-only' && hips.length > 0 && houdiniMode !== 'skip') {
+  // other caller. Hair only is in the same boat: it refreshes the groom
+  // Alembics but writes no `.dth`, so a Houdini run off it would read as this
+  // run's round trip while consuming the previous character export.
+  if ((mode === 'rom-only' || mode === 'hair-only') && hips.length > 0 && houdiniMode !== 'skip') {
     throw new Error(
-      'ROM only writes no export for Houdini to run on — use "Skip Houdini", or deselect the Houdini projects.',
+      `${mode === 'rom-only' ? 'ROM only' : 'Hair items only'} writes no export for Houdini to run on — use "Skip Houdini", or deselect the Houdini projects.`,
     )
+  }
+
+  // Hair only runs the scenes whose "Export hair items" switch is on — the
+  // panel lists only those; this is the backstop against a stale pick.
+  if (mode === 'hair-only') {
+    for (const scene of scenes) {
+      if (!sceneHairExportEnabled(character, scene)) {
+        throw new Error(
+          `"Export hair items" is off for this scene:\n${scene}\nTurn it on in the scene's utils drawer first, or unselect the scene.`,
+        )
+      }
+    }
   }
 
   // The generated scripts must exist on disk — the export runs what generation

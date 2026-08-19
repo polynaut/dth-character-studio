@@ -5,9 +5,12 @@
 // The Groom Guide's "Export Alembic Groom Poses" step, automated PER HAIR ITEM:
 // for each of the open scene's hair items it hides every other wearable (the
 // item stays FITTED, as worn), exports its 2-frame Alembic as <Name>_Hair_<item>
-// via the DTH Exporter, restores the scene. Run it on the character's scene with
-// the figure selected; the ROM is NOT needed.
+// via the DTH Exporter, restores the scene. The Runner executes this one
+// unattended (DTH Export's "Hair items only" mode); the ROM is NOT needed.
 
+var dthProgressLogPath = "";
+// The studio's interrupt flag for this character — see EXPORT_CANCEL_FILE.
+var dthCancelPath = "C:/DTH/Project/.dcsmeta/characters/electra-g9/.dth_export_cancel";
 var dthLinkedScenes = [
   "c:/dth/project/assets/characters/electra g9/daz3d/electra.duf",
   "c:/dth/project/assets/characters/electra g9/daz3d/electra_yoga.duf"
@@ -39,6 +42,35 @@ var dthRomSourceHit = dthRomSourceScenes[String(dthOpenSceneFile).split("\\").jo
 if (dthRomSourceHit) {
     print("DTH: the open file is the saved ROM animation of " + dthRomSourceHit);
     dthOpenSceneFile = dthRomSourceHit;
+}
+
+// Verbose per-scene progress for the studio's live display (Runner v1.2.0
+// contract): "[<percent>] <scene>: <message>" appended per finished step.
+function dthProgressLog(nPct, sMsg) {
+    try {
+        if (typeof dthProgressLogPath == "undefined" || !dthProgressLogPath) return;
+        var dthPStem = "scene";
+        try {
+            var dthPScene = (typeof dthOpenSceneFile != "undefined" && dthOpenSceneFile)
+                ? String(dthOpenSceneFile) : String(Scene.getFilename());
+            if (dthPScene) dthPStem = String(new DzFileInfo(dthPScene).completeBaseName());
+        } catch (dthPStemErr) {}
+        var dthPFile = new DzFile(dthProgressLogPath);
+        if (dthPFile.open(dthPFile.Append)) {
+            dthPFile.write("[" + Math.round(nPct) + "] " + dthPStem + ": " + sMsg + "\n");
+            dthPFile.close();
+        }
+    } catch (dthPErr) { /* progress is best-effort - never fail the run over it */ }
+}
+
+// Interrupt: the studio drops this flag file when the user stops a running
+// DTH Export. Every carrier probes it at the points where abandoning the work
+// leaves nothing half-written; the studio deletes it again when the run ends.
+function dthCancelRequested() {
+    try {
+        if (typeof dthCancelPath == "undefined" || !dthCancelPath) return false;
+        return new DzFile(dthCancelPath).exists();
+    } catch (dthCErr) { return false; /* can't tell = keep working */ }
 }
 
 var dthAction = MainWindow.getActionMgr().findAction("DazToHueExporterAction");
@@ -88,17 +120,27 @@ if (dthSelPath == null || (dthSelPath != "" && !dthMatchesAsset(dthSelPath))) {
 }
 var dthSceneLinkErr = dthSceneLinkError();
 if (dthSceneLinkErr) {
-    MessageBox.critical(dthSceneLinkErr, "DTH Character Studio", "&OK");
+    print("DTH Character Studio: " + dthSceneLinkErr);
+    dthProgressLog(100, "scene link check failed - nothing was exported");
+} else if (dthCancelRequested()) {
+    // Interrupted before this row's turn — skip the scene and say so (the
+    // bulk carriers' twin; a silent skip would read as a run that worked).
+    print("DTH Character Studio: the export was interrupted - this scene was skipped.");
+    dthProgressLog(100, "skipped - the export was interrupted");
 } else if (!dthAction) {
-    MessageBox.critical("DazToHue Exporter Action not found - install the DTH Exporter Plugin v2.0+.", "DTH Character Studio", "&OK");
+    print("DTH Character Studio: DazToHue Exporter Action not found - install the DTH Exporter Plugin v2.0+.");
+    dthProgressLog(100, "exporter plugin missing - nothing was exported");
 } else if (!dthFig || !dthFig.inherits("DzNode")) {
-    MessageBox.critical("No G9 figure found in the scene - load the character's scene and re-run.", "DTH Character Studio", "&OK");
+    print("DTH Character Studio: No G9 figure found in the scene - load the character's scene and re-run.");
+    dthProgressLog(100, "no figure found - nothing was exported");
 } else {
     var dthGroomByScene = {"c:/dth/project/assets/characters/electra g9/daz3d/electra.duf":["Ponytail"],"c:/dth/project/assets/characters/electra g9/daz3d/electra_yoga.duf":["Yoga Braids"]};
     var dthGroomScene = dthOpenSceneFile.split("\\").join("/").toLowerCase();
     var dthGroomLabels = dthGroomByScene[dthGroomScene] || [];
     if (dthGroomLabels.length == 0) {
-        MessageBox.information("The open scene has no hair list in DTH Character Studio - nothing to export. Open one of the character's scenes with hair items defined.", "DTH Character Studio", "&OK");
+        // No modal — an empty hair list is a per-scene no-op, not a batch stopper.
+        print("DTH Character Studio: the open scene has no hair list - nothing to export.");
+        dthProgressLog(100, "no hair list for this scene - nothing to export");
     } else {
         var dthExportDir = "C:/DTH/Export/Electra";
 var dthExportSubByScene = {"c:/dth/project/assets/characters/electra g9/daz3d/electra.duf":"Electra","c:/dth/project/assets/characters/electra g9/daz3d/electra_yoga.duf":"Electra_Yoga"};
@@ -160,5 +202,6 @@ if (dthExportSub != "") dthExportDir = dthExportDir + "/" + dthExportSub;
             }
         }
         print("Hair items exported: " + dthGroomLabels.length);
+        dthProgressLog(100, "hair items exported");
     }
 }

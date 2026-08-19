@@ -60,6 +60,31 @@ export function detectedHairLabels(items: Array<SceneWearable>): Array<string> {
 }
 
 /**
+ * How a scene's stored hair list has DRIFTED from what the scene now contains
+ * — the user keeps editing scenes in Daz long after listing their hair, and
+ * both directions of the mismatch are silent failures at export time:
+ * `missing` are listed labels the scene no longer carries (the generated
+ * script STOPS the export on a label it cannot find), `unlisted` is detected
+ * hair the list doesn't cover (it would ride into the export). One rule, so
+ * every consumer judges drift identically — today that's the editor's two
+ * warnings (groom-fields); an export-time pre-flight would call this too.
+ *
+ * Callers gate on a SUCCESSFUL scan themselves — computing drift from a
+ * failed read would fabricate "gone from the scene" about every listed item.
+ */
+export function hairDrift(
+  listed: ReadonlyArray<string>,
+  items: Array<SceneWearable>,
+): { missing: Array<string>; unlisted: Array<string> } {
+  const known = new Set(items.map((wearable) => wearable.label))
+  const listedSet = new Set(listed)
+  return {
+    missing: listed.filter((label) => !known.has(label)),
+    unlisted: detectedHairLabels(items).filter((label) => !listedSet.has(label)),
+  }
+}
+
+/**
  * The AUTOMATIC per-scene "Export hair items" that follows a hair-list change
  * on a NON-PRIMARY scene — the editor's list edit and the add-scene seeding
  * both re-decide the switch from the list itself (the Scene utils switch stays

@@ -105,15 +105,18 @@ function goldenCharacter(): Character {
     scenePath: 'C:/DTH/Project/assets/characters/Electra G9/daz3d/Electra.duf',
     extraScenes: ['C:/DTH/Project/assets/characters/Electra G9/daz3d/Electra_Yoga.duf'],
     exportPath: 'C:/DTH/Export/Electra',
-    // A hair list, so the groom paths are pinned too: the hide bracket the
-    // Export_ script wraps around its export, the per-item pass the bulk
-    // carriers inline behind theirs, and the standalone Export_Hair_ script.
-    // (The header above always claimed groom coverage; until v38 the fixture
-    // carried no hair, so all three went unpinned.)
+    // Hair on BOTH scenes: the doc above claims groom coverage, and without a
+    // list the two hair scripts pin an EMPTY per-scene map — a golden that
+    // could not catch a broken lookup. A hair-only record never arms the
+    // override (`sceneRecordEmpty` counts it), so nothing else changes shape.
     sceneOverrides: [
       {
         scenePath: 'C:/DTH/Project/assets/characters/Electra G9/daz3d/Electra.duf',
-        hair: [{ nodeLabel: 'dForce Ponytail' }],
+        hair: [{ nodeLabel: 'Ponytail' }],
+      },
+      {
+        scenePath: 'C:/DTH/Project/assets/characters/Electra G9/daz3d/Electra_Yoga.duf',
+        hair: [{ nodeLabel: 'Yoga Braids' }],
       },
     ],
   })
@@ -207,6 +210,7 @@ describe('generated artifacts (golden)', () => {
     expect(runnerCarriers.map((f) => f.fileName).sort()).toEqual([
       '.Build_ROM_Animation.dsa',
       '.Bulk_Export_Only.dsa',
+      '.Bulk_Hair_Export.dsa',
       '.Bulk_ROM_Export.dsa',
     ])
   })

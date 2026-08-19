@@ -32,6 +32,7 @@ import {
   activeSceneOverrides,
   BUILD_ROM_ANIMATION_SCRIPT,
   BULK_EXPORT_ONLY_SCRIPT,
+  BULK_HAIR_EXPORT_SCRIPT,
   BULK_ROM_EXPORT_SCRIPT,
   characterScriptName,
   characterSlug,
@@ -574,15 +575,15 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
           [
             `${dazBase}.dsa`,
             ...iconBearing,
-            // The two hidden bulk carriers exist only WITH an export dir —
-            // swept here once the dir is cleared. BOTH of them: the export-only
-            // twin was missing from this list, so clearing the export dir
-            // retired `.Bulk_ROM_Export.dsa` and left `.Bulk_Export_Only.dsa`
-            // behind with a stale export path baked into it. The ROM-only
-            // sibling is always written now; listing it keeps a future
-            // retirement sweepable.
+            // The three hidden bulk carriers exist only WITH an export dir —
+            // swept here once the dir is cleared. The export-only twin was
+            // missing from this list and lingered behind with a stale export
+            // path baked into it; all three retire together now. The ROM-only
+            // sibling is always written; listing it keeps a future retirement
+            // sweepable.
             BULK_ROM_EXPORT_SCRIPT,
             BULK_EXPORT_ONLY_SCRIPT,
+            BULK_HAIR_EXPORT_SCRIPT,
             BUILD_ROM_ANIMATION_SCRIPT,
             // Legacy name (pre-Hair rename) — never in the written set now, so it's
             // always swept from a character folder that still has the old script.

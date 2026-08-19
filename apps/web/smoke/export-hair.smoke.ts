@@ -69,3 +69,27 @@ test('a Save writes the three separate scripts, one job each', async ({ page }) 
   const hair = await read('Export_Hair_Kira_G9.dsa')
   expect(hair).not.toContain('ApplyDTHCharacter(')
 })
+
+test('hair drift on the PRIMARY scene warns both ways — gone and unlisted', async ({ page }) => {
+  // The reported shape (2026-08-19): the user re-styles the scene in Daz and
+  // saves — the list still names the old hair (the export stops on a label it
+  // cannot find) and the new hair is unlisted (it rides into the export).
+  // The unlisted half used to be gated to outfit scenes on the "the primary
+  // was seeded complete at creation" reasoning, so a drifted PRIMARY warned
+  // about nothing at all.
+  const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true })
+  seed.sceneWearables = {
+    [P.scene]: [
+      { id: 'nova-ponytail-hair', label: 'Nova Ponytail Hair', conformTarget: '#Genesis9' },
+    ],
+  }
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+
+  // Listed but gone from the scene…
+  await expect(page.getByText(/Not found in .KiraDefault_G9_GP.+CHT Sevenly Hair/)).toBeVisible()
+  // …and in the scene but not listed — on the primary, the new half.
+  await expect(page.getByText(/Unlisted hair: Nova Ponytail Hair/)).toBeVisible()
+})

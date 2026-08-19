@@ -47,6 +47,7 @@ import type {
   HoudiniRunMode,
   RunChoice,
 } from '#/lib/rom/execute-jobs.ts'
+import { sceneHairExportEnabled } from '@dth/rom'
 import type { Character } from '@dth/rom'
 
 import { EMPTY_SELECTION } from './progress.tsx'
@@ -302,7 +303,15 @@ export function DthExportPanel({
       romExists: false,
       romUnexported: false,
       exportExists: false,
+      hairExport: sceneHairExportEnabled(character, scenePath),
     }))
+  /** The list the panel actually shows: "Hair items only" lists ONLY the
+   *  scenes whose "Export hair items" switch is on — the mode exports nothing
+   *  else, so a scene it cannot touch has no business in its list. Every other
+   *  mode shows every linked scene (rows a mode can't run are disabled, not
+   *  hidden — the hint says why). Hair is the exception because the switch is
+   *  a per-scene CHOICE made in the utils drawer, not a state a run repairs. */
+  const visibleRows = mode === 'hair-only' ? rows.filter((row) => row.hairExport) : rows
 
   /**
    * The "Export only" Start gate: SELECTED scenes with no saved ROM animation
@@ -339,9 +348,11 @@ export function DthExportPanel({
    * refuse a rom-only run with Houdini projects attached. `skip` is a CHOICE
    * ("use last exports") when the user picks it; under rom-only it is merely
    * what `pickMode` was left with, and inheriting a send from it would be a
-   * choice nobody made.
+   * choice nobody made. Hair only stops after Daz for the same reason — the
+   * fresh grooms never reach a `.dth`, so a send could only carry the past.
    */
-  const unrealSendable = mode !== 'rom-only' && (houdiniMode === 'skip' || checkedHips.size > 0)
+  const dazOnlyMode = mode === 'rom-only' || mode === 'hair-only'
+  const unrealSendable = !dazOnlyMode && (houdiniMode === 'skip' || checkedHips.size > 0)
 
   /**
    * The whole run is the Unreal send — nothing runs in Daz or Houdini.
@@ -357,7 +368,7 @@ export function DthExportPanel({
    * cannot be selected in the first place.
    */
   const unrealOnlyRun =
-    houdiniMode === 'skip' && mode !== 'rom-only' && (mode === 'houdini-only' || checked.size === 0)
+    houdiniMode === 'skip' && !dazOnlyMode && (mode === 'houdini-only' || checked.size === 0)
 
   /**
    * The export sets THIS RUN will produce, or null when the studio cannot say.
@@ -443,10 +454,10 @@ export function DthExportPanel({
   /** Why this section can't do anything — '' when it can, which is when it says
    *  nothing at all. */
   const unrealNote = !unrealSendable
-    ? mode === 'rom-only'
+    ? dazOnlyMode
       ? // Naming the Houdini pick here would be advice the user cannot take:
-        //  rom-only cleared that list and runs no Houdini at all.
-        'ROM only writes no export — nothing to send. Run “ROM + Export”, or send the last export with “Skip Daz”.'
+        //  these modes cleared that list and run no Houdini at all.
+        `${mode === 'rom-only' ? 'ROM only' : 'Hair items only'} writes no export — nothing to send. Run “ROM + Export”, or send the last export with “Skip Daz”.`
       : 'Needs somewhere to send from: tick a Houdini project, or pick “Skip Houdini”.'
     : nothingToSend
       ? houdiniMode === 'skip'
@@ -503,7 +514,12 @@ export function DthExportPanel({
         // run writes no fresh export, so a Houdini continuation could only
         // re-consume the PREVIOUS one while the report reads as the new ROM's
         // round trip (`executeCharacterJobs` refuses that combination outright).
-        if (pre.size > 0 && modeRef.current !== 'rom-only' && character.houdiniProjects.length > 0) {
+        if (
+          pre.size > 0 &&
+          modeRef.current !== 'rom-only' &&
+          modeRef.current !== 'hair-only' &&
+          character.houdiniProjects.length > 0
+        ) {
           setCheckedHips((prev) =>
             prev.size > 0
               ? prev
@@ -529,6 +545,9 @@ export function DthExportPanel({
               romExists: true,
               romUnexported: false,
               exportExists: true,
+              // Not a probe result — read straight off the definition, so a
+              // failed probe changes nothing about which scenes hair-only lists.
+              hairExport: sceneHairExportEnabled(character, scenePath),
             })),
         )
         toast.error(error instanceof Error ? error.message : String(error))
@@ -559,7 +578,7 @@ export function DthExportPanel({
   // ignorance). Missing `.hip`s stay out. Not under rom-only — that list is a
   // manual OPEN pick.
   useEffect(() => {
-    if (mode === 'rom-only' || hipImports.length === 0) return
+    if (mode === 'rom-only' || mode === 'hair-only' || hipImports.length === 0) return
     const dthFor = (scene: string): string => sceneDth[normalizeSceneKey(scene)] ?? ''
     const scenesDth = [...checked].map(dthFor).filter((dth) => dth !== '')
     // The other side of the same coin: every LINKED scene that is not ticked.
@@ -608,11 +627,21 @@ export function DthExportPanel({
     setMode(next)
     // Only seed a list the user has not made their own — see `scenesTouched`.
     if (status && !scenesTouched) setChecked(preCheckedScenes(next, status))
+    else if (next === 'hair-only') {
+      // A hand-made selection survives a mode switch — except the scenes this
+      // mode HIDES: hair-only lists only the hair-enabled scenes, and a
+      // checked row that isn't rendered would ride into the run invisibly.
+      setChecked(
+        (prev) => new Set([...prev].filter((scene) => sceneHairExportEnabled(character, scene))),
+      )
+    }
     // ROM only writes no fresh export, so a Houdini continuation has nothing
     // of THIS run's to consume — whatever the list had armed (auto-selection
     // included) doesn't carry over, and the one thing it can still do is OPEN
-    // a project the user re-picks deliberately.
-    if (next === 'rom-only') {
+    // a project the user re-picks deliberately. Hair only is the same case:
+    // it refreshes the groom Alembics but writes no `.dth` for Houdini to run
+    // on (`executeCharacterJobs` refuses both combinations outright).
+    if (next === 'rom-only' || next === 'hair-only') {
       setCheckedHips(new Set())
       setHoudiniMode('skip')
     }
@@ -631,7 +660,11 @@ export function DthExportPanel({
   async function onExport() {
     setBusy(true)
     try {
-      const chosenScenes = rows.filter((r) => checked.has(r.scenePath)).map((r) => r.scenePath)
+      // Off the VISIBLE list: under hair-only a checked scene the filter hides
+      // must not ride into the run (pickMode prunes those; belt and braces).
+      const chosenScenes = visibleRows
+        .filter((r) => checked.has(r.scenePath))
+        .map((r) => r.scenePath)
       const chosenHips = character.houdiniProjects.filter((hip) => checkedHips.has(hip))
       // Only when this run actually exports — see `unrealSendable`.
       const chosenUnreal = unrealSendable
@@ -728,7 +761,7 @@ export function DthExportPanel({
       })
       onExported({
         scenes: chosenScenes,
-        houdiniProjects: mode === 'rom-only' || houdiniMode === 'skip' ? [] : chosenHips,
+        houdiniProjects: dazOnlyMode || houdiniMode === 'skip' ? [] : chosenHips,
         // The scene scope the Houdini leg will export (→ the networks its
         // task cards name) — the continuation recomputes the same set.
         houdiniScenes: chosenScenes,
@@ -746,7 +779,12 @@ export function DthExportPanel({
       })
       onClose()
       const count = `${result.scenes.length} scene${result.scenes.length === 1 ? '' : 's'}`
-      const what = mode === 'rom-only' ? 'queued for a ROM build' : 'queued for export'
+      const what =
+        mode === 'rom-only'
+          ? 'queued for a ROM build'
+          : mode === 'hair-only'
+            ? 'queued for hair export'
+            : 'queued for export'
       toast.success(
         result.dazWasRunning
           ? // The plugin polls for the job file, so a running Daz picks it up.
@@ -862,12 +900,14 @@ export function DthExportPanel({
             ? 'Skips Daz entirely — the selected Houdini projects run their DazToHue exports off each scene’s last Daz export.'
             : mode === 'export-only'
               ? 'Exports each selected scene’s saved ROM animation as it stands — no rebuild, so this is the quick one.'
-              : 'Heads up: this takes a long time — Daz Studio plays through the full ROM for every selected scene.'}
+              : mode === 'hair-only'
+                ? 'Exports only the hair items of the selected scenes — one Alembic per item, nothing else. Listed are the scenes with “Export hair items” on.'
+                : 'Heads up: this takes a long time — Daz Studio plays through the full ROM for every selected scene.'}
         </p>
         <div>
           <Label className="mb-1.5">Daz scenes</Label>
           <div className="space-y-2">
-            {rows.map((row) => (
+            {visibleRows.map((row) => (
               <SceneRow
                 key={normalizeSceneKey(row.scenePath)}
                 status={row}
@@ -884,7 +924,7 @@ export function DthExportPanel({
                   setScenesTouched(true)
                   setChecked(
                     new Set(
-                      rows
+                      visibleRows
                         .filter((r) =>
                           mode === 'houdini-only'
                             ? r.exportExists
@@ -896,6 +936,14 @@ export function DthExportPanel({
                 }}
               />
             ))}
+            {visibleRows.length === 0 && (
+              // Only hair-only can empty the list (every other mode shows all
+              // linked scenes) — an empty section with no word would read as a
+              // character with no scenes at all.
+              <p className="text-xs text-muted-foreground">
+                No scene has “Export hair items” on — turn it on in a scene’s utils drawer first.
+              </p>
+            )}
           </div>
           <div className="mt-2 flex items-center gap-2">
             <Label className="shrink-0" htmlFor="daz-mode">
@@ -962,15 +1010,13 @@ export function DthExportPanel({
                     <SelectItem
                       key={option.mode}
                       value={option.mode}
-                      // The EXPORT mode is dead under ROM only: that run writes
-                      // no fresh export, so it could only re-consume the previous
-                      // one while reading as this run's output.
-                      // `skip` needs somewhere to send to; the export mode needs
-                      // a run that produces an export.
+                      // The EXPORT mode is dead under ROM only and Hair only:
+                      // those runs write no fresh `.dth`, so it could only
+                      // re-consume the previous one while reading as this run's
+                      // output. `skip` needs somewhere to send to; the export
+                      // mode needs a run that produces an export.
                       disabled={
-                        option.mode === 'skip'
-                          ? unrealProjects.length === 0
-                          : mode === 'rom-only'
+                        option.mode === 'skip' ? unrealProjects.length === 0 : dazOnlyMode
                       }
                     >
                       <span className="block">

@@ -121,6 +121,8 @@ describe('the JSON job file (contract v2)', () => {
     expect(jobStepsForMode('rom-export')).toBe(5)
     expect(jobStepsForMode('export-only')).toBe(4)
     expect(jobStepsForMode('rom-only')).toBe(2)
+    // open / export the hair items — the carrier's final line is the 100.
+    expect(jobStepsForMode('hair-only')).toBe(2)
   })
 
   it('parseExportProgressLog + exportProgressStateFrom: the live view', () => {
@@ -480,12 +482,15 @@ describe('job rows per export mode — which hidden script, on which scene file'
     expect(jobScriptForMode('rom-export')).toBe('.Bulk_ROM_Export.dsa')
     expect(jobScriptForMode('rom-only')).toBe('.Build_ROM_Animation.dsa')
     expect(jobScriptForMode('export-only')).toBe('.Bulk_Export_Only.dsa')
+    expect(jobScriptForMode('hair-only')).toBe('.Bulk_Hair_Export.dsa')
   })
 
   it('export-only opens the SAVED ROM animation, the other modes the scene itself', () => {
     const scene = 'X:\\proj\\Electra\\daz3d\\primary\\Electra.duf'
     expect(jobSceneForMode('rom-export', scene)).toBe(scene)
     expect(jobSceneForMode('rom-only', scene)).toBe(scene)
+    // The hair pass runs on the scene as saved — no ROM involved at all.
+    expect(jobSceneForMode('hair-only', scene)).toBe(scene)
     expect(jobSceneForMode('export-only', scene)).toBe(
       'X:/proj/Electra/daz3d/primary/rom-animations/Electra_ROM.duf',
     )
@@ -516,6 +521,10 @@ describe('which scenes a starting run retires from the last report', () => {
     // describes what is being exported, and a clean export writes no run log
     // to replace it with.
     expect(scenesRetiredByRun('export-only', [A, B])).toEqual([])
+  })
+
+  it('NOTHING for hair-only either — the hair pass writes no run log', () => {
+    expect(scenesRetiredByRun('hair-only', [A, B])).toEqual([])
   })
 })
 
@@ -639,6 +648,7 @@ describe('preCheckedScenes — the dialog pre-selection per mode', () => {
       romExists: boolean
       romUnexported: boolean
       exportExists: boolean
+      hairExport: boolean
     }> = {},
   ) => ({
     scenePath,
@@ -647,6 +657,7 @@ describe('preCheckedScenes — the dialog pre-selection per mode', () => {
     romExists: false,
     romUnexported: false,
     exportExists: false,
+    hairExport: false,
     ...over,
   })
 
@@ -687,6 +698,19 @@ describe('preCheckedScenes — the dialog pre-selection per mode', () => {
       row(B, { affected: true, exportExists: false }),
     ]
     expect(preCheckedScenes('houdini-only', rows)).toEqual(new Set([A]))
+  })
+
+  it('hair-only pre-checks every runnable hair-enabled scene — its whole list', () => {
+    // No staleness signal (nothing tracks what the hair pass last wrote): the
+    // panel lists only the hair-enabled scenes, and picking the mode means
+    // "export their hair now" — so all of them start checked, except a scene
+    // whose .duf cannot be opened (the hair pass runs ON the scene).
+    const rows = [
+      row(A, { hairExport: true }),
+      row(B, { hairExport: true, missing: true }),
+      row('X:/p/Kira/daz3d/gym/KiraGym.duf', { affected: true }),
+    ]
+    expect(preCheckedScenes('hair-only', rows)).toEqual(new Set([A]))
   })
 })
 
