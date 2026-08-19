@@ -156,6 +156,72 @@ describe('houdiniTaskCards', () => {
     expect(cards.map((c) => c.status)).toEqual(['active', 'waiting', 'waiting'])
   })
 
+  it('KEEPS the network rows once the project has finished', () => {
+    // The reported bug: `live` describes the ACTIVE project only, and the end
+    // report keeps a summary line per project rather than its networks — so a
+    // finished project fell back to one row and the list went 1 -> N -> 1. A
+    // two-project run whose toast said "2 exported" for each really exported
+    // four networks and never showed more than two rows.
+    const cards = houdiniTaskCards(project(), 0, null, false, 1, {
+      total: 2,
+      networks: [
+        { label: 'LaraClassic', status: 'ok' },
+        { label: 'LaraNaked', status: 'ok' },
+      ],
+    })
+    expect(cards.map((c) => [c.label, c.status])).toEqual([
+      ['LaraClassic', 'done'],
+      ['LaraNaked', 'done'],
+    ])
+    expect(cards.every((c) => c.detail === 'DazToHue network')).toBe(true)
+    expect(cards.every((c) => c.context === 'LaraCroft_G81')).toBe(true)
+  })
+
+  it('a finished project keeps a FAILED network failed, and an unreached one unstarted', () => {
+    // The same honesty rule the live rows follow: `skipped` finished with
+    // nothing to do (done), `failed` is finished-but-wrong, and a network the
+    // run never reached — an interrupted queue — must not be ticked off, or
+    // the list claims work that did not happen.
+    const cards = houdiniTaskCards(project(), 0, null, false, 1, {
+      total: 3,
+      networks: [
+        { label: 'LaraClassic', status: 'skipped' },
+        { label: 'LaraNaked', status: 'failed' },
+        { label: 'LaraThick', status: 'waiting' },
+      ],
+    })
+    expect(cards.map((c) => [c.label, c.status])).toEqual([
+      ['LaraClassic', 'done'],
+      ['LaraNaked', 'failed'],
+      ['LaraThick', 'waiting'],
+    ])
+  })
+
+  it('the memo outranks the scan — it is the list that actually exported', () => {
+    // The scan says what the project WRITES; the run said what it DID. Same
+    // precedence the live rows have over the scan, held after the run ends.
+    const cards = houdiniTaskCards(
+      project({ sets: ['LaraClassic', 'LaraNaked', 'LaraThick'] }),
+      0,
+      null,
+      false,
+      1,
+      { total: 2, networks: [{ label: 'LaraClassic', status: 'ok' }, { label: 'LaraNaked', status: 'ok' }] },
+    )
+    expect(cards.map((c) => c.label)).toEqual(['LaraClassic', 'LaraNaked'])
+  })
+
+  it('a one-network memo stays the single project row', () => {
+    // Nothing to expand: one network is what the single row already says, and
+    // a lone "Network 1" under a project heading is noise.
+    expect(
+      houdiniTaskCards(project(), 0, null, false, 1, {
+        total: 1,
+        networks: [{ label: 'LaraClassic', status: 'ok' }],
+      }),
+    ).toHaveLength(1)
+  })
+
   it('stays ONE row when nothing knows better', () => {
     // No scan, no run: a single project row, which is what shipped before any
     // of this — named by the project, saying what it is there to do.

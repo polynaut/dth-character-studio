@@ -60,6 +60,17 @@ export function dazTaskCards(
 }
 
 /**
+ * What one project's run reported about its networks — kept by the caller so
+ * the rows outlive that project's turn (see {@link houdiniTaskCards}). The
+ * same shape the running state carries, and deliberately nothing more: a memo
+ * that could drift from the run is worse than no memo.
+ */
+export interface HoudiniNetworkMemo {
+  total: number
+  networks: Extract<HoudiniRunState, { state: 'running' }>['networks']
+}
+
+/**
  * The Houdini half: one row per DazToHue NETWORK.
  *
  * Where the names come from, in the order they become available:
@@ -76,6 +87,15 @@ export function dazTaskCards(
  * selected is not exported — so the run replaces it the moment it speaks. That
  * is a row disappearing mid-run, which is honest: it says "that network is not
  * in this run" instead of leaving one that never starts.
+ *
+ * 4. **What that project's own run last reported** (`remembered`), once it is
+ *    OVER. `live` describes the ACTIVE project only, and the end-of-run report
+ *    keeps one summary line per project rather than its networks — so a
+ *    finished project had nothing left to build rows from and collapsed from N
+ *    back to one. Measured on a two-project run whose toast said "2 exported"
+ *    for each: four networks really exported, and the list only ever showed
+ *    two rows. The caller hands the last snapshot back here so the rows the
+ *    run earned survive it.
  */
 export function houdiniTaskCards(
   project: { path: string; label: string; networks: Array<string>; sets?: Array<string> },
@@ -83,6 +103,9 @@ export function houdiniTaskCards(
   live: Extract<HoudiniRunState, { state: 'running' }> | null,
   isActive: boolean,
   finishedProjects: number,
+  /** The last snapshot THIS project's run reported, kept by the caller past the
+   *  end of that project's turn (see source 4 above). Its statuses are final. */
+  remembered?: HoudiniNetworkMemo | null,
 ): Array<ExportTask> {
   const single = (): Array<ExportTask> => [
     {
@@ -117,6 +140,32 @@ export function houdiniTaskCards(
           : n === running
             ? 'active'
             : 'waiting',
+      }
+    })
+  }
+  // The project's turn is over: `live` is null again, but its run named every
+  // network it touched and those names are still true. Preferred over the scan
+  // for the same reason the run outranks it above — this is the list that
+  // actually exported.
+  if (!live && remembered && remembered.total > 1) {
+    return Array.from({ length: remembered.total }, (_, n) => {
+      const network = remembered.networks[n]
+      return {
+        id: `hou:${project.path}#${n}`,
+        label: network?.label || `Network ${n + 1}`,
+        detail: 'DazToHue network',
+        context: project.label,
+        kind: 'houdini' as const,
+        // A network still `waiting` when its project's run ended never ran —
+        // an interrupted queue. Ticking it off would claim work that did not
+        // happen, so it keeps the unstarted look; `failed` stays failed and
+        // `skipped` counts as done, exactly as during the run.
+        status:
+          network === undefined || network.status === 'waiting'
+            ? ('waiting' as const)
+            : network.status === 'failed'
+              ? ('failed' as const)
+              : ('done' as const),
       }
     })
   }
