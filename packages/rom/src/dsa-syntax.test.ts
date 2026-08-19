@@ -21,7 +21,7 @@ import type { Character, RomGroup, RomSections } from './types'
  * concatenation across VARIANTS, because the golden character only exercises
  * one of them. Runtime v85's export rework was the case in point: it wrapped
  * the export core and the hair pass in success-verdict brackets (removed again
- * in v87 with the DS4 skip-guard sweep), inside a groom bracket that the
+ * in v96 with the DS4 skip-guard sweep), inside a groom bracket that the
  * golden character has no grooms to emit.
  *
  * `new Script` is the check — the emitted DAZ Script is plain ES3-shaped JS, so

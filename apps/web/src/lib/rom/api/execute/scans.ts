@@ -29,7 +29,6 @@ import {
 } from '../../execute-jobs'
 import { BUILD_ROM_ANIMATION_SCRIPT } from '@dth/rom'
 
-import type { GenesisVersion } from '@dth/rom'
 import {
   SCAN_RUN_SCRIPT,
   parseScanResult,
@@ -58,9 +57,9 @@ export const PROJECT_SCAN_RUN = '#project-scan'
 export interface ProjectScanCharacter {
   id: string
   name: string
-  /** Which Genesis generation, so the panel's scene tiles crop their previews
-   *  where Daz actually put the face for it (see lib/tip-framing). */
-  genesis: GenesisVersion
+  /** The character's `imageOffsetY`, so the panel's scene tiles crop their
+   *  previews where its figure actually sits (see lib/avatar-offset). */
+  imageOffsetY: number
   /** Linked scenes whose `.duf` is readable — the ones that can get a row. */
   scenes: Array<string>
   /** Linked scenes whose `.duf` is missing — named in the panel, never enqueued. */
@@ -112,7 +111,7 @@ export async function fetchProjectScanPlan({ data }: { data: unknown }): Promise
     out.push({
       id: character.id,
       name: character.name,
-      genesis: character.genesis,
+      imageOffsetY: character.imageOffsetY,
       scenes,
       missing,
     })

@@ -26,7 +26,6 @@ import { useFileDrop } from '#/lib/file-drop.ts'
 import { DetectedFilesBanner } from '#/components/character/detected-files-banner.tsx'
 import { DetectedFilesWizard } from '#/components/character/detected-files-wizard.tsx'
 import { EditorHeader } from '#/components/character/editor-header.tsx'
-import { ExportSettingsSection } from '#/components/character/export-settings-section.tsx'
 import { FrameZeroFields } from '#/components/character/frame-zero-fields.tsx'
 import { GroomFields } from '#/components/character/groom-fields.tsx'
 import { IdentitySection } from '#/components/character/identity-section.tsx'
@@ -677,8 +676,6 @@ function CharacterPage({ onImportRemount }: { onImportRemount: () => void }) {
 
       <div className={onProductsTab || activeTab === 'notes' ? 'hidden' : undefined}>
       <SceneLock locked={!sceneLinked}>
-      <ExportSettingsSection character={character} />
-
       <RomEditorSection
         character={character}
         patch={patch}
@@ -779,7 +776,7 @@ function CharacterPage({ onImportRemount }: { onImportRemount: () => void }) {
       <SceneFooter
         show={sceneLinked && activeTab === 'character' && !scenesOnScreen}
         scenes={sceneSel.linkedScenes}
-        genesis={character.genesis}
+        offsetY={character.imageOffsetY}
         primary={character.scenePath}
         selected={sceneSel.effectiveScene}
         onSelect={sceneSel.selectScene}

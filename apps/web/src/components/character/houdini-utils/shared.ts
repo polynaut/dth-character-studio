@@ -25,7 +25,7 @@ import type {
   OcclusionSection,
   SkeletonSection,
 } from '#/lib/rom/api.ts'
-import { normalizePath } from '#/lib/path.ts'
+import { normalizePath, normalizePathLower } from '#/lib/path.ts'
 
 /** Label + rationale for each transferable part of a skeleton setup. The
  *  sections are the node's own tabs, so they read the same here as in Houdini. */
@@ -181,6 +181,20 @@ export function fileName(path: string): string {
   return path.split(/[\\/]/).pop() ?? path
 }
 
+/** The card-title form of a Houdini project path: file name, extension off —
+ *  the same reading the project card's heading gives, so the source picker
+ *  and the cards name a project identically. */
+export function hipStem(path: string): string {
+  const name = fileName(path)
+  const dot = name.lastIndexOf('.')
+  return dot > 0 ? name.slice(0, dot) : name
+}
+
+/** Up to this many studio Houdini projects, the source picker lists them FLAT
+ *  (one entry per project); above it, the list would scroll past usefulness,
+ *  so it switches to the two-level character → project layout. */
+export const FLAT_SOURCE_LIMIT = 15
+
 /** The source slots a run will actually install — every one when none is picked. */
 export function pickedSlots(
   node: MaterialNodeInfo,
@@ -315,3 +329,22 @@ export interface ScanState {
 
 export const EMPTY_SCAN: ScanState = { loading: false, error: '', projects: [] }
 
+/** The "Character from the studio…" source picker's candidate list: every
+ *  character that still has a Houdini project to offer — the CURRENT character
+ *  included, so a setup can be copied between two of its own projects. What
+ *  gets taken out is the drawer's own TARGET project, from every candidate's
+ *  list (copying a project onto itself is refused by the api anyway, and
+ *  offering it invites the mistake). The current character sorts first: its
+ *  other projects are the closest-at-hand source. */
+export function sourceCharacterCandidates<
+  C extends { id: string; houdiniProjects: Array<string> },
+>(all: Array<C>, currentCharacterId: string, targetHip: string): Array<C> {
+  const targetKey = normalizePathLower(targetHip)
+  return all
+    .map((c) => ({
+      ...c,
+      houdiniProjects: c.houdiniProjects.filter((hip) => normalizePathLower(hip) !== targetKey),
+    }))
+    .filter((c) => c.houdiniProjects.length > 0)
+    .sort((a, b) => Number(b.id === currentCharacterId) - Number(a.id === currentCharacterId))
+}

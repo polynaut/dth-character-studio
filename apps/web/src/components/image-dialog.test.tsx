@@ -80,6 +80,7 @@ function previewSrc(): string | null {
 
 const baseProps = {
   image: 'orig-img',
+  offsetY: 0,
   name: 'Vic',
   characterId: 'c1',
   scenes: [],
@@ -119,7 +120,7 @@ describe('ImageDialog crop + persist flow', () => {
 
   it('keeps the staged crop (to retry) when the persist fails after the upload ran', async () => {
     const onApply = vi.fn(
-      async (produce: () => Promise<{ image: string; imageScene: string }>) => {
+      async (produce: () => Promise<{ image: string; imageScene: string; imageOffsetY: number }>) => {
         await produce()
         return null
       },
@@ -136,7 +137,7 @@ describe('ImageDialog crop + persist flow', () => {
   it('uploads the crop on Apply and closes on a successful persist', async () => {
     const onClose = vi.fn()
     const onApply = vi.fn(
-      async (produce: () => Promise<{ image: string; imageScene: string }>) => await produce(),
+      async (produce: () => Promise<{ image: string; imageScene: string; imageOffsetY: number }>) => await produce(),
     )
     render(<ImageDialog {...baseProps} onApply={onApply} onClose={onClose} />)
     pickFile()
@@ -151,7 +152,7 @@ describe('ImageDialog crop + persist flow', () => {
     recentUploads = ['c1--up-200.png', 'c1--up-100.png']
     const onClose = vi.fn()
     const onApply = vi.fn(
-      async (produce: () => Promise<{ image: string; imageScene: string }>) => await produce(),
+      async (produce: () => Promise<{ image: string; imageScene: string; imageOffsetY: number }>) => await produce(),
     )
     render(<ImageDialog {...baseProps} onApply={onApply} onClose={onClose} />)
     const buttons = await screen.findAllByRole('button', { name: 'Use this uploaded image' })
@@ -169,9 +170,9 @@ describe('ImageDialog crop + persist flow', () => {
     // The scene path stages a preview (never persists on select), and Apply copies the
     // scene tip in AND records the scene as the image's provenance — the field the avatar
     // auto-sync keys off. It must NOT run the crop-upload producer.
-    let produced: { image: string; imageScene: string } | null = null
+    let produced: { image: string; imageScene: string; imageOffsetY: number } | null = null
     const onClose = vi.fn()
-    const onApply = vi.fn(async (produce: () => Promise<{ image: string; imageScene: string }>) => {
+    const onApply = vi.fn(async (produce: () => Promise<{ image: string; imageScene: string; imageOffsetY: number }>) => {
       produced = await produce()
       return produced
     })
@@ -183,7 +184,11 @@ describe('ImageDialog crop + persist flow', () => {
     expect(onApply).not.toHaveBeenCalled() // selecting a scene only STAGES it
     apply()
     await waitFor(() => expect(onApply).toHaveBeenCalledTimes(1))
-    expect(produced).toEqual({ image: 'scene-img', imageScene: 'X:/scenes/Beach.duf' })
+    expect(produced).toEqual({
+      image: 'scene-img',
+      imageScene: 'X:/scenes/Beach.duf',
+      imageOffsetY: 0,
+    })
     expect(uploadCroppedAvatar).not.toHaveBeenCalled() // the scene path uploads no crop
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
   })
@@ -203,5 +208,109 @@ describe('ImageDialog crop + persist flow', () => {
     await waitFor(() =>
       expect(screen.getAllByRole('button', { name: 'Delete this upload' })).toHaveLength(1),
     )
+  })
+})
+
+/** The vertical framing offset (`character.imageOffsetY`) — staged like every
+ *  other selection here and committed by the same single Apply. */
+describe('ImageDialog vertical offset', () => {
+  const offsetSlider = () => screen.getByRole('slider') as HTMLInputElement
+
+  function commitPatch() {
+    let produced: { image: string; imageScene: string; imageOffsetY: number } | null = null
+    const onApply = vi.fn(
+      async (
+        produce: () => Promise<{ image: string; imageScene: string; imageOffsetY: number }>,
+      ) => {
+        produced = await produce()
+        return produced
+      },
+    )
+    return { onApply, read: () => produced }
+  }
+
+  it('seeds from the stored offset and commits a dragged value', async () => {
+    const { onApply, read } = commitPatch()
+    render(<ImageDialog {...baseProps} offsetY={4} onApply={onApply} />)
+    expect(offsetSlider().value).toBe('4')
+    fireEvent.change(offsetSlider(), { target: { value: '-7.5' } })
+    apply()
+    await waitFor(() => expect(onApply).toHaveBeenCalledTimes(1))
+    expect(read()?.imageOffsetY).toBe(-7.5)
+    // The picture itself is untouched — re-framing is not a re-upload.
+    expect(read()?.image).toBe('orig-img')
+    expect(uploadCroppedAvatar).not.toHaveBeenCalled()
+  })
+
+  it('a changed offset alone is a real change — Apply persists instead of no-oping', async () => {
+    const { onApply } = commitPatch()
+    const onClose = vi.fn()
+    render(<ImageDialog {...baseProps} onApply={onApply} onClose={onClose} />)
+    fireEvent.change(offsetSlider(), { target: { value: '6' } })
+    apply()
+    await waitFor(() => expect(onApply).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
+  })
+
+  it('an untouched dialog still persists nothing', async () => {
+    const { onApply } = commitPatch()
+    const onClose = vi.fn()
+    render(<ImageDialog {...baseProps} offsetY={4} onApply={onApply} onClose={onClose} />)
+    apply()
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
+    expect(onApply).not.toHaveBeenCalled()
+  })
+
+  it('rides along with a newly picked scene — one Apply, one save', async () => {
+    const { onApply, read } = commitPatch()
+    render(<ImageDialog {...baseProps} scenes={['X:/scenes/Beach.duf']} onApply={onApply} />)
+    fireEvent.click(await screen.findByTitle('Beach.duf'))
+    fireEvent.change(offsetSlider(), { target: { value: '9' } })
+    apply()
+    await waitFor(() => expect(onApply).toHaveBeenCalledTimes(1))
+    expect(read()).toEqual({
+      image: 'scene-img',
+      imageScene: 'X:/scenes/Beach.duf',
+      imageOffsetY: 9,
+    })
+  })
+
+  it('Reset returns to 0 and is disabled once there', async () => {
+    render(<ImageDialog {...baseProps} offsetY={12} onApply={vi.fn(async () => null)} />)
+    const reset = screen.getByRole('button', { name: 'Reset' })
+    expect(reset).toHaveProperty('disabled', false)
+    fireEvent.click(reset)
+    expect(offsetSlider().value).toBe('0')
+    expect(screen.getByRole('button', { name: 'Reset' })).toHaveProperty('disabled', true)
+  })
+
+  it('freezes all three offset controls while the persist is in flight', async () => {
+    // A value typed DURING a persist would be silently dropped when the dialog
+    // closes on success (the producer captured its offset at commit) — so the
+    // box must freeze with the slider and Reset, not stay editable.
+    let finish!: (v: null) => void
+    const onApply = vi.fn(() => new Promise<null>((r) => (finish = r)))
+    render(<ImageDialog {...baseProps} offsetY={4} onApply={onApply} />)
+    fireEvent.change(offsetSlider(), { target: { value: '6' } })
+    apply()
+    await waitFor(() => expect(onApply).toHaveBeenCalledTimes(1))
+    expect(offsetSlider().disabled).toBe(true)
+    expect(screen.getByTitle(/Percent of the picture/)).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Reset' })).toHaveProperty('disabled', true)
+    finish(null) // let the in-flight persist settle so nothing leaks past the test
+    await waitFor(() => expect(offsetSlider().disabled).toBe(false))
+  })
+
+  it('clamps a typed value before it is saved — zod would reject anything past ±50', async () => {
+    // Asserted on the COMMITTED value, not the slider: the track clamps its own
+    // rendering regardless, so reading it back would pass over a missing clamp.
+    const { onApply, read } = commitPatch()
+    render(<ImageDialog {...baseProps} onApply={onApply} />)
+    const box = screen.getByTitle(/Percent of the picture/) as HTMLInputElement
+    fireEvent.change(box, { target: { value: '400' } })
+    fireEvent.blur(box)
+    apply()
+    await waitFor(() => expect(onApply).toHaveBeenCalledTimes(1))
+    expect(read()?.imageOffsetY).toBe(25)
   })
 })

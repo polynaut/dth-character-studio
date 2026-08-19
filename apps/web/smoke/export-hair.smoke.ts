@@ -3,9 +3,11 @@ import { expect, test } from '@playwright/test'
 import { P, buildSeed } from './fixtures.ts'
 import { installTauriMock } from './tauri-mock.ts'
 
-// "Export hair assets too": flipping the Export-directory toggle persists +
-// regenerates immediately (the persistPatch pattern), and the regenerated ROM
-// script carries the per-item groom-export pass.
+// "Export hair assets too": flipping the toggle in the "Daz scripts generated"
+// panel persists + regenerates immediately (the persistPatch pattern), and the
+// regenerated ROM script carries the per-item groom-export pass. The same panel
+// is where the read-only Export directory reads out, so the spec pins that the
+// switches and the directory they deliver into stayed in ONE box.
 
 test('the export-hair toggle regenerates the script with the groom pass', async ({ page }) => {
   const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true })
@@ -16,6 +18,15 @@ test('the export-hair toggle regenerates the script with the groom pass', async 
   await page.goto('/')
   await page.getByRole('link', { name: /Kira/ }).click()
   await page.getByText(/custom ROM frames/).waitFor()
+
+  // The switches and the Export directory sub-section share one panel (the
+  // standalone Export directory box folded in here once the directory became
+  // derived and read-only) — a split back into two panels fails here.
+  const scripts = page
+    .locator('section')
+    .filter({ has: page.getByRole('heading', { name: 'Daz scripts generated' }) })
+  await expect(scripts.getByRole('heading', { name: 'Export directory' })).toBeVisible()
+  await expect(scripts).toContainText(/exports/i)
 
   const label = page.getByText('Export hair assets too')
   await label.scrollIntoViewIfNeeded()

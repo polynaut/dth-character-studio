@@ -267,7 +267,9 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
   // here. A ROM-only run writes its `rom-animations` scene beside the source
   // scene, so it needs no export dir at all.
   if (mode !== 'rom-only' && !character.exportPath.trim()) {
-    throw new Error('DTH Export needs an export directory — set one in the Export directory panel.')
+    throw new Error(
+      'DTH Export needs an export directory — this character has none because it has no folder of its own. Move it into a folder to export.',
+    )
   }
 
   // Resolve each chosen scene to its linked spelling (the dialog passes them

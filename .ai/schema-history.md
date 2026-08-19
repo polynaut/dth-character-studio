@@ -206,6 +206,15 @@ of that file ~12k tokens to scroll past.
       a no-op override that would silently pin that scene. The v35 step drops
       exactly those blocks (guarded on `preserve.morphs` still being present,
       so it is idempotent).
+ 36 — ADDED `imageOffsetY` (number, default 0): a per-character vertical
+      framing nudge for every picture of that character, as a signed
+      percentage of the picture itself. Replaces the per-GENERATION tip
+      framing shipped in #860, which was the wrong model — Daz frames a
+      figure by how TALL it is, not by which Genesis it is, so two G9
+      characters of different heights need different crops and no table
+      can predict either. Additive with a zod default, so no migration
+      step: a definition written before this reads back at 0, which IS
+      the framing every character had.
 ```
 
 ## Generated-runtime versions (`RUNTIME_VERSION`)
@@ -1094,7 +1103,71 @@ v80 — no unattended carrier opens a modal, and the missing-runtime message sto
       on a matching `v<N>` marker and the script header reads current, so the
       second one never reaches an install that already has the first.
       No schema change, no migration step.
- 87 — the DS4 skip-guard sweep is REMOVED: no pre-export clear, no
+v88 — the v71 `dthSettle(1000)` pauses are REMOVED (helper and all three call
+      sites): the bulk ROM carrier no longer sleeps after the scene load, and
+      no carrier sleeps between the ROM build and the exporter — a DTH Export
+      paid up to ~2 s of artificial wait per scene. The pauses were
+      precautionary from the start (#795 added them without a measured
+      failure they fixed; "own precautions aren't evidence"), and every real
+      settling problem since was solved by its own targeted fix, not by the
+      sleep. If a scene-load race ever DOES surface, re-add a wait gated on
+      the actual condition being waited for, not a fixed timer. NOT v87:
+      PR #901 (open when this bump was written) holds that number for the DS4
+      sweep revert, and per the gotcha (`gotchas-daz.md`, measured on
+      #894/#895) the collision is INVISIBLE to git — both branches make the
+      identical `86 → 87` edit, so the merge is clean and nothing forces the
+      second lander to renumber. Skipping to 88 costs nothing (staleness is
+      `runtimeVersion < app.runtime`, so versions only have to be monotonic
+      and a gap is harmless if #901 never lands).
+      No schema change, no migration step.
+v95 — the product scan matches hand-installed morphs, flat texture folders
+      and every mapped content directory. Four diagnosis rounds against ONE
+      real library (each fixing what the previous round's REAL rescan still
+      showed; evidence: the stored products.json + _diagnostic files), folded
+      into one released number:
+      (1) `productFolderKey` learns the STANDARD morph install layout — under
+      the base-figure root ("data/DAZ 3D/Genesis 8/Female/Morphs/<Vendor>/
+      <Product>/…") the vendor/product pair sits after "Morphs/", not after
+      "data/", so those paths no longer collapse to "" (base content). FLAT
+      texture layouts ("Runtime/textures/GC Lara Croft COD/Backpack.jpg") key
+      by the folder alone (the old two-segment key swallowed the filename).
+      (2) Content-folder synthesis walks the Morphs/<Vendor>/<Product> roots
+      too, and BOTH walks cover every content directory Daz has mapped
+      (`App.getContentMgr()`), not just the studio-configured library;
+      LOCAL_USER pickup and artist/version enrichment read all of them.
+      (3) A morph modifier can expose NO source file at all (measured:
+      getAssetUri / getAssetFileInfo / getAssetId all empty while Parameter
+      Settings shows the .dsf), so the last resort matches a morph to a morph
+      FILE named like it, over three ranked sources: real products' manifest
+      morph files ("Manifest Match" — `parseManifestFile` keeps EVERY morph
+      basename as `morphKeys` beside the 60-capped `files` list, each with
+      ITS OWN file's generation tag in `morphGens`; Shape Shift lists 166
+      files across G3+G8 and "Waist Shape.dsf" is #163), real products' owned
+      Morphs folders listed on disk via hidden ownedBy records ("Folder
+      Match", 40-dir/400-file budget), and the synthesized morph-root folders
+      ("Content Folder Match"). Generation fit is judged per FILE and
+      case-immune (a manifest's raw "Genesis 8" spelling counts), and
+      outweighs the parameter-path hint.
+      (4) CHILD-NODE morphs are never matched independently — a morph dialed
+      on a fitted item is the item's own fit morph or an auto-follow
+      projection (a generic "Expand_All" fit morph on a bikini basename-
+      matched an unrelated outfit's manifest). A node with a FOLLOW TARGET
+      never contributes morphs whatever its name ("Genesis 8 Female
+      Genitalia" is a geograft, not the figure); otherwise morphs come from
+      root nodes and Genesis figures (a grouped figure keeps its morphs).
+      (5) An unmatched node's unowned texture folder becomes a product ON
+      DEMAND (nested → name+artist, flat → name only), get-or-created so
+      sibling parts group under one product; skin folders stay excluded.
+      NOT 88–94: dev-install iterations stamped those numbers while this was
+      built (88–91 the four rounds; 92/93 a content-folder + matched-files
+      display retracted on request; 94 the retraction — content-wise v91),
+      and released v88 went to the settle-pause removal (#906) mid-
+      development. The reinstall trigger is an equality check but script
+      staleness is `runtimeVersion < app.runtime`, so the released number
+      must exceed every dev-stamped one or those installs read as fresh
+      forever. #901 (open) must land on a number > 95.
+      No schema change, no migration step.
+v96 — the DS4 skip-guard sweep is REMOVED: no pre-export clear, no
       move-aside, no restore. The DTH Exporter plugin itself was fixed on
       2026-08-18 to handle existing output files (the v69 measurement: a
       scripted doExport over its own previous output skipped the ROM walk and
@@ -1107,5 +1180,9 @@ v80 — no unattended carrier opens a modal, and the missing-runtime message sto
       absent before doExport), and the stale-file side benefit (renamed hair
       items' grooms / outdated reference skeletons linger again). Runtime
       files unchanged — the bump only makes Refresh assets regenerate the
-      scripts on disk. No schema change, no migration step.
+      scripts on disk. NOT 87: this bump was written as v87, but the number
+      race with the settle-pause removal (both branches editing 86 in
+      parallel — the silent-collision trap in gotchas-daz.md) settled with
+      v88 (#906) and v95 (#907) released first, so this takes the next free
+      number. No schema change, no migration step.
 ```

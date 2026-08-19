@@ -8,23 +8,14 @@ that workflow is the fold-out at the end of this page:
 
 ## Run it — DTH Export
 
-1. Press **DTH Export** in the character header.
-2. Check the **Daz scenes** to run — the ones with outstanding work are already
-   ticked — and leave the **Mode** on *ROM + Export*.
-3. Press **Start**.
-
-Daz Studio is opened where you can see it (a running Daz picks the batch up by
-itself), the entire ROM is built on the timeline — every section you enabled,
-every morph on its exact frame — and the export runs straight after. The
-character header shows the run while it lasts and reports when everything is
-done. On the way each scene is also scanned into the studio's
-[morph index](./custom-morphs.md), so the Parameter-name autocomplete stays
-current through normal use.
-
-The panel does more than this page needs — carrying straight on into the linked
-**Houdini projects**, queueing the result for **Unreal**, watching and
-interrupting a run. All of it is on its own page:
-**[The DTH Export batch](./dth-export.md)**.
+Press **DTH Export** in the character header, keep the pre-ticked **Daz scenes**
+and the *ROM + Export* mode, and press **Start**. The panel itself — its modes,
+the Houdini and Unreal legs, watching and interrupting a run — has its own page:
+**[The DTH Export batch](./dth-export.md)**. What matters here is what that run
+builds: the entire ROM on the timeline — every section you enabled, every morph
+on its exact frame — with the export straight after. On the way each scene is
+also scanned into the studio's [morph index](./custom-morphs.md), so the
+Parameter-name autocomplete stays current through normal use.
 
 > [!NOTE]
 > If a morph couldn't be applied, the run's report says so and the studio lists
@@ -40,9 +31,9 @@ The export is driven by the **DTH Exporter Plugin** (v1.8.1+, installed in
 [step 2](./02-setup.md#daz-studio-plugins)).
 
 <p align="center">
-  <img width="900" alt="character page, export directory section" src="screenshots/character-export-directory.png" />
+  <img width="900" alt="character page, Daz scripts generated box with the Export directory sub-section" src="screenshots/character-scripts-section.png" />
   <br>
-  <sub><em>The export directory section on the character page.</em></sub>
+  <sub><em>The Export directory, at the bottom of the Daz scripts generated box.</em></sub>
 </p>
 
 There is nothing to set up: every character has an **Export directory**, fixed at

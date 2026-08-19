@@ -91,12 +91,12 @@ holds the two **export switches**, detailed in
 [Working with the scripts alone](./05-rom-in-daz.md#working-with-the-scripts-alone).
 
 <p align="center">
-  <img width="900" alt="the Daz scripts generated box — install location and the export switches" src="screenshots/character-scripts-section.png" />
+  <img width="900" alt="the Daz scripts generated box — install location, the export switches and the Export directory" src="screenshots/character-scripts-section.png" />
   <br>
-  <sub><em>The Daz scripts generated box: the install location and the two export switches.</em></sub>
+  <sub><em>The Daz scripts generated box: the install location, the two export switches and the Export directory.</em></sub>
 </p>
 
-**Export directory** shows where
+**Export directory**, at the bottom of the same box, shows where
 [the export](./05-rom-in-daz.md#what-a-run-exports) lands.
 It's fixed and read-only: `daz-export` inside the character's Houdini folder, next
 to the `.hip` that reads it — see
@@ -230,7 +230,12 @@ you need:
 
 - **Avatar** — click the portrait to use the primary scene's thumbnail, drop an
   image file (cropped square in the built-in editor), or paste a URL. Applied
-  immediately; stored in the project's `.dcsmeta/images`.
+  immediately; stored in the project's `.dcsmeta/images`. The same dialog has a
+  **Vertical offset** slider: Daz frames a figure in its previews by how tall it
+  is, so a short or tall character can come out sitting high or low in the
+  square. The slider moves that character's picture up or down in *every* avatar
+  and scene thumbnail at once, and the dialog previews the result while you
+  drag. 0 is the default.
 - **Name** — click to rename. The folder, notes and generated scripts follow.
 - **Subtitle** — the generation, the **skinning** the ROM targets (DQS or Linear,
   derived from the preset assets), and the custom-frame count.

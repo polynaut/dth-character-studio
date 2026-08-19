@@ -813,7 +813,7 @@ export function jcmMorphModForRuntime(mod: JcmMorphMod): {
  * step — is `.ai/schema-history.md`. Bumping this means adding the entry there,
  * in the same commit.
  */
-export const CHARACTER_SCHEMA_VERSION = 35
+export const CHARACTER_SCHEMA_VERSION = 36
 
 /**
  * Version of the generated **script runtime** — the bundled DTH `.dsa` runtime
@@ -832,7 +832,7 @@ export const CHARACTER_SCHEMA_VERSION = 35
  * step — is `.ai/schema-history.md`. Bumping this means adding the entry there,
  * in the same commit.
  */
-export const RUNTIME_VERSION = 87
+export const RUNTIME_VERSION = 96
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a
@@ -985,6 +985,24 @@ export const characterSchema = z.object({
    * app window regains focus. Repointed alongside `scenePath` on folder moves.
    */
   imageScene: z.string().max(MAX_PATH_LENGTH).default(''),
+  /**
+   * Vertical framing nudge for every picture of this character, as a signed
+   * PERCENTAGE OF THE PICTURE ITSELF (positive moves it down). 0 = the default
+   * crop, which is what every character got before this existed.
+   *
+   * Why it is per character and not per generation: Daz frames a figure in the
+   * `.tip.png` it renders according to how TALL that figure is, not which
+   * Genesis it is — a short character sits high in the square and the default
+   * crop takes the top off its head, whatever generation it is. There is no
+   * table that can predict it, so it is a knob the user tunes by eye (the avatar
+   * dialog, character detail).
+   *
+   * The unit is what makes ONE value work for every avatar variant in the app,
+   * from the 224px header portrait down to a 32px scene chip: each variant
+   * over-scans the same square picture by its own zoom, so a percentage of the
+   * PICTURE lands the same crop everywhere, where a pixel nudge would not.
+   */
+  imageOffsetY: z.number().min(-50).max(50).default(0),
   /**
    * Absolute path to the Daz scene (`.duf`) this character was created from.
    * Read-only provenance shown in the editor; empty for characters made before

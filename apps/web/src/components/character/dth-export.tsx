@@ -1294,7 +1294,7 @@ export function DthExportAction({
     : !sceneLinked
       ? 'Link a primary Daz scene first'
       : !exportDirSet
-        ? 'Set an export directory first — the export runs deliver into it'
+        ? 'This character has no export directory (it has no folder of its own) — move it into a folder first'
         : dirty
           ? 'Save first — the export runs the generated scripts on disk'
           : undefined

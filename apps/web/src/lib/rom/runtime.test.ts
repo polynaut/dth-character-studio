@@ -55,7 +55,7 @@ const RUNTIME_ASSETS = [
 // Bump this together with RUNTIME_VERSION whenever a runtime file legitimately
 // changes (this run prints the new value in the failure message).
 const EXPECTED_RUNTIME_HASH =
-  'a80bd3e90243c3d6a3d32dc060cf524ee7ae7fa5d77ac6f578418a242f2897e2'
+  '333441f53757a05447294d714848d4973af5cf3a047748a97e156a499d56d438'
 
 function runtimeHash(): string {
   const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
@@ -1100,5 +1100,759 @@ describe('product scan under the Runner (DthProducts.dsa)', () => {
     products.getInstalledProducts('')
     products.writeProductsCsv('C:/out/scene.csv', NO_MATCHES, 'Scene', 'C:/s.duf')
     expect(dialogs).toEqual(['Directory Not Found', 'DIM Manifests Folder Not Set', 'DTH Product Scan'])
+  })
+})
+
+/* ── Matching for hand-installed content (DthProducts.dsa, runtime v88) ───────
+ *
+ * A manually-installed product (no DIM manifest, no LOCAL_USER metadata) is only
+ * recognisable from the content tree itself, and hand-installed MORPHS live under
+ * the base-figure root ("data/DAZ 3D/Genesis 8/Female/Morphs/<Vendor>/<Product>")
+ * that the folder heuristics used to write off wholesale as base content — the
+ * real-library case these rules were built from ("GC BodyMorph") sat unmatched
+ * for exactly that reason. These tests drive the actual runtime matchers over an
+ * in-memory directory tree, so the folder-key extraction, the morph-root
+ * synthesis, the multi-directory walk and the end-to-end match are all pinned
+ * without a Daz install.
+ */
+interface MatchingModule {
+  productFolderKey: (p: string) => string
+  getContentDirectories: (lib: string) => Array<string>
+  getContentFolderProducts: (
+    dirs: Array<string>,
+    real: Array<Record<string, unknown>>,
+  ) => Array<{ name: string; artist: string; folders: Array<string>; productType: string }>
+  findProductMatches: (
+    usedAssets: Array<Record<string, unknown>>,
+    installed: Array<Record<string, unknown>>,
+    genesis: number,
+    synth: Array<Record<string, unknown>>,
+  ) => {
+    matches: Array<{ product: { name: string }; method: string }>
+    unmatched: Array<{ name: string }>
+  }
+  parseManifestFile: (
+    path: string,
+  ) => { name: string; files: Array<string>; morphKeys: Array<string>; morphGens: Array<number> } | null
+  getUsedAssets: () => Array<{ type: string; name: string }>
+}
+
+const MATCHING_EXPORTS =
+  'productFolderKey, getContentDirectories, getContentFolderProducts, findProductMatches, parseManifestFile, getUsedAssets'
+
+/**
+ * Load DthProducts.dsa over an in-memory directory tree (`dirs` are the existing
+ * directories; `files` are full file paths, listed by their parent directory but
+ * never openable — file CONTENT is irrelevant to the matchers under test).
+ * `appContentDirs`, when given, backs a fake `App.getContentMgr()`. `extra` can
+ * supply openable file contents (for parseManifestFile) and scene nodes (for
+ * getUsedAssets).
+ */
+function loadMatching(
+  dirs: Array<string> = [],
+  appContentDirs?: Array<string>,
+  files: Array<string> = [],
+  extra: { fileContents?: Record<string, string>; sceneNodes?: Array<unknown> } = {},
+): MatchingModule {
+  const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
+  const src = readFileSync(join(dir, 'DthProducts.dsa'), 'utf8')
+  const dirSet = new Set(dirs.map((d) => d.toLowerCase()))
+  const childrenOf = (p: string): Array<string> => {
+    const prefix = `${p.toLowerCase()}/`
+    const names = new Set<string>()
+    for (const d of [...dirs, ...files]) {
+      if (d.toLowerCase().startsWith(prefix)) names.add(d.slice(p.length + 1).split('/')[0])
+    }
+    return [...names]
+  }
+  class DzDir {
+    constructor(public p: string) {}
+    exists() {
+      return dirSet.has(this.p.toLowerCase())
+    }
+    filePath(name: string) {
+      return `${this.p}/${name}`
+    }
+    entryList() {
+      return childrenOf(this.p)
+    }
+    getSubdirList() {
+      return childrenOf(this.p)
+    }
+    mkpath() {
+      return false
+    }
+  }
+  class DzFileInfo {
+    constructor(public full: string) {}
+    path() {
+      return this.full.split('/').slice(0, -1).join('/')
+    }
+  }
+  const fileContents = extra.fileContents ?? {}
+  class DzFile {
+    WriteOnly = 2
+    Truncate = 4
+    constructor(public p: string) {}
+    open() {
+      return Object.hasOwn(fileContents, this.p)
+    }
+    read() {
+      return fileContents[this.p] ?? ''
+    }
+    write() {}
+    close() {}
+  }
+  const sandbox: Record<string, unknown> = {
+    print: () => {},
+    verbose: () => {},
+    getScriptFileName: () => 'C:/runtime/.DthProducts.dsa',
+    include: () => {
+      throw new Error('the sandbox must not include a sibling runtime')
+    },
+    DzDir,
+    DzFile,
+    DzFileInfo,
+    JSON,
+    MessageBox: { information: () => {}, warning: () => {}, critical: () => {} },
+    Scene: { getNodeList: () => extra.sceneNodes ?? [] },
+  }
+  if (appContentDirs) {
+    sandbox.App = {
+      getContentMgr: () => ({
+        getNumContentDirectories: () => appContentDirs.length,
+        getContentDirectoryPath: (i: number) => appContentDirs[i],
+      }),
+    }
+  }
+  return runInNewContext(`${src}\n;({ ${MATCHING_EXPORTS} })`, sandbox) as MatchingModule
+}
+
+describe('product folder keys (DthProducts.dsa)', () => {
+  it('extracts vendor/product from the base-figure Morphs root', () => {
+    const { productFolderKey } = loadMatching()
+    expect(
+      productFolderKey(
+        '/data/DAZ 3D/Genesis 8/Female/Morphs/guhzcoituz/GC Bodymorph/GC BodyMorph.dsf',
+      ),
+    ).toBe('guhzcoituz/gc bodymorph')
+    expect(productFolderKey('/data/Daz 3D/Genesis 9/Base/Morphs/VendorX/PackY/Waist Shape.dsf')).toBe(
+      'vendorx/packy',
+    )
+  })
+
+  it('still writes off official base content, even under a Morphs root', () => {
+    const { productFolderKey } = loadMatching()
+    expect(productFolderKey('/data/DAZ 3D/Genesis 8/Female/Genesis8Female.dsf')).toBe('')
+    expect(productFolderKey('/data/DAZ 3D/Genesis 8/Female/Morphs/DAZ 3D/Base Pose/x.dsf')).toBe('')
+    // A bare Morphs/<file> with no vendor/product pair below it is not a product key.
+    expect(productFolderKey('/data/DAZ 3D/Genesis 8/Female/Morphs/loose.dsf')).toBe('')
+  })
+
+  it('keys a FLAT texture folder by the folder alone, never by folder/filename', () => {
+    // Measured on a real freebie outfit ("GC Lara Croft COD"): its textures live
+    // directly in Runtime/textures/<Product>/, and the old two-segment key
+    // swallowed the FILENAME ("gc lara croft cod/backpack.jpg" — matched nothing).
+    const { productFolderKey } = loadMatching()
+    expect(productFolderKey('D:/Lib/Runtime/textures/GC Lara Croft COD/Backpack.jpg')).toBe(
+      'gc lara croft cod',
+    )
+    // A flat DATA layout identifies nothing, and official base textures stay out.
+    expect(productFolderKey('/data/SomeVendor/loose.dsf')).toBe('')
+    expect(productFolderKey('D:/Lib/Runtime/textures/DAZ 3D/base.jpg')).toBe('')
+  })
+
+  it('keeps the vendor-rooted keys unchanged (no morph-segment stealing)', () => {
+    // A vendor's own Morphs SUBfolder ("data/<Vendor>/<Product>/Morphs/…") keeps
+    // identifying the product by its first two segments, as before.
+    const { productFolderKey } = loadMatching()
+    expect(productFolderKey('/data/Luthbellina/Adventure Clothes/Morphs/fit.dsf')).toBe(
+      'luthbellina/adventure clothes',
+    )
+    expect(productFolderKey('C:/Lib/Runtime/Textures/Luthbellina/Adventure Clothes/x.jpg')).toBe(
+      'luthbellina/adventure clothes',
+    )
+  })
+})
+
+describe('content directories (DthProducts.dsa)', () => {
+  it('unions the studio library with every directory Daz has mapped, deduped', () => {
+    const { getContentDirectories } = loadMatching([], ['C:\\Lib\\', 'X:/NetLib'])
+    expect(getContentDirectories('C:/Lib')).toEqual(['C:/Lib', 'X:/NetLib'])
+  })
+
+  it('falls back to the studio library alone when Daz exposes no content manager', () => {
+    // No `App` in the sandbox at all — the reference throws and is swallowed.
+    const { getContentDirectories } = loadMatching()
+    expect(getContentDirectories('C:/Lib')).toEqual(['C:/Lib'])
+  })
+})
+
+describe('content-folder product synthesis (DthProducts.dsa)', () => {
+  const LIB = 'C:/Lib'
+  const NET = 'X:/NetLib'
+  const TREE = [
+    // A regular hand-installed vendor product.
+    `${LIB}/data/VendorA/ProdA`,
+    // A hand-installed morph under the base-figure root — the GC BodyMorph shape.
+    `${LIB}/data/DAZ 3D/Genesis 8/Female/Morphs/guhzcoituz/GC Bodymorph`,
+    // Official base morphs must not become a product.
+    `${LIB}/data/DAZ 3D/Genesis 8/Female/Morphs/DAZ 3D/Base Correctives`,
+    // Content in a SECOND mapped library.
+    `${NET}/data/VendorB/ProdB`,
+  ].flatMap((leaf) => {
+    const parts = leaf.split('/')
+    return parts.map((_, i) => parts.slice(0, i + 1).join('/')).filter((p) => p.includes('/'))
+  })
+
+  it('synthesizes vendor products, morph-root products, and second-library products', () => {
+    const { getContentFolderProducts } = loadMatching(TREE)
+    const products = getContentFolderProducts([LIB, NET], [])
+    const byName = Object.fromEntries(products.map((p) => [p.name, p]))
+    expect(byName['ProdA']).toMatchObject({ artist: 'VendorA', folders: ['vendora/proda'] })
+    expect(byName['GC Bodymorph']).toMatchObject({
+      artist: 'guhzcoituz',
+      folders: ['guhzcoituz/gc bodymorph'],
+      productType: 'Content folder',
+    })
+    expect(byName['ProdB']).toMatchObject({ artist: 'VendorB', folders: ['vendorb/prodb'] })
+    expect(byName['Base Correctives']).toBeUndefined()
+  })
+
+  it('skips folders a real product already owns', () => {
+    const { getContentFolderProducts } = loadMatching(TREE)
+    const real = [{ name: 'Adventure Things', folders: ['vendora/proda'], files: [] }]
+    const products = getContentFolderProducts([LIB, NET], real)
+    expect(products.map((p) => p.name).sort()).toEqual(['GC Bodymorph', 'ProdB'])
+  })
+})
+
+describe('morph matching end-to-end (DthProducts.dsa)', () => {
+  const LIB = 'C:/Lib'
+  const morphAsset = (name: string, sourceFile: string) => ({
+    type: 'Morph',
+    name,
+    technicalName: name,
+    details: 'Value: 0.200',
+    value: 0.2,
+    sourceFile,
+    path: '',
+    textures: [],
+  })
+
+  it('places a hand-installed base-root morph on its synthesized folder product', () => {
+    const mod = loadMatching(
+      [
+        'data',
+        'data/DAZ 3D',
+        'data/DAZ 3D/Genesis 8',
+        'data/DAZ 3D/Genesis 8/Female',
+        'data/DAZ 3D/Genesis 8/Female/Morphs',
+        'data/DAZ 3D/Genesis 8/Female/Morphs/guhzcoituz',
+        'data/DAZ 3D/Genesis 8/Female/Morphs/guhzcoituz/GC Bodymorph',
+      ].map((p) => `${LIB}/${p}`),
+    )
+    const synth = mod.getContentFolderProducts([LIB], [])
+    const result = mod.findProductMatches(
+      [
+        morphAsset(
+          'GC BodyMorph',
+          '/data/DAZ 3D/Genesis 8/Female/Morphs/guhzcoituz/GC Bodymorph/GC BodyMorph.dsf',
+        ),
+      ],
+      [],
+      8.1,
+      synth,
+    )
+    expect(result.unmatched).toEqual([])
+    expect(result.matches).toHaveLength(1)
+    expect(result.matches[0].method).toBe('Content Folder Match')
+    expect(result.matches[0].product.name).toBe('GC Bodymorph')
+  })
+
+  it('folder-matches a morph to a REAL product whose capped file list dropped it', () => {
+    const { findProductMatches } = loadMatching()
+    const pack = {
+      name: 'Shapes for Genesis 8 Female',
+      sku: '11111-1',
+      artist: 'VendorX',
+      version: '1.0',
+      productType: 'Morphs',
+      files: [], // the exact file fell off the 60-file manifest cap
+      folders: ['vendorx/packy'],
+    }
+    const result = findProductMatches(
+      [morphAsset('Waist Shape', '/data/DAZ 3D/Genesis 8/Female/Morphs/VendorX/PackY/Waist Shape.dsf')],
+      [pack],
+      8,
+      [],
+    )
+    expect(result.unmatched).toEqual([])
+    expect(result.matches[0].method).toBe('Folder Match')
+    expect(result.matches[0].product.name).toBe('Shapes for Genesis 8 Female')
+  })
+})
+
+describe('texture-folder products on demand (DthProducts.dsa)', () => {
+  const nodeAsset = (name: string, technicalName: string, textures: Array<string>) => ({
+    type: 'Node',
+    name,
+    technicalName,
+    details: 'Rigged Item',
+    value: null,
+    sourceFile: '',
+    parentName: 'Genesis8_1Female',
+    textures,
+  })
+
+  it('groups flat-texture outfit parts under ONE product named by the folder', () => {
+    // The real diagnostic data: Backpack/Boots expose ONLY flat texture paths
+    // ("Runtime/textures/GC Lara Croft COD/…") and no source file at all.
+    const { findProductMatches } = loadMatching()
+    const result = findProductMatches(
+      [
+        nodeAsset('Backpack', 'Bags_11509', [
+          'D:/Lib/Runtime/textures/GC Lara Croft COD/Backpack.jpg',
+          'D:/Lib/Runtime/textures/GC Lara Croft COD/Belt_Metal_D.jpg',
+        ]),
+        nodeAsset('Boots', 'Boots_12736', ['D:/Lib/Runtime/textures/GC Lara Croft COD/Boots_d.jpg']),
+      ],
+      [],
+      8.1,
+      [],
+    )
+    expect(result.unmatched).toEqual([])
+    expect(result.matches.map((m) => m.method)).toEqual([
+      'Content Folder Match',
+      'Content Folder Match',
+    ])
+    // One shared product, named with the folder's original casing.
+    expect(new Set(result.matches.map((m) => m.product.name))).toEqual(new Set(['GC Lara Croft COD']))
+  })
+
+  it('names a nested texture folder product vendor-first', () => {
+    const { findProductMatches } = loadMatching()
+    const result = findProductMatches(
+      [
+        nodeAsset('SaltBikini_Bra', 'SaltBikini_Bra_2050', [
+          'D:/Lib/Runtime/textures/LilFlameIV/SaltBikini/Salt_Bra_BM01.jpg',
+        ]),
+      ],
+      [],
+      8.1,
+      [],
+    )
+    expect(result.unmatched).toEqual([])
+    expect(result.matches[0].method).toBe('Content Folder Match')
+    expect(result.matches[0].product).toMatchObject({ name: 'SaltBikini', artist: 'LilFlameIV' })
+  })
+
+  it('never synthesizes a product from the figure skin folders', () => {
+    // A geograft carrying the figure's copied skin must not spawn (or match) a
+    // product named after the SKIN's texture folder.
+    const { findProductMatches } = loadMatching()
+    const figure = {
+      type: 'Node',
+      name: 'Genesis 8.1 Female',
+      technicalName: 'Genesis8_1Female',
+      details: 'Figure',
+      value: null,
+      sourceFile: '',
+      parentName: '',
+      textures: ['D:/Lib/Runtime/textures/SomeSkin/face.jpg'],
+    }
+    const graft = nodeAsset('Attachment Thing', 'AttachmentThing', [
+      'D:/Lib/Runtime/textures/SomeSkin/face.jpg',
+    ])
+    const result = findProductMatches([figure, graft], [], 8.1, [])
+    expect(result.matches).toEqual([])
+    expect(result.unmatched.map((u) => u.name).sort()).toEqual([
+      'Attachment Thing',
+      'Genesis 8.1 Female',
+    ])
+  })
+})
+
+describe('morph basename matching (DthProducts.dsa)', () => {
+  it('matches a no-source-file morph to the morph-root folder holding its .dsf', () => {
+    // Measured: a hand-installed G8.1 morph exposes NO source file to the scan
+    // (getAssetUri / getAssetFileInfo / getAssetId all empty), so the folder key
+    // has nothing to key on — the file's NAME inside the synthesized folder is
+    // the only remaining evidence.
+    const LIB = 'C:/Lib'
+    const dirs = [
+      'data',
+      'data/DAZ 3D',
+      'data/DAZ 3D/Genesis 8',
+      'data/DAZ 3D/Genesis 8/Female',
+      'data/DAZ 3D/Genesis 8/Female/Morphs',
+      'data/DAZ 3D/Genesis 8/Female/Morphs/guhzcoituz',
+      'data/DAZ 3D/Genesis 8/Female/Morphs/guhzcoituz/GC Bodymorph',
+    ].map((p) => `${LIB}/${p}`)
+    const files = [`${LIB}/data/DAZ 3D/Genesis 8/Female/Morphs/guhzcoituz/GC Bodymorph/GC BodyMorph.dsf`]
+    const mod = loadMatching(dirs, undefined, files)
+    const synth = mod.getContentFolderProducts([LIB], [])
+    const result = mod.findProductMatches(
+      [
+        {
+          type: 'Morph',
+          name: 'GC BodyMorph',
+          technicalName: 'GC BodyMorph',
+          details: 'Value: 0.200',
+          value: 0.2,
+          sourceFile: '', // what the scan actually sees
+          path: '',
+          textures: [],
+        },
+      ],
+      [],
+      8.1,
+      synth,
+    )
+    expect(result.unmatched).toEqual([])
+    expect(result.matches[0].method).toBe('Content Folder Match')
+    expect(result.matches[0].product.name).toBe('GC Bodymorph')
+  })
+})
+
+describe('no-source-file morphs of REAL products (DthProducts.dsa)', () => {
+  const morph = (name: string, path: string) => ({
+    type: 'Morph',
+    name,
+    technicalName: name,
+    details: 'Value: -0.167',
+    value: -0.167,
+    sourceFile: '', // what the scan actually sees (measured)
+    path,
+    textures: [],
+  })
+  const product = (name: string, files: Array<string>, folders: Array<string> = []) => ({
+    name,
+    sku: '23127-1',
+    artist: 'Zev0',
+    version: '1.0',
+    productType: 'Morphs',
+    files,
+    folders,
+  })
+
+  it('matches through the manifest morph-file list ("Manifest Match")', () => {
+    // The real Waist Shape case: a Shape Shift morph dialed on the figure,
+    // exposing no source file — but the product's DIM manifest lists the .dsf.
+    const { findProductMatches } = loadMatching()
+    const result = findProductMatches(
+      [morph('Waist Shape', 'Actor/Waist/Real World/Shape Shift/Waist')],
+      [product('Shape Shift', ['data/daz 3d/genesis 8/female/morphs/zev0/shape shift/waist shape.dsf'])],
+      8.1,
+      [],
+    )
+    expect(result.unmatched).toEqual([])
+    expect(result.matches[0].method).toBe('Manifest Match')
+    expect(result.matches[0].product.name).toBe('Shape Shift')
+  })
+
+  it('prefers the file under the scene generation and the path-named product', () => {
+    // Vendors ship the SAME basename per generation; the G8 scene must land on
+    // the G8 product, not the G3 one that happens to sort first.
+    const { findProductMatches } = loadMatching()
+    const g3 = product('Shape Shift for Genesis 3', [
+      'data/daz 3d/genesis 3/female/morphs/zev0/shape shift/waist shape.dsf',
+    ])
+    const g8 = product('Shape Shift Genesis 8', [
+      'data/daz 3d/genesis 8/female/morphs/zev0/shape shift/waist shape.dsf',
+    ])
+    const result = findProductMatches(
+      [morph('Waist Shape', 'Actor/Waist/Real World/Shape Shift/Waist')],
+      [g3, g8],
+      8,
+      [],
+    )
+    expect(result.matches[0].product.name).toBe('Shape Shift Genesis 8')
+  })
+
+  it('lists a real product\'s OWNED morph folder for files past the manifest cap', () => {
+    // The manifest's capped file list dropped the .dsf, but the product owns
+    // the folder — the hidden ownedBy record lets the basename matcher list it
+    // on disk and attribute the morph to the REAL product ("Folder Match").
+    const LIB = 'C:/Lib'
+    const dirs = [
+      'data',
+      'data/DAZ 3D',
+      'data/DAZ 3D/Genesis 8',
+      'data/DAZ 3D/Genesis 8/Female',
+      'data/DAZ 3D/Genesis 8/Female/Morphs',
+      'data/DAZ 3D/Genesis 8/Female/Morphs/Zev0',
+      'data/DAZ 3D/Genesis 8/Female/Morphs/Zev0/Shape Shift',
+    ].map((p) => `${LIB}/${p}`)
+    const files = [`${LIB}/data/DAZ 3D/Genesis 8/Female/Morphs/Zev0/Shape Shift/Waist Shape.dsf`]
+    const mod = loadMatching(dirs, undefined, files)
+    const shapeShift = product('Shape Shift', [], ['zev0/shape shift'])
+    const synth = mod.getContentFolderProducts([LIB], [shapeShift])
+    const result = mod.findProductMatches(
+      [morph('Waist Shape', 'Actor/Waist/Real World/Shape Shift/Waist')],
+      [shapeShift],
+      8.1,
+      synth,
+    )
+    expect(result.unmatched).toEqual([])
+    expect(result.matches[0].method).toBe('Folder Match')
+    expect(result.matches[0].product.name).toBe('Shape Shift')
+  })
+})
+
+describe('big morph packs past the caps (DthProducts.dsa)', () => {
+  it('keeps EVERY morph basename from a manifest, past the 60-file cap', () => {
+    // The measured Shape Shift case: the manifest lists 166 morph files and
+    // "Waist Shape.dsf" is #163 — the capped `files` list drops it, and the
+    // basename matcher needs exactly that name.
+    const morphFiles = [
+      ...Array.from({ length: 69 }, (_, i) => `Belly Fold ${String(i).padStart(2, '0')}.dsf`),
+      'Waist Shape.dsf',
+    ]
+    const manifest =
+      '<DAZInstallManifest VERSION="0.1">\n<ProductName VALUE="Shape Shift"/>\n' +
+      morphFiles
+        .map(
+          (f) =>
+            `<File TARGET="Content" ACTION="Install" VALUE="Content/data/DAZ 3D/Genesis 8/Female/Morphs/Zev0/Shape Shift/${f}"/>`,
+        )
+        .join('\n') +
+      '\n</DAZInstallManifest>'
+    const mod = loadMatching([], undefined, [], {
+      fileContents: { 'D:/DIM/IM00045723-01_ShapeShift.dsx': manifest },
+    })
+    const product = mod.parseManifestFile('D:/DIM/IM00045723-01_ShapeShift.dsx')
+    expect(product?.files).toHaveLength(60)
+    expect(product?.morphKeys).toHaveLength(70)
+    expect(product?.morphKeys).toContain('waistshape')
+    // Every key carries ITS OWN file's generation tag, read case-immune from
+    // the manifest's raw "Genesis 8" spelling.
+    expect(product?.morphGens).toHaveLength(70)
+    expect(product?.morphGens?.every((g: number) => g === 8)).toBe(true)
+  })
+
+  it('manifest-matches a morph whose file fell past the 60-file cap', () => {
+    const { findProductMatches } = loadMatching()
+    const shapeShift = {
+      name: 'Shape Shift',
+      sku: '45723-1',
+      artist: 'Zev0',
+      version: '1.0',
+      productType: 'Morphs',
+      files: [], // the capped list — Waist Shape fell off it
+      folders: ['zev0/shape shift'],
+      morphKeys: ['bellydiameter', 'waistshape'],
+      morphSample: 'data/daz 3d/genesis 8/female/morphs/zev0/shape shift/belly diameter.dsf',
+    }
+    const result = findProductMatches(
+      [
+        {
+          type: 'Morph',
+          name: 'Waist Shape',
+          technicalName: 'Waist Shape',
+          details: 'Value: -0.167',
+          value: -0.167,
+          sourceFile: '',
+          path: 'Actor/Waist/Real World/Shape Shift/Waist',
+          textures: [],
+        },
+      ],
+      [shapeShift],
+      8.1,
+      [],
+    )
+    expect(result.unmatched).toEqual([])
+    expect(result.matches[0].method).toBe('Manifest Match')
+    expect(result.matches[0].product.name).toBe('Shape Shift')
+  })
+
+  it('ranks by EACH file\'s generation, not the manifest\'s first sample', () => {
+    // One manifest lists both generations' copies (the real Shape Shift shape):
+    // the G3 copy sorts first, so a single morphSample would tag every key G3
+    // — and the raw "Genesis 8" casing must not defeat the check either. The
+    // morph's parameter path names neither product, so generation fit is the
+    // only signal; the wrong-generation product comes FIRST in the index to
+    // catch a first-wins tie.
+    const { findProductMatches } = loadMatching()
+    const wrongGen = {
+      name: 'Slim Shapes for Genesis 3',
+      sku: '11111-1',
+      artist: 'Other',
+      version: '1.0',
+      productType: 'Morphs',
+      files: [],
+      folders: ['other/slim shapes'],
+      morphKeys: ['waistshape'],
+      morphGens: [3],
+      morphSample: 'Content/data/DAZ 3D/Genesis 3/Female/Morphs/Other/Slim Shapes/Waist Shape.dsf',
+    }
+    const shapeShift = {
+      name: 'Shape Shift',
+      sku: '45723-1',
+      artist: 'Zev0',
+      version: '1.0',
+      productType: 'Morphs',
+      files: [],
+      folders: ['zev0/shape shift'],
+      morphKeys: ['bellydiameter', 'waistshape'],
+      morphGens: [3, 8], // the G3 belly file is listed first — per-key tags matter
+      morphSample: 'Content/data/DAZ 3D/Genesis 3/Female/Morphs/Zev0/Shape Shift/Belly Diameter.dsf',
+    }
+    const result = findProductMatches(
+      [
+        {
+          type: 'Morph',
+          name: 'Waist Shape',
+          technicalName: 'Waist Shape',
+          details: 'Value: -0.167',
+          value: -0.167,
+          sourceFile: '',
+          path: 'Actor/Waist/Real World/Waist',
+          textures: [],
+        },
+      ],
+      [wrongGen, shapeShift],
+      8.1,
+      [],
+    )
+    expect(result.unmatched).toEqual([])
+    expect(result.matches[0].method).toBe('Manifest Match')
+    expect(result.matches[0].product.name).toBe('Shape Shift')
+  })
+
+  it('folder-lists past 80 files (the old per-folder cap)', () => {
+    const LIB = 'C:/Lib'
+    const FOLDER = 'data/DAZ 3D/Genesis 8/Female/Morphs/Zev0/Shape Shift'
+    const dirs = [
+      'data',
+      'data/DAZ 3D',
+      'data/DAZ 3D/Genesis 8',
+      'data/DAZ 3D/Genesis 8/Female',
+      'data/DAZ 3D/Genesis 8/Female/Morphs',
+      'data/DAZ 3D/Genesis 8/Female/Morphs/Zev0',
+      FOLDER,
+    ].map((p) => `${LIB}/${p}`)
+    // 120 files sorting before the target, mirroring the real 166-file folder.
+    const files = [
+      ...Array.from({ length: 120 }, (_, i) => `${LIB}/${FOLDER}/A Morph ${String(i).padStart(3, '0')}.dsf`),
+      `${LIB}/${FOLDER}/Waist Shape.dsf`,
+    ]
+    const mod = loadMatching(dirs, undefined, files)
+    const shapeShift = {
+      name: 'Shape Shift',
+      sku: '45723-1',
+      artist: 'Zev0',
+      version: '1.0',
+      productType: 'Morphs',
+      files: [],
+      folders: ['zev0/shape shift'],
+      // No morphKeys — the owned-folder listing is the only route.
+    }
+    const synth = mod.getContentFolderProducts([LIB], [shapeShift])
+    const result = mod.findProductMatches(
+      [
+        {
+          type: 'Morph',
+          name: 'Waist Shape',
+          technicalName: 'Waist Shape',
+          details: 'Value: -0.167',
+          value: -0.167,
+          sourceFile: '',
+          path: 'Actor/Waist/Real World/Shape Shift/Waist',
+          textures: [],
+        },
+      ],
+      [shapeShift],
+      8.1,
+      synth,
+    )
+    expect(result.unmatched).toEqual([])
+    expect(result.matches[0].method).toBe('Folder Match')
+    expect(result.matches[0].product.name).toBe('Shape Shift')
+  })
+})
+
+describe('child-node morphs are the node product\'s own (DthProducts.dsa)', () => {
+  it('collects morphs from the figure only, not from fitted items', () => {
+    // The measured false positive: a generic "Expand_All" fit morph dialed on a
+    // fitted bikini basename-matched an unrelated outfit's manifest. Morphs on
+    // a CHILD node are always part of the product that brought the node.
+    const channel = (v: number) => ({ getValue: () => v, getPath: () => 'Actor/Fit' })
+    const dzMorph = (name: string, v: number) => ({
+      inherits: (c: string) => c === 'DzMorph',
+      getValueChannel: () => channel(v),
+      getName: () => name,
+      getLabel: () => name,
+    })
+    const node = (label: string, name: string, parent: unknown, morphs: Array<unknown>) => ({
+      getLabel: () => label,
+      getName: () => name,
+      className: () => 'DzNode',
+      getNodeParent: () => parent,
+      getObject: () => ({
+        getNumModifiers: () => morphs.length,
+        getModifier: (i: number) => morphs[i],
+        getCurrentShape: () => null,
+      }),
+    })
+    const figure = node('Genesis 8.1 Female', 'Genesis8_1Female', null, [
+      dzMorph('GC BodyMorph', 0.2),
+    ])
+    const bikini = node('SaltBikini_Bra', 'SaltBikini_Bra_2050', figure, [
+      dzMorph('Expand_All', 0.6), // the item's own fit morph
+      dzMorph('GC BodyMorph', 0.2), // an auto-follow projection of the figure morph
+    ])
+    const mod = loadMatching([], undefined, [], { sceneNodes: [figure, bikini] })
+    const assets = mod.getUsedAssets()
+    const morphs = assets.filter((a) => a.type === 'Morph').map((a) => a.name)
+    expect(morphs).toEqual(['GC BodyMorph']) // the figure's copy only
+    expect(assets.filter((a) => a.type === 'Node')).toHaveLength(2)
+  })
+
+  it('a FOLLOWING item never contributes morphs, even named after the figure', () => {
+    // Geografts are routinely named for the figure ("Genesis 8 Female
+    // Genitalia") — the genesis-name exception must not re-admit their
+    // projected morphs. A follow target outranks any name: following = fitted.
+    const channel = (v: number) => ({ getValue: () => v, getPath: () => 'Actor/Fit' })
+    const dzMorph = (name: string, v: number) => ({
+      inherits: (c: string) => c === 'DzMorph',
+      getValueChannel: () => channel(v),
+      getName: () => name,
+      getLabel: () => name,
+    })
+    const node = (
+      label: string,
+      name: string,
+      parent: unknown,
+      morphs: Array<unknown>,
+      followTarget: unknown = null,
+    ) => ({
+      getLabel: () => label,
+      getName: () => name,
+      className: () => 'DzNode',
+      getNodeParent: () => parent,
+      getFollowTarget: () => followTarget,
+      getObject: () => ({
+        getNumModifiers: () => morphs.length,
+        getModifier: (i: number) => morphs[i],
+        getCurrentShape: () => null,
+      }),
+    })
+    const figure = node('Genesis 8.1 Female', 'Genesis8_1Female', null, [
+      dzMorph('GC BodyMorph', 0.2),
+    ])
+    const graft = node(
+      'Genesis 8 Female Genitalia',
+      'Genesis8FemaleGenitalia',
+      figure,
+      [dzMorph('GC BodyMorph', 0.2)], // an auto-follow projection
+      figure, // fitted: it follows the figure
+    )
+    const mod = loadMatching([], undefined, [], { sceneNodes: [figure, graft] })
+    const morphs = mod
+      .getUsedAssets()
+      .filter((a) => a.type === 'Morph')
+      .map((a) => a.name)
+    expect(morphs).toEqual(['GC BodyMorph']) // the figure's copy only
   })
 })
