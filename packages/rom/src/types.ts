@@ -843,7 +843,7 @@ export const CHARACTER_SCHEMA_VERSION = 37
  * step — is `.ai/schema-history.md`. Bumping this means adding the entry there,
  * in the same commit.
  */
-export const RUNTIME_VERSION = 96
+export const RUNTIME_VERSION = 97
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

@@ -235,9 +235,10 @@ export function SceneRow({
   const noExport = mode === 'houdini-only' && !loading && !status.exportExists
   const disabled = mode === 'houdini-only' ? noExport : status.missing || noRom
   // Each mode reports the state that decides ITS pre-selection ("Houdini only"
-  // has no staleness signal, so nothing highlights green there).
+  // and "Hair items only" have no staleness signal, so nothing highlights
+  // green there).
   const highlight =
-    mode === 'houdini-only'
+    mode === 'houdini-only' || mode === 'hair-only'
       ? false
       : mode === 'export-only'
         ? status.romUnexported
@@ -251,17 +252,21 @@ export function SceneRow({
           : 'Uses this scene’s last Daz export as it stands'
       : status.missing
         ? 'Scene file missing — relink it in the editor'
-        : loading
-          ? 'Checking for changes…'
-          : noRom
-            ? 'No ROM animation yet — run a ROM build for this scene first'
-            : mode === 'export-only'
-              ? status.romUnexported
-                ? 'ROM animation changed since its last export'
-                : 'ROM animation already exported as it stands'
-              : status.affected
-                ? 'Changed since the last export'
-                : 'Unchanged since the last export'
+        : mode === 'hair-only'
+          ? // No staleness to report and no ROM needed — the row can only say
+            // what the run does to it.
+            'Exports each hair item of this scene on its own'
+          : loading
+            ? 'Checking for changes…'
+            : noRom
+              ? 'No ROM animation yet — run a ROM build for this scene first'
+              : mode === 'export-only'
+                ? status.romUnexported
+                  ? 'ROM animation changed since its last export'
+                  : 'ROM animation already exported as it stands'
+                : status.affected
+                  ? 'Changed since the last export'
+                  : 'Unchanged since the last export'
   return (
     <div className="group/card relative w-full">
       <div
@@ -359,6 +364,11 @@ export const DAZ_MODE_OPTIONS: ReadonlyArray<{ mode: RunChoice; title: string; b
     mode: 'export-only',
     title: EXPORT_MODE_LABELS['export-only'],
     blurb: 'Export the saved ROM animations as they stand, without rebuilding.',
+  },
+  {
+    mode: 'hair-only',
+    title: EXPORT_MODE_LABELS['hair-only'],
+    blurb: 'Export only the hair items of the selected scenes — lists the scenes with “Export hair items” on.',
   },
   {
     mode: 'houdini-only',

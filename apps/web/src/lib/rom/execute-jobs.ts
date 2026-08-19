@@ -1,6 +1,7 @@
 import {
   BUILD_ROM_ANIMATION_SCRIPT,
   BULK_EXPORT_ONLY_SCRIPT,
+  BULK_HAIR_EXPORT_SCRIPT,
   BULK_ROM_EXPORT_SCRIPT,
   romAnimationPath,
   sceneExportSubfolders,
@@ -241,9 +242,10 @@ export function isExportRunFile(path: string): boolean {
  *    deliver the PoseAsset CSV
  *  - export-only (4): the same minus the ROM build
  *  - rom-only (2): open / generate + save the ROM
+ *  - hair-only (2): open / export the hair items
  */
 export function jobStepsForMode(mode: ExportMode): number {
-  if (mode === 'rom-only') return 2
+  if (mode === 'rom-only' || mode === 'hair-only') return 2
   if (mode === 'export-only') return 4
   return 5
 }
@@ -351,8 +353,14 @@ export { romAnimationPath }
  * - `export-only` — export the SAVED ROM animation as it stands (hair
  *   included), rebuilding nothing: the mode for a ROM that was hand-edited in
  *   Daz. Its job rows open the ROM animation, not the source scene.
+ * - `hair-only` — export ONLY each scene's hair items (one Alembic per item),
+ *   no ROM, no skeleton/mesh, no CSV. Needs no saved ROM animation — the pass
+ *   runs on the scene itself. The panel lists only the scenes whose "Export
+ *   hair items" switch is on ({@link sceneHairExportEnabled}), and like
+ *   rom-only it stops after Daz: it writes no `.dth`, so a Houdini/Unreal
+ *   continuation could only re-consume the previous export.
  */
-export const EXPORT_MODES = ['rom-export', 'rom-only', 'export-only'] as const
+export const EXPORT_MODES = ['rom-export', 'rom-only', 'export-only', 'hair-only'] as const
 export type ExportMode = (typeof EXPORT_MODES)[number]
 
 /**
@@ -366,6 +374,7 @@ export const EXPORT_MODE_LABELS: Record<ExportMode, string> = {
   'rom-export': 'ROM + Export',
   'rom-only': 'ROM only',
   'export-only': 'Export only',
+  'hair-only': 'Hair items only',
 }
 
 /**
@@ -486,12 +495,14 @@ export function hipsForSelectedScenes(
  * The hidden generated script a mode's job rows run — each selects the open
  * scene's overrides itself, so one script serves every scene:
  * {@link BULK_ROM_EXPORT_SCRIPT} (ROM + full export),
- * {@link BUILD_ROM_ANIMATION_SCRIPT} (ROM + save, no export) or
- * {@link BULK_EXPORT_ONLY_SCRIPT} (full export, no ROM build).
+ * {@link BUILD_ROM_ANIMATION_SCRIPT} (ROM + save, no export),
+ * {@link BULK_EXPORT_ONLY_SCRIPT} (full export, no ROM build) or
+ * {@link BULK_HAIR_EXPORT_SCRIPT} (the per-item hair pass alone).
  */
 export function jobScriptForMode(mode: ExportMode): string {
   if (mode === 'rom-only') return BUILD_ROM_ANIMATION_SCRIPT
   if (mode === 'export-only') return BULK_EXPORT_ONLY_SCRIPT
+  if (mode === 'hair-only') return BULK_HAIR_EXPORT_SCRIPT
   return BULK_ROM_EXPORT_SCRIPT
 }
 
@@ -548,6 +559,11 @@ export function scenesMissingExport<T extends { scenePath: string; exportExists:
  * consumed), so it pre-checks every scene whose export is on disk — including
  * one whose `.duf` is missing: Houdini reads the delivered export, not the
  * scene, so a deleted `.duf` takes nothing away from this run.
+ *
+ * `hair-only` has none either (nothing tracks what the hair pass last wrote),
+ * so it pre-checks every runnable scene of its own list — the ones whose
+ * "Export hair items" switch is on (`hairExport`; the panel lists only those)
+ * and whose `.duf` is readable.
  */
 export function preCheckedScenes(
   mode: RunChoice,
@@ -558,10 +574,14 @@ export function preCheckedScenes(
     romExists: boolean
     romUnexported: boolean
     exportExists: boolean
+    hairExport: boolean
   }>,
 ): Set<string> {
   if (mode === 'houdini-only') {
     return new Set(scenes.filter((s) => s.exportExists).map((s) => s.scenePath))
+  }
+  if (mode === 'hair-only') {
+    return new Set(scenes.filter((s) => !s.missing && s.hairExport).map((s) => s.scenePath))
   }
   return new Set(
     scenes
@@ -781,13 +801,14 @@ export function jobSceneForMode(mode: ExportMode, scenePath: string): string {
  *   animation as it stands). The ROM verdict it would be deleting still
  *   describes the ROM it is about to export — including the failed-morph rows
  *   the user is meant to act on — and a clean export writes no run log to
- *   replace it with.
+ *   replace it with. Same for `hair-only`: the hair pass builds no ROM and
+ *   writes no run log, so the standing verdict outlives it untouched.
  */
 export function scenesRetiredByRun(
   mode: ExportMode,
   scenes: ReadonlyArray<string>,
 ): Array<string> {
-  if (mode === 'export-only') return []
+  if (mode === 'export-only' || mode === 'hair-only') return []
   return [...scenes, '']
 }
 

@@ -31,6 +31,8 @@ import { withBusyCursor } from '../../busy-cursor.ts'
 import {
   activeSceneOverrides,
   BUILD_ROM_ANIMATION_SCRIPT,
+  BULK_EXPORT_ONLY_SCRIPT,
+  BULK_HAIR_EXPORT_SCRIPT,
   BULK_ROM_EXPORT_SCRIPT,
   characterScriptName,
   characterSlug,
@@ -569,10 +571,14 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
           [
             `${dazBase}.dsa`,
             ...iconBearing,
-            // The hidden bulk script exists only WITH an export dir — swept
-            // here once the dir is cleared. The ROM-only sibling is always
-            // written now; listing it keeps a future retirement sweepable.
+            // The hidden bulk scripts exist only WITH an export dir — swept
+            // here once the dir is cleared (the export-only twin was missing
+            // from this list and lingered; now all three retire together). The
+            // ROM-only sibling is always written; listing it keeps a future
+            // retirement sweepable.
             BULK_ROM_EXPORT_SCRIPT,
+            BULK_EXPORT_ONLY_SCRIPT,
+            BULK_HAIR_EXPORT_SCRIPT,
             BUILD_ROM_ANIMATION_SCRIPT,
             // Legacy name (pre-Hair rename) — never in the written set now, so it's
             // always swept from a character folder that still has the old script.
