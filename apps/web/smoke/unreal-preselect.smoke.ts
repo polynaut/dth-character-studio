@@ -384,6 +384,53 @@ test('ONE task row per re-import — and a set the project never held is dropped
   )
 })
 
+test('the just-re-import run needs no Daz-mode change: no scenes + Skip Houdini starts the send', async ({
+  page,
+}) => {
+  // The reported shape (2026-08-19): Daz mode left where it opened
+  // ("ROM + Export"), "Skip Houdini — use last exports" picked, the Unreal
+  // project ticked — and Start held on "Select at least one Daz scene" for a
+  // run that needs none. The selection describes the run: no scenes and no
+  // Houdini leaves only the send, the same run "Skip Daz" + "Skip Houdini"
+  // always started.
+  const seed = buildSeed({
+    activeProjectFile: P.dcsp,
+    demo: true,
+    houdiniProject: true,
+    unrealProjects: [UPROJECT],
+  })
+  seed.files[`${EXPORT_ROOT}/KiraDefault/DTH_KiraDefault.dth`] = '{}'
+  seed.files[IMPORTED] = 'uasset-fixture'
+  seed.files[`${UPROJECT_DIR}/Plugins/DTHCharacterStudioRunner/DTHCharacterStudioRunner.uplugin`] = JSON.stringify({
+    Version: UNREAL_BRIDGE_VERSION,
+  })
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+  await page.getByRole('button', { name: 'DTH Export' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.waitFor()
+
+  // Wait out the scene probe (it seeds the pre-selection when it lands —
+  // unchecking before that would be overwritten), then take the scene OFF the
+  // run. The Daz mode dropdown is never touched.
+  const scene = dialog.getByRole('checkbox', { name: /Export KiraDefault/ })
+  await expect(scene).toBeChecked()
+  await scene.uncheck()
+  await dialog.locator('#houdini-mode').click()
+  await page.getByRole('option', { name: /Skip Houdini/ }).click()
+  await dialog.getByRole('checkbox', { name: 'Send to DemoGame' }).check()
+
+  const start = dialog.getByRole('button', { name: 'Start' })
+  await expect(start).toBeEnabled()
+  await start.click()
+
+  // The run IS the send: the job queues for the editor, and no Daz batch was
+  // handed off (the finish toast machinery reports the Unreal line alone).
+  await expect(page.getByText(/Unreal: queued for DemoGame/)).toBeVisible()
+})
+
 test('nothing claims the job and no editor is running — the studio opens the project', async ({
   page,
 }) => {

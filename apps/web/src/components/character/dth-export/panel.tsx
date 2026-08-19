@@ -344,6 +344,22 @@ export function DthExportPanel({
   const unrealSendable = mode !== 'rom-only' && (houdiniMode === 'skip' || checkedHips.size > 0)
 
   /**
+   * The whole run is the Unreal send — nothing runs in Daz or Houdini.
+   *
+   * Two ways to say it, both honoured: pick "Skip Daz" (scenes are then
+   * irrelevant — that mode never reads them under `skip`), or leave every Daz
+   * scene unticked under any exporting mode. The selection describes the run,
+   * and "no scenes + Skip Houdini + a ticked Unreal project" IS the
+   * just-re-import run — it used to be reachable only through the "Skip Daz"
+   * dropdown, and Start otherwise held on "Select at least one Daz scene" for
+   * a run that needed none. Never under rom-only: that mode disables the
+   * Unreal rows outright (see {@link unrealSendable}), so a send from it
+   * cannot be selected in the first place.
+   */
+  const unrealOnlyRun =
+    houdiniMode === 'skip' && mode !== 'rom-only' && (mode === 'houdini-only' || checked.size === 0)
+
+  /**
    * The export sets THIS RUN will produce, or null when the studio cannot say.
    *
    * Each checked Houdini project declares the sets it writes (its export
@@ -640,16 +656,18 @@ export function DthExportPanel({
       // Nobody looked, so the rows claim a plain "Import" and the send
       // decides — it re-probes for real.
       const located = sendPlan?.located
+      // Nothing to run in Daz OR Houdini: this IS the "just re-import in
+      // Unreal" case, and it is one file write away — reached through "Skip
+      // Daz", or through any mode with no scene ticked (see
+      // {@link unrealOnlyRun}).
+      if (unrealOnlyRun) {
+        onUnrealOnly(unrealTargets, chosenSets, located)
+        onClose()
+        return
+      }
       // Skip Daz: the Houdini selection IS the run — the same machinery the
       // after-batch continuation drives, minus the batch.
       if (mode === 'houdini-only') {
-        // Nothing to run in Daz OR Houdini: this IS the "just re-import in
-        // Unreal" case, and it is one file write away.
-        if (houdiniMode === 'skip') {
-          onUnrealOnly(unrealTargets, chosenSets, located)
-          onClose()
-          return
-        }
         // Belt and braces, the export-only re-probe's sibling: the panel's
         // status is a snapshot, and an export folder can be cleared while it
         // sits open — a vanished `.dth` must land back in the panel, not in
@@ -787,7 +805,7 @@ export function DthExportPanel({
             disabled={
               busy ||
               checking ||
-              (mode === 'houdini-only' && houdiniMode === 'skip'
+              (unrealOnlyRun
                 ? // Neither app runs: the whole run is the send, so the Unreal
                   // pick is the only thing that can gate it.
                   checkedUnreal.size === 0
@@ -798,17 +816,23 @@ export function DthExportPanel({
                     : !runner || runner.blocked || noRomChecked.length > 0))
             }
             title={
-              mode !== 'houdini-only' && runner?.blocked
+              // The Runner is the DAZ plugin's gate — a send-only run never
+              // reaches it, so its title must not claim to block one.
+              !unrealOnlyRun && mode !== 'houdini-only' && runner?.blocked
                 ? 'The Runner plugin needs attention in Settings first'
                 : checking
                   ? mode === 'houdini-only'
                     ? 'Checking each scene for a Daz export on disk — a moment'
                     : 'Checking each scene for a saved ROM animation — a moment'
-                  : mode === 'houdini-only' && houdiniMode === 'skip'
+                  : unrealOnlyRun
                     ? // The send-only run's single requirement — the Daz-scene
                       // wording below would name a selection it never reads.
                       checkedUnreal.size === 0
-                      ? 'Select the Unreal project to send to'
+                      ? mode === 'houdini-only'
+                        ? 'Select the Unreal project to send to'
+                        : // Reached with nothing at all ticked: both ways
+                          // forward are real, so name both.
+                          'Select Daz scenes to run, or an Unreal project to re-send the last exports'
                       : undefined
                     : checked.size === 0
                       ? 'Select at least one Daz scene'
@@ -1020,8 +1044,11 @@ export function DthExportPanel({
           </div>
         )}
         {/* The Runner gate is the DAZ plugin's — a skip-Daz run never goes
-            through it, so it must not block one. */}
-        {mode !== 'houdini-only' && runner?.blocked && <RunnerGateNotice gate={runner} />}
+            through it, so it must not block one. Nor a send-only run: with no
+            scene ticked under Skip Houdini, nothing reaches Daz either. */}
+        {!unrealOnlyRun && mode !== 'houdini-only' && runner?.blocked && (
+          <RunnerGateNotice gate={runner} />
+        )}
         {noRomChecked.length > 0 && (
           <div className="space-y-1 rounded-lg border border-destructive/50 bg-destructive/5 p-3 text-sm">
             <p>
