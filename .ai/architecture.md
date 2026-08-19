@@ -491,7 +491,14 @@ surface as a banner + add wizard instead of waiting for a manual pick/drop.
   folders (`morphRoot: true`, bounded BFS, "Content Folder Match"). Candidates
   are ranked: generation fit (vendors ship same-named morph files per
   generation) outweighs the parameter-path hint (a morph's Path often names
-  its product). FLAT texture layouts
+  its product). Real caps sized from real packs (v91): `parseManifestFile`
+  keeps every morph basename as `morphKeys` beside the 60-capped `files`
+  (Shape Shift lists 166), and the folder listing budget is 40 dirs/400 files.
+  CHILD-NODE morphs are never collected at all (v91): a morph dialed on a
+  fitted item is the item's own fit morph or an auto-follow projection —
+  matching them independently produced false positives on generic basenames
+  ("Expand_All") — so `getUsedAssets` takes morphs only from root nodes and
+  Genesis figures. FLAT texture layouts
   (`Runtime/textures/<Product>/<file>.jpg`) key by the folder alone (the old
   two-segment key swallowed the filename), and an unmatched node's unowned
   texture folder becomes a product ON DEMAND (`textureFolderProduct`, no

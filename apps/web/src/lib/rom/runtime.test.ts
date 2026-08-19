@@ -55,7 +55,7 @@ const RUNTIME_ASSETS = [
 // Bump this together with RUNTIME_VERSION whenever a runtime file legitimately
 // changes (this run prints the new value in the failure message).
 const EXPECTED_RUNTIME_HASH =
-  '09dcf5c9b02eda380cefce7eab5c1be350a35822f4e006acd12ce9b209fcdae5'
+  'e0f1d30f4bd370db044c2028db0fe8e9872d43023cc4f428c2c81c89dd001874'
 
 function runtimeHash(): string {
   const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
@@ -1131,21 +1131,28 @@ interface MatchingModule {
     matches: Array<{ product: { name: string }; method: string }>
     unmatched: Array<{ name: string }>
   }
+  parseManifestFile: (
+    path: string,
+  ) => { name: string; files: Array<string>; morphKeys: Array<string> } | null
+  getUsedAssets: () => Array<{ type: string; name: string }>
 }
 
 const MATCHING_EXPORTS =
-  'productFolderKey, getContentDirectories, getContentFolderProducts, findProductMatches'
+  'productFolderKey, getContentDirectories, getContentFolderProducts, findProductMatches, parseManifestFile, getUsedAssets'
 
 /**
  * Load DthProducts.dsa over an in-memory directory tree (`dirs` are the existing
  * directories; `files` are full file paths, listed by their parent directory but
  * never openable — file CONTENT is irrelevant to the matchers under test).
- * `appContentDirs`, when given, backs a fake `App.getContentMgr()`.
+ * `appContentDirs`, when given, backs a fake `App.getContentMgr()`. `extra` can
+ * supply openable file contents (for parseManifestFile) and scene nodes (for
+ * getUsedAssets).
  */
 function loadMatching(
   dirs: Array<string> = [],
   appContentDirs?: Array<string>,
   files: Array<string> = [],
+  extra: { fileContents?: Record<string, string>; sceneNodes?: Array<unknown> } = {},
 ): MatchingModule {
   const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
   const src = readFileSync(join(dir, 'DthProducts.dsa'), 'utf8')
@@ -1182,11 +1189,16 @@ function loadMatching(
       return this.full.split('/').slice(0, -1).join('/')
     }
   }
+  const fileContents = extra.fileContents ?? {}
   class DzFile {
     WriteOnly = 2
     Truncate = 4
+    constructor(public p: string) {}
     open() {
-      return false
+      return Object.hasOwn(fileContents, this.p)
+    }
+    read() {
+      return fileContents[this.p] ?? ''
     }
     write() {}
     close() {}
@@ -1203,6 +1215,7 @@ function loadMatching(
     DzFileInfo,
     JSON,
     MessageBox: { information: () => {}, warning: () => {}, critical: () => {} },
+    Scene: { getNodeList: () => extra.sceneNodes ?? [] },
   }
   if (appContentDirs) {
     sandbox.App = {
@@ -1584,5 +1597,157 @@ describe('no-source-file morphs of REAL products (DthProducts.dsa)', () => {
     expect(result.unmatched).toEqual([])
     expect(result.matches[0].method).toBe('Folder Match')
     expect(result.matches[0].product.name).toBe('Shape Shift')
+  })
+})
+
+describe('big morph packs past the caps (DthProducts.dsa)', () => {
+  it('keeps EVERY morph basename from a manifest, past the 60-file cap', () => {
+    // The measured Shape Shift case: the manifest lists 166 morph files and
+    // "Waist Shape.dsf" is #163 — the capped `files` list drops it, and the
+    // basename matcher needs exactly that name.
+    const morphFiles = [
+      ...Array.from({ length: 69 }, (_, i) => `Belly Fold ${String(i).padStart(2, '0')}.dsf`),
+      'Waist Shape.dsf',
+    ]
+    const manifest =
+      '<DAZInstallManifest VERSION="0.1">\n<ProductName VALUE="Shape Shift"/>\n' +
+      morphFiles
+        .map(
+          (f) =>
+            `<File TARGET="Content" ACTION="Install" VALUE="Content/data/DAZ 3D/Genesis 8/Female/Morphs/Zev0/Shape Shift/${f}"/>`,
+        )
+        .join('\n') +
+      '\n</DAZInstallManifest>'
+    const mod = loadMatching([], undefined, [], {
+      fileContents: { 'D:/DIM/IM00045723-01_ShapeShift.dsx': manifest },
+    })
+    const product = mod.parseManifestFile('D:/DIM/IM00045723-01_ShapeShift.dsx')
+    expect(product?.files).toHaveLength(60)
+    expect(product?.morphKeys).toHaveLength(70)
+    expect(product?.morphKeys).toContain('waistshape')
+  })
+
+  it('manifest-matches a morph whose file fell past the 60-file cap', () => {
+    const { findProductMatches } = loadMatching()
+    const shapeShift = {
+      name: 'Shape Shift',
+      sku: '45723-1',
+      artist: 'Zev0',
+      version: '1.0',
+      productType: 'Morphs',
+      files: [], // the capped list — Waist Shape fell off it
+      folders: ['zev0/shape shift'],
+      morphKeys: ['bellydiameter', 'waistshape'],
+      morphSample: 'data/daz 3d/genesis 8/female/morphs/zev0/shape shift/belly diameter.dsf',
+    }
+    const result = findProductMatches(
+      [
+        {
+          type: 'Morph',
+          name: 'Waist Shape',
+          technicalName: 'Waist Shape',
+          details: 'Value: -0.167',
+          value: -0.167,
+          sourceFile: '',
+          path: 'Actor/Waist/Real World/Shape Shift/Waist',
+          textures: [],
+        },
+      ],
+      [shapeShift],
+      8.1,
+      [],
+    )
+    expect(result.unmatched).toEqual([])
+    expect(result.matches[0].method).toBe('Manifest Match')
+    expect(result.matches[0].product.name).toBe('Shape Shift')
+  })
+
+  it('folder-lists past 80 files (the old per-folder cap)', () => {
+    const LIB = 'C:/Lib'
+    const FOLDER = 'data/DAZ 3D/Genesis 8/Female/Morphs/Zev0/Shape Shift'
+    const dirs = [
+      'data',
+      'data/DAZ 3D',
+      'data/DAZ 3D/Genesis 8',
+      'data/DAZ 3D/Genesis 8/Female',
+      'data/DAZ 3D/Genesis 8/Female/Morphs',
+      'data/DAZ 3D/Genesis 8/Female/Morphs/Zev0',
+      FOLDER,
+    ].map((p) => `${LIB}/${p}`)
+    // 120 files sorting before the target, mirroring the real 166-file folder.
+    const files = [
+      ...Array.from({ length: 120 }, (_, i) => `${LIB}/${FOLDER}/A Morph ${String(i).padStart(3, '0')}.dsf`),
+      `${LIB}/${FOLDER}/Waist Shape.dsf`,
+    ]
+    const mod = loadMatching(dirs, undefined, files)
+    const shapeShift = {
+      name: 'Shape Shift',
+      sku: '45723-1',
+      artist: 'Zev0',
+      version: '1.0',
+      productType: 'Morphs',
+      files: [],
+      folders: ['zev0/shape shift'],
+      // No morphKeys — the owned-folder listing is the only route.
+    }
+    const synth = mod.getContentFolderProducts([LIB], [shapeShift])
+    const result = mod.findProductMatches(
+      [
+        {
+          type: 'Morph',
+          name: 'Waist Shape',
+          technicalName: 'Waist Shape',
+          details: 'Value: -0.167',
+          value: -0.167,
+          sourceFile: '',
+          path: 'Actor/Waist/Real World/Shape Shift/Waist',
+          textures: [],
+        },
+      ],
+      [shapeShift],
+      8.1,
+      synth,
+    )
+    expect(result.unmatched).toEqual([])
+    expect(result.matches[0].method).toBe('Folder Match')
+    expect(result.matches[0].product.name).toBe('Shape Shift')
+  })
+})
+
+describe('child-node morphs are the node product\'s own (DthProducts.dsa)', () => {
+  it('collects morphs from the figure only, not from fitted items', () => {
+    // The measured false positive: a generic "Expand_All" fit morph dialed on a
+    // fitted bikini basename-matched an unrelated outfit's manifest. Morphs on
+    // a CHILD node are always part of the product that brought the node.
+    const channel = (v: number) => ({ getValue: () => v, getPath: () => 'Actor/Fit' })
+    const dzMorph = (name: string, v: number) => ({
+      inherits: (c: string) => c === 'DzMorph',
+      getValueChannel: () => channel(v),
+      getName: () => name,
+      getLabel: () => name,
+    })
+    const node = (label: string, name: string, parent: unknown, morphs: Array<unknown>) => ({
+      getLabel: () => label,
+      getName: () => name,
+      className: () => 'DzNode',
+      getNodeParent: () => parent,
+      getObject: () => ({
+        getNumModifiers: () => morphs.length,
+        getModifier: (i: number) => morphs[i],
+        getCurrentShape: () => null,
+      }),
+    })
+    const figure = node('Genesis 8.1 Female', 'Genesis8_1Female', null, [
+      dzMorph('GC BodyMorph', 0.2),
+    ])
+    const bikini = node('SaltBikini_Bra', 'SaltBikini_Bra_2050', figure, [
+      dzMorph('Expand_All', 0.6), // the item's own fit morph
+      dzMorph('GC BodyMorph', 0.2), // an auto-follow projection of the figure morph
+    ])
+    const mod = loadMatching([], undefined, [], { sceneNodes: [figure, bikini] })
+    const assets = mod.getUsedAssets()
+    const morphs = assets.filter((a) => a.type === 'Morph').map((a) => a.name)
+    expect(morphs).toEqual(['GC BodyMorph']) // the figure's copy only
+    expect(assets.filter((a) => a.type === 'Node')).toHaveLength(2)
   })
 })

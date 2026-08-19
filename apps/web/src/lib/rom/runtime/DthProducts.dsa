@@ -251,7 +251,20 @@ function getUsedAssets() {
       textures: getNodeTextureFiles(node),
     });
 
-    var obj = node.getObject();
+    // Morphs dialed on a CHILD node (fitted clothing, hair, geografts) are the
+    // item's own adjustment morphs or auto-follow projections of figure morphs
+    // — always part of the product that brought the item into the scene, never
+    // a product of their own. Matching them independently produced false
+    // positives (a generic "Expand_All" fit morph on a bikini basename-matched
+    // an unrelated outfit's manifest) and duplicate projected copies of every
+    // figure morph. Collect morphs only from root nodes and Genesis figures
+    // (the figure keeps its morphs even when the user grouped it).
+    var collectMorphs =
+      !parentNode ||
+      nodeName.toLowerCase().indexOf("genesis") !== -1 ||
+      nodeLabel.toLowerCase().indexOf("genesis") !== -1;
+
+    var obj = collectMorphs ? node.getObject() : null;
     if (obj) {
       var numMods = obj.getNumModifiers();
       for (var m = 0; m < numMods; m++) {
@@ -473,6 +486,19 @@ function parseManifestFile(manifestPath) {
     var dataFiles = geomFiles.concat(morphFiles);
     if (dataFiles.length > 60) dataFiles = dataFiles.slice(0, 60);
 
+    // The cap above protects the exact-file index, but it DROPS the morph files
+    // a big pack installs past #60 (measured: Shape Shift lists 166 —
+    // "Waist Shape.dsf" is #163), and a no-source-file morph is matched by
+    // exactly those basenames. Keep the basename KEYS of every morph file
+    // separately — short strings, cheap — plus one sample path for the
+    // generation ranking.
+    var morphKeys = [];
+    for (var mK = 0; mK < morphFiles.length && morphKeys.length < 500; mK++) {
+      var mkKey = manifestFileKey(morphFiles[mK]);
+      if (mkKey) morphKeys.push(mkKey);
+    }
+    var morphSample = morphFiles.length ? morphFiles[0] : "";
+
     // Distinct "vendor/product" folders this product installs under — the key a
     // used node's texture path can be matched against (the node API gives us no
     // .dsf, only texture paths, but both share the vendor/product folder).
@@ -499,6 +525,8 @@ function parseManifestFile(manifestPath) {
         supportFile: extractSupportFile(content),
         files: dataFiles,
         folders: folders,
+        morphKeys: morphKeys,
+        morphSample: morphSample,
       };
     }
   } catch (e) {
@@ -1736,9 +1764,20 @@ function buildMorphFileIndex(installedProducts, synthProducts, sceneGenesisVersi
     return si === -1 ? String(folderKey || "") : String(folderKey).substring(si + 1);
   }
 
-  // 1) Manifest morph files of every installed product.
+  // 1) Manifest morph files of every installed product. `morphKeys` carries
+  // EVERY morph basename (the `files` list is capped at 60 and big packs
+  // overflow it — the measured Shape Shift case); fall back to scanning
+  // `files` for products without it (LOCAL_USER metadata).
   for (var p = 0; p < installedProducts.length; p++) {
     var product = installedProducts[p];
+    if (product.morphKeys && product.morphKeys.length) {
+      var sSeg = segOfKey(productFolderKey(product.morphSample));
+      var sGen = pathMatchesGenesis(String(product.morphSample || ""), sceneGenesisVersion);
+      for (var mk = 0; mk < product.morphKeys.length; mk++) {
+        add(product.morphKeys[mk], product, "Manifest Match", sSeg, sGen);
+      }
+      continue;
+    }
     if (!product.files) continue;
     for (var f = 0; f < product.files.length; f++) {
       var file = String(product.files[f]).toLowerCase();
@@ -1764,10 +1803,13 @@ function buildMorphFileIndex(installedProducts, synthProducts, sceneGenesisVersi
     var method = sp.ownedBy ? "Folder Match" : "Content Folder Match";
     var seg = segOfKey(sp.folders && sp.folders[0]);
     var gen = pathMatchesGenesis(String(sp.contentFolder).toLowerCase(), sceneGenesisVersion);
+    // Bounds sized from real libraries: Shape Shift's ONE folder holds 166
+    // morphs ("Waist Shape.dsf" is #163 — an 80-file cap dropped it), so the
+    // per-folder budget must comfortably exceed the biggest single packs.
     var queue = [sp.contentFolder];
     var visited = 0;
     var taken = 0;
-    while (queue.length && visited < 20 && taken < 80) {
+    while (queue.length && visited < 40 && taken < 400) {
       var dirPath = queue.shift();
       visited++;
       var d = new DzDir(dirPath);

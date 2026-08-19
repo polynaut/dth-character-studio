@@ -1156,4 +1156,21 @@ v80 — no unattended carrier opens a modal, and the missing-runtime message sto
       names its product: "Actor/Waist/Real World/Shape Shift/Waist").
       v90 not 89: the dev install had stamped v89 (same reinstall trap as 88).
       No schema change, no migration step.
+ 91 — two measured fixes from the v90 real rescan. (1) CHILD-NODE morphs are
+      never matched independently: a morph dialed on a fitted item (clothing,
+      hair, geograft) is the item's own fit morph or an auto-follow projection
+      of a figure morph — always part of the product that brought the node —
+      and matching them produced a real false positive (a generic "Expand_All"
+      fit morph on a bikini basename-matched an unrelated outfit's manifest)
+      plus one projected duplicate of every figure morph per fitted item.
+      getUsedAssets collects morphs only from root nodes and Genesis figures
+      (a grouped figure keeps its morphs). (2) The basename matcher's caps
+      were smaller than real packs: Shape Shift's manifest lists 166 morph
+      files and its ONE folder holds them all — "Waist Shape.dsf" is #163,
+      past both the manifest's 60-file cap and the folder listing's 80-file
+      cap, so it stayed unmatched. parseManifestFile now keeps the basename
+      KEYS of every morph file (`morphKeys`, ≤500, short strings) beside the
+      capped `files` list, and the folder listing budget is 40 dirs/400 files.
+      v91 not 90: the dev install had stamped v90 (same reinstall trap).
+      No schema change, no migration step.
 ```
