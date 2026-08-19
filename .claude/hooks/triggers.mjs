@@ -305,6 +305,12 @@ export const TRIGGERS = [
 
   /* ---- caches, scans, job files ------------------------------------------- */
   {
+    id: 'ci-cache-scope',
+    path: /\.github\/workflows\/[^/]+\.ya?ml$/,
+    doc: GOTCHAS_RELEASES,
+    anchor: 'A CI cache saved from a PR run is invisible to every OTHER PR',
+  },
+  {
     id: 'scan-cache-key',
     path: /apps\/web\/src\/lib\/rom\/houdini-project-cache\.ts$/,
     doc: GOTCHAS_DESKTOP,
