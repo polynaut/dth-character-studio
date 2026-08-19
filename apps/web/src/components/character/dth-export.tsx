@@ -23,6 +23,7 @@ import {
 import { holdBusyCursor } from '#/lib/busy-cursor.ts'
 import {
   dazTaskCards,
+  houdiniNetworkMemoAtFinish,
   houdiniTaskCards,
   type HoudiniNetworkMemo,
   runPercent,
@@ -1213,12 +1214,17 @@ export function DthExportAction({
       // node's entry (it lands moments before the state flips, between two
       // polls), so a memo left at that snapshot shows the last network as
       // never-run. Overwrite it with the truth while the run can still say it.
+      // NOT verbatim on a cancel: 456.py marks the networks its interrupt
+      // skipped `skipped`, which renders as done — the pure rule keeps those
+      // looking unstarted (see houdiniNetworkMemoAtFinish).
       const finishedHip = pipelineRef.current?.houdini.find((one) => one.label === label)
-      if (finishedHip && run.networks.length > 0) {
-        hipNetworkMemoRef.current[finishedHip.path] = {
-          total: run.networks.length,
-          networks: run.networks,
-        }
+      if (finishedHip) {
+        const memo = houdiniNetworkMemoAtFinish(
+          hipNetworkMemoRef.current[finishedHip.path],
+          run.networks,
+          run.cancelled,
+        )
+        if (memo) hipNetworkMemoRef.current[finishedHip.path] = memo
       }
       const report = runReportRef.current
       if (report) {

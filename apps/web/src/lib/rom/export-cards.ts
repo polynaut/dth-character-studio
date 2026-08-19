@@ -71,6 +71,35 @@ export interface HoudiniNetworkMemo {
 }
 
 /**
+ * The memo's LAST update, from the finished state — the one snapshot that can
+ * name the final network's outcome (the last `running` poll almost always
+ * predates the closing node's entry).
+ *
+ * A CANCELLED run is the one place the finished statuses are not taken at
+ * face value: 456.py reports the networks its interrupt skipped as `skipped`
+ * (with the reason), the same word a genuine nothing-to-do finish uses — and
+ * `skipped` renders as done. So under a cancel, only `ok`/`failed` (work that
+ * really ran) is adopted; a skipped-or-waiting network keeps what the running
+ * polls last said about it, which for an unreached one is `waiting` — the
+ * unstarted look the interrupt earned it, not a tick for work it prevented.
+ */
+export function houdiniNetworkMemoAtFinish(
+  prior: HoudiniNetworkMemo | undefined,
+  networks: HoudiniNetworkMemo['networks'],
+  cancelled: boolean,
+): HoudiniNetworkMemo | undefined {
+  if (networks.length === 0) return prior
+  return {
+    total: networks.length,
+    networks: networks.map((network, n) =>
+      !cancelled || network.status === 'ok' || network.status === 'failed'
+        ? network
+        : { label: network.label, status: prior?.networks[n]?.status ?? ('waiting' as const) },
+    ),
+  }
+}
+
+/**
  * The Houdini half: one row per DazToHue NETWORK.
  *
  * Where the names come from, in the order they become available:
