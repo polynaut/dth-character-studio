@@ -77,8 +77,17 @@ test('a single-scene character is not asked which scene — there is only one', 
   await expect(dialog).toContainText('(primary)')
   await dialog.getByRole('button', { name: 'Generate', exact: true }).click()
   await expect(page.getByRole('dialog')).toHaveCount(0)
-  // And so does the confirmation, after the dialog is gone.
-  await expect(page.getByText(/Houdini project generated for KiraDefault_G9_GP/)).toBeVisible()
+  // And so does the confirmation, after the dialog is gone — with the timeline
+  // AND the playbar range the saved scene reported back (the fifth report
+  // segment, set from the Alembic file's own frames): the claim is the scene's
+  // own answer, and this pins that the "<start>-<end>" wire form actually
+  // parses into the confirmation instead of silently reading as "no range".
+  await expect(
+    page.getByText(/Houdini project generated for KiraDefault_G9_GP/),
+  ).toBeVisible()
+  await expect(
+    page.getByText(/timeline at 30 fps, frames 0 – 981/),
+  ).toBeVisible()
 
   const prefill = await lastPrefill(page)
   // The fixture's scenes sit directly in `daz3d/`, so each export subfolder is

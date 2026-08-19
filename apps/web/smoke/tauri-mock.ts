@@ -559,8 +559,10 @@ export function installTauriMock(seed: TauriMockSeed): void {
         // The fourth field is the FPS the saved scene reports. The real command
         // reads it back off `hou.fps()` AFTER setting it, so echoing the
         // request is the honest fake here: this world has no Houdini that could
-        // refuse the call.
-        return `daztohueimport|daztohueimport|import_character_dtu_file|${args.request.fps ?? 0}`
+        // refuse the call. The fifth is the playbar read back after the Alembic
+        // timeline routine — this world's Alembics hold 0–981 (the same healthy
+        // default the scan mock answers), so that is what the routine "set".
+        return `daztohueimport|daztohueimport|import_character_dtu_file|${args.request.fps ?? 0}|0.0-981.0`
       }
       case 'open_project_window': // opens a separate OS window on the desktop —
         return null //              recorded (see `calls`), nothing to do here
