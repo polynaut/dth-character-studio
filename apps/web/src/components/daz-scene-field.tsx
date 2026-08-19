@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { MutableRefObject, ReactNode, Ref } from 'react'
-import { FolderInput, Link2, Plus } from 'lucide-react'
+import { FolderInput, Link2, Plus, Waves } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { DirPathChip, displayDirOf } from '#/components/dir-path-chip.tsx'
@@ -13,6 +13,7 @@ import { GuideLink } from '#/components/guide-link.tsx'
 import { PrimaryBadge } from '#/components/primary-badge.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import type { SceneDockActions } from '#/components/character/scene-footer.tsx'
+import { DazSceneUtilsPanel } from '#/components/character/daz-scene-utils-panel.tsx'
 import { SceneCopyDialog } from '#/components/scene-copy-dialog.tsx'
 import { CardReorderContext, SortableCard } from '#/components/sortable-cards.tsx'
 import dazLogo from '#/assets/daz-logo.png'
@@ -33,7 +34,7 @@ import {
   romAnimationFresh,
   sceneWearables,
 } from '#/lib/rom/api.ts'
-import { sceneExportSubfolders } from '@dth/rom'
+import { sceneExportSubfolders, sceneHairExportEnabled } from '@dth/rom'
 
 import { romAnimationPath } from '#/lib/rom/execute-jobs.ts'
 import { SceneValidationTable } from '#/components/scene-compat.tsx'
@@ -75,6 +76,8 @@ function SceneCard({
   onReplace,
   replaceDisabled,
   replaceReason,
+  onUtils,
+  hairExportOn,
   primary,
   selected,
   onSelect,
@@ -99,6 +102,13 @@ function SceneCard({
   replaceDisabled?: boolean
   /** Tooltip for the replace button; the REASON when it is disabled. */
   replaceReason?: string
+  /** Opens the scene's Utils drawer (scans + the per-scene hair-export switch)
+   *  — the 🔧 in the card's corner cluster, like the Houdini cards'. */
+  onUtils?: () => void
+  /** The scene's effective "Export hair items" state (`sceneHairExportEnabled`)
+   *  — drives the badge row's hair glyph: lit when the DTH Export flow exports
+   *  this scene's hair items, dimmed when it doesn't. */
+  hairExportOn: boolean
   /** The character's original creation scene — gets a "primary" badge and is not
    *  unlinkable (the caller omits onRemove and passes onReplace instead). */
   primary?: boolean
@@ -139,15 +149,33 @@ function SceneCard({
         />
       }
       extra={
-        primary || pathChip ? (
-          // Stacked rows under the title: the path chip always second, the
-          // PRIMARY label alone on the third. The chip is interactive (copy /
-          // Alt-reveal / edit-to-move) — the card's extra block sits ABOVE the
-          // cover button (LinkedAssetCard), so its clicks are its own and
-          // never select/open the card. The chip's 1px offset is paint-only
-          // (relative top) so the PRIMARY row below doesn't move with it.
-          <span className="flex flex-col items-start gap-2">
-            {pathChip && <span className="relative top-[1px]">{pathChip}</span>}
+        // Stacked rows under the title: the path chip always second, the badge
+        // row third — the hair glyph FIRST (lit = the DTH Export flow exports
+        // this scene's hair items, dimmed = it doesn't; the Scene utils switch
+        // decides), then the PRIMARY label on the primary card. The chip is
+        // interactive (copy / Alt-reveal / edit-to-move) — the card's extra
+        // block sits ABOVE the cover button (LinkedAssetCard), so its clicks
+        // are its own and never select/open the card. The chip's 1px offset is
+        // paint-only (relative top) so the badge row below doesn't move with it.
+        <span className="flex flex-col items-start gap-2">
+          {pathChip && <span className="relative top-[1px]">{pathChip}</span>}
+          <span className="flex items-center gap-1.5">
+            <span
+              title={
+                hairExportOn
+                  ? 'Hair items of this scene export with DTH Export — switch it in Scene utils'
+                  : 'Hair export is off for this scene — switch it in Scene utils'
+              }
+              aria-label={
+                hairExportOn ? 'Hair export on for this scene' : 'Hair export off for this scene'
+              }
+              role="img"
+              className={
+                hairExportOn ? 'text-violet-500 dark:text-violet-300' : 'text-muted-foreground/40'
+              }
+            >
+              <Waves className="size-4" aria-hidden />
+            </span>
             {primary && (
               <PrimaryBadge
                 dense
@@ -155,7 +183,7 @@ function SceneCard({
               />
             )}
           </span>
-        ) : undefined
+        </span>
       }
       altHeld={altHeld}
       openTitle="Open in Daz"
@@ -170,6 +198,11 @@ function SceneCard({
       onReplace={onReplace}
       replaceDisabled={replaceDisabled}
       replaceTitle={replaceReason ?? 'Replace with another Daz scene…'}
+      onUtils={onUtils}
+      // "Scene utils", not "Utils": the accessible name is how tests (and
+      // screen readers) tell this drawer's button apart from the Houdini
+      // cards' "Utils — …" on the same page.
+      utilsTitle="Scene utils — scans + hair export for this scene"
       selected={selected}
       onSelect={onSelect}
     />
@@ -307,6 +340,7 @@ export function DazSceneField({
   dockActionsRef,
   onScenesRemoved,
   onRomRebuildStarted,
+  dazProductsEnabled,
 }: {
   projectId: string
   character: Character
@@ -345,8 +379,14 @@ export function DazSceneField({
    *  supersedes nothing else. An array because it is the same "these scenes are
    *  history" signal the DTH Export handoff sends for its whole selection. */
   onRomRebuildStarted?: (scenePaths: ReadonlyArray<string>) => void
+  /** The project's "Daz Products" opt-in — threaded into the scene Utils drawer
+   *  so its product-scan button can explain itself instead of failing. */
+  dazProductsEnabled: boolean
 }) {
   const [busy, setBusy] = useState(false)
+  // The scene whose Utils drawer is open ('' = closed) — the path IS the scope,
+  // like the Houdini cards' drawer.
+  const [utilsFor, setUtilsFor] = useState('')
   const [error, setError] = useState('')
   // A scene click while Daz is already running: the studio can't switch a running
   // Daz's scene, so this holds the clicked scene path to drive the warning dialog.
@@ -1439,6 +1479,8 @@ export function DazSceneField({
                       onReplace={busy ? undefined : () => void onReplacePick()}
                       replaceDisabled={replaceBlocked}
                       replaceReason={replaceReason}
+                      onUtils={() => setUtilsFor(character.scenePath)}
+                      hairExportOn={sceneHairExportEnabled(character, character.scenePath)}
                       primary
                       selected={selectedScene !== undefined ? selectedScene === character.scenePath : undefined}
                       onSelect={onSelectScene ? () => onSelectScene(character.scenePath) : undefined}
@@ -1482,6 +1524,8 @@ export function DazSceneField({
                         insideCharFolder(scene) ? (next) => renameLinkedScene(scene, next) : undefined
                       }
                       onRemove={() => askRemove(scene)}
+                      onUtils={() => setUtilsFor(scene)}
+                      hairExportOn={sceneHairExportEnabled(character, scene)}
                       selected={selectedScene !== undefined ? selectedScene === scene : undefined}
                       onSelect={onSelectScene ? () => onSelectScene(scene) : undefined}
                       pathChip={sceneLocationChip(scene)}
@@ -1710,6 +1754,23 @@ export function DazSceneField({
         </Modal>
       )}
       <MultipleDazModal open={multiDaz} onClose={() => setMultiDaz(false)} />
+
+      {/* Mounted only while open, like the Houdini Utils drawer — the drawer
+          probes the Runner and the scan plan on mount. Guarded against the
+          scene unlinking underneath it (the drawer's scope would be gone). */}
+      {utilsFor && [character.scenePath, ...character.extraScenes].includes(utilsFor) && (
+        <DazSceneUtilsPanel
+          open
+          character={character}
+          // The drawer acts on THIS scene alone — `utilsFor` is the card whose
+          // Utils button was pressed, and it is the drawer's entire scope.
+          targetScene={utilsFor}
+          projectId={projectId}
+          persistPatch={persistPatch}
+          dazProductsEnabled={dazProductsEnabled}
+          onClose={() => setUtilsFor('')}
+        />
+      )}
     </FileDropZone>
   )
 }

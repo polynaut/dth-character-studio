@@ -2654,3 +2654,79 @@ describe('exportHairAssets — the hair pass rides the main export', () => {
     )
   })
 })
+
+describe('per-scene "Export hair items" switch — the hair pass gate (schema v37)', () => {
+  // Primary + one extra scene, BOTH with hair — the gate map must answer for
+  // each scene on its own (the script serves every linked scene at run time).
+  const TWO_HAIR_SCENES = {
+    scenePath: 'D:/P/Kira/daz3d/primary/Kira.duf',
+    extraScenes: ['D:/P/Kira/daz3d/beach/Beach.duf'],
+    exportPath: 'X:/exports',
+    exportHairAssets: true,
+    sceneOverrides: [
+      {
+        scenePath: 'D:/P/Kira/daz3d/primary/Kira.duf',
+        rom: {},
+        hair: [{ nodeLabel: 'CHT Sevenly Hair' }],
+      },
+      {
+        scenePath: 'D:/P/Kira/daz3d/beach/Beach.duf',
+        rom: {},
+        hair: [{ nodeLabel: 'Summer Updo' }],
+      },
+    ],
+  } satisfies Partial<Character>
+
+  it('defaults: primary ON, extra OFF — and the runtime gate wraps the pass', () => {
+    const content = toCharacterScriptDsa(makeCharacter(TWO_HAIR_SCENES), {}, FRAMES).content
+    expect(content).toContain(
+      'var dthHairExportByScene = {"d:/p/kira/daz3d/primary/kira.duf":true,"d:/p/kira/daz3d/beach/beach.duf":false};',
+    )
+    expect(content).toContain(
+      'var dthHairExportOn = dthHairExportByScene[dthGroomScene] === true;',
+    )
+    expect(content).toContain('if (!dthHairExportOn) {')
+    expect(content).toContain('Hair export is switched off for this scene - skipped.')
+  })
+
+  it('a stored choice flips the map entry, both ways', () => {
+    const character = makeCharacter({
+      ...TWO_HAIR_SCENES,
+      sceneOverrides: TWO_HAIR_SCENES.sceneOverrides.map((record) => ({
+        ...record,
+        exportHair: record.scenePath.includes('beach'),
+      })),
+    })
+    expect(toCharacterScriptDsa(character, {}, FRAMES).content).toContain(
+      'var dthHairExportByScene = {"d:/p/kira/daz3d/primary/kira.duf":false,"d:/p/kira/daz3d/beach/beach.duf":true};',
+    )
+  })
+
+  it('the bulk carrier gets the same per-scene gate (its forced exportHairAssets is not a bypass)', () => {
+    const content = toBulkRomExportScriptDsa(makeCharacter(TWO_HAIR_SCENES), {}, FRAMES).content
+    expect(content).toContain('var dthHairExportOn = dthHairExportByScene[dthGroomScene] === true;')
+    expect(content).toContain('if (!dthHairExportOn) {')
+  })
+
+  it('the standalone Export_Hair script is NOT gated — the manual escape hatch stays', () => {
+    const content = toGroomExportScriptDsa(makeCharacter(TWO_HAIR_SCENES)).content
+    expect(content).toContain('doExportAlembicGroomPoses')
+    expect(content).not.toContain('dthHairExport')
+  })
+
+  it('the hide bracket ignores the switch — hair stays out of the main export either way', () => {
+    // Every scene keeps its labels in the groom map even with export off
+    // everywhere: the bracket must still hide them around dthRunExport().
+    const off = makeCharacter({
+      ...TWO_HAIR_SCENES,
+      sceneOverrides: TWO_HAIR_SCENES.sceneOverrides.map((record) => ({
+        ...record,
+        exportHair: false,
+      })),
+    })
+    const content = toCharacterScriptDsa(off, {}, FRAMES).content
+    expect(content).toContain('"d:/p/kira/daz3d/primary/kira.duf":["CHT Sevenly Hair"]')
+    expect(content).toContain('"d:/p/kira/daz3d/beach/beach.duf":["Summer Updo"]')
+    expect(content).toContain('dthGroomHideTree(dthGroomNodes[dthGd])')
+  })
+})

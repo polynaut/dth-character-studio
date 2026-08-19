@@ -348,16 +348,36 @@ test('ONE task row per re-import — and a set the project never held is dropped
   await expect(rows.filter({ hasText: 'KiraDefault' })).toContainText('Re-import · DemoGame')
   await expect(rows.filter({ hasText: 'KiraSummertide' })).toHaveCount(0)
 
-  // The drop is SAID — silently skipping a set would read as "everything
-  // reached Unreal".
-  await expect(page.getByText(/not sent: KiraSummertide/)).toBeVisible({ timeout: 15_000 })
+  // NO warning about the dropped set on a "use last exports" send: refreshing
+  // what the project holds is that run's whole promise (the panel row said
+  // so), and the folder holding more is the steady state — a warning here
+  // fired on every repeat send about variants kept out of that project on
+  // purpose. The scope is the rows: KiraSummertide simply has none.
+  await expect(page.getByText(/not sent/i)).toHaveCount(0)
 
   // The status line carries the leg's newest word — one line, not a transcript.
   await expect(page.locator('[data-export-status]')).toContainText(
     /Unreal; queued for DemoGame/,
   )
 
-  // …and when the editor finally answers, the outcome becomes that line.
+  // The bridge claims the job and says `running` before the (blocking) work —
+  // the panel must move off "waiting" then, not sit on it until the outcome.
+  await page.evaluate((dir: string) => {
+    const mock = (window as any).__tauriMock
+    mock.files.delete(`${dir}/Saved/DTHStudio/job.json`)
+    mock.files.set(
+      `${dir}/Saved/DTHStudio/result.json`,
+      JSON.stringify({ version: 4, state: 'running', error: '', imports: [] }),
+    )
+  }, UPROJECT_DIR)
+  await expect(page.locator('[data-export-status]')).toContainText(/DemoGame is importing/, {
+    timeout: 15_000,
+  })
+
+  // …and when the editor finally answers, the outcome ENDS the run: a sticky
+  // toast of its own, and the panel goes with the work it was showing — it
+  // used to become the status line of a bar that then sat at 100% forever
+  // (measured 2026-08-19, the first live in-place re-import).
   await page.evaluate((dir: string) => {
     const mock = (window as any).__tauriMock
     mock.files.delete(`${dir}/Saved/DTHStudio/job.json`)
@@ -378,10 +398,10 @@ test('ONE task row per re-import — and a set the project never held is dropped
       }),
     )
   }, UPROJECT_DIR)
-  await expect(page.locator('[data-export-status]')).toContainText(
-    /Unreal; re-imported 1 asset in .Game.Characters.Kira/,
+  await expect(page.getByText(/Unreal: re-imported 1 asset in .Game.Characters.Kira/)).toBeVisible(
     { timeout: 15_000 },
   )
+  await expect(rows).toHaveCount(0)
 })
 
 test('the just-re-import run needs no Daz-mode change: no scenes + Skip Houdini starts the send', async ({
@@ -426,9 +446,11 @@ test('the just-re-import run needs no Daz-mode change: no scenes + Skip Houdini 
   await expect(start).toBeEnabled()
   await start.click()
 
-  // The run IS the send: the job queues for the editor, and no Daz batch was
-  // handed off (the finish toast machinery reports the Unreal line alone).
-  await expect(page.getByText(/Unreal: queued for DemoGame/)).toBeVisible()
+  // The run IS the send: the task row + status line carry the queue — a clean
+  // queue raises NO toast (that would repeat the progress bar; the leg's one
+  // toast is its outcome, when the editor answers).
+  await expect(page.locator('[data-export-status]')).toContainText(/Unreal; queued for DemoGame/)
+  await expect(page.getByText(/Unreal: queued for DemoGame/)).toHaveCount(0)
 })
 
 test('nothing claims the job and no editor is running — the studio opens the project', async ({
@@ -472,7 +494,8 @@ test('nothing claims the job and no editor is running — the studio opens the p
   await dialog.getByRole('checkbox', { name: 'Send to DemoGame' }).check()
   await dialog.getByRole('button', { name: 'Start' }).click()
 
-  await expect(page.getByText(/Unreal: queued for DemoGame/)).toBeVisible()
+  // The queue shows in the run's own status line — no toast for a clean queue.
+  await expect(page.locator('[data-export-status]')).toContainText(/Unreal; queued for DemoGame/)
   // Nothing claims it (no editor in the fake world), so after the grace period
   // the project is handed to the OS the same way a `.hip` or `.duf` is.
   await expect
@@ -518,4 +541,184 @@ test('a REFUSED send fails its rows and complains as an error, not a shrug', asy
   await expect(page.locator('[data-task^="ue:"]')).toHaveAttribute('data-task-status', 'failed')
   // …and the "open the editor" hint stays off a send that queued nothing.
   await expect(page.getByText(/open the editor if it is closed/)).toHaveCount(0)
+})
+
+test('a Daz run with Skip Houdini arms the send’s own task rows — visible from the file write', async ({
+  page,
+}) => {
+  // The fourth shape of the leg (2026-08-19): Daz runs, Houdini is skipped,
+  // and the send goes off the exports already on disk the moment the batch
+  // reports done. It used to be INVISIBLE — no rows, no status line — from
+  // the job-file write until the editor answered. It is the same run the
+  // Unreal-only send shows now: rows + status line carry the queue, and a
+  // clean queue toasts nothing (the leg's one toast is its outcome).
+  const DAZ_INSTALL = 'C:/Program Files/DAZ 3D/DAZStudio4'
+  const SCRIPTS_ROOT = `${P.dazLib}/Scripts/DTH-Character-Studio`
+  const PENDING_JOB = `${SCRIPTS_ROOT}/dth_exporter_jobs.json`
+  const RUNNING_JOB = `${SCRIPTS_ROOT}/running_dth_exporter_jobs.json`
+  const seed = buildSeed({
+    activeProjectFile: P.dcsp,
+    demo: true,
+    houdiniProject: true,
+    dazInstallFolder: DAZ_INSTALL,
+    unrealProjects: [UPROJECT],
+  })
+  seed.files[`${EXPORT_ROOT}/KiraDefault/DTH_KiraDefault.dth`] = '{}'
+  seed.files[IMPORTED] = 'uasset-fixture'
+  seed.files[`${UPROJECT_DIR}/Plugins/DTHCharacterStudioRunner/DTHCharacterStudioRunner.uplugin`] =
+    JSON.stringify({ Version: UNREAL_BRIDGE_VERSION })
+  // The batch runs the HIDDEN bulk script — a missing one is refused up
+  // front, before any job file (see houdini-export.smoke.ts).
+  seed.files[`${SCRIPTS_ROOT}/Demo/Kira/.Bulk_ROM_Export.dsa`] = '// bulk-export fixture'
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+  await page.getByRole('button', { name: 'DTH Export' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.waitFor()
+
+  // The Daz mode stays where it opened — only the Houdini leg is skipped.
+  await expect(dialog.getByRole('checkbox', { name: /Export KiraDefault/ })).toBeChecked()
+  await dialog.locator('#houdini-mode').click()
+  await page.getByRole('option', { name: /Skip Houdini/ }).click()
+  await dialog.getByRole('checkbox', { name: 'Send to DemoGame' }).check()
+  await dialog.getByRole('button', { name: 'Start' }).click()
+
+  // The batch is handed off, and the Runner (played here) claims + finishes
+  // it — the rename IS the claim, and progress 100 is the studio's cue.
+  await expect
+    .poll(() =>
+      page.evaluate((p) => ((window as any).__tauriMock.files as Map<string, string>).has(p), PENDING_JOB),
+    )
+    .toBe(true)
+  await page.evaluate(
+    ([pending, running]) => {
+      const files = (window as any).__tauriMock.files as Map<string, string>
+      const job = JSON.parse(files.get(pending) ?? '{}')
+      files.delete(pending)
+      files.set(
+        running,
+        JSON.stringify({
+          ...job,
+          progress: 100,
+          jobsDone: job.jobs.length,
+          jobs: job.jobs.map((row: Record<string, unknown>) => ({ ...row, status: 'done' })),
+        }),
+      )
+    },
+    [PENDING_JOB, RUNNING_JOB],
+  )
+
+  // The Daz batch reports — and the send leg does NOT end with it:
+  await expect(page.getByText(/DTH Export finished — 1 scene exported/)).toBeVisible({
+    timeout: 15_000,
+  })
+  // …its rows are on screen with the queue in the status line…
+  await expect(page.locator('[data-task^="ue:"]')).toBeVisible()
+  await expect(page.locator('[data-export-status]')).toContainText(/Unreal; queued for DemoGame/)
+  // …and the clean queue raised no toast of its own.
+  await expect(page.getByText(/Unreal: queued for DemoGame/)).toHaveCount(0)
+})
+
+test('a reloaded window finds the send again — the job file is the leg’s sidecar', async ({
+  page,
+}) => {
+  // Reported 2026-08-19: reloading (or navigating away and back) mid-send
+  // "forgot" the rows, the status line and — worst — the outcome toast, while
+  // the bridge worked on unwatched. The leg's own job files carry everything
+  // a window needs to pick the watch back up, exactly like the Daz batch and
+  // the Houdini run. Seeded here AS the reloaded shape: the job file already
+  // in the Unreal project, nothing in this window's memory.
+  const seed = buildSeed({
+    activeProjectFile: P.dcsp,
+    demo: true,
+    houdiniProject: true,
+    unrealProjects: [UPROJECT],
+  })
+  seed.files[`${EXPORT_ROOT}/KiraDefault/DTH_KiraDefault.dth`] = '{}'
+  seed.files[IMPORTED] = 'uasset-fixture'
+  seed.files[`${UPROJECT_DIR}/Saved/DTHStudio/job.json`] = JSON.stringify({
+    version: 4,
+    imports: [
+      {
+        dth: `${EXPORT_ROOT}/KiraDefault/DTH_KiraDefault.dth`,
+        destination: '/Game/Characters/Kira',
+        existing: true,
+        character: 'KiraDefault',
+        files: [],
+      },
+    ],
+  })
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+
+  // The leg is back without touching anything: its re-import row and the
+  // queue on the status line.
+  const rows = page.locator('[data-task^="ue:"]')
+  await expect(rows).toHaveCount(1)
+  await expect(rows).toContainText('KiraDefault')
+  await expect(page.locator('[data-export-status]')).toContainText(/Unreal; queued for DemoGame/)
+
+  // The editor claims the job and answers — the outcome lands in THIS window,
+  // as the leg's own sticky toast, and ends the run.
+  await page.evaluate((dir: string) => {
+    const mock = (window as any).__tauriMock
+    mock.files.delete(`${dir}/Saved/DTHStudio/job.json`)
+    mock.files.set(
+      `${dir}/Saved/DTHStudio/result.json`,
+      JSON.stringify({
+        version: 4,
+        state: 'done',
+        error: '',
+        imports: [
+          {
+            character: 'KiraDefault',
+            destination: '/Game/Characters/Kira',
+            mode: 'reimport',
+            assets: ['/Game/Characters/Kira/SKM_KiraDefault'],
+          },
+        ],
+      }),
+    )
+  }, UPROJECT_DIR)
+  await expect(page.getByText(/Unreal: re-imported 1 asset in .Game.Characters.Kira/)).toBeVisible(
+    { timeout: 15_000 },
+  )
+  await expect(rows).toHaveCount(0)
+})
+
+test('another character’s pending job is NOT adopted', async ({ page }) => {
+  // Whose job a file is comes from its own `dth` paths — a job pointing into
+  // some other character's export folder must not put rows on THIS page (two
+  // characters can legitimately share one linked Unreal project).
+  const seed = buildSeed({
+    activeProjectFile: P.dcsp,
+    demo: true,
+    houdiniProject: true,
+    unrealProjects: [UPROJECT],
+  })
+  seed.files[`${EXPORT_ROOT}/KiraDefault/DTH_KiraDefault.dth`] = '{}'
+  seed.files[`${UPROJECT_DIR}/Saved/DTHStudio/job.json`] = JSON.stringify({
+    version: 4,
+    imports: [
+      {
+        dth: 'D:/DTH Projects/Demo/Milena/export/Milena/DTH_Milena.dth',
+        destination: '/Game/Characters/Milena',
+        existing: true,
+        character: 'Milena',
+        files: [],
+      },
+    ],
+  })
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+  // Give the mount-time adoption its beat, then hold: no rows, no status.
+  await page.waitForTimeout(1000)
+  await expect(page.locator('[data-task^="ue:"]')).toHaveCount(0)
+  await expect(page.locator('[data-export-status]')).toHaveCount(0)
 })

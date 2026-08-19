@@ -620,6 +620,7 @@ function CharacterPage({ onImportRemount }: { onImportRemount: () => void }) {
                   dockActionsRef={sceneDockActions}
                   onScenesRemoved={detect.answerFor}
                   onRomRebuildStarted={runLog.forgetScenes}
+                  dazProductsEnabled={project?.dazProductsEnabled === true}
                 />
                 <SceneLock locked={!sceneLinked}>
                   <HoudiniProjectsField

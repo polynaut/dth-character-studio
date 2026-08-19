@@ -103,6 +103,7 @@ import { flattenRom, jcmIsBaseRom, presetSelections } from './frames'
 import {
   activeSceneOverrides,
   mergeSceneOverride,
+  sceneHairExportEnabled,
   sceneOverrideBuildsRom,
   sceneOverrideSlug,
 } from './scene-override'
@@ -654,10 +655,14 @@ ${indentLines(csvCopyBlock)}${
   // figure resolves under its OWN name — the standalone Export_ script already
   // declares `dthFig`, and this block must work in both carriers.
   const hairPassCore = `        // Export hair assets too: the Export_Hair pass, right after the main
-        // export — same action, same (scene-resolved) export dir. Gated on
-        // the main export having LANDED: over a restored previous set the
-        // grooms would mix one run's hair with another run's body.
-        if (!dthExportLanded) {
+        // export — same action, same (scene-resolved) export dir. Per-scene
+        // switch first ("Export hair items", off by default on non-primary
+        // scenes), then gated on the main export having LANDED: over a
+        // restored previous set the grooms would mix one run's hair with
+        // another run's body.
+        if (!dthHairExportOn) {
+            print("Hair export is switched off for this scene - skipped.");
+        } else if (!dthExportLanded) {
             print("Main export did not land - hair export skipped.");
         } else {${
           progressPcts
@@ -690,6 +695,12 @@ ${indentBlock(indentBlock(indentBlock(hairExportLoopSnippet(character, { fig: 'd
     var dthRunExport = function () {
 ${indentBlock(indentBlock(exportCore))}    };
 ${groomSceneLookupSnippet(groomMap)}
+    // The per-scene "Export hair items" switch, resolved for the OPEN scene
+    // like the labels above. Only the hair PASS asks — the hide bracket below
+    // keeps hiding the items either way (they must stay out of the main
+    // export regardless of whether they also export on their own).
+    var dthHairExportByScene = ${dazJson(hairExportScenes(character))};
+    var dthHairExportOn = dthHairExportByScene[dthGroomScene] === true;
 ${hideTreeSnippet('dthGroomHideTree', 'dthGroomHidden')}
     if (dthGroomLabels.length == 0) {
         print("No hair list for the open scene - exporting as-is.");
@@ -856,6 +867,22 @@ function groomSceneMap(character: Character): Record<string, Array<string>> {
     const key = record.scenePath.trim().replace(/\\/g, '/').toLowerCase()
     const labels = record.hair.map((n) => n.nodeLabel.trim()).filter((label) => label !== '')
     if (key !== '' && labels.length > 0) map[key] = labels
+  }
+  return map
+}
+
+/**
+ * The per-scene "Export hair items" switch as the lookup the export block
+ * embeds beside {@link groomSceneMap}: same normalized keys, `true` where the
+ * DTH Export flow should run the hair pass ({@link sceneHairExportEnabled} —
+ * stored choice, else on for the primary scene only). Only scenes that carry
+ * hair get a key: the pass never runs without labels, so the map stays as
+ * small as the groom map it gates.
+ */
+function hairExportScenes(character: Character): Record<string, boolean> {
+  const map: Record<string, boolean> = {}
+  for (const key of Object.keys(groomSceneMap(character))) {
+    map[key] = sceneHairExportEnabled(character, key)
   }
   return map
 }

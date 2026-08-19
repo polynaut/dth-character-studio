@@ -1,6 +1,7 @@
 import { sceneOverrideSchema } from '@dth/rom'
 
 import { normalizeSceneKey } from '#/lib/rom/execute-jobs.ts'
+import { labelsKey } from '#/lib/preserve-diff.ts'
 
 import type { SceneWearable } from '#/lib/rom/api/native-types.ts'
 import type { SceneOverride } from '@dth/rom'
@@ -81,6 +82,28 @@ export function hairDrift(
     missing: listed.filter((label) => !known.has(label)),
     unlisted: detectedHairLabels(items).filter((label) => !listedSet.has(label)),
   }
+}
+
+/**
+ * The AUTOMATIC per-scene "Export hair items" that follows a hair-list change
+ * on a NON-PRIMARY scene — the editor's list edit and the add-scene seeding
+ * both re-decide the switch from the list itself (the Scene utils switch stays
+ * the manual override in between): hair that differs from the primary's — even
+ * partly — arms the export (`true`); a list matching the primary's again falls
+ * back to the DEFAULT (absent = off for an extra scene), as does an EMPTIED
+ * list (nothing to export — arming it would only pin a dead record). Compared
+ * as the same canonical multiset the hair override mark uses, so "differs"
+ * here and the green glyph can never disagree.
+ */
+export function autoExportHair(
+  primaryHair: ReadonlyArray<{ nodeLabel: string }>,
+  sceneHair: ReadonlyArray<{ nodeLabel: string }>,
+): true | undefined {
+  const listed = (hair: ReadonlyArray<{ nodeLabel: string }>) =>
+    hair.map((groom) => groom.nodeLabel.trim()).filter((label) => label !== '')
+  const scene = listed(sceneHair)
+  if (scene.length === 0) return undefined
+  return labelsKey(scene) === labelsKey(listed(primaryHair)) ? undefined : true
 }
 
 /**

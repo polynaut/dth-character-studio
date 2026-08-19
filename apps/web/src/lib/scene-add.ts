@@ -10,7 +10,7 @@ import {
   sceneCreateRows,
   sceneNotLinkedRow,
 } from '#/lib/scene-compat.ts'
-import { seedSceneHair } from '#/lib/groom-detect.ts'
+import { autoExportHair, seedSceneHair } from '#/lib/groom-detect.ts'
 import { extrasWithoutPrimary, normalizePath } from '#/lib/path.ts'
 import { genesisFromFigureNode } from '@dth/rom'
 
@@ -142,7 +142,20 @@ export async function addScenePatch(
     await sceneWearables({ data: { scenePath } }),
     character.sceneOverrides,
   )
-  if (seeded) patch.sceneOverrides = seeded
+  if (seeded) {
+    // The seeded list is a hair-list "set" on a non-primary scene, so the
+    // automatic "Export hair items" rule applies here like in the editor: an
+    // outfit scene arriving with its OWN hair gets the export armed right
+    // away. Only the freshly seeded record — an existing record (a re-add)
+    // returns null above and keeps whatever the user had.
+    const primary =
+      character.sceneOverrides.find((o) => o.scenePath === character.scenePath)?.hair ?? []
+    patch.sceneOverrides = seeded.map((record) =>
+      record.scenePath === scenePath
+        ? { ...record, exportHair: autoExportHair(primary, record.hair) }
+        : record,
+    )
+  }
   return patch
 }
 

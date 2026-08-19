@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { detectedHairLabels, groomCandidates, hairDrift, seedSceneHair } from './groom-detect.ts'
+import { autoExportHair, detectedHairLabels, groomCandidates, hairDrift, seedSceneHair } from './groom-detect.ts'
 
 import type { SceneWearable } from '#/lib/rom/api/native-types.ts'
 
@@ -152,5 +152,37 @@ describe('hairDrift', () => {
   it('an empty list on a scene with hair is all drift, no missing', () => {
     const items = [w('cht-sevenly', 'CHT Sevenly Hair')]
     expect(hairDrift([], items)).toEqual({ missing: [], unlisted: ['CHT Sevenly Hair'] })
+  })
+})
+
+describe('autoExportHair — the automatic per-scene "Export hair items"', () => {
+  const hair = (...labels: Array<string>) => labels.map((nodeLabel) => ({ nodeLabel }))
+
+  it('hair differing from the primary — even partly — arms the export', () => {
+    expect(autoExportHair(hair('CHT Sevenly Hair'), hair('Nova Ponytail'))).toBe(true)
+    // Partly different: one shared item, one own.
+    expect(
+      autoExportHair(hair('CHT Sevenly Hair'), hair('CHT Sevenly Hair', 'Nova Ponytail')),
+    ).toBe(true)
+    // A primary without hair still counts as "differs".
+    expect(autoExportHair([], hair('Nova Ponytail'))).toBe(true)
+  })
+
+  it('a list fully matching the primary falls back to the default (absent)', () => {
+    expect(autoExportHair(hair('CHT Sevenly Hair'), hair('CHT Sevenly Hair'))).toBeUndefined()
+    // Order-independent — the same multiset compare as the override mark.
+    expect(
+      autoExportHair(hair('A', 'B'), hair('B', 'A')),
+    ).toBeUndefined()
+  })
+
+  it('an emptied list falls back to the default — nothing to export', () => {
+    expect(autoExportHair(hair('CHT Sevenly Hair'), [])).toBeUndefined()
+    expect(autoExportHair([], [])).toBeUndefined()
+  })
+
+  it('blank labels are ignored on both sides', () => {
+    expect(autoExportHair(hair('A', '  '), hair('A'))).toBeUndefined()
+    expect(autoExportHair(hair('A'), hair('A', ' '))).toBeUndefined()
   })
 })
