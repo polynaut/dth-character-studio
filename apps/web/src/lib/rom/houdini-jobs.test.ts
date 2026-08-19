@@ -9,6 +9,7 @@ import {
   houdiniRunFilesToClear,
   houdiniDeathReason,
   houdiniRunLooksDead,
+  houdiniConsoleFailure,
   houdiniRunStateFrom,
   parseHoudiniResult,
   sceneDthPath,
@@ -666,5 +667,77 @@ describe('houdiniRunFilesToClear — the handoff cleans up after itself', () => 
     // process list yet — deleting the job it is about to read would break it.
     // The next run overwrites it anyway, so leaving it costs nothing.
     expect(houdiniRunFilesToClear({ state: 'dead', hasResult: false, ...paths })).toEqual([])
+  })
+})
+
+describe('the false success — a finished run whose console carries a traceback', () => {
+  // The measured incident (2026-08-19). The `.hip` could not load its PoseAsset
+  // CSV, so both DazToHue export nodes raised inside `do_export`; Houdini's
+  // callback wrapper CAUGHT each one, printed it, and returned normally — so
+  // 456.py saw a clean `pressButton()` and reported both nodes `ok`. The studio
+  // toasted "2 exported in 17s" over an export that wrote nothing, and the 17s
+  // (hython booting, loading, failing twice) was the only clue anything was
+  // wrong. Verbatim tail of that run's console log.
+  const CONSOLE = [
+    'DTH Character Studio: loading D:/P/LaraCroft_G81/houdini/LaraCroft_G81_THICK.hiplc (headless)',
+    'oplib:/Sop/DazToHuePoseAsset?Sop/DazToHuePoseAsset Warning(11): error binding handle sidefx_hud_button because it doesn\'t exist.',
+    'Error running event handler:',
+    'Traceback (most recent call last):',
+    "FileNotFoundError: [Errno 2] No such file or directory: 'D:/P/.../LaraCroft_G81_Thick_pose_asset.csv'",
+    'DTH Character Studio: 2 export node(s) match the selected scenes',
+    'Error running callback:',
+    "AttributeError: 'NoneType' object has no attribute 'attribValue'",
+    'DTH Character Studio: /obj/DazToHue/DazToHueExport -> ok',
+  ].join('\n')
+
+  const finished = (statuses: Array<'ok' | 'skipped' | 'failed'>) =>
+    parseHoudiniResult(
+      JSON.stringify({
+        state: 'done',
+        nodes: statuses.map((status, i) => ({ node: `/obj/n${i}`, scene: `Scene${i}`, status })),
+      }),
+    )!
+
+  it('names the swallowed error instead of letting an all-ok run read as clean', () => {
+    const state = houdiniRunStateFrom(finished(['ok', 'ok']), false, CONSOLE)
+    expect(state.state).toBe('finished')
+    const problems = state.state === 'finished' ? state.problems : []
+    expect(problems).toHaveLength(1)
+    expect(problems[0]).toContain('Houdini logged an error this run did not attribute to a node')
+    expect(problems[0]).toContain('Error running event handler')
+  })
+
+  it('stays quiet when the console reads clean', () => {
+    const clean = [
+      'DTH Character Studio: 2 export node(s) match the selected scenes',
+      'DTH Character Studio: /obj/DazToHue/DazToHueExport -> ok',
+      'DTH Character Studio: batch finished - closing Houdini',
+    ].join('\n')
+    const state = houdiniRunStateFrom(finished(['ok', 'ok']), false, clean)
+    expect(state.state === 'finished' ? state.problems : ['x']).toEqual([])
+  })
+
+  it('does not pile on when the run already reported a failure of its own', () => {
+    // Past that point the run is explaining itself, and repeating the console
+    // line would just say the same thing twice in the same toast.
+    const state = houdiniRunStateFrom(finished(['ok', 'failed']), false, CONSOLE)
+    expect(state.state === 'finished' ? state.problems : ['x']).toEqual([])
+  })
+
+  it('a Houdini WARNING is not an error — the hud-button line must not trip it', () => {
+    // That line is in every single run of this project. Treating it as failure
+    // would make the warning permanent and therefore invisible.
+    expect(
+      houdiniConsoleFailure(
+        'oplib:/Sop/X Warning(11): error binding handle sidefx_hud_button because it does not exist.',
+      ),
+    ).toBe('')
+  })
+
+  it('caps a long line so the toast stays readable', () => {
+    const long = `Error running callback: ${'x'.repeat(400)}`
+    const found = houdiniConsoleFailure(long)
+    expect(found.length).toBe(160)
+    expect(found.endsWith('\u2026')).toBe(true)
   })
 })
