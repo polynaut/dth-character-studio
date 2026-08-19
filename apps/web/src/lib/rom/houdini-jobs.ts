@@ -601,7 +601,13 @@ export function houdiniRunStateFrom(
     ...counts,
     summary: houdiniResultSummary(result),
     cancelled: result.cancelled,
-    error: result.state === 'failed' ? result.error || 'the run failed in Houdini' : result.error,
+    // A 'done' run with a failed NODE carries its cause on the node, not the
+    // top level — surface it, or the toast says "1 failed" and nothing else
+    // (the result file holding the cause is deleted as this run ends).
+    error:
+      result.state === 'failed'
+        ? result.error || 'the run failed in Houdini'
+        : result.error || result.nodes.find((node) => node.status === 'failed')?.error || '',
     problems: [
       ...result.nodes.flatMap((node) =>
         node.problems.map((problem) => `${node.scene || node.node}: ${problem}`),

@@ -31,7 +31,12 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   two marker lists in step; matching a Houdini `Warning(...)` line must stay
   OUT of both (the `sidefx_hud_button` warning is in every run of some
   projects, so treating it as failure makes the signal permanent and therefore
-  invisible).
+  invisible). The console backstop was BORN INERT, and the grill caught it
+  only by reading the CALLER: the console file was read solely behind the
+  looks-dead gate, so a finished run always passed '' while the unit tests
+  injected the text directly and stayed green. A detector's wiring is part of
+  the detector — verify what production actually passes in, not what the test
+  hands it.
 - **Houdini runs a `456.py` on HOUDINI_SCRIPT_PATH for the startup EMPTY scene
   too, not only for a loaded `.hip`** — measured 2026-08-11 on the first
   headless "Export too" run: hython started, the empty initial scene triggered

@@ -734,6 +734,42 @@ describe('the false success — a finished run whose console carries a traceback
     ).toBe('')
   })
 
+  it("a failed NODE's cause becomes the run's error when the top level has none", () => {
+    // 456.py marks a swallowed blow-up on the NODE ("the HDA raised behind
+    // Houdini's callback wrapper: ..."), and a 'done' result has no top-level
+    // error — without this fallback the toast said "1 failed" and the result
+    // file holding the cause was deleted with the run.
+    const state = houdiniRunStateFrom(
+      parseHoudiniResult(
+        JSON.stringify({
+          state: 'done',
+          nodes: [
+            { node: '/obj/a', status: 'ok' },
+            {
+              node: '/obj/b',
+              status: 'failed',
+              error: "the HDA raised behind Houdini's callback wrapper: AttributeError: ...",
+            },
+          ],
+        }),
+      ),
+      false,
+    )
+    expect(state.state === 'finished' ? state.error : '').toContain('callback wrapper')
+    // A top-level error still wins — it describes the RUN, not one node.
+    const topLevel = houdiniRunStateFrom(
+      parseHoudiniResult(
+        JSON.stringify({
+          state: 'done',
+          error: 'the whole run said so',
+          nodes: [{ node: '/obj/b', status: 'failed', error: 'node-level' }],
+        }),
+      ),
+      false,
+    )
+    expect(topLevel.state === 'finished' ? topLevel.error : '').toBe('the whole run said so')
+  })
+
   it('caps a long line so the toast stays readable', () => {
     const long = `Error running callback: ${'x'.repeat(400)}`
     const found = houdiniConsoleFailure(long)

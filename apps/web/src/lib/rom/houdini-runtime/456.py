@@ -464,17 +464,35 @@ SWALLOWED_FAILURE_MARKERS = (
 
 
 def swallowed_failure(lines):
-    """The first captured line that says the HDA blew up behind the wrapper,
-    or None. Kept dumb on purpose: any of these markers means the run cannot be
-    called clean, and being wrong in the SAFE direction (reporting a failure
-    that was survivable) costs a look at the log, while being wrong the other
-    way costs the whole afternoon this was measured in."""
+    """The most INFORMATIVE line of a swallowed blow-up, or None.
+
+    A marker line alone can be information-free ("Traceback (most recent call
+    last):" says only that something died), so once one is found, the LAST
+    captured line is preferred - a printed traceback ends with the exception
+    itself ("AttributeError: ...", the line worth reading) and the capture
+    stops when the callback does.
+
+    Kept dumb on purpose: any marker means the run cannot be called clean, and
+    being wrong in the SAFE direction (reporting a failure that was
+    survivable) costs a look at the log, while being wrong the other way costs
+    the whole afternoon this was measured in. The capture is tail-capped
+    (NODE_LOG_LINES_KEPT); a marker evicted by a chatty export past the error
+    is caught by the studio-side console-log backstop instead
+    (houdiniConsoleFailure in houdini-jobs.ts - keep the marker lists in
+    step)."""
+    found = None
     for line in lines:
         low = str(line).lower()
         for marker in SWALLOWED_FAILURE_MARKERS:
             if marker in low:
-                return str(line)
-    return None
+                found = str(line)
+                break
+        if found is not None:
+            break
+    if found is None:
+        return None
+    last = str(lines[-1]) if lines else found
+    return found if last == found else "{} ... {}".format(found, last)
 
 
 def export_one(node, fallback_directory, on_line=None):

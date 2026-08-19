@@ -1038,12 +1038,19 @@ export async function fetchHoudiniRunProgress(): Promise<
   const houdiniUp = await invoke('houdini_running')
     .then((up) => z.boolean().parse(up))
     .catch(() => true)
-  // Only when the run looks DEAD is the console log worth a read: it is the
-  // one case where the studio has an answer on disk and nothing else does.
-  // (Reading it on every poll would re-read a growing file every 2.5 s.) The
-  // condition is the pure module's own, not a second copy of it.
+  // The console log is read in exactly two cases (reading it on every poll
+  // would re-read a growing file every 2.5 s):
+  //  - the run looks DEAD — the one case where the studio has an answer on
+  //    disk and nothing else does (the condition is the pure module's own,
+  //    not a second copy of it);
+  //  - the result is TERMINAL — houdiniRunStateFrom's false-success backstop
+  //    scans it for errors Houdini swallowed behind its callback wrapper.
+  //    This gate used to be dead-only, which made that backstop INERT in
+  //    production: a finished run always got '' while the tests injected the
+  //    text directly. Each happens once per run, so the cost argument above
+  //    does not apply to them.
   let consoleText = ''
-  if (houdiniRunLooksDead(result, houdiniUp)) {
+  if (houdiniRunLooksDead(result, houdiniUp) || (result !== null && result.state !== 'running')) {
     const consolePath = joinPath(runFolderOf(run), HOUDINI_CONSOLE_FILE)
     try {
       if (await exists(consolePath)) consoleText = await readTextFile(consolePath)
