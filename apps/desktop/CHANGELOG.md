@@ -1,5 +1,19 @@
 # @dth/desktop
 
+## 0.86.1
+
+### Patch Changes
+
+- [#929](https://github.com/polynaut/dth-character-studio/pull/929) [`fc17e9f`](https://github.com/polynaut/dth-character-studio/commit/fc17e9f72d3dfa5ebe1c664f18e908be22ee28b0) Thanks [@polynaut](https://github.com/polynaut)! - Fix: a failed export can no longer destroy the copy that survived the _previous_ failed export. Before running the DTH Exporter the studio parks the existing export set aside as `<name>.dthprev`, and puts it back if the run fails. But a run that dies outright — Daz closing, the exporter aborting — never reaches that step, so the backup stays parked with a half-written file beside it. The next export then deleted that backup to make room, on the assumption that the newer file must be the good one. It isn't: measured on a real project, the "newer" files were a 0-byte `.dth` and a 29 MB fragment of an 807 MB Alembic. An existing backup is now understood as the last copy anything finished writing, and it is kept.
+
+  Also fixed: the hair Alembics were matched by a name test loose enough to match their own backups, so every export parked the previous backup again — `.dthprev.dthprev.dthprev.dthprev` files, and no live hair Alembic left. Existing stacks clear themselves on the next successful export.
+
+  Runtime v99, so **Tools → Refresh assets** reinstalls the generated scripts.
+
+- [#928](https://github.com/polynaut/dth-character-studio/pull/928) [`fc64c34`](https://github.com/polynaut/dth-character-studio/commit/fc64c34bf8489c09c7b75318308cd6b307e6fdce) Thanks [@polynaut](https://github.com/polynaut)! - Fix: a DazToHue export that fails inside Houdini is no longer reported as a success. Houdini runs an HDA's button callback through a wrapper that catches the script's exception, prints it, and returns normally — so the studio saw a clean return and counted the node as exported. A run whose project could not load its PoseAsset CSV therefore finished in 17 seconds, wrote nothing, and toasted "2 exported". Failures are now read from what Houdini actually printed: 456.py marks the individual node failed, and the studio additionally checks the run's console log, which is the only channel carrying errors Houdini raises before or outside the in-process capture (a project that fails while _loading_ now says so instead of finishing quietly).
+
+- [#927](https://github.com/polynaut/dth-character-studio/pull/927) [`05ebed1`](https://github.com/polynaut/dth-character-studio/commit/05ebed1f05ea1ae167ff3e00433b46509ac1d438) Thanks [@polynaut](https://github.com/polynaut)! - Fix: a finished Houdini project no longer collapses its task rows back to one. The run's list is one row per DazToHue **network**, but only the project being exported right now could name its networks — so the rows went 1 → N → 1, and a two-project run that really exported four networks showed two rows for the whole thing. Each project's rows now survive its turn, keeping the status the run gave them: a failed network stays failed, and one an interrupted queue never reached stays unstarted rather than being ticked off.
+
 ## 0.86.0
 
 ### Minor Changes
