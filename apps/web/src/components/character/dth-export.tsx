@@ -23,7 +23,9 @@ import {
 import { holdBusyCursor } from '#/lib/busy-cursor.ts'
 import {
   dazTaskCards,
+  houdiniNetworkMemoAtFinish,
   houdiniTaskCards,
+  type HoudiniNetworkMemo,
   runPercent,
   unrealTaskCards,
 } from '#/lib/rom/export-cards.ts'
@@ -402,15 +404,35 @@ export function DthExportAction({
         dazFinished,
         progressNow?.state === 'running',
       ),
-      ...armed.houdini.flatMap((hip, index) =>
-        houdiniTaskCards(
+      ...armed.houdini.flatMap((hip, index) => {
+        const running =
+          hip.label === houdiniActive && houdiniNow?.state === 'running' ? houdiniNow : null
+        // Remember what the run says while it is saying it — this is the only
+        // moment the network list exists, and the rows need it after.
+        if (running && running.total > 0) {
+          hipNetworkMemoRef.current[hip.path] = {
+            total: running.total,
+            networks: running.networks,
+          }
+        }
+        return houdiniTaskCards(
           hip,
           index,
-          hip.label === houdiniActive && houdiniNow?.state === 'running' ? houdiniNow : null,
+          running,
           hip.label === houdiniActive && houdiniNow !== null,
           houdiniDone,
-        ),
-      ),
+          // Only a project that finished THIS run may render from its memo.
+          // The ref outlives the run (that is its purpose — the rows must
+          // survive the queue moving on), so on a RE-run the previous run's
+          // snapshot is still in there: unguarded, it rendered the first
+          // project as already ticked while hython was still opening
+          // (measured 2026-08-19, a Skip-Daz re-run of the same character).
+          // `houdiniDone` counts this run's finished projects in queue order,
+          // so it is exactly the boundary between "these rows are this run's
+          // past" and "that snapshot is some other run's".
+          index < houdiniDone ? hipNetworkMemoRef.current[hip.path] : undefined,
+        )
+      }),
       // Last, because it happens last: the send waits for every Houdini project
       // to finish. One row per export set per project — two characters going
       // into one project are two import jobs, and the list says so.
@@ -523,6 +545,17 @@ export function DthExportAction({
    * Houdini": the run knows, minutes later, and the scan knew all along.
    */
   const hipSetsRef = useRef<Record<string, Array<string>>>({})
+  /**
+   * What each project's own run said about its networks, kept past the end of
+   * that project's turn — keyed by `.hip` path.
+   *
+   * `houdiniNow` only ever describes the ACTIVE project, and the end report
+   * keeps a summary line per project rather than its network list, so a
+   * finished project had nothing to build rows from and fell back to a single
+   * project row. The rows went 1 → N → 1: a two-project run that really
+   * exported four networks showed two rows for the whole thing.
+   */
+  const hipNetworkMemoRef = useRef<Record<string, HoudiniNetworkMemo>>({})
   useEffect(() => {
     let active = true
     void fetchCachedHoudiniScans({ data: { projectId, id: character.id } })
@@ -1176,6 +1209,23 @@ export function DthExportAction({
         .filter(Boolean)
         .join(' · ')
       const label = currentHipRef.current || 'Houdini'
+      // The finished state is the only snapshot with every network status
+      // FINAL — the last `running` poll almost always predates the closing
+      // node's entry (it lands moments before the state flips, between two
+      // polls), so a memo left at that snapshot shows the last network as
+      // never-run. Overwrite it with the truth while the run can still say it.
+      // NOT verbatim on a cancel: 456.py marks the networks its interrupt
+      // skipped `skipped`, which renders as done — the pure rule keeps those
+      // looking unstarted (see houdiniNetworkMemoAtFinish).
+      const finishedHip = pipelineRef.current?.houdini.find((one) => one.label === label)
+      if (finishedHip) {
+        const memo = houdiniNetworkMemoAtFinish(
+          hipNetworkMemoRef.current[finishedHip.path],
+          run.networks,
+          run.cancelled,
+        )
+        if (memo) hipNetworkMemoRef.current[finishedHip.path] = memo
+      }
       const report = runReportRef.current
       if (report) {
         report.houdini.push({

@@ -467,6 +467,16 @@ describe('houdiniRunStateFrom', () => {
       error: '',
       cancelled: false,
       problems: [],
+      // The finished state keeps the per-network list with every status FINAL
+      // — the task cards' only accurate source at exactly the moment the
+      // running state (their previous one) disappears. Counts alone can say
+      // "2 ok, 1 skipped" but not WHICH, and the last running-state poll
+      // almost always misses the closing node's entry.
+      networks: [
+        { label: '/obj/a', status: 'ok' },
+        { label: '/obj/b', status: 'ok' },
+        { label: '/obj/c', status: 'skipped' },
+      ],
     })
   })
 
@@ -490,6 +500,16 @@ describe('houdiniRunStateFrom', () => {
     )!
     const state = houdiniRunStateFrom(stopped, true)
     expect(state).toMatchObject({ state: 'finished', ok: 1, skipped: 2, cancelled: true })
+    // The unreached networks come back `skipped` — reported by 456.py with the
+    // interrupt as the reason — NOT `waiting`. The memo side is what keeps
+    // them looking unstarted (see houdiniNetworkMemoAtFinish).
+    expect(state).toMatchObject({
+      networks: [
+        { label: '/obj/a', status: 'ok' },
+        { label: '/obj/b', status: 'skipped' },
+        { label: '/obj/c', status: 'skipped' },
+      ],
+    })
     // An older 456.py writes no field at all — that is a normal finish.
     expect(houdiniRunStateFrom(parseHoudiniResult('{"state":"done"}'), true)).toMatchObject({
       cancelled: false,

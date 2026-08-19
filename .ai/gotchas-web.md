@@ -588,6 +588,18 @@ and the Unreal install button. If a spec has to hold a modifier:
   pattern that caught it: hython `alembicTimeRange` + a two-frame
   `pointFloatAttribValues('P')` compare (set the Alembic SOP's `frame` parm
   explicitly — `hou.setFrame` alone does not re-cook the packed prims).
+  **UPDATE (runtime v99): this bug is FIXED in the current plugin, and the
+  block STAYED anyway** — for its other, un-planned effect. PR #901 proposed
+  deleting it outright now the skip-guard is obsolete, which is sound on the
+  guard and wrong on the rest: v85 turned the delete into a MOVE-ASIDE
+  (`.dthprev`), and that parking is the only thing standing between a
+  half-written export and the previous one. Measured 2026-08-19 — the DTH
+  Exporter aborted with "Could not create alembic archive", leaving a 0-byte
+  `.dth` and a 29 MB fragment of an 807 MB Alembic; the real export, both
+  `.fbx`s and the PoseAsset CSV survived only as `.dthprev`. So when a
+  workaround is retired, check what it started doing by accident before
+  deleting the code: the two reasons this block existed retire on completely
+  different schedules.
 - **Modal → SidePanel un-blocks the page BEHIND the overlay: file drops land on
   it again.** Measured 2026-08-14 while moving the DTH Export picker off `Modal`
   onto the drawer. `Modal` is Radix Dialog, whose `disableOutsidePointerEvents`

@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { dazTaskCards, houdiniTaskCards, runPercent, unrealTaskCards } from './export-cards.ts'
+import {
+  dazTaskCards,
+  houdiniNetworkMemoAtFinish,
+  houdiniTaskCards,
+  runPercent,
+  unrealTaskCards,
+} from './export-cards.ts'
 
 // ONE ROW PER JOB — the rule the whole task list is built on. A `.hip` can hold
 // several DazToHue networks; one Unreal project can take several export sets.
@@ -156,6 +162,72 @@ describe('houdiniTaskCards', () => {
     expect(cards.map((c) => c.status)).toEqual(['active', 'waiting', 'waiting'])
   })
 
+  it('KEEPS the network rows once the project has finished', () => {
+    // The reported bug: `live` describes the ACTIVE project only, and the end
+    // report keeps a summary line per project rather than its networks — so a
+    // finished project fell back to one row and the list went 1 -> N -> 1. A
+    // two-project run whose toast said "2 exported" for each really exported
+    // four networks and never showed more than two rows.
+    const cards = houdiniTaskCards(project(), 0, null, false, 1, {
+      total: 2,
+      networks: [
+        { label: 'LaraClassic', status: 'ok' },
+        { label: 'LaraNaked', status: 'ok' },
+      ],
+    })
+    expect(cards.map((c) => [c.label, c.status])).toEqual([
+      ['LaraClassic', 'done'],
+      ['LaraNaked', 'done'],
+    ])
+    expect(cards.every((c) => c.detail === 'DazToHue network')).toBe(true)
+    expect(cards.every((c) => c.context === 'LaraCroft_G81')).toBe(true)
+  })
+
+  it('a finished project keeps a FAILED network failed, and an unreached one unstarted', () => {
+    // The same honesty rule the live rows follow: `skipped` finished with
+    // nothing to do (done), `failed` is finished-but-wrong, and a network the
+    // run never reached — an interrupted queue — must not be ticked off, or
+    // the list claims work that did not happen.
+    const cards = houdiniTaskCards(project(), 0, null, false, 1, {
+      total: 3,
+      networks: [
+        { label: 'LaraClassic', status: 'skipped' },
+        { label: 'LaraNaked', status: 'failed' },
+        { label: 'LaraThick', status: 'waiting' },
+      ],
+    })
+    expect(cards.map((c) => [c.label, c.status])).toEqual([
+      ['LaraClassic', 'done'],
+      ['LaraNaked', 'failed'],
+      ['LaraThick', 'waiting'],
+    ])
+  })
+
+  it('the memo outranks the scan — it is the list that actually exported', () => {
+    // The scan says what the project WRITES; the run said what it DID. Same
+    // precedence the live rows have over the scan, held after the run ends.
+    const cards = houdiniTaskCards(
+      project({ sets: ['LaraClassic', 'LaraNaked', 'LaraThick'] }),
+      0,
+      null,
+      false,
+      1,
+      { total: 2, networks: [{ label: 'LaraClassic', status: 'ok' }, { label: 'LaraNaked', status: 'ok' }] },
+    )
+    expect(cards.map((c) => c.label)).toEqual(['LaraClassic', 'LaraNaked'])
+  })
+
+  it('a one-network memo stays the single project row', () => {
+    // Nothing to expand: one network is what the single row already says, and
+    // a lone "Network 1" under a project heading is noise.
+    expect(
+      houdiniTaskCards(project(), 0, null, false, 1, {
+        total: 1,
+        networks: [{ label: 'LaraClassic', status: 'ok' }],
+      }),
+    ).toHaveLength(1)
+  })
+
   it('stays ONE row when nothing knows better', () => {
     // No scan, no run: a single project row, which is what shipped before any
     // of this — named by the project, saying what it is there to do.
@@ -182,6 +254,92 @@ describe('houdiniTaskCards', () => {
     expect(
       houdiniTaskCards(project({ sets: ['A', 'B'] }), 0, null, false, 1).map((c) => c.status),
     ).toEqual(['done', 'done'])
+  })
+})
+
+describe('houdiniNetworkMemoAtFinish', () => {
+  it('adopts the finished statuses — the last network is NEVER final in a running poll', () => {
+    // 456.py appends the final node's entry and writes the finished state
+    // right behind it, so the last running snapshot the poll saw still has
+    // that network `waiting`. Without this reconciliation, every finished
+    // project's last network kept the unstarted look forever.
+    const memo = houdiniNetworkMemoAtFinish(
+      {
+        total: 2,
+        networks: [
+          { label: 'LaraClassic', status: 'ok' },
+          { label: 'LaraNaked', status: 'waiting' },
+        ],
+      },
+      [
+        { label: 'LaraClassic', status: 'ok' },
+        { label: 'LaraNaked', status: 'ok' },
+      ],
+      false,
+    )
+    expect(memo).toEqual({
+      total: 2,
+      networks: [
+        { label: 'LaraClassic', status: 'ok' },
+        { label: 'LaraNaked', status: 'ok' },
+      ],
+    })
+  })
+
+  it('a CANCELLED run keeps its unreached networks unstarted', () => {
+    // 456.py reports the networks its interrupt skipped as `skipped` — the
+    // same word a genuine nothing-to-do finish uses, and `skipped` renders as
+    // done. Under a cancel only real work (`ok`/`failed`) is adopted; the
+    // rest keeps what the running polls last said, `waiting` for an unreached
+    // one — ticking it off would claim work the interrupt prevented.
+    const memo = houdiniNetworkMemoAtFinish(
+      {
+        total: 3,
+        networks: [
+          { label: 'LaraClassic', status: 'ok' },
+          { label: 'LaraNaked', status: 'waiting' },
+          { label: 'LaraThick', status: 'waiting' },
+        ],
+      },
+      [
+        { label: 'LaraClassic', status: 'ok' },
+        { label: 'LaraNaked', status: 'skipped' },
+        { label: 'LaraThick', status: 'skipped' },
+      ],
+      true,
+    )
+    expect(memo?.networks).toEqual([
+      { label: 'LaraClassic', status: 'ok' },
+      { label: 'LaraNaked', status: 'waiting' },
+      { label: 'LaraThick', status: 'waiting' },
+    ])
+  })
+
+  it('a cancelled run still adopts a FAILURE, and survives having no prior memo', () => {
+    // The node being exported when the stop landed runs to completion — its
+    // real outcome (here a failure) must land even under a cancel. And a run
+    // too quick for any running poll has no prior snapshot at all: the
+    // unreached tail then degrades to `waiting`, never to done.
+    const memo = houdiniNetworkMemoAtFinish(
+      undefined,
+      [
+        { label: 'LaraClassic', status: 'failed' },
+        { label: 'LaraNaked', status: 'skipped' },
+      ],
+      true,
+    )
+    expect(memo?.networks).toEqual([
+      { label: 'LaraClassic', status: 'failed' },
+      { label: 'LaraNaked', status: 'waiting' },
+    ])
+  })
+
+  it('an empty finished list changes nothing', () => {
+    // An old 456.py that reported neither targets nor nodes has nothing to
+    // reconcile with — whatever the running polls captured stays.
+    const prior = { total: 2, networks: [{ label: 'LaraClassic', status: 'ok' as const }] }
+    expect(houdiniNetworkMemoAtFinish(prior, [], false)).toBe(prior)
+    expect(houdiniNetworkMemoAtFinish(undefined, [], true)).toBeUndefined()
   })
 })
 
