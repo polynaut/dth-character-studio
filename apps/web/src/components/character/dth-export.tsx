@@ -420,7 +420,16 @@ export function DthExportAction({
           running,
           hip.label === houdiniActive && houdiniNow !== null,
           houdiniDone,
-          hipNetworkMemoRef.current[hip.path],
+          // Only a project that finished THIS run may render from its memo.
+          // The ref outlives the run (that is its purpose — the rows must
+          // survive the queue moving on), so on a RE-run the previous run's
+          // snapshot is still in there: unguarded, it rendered the first
+          // project as already ticked while hython was still opening
+          // (measured 2026-08-19, a Skip-Daz re-run of the same character).
+          // `houdiniDone` counts this run's finished projects in queue order,
+          // so it is exactly the boundary between "these rows are this run's
+          // past" and "that snapshot is some other run's".
+          index < houdiniDone ? hipNetworkMemoRef.current[hip.path] : undefined,
         )
       }),
       // Last, because it happens last: the send waits for every Houdini project
@@ -1199,6 +1208,18 @@ export function DthExportAction({
         .filter(Boolean)
         .join(' · ')
       const label = currentHipRef.current || 'Houdini'
+      // The finished state is the only snapshot with every network status
+      // FINAL — the last `running` poll almost always predates the closing
+      // node's entry (it lands moments before the state flips, between two
+      // polls), so a memo left at that snapshot shows the last network as
+      // never-run. Overwrite it with the truth while the run can still say it.
+      const finishedHip = pipelineRef.current?.houdini.find((one) => one.label === label)
+      if (finishedHip && run.networks.length > 0) {
+        hipNetworkMemoRef.current[finishedHip.path] = {
+          total: run.networks.length,
+          networks: run.networks,
+        }
+      }
       const report = runReportRef.current
       if (report) {
         report.houdini.push({
