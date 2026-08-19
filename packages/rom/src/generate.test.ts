@@ -2085,7 +2085,7 @@ describe('exporter integration', () => {
     expect(bulk?.content).toContain('Export hair assets too')
     expect(bulk?.content).toContain('Main export did not land - hair export skipped.')
     expect(bulk?.content).not.toContain('dthBulkExport')
-    // Runtime v87: the v71 dthSettle pauses are gone — no generated carrier
+    // Runtime v88: the v71 dthSettle pauses are gone — no generated carrier
     // sleeps at the automation seams anymore (they cost up to ~2 s per scene
     // and never had a measured failure behind them).
     expect(bulk?.content).not.toContain('dthSettle')
