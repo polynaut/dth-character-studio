@@ -4,10 +4,11 @@ name: ✅ Pull Request validation
 # version/release workflows only run on pushes to main, so this is the gate that
 # catches regressions before a PR is merged.
 #
-# Also runs the `rust` job on pushes to main — NOT for PR gating, but to warm the
-# Rust build cache on the default branch. GitHub only lets PR runs restore caches
-# from the default branch, so without this every PR's rust job is a cold rebuild.
-# (validate/changeset stay PR-only.)
+# Also runs the `rust` and `playwright-cache` jobs on pushes to main — NOT for
+# PR gating, but to warm the Rust build cache and the Playwright browser cache on
+# the default branch. GitHub only lets PR runs restore caches from the default
+# branch, so without this every PR's rust job is a cold rebuild and every new
+# PR's first smoke run re-downloads Chromium. (validate/changeset stay PR-only.)
 
 on:
   pull_request:
@@ -108,25 +109,29 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # Cache the ~130 MB Chromium download, keyed on the installed Playwright
-      # version — uncached it re-downloads on every PR run (minutes + a
-      # download-flake surface). `--with-deps` below still apt-installs the
-      # system libraries; only the browser binaries live in this cache.
+      # Restore the ~130 MB Chromium download, keyed on the installed Playwright
+      # version. RESTORE-only on purpose: a cache SAVED from a PR run is scoped
+      # to that PR and invisible to every other PR, so PR-side saves only piled
+      # duplicate 130 MB entries against the repo's 10 GB cache cap — the
+      # `playwright-cache` job below saves the one copy PRs can actually
+      # restore (a default-branch cache is visible to all PR runs).
       - name: Playwright version (cache key)
         id: pw
         shell: bash
         run: echo "version=$(node -p "require('./apps/web/node_modules/@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
-      - name: Cache Playwright browsers
+      - name: Restore Playwright browsers
         id: pw-cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
       - name: Install Playwright Chromium
-        # Cache misses only (= once per Playwright version bump). On a hit the
-        # browser binaries come from the cache above, and the hosted runner
-        # image already ships Chromium's system libraries — re-running
-        # `--with-deps` would apt-install packages for ~30s on every PR.
+        # Cache misses only — a fresh PR right after a Playwright version bump
+        # (the main-warmed cache appears when the bump merges), or an evicted
+        # cache. On a hit the browser binaries come from the cache above, and
+        # the hosted runner image already ships Chromium's system libraries —
+        # re-running `--with-deps` would apt-install packages for ~30s on every
+        # PR.
         if: steps.pw-cache.outputs.cache-hit != 'true'
         run: pnpm --filter @dth/web exec playwright install chromium --with-deps
       - name: Browser smoke (Playwright)
@@ -176,6 +181,46 @@ jobs:
           path: apps/web/test-results/
           retention-days: 7
           if-no-files-found: ignore
+
+  # Warm the Playwright browser cache on the default branch — the smoke job is
+  # PR-only, and a cache saved from a PR run is invisible to every OTHER PR
+  # (GitHub cache isolation), so before this job existed each new PR's first
+  # smoke run re-downloaded Chromium (~47s measured). Same pattern as the rust
+  # job's main-push runs. The key computation must stay IDENTICAL to the smoke
+  # job's, or PRs never hit what this saves. Runs once per merge and is a no-op
+  # (restore + skip) except right after a Playwright version bump lands.
+  playwright-cache:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+      # Needed only to resolve the installed Playwright version for the key —
+      # reading it from the lockfile instead would risk a formatting drift
+      # against the smoke job's node_modules-based key, and a key mismatch
+      # fails SILENTLY (every PR just misses forever).
+      - run: pnpm install --frozen-lockfile
+      - name: Playwright version (cache key)
+        id: pw
+        shell: bash
+        run: echo "version=$(node -p "require('./apps/web/node_modules/@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+      - name: Download Chromium (browser binaries only)
+        # No `--with-deps`: apt packages can't live in this cache anyway, and
+        # the smoke job's install path handles system libraries on its own
+        # misses. Only the browser download is worth warming.
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: pnpm --filter @dth/web exec playwright install chromium
 
   # Every feature PR must ship a changeset (the four packages — web, desktop,
   # rom, ui — are a fixed group, so this is what actually bumps the product
