@@ -781,6 +781,24 @@ Part of the domain reference — `.ai/domain.md` is the index.
   The studio cannot read an editor's asset registry from out here, so a set
   whose assets were RENAMED reads as absent — un-ticking a row the user can
   tick, never ticking one they didn't mean.
+  **AFTER the send, the leg's own job files are its sidecar** (reported live
+  2026-08-19: a reload — or navigating away and back — mid-send forgot the
+  rows, the status line and, worst, the outcome toast while the bridge worked
+  on unwatched). `adoptUnrealImports` (api/unreal-import.ts) runs at editor
+  mount, READ-ONLY, and answers WHOSE the files are per protocol phase: a
+  `job.json`/`running_job.json` says so itself — its `dth` paths point into
+  one character's export folder (prefix-matched, so two characters sharing a
+  linked project never cross-adopt a pending job); a result ALONE is a
+  finished import (the bridge deletes the claimed file last) and is matched by
+  export-set names against the character's export folder, the same filesystem
+  answer the send was built from. The component re-arms exactly what the send
+  armed — rows, status line, the one watched project — and the existing poll
+  takes over, so a result written while nobody watched toasts on its next tick
+  instead of never (the finish path then dismisses all three files, so an
+  adopted outcome can never re-toast). Adoption yields to a live watch or an
+  armed pipeline, and cannot fight the Houdini adoption: the run plan's clear
+  is AWAITED inside the finish poll before the component's `sendToUnreal`
+  writes the job file, so the two legs' sidecars never coexist on disk.
   **The send is RE-import ONLY** (Remo, 2026-08-14 — a run had "First import"
   rows for a variant nobody had ever put in that project): a character's FIRST
   import into an Unreal project is made in Unreal itself, a placement decision

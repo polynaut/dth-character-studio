@@ -318,6 +318,37 @@ export function parseUnrealResult(text: string): UnrealImportResult | null {
   }
 }
 
+/** The job file, read BACK. The studio only ever wrote it ({@link unrealJobJson})
+ *  until the reload-adoption needed to ask a found job file whose it is — the
+ *  `dth` paths answer that (they point into one character's export folder). */
+const jobSchema = z.object({
+  version: z.number().default(0),
+  imports: z
+    .array(
+      z.object({
+        dth: z.string().default(''),
+        destination: z.string().default(''),
+        existing: z.boolean().default(false),
+        character: z.string().default(''),
+        files: z.array(z.string()).default([]),
+      }),
+    )
+    .default([]),
+})
+
+export type UnrealJob = z.infer<typeof jobSchema>
+
+/** Parse a job (or claimed) file, with {@link parseUnrealResult}'s tolerance:
+ *  null means unreadable, never a throw — a job another studio version wrote
+ *  is simply not adoptable. */
+export function parseUnrealJob(text: string): UnrealJob | null {
+  try {
+    return jobSchema.parse(JSON.parse(text))
+  } catch {
+    return null
+  }
+}
+
 export type UnrealImportState =
   /** The job file is still sitting there unclaimed: no editor is watching yet.
    *  Not an error — this is the "Unreal is still starting" stretch, and the one

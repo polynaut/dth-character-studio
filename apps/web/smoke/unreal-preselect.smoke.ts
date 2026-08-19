@@ -620,3 +620,105 @@ test('a Daz run with Skip Houdini arms the send’s own task rows — visible fr
   // …and the clean queue raised no toast of its own.
   await expect(page.getByText(/Unreal: queued for DemoGame/)).toHaveCount(0)
 })
+
+test('a reloaded window finds the send again — the job file is the leg’s sidecar', async ({
+  page,
+}) => {
+  // Reported 2026-08-19: reloading (or navigating away and back) mid-send
+  // "forgot" the rows, the status line and — worst — the outcome toast, while
+  // the bridge worked on unwatched. The leg's own job files carry everything
+  // a window needs to pick the watch back up, exactly like the Daz batch and
+  // the Houdini run. Seeded here AS the reloaded shape: the job file already
+  // in the Unreal project, nothing in this window's memory.
+  const seed = buildSeed({
+    activeProjectFile: P.dcsp,
+    demo: true,
+    houdiniProject: true,
+    unrealProjects: [UPROJECT],
+  })
+  seed.files[`${EXPORT_ROOT}/KiraDefault/DTH_KiraDefault.dth`] = '{}'
+  seed.files[IMPORTED] = 'uasset-fixture'
+  seed.files[`${UPROJECT_DIR}/Saved/DTHStudio/job.json`] = JSON.stringify({
+    version: 4,
+    imports: [
+      {
+        dth: `${EXPORT_ROOT}/KiraDefault/DTH_KiraDefault.dth`,
+        destination: '/Game/Characters/Kira',
+        existing: true,
+        character: 'KiraDefault',
+        files: [],
+      },
+    ],
+  })
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+
+  // The leg is back without touching anything: its re-import row and the
+  // queue on the status line.
+  const rows = page.locator('[data-task^="ue:"]')
+  await expect(rows).toHaveCount(1)
+  await expect(rows).toContainText('KiraDefault')
+  await expect(page.locator('[data-export-status]')).toContainText(/Unreal; queued for DemoGame/)
+
+  // The editor claims the job and answers — the outcome lands in THIS window,
+  // as the leg's own sticky toast, and ends the run.
+  await page.evaluate((dir: string) => {
+    const mock = (window as any).__tauriMock
+    mock.files.delete(`${dir}/Saved/DTHStudio/job.json`)
+    mock.files.set(
+      `${dir}/Saved/DTHStudio/result.json`,
+      JSON.stringify({
+        version: 4,
+        state: 'done',
+        error: '',
+        imports: [
+          {
+            character: 'KiraDefault',
+            destination: '/Game/Characters/Kira',
+            mode: 'reimport',
+            assets: ['/Game/Characters/Kira/SKM_KiraDefault'],
+          },
+        ],
+      }),
+    )
+  }, UPROJECT_DIR)
+  await expect(page.getByText(/Unreal: re-imported 1 asset in .Game.Characters.Kira/)).toBeVisible(
+    { timeout: 15_000 },
+  )
+  await expect(rows).toHaveCount(0)
+})
+
+test('another character’s pending job is NOT adopted', async ({ page }) => {
+  // Whose job a file is comes from its own `dth` paths — a job pointing into
+  // some other character's export folder must not put rows on THIS page (two
+  // characters can legitimately share one linked Unreal project).
+  const seed = buildSeed({
+    activeProjectFile: P.dcsp,
+    demo: true,
+    houdiniProject: true,
+    unrealProjects: [UPROJECT],
+  })
+  seed.files[`${EXPORT_ROOT}/KiraDefault/DTH_KiraDefault.dth`] = '{}'
+  seed.files[`${UPROJECT_DIR}/Saved/DTHStudio/job.json`] = JSON.stringify({
+    version: 4,
+    imports: [
+      {
+        dth: 'D:/DTH Projects/Demo/Milena/export/Milena/DTH_Milena.dth',
+        destination: '/Game/Characters/Milena',
+        existing: true,
+        character: 'Milena',
+        files: [],
+      },
+    ],
+  })
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+  // Give the mount-time adoption its beat, then hold: no rows, no status.
+  await page.waitForTimeout(1000)
+  await expect(page.locator('[data-task^="ue:"]')).toHaveCount(0)
+  await expect(page.locator('[data-export-status]')).toHaveCount(0)
+})

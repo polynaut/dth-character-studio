@@ -161,6 +161,7 @@ export type { ProductScanResult } from './api/products'
 
 // --- unreal import: hand a Houdini export to a watching editor (bridge plugin)
 export {
+  adoptUnrealImports,
   dismissUnrealImport,
   fetchUnrealSendPlan,
   fetchUnrealImportProgress,
@@ -169,7 +170,12 @@ export {
   startUnrealImport,
   unrealExportSets,
 } from './api/unreal-import'
-export type { UnrealExportSet, UnrealImportStarted, UnrealSendPlan } from './api/unreal-import'
+export type {
+  UnrealAdoptedImport,
+  UnrealExportSet,
+  UnrealImportStarted,
+  UnrealSendPlan,
+} from './api/unreal-import'
 
 // --- execute: DTH Exporter job-file handoff + Daz launch ---------------------
 export {
