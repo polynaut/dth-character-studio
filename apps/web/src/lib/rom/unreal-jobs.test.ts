@@ -7,6 +7,7 @@ import {
   bridgeUpluginJson,
   bridgeVersionFrom,
   dthExportFiles,
+  parseUnrealJob,
   parseUnrealResult,
   unrealContentPath,
   unrealDestinationFor,
@@ -107,6 +108,44 @@ describe('unrealJobJson', () => {
       ]),
     ) as { imports: Array<{ character: string }> }
     expect(job.imports.map((one) => one.character)).toEqual(['LaraCroft', 'LaraNaked'])
+  })
+})
+
+describe('parseUnrealJob', () => {
+  it('round-trips what unrealJobJson writes', () => {
+    const job = parseUnrealJob(
+      unrealJobJson([
+        {
+          dth: 'D:/p/Kira/export/Kira/DTH_Kira.dth',
+          destination: '/Game/Characters/Kira',
+          existing: true,
+          character: 'Kira',
+          files: ['D:/p/Kira/export/Kira/Skeletal Meshes/SKM_Kira.fbx'],
+        },
+      ]),
+    )
+    expect(job?.version).toBe(UNREAL_JOB_VERSION)
+    expect(job?.imports).toEqual([
+      {
+        dth: 'D:/p/Kira/export/Kira/DTH_Kira.dth',
+        destination: '/Game/Characters/Kira',
+        existing: true,
+        character: 'Kira',
+        files: ['D:/p/Kira/export/Kira/Skeletal Meshes/SKM_Kira.fbx'],
+      },
+    ])
+  })
+
+  it('tolerates missing fields and refuses garbage — null, never a throw', () => {
+    // A job an older (or newer) studio wrote still answers "whose is it": the
+    // adoption only needs `dth` and `character`, defaulted when absent.
+    expect(parseUnrealJob('{"imports":[{"dth":"D:/x/DTH_X.dth"}]}')).toEqual({
+      version: 0,
+      imports: [{ dth: 'D:/x/DTH_X.dth', destination: '', existing: false, character: '', files: [] }],
+    })
+    expect(parseUnrealJob('{"version":4,"imp')).toBeNull()
+    expect(parseUnrealJob('')).toBeNull()
+    expect(parseUnrealJob('[]')).toBeNull()
   })
 })
 

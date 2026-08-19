@@ -6,6 +6,7 @@ import { Button, useArmedWatch, useCoalescedRefresh, useRefetchOnFocus } from '@
 import {
   abortExporterJobs,
   adoptHoudiniRun,
+  adoptUnrealImports,
   awaitBatchPickup,
   exporterJobsPending,
   fetchExportRunProgress,
@@ -1333,6 +1334,53 @@ export function DthExportAction({
       .catch(() => {
         // Read-only convenience — without it the leg simply stays invisible,
         // which is the behaviour this replaces.
+      })
+    return () => {
+      active = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // The Unreal leg found again the same way (reported 2026-08-19: a reload —
+  // or just navigating away and back — mid-send "forgot" the rows, the status
+  // line and the outcome). Its job files ARE its sidecar, exactly like the
+  // other two legs' — `adoptUnrealImports` reads whose they are. Mount-only,
+  // and it yields to anything this window already knows: a live watch or an
+  // armed pipeline (the Houdini adoption covers the pre-send stretch; the job
+  // files only exist after it, so in practice one of the two adopts).
+  useEffect(() => {
+    let active = true
+    void adoptUnrealImports({ data: { projectId, id: character.id } })
+      .then((adopted) => {
+        if (!active || adopted.length === 0) return
+        if (unrealWatchRef.current || pipelineRef.current) return
+        unrealSentRef.current = true
+        // One project is watched, exactly as the send armed it — the rows
+        // name the rest.
+        unrealWatchRef.current = adopted[0].uprojectPath
+        const name = stemOf(adopted[0].uprojectPath)
+        unrealStatusRef.current =
+          adopted[0].state === 'waiting'
+            ? `Unreal; queued for ${name} — waiting for the editor to pick the job up`
+            : `Unreal; ${name} is importing — the editor freezes while the DazToHue pipeline runs`
+        pipelineRef.current = {
+          daz: [],
+          houdini: [],
+          unreal: adopted.map((one) => ({
+            path: one.uprojectPath,
+            label: stemOf(one.uprojectPath),
+            sets: one.sets,
+          })),
+        }
+        publishPipeline(null, null)
+        // The first poll takes over from here: it arms the interval (its
+        // state gates `watching`), keeps the status honest, and a result
+        // written while nobody watched becomes the outcome toast now instead
+        // of never.
+        void refreshUnreal()
+      })
+      .catch(() => {
+        // Read-only convenience, same as above.
       })
     return () => {
       active = false

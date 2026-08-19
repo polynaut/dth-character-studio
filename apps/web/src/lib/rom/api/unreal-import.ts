@@ -9,6 +9,7 @@ import {
   bridgeUpluginJson,
   bridgeVersionFrom,
   dthExportFiles,
+  parseUnrealJob,
   parseUnrealResult,
   unrealContentPath,
   unrealDestinationFor,
@@ -532,4 +533,96 @@ export async function dismissUnrealImport({ data }: { data: unknown }): Promise<
       }
     }),
   )
+}
+
+/** One Unreal project's live (or just-landed) import, found again on disk —
+ *  what a reloaded window re-arms its Unreal leg from. */
+export interface UnrealAdoptedImport {
+  uprojectPath: string
+  /** Where the leg is, for the status line's first words — the poll takes
+   *  over from there ('finished' toasts the outcome on its next tick). */
+  state: 'waiting' | 'running' | 'finished'
+  /** The sets the job carries for THIS character (name + re-import), in job
+   *  order — the task rows. */
+  sets: Array<{ name: string; existing: boolean }>
+}
+
+/**
+ * Find this character's Unreal imports again after a reload — the leg's own
+ * job files ARE its sidecar, exactly as the Daz batch and the Houdini run are
+ * found again through theirs. Without this, navigating away (or reloading)
+ * during the send silently dropped the rows, the status line and — worst —
+ * the outcome toast, while the bridge worked on unwatched.
+ *
+ * Whose job a file is, per phase of the protocol:
+ * - `job.json` / `running_job.json` say so themselves: their `dth` paths point
+ *   into one character's export folder.
+ * - a result ALONE (the bridge deletes the claimed file last, so this is a
+ *   finished import) names only its export sets — matched against the sets in
+ *   this character's export folder, the same filesystem answer the send
+ *   itself was built from.
+ *
+ * Read-only: adopting must never advance, dismiss, or re-open anything — the
+ * component's own poll does all of that once the watch is re-armed.
+ */
+export async function adoptUnrealImports({
+  data,
+}: {
+  data: unknown
+}): Promise<Array<UnrealAdoptedImport>> {
+  const { projectId, id } = charScopeInput.parse(data)
+  if (!isTauri()) return []
+  try {
+    const project = await resolveProject(projectId)
+    const linked = project.unrealProjects ?? []
+    if (linked.length === 0) return []
+    const location = await locateCharacter(charsRoot(project), id)
+    if (!location) return []
+    const folder = `${location.folderAbs.replace(/\\/g, '/').toLowerCase()}/`
+    // Lazy, shared: only a result-only (finished) adoption needs the set
+    // names, and every project that does shares the one scan.
+    let ownSetsPromise: Promise<Array<string>> | null = null
+    const ownSets = () =>
+      (ownSetsPromise ??= unrealExportSets(
+        joinPath(location.folderAbs, normalizeRelFolder(project.exportSubdir)),
+      ).then((sets) => sets.map((set) => set.name.toLowerCase())))
+    const adopted = await Promise.all(
+      linked.map(async (uprojectPath): Promise<UnrealAdoptedImport | null> => {
+        const paths = unrealJobPaths(uprojectPath)
+        const jobText =
+          (await readTextFile(paths.jobFile).catch(() => null)) ??
+          (await readTextFile(paths.claimedFile).catch(() => null))
+        if (jobText !== null) {
+          const job = parseUnrealJob(jobText)
+          const mine = (job?.imports ?? []).filter((one) =>
+            one.dth.replace(/\\/g, '/').toLowerCase().startsWith(folder),
+          )
+          if (mine.length === 0) return null
+          const jobStillPending = await exists(paths.jobFile).catch(() => false)
+          return {
+            uprojectPath,
+            state: jobStillPending ? 'waiting' : 'running',
+            sets: mine.map((one) => ({ name: one.character, existing: one.existing })),
+          }
+        }
+        const resultText = await readTextFile(paths.resultFile).catch(() => null)
+        if (resultText === null) return null
+        const result = parseUnrealResult(resultText)
+        if (!result || result.imports.length === 0) return null
+        const names = await ownSets()
+        const mine = result.imports.filter((one) => names.includes(one.character.toLowerCase()))
+        if (mine.length === 0) return null
+        return {
+          uprojectPath,
+          state: result.state === 'running' ? 'running' : 'finished',
+          sets: mine.map((one) => ({ name: one.character, existing: one.mode === 'reimport' })),
+        }
+      }),
+    )
+    return adopted.filter((one): one is UnrealAdoptedImport => one !== null)
+  } catch {
+    // Read-only convenience, like adoptHoudiniRun: a failed adoption leaves
+    // the leg invisible, which is exactly the behaviour it replaces.
+    return []
+  }
 }
