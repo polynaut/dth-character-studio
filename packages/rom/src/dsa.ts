@@ -122,8 +122,9 @@ import type { RomPaths } from './resolve'
 import type { ArtDirectionFrame, Character, Morph } from './types'
 
 /**
- * The `.dsa` generators: the self-contained character/ROM script, the split
- * Export script, the groom (hair) export, the product scan — plus the
+ * The `.dsa` generators: the ROM script, the standalone Export script, the
+ * groom (hair) export, the product scan (plus the Runner's hidden bulk
+ * carriers, which are the same builders in their `bulk` shape) — plus the
  * generateAll entry point that pairs them with the
  * PoseAsset CSV (csv.ts). Formats are taken from real files in
  * soltude/DazToHue-Scripts (ElectraG9_FBMs.json / .csv, DthWorkflowElectraG9.dsa)
@@ -773,7 +774,7 @@ ${hairPassBlock}    }
   // Runner's unattended carriers have — without it a bulk run on a Daz that
   // cannot export completes every scene, exports nothing, and says nothing.
   // Written here rather than through the runtime's logRunError because the
-  // split Export_ carriers don't include the runtime at all.
+  // Export_ carriers don't include the runtime at all.
   //
   // The DIALOG only when a human ran it. A modal inside a Runner carrier warns
   // nobody and blocks the batch on a click that never comes.
@@ -1078,8 +1079,9 @@ function buildSceneConfigMap(
  * Scene → PoseAsset-CSV-name for every linked scene that overrides the ROM (and
  * so has its own scene-suffixed CSV, built from the merged sections). Keyed by
  * the open scene's normalized path, matching {@link buildSceneConfigMap}. The
- * export block (in the combined ROM script AND the split Export_ script)
- * resolves the CSV to deliver through this; an identity/groom-only scene isn't
+ * export block (the standalone Export_ script and the hidden bulk carriers —
+ * since v38 the ROM script carries no export) resolves the CSV to deliver
+ * through this; an identity/groom-only scene isn't
  * here and rides the base CSV. Public: the studio's export watch derives each
  * scene's expected delivered-CSV path from the same lookup.
  */
@@ -2292,8 +2294,8 @@ if (dthSceneLinkErr) {
 
 /**
  * The files written on save: the one self-contained character script (Daz) and
- * the PoseAsset CSV (Houdini), plus the optional split Export_ script and the
- * per-character product-scan script. Everything the character script needs (FBM
+ * the PoseAsset CSV (Houdini), plus the Export_ script (whenever an export dir
+ * is set) and the per-character product-scan script. Everything the character script needs (FBM
  * frames, art direction) is inlined via {@link buildFbmData} /
  * {@link buildArtDirectionData}. Every linked scene is served by the ONE
  * character script (it selects the open scene's overrides at run time); a

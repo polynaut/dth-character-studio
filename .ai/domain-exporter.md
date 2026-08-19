@@ -889,6 +889,15 @@ Part of the domain reference — `.ai/domain.md` is the index.
   what `bulk` MEANS since schema v38: build the ROM, export, and run the hair
   pass in ONE unattended run. Generated whenever an export dir is set,
   dot-prefixed so the Content Library hides it, swept when the dir clears).
+  **The generate sweep only retires names it is explicitly TOLD about** — it
+  deletes `candidates - just-written` (`removalSweepNames`, api/generate.ts),
+  so a conditionally-generated script missing from the candidate array is
+  never swept and simply survives on disk with its stale baked paths. Measured
+  on `.Bulk_Export_Only.dsa`, which had been absent from that list since it was
+  added: clearing the export dir retired its ROM+export twin and left it
+  behind. Adding a new generated `.dsa` means adding its name there in the same
+  change, and the pin is a save-then-clear-the-gate test
+  (generate-script-icons.test.ts).
   This is the ONLY carrier that combines the jobs — the visible per-character
   scripts are always the three separate ones (`ROM_…` builds, `Export_…`
   exports, `Export_Hair_…` grooms), and the per-item hair pass is inlined
