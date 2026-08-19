@@ -1078,9 +1078,11 @@ test('detail-path-chip-alt', async ({ page }) => {
   await page.keyboard.up('Alt')
 })
 
-test('settings-daz-plugins', async ({ page }) => {
-  // A two-Studio machine, which is the whole point of the panel: one release
-  // folder holding a build per generation, installed into every Daz found.
+/** A two-Studio machine, which is the whole point of the Daz-plugins panel: one
+ *  release folder holding a build per generation, installed into every Daz
+ *  found — with an update pending on the DS6 exporter. Shared by the panel shot
+ *  and the needs-admin failure shot. */
+function dazPluginsSeed() {
   const roaming = 'C:/Users/You/AppData/Roaming'
   const dazAppData = `${roaming}/DAZ 3D`
   const ds4 = 'C:/Program Files/DAZ 3D/DAZStudio4'
@@ -1116,14 +1118,43 @@ test('settings-daz-plugins', async ({ page }) => {
     dazInstallKey: 'dzstudio6installdir-64',
     dthExporterFolders: [exporter],
   })
+  return seed
+}
+
+/** Land on Settings with the Daz-plugins scan finished (never an empty table). */
+async function openDazPlugins(page: Page, seed: ReturnType<typeof dazPluginsSeed>) {
   await prime(page, seed)
   await page.goto('/')
   await page.getByRole('heading', { name: 'DTH Character Studio' }).waitFor()
   await page.getByRole('link', { name: 'Settings' }).click()
   await page.getByRole('heading', { name: 'Daz Studio plugins' }).waitFor()
-  // Wait for the per-install scan, so the shot never catches an empty table.
   await page.getByText('pending').first().waitFor()
+}
+
+test('settings-daz-plugins', async ({ page }) => {
+  await openDazPlugins(page, dazPluginsSeed())
   await shoot(page, join(OUT, 'settings-daz-plugins.png'), card(page, 'Daz Studio plugins'))
+})
+
+test('settings-daz-plugins-admin', async ({ page }) => {
+  // The needs-admin state: a copy into Program Files refused, the panel
+  // explaining the one-shot elevated retry. The detail is report.rs's real
+  // wording (pinned by a Rust test; also mirrored in the plugin-install smoke).
+  const seed = dazPluginsSeed()
+  seed.pluginInstallFailure = String.raw`couldn't write C:\Program Files\DAZ 3D\DAZStudio6\plugins\dsp_dth_exporter.dll: Access is denied. (os error 5) — this needs administrator rights — use "Install with administrator rights"`
+  await openDazPlugins(page, seed)
+  await page.getByRole('button', { name: /Install \/ update all/ }).click()
+  const elevate = page.getByRole('button', { name: 'Install with administrator rights' })
+  await elevate.waitFor()
+  // Frame the failure box itself (explainer + button): the full card grew past
+  // the height cap with the report rows, and a top-aligned crop would cut off
+  // exactly this region at the card's bottom.
+  const failureBox = card(page, 'Daz Studio plugins')
+    .locator('div')
+    .filter({ hasText: 'needs administrator' })
+    .filter({ has: elevate })
+    .last()
+  await shoot(page, join(OUT, 'settings-daz-plugins-admin.png'), failureBox)
 })
 
 test('detail-morph-autocomplete', async ({ page }) => {
