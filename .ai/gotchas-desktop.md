@@ -31,7 +31,12 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   two marker lists in step; matching a Houdini `Warning(...)` line must stay
   OUT of both (the `sidefx_hud_button` warning is in every run of some
   projects, so treating it as failure makes the signal permanent and therefore
-  invisible).
+  invisible). And the backstop is only as good as its FEED: the api layer's
+  read guard (`houdiniConsoleWorthReading`) must hand the console to the
+  finished-claiming-clean poll, not just the dead one — the first version of
+  this fix checked the console in `houdiniRunStateFrom` but the guard only
+  read it for dead runs, so the backstop shipped dead with green tests (they
+  called the pure function directly).
 - **Houdini runs a `456.py` on HOUDINI_SCRIPT_PATH for the startup EMPTY scene
   too, not only for a loaded `.hip`** — measured 2026-08-11 on the first
   headless "Export too" run: hython started, the empty initial scene triggered
