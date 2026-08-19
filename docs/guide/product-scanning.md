@@ -55,7 +55,9 @@ Scan project.
 
 Matching tries the strongest signals first — the asset's own file, its textures,
 SKU, product keywords — falling back to a content-library match for manual installs
-without a DIM manifest (that's the **Match** column).
+without a DIM manifest (that's the **Match** column). The scan looks in every
+content directory Daz has mapped, and recognises morphs installed under the
+figure's own `Morphs/<Vendor>/<Product>` folder.
 
 Results are stored in the project's hidden
 `.dcsmeta/characters/<Character>/products.json`, so they travel with the project
