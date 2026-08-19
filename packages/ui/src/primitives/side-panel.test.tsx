@@ -125,7 +125,7 @@ describe('SidePanel', () => {
     opener.remove()
   })
 
-  it('sweeps the host toasts on open, not on mount-closed', () => {
+  it('sweeps the host toasts once per open, not on mount-closed or re-renders', () => {
     const dismissToasts = vi.fn()
     const panel = (open: boolean) => (
       <UiConfigProvider value={{ dismissToasts }}>
@@ -136,6 +136,10 @@ describe('SidePanel', () => {
     )
     const { rerender } = render(panel(false))
     expect(dismissToasts).not.toHaveBeenCalled()
+    rerender(panel(true))
+    expect(dismissToasts).toHaveBeenCalledTimes(1)
+    // A re-render while open must NOT re-sweep — a mid-open sweep would also
+    // close an InfoPopup/tooltip the user opened INSIDE the drawer.
     rerender(panel(true))
     expect(dismissToasts).toHaveBeenCalledTimes(1)
   })

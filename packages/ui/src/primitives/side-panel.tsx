@@ -104,7 +104,9 @@ export function SidePanel({
   // the same reason as Modal — see the comment there. The host's toasts stack
   // above z-50 too and outlive whatever action raised them, so a stale one
   // would float over the drawer just the same — swept via the config seam
-  // (the kit has no toast system of its own).
+  // (the kit has no toast system of its own). The toast half is deliberately
+  // SidePanel-only: modals are short-lived confirms where a toast on top is
+  // tolerable, a drawer is a workspace the user settles into.
   useLayoutEffect(() => {
     if (!open) return
     closeFloatingLayers()
