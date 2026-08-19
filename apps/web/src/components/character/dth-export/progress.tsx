@@ -60,7 +60,7 @@ const warningToastIds: Array<string | number> = []
  * green summary never buries it). Sticky for the same reason the report is —
  * the user is away in Daz/Houdini for most of a run — and dismissed with it.
  */
-export function exportWarningToast(title: string, description?: string): void {
+export function exportWarningToast(title: string, description: string): void {
   warningToastIds.push(toast.warning(title, { duration: Infinity, description }))
 }
 

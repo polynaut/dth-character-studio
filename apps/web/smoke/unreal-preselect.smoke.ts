@@ -542,3 +542,81 @@ test('a REFUSED send fails its rows and complains as an error, not a shrug', asy
   // …and the "open the editor" hint stays off a send that queued nothing.
   await expect(page.getByText(/open the editor if it is closed/)).toHaveCount(0)
 })
+
+test('a Daz run with Skip Houdini arms the send’s own task rows — visible from the file write', async ({
+  page,
+}) => {
+  // The fourth shape of the leg (2026-08-19): Daz runs, Houdini is skipped,
+  // and the send goes off the exports already on disk the moment the batch
+  // reports done. It used to be INVISIBLE — no rows, no status line — from
+  // the job-file write until the editor answered. It is the same run the
+  // Unreal-only send shows now: rows + status line carry the queue, and a
+  // clean queue toasts nothing (the leg's one toast is its outcome).
+  const DAZ_INSTALL = 'C:/Program Files/DAZ 3D/DAZStudio4'
+  const SCRIPTS_ROOT = `${P.dazLib}/Scripts/DTH-Character-Studio`
+  const PENDING_JOB = `${SCRIPTS_ROOT}/dth_exporter_jobs.json`
+  const RUNNING_JOB = `${SCRIPTS_ROOT}/running_dth_exporter_jobs.json`
+  const seed = buildSeed({
+    activeProjectFile: P.dcsp,
+    demo: true,
+    houdiniProject: true,
+    dazInstallFolder: DAZ_INSTALL,
+    unrealProjects: [UPROJECT],
+  })
+  seed.files[`${EXPORT_ROOT}/KiraDefault/DTH_KiraDefault.dth`] = '{}'
+  seed.files[IMPORTED] = 'uasset-fixture'
+  seed.files[`${UPROJECT_DIR}/Plugins/DTHCharacterStudioRunner/DTHCharacterStudioRunner.uplugin`] =
+    JSON.stringify({ Version: UNREAL_BRIDGE_VERSION })
+  // The batch runs the HIDDEN bulk script — a missing one is refused up
+  // front, before any job file (see houdini-export.smoke.ts).
+  seed.files[`${SCRIPTS_ROOT}/Demo/Kira/.Bulk_ROM_Export.dsa`] = '// bulk-export fixture'
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+  await page.getByRole('button', { name: 'DTH Export' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.waitFor()
+
+  // The Daz mode stays where it opened — only the Houdini leg is skipped.
+  await expect(dialog.getByRole('checkbox', { name: /Export KiraDefault/ })).toBeChecked()
+  await dialog.locator('#houdini-mode').click()
+  await page.getByRole('option', { name: /Skip Houdini/ }).click()
+  await dialog.getByRole('checkbox', { name: 'Send to DemoGame' }).check()
+  await dialog.getByRole('button', { name: 'Start' }).click()
+
+  // The batch is handed off, and the Runner (played here) claims + finishes
+  // it — the rename IS the claim, and progress 100 is the studio's cue.
+  await expect
+    .poll(() =>
+      page.evaluate((p) => ((window as any).__tauriMock.files as Map<string, string>).has(p), PENDING_JOB),
+    )
+    .toBe(true)
+  await page.evaluate(
+    ([pending, running]) => {
+      const files = (window as any).__tauriMock.files as Map<string, string>
+      const job = JSON.parse(files.get(pending) ?? '{}')
+      files.delete(pending)
+      files.set(
+        running,
+        JSON.stringify({
+          ...job,
+          progress: 100,
+          jobsDone: job.jobs.length,
+          jobs: job.jobs.map((row: Record<string, unknown>) => ({ ...row, status: 'done' })),
+        }),
+      )
+    },
+    [PENDING_JOB, RUNNING_JOB],
+  )
+
+  // The Daz batch reports — and the send leg does NOT end with it:
+  await expect(page.getByText(/DTH Export finished — 1 scene exported/)).toBeVisible({
+    timeout: 15_000,
+  })
+  // …its rows are on screen with the queue in the status line…
+  await expect(page.locator('[data-task^="ue:"]')).toBeVisible()
+  await expect(page.locator('[data-export-status]')).toContainText(/Unreal; queued for DemoGame/)
+  // …and the clean queue raised no toast of its own.
+  await expect(page.getByText(/Unreal: queued for DemoGame/)).toHaveCount(0)
+})
