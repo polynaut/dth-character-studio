@@ -1273,5 +1273,13 @@ v99 — the export set's ".dthprev" backup stops eating itself, and stops
       deleting the whole block over. It stays because the backup it takes is
       the only reason the measured incident above was recoverable — so #901's
       premise holds for the guard and not for the parking.
+      Known envelope: the corpse-drop can hit a COMPLETE live file in two rare
+      paths (a run dying between the .dth landing and the purge; the restore
+      path peeling one layer off pre-v99 stacked litter next to a good live
+      file). Safe either way - the imminent export regenerates it, and its
+      failure path regresses to the older backup, never to an empty folder.
       No schema change, no migration step. Bumped so Refresh assets reinstalls.
+      NB: keeps the monotonic floor moving - #901, if it ever lands, must now
+      use a number > 99 (and post-v99 its premise is half-spent; see the
+      gotchas-web entry).
 ```

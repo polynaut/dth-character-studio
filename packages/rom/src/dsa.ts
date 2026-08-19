@@ -557,6 +557,17 @@ ${refDirBlock}
   // recorded here rather than in the emitted script, which does not need to
   // carry its own history into every character's Daz library.)
   //
+  // The corpse-drop rule is deliberately allowed two rare false positives: a
+  // run dying in the instants between the .dth landing and the backup purge,
+  // and the restore path resurrecting one layer of pre-v99 stacked litter
+  // ("X.dthprev.dthprev" -> "X.dthprev") beside a restored good "X" - in both,
+  // the live file dropped is COMPLETE, not a corpse. That is safe by the same
+  // argument either way: the export about to run regenerates it, and the worst
+  // case (that export then failing) regresses to the older parked backup - the
+  // folder never ends up holding no complete set at all. Distinguishing a
+  // corpse from a complete file would need content checks DazScript cannot be
+  // trusted with; the envelope is the guarantee, not the diagnosis.
+  //
   // It stays because the OTHER thing it does turned out to matter more: an
   // export that dies partway would otherwise overwrite the previous set in
   // place. Measured 2026-08-19 — the DTH Exporter aborted with "Could not
