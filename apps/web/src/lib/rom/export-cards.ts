@@ -142,6 +142,13 @@ export interface UnrealTarget {
    *  the names are not known here (a run restored into a window that never saw
    *  the panel), not "nothing is sent". */
   sets: Array<UnrealTargetSet>
+  /** The send for THIS project was refused before anything was queued (no
+   *  bridge, no export, a vanished `.uproject`) — its rows are failed work,
+   *  not pending work. Per target, because the shared leg status cannot say
+   *  it: nothing else ever advances a row whose job was never written, so
+   *  without this the row spun at 0% forever (measured 2026-08-19, a bridge
+   *  a `p4 clean` had deleted). */
+  failed?: boolean
 }
 
 export interface UnrealTargetSet {
@@ -174,6 +181,9 @@ export function unrealTaskCards(
   target: UnrealTarget,
   status: ExportTask['status'],
 ): Array<ExportTask> {
+  // A refused send outranks the leg-wide status: the caller's one status says
+  // where the LEG is, and this target is no longer in it.
+  const rowStatus = target.failed === true ? 'failed' : status
   if (target.sets.length === 0) {
     return [
       {
@@ -181,7 +191,7 @@ export function unrealTaskCards(
         label: target.label,
         detail: 'Import',
         kind: 'unreal',
-        status,
+        status: rowStatus,
       },
     ]
   }
@@ -193,7 +203,7 @@ export function unrealTaskCards(
       detail: set.existing === true ? 'Re-import' : 'Import',
       context: target.label,
       kind: 'unreal',
-      status,
+      status: rowStatus,
     }))
 }
 

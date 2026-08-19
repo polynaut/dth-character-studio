@@ -246,6 +246,21 @@ describe('unrealTaskCards', () => {
       { id: `ue:${UPROJECT}`, label: 'workflow3d', detail: 'Import', kind: 'unreal', status: 'active' },
     ])
   })
+
+  it('a refused send FAILS its rows, whatever the leg status says', () => {
+    // The send threw before a job was written (no bridge, no export): nothing
+    // else ever advances these rows, so the leg-wide 'active' left them
+    // spinning at 0% forever. The target's own flag outranks it.
+    const target = {
+      path: UPROJECT,
+      label: 'workflow3d',
+      sets: [{ name: 'LaraClassic', existing: true as const }],
+      failed: true,
+    }
+    expect(unrealTaskCards(target, 'active').map((c) => c.status)).toEqual(['failed'])
+    // …and the sets-unknown fallback row fails the same way.
+    expect(unrealTaskCards({ ...target, sets: [] }, 'active')[0].status).toBe('failed')
+  })
 })
 
 describe('runPercent', () => {

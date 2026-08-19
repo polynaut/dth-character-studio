@@ -479,3 +479,43 @@ test('nothing claims the job and no editor is running — the studio opens the p
     .poll(() => callsNamed(page, 'shell_open_file'), { timeout: 15_000 })
     .toEqual([{ path: UPROJECT }])
 })
+
+test('a REFUSED send fails its rows and complains as an error, not a shrug', async ({ page }) => {
+  // The live shape (2026-08-19): the bridge plugin had been deleted from the
+  // Unreal project (a `p4 clean` — it was neither in the depot nor ignored),
+  // and the send's refusal rode a blue (i) toast while the task row spun
+  // "Re-import · 0%" forever — nothing else ever advances a row whose job was
+  // never written. The refusal must fail the row and speak as a failure.
+  const seed = buildSeed({
+    activeProjectFile: P.dcsp,
+    demo: true,
+    houdiniProject: true,
+    unrealProjects: [UPROJECT],
+  })
+  seed.files[`${EXPORT_ROOT}/KiraDefault/DTH_KiraDefault.dth`] = '{}'
+  seed.files[IMPORTED] = 'uasset-fixture'
+  // NO bridge uplugin in the project — the send refuses before writing a job.
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+  await page.getByRole('button', { name: 'DTH Export' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.waitFor()
+
+  await dialog.locator('#daz-mode').click()
+  await page.getByRole('option', { name: /Skip Daz/ }).click()
+  await dialog.locator('#houdini-mode').click()
+  await page.getByRole('option', { name: /Skip Houdini/ }).click()
+  await dialog.getByRole('checkbox', { name: 'Send to DemoGame' }).check()
+  await dialog.getByRole('button', { name: 'Start' }).click()
+
+  // The refusal is a FAILURE toast naming the cause…
+  await expect(
+    page.getByText(/Unreal: not queued for DemoGame — The DTH Character Studio Runner is not installed/),
+  ).toBeVisible()
+  // …its row is failed, not forever "active" at 0%…
+  await expect(page.locator('[data-task^="ue:"]')).toHaveAttribute('data-task-status', 'failed')
+  // …and the "open the editor" hint stays off a send that queued nothing.
+  await expect(page.getByText(/open the editor if it is closed/)).toHaveCount(0)
+})
