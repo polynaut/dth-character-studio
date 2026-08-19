@@ -906,13 +906,18 @@ function getLocalUserProducts(contentDirs) {
 function getContentFolderProducts(contentDirs, realProducts) {
   var products = [];
 
-  // Folder keys + names already covered by real products, so we don't duplicate them.
+  // Folder keys + names already covered by real products, so we don't duplicate
+  // them. Keyed to the OWNING product (not a bare true): an owned MORPH folder
+  // still yields a hidden record pointing at its owner, so the basename matcher
+  // can search it for files the manifest's capped list dropped.
   var realNames = {};
   var realFolders = {};
   for (var r = 0; r < realProducts.length; r++) {
     realNames[String(realProducts[r].name).toLowerCase()] = true;
     var rf = realProducts[r].folders;
-    if (rf) for (var rk = 0; rk < rf.length; rk++) realFolders[rf[rk]] = true;
+    if (rf) for (var rk = 0; rk < rf.length; rk++) {
+      if (!realFolders[rf[rk]]) realFolders[rf[rk]] = realProducts[r];
+    }
   }
   // The same vendor/product folder present in two mapped libraries (or under two
   // figures' Morphs roots): first one wins.
@@ -936,7 +941,25 @@ function getContentFolderProducts(contentDirs, realProducts) {
     var folderKey = vendor.toLowerCase() + "/" + prod.toLowerCase();
     if (hasOwn(synthSeen, folderKey)) return;
     synthSeen[folderKey] = true;
-    if (realFolders[folderKey] || realNames[prod.toLowerCase()]) return;
+    if (realFolders[folderKey]) {
+      // A morph folder a REAL product owns: keep a HIDDEN record of the folder
+      // pointing at its owner. It takes no part in folder/keyword matching (the
+      // owner already covers those), but the basename matcher lists it — the
+      // manifest's 60-file cap can have dropped exactly the file that would
+      // place a no-source-file morph on this product.
+      if (morphRoot === true) {
+        products.push({
+          name: prod,
+          folders: [folderKey],
+          contentFolder: fullPath,
+          morphRoot: true,
+          ownedBy: realFolders[folderKey],
+          hidden: true,
+        });
+      }
+      return;
+    }
+    if (realNames[prod.toLowerCase()]) return;
     products.push({
       name: prod,
       sku: "",
@@ -1000,7 +1023,9 @@ function getContentFolderProducts(contentDirs, realProducts) {
       print("Content-folder products (" + contentDirs[d] + "): " + e);
     }
   }
-  print("Synthesized " + products.length + " content-folder products");
+  var visible = 0;
+  for (var pv = 0; pv < products.length; pv++) if (!products[pv].hidden) visible++;
+  print("Synthesized " + visible + " content-folder products");
   return products;
 }
 
@@ -1223,7 +1248,14 @@ function findProductMatches(usedAssets, installedProducts, knownGenesisVersion, 
   // parent/child attribution): place anything no real product claimed onto a
   // synthesized content-folder product. Reached only by assets the metadata-backed
   // products didn't match, so it never overrides or duplicates a real product.
-  unmatched = matchContentFolderProducts(unmatched, matches, contentFolderProducts, skinFolders);
+  unmatched = matchContentFolderProducts(
+    unmatched,
+    matches,
+    contentFolderProducts,
+    skinFolders,
+    installedProducts,
+    sceneGenesisVersion
+  );
 
   // Structural attribution passes, run to a FIXPOINT. Each can create a match that
   // unblocks another, so a single ordered sweep isn't enough: a decoration's parent
@@ -1661,17 +1693,77 @@ function textureFolderProduct(rawPath, key) {
   };
 }
 
-// Basename → product index over the synthesized MORPH-root products' own folders.
-// A morph modifier often exposes NO source file at all (measured on a
-// hand-installed G8.1 morph: getAssetUri / getAssetFileInfo / getAssetId all
-// empty, while the Parameter Settings dialog happily shows the .dsf), so the only
-// evidence left is that a Morphs/<Vendor>/<Product> folder holds a file named
-// like the morph. Bounded per product so a giant folder can't spin.
-function buildMorphFileIndex(synthProducts) {
+// Does a content path belong to the scene's Genesis generation's figure root?
+// Used only to RANK basename candidates — vendors ship same-named morph files
+// for several generations (Shape Shift installs a "Waist Shape.dsf" under both
+// the G3 and the G8 Morphs roots), and the file under the scene's own figure
+// root is the one actually loaded.
+function pathMatchesGenesis(lowPath, v) {
+  if (!v) return false;
+  if (v === 9) return lowPath.indexOf("genesis 9") !== -1;
+  if (v === 8 || v === 8.1) return lowPath.indexOf("genesis 8") !== -1;
+  if (v === 3) return lowPath.indexOf("genesis 3") !== -1;
+  if (v === 2) return lowPath.indexOf("genesis 2") !== -1;
+  return false;
+}
+
+// Normalise for containment checks against a morph's parameter path: lowercase,
+// spaces/underscores/dashes stripped — the same shape nodeFileKeys produces.
+function squashName(s) {
+  return String(s || "").toLowerCase().replace(/[\s_\-]+/g, "");
+}
+
+// Basename → candidate-list index for the morph matcher. A morph modifier often
+// exposes NO source file at all (measured on a hand-installed G8.1 morph:
+// getAssetUri / getAssetFileInfo / getAssetId all empty, while the Parameter
+// Settings dialog happily shows the .dsf), so the remaining evidence is a
+// morph FILE named like it. Three sources, most authoritative first:
+//   • a REAL product's manifest morph-file list ("Manifest Match"),
+//   • a REAL product's owned Morphs folder, listed on disk — for the files the
+//     manifest's capped list dropped ("Folder Match", via the hidden records),
+//   • a synthesized morph-root folder's own files ("Content Folder Match").
+// Each candidate carries its product segment + generation fit for ranking.
+// Bounded per folder so a giant morph pack can't spin.
+function buildMorphFileIndex(installedProducts, synthProducts, sceneGenesisVersion) {
   var index = {};
-  for (var i = 0; i < synthProducts.length; i++) {
+  function add(baseKey, product, method, seg, gen) {
+    if (!baseKey) return;
+    if (!hasOwn(index, baseKey)) index[baseKey] = [];
+    index[baseKey].push({ product: product, method: method, seg: squashName(seg), gen: gen });
+  }
+  function segOfKey(folderKey) {
+    var si = String(folderKey || "").indexOf("/");
+    return si === -1 ? String(folderKey || "") : String(folderKey).substring(si + 1);
+  }
+
+  // 1) Manifest morph files of every installed product.
+  for (var p = 0; p < installedProducts.length; p++) {
+    var product = installedProducts[p];
+    if (!product.files) continue;
+    for (var f = 0; f < product.files.length; f++) {
+      var file = String(product.files[f]).toLowerCase();
+      if (file.indexOf("morphs/") === -1) continue;
+      add(
+        manifestFileKey(file),
+        product,
+        "Manifest Match",
+        segOfKey(productFolderKey(file)),
+        pathMatchesGenesis(file, sceneGenesisVersion)
+      );
+    }
+  }
+
+  // 2) + 3) Folder listings: hidden owned-folder records and synthesized
+  // morph-root products alike.
+  var foldersListed = 0;
+  for (var i = 0; i < synthProducts.length && foldersListed < 300; i++) {
     var sp = synthProducts[i];
     if (!sp.morphRoot || !sp.contentFolder) continue;
+    foldersListed++;
+    var owner = sp.ownedBy || sp;
+    var method = sp.ownedBy ? "Folder Match" : "Content Folder Match";
+    var seg = segOfKey(sp.folders && sp.folders[0]);
+    var gen = pathMatchesGenesis(String(sp.contentFolder).toLowerCase(), sceneGenesisVersion);
     var queue = [sp.contentFolder];
     var visited = 0;
     var taken = 0;
@@ -1686,11 +1778,8 @@ function buildMorphFileIndex(synthProducts) {
         if (name === "." || name === "..") continue;
         var low = name.toLowerCase();
         if (/\.(dsf|duf)$/.test(low)) {
-          var bk = manifestFileKey(name);
-          if (bk && !hasOwn(index, bk)) {
-            index[bk] = sp;
-            taken++;
-          }
+          add(manifestFileKey(name), owner, method, seg, gen);
+          taken++;
         } else if (new DzDir(dirPath + "/" + name).exists()) {
           queue.push(dirPath + "/" + name);
         }
@@ -1700,14 +1789,48 @@ function buildMorphFileIndex(synthProducts) {
   return index;
 }
 
+// Pick the best basename candidate for a morph: generation fit outweighs the
+// parameter-path hint (a morph's Path often names its product — "Actor/Waist/
+// Real World/Shape Shift/Waist"), first candidate wins ties. Returns
+// { product, method } or null.
+function matchMorphByFile(asset, morphFileIndex) {
+  var keys = nodeFileKeys(asset);
+  var pathNorm = squashName(asset.path);
+  var best = null;
+  var bestScore = -1;
+  for (var k = 0; k < keys.length; k++) {
+    if (!hasOwn(morphFileIndex, keys[k])) continue;
+    var cands = morphFileIndex[keys[k]];
+    for (var c = 0; c < cands.length; c++) {
+      var cand = cands[c];
+      var score = (cand.gen ? 2 : 0) + (cand.seg && pathNorm.indexOf(cand.seg) !== -1 ? 1 : 0);
+      if (score > bestScore) {
+        bestScore = score;
+        best = cand;
+      }
+    }
+  }
+  return best;
+}
+
 // Run the content-folder last-resort over the still-unmatched assets, indexing the
-// synthesized products by folder key and by name keyword. Returns the leftover list.
-function matchContentFolderProducts(unmatched, matches, synthProducts, skinFolders) {
+// synthesized products by folder key and by name keyword. `installedProducts` +
+// `sceneGenesisVersion` feed the morph basename matcher. Returns the leftover list.
+function matchContentFolderProducts(
+  unmatched,
+  matches,
+  synthProducts,
+  skinFolders,
+  installedProducts,
+  sceneGenesisVersion
+) {
   synthProducts = synthProducts || [];
+  installedProducts = installedProducts || [];
   var synthFolderIndex = {};
   var synthKeywordMap = {};
   for (var i = 0; i < synthProducts.length; i++) {
     var sp = synthProducts[i];
+    if (sp.hidden) continue; // owned-folder record — basename matcher only
     if (sp.folders) {
       for (var f = 0; f < sp.folders.length; f++) {
         if (sp.folders[f] && !hasOwn(synthFolderIndex, sp.folders[f])) {
@@ -1727,6 +1850,7 @@ function matchContentFolderProducts(unmatched, matches, synthProducts, skinFolde
   var still = [];
   for (var u = 0; u < unmatched.length; u++) {
     var asset = unmatched[u];
+    var method = "Content Folder Match";
     var prod = findContentFolderMatch(asset, synthFolderIndex, synthKeywordMap, skinFolders);
 
     // A node whose textures live in a folder nothing owns: that folder IS the
@@ -1745,18 +1869,22 @@ function matchContentFolderProducts(unmatched, matches, synthProducts, skinFolde
       }
     }
 
-    // A morph with no source file: find a synthesized morph-root folder holding
-    // a .dsf named like it.
+    // A morph with no source file: find a morph FILE named like it — in a real
+    // product's manifest, a real product's owned Morphs folder, or a
+    // synthesized morph-root folder.
     if (!prod && asset.type === "Morph") {
-      if (morphFileIndex === null) morphFileIndex = buildMorphFileIndex(synthProducts);
-      var mkeys = nodeFileKeys(asset);
-      for (var km = 0; km < mkeys.length && !prod; km++) {
-        if (hasOwn(morphFileIndex, mkeys[km])) prod = morphFileIndex[mkeys[km]];
+      if (morphFileIndex === null) {
+        morphFileIndex = buildMorphFileIndex(installedProducts, synthProducts, sceneGenesisVersion);
+      }
+      var hit = matchMorphByFile(asset, morphFileIndex);
+      if (hit) {
+        prod = hit.product;
+        method = hit.method;
       }
     }
 
     if (prod) {
-      matches.push({ asset: asset, product: prod, method: "Content Folder Match" });
+      matches.push({ asset: asset, product: prod, method: method });
     } else {
       still.push(asset);
     }

@@ -55,7 +55,7 @@ const RUNTIME_ASSETS = [
 // Bump this together with RUNTIME_VERSION whenever a runtime file legitimately
 // changes (this run prints the new value in the failure message).
 const EXPECTED_RUNTIME_HASH =
-  'cfd80d83b9639911387043803849197043b6c25f3b05b1afb838bf6ac341fac4'
+  '09dcf5c9b02eda380cefce7eab5c1be350a35822f4e006acd12ce9b209fcdae5'
 
 function runtimeHash(): string {
   const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
@@ -1499,5 +1499,90 @@ describe('morph basename matching (DthProducts.dsa)', () => {
     expect(result.unmatched).toEqual([])
     expect(result.matches[0].method).toBe('Content Folder Match')
     expect(result.matches[0].product.name).toBe('GC Bodymorph')
+  })
+})
+
+describe('no-source-file morphs of REAL products (DthProducts.dsa)', () => {
+  const morph = (name: string, path: string) => ({
+    type: 'Morph',
+    name,
+    technicalName: name,
+    details: 'Value: -0.167',
+    value: -0.167,
+    sourceFile: '', // what the scan actually sees (measured)
+    path,
+    textures: [],
+  })
+  const product = (name: string, files: Array<string>, folders: Array<string> = []) => ({
+    name,
+    sku: '23127-1',
+    artist: 'Zev0',
+    version: '1.0',
+    productType: 'Morphs',
+    files,
+    folders,
+  })
+
+  it('matches through the manifest morph-file list ("Manifest Match")', () => {
+    // The real Waist Shape case: a Shape Shift morph dialed on the figure,
+    // exposing no source file — but the product's DIM manifest lists the .dsf.
+    const { findProductMatches } = loadMatching()
+    const result = findProductMatches(
+      [morph('Waist Shape', 'Actor/Waist/Real World/Shape Shift/Waist')],
+      [product('Shape Shift', ['data/daz 3d/genesis 8/female/morphs/zev0/shape shift/waist shape.dsf'])],
+      8.1,
+      [],
+    )
+    expect(result.unmatched).toEqual([])
+    expect(result.matches[0].method).toBe('Manifest Match')
+    expect(result.matches[0].product.name).toBe('Shape Shift')
+  })
+
+  it('prefers the file under the scene generation and the path-named product', () => {
+    // Vendors ship the SAME basename per generation; the G8 scene must land on
+    // the G8 product, not the G3 one that happens to sort first.
+    const { findProductMatches } = loadMatching()
+    const g3 = product('Shape Shift for Genesis 3', [
+      'data/daz 3d/genesis 3/female/morphs/zev0/shape shift/waist shape.dsf',
+    ])
+    const g8 = product('Shape Shift Genesis 8', [
+      'data/daz 3d/genesis 8/female/morphs/zev0/shape shift/waist shape.dsf',
+    ])
+    const result = findProductMatches(
+      [morph('Waist Shape', 'Actor/Waist/Real World/Shape Shift/Waist')],
+      [g3, g8],
+      8,
+      [],
+    )
+    expect(result.matches[0].product.name).toBe('Shape Shift Genesis 8')
+  })
+
+  it('lists a real product\'s OWNED morph folder for files past the manifest cap', () => {
+    // The manifest's capped file list dropped the .dsf, but the product owns
+    // the folder — the hidden ownedBy record lets the basename matcher list it
+    // on disk and attribute the morph to the REAL product ("Folder Match").
+    const LIB = 'C:/Lib'
+    const dirs = [
+      'data',
+      'data/DAZ 3D',
+      'data/DAZ 3D/Genesis 8',
+      'data/DAZ 3D/Genesis 8/Female',
+      'data/DAZ 3D/Genesis 8/Female/Morphs',
+      'data/DAZ 3D/Genesis 8/Female/Morphs/Zev0',
+      'data/DAZ 3D/Genesis 8/Female/Morphs/Zev0/Shape Shift',
+    ].map((p) => `${LIB}/${p}`)
+    const files = [`${LIB}/data/DAZ 3D/Genesis 8/Female/Morphs/Zev0/Shape Shift/Waist Shape.dsf`]
+    const mod = loadMatching(dirs, undefined, files)
+    const shapeShift = product('Shape Shift', [], ['zev0/shape shift'])
+    const synth = mod.getContentFolderProducts([LIB], [shapeShift])
+    const result = mod.findProductMatches(
+      [morph('Waist Shape', 'Actor/Waist/Real World/Shape Shift/Waist')],
+      [shapeShift],
+      8.1,
+      synth,
+    )
+    expect(result.unmatched).toEqual([])
+    expect(result.matches[0].method).toBe('Folder Match')
+    expect(result.matches[0].product.name).toBe('Shape Shift')
   })
 })

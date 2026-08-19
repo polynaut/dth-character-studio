@@ -1141,4 +1141,19 @@ v80 — no unattended carrier opens a modal, and the missing-runtime message sto
       88 because a dev install had already stamped the v88 marker — a second
       iteration inside one number never reinstalls (gotchas-daz.md).
       No schema change, no migration step.
+ 90 — a no-source-file morph belonging to a REAL product finds its way home.
+      The v89 basename matcher searched only SYNTHESIZED morph folders, but an
+      owned folder (e.g. Zev0/Shape Shift, manifest-backed) is excluded from
+      synthesis — so "Waist Shape" (real .dsf under the G8F Morphs root,
+      exposing no source file to the scan APIs) stayed unmatched. The basename
+      index now spans three sources: every installed product's manifest
+      morph-file list ("Manifest Match"), the real-owned Morphs folders listed
+      on disk via hidden ownedBy records (for files the manifest's 60-file cap
+      dropped — "Folder Match"), and the synthesized folders as before.
+      Candidates are RANKED, not first-wins: generation fit (the G8 file over
+      the G3 file for the same basename — vendors ship same-named morphs per
+      generation) outweighs the parameter-path hint (a morph's Path often
+      names its product: "Actor/Waist/Real World/Shape Shift/Waist").
+      v90 not 89: the dev install had stamped v89 (same reinstall trap as 88).
+      No schema change, no migration step.
 ```

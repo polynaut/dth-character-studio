@@ -483,9 +483,15 @@ surface as a banner + add wizard instead of waiting for a manual pick/drop.
   measured on a real library where v88 still left 9 unmatched.** A morph
   frequently exposes NO source file to the scan APIs (`getAssetUri` /
   `getAssetFileInfo` / `getAssetId` all empty while Parameter Settings shows
-  the .dsf), so `matchContentFolderProducts` lists the synthesized morph-root
-  folders (`morphRoot: true`, bounded BFS) and matches a morph to the folder
-  holding a .dsf named like it. FLAT texture layouts
+  the .dsf), so `matchContentFolderProducts` matches a morph to the morph FILE
+  named like it (`buildMorphFileIndex` / `matchMorphByFile`, v90): real
+  products' manifest morph files ("Manifest Match"), real products' owned
+  Morphs folders listed on disk via hidden `ownedBy` records — for files past
+  the manifest's 60-file cap ("Folder Match") — and the synthesized morph-root
+  folders (`morphRoot: true`, bounded BFS, "Content Folder Match"). Candidates
+  are ranked: generation fit (vendors ship same-named morph files per
+  generation) outweighs the parameter-path hint (a morph's Path often names
+  its product). FLAT texture layouts
   (`Runtime/textures/<Product>/<file>.jpg`) key by the folder alone (the old
   two-segment key swallowed the filename), and an unmatched node's unowned
   texture folder becomes a product ON DEMAND (`textureFolderProduct`, no
