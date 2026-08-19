@@ -64,6 +64,27 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   that one became a `while (s.endsWith('_'))` loop.
   A *global, unanchored* replace (`/_+/g`, `/[^A-Za-z0-9_]+/g`) is fine — every
   match consumes, so there is nothing to backtrack.
+- **A dismissed CodeQL alert comes back as a NEW open alert when the flagged
+  line changes** — the fingerprint hashes the sink line's content, so touching
+  it (even adding an inline `style` prop) re-files the same finding under a
+  fresh number and fails the PR's CodeQL check; the dismissal and its comment
+  stay behind on the dead number. Measured three times on the
+  `js/xss-through-dom` avatar `<img src>` sinks: alert #2 (avatar.tsx, dismissed
+  2026-07-20 as FP) resurfaced as #9 when #903 added the offset style to that
+  line; #4 (portrait.tsx, dismissed 2026-07-24) was marked "fixed" and
+  re-created as #8 in the same second when a later merge changed its line; and
+  #8's own dismissal (2026-08-18 15:45) re-filed as #11 two hours later when
+  #903's merge landed the offset style on the portrait sink — handled per this
+  playbook 2026-08-19. The class itself is a
+  false positive CodeQL cannot see past: every path from a stored avatar
+  reference to an `<img src>` ends in the `safeImgSrc` scheme allowlist
+  (portrait.tsx — `usePortraitSrc` always did; `useVariantSrc` and
+  `useResolvedImage` since #903, which is the gap re-verifying the rationale
+  caught), and CodeQL does not model the regex check as a sanitizer. On
+  recurrence: first VERIFY the allowlist still covers the flagged flow, then
+  re-dismiss as FP citing alert #2's rationale — don't contort the code to
+  satisfy the query. The dismissal-comment API field caps at 280 characters
+  (HTTP 422 past it), so cite #2 by number instead of restating the rationale.
 - **Unreal decides a plugin fits by `BuildId` EQUALITY, not by any version
   label.** Measured 2026-08-12. The engine carries one in
   `Engine/Binaries/Win64/UnrealEditor.modules`, every built plugin in
