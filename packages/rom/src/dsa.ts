@@ -540,29 +540,70 @@ ${refDirBlock}
     }
 `
     : ''
-  // Clear THIS set's previous output before the exporter runs. Measured
-  // 2026-08-11 (DS4 exporter plugin 2.0.2, DS 4.24): a scripted doExport whose
-  // output files already exist SKIPS the per-frame ROM walk and rewrites them
-  // as a single static frame — fresh mtimes, rest-pose content, no error
-  // anywhere (26 s and an 8 MB Alembic against the same scene's 3.5 min and
-  // 332 MB into an empty folder). Deleting the old set first forces the real
-  // walk; DS6 never skipped, and a fresh set also stops stale files (a renamed
-  // hair item's grooms, a changed frame layout's reference skeletons)
-  // lingering beside it. Only the set's OWN name patterns are removed —
-  // anything else in the folder (a user's zip, another scene's set) is not
-  // ours to touch. DzFile.remove + DzDir.entryList are the runtime's own
-  // DS4-proven idioms (DthProducts.dsa).
-  const clearPreviousSetBlock = `    // Runtime v85: the sweep MOVES the previous set aside (".dthprev" suffix)
-    // instead of deleting it. The DS4 skip-guard above only needs the expected
-    // output NAMES absent before doExport; deleting outright meant a run that
-    // failed AFTER this sweep — an exporter exception, a plugin refusal — left
-    // the set's folder EMPTY (measured 2026-08-18: a failed re-export deleted
-    // the primary set, and the Houdini project's auto-loading PoseAsset CSV
-    // with it). dthFinishPreviousSet below gives the set back on failure and
-    // drops the backups on success. DzDir.rename is capability-gated (its
-    // presence is unmeasured on DS4): where it is missing or refuses, the old
-    // destructive remove keeps the skip-guard intact — no worse than before.
+  // Park THIS set's previous output before the exporter runs, so a failed
+  // export can be undone.
+  //
+  // This block was BORN as a DS4 workaround: measured 2026-08-11 (exporter
+  // plugin 2.0.2, DS 4.24), a scripted doExport whose output files already
+  // existed SKIPPED the per-frame ROM walk and rewrote them as one static
+  // frame — 26 s and an 8 MB Alembic against the same scene's 3.5 min and
+  // 332 MB into an empty folder. That bug is FIXED in the current plugin, so
+  // the skip-guard is no longer why this runs (see #901, which proposed
+  // deleting the block outright on exactly that ground).
+  //
+  // (The rule inside `dthMoveAside` used to read "a backup a failed run left
+  // behind is superseded the moment a live file exists again - the live file is
+  // the newer good state". That is the sentence runtime v99 falsified; it is
+  // recorded here rather than in the emitted script, which does not need to
+  // carry its own history into every character's Daz library.)
+  //
+  // The corpse-drop rule is deliberately allowed two rare false positives: a
+  // run dying in the instants between the .dth landing and the backup purge,
+  // and the restore path resurrecting one layer of pre-v99 stacked litter
+  // ("X.dthprev.dthprev" -> "X.dthprev") beside a restored good "X" - in both,
+  // the live file dropped is COMPLETE, not a corpse. That is safe by the same
+  // argument either way: the export about to run regenerates it, and the worst
+  // case (that export then failing) regresses to the older parked backup - the
+  // folder never ends up holding no complete set at all. Distinguishing a
+  // corpse from a complete file would need content checks DazScript cannot be
+  // trusted with; the envelope is the guarantee, not the diagnosis.
+  //
+  // It stays because the OTHER thing it does turned out to matter more: an
+  // export that dies partway would otherwise overwrite the previous set in
+  // place. Measured 2026-08-19 — the DTH Exporter aborted with "Could not
+  // create alembic archive", leaving a 0-byte `.dth` and a 29 MB fragment of
+  // an Alembic; the only reason the real 807 MB export, both `.fbx`s and the
+  // PoseAsset CSV still existed was that this block had parked them first.
+  // Runtime v99 keeps the parking and drops the guard's rationale.
+  //
+  // A fresh set also stops stale files (a renamed hair item's grooms, a
+  // changed frame layout's reference skeletons) lingering beside it. Only the
+  // set's OWN name patterns are touched — anything else in the folder (a
+  // user's zip, another scene's set) is not ours to move. DzFile.remove +
+  // DzDir.entryList are the runtime's own DS4-proven idioms (DthProducts.dsa).
+  const clearPreviousSetBlock = `    // Runtime v85: the previous set is MOVED aside (".dthprev" suffix) rather
+    // than deleted, so a run that fails after this point can be undone -
+    // deleting outright left the folder EMPTY (measured 2026-08-18: a failed
+    // re-export deleted the primary set and the Houdini project's
+    // auto-loading PoseAsset CSV with it). dthFinishPreviousSet below gives
+    // the set back on failure and drops the backups on success.
+    // DzDir.rename is capability-gated (its presence is unmeasured on DS4):
+    // where it is missing or refuses, the file is removed instead - no worse
+    // than the pre-v85 behaviour.
     var dthPrevSuffix = ".dthprev";
+    // Does this file BELONG to the set - i.e. is it live output, not a backup?
+    // Every plain name is an exact match; the hair alembics can only be matched
+    // by shape, and that test used to be a SUBSTRING ("_grooms.abc" anywhere),
+    // which also matched their own "<...>_grooms.abc.dthprev" backups. Each run
+    // therefore parked the previous backup again - measured 2026-08-19, a real
+    // project carrying "_grooms.abc.dthprev.dthprev" AND
+    // "_grooms.abc.dthprev.dthprev.dthprev.dthprev", with no live hair alembic
+    // left at all. It has to END with the suffix (no String.endsWith in this
+    // engine, hence the lastIndexOf shape).
+    var dthEndsWith = function (dthName, dthTail) {
+        var dthAt = dthName.length - dthTail.length;
+        return dthAt >= 0 && dthName.lastIndexOf(dthTail) == dthAt;
+    };
     var dthOwnSetFile = function (dthName) {
         return dthName == dthExportName + ".dth" ||
             dthName == dthExportName + ".abc" ||
@@ -570,13 +611,23 @@ ${refDirBlock}
             dthName == dthExportName + "_base.fbx" ||
             dthName == dthExportName + "_experimental_rom.fbx" ||
             dthName == dthExportName + "_pose_asset.csv" ||
-            (dthName.indexOf(dthExportName + "_Hair_") == 0 && dthName.indexOf("_grooms.abc") > 0);
+            (dthName.indexOf(dthExportName + "_Hair_") == 0 && dthEndsWith(dthName, "_grooms.abc"));
     };
     var dthMoveAside = function (dthDirObj, dthName) {
         var dthPrevName = dthName + dthPrevSuffix;
-        // A backup a FAILED run left behind is superseded the moment a live
-        // file exists again - the live file is the newer good state.
-        if (dthDirObj.exists(dthPrevName)) new DzFile(dthDirObj.absoluteFilePath(dthPrevName)).remove();
+        // An EXISTING backup means the previous run never reached its finish
+        // step: it neither purged its backups (success) nor renamed them back
+        // (failure), so it DIED - and that backup is the newest copy anything
+        // ever finished writing. The live file beside it is the corpse that run
+        // left behind. Keep the backup; drop the corpse.
+        //
+        // Measured 2026-08-19: Daz aborted mid-Alembic and left a 0-byte .dth
+        // beside a 29 MB fragment of an 807 MB export. The rule used to run the
+        // other way, and would have deleted the real 807 MB backup to park
+        // those. (Runtime v99; the full account is in schema-history.)
+        if (dthDirObj.exists(dthPrevName)) {
+            return new DzFile(dthDirObj.absoluteFilePath(dthName)).remove();
+        }
         if (typeof dthDirObj.rename == "function" && dthDirObj.rename(dthName, dthPrevName)) return true;
         return new DzFile(dthDirObj.absoluteFilePath(dthName)).remove();
     };
