@@ -263,11 +263,30 @@ export function LinkedAssetCard({
         </span>
       )}
 
-      {/* Bottom-right controls: a hover remove button + the always-present open
-          affordance. `pointer-events-none` on the wrapper lets the plain open
-          icon (non-selectable mode) fall through to the card button; each real
-          button re-enables pointer events. */}
+      {/* Bottom-right controls, destructive-to-primary left to right: the hover
+          remove (bin) button FIRST, then replace/utils, the always-present open
+          affordance last — the bin sits farthest from the open action so a
+          hurried open never grazes it. `pointer-events-none` on the wrapper
+          lets the plain open icon (non-selectable mode) fall through to the
+          card button; each real button re-enables pointer events. */}
       <div className="pointer-events-none absolute right-2 bottom-2 flex items-center gap-0.5">
+        {onRemove && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            // The adornment recipe (the chip pencil's style, size aside):
+            // ghost at rest, solid #333 + white/20 edge + shadow on hover —
+            // the ghost accent tint muddied on the tinted card surfaces. The
+            // dark: pair is required — ghost's own dark:hover:bg-accent/50
+            // would win the cascade.
+            className="group/del pointer-events-auto border border-transparent opacity-0 transition-opacity group-hover/card:opacity-100 focus-visible:opacity-100 hover:border-white/20 hover:bg-[#333] hover:shadow-sm dark:hover:bg-[#333]"
+            title={removeTitle}
+            aria-label={removeTitle}
+            onClick={onRemove}
+          >
+            <Trash2 className="size-3.5 text-muted-foreground transition-colors group-hover/del:text-destructive" />
+          </Button>
+        )}
         {onReplace && (
           // The span carries the tooltip: a DISABLED button emits no hover
           // events, so a title on it alone would never appear — and the whole
@@ -276,7 +295,7 @@ export function LinkedAssetCard({
             <Button
               variant="ghost"
               size="icon-sm"
-              // Same adornment recipe as the remove button below.
+              // Same adornment recipe as the remove button above.
               className="group/repl pointer-events-auto border border-transparent opacity-0 transition-opacity group-hover/card:opacity-100 focus-visible:opacity-100 hover:border-white/20 hover:bg-[#333] hover:shadow-sm dark:hover:bg-[#333]"
               title={replaceTitle}
               aria-label={replaceTitle}
@@ -299,23 +318,6 @@ export function LinkedAssetCard({
             onClick={onUtils}
           >
             <Wrench className="size-3.5 text-muted-foreground transition-colors group-hover/utils:text-foreground" />
-          </Button>
-        )}
-        {onRemove && (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            // The adornment recipe (the chip pencil's style, size aside):
-            // ghost at rest, solid #333 + white/20 edge + shadow on hover —
-            // the ghost accent tint muddied on the tinted card surfaces. The
-            // dark: pair is required — ghost's own dark:hover:bg-accent/50
-            // would win the cascade.
-            className="group/del pointer-events-auto border border-transparent opacity-0 transition-opacity group-hover/card:opacity-100 focus-visible:opacity-100 hover:border-white/20 hover:bg-[#333] hover:shadow-sm dark:hover:bg-[#333]"
-            title={removeTitle}
-            aria-label={removeTitle}
-            onClick={onRemove}
-          >
-            <Trash2 className="size-3.5 text-muted-foreground transition-colors group-hover/del:text-destructive" />
           </Button>
         )}
         {cornerOpens ? (
