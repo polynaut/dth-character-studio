@@ -1173,4 +1173,10 @@ v80 — no unattended carrier opens a modal, and the missing-runtime message sto
       capped `files` list, and the folder listing budget is 40 dirs/400 files.
       v91 not 90: the dev install had stamped v90 (same reinstall trap).
       No schema change, no migration step.
+ 92 — a folder-derived product's CSV row carries the identifying folder in the
+      otherwise-unused source_file column, so the Products tab can show WHERE
+      a "Content Folder Match" came from (expanded row, `contentFolder` on
+      productRecordSchema — additive zod default, no character-schema bump;
+      merge keeps the first non-empty folder so an old scan can't blank it).
+      No schema change, no migration step.
 ```

@@ -26,6 +26,7 @@ describe('parseProductScanCsv', () => {
         version: '1.0',
         productType: 'Anatomy',
         matchMethod: 'SKU Match',
+        contentFolder: '',
         usage: 'Genitalia',
         usedBy: 'GoldenPalace_G9',
         scenes: [],
@@ -42,6 +43,43 @@ describe('parseProductScanCsv', () => {
         scenes: [],
       },
     ])
+  })
+
+  it('reads the identifying folder of a Content Folder Match product', () => {
+    // Product rows carry the folder in the otherwise-unused source_file column.
+    const csv = [
+      HEADER,
+      'product,GC Lara Croft COD,,,,Content folder,Content Folder Match,,,D:/Lib/Runtime/textures/GC Lara Croft COD,Clothing,Backpack (Node)',
+    ].join('\n')
+    const scan = parseProductScanCsv(csv)
+    expect(scan.products[0].contentFolder).toBe('D:/Lib/Runtime/textures/GC Lara Croft COD')
+  })
+
+  it('keeps the first non-empty content folder across merged scenes', () => {
+    // A scan from an older runtime carries no folder; merging it first must not
+    // blank the folder a newer scan recorded.
+    const product = (contentFolder: string) => ({
+      name: 'GC Lara Croft COD',
+      sku: '',
+      artist: '',
+      version: '',
+      productType: 'Content folder',
+      matchMethod: 'Content Folder Match',
+      contentFolder,
+      usage: '',
+      usedBy: '',
+      scenes: [],
+    })
+    const merged = mergeProductScans([
+      { sceneName: 'A', scenePath: '', products: [product('')], unmatched: [] },
+      {
+        sceneName: 'B',
+        scenePath: '',
+        products: [product('D:/Lib/Runtime/textures/GC Lara Croft COD')],
+        unmatched: [],
+      },
+    ])
+    expect(merged.products[0].contentFolder).toBe('D:/Lib/Runtime/textures/GC Lara Croft COD')
   })
 
   it('reads the scene meta row (name + path)', () => {
@@ -155,6 +193,7 @@ describe('mergeProductScans', () => {
       version: '',
       productType: '',
       matchMethod: '',
+      contentFolder: '',
       usage: '',
       usedBy: '',
       scenes: [],
@@ -230,6 +269,7 @@ function makeProduct(over: Partial<ProductScan['products'][number]>): ProductSca
     version: '',
     productType: '',
     matchMethod: '',
+    contentFolder: '',
     usage: '',
     usedBy: '',
     scenes: [],

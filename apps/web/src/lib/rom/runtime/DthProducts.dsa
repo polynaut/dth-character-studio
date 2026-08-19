@@ -2251,7 +2251,10 @@ function writeProductsCsv(outputCsvPath, matchResults, sceneName, scenePath, bQu
         csvField(info.methods.join("; ")),
         "",
         "",
-        "",
+        // A folder-derived product carries the folder it was identified from
+        // (in the otherwise-unused source_file column), so the studio can show
+        // WHERE a Content Folder Match came from. '' for manifest products.
+        csvField(p.contentFolder || ""),
         csvField(info.roles.join("; ")),
         csvField(info.assets.join("; "))
       ].join(",")

@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { runInNewContext } from 'node:vm'
 
-import { RUNTIME_VERSION, nonAsciiStringLiterals } from '@dth/rom'
+import { RUNTIME_VERSION, nonAsciiStringLiterals, parseProductScanCsv } from '@dth/rom'
 import { describe, expect, it } from 'vitest'
 
 // The DTH Daz runtime (.dsa) is bundled + installed by the studio; it descends
@@ -55,7 +55,7 @@ const RUNTIME_ASSETS = [
 // Bump this together with RUNTIME_VERSION whenever a runtime file legitimately
 // changes (this run prints the new value in the failure message).
 const EXPECTED_RUNTIME_HASH =
-  'e0f1d30f4bd370db044c2028db0fe8e9872d43023cc4f428c2c81c89dd001874'
+  'f2992af856217ef472500dbaae0e682ff309545e42b4f0f34470af55e8dc308c'
 
 function runtimeHash(): string {
   const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
@@ -1135,10 +1135,17 @@ interface MatchingModule {
     path: string,
   ) => { name: string; files: Array<string>; morphKeys: Array<string> } | null
   getUsedAssets: () => Array<{ type: string; name: string }>
+  writeProductsCsv: (
+    outputCsvPath: string,
+    matchResults: { matches: Array<unknown>; unmatched: Array<unknown> },
+    sceneName: string,
+    scenePath: string,
+    quiet?: boolean,
+  ) => boolean
 }
 
 const MATCHING_EXPORTS =
-  'productFolderKey, getContentDirectories, getContentFolderProducts, findProductMatches, parseManifestFile, getUsedAssets'
+  'productFolderKey, getContentDirectories, getContentFolderProducts, findProductMatches, parseManifestFile, getUsedAssets, writeProductsCsv'
 
 /**
  * Load DthProducts.dsa over an in-memory directory tree (`dirs` are the existing
@@ -1152,7 +1159,12 @@ function loadMatching(
   dirs: Array<string> = [],
   appContentDirs?: Array<string>,
   files: Array<string> = [],
-  extra: { fileContents?: Record<string, string>; sceneNodes?: Array<unknown> } = {},
+  extra: {
+    fileContents?: Record<string, string>
+    sceneNodes?: Array<unknown>
+    /** When given, every DzFile write lands here (keyed by path) and opens succeed. */
+    captureWrites?: Record<string, string>
+  } = {},
 ): MatchingModule {
   const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
   const src = readFileSync(join(dir, 'DthProducts.dsa'), 'utf8')
@@ -1195,12 +1207,16 @@ function loadMatching(
     Truncate = 4
     constructor(public p: string) {}
     open() {
-      return Object.hasOwn(fileContents, this.p)
+      return Object.hasOwn(fileContents, this.p) || extra.captureWrites !== undefined
     }
     read() {
       return fileContents[this.p] ?? ''
     }
-    write() {}
+    write(s: string) {
+      if (extra.captureWrites) {
+        extra.captureWrites[this.p] = (extra.captureWrites[this.p] ?? '') + s
+      }
+    }
     close() {}
   }
   const sandbox: Record<string, unknown> = {
@@ -1749,5 +1765,46 @@ describe('child-node morphs are the node product\'s own (DthProducts.dsa)', () =
     const morphs = assets.filter((a) => a.type === 'Morph').map((a) => a.name)
     expect(morphs).toEqual(['GC BodyMorph']) // the figure's copy only
     expect(assets.filter((a) => a.type === 'Node')).toHaveLength(2)
+  })
+})
+
+describe('content folder in the CSV (DthProducts.dsa)', () => {
+  it('writes a folder product\'s identifying folder, readable by the studio parser', () => {
+    // End-to-end across the wire: the runtime writes the folder into the
+    // otherwise-unused source_file column of the product row, and @dth/rom's
+    // parseProductScanCsv reads it back as `contentFolder`.
+    const written: Record<string, string> = {}
+    const mod = loadMatching([], undefined, [], { captureWrites: written })
+    const folderProduct = {
+      name: 'GC Lara Croft COD',
+      sku: '',
+      artist: '',
+      version: '',
+      productType: 'Content folder',
+      contentFolder: 'D:/Lib/Runtime/textures/GC Lara Croft COD',
+      synthesized: true,
+    }
+    const asset = {
+      type: 'Node',
+      name: 'Backpack',
+      technicalName: 'Bags_11509',
+      details: 'Rigged Item',
+      sourceFile: '',
+      textures: [],
+    }
+    const ok = mod.writeProductsCsv(
+      'C:/out/scene.csv',
+      { matches: [{ asset, product: folderProduct, method: 'Content Folder Match' }], unmatched: [] },
+      'LaraCroft_G8_1_THICK',
+      'D:/scenes/LaraCroft_G8_1_THICK.duf',
+      true,
+    )
+    expect(ok).toBe(true)
+    const scan = parseProductScanCsv(written['C:/out/scene.csv'])
+    expect(scan.complete).toBe(true)
+    expect(scan.products).toHaveLength(1)
+    expect(scan.products[0].name).toBe('GC Lara Croft COD')
+    expect(scan.products[0].matchMethod).toBe('Content Folder Match')
+    expect(scan.products[0].contentFolder).toBe('D:/Lib/Runtime/textures/GC Lara Croft COD')
   })
 })

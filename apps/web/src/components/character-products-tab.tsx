@@ -389,6 +389,14 @@ function CharacterProductsTabImpl({
                                     ? ` · in ${p.scenes.length} scene${p.scenes.length === 1 ? '' : 's'}: ${p.scenes.join(', ')}`
                                     : ''}
                                 </div>
+                                {p.contentFolder && (
+                                  <div className="mb-1 text-xs text-muted-foreground">
+                                    Content folder:{' '}
+                                    <code className="font-mono text-foreground/80">
+                                      {p.contentFolder}
+                                    </code>
+                                  </div>
+                                )}
                                 {assets.length ? (
                                   <ul className="space-y-0.5 text-sm">
                                     {assets.map((a, j) => (
