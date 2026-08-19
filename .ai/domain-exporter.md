@@ -667,7 +667,7 @@ Part of the domain reference — `.ai/domain.md` is the index.
   to build it again (a Daz run of many minutes) with the file sitting there.
   `exists` is the separate field for "there is one", and it is the one that
   decides whether an action is offered at all.
-- **DTH Export runs in one of three Daz MODES** (the panel's first step; the
+- **DTH Export runs in one of four Daz MODES** (the panel's first step; the
   `ExportMode` union in `execute-jobs.ts` owns the mapping):
   `rom-export` → `.Bulk_ROM_Export.dsa` on the source scene (fresh ROM, saved
   ROM animation, full export — the default, and the ONLY mode that writes
@@ -678,7 +678,17 @@ Part of the domain reference — `.ai/domain.md` is the index.
   rebuild — for a ROM hand-edited in Daz). Export-only pre-checks the scenes
   whose ROM animation is newer than their delivered `<exportName>_pose_asset.csv`
   (`fetchExecuteScenes`'s `romUnexported`), i.e. unexported as it now stands.
-  The Daz Mode dropdown's FOURTH option, `houdini-only` ("Skip Daz — use last
+  `hair-only` ("Hair items only", runtime v97) → `.Bulk_Hair_Export.dsa` on the
+  source scene: the per-item hair pass ALONE (no ROM, no skeleton/mesh, no
+  CSV, no stamps, retires no run log). Its panel list is FILTERED, not
+  disabled-rowed: only the scenes whose "Export hair items" switch is on
+  (`fetchExecuteScenes`'s `hairExport` = `sceneHairExportEnabled`) appear, all
+  runnable ones pre-checked (no staleness signal exists for hair), and
+  `executeCharacterJobs` throws on a hair-disabled scene as the backstop. Like
+  rom-only it stops after Daz — it writes no fresh `.dth`, so the panel forces
+  Skip Houdini + clears the project list and the same `executeCharacterJobs`
+  refusal covers both modes.
+  The Daz Mode dropdown's FIFTH option, `houdini-only` ("Skip Daz — use last
   exports"; `RunChoice` union, same file), is deliberately NOT an
   `ExportMode`: it writes no Daz job at all — the Houdini selection runs
   directly, the standalone version of the after-batch continuation. Its

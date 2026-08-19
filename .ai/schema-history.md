@@ -1200,4 +1200,16 @@ v96 — the export block's hair pass gains a per-scene runtime gate: beside the
       NB: this number collides with what #901 (still open) reserved — per the
       monotonic rule its revert must now land on a number > 96.
       No migration step; schema v37 rides the same release.
+v97 — a fourth hidden Runner carrier joins the set: `.Bulk_Hair_Export.dsa`
+      (`BULK_HAIR_EXPORT_SCRIPT`), the standalone `Export_Hair_…` pass built by
+      the SAME `toGroomExportScriptDsa` builder run unattended (prints instead
+      of modals, cancel-flag probe, `dthProgressLog(100, …)` closing the 2-step
+      job-row scale). Emitted with an export dir like its bulk siblings —
+      deliberately NOT gated on the groom lists, so a hair list filled after
+      the last save still finds its carrier on disk (the pass no-ops per scene
+      without one). Backs DTH Export's new "Hair items only" mode (`hair-only`
+      in `EXPORT_MODES`), whose panel lists only the scenes with the v37
+      "Export hair items" switch on. The standalone visible script's bytes are
+      unchanged. NB: #901 (still open) must now land on a number > 97.
+      No schema change, no migration step.
 ```

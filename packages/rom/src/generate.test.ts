@@ -652,6 +652,7 @@ describe('the baked runtime-root fallback', () => {
     expect(dsa.map((f) => f.fileName).sort()).toEqual([
       '.Build_ROM_Animation.dsa',
       '.Bulk_Export_Only.dsa',
+      '.Bulk_Hair_Export.dsa',
       '.Bulk_ROM_Export.dsa',
       'Export_ElectraG9_G9.dsa',
       'Export_Hair_ElectraG9_G9.dsa',
@@ -810,6 +811,7 @@ describe('generateAll', () => {
         ['ROM_ElectraG9_G9.dsa', 'rom-export'],
         ['.Bulk_ROM_Export.dsa', undefined],
         ['.Bulk_Export_Only.dsa', undefined],
+        ['.Bulk_Hair_Export.dsa', undefined],
         ['.Build_ROM_Animation.dsa', undefined],
       ])
     })
@@ -824,6 +826,7 @@ describe('generateAll', () => {
         ['Export_ElectraG9_G9.dsa', 'export'],
         ['.Bulk_ROM_Export.dsa', undefined],
         ['.Bulk_Export_Only.dsa', undefined],
+        ['.Bulk_Hair_Export.dsa', undefined],
         ['.Build_ROM_Animation.dsa', undefined],
       ])
     })
@@ -845,6 +848,7 @@ describe('generateAll', () => {
         ['ROM_ElectraG9_G9.dsa', 'rom-export'],
         ['.Bulk_ROM_Export.dsa', undefined],
         ['.Bulk_Export_Only.dsa', undefined],
+        ['.Bulk_Hair_Export.dsa', undefined],
         ['.Build_ROM_Animation.dsa', undefined],
         ['Export_Hair_ElectraG9_G9.dsa', 'export-hair'],
       ])
@@ -2008,6 +2012,7 @@ describe('exporter integration', () => {
       'ROM_Electra_G9.dsa',
       '.Bulk_ROM_Export.dsa',
       '.Bulk_Export_Only.dsa',
+      '.Bulk_Hair_Export.dsa',
       '.Build_ROM_Animation.dsa',
       'Electra_pose_asset.csv',
     ])
@@ -2024,7 +2029,12 @@ describe('exporter integration', () => {
     // — the ROM/bulk one, the export-only one, and the visible scripts built
     // by the same builders. `cancelFlagPath` is the ONE rule for where it is.
     expect(cancelFlagPath('D:\\lib\\Electra')).toBe(flag)
-    for (const name of ['.Bulk_ROM_Export.dsa', '.Bulk_Export_Only.dsa', '.Build_ROM_Animation.dsa']) {
+    for (const name of [
+      '.Bulk_ROM_Export.dsa',
+      '.Bulk_Export_Only.dsa',
+      '.Bulk_Hair_Export.dsa',
+      '.Build_ROM_Animation.dsa',
+    ]) {
       const carrier = files.find((f) => f.fileName === name)
       expect(carrier, name).toBeDefined()
       expect(carrier?.content, name).toContain(`var dthCancelPath = "${flag}";`)
@@ -2138,6 +2148,43 @@ describe('exporter integration', () => {
     ).not.toContain('.Bulk_Export_Only.dsa')
   })
 
+  it('the hidden .Bulk_Hair_Export.dsa runs ONLY the per-item hair pass, unattended', () => {
+    const character = withReferencePose({
+      name: 'Electra',
+      exportPath: 'X:\\exports\\electra',
+      scenePath: 'X:\\proj\\Electra\\daz3d\\Electra.duf',
+      sceneOverrides: [
+        { scenePath: 'X:\\proj\\Electra\\daz3d\\Electra.duf', rom: {}, hair: [{ nodeLabel: 'Ponytail' }] },
+      ],
+    })
+    const hair = generateAll(character, {}, FRAMES, 'D:\\lib\\Electra').find(
+      (f) => f.fileName === '.Bulk_Hair_Export.dsa',
+    )
+    expect(hair).toBeDefined()
+    expect(hair?.icon).toBeUndefined() // hidden: no Content Library tile
+    // The whole point: the hair loop and NOTHING else — no ROM build, no
+    // skeleton/mesh export, no CSV delivery.
+    expect(hair?.content).toContain('doExportAlembicGroomPoses(dthExportDir, dthHairName, false)')
+    expect(hair?.content).not.toContain('ApplyDTHCharacter(')
+    expect(hair?.content).not.toContain('doExport(')
+    expect(hair?.content).not.toContain('_pose_asset.csv')
+    // Unattended: the Runner drives it — a modal would block the whole batch.
+    expect(hair?.content).not.toContain('MessageBox')
+    // …and the finished pass closes the 2-step progress scale itself.
+    expect(hair?.content).toContain('dthProgressLog(100, "hair items exported");')
+    // The visible standalone script keeps its modals — same builder, so the
+    // two passes cannot drift, but only the carrier goes silent.
+    const visible = generateAll(character, {}, FRAMES, 'D:\\lib\\Electra').find(
+      (f) => f.fileName === 'Export_Hair_Electra_G9.dsa',
+    )
+    expect(visible?.content).toContain('MessageBox.critical')
+    expect(visible?.content).not.toContain('dthProgressLog')
+    // No export dir → no hair carrier (nothing to export into).
+    expect(
+      generateAll(withReferencePose({ name: 'Electra' }), {}, FRAMES).map((f) => f.fileName),
+    ).not.toContain('.Bulk_Hair_Export.dsa')
+  })
+
   it('split (exportWithRomScript off): the ROM script builds only, Export_ script for manual export', () => {
     const character = withReferencePose({
       name: 'Electra',
@@ -2166,6 +2213,7 @@ describe('exporter integration', () => {
       'Export_Electra_G9.dsa',
       '.Bulk_ROM_Export.dsa',
       '.Bulk_Export_Only.dsa',
+      '.Bulk_Hair_Export.dsa',
       '.Build_ROM_Animation.dsa',
       'Electra_pose_asset.csv',
     ])
@@ -2406,10 +2454,15 @@ describe('groom items (hair kept out of the export)', () => {
   })
 
   it('generateAll emits the groom script only with an export path AND groom lists', () => {
+    // The hidden hair CARRIER rides on the export path alone, deliberately NOT
+    // on the groom lists: a scene whose list is filled after the last save
+    // must still find its carrier on disk (the pass no-ops per scene without
+    // one); the visible tile keeps the tighter gate.
     expect(generateAll(groomChar(), {}, FRAMES, 'D:\\lib\\Electra').map((f) => f.fileName)).toEqual([
       'ROM_Electra_G9.dsa',
       '.Bulk_ROM_Export.dsa',
       '.Bulk_Export_Only.dsa',
+      '.Bulk_Hair_Export.dsa',
       '.Build_ROM_Animation.dsa',
       'Export_Hair_Electra_G9.dsa',
       'Electra_pose_asset.csv',
