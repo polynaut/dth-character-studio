@@ -114,7 +114,7 @@ function RootComponent() {
   }, [navigate])
 
   // UiConfigProvider memoizes per HANDLER — inline arrows here would hand it
-  // three fresh functions every root re-render and defeat that memo, re-rendering
+  // fresh functions every root re-render and defeat that memo, re-rendering
   // every useUiConfig consumer. Keep each handler referentially stable.
   // In-app links (InfoPopup) go through the router; external URLs open in
   // the OS browser (Tauri) — the seam that keeps @dth/ui native-free.
@@ -126,6 +126,9 @@ function RootComponent() {
   // Kit-internal errors (e.g. a failed EditableTitle save) surface as the
   // app's toast — the kit itself has no sonner dependency.
   const onError = useCallback((message: string) => void toast.error(message), [])
+  // SidePanel sweeps stale toasts on open — a leftover toast (top-center,
+  // above z-50) would float over the drawer as it slides in.
+  const dismissToasts = useCallback(() => void toast.dismiss(), [])
 
   // Dev-only: the smoke/screenshot harness fires demo toasts through the app's
   // OWN sonner instance (a spec-side `import('sonner')` gets its own module
@@ -135,7 +138,7 @@ function RootComponent() {
   }
 
   return (
-    <UiConfigProvider value={{ onNavigate, onOpenExternal, onError }}>
+    <UiConfigProvider value={{ onNavigate, onOpenExternal, onError, dismissToasts }}>
       <ConfirmProvider>
         {/* Above the page, not on one: a file saved into a character's folder
             should be noticed wherever the user comes back to — the character

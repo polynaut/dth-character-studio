@@ -238,6 +238,12 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   can't remember half the sweep) in a **`useLayoutEffect`**: a passive effect is
   deferred until after paint, which is one frame of the new overlay with the old
   tooltip still on top of it.
+  The host's toasts (sonner, top-center) also stack above z-50 and outlive the
+  action that raised them; **SidePanel additionally sweeps those** via the
+  `dismissToasts` config seam (`config.tsx` — the kit has no sonner dependency;
+  provider-less default no-op, wired to `toast.dismiss()` in `__root.tsx`).
+  Deliberately SidePanel-only: a modal is a short-lived confirm where a toast
+  on top is tolerable, a drawer is a workspace the user settles into.
   **Modal/SidePanel do NOT cover the whole app** — `update-prompt.tsx` is
   hand-rolled and sweeps itself, and it is the case that matters most: it is the
   only overlay that appears with *no user gesture* (an update check finishing),

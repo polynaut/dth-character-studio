@@ -21,6 +21,15 @@ export type UiConfig = {
    * bare-browser build never swallows the error silently.
    */
   onError: (message: string) => void
+  /**
+   * Dismiss every toast the host currently shows. {@link SidePanel} calls this
+   * on open: toasts outlive the action that raised them, and the host's toast
+   * layer stacks above the kit's z-50 overlays, so a leftover one would float
+   * over the drawer as it slides in. The kit has no toast system of its own —
+   * the host owns one (the seam mirrors `onError`, which feeds it) — hence the
+   * provider-less default is a no-op.
+   */
+  dismissToasts: () => void
 }
 
 const defaultConfig: UiConfig = {
@@ -33,6 +42,7 @@ const defaultConfig: UiConfig = {
   onError: (message) => {
     console.error(message)
   },
+  dismissToasts: () => {},
 }
 
 const UiConfigContext = createContext<UiConfig>(defaultConfig)
@@ -49,14 +59,15 @@ export function UiConfigProvider({
   // consumer whenever the host root re-rendered. Note this only helps when the
   // HANDLERS themselves are referentially stable (useCallback / module-level in
   // the host) — inline arrow handlers defeat the memo just the same.
-  const { onNavigate, onOpenExternal, onError } = value
+  const { onNavigate, onOpenExternal, onError, dismissToasts } = value
   const merged = useMemo(
     () => ({
       onNavigate: onNavigate ?? defaultConfig.onNavigate,
       onOpenExternal: onOpenExternal ?? defaultConfig.onOpenExternal,
       onError: onError ?? defaultConfig.onError,
+      dismissToasts: dismissToasts ?? defaultConfig.dismissToasts,
     }),
-    [onNavigate, onOpenExternal, onError],
+    [onNavigate, onOpenExternal, onError, dismissToasts],
   )
   return <UiConfigContext.Provider value={merged}>{children}</UiConfigContext.Provider>
 }

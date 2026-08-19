@@ -6,6 +6,7 @@ import { DismissableLayer, FocusScope } from 'radix-ui/internal'
 import { Button } from './button.tsx'
 import { closeFloatingLayers } from './overlay-sweep.ts'
 import { cn } from '../cn.ts'
+import { useUiConfig } from '../config.tsx'
 import { isRefocusPointerDown } from '../refocus-click.ts'
 
 /** How long the slide / fade runs — keep in sync with the `duration-300` classes. */
@@ -74,6 +75,7 @@ export function SidePanel({
   const [shown, setShown] = useState(false)
   const panelRef = useRef<HTMLElement>(null)
   const titleId = useId()
+  const { dismissToasts } = useUiConfig()
 
   useEffect(() => {
     if (open) {
@@ -99,11 +101,17 @@ export function SidePanel({
   // Same sweep as Modal: InfoPopups (z-[60]) and tooltips (z-[100]) portal
   // ABOVE this z-50 layer, so one left over from the control that opened the
   // drawer would float over it as it slides in. Pre-paint (useLayoutEffect) for
-  // the same reason as Modal — see the comment there.
+  // the same reason as Modal — see the comment there. The host's toasts stack
+  // above z-50 too and outlive whatever action raised them, so a stale one
+  // would float over the drawer just the same — swept via the config seam
+  // (the kit has no toast system of its own). The toast half is deliberately
+  // SidePanel-only: modals are short-lived confirms where a toast on top is
+  // tolerable, a drawer is a workspace the user settles into.
   useLayoutEffect(() => {
     if (!open) return
     closeFloatingLayers()
-  }, [open])
+    dismissToasts()
+  }, [open, dismissToasts])
 
   // Lock body scroll while open (the non-modal layer doesn't).
   useEffect(() => {
