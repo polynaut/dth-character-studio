@@ -152,6 +152,13 @@ Daz Studio it finds:
    alone: one Windows permission prompt, no restart, and the app window stays
    unelevated, so drag-and-drop and your mapped network drives keep working.
 
+   <p align="center">
+     <img width="900" alt="Install with administrator rights" src="screenshots/settings-daz-plugins-admin.png" />
+     <br>
+     <sub><em>A refused copy offers a one-shot elevated install — one prompt, no
+     restart, the window stays normal.</em></sub>
+   </p>
+
 ## Unreal Engine Plugins
 
 Where the studio looks for **Unreal Engine plugins** to offer when installing into
