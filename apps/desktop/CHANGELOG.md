@@ -1,5 +1,11 @@
 # @dth/desktop
 
+## 0.85.0
+
+### Patch Changes
+
+- [#909](https://github.com/polynaut/dth-character-studio/pull/909) [`65d43ae`](https://github.com/polynaut/dth-character-studio/commit/65d43aeea488cb1d93aa59385bb76114579db553) Thanks [@polynaut](https://github.com/polynaut)! - Refuse DTH job handoffs while more than one Daz Studio is open. Two installations open side by side (a DS4 next to a DS6) both host a Runner watching the same job file, so batches ran in whichever Daz noticed first and their progress bookkeeping could clobber each other. Every batch handoff (DTH Export, ROM build, project scan, scene scan) now counts the running Daz processes first — each install is single-instance, so two processes means two installations — and shows a dialog asking to close all but one.
+
 ## 0.84.0
 
 ## 0.83.2
