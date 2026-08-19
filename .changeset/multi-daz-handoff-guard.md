@@ -1,4 +1,7 @@
 ---
+# bump: patch is deliberate — the new command + error class only power a
+# guard that REFUSES a broken state (two Dazs racing one job file); the app
+# gains no capability it did not have.
 "@dth/web": patch
 "@dth/desktop": patch
 ---
