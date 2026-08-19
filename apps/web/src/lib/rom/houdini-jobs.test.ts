@@ -9,6 +9,8 @@ import {
   houdiniRunFilesToClear,
   houdiniDeathReason,
   houdiniRunLooksDead,
+  houdiniConsoleFailure,
+  houdiniConsoleWorthReading,
   houdiniRunStateFrom,
   parseHoudiniResult,
   sceneDthPath,
@@ -657,6 +659,38 @@ describe('houdiniRunLooksDead — the guard that decides the log is worth a read
   })
 })
 
+describe('houdiniConsoleWorthReading — the api layer feeds the console to the right polls', () => {
+  const res = (over: Record<string, unknown>) =>
+    parseHoudiniResult(JSON.stringify({ state: 'running', total: 2, done: 1, ...over }))
+
+  it('reads for a dead-looking run, never on the live 2.5s poll', () => {
+    expect(houdiniConsoleWorthReading(null, false)).toBe(true)
+    expect(houdiniConsoleWorthReading(res({}), false)).toBe(true)
+    expect(houdiniConsoleWorthReading(res({}), true)).toBe(false)
+    expect(houdiniConsoleWorthReading(null, true)).toBe(false)
+  })
+
+  it('reads for a finished run CLAIMING to be clean — the false-success shape', () => {
+    // The backstop's whole channel: a backstop that is never fed its input is
+    // no backstop, which is exactly how the first version of this fix shipped
+    // — houdiniRunStateFrom knew what to look for, and the api layer's read
+    // guard (dead runs only) never handed it the console.
+    const clean = res({ state: 'done', done: 2, nodes: [{ node: '/obj/a', status: 'ok' }] })
+    expect(houdiniConsoleWorthReading(clean, false)).toBe(true)
+    expect(houdiniConsoleWorthReading(clean, true)).toBe(true)
+  })
+
+  it('skips the read when the run already reported a failure — it explains itself', () => {
+    expect(
+      houdiniConsoleWorthReading(
+        res({ state: 'done', nodes: [{ node: '/obj/a', status: 'failed' }] }),
+        true,
+      ),
+    ).toBe(false)
+    expect(houdiniConsoleWorthReading(res({ state: 'failed', error: 'boom' }), true)).toBe(false)
+  })
+})
+
 describe('houdiniRunFilesToClear — the handoff cleans up after itself', () => {
   const paths = { jobPath: 'X:/p/Kira/.dth_houdini_job.json', resultPath: 'X:/p/Kira/.dth_houdini_result.json' }
 
@@ -686,5 +720,121 @@ describe('houdiniRunFilesToClear — the handoff cleans up after itself', () => 
     // process list yet — deleting the job it is about to read would break it.
     // The next run overwrites it anyway, so leaving it costs nothing.
     expect(houdiniRunFilesToClear({ state: 'dead', hasResult: false, ...paths })).toEqual([])
+  })
+})
+
+describe('the false success — a finished run whose console carries a traceback', () => {
+  // The measured incident (2026-08-19). The `.hip` could not load its PoseAsset
+  // CSV, so both DazToHue export nodes raised inside `do_export`; Houdini's
+  // callback wrapper CAUGHT each one, printed it, and returned normally — so
+  // 456.py saw a clean `pressButton()` and reported both nodes `ok`. The studio
+  // toasted "2 exported in 17s" over an export that wrote nothing, and the 17s
+  // (hython booting, loading, failing twice) was the only clue anything was
+  // wrong. Verbatim tail of that run's console log.
+  const CONSOLE = [
+    'DTH Character Studio: loading D:/P/LaraCroft_G81/houdini/LaraCroft_G81_THICK.hiplc (headless)',
+    'oplib:/Sop/DazToHuePoseAsset?Sop/DazToHuePoseAsset Warning(11): error binding handle sidefx_hud_button because it doesn\'t exist.',
+    'Error running event handler:',
+    'Traceback (most recent call last):',
+    "FileNotFoundError: [Errno 2] No such file or directory: 'D:/P/.../LaraCroft_G81_Thick_pose_asset.csv'",
+    'DTH Character Studio: 2 export node(s) match the selected scenes',
+    'Error running callback:',
+    "AttributeError: 'NoneType' object has no attribute 'attribValue'",
+    'DTH Character Studio: /obj/DazToHue/DazToHueExport -> ok',
+  ].join('\n')
+
+  const finished = (statuses: Array<'ok' | 'skipped' | 'failed'>) =>
+    parseHoudiniResult(
+      JSON.stringify({
+        state: 'done',
+        nodes: statuses.map((status, i) => ({ node: `/obj/n${i}`, scene: `Scene${i}`, status })),
+      }),
+    )!
+
+  it('names the swallowed error instead of letting an all-ok run read as clean', () => {
+    const state = houdiniRunStateFrom(finished(['ok', 'ok']), false, CONSOLE)
+    expect(state.state).toBe('finished')
+    const problems = state.state === 'finished' ? state.problems : []
+    expect(problems).toHaveLength(1)
+    expect(problems[0]).toContain('Houdini logged an error this run did not attribute to a node')
+    expect(problems[0]).toContain('Error running event handler')
+  })
+
+  it('stays quiet when the console reads clean', () => {
+    const clean = [
+      'DTH Character Studio: 2 export node(s) match the selected scenes',
+      'DTH Character Studio: /obj/DazToHue/DazToHueExport -> ok',
+      'DTH Character Studio: batch finished - closing Houdini',
+    ].join('\n')
+    const state = houdiniRunStateFrom(finished(['ok', 'ok']), false, clean)
+    expect(state.state === 'finished' ? state.problems : ['x']).toEqual([])
+  })
+
+  it('does not pile on when the run already reported a failure of its own', () => {
+    // Past that point the run is explaining itself, and repeating the console
+    // line would just say the same thing twice in the same toast.
+    const state = houdiniRunStateFrom(finished(['ok', 'failed']), false, CONSOLE)
+    expect(state.state === 'finished' ? state.problems : ['x']).toEqual([])
+    // Same for a RUN-LEVEL failure (456.py's own crash writes state 'failed'):
+    // the error field carries it, and the backstop would just echo the log
+    // line that error came from.
+    const crashed = parseHoudiniResult(
+      JSON.stringify({ state: 'failed', error: 'Traceback (most recent call last)…', nodes: [] }),
+    )!
+    const failedState = houdiniRunStateFrom(crashed, false, CONSOLE)
+    expect(failedState.state === 'finished' ? failedState.problems : ['x']).toEqual([])
+  })
+
+  it('a Houdini WARNING is not an error — the hud-button line must not trip it', () => {
+    // That line is in every single run of this project. Treating it as failure
+    // would make the warning permanent and therefore invisible.
+    expect(
+      houdiniConsoleFailure(
+        'oplib:/Sop/X Warning(11): error binding handle sidefx_hud_button because it does not exist.',
+      ),
+    ).toBe('')
+  })
+
+  it("a failed NODE's cause becomes the run's error when the top level has none", () => {
+    // 456.py marks a swallowed blow-up on the NODE ("the HDA raised behind
+    // Houdini's callback wrapper: ..."), and a 'done' result has no top-level
+    // error — without this fallback the toast said "1 failed" and the result
+    // file holding the cause was deleted with the run.
+    const state = houdiniRunStateFrom(
+      parseHoudiniResult(
+        JSON.stringify({
+          state: 'done',
+          nodes: [
+            { node: '/obj/a', status: 'ok' },
+            {
+              node: '/obj/b',
+              status: 'failed',
+              error: "the HDA raised behind Houdini's callback wrapper: AttributeError: ...",
+            },
+          ],
+        }),
+      ),
+      false,
+    )
+    expect(state.state === 'finished' ? state.error : '').toContain('callback wrapper')
+    // A top-level error still wins — it describes the RUN, not one node.
+    const topLevel = houdiniRunStateFrom(
+      parseHoudiniResult(
+        JSON.stringify({
+          state: 'done',
+          error: 'the whole run said so',
+          nodes: [{ node: '/obj/b', status: 'failed', error: 'node-level' }],
+        }),
+      ),
+      false,
+    )
+    expect(topLevel.state === 'finished' ? topLevel.error : '').toBe('the whole run said so')
+  })
+
+  it('caps a long line so the toast stays readable', () => {
+    const long = `Error running callback: ${'x'.repeat(400)}`
+    const found = houdiniConsoleFailure(long)
+    expect(found.length).toBe(160)
+    expect(found.endsWith('\u2026')).toBe(true)
   })
 })

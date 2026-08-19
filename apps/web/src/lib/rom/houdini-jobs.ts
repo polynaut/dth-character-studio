@@ -509,6 +509,39 @@ export function houdiniRunLooksDead(
 }
 
 /**
+ * A finished result that claims NOTHING went wrong — no failed node, no
+ * run-level error, a clean `done`. This is the shape of the false success,
+ * and the ONE place {@link houdiniRunStateFrom} consults the console log for:
+ * a result already reporting a failure explains itself.
+ */
+function houdiniResultClaimsClean(result: HoudiniResult): boolean {
+  return (
+    result.state === 'done' &&
+    !result.error &&
+    result.nodes.every((node) => node.status !== 'failed')
+  )
+}
+
+/**
+ * Whether this poll should spend a file read on the console log before calling
+ * {@link houdiniRunStateFrom} — the api layer's read guard, kept here for the
+ * same reason as {@link houdiniRunLooksDead}: two copies of the condition
+ * would drift, and the failure would be silent. Two cases earn the read: a
+ * DEAD run (the log is its only witness), and a finished run claiming to be
+ * clean (the log is what catches the false success — a backstop that is never
+ * fed its channel is no backstop, which is exactly how the first version of
+ * this fix shipped dead). A live run, or a finished one already reporting a
+ * failure, explains itself — no read on the 2.5 s poll.
+ */
+export function houdiniConsoleWorthReading(
+  result: HoudiniResult | null,
+  houdiniRunning: boolean,
+): boolean {
+  if (houdiniRunLooksDead(result, houdiniRunning)) return true
+  return result !== null && houdiniResultClaimsClean(result)
+}
+
+/**
  * Every network of the running project, in run order: named from the run's own
  * target list, `status` filled in as each finishes.
  *
@@ -535,11 +568,44 @@ function houdiniNetworks(
   })
 }
 
+/**
+ * Houdini's own headings for an exception it CAUGHT and printed, plus the
+ * Python traceback banner — the twin of `SWALLOWED_FAILURE_MARKERS` in
+ * `456.py`, kept here because this side reads a channel that one cannot.
+ */
+const CONSOLE_FAILURE_MARKERS =
+  /error running callback|error running event handler|traceback \(most recent call last\)/i
+
+/**
+ * The first line of the console log that says something blew up behind
+ * Houdini's callback wrapper — '' when it reads clean.
+ *
+ * This is the BACKSTOP for the false-success bug. 456.py catches the same
+ * thing from the tee'd stdout/stderr and marks the node failed, but the tee is
+ * an in-process capture and the console log is the process's real stdout+stderr
+ * (see HOUDINI_CONSOLE_FILE): anything Houdini prints from C++, or before the
+ * capture is entered, reaches only this file. Measured 2026-08-19 — a run
+ * whose `.hip` could not load its PoseAsset CSV logged two
+ * "Error running event handler" tracebacks at LOAD time, then exported nothing
+ * and reported "2 exported".
+ */
+export function houdiniConsoleFailure(consoleText: string): string {
+  for (const line of consoleText.split(/\r?\n/)) {
+    const trimmed = line.trim()
+    if (trimmed && CONSOLE_FAILURE_MARKERS.test(trimmed)) {
+      return trimmed.length > 160 ? `${trimmed.slice(0, 159)}…` : trimmed
+    }
+  }
+  return ''
+}
+
 export function houdiniRunStateFrom(
   result: HoudiniResult | null,
   houdiniRunning: boolean,
-  /** The console log's contents, when the caller could read them. Only ever
-   *  consulted for a DEAD run — a live or finished one explains itself. */
+  /** The console log's contents, when the caller could read them. Consulted for
+   *  a DEAD run — and, since the false-success bug, for a FINISHED one that
+   *  claims nothing went wrong: "a finished run explains itself" was the
+   *  assumption that let an export of nothing be reported as an export. */
   consoleText = '',
 ): HoudiniRunState {
   const dead = (): HoudiniRunState => {
@@ -568,6 +634,13 @@ export function houdiniRunStateFrom(
   }
   const counts = { ok: 0, skipped: 0, failed: 0 }
   for (const node of result.nodes) counts[node.status] += 1
+  // A run that reports NO failure of any kind — node, run-level state or
+  // error — but whose console carries a traceback is the shape of the false
+  // success: say so rather than let the toast's green checkmark stand alone.
+  // A result already reporting a failure explains itself, and this would just
+  // repeat it. Same predicate the api layer's read guard uses, so the one
+  // case that needs the console is exactly the one that got the file read.
+  const swallowed = houdiniResultClaimsClean(result) ? houdiniConsoleFailure(consoleText) : ''
   return {
     state: 'finished',
     ...counts,
@@ -577,10 +650,23 @@ export function houdiniRunStateFrom(
     networks: houdiniNetworks(result),
     summary: houdiniResultSummary(result),
     cancelled: result.cancelled,
-    error: result.state === 'failed' ? result.error || 'the run failed in Houdini' : result.error,
-    problems: result.nodes.flatMap((node) =>
-      node.problems.map((problem) => `${node.scene || node.node}: ${problem}`),
-    ),
+    // A 'done' run with a failed NODE carries its cause on the node, not the
+    // top level — surface it, or the toast says "1 failed" and nothing else
+    // (the result file holding the cause is deleted as this run ends).
+    error:
+      result.state === 'failed'
+        ? result.error || 'the run failed in Houdini'
+        : result.error || result.nodes.find((node) => node.status === 'failed')?.error || '',
+    problems: [
+      ...result.nodes.flatMap((node) =>
+        node.problems.map((problem) => `${node.scene || node.node}: ${problem}`),
+      ),
+      ...(swallowed
+        ? [
+            `Houdini logged an error this run did not attribute to a node — check the console log: ${swallowed}`,
+          ]
+        : []),
+    ],
   }
 }
 
