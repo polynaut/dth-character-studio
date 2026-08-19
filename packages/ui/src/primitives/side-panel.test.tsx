@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { SidePanel } from './side-panel.tsx'
+import { UiConfigProvider } from '../config.tsx'
 
 afterEach(cleanup)
 
@@ -122,5 +123,20 @@ describe('SidePanel', () => {
     await new Promise((resolve) => setTimeout(resolve, 350))
     expect(document.activeElement).toBe(opener)
     opener.remove()
+  })
+
+  it('sweeps the host toasts on open, not on mount-closed', () => {
+    const dismissToasts = vi.fn()
+    const panel = (open: boolean) => (
+      <UiConfigProvider value={{ dismissToasts }}>
+        <SidePanel open={open} title="Panel" onClose={vi.fn()}>
+          <button type="button">Inside</button>
+        </SidePanel>
+      </UiConfigProvider>
+    )
+    const { rerender } = render(panel(false))
+    expect(dismissToasts).not.toHaveBeenCalled()
+    rerender(panel(true))
+    expect(dismissToasts).toHaveBeenCalledTimes(1)
   })
 })
