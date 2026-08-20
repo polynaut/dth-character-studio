@@ -76,8 +76,11 @@ test('a changed DTH release offers the linked projects, and a clean run records 
   // one linked project has never been swept, which the offer says plainly
   // rather than dressing up as a verdict.
   await expect(offer.getByText('Kira.hip')).toBeVisible()
-  await expect(offer.getByText(/never refreshed by the studio/)).toBeVisible()
-  await expect(offer.getByText(/it was 2\.3\.0 the last time/)).toBeVisible()
+  await expect(offer.getByText(/was 2\.3\.0/)).toBeVisible()
+  // The column header is what makes the row's bare "never" honest: it reads
+  // "last refreshed BY THE STUDIO", which is the absence of a verdict, not one.
+  await expect(offer.getByText('Last refreshed by the studio')).toBeVisible()
+  await expect(offer.getByText('never', { exact: true })).toBeVisible()
 
   await offer.getByRole('button', { name: /^Refresh 1 project$/ }).click()
   await expect(page.getByText('1 project refreshed and saved.')).toBeVisible()
@@ -202,8 +205,11 @@ test('an existing backup is named, and the run is held until that is accepted', 
   seed.files[BACKUP] = 'an-older-backup'
   const offer = await runStudioRefresh(page, seed)
 
-  await expect(offer.getByText(/1 project already has a studio backup/)).toBeVisible()
-  await expect(offer.getByText('Kira_dthbak.hip')).toBeVisible()
+  await expect(offer.getByText(/1 existing backup at risk/)).toBeVisible()
+  // Marked on the project's own row, not listed a second time underneath. AT
+  // RISK, not "will be replaced": only a project the tool leaves modified is
+  // saved, and nothing here can know in advance which those are.
+  await expect(offer.getByText('backup at risk', { exact: true })).toBeVisible()
 
   // Held: the destructive step has to be accepted before the run can start.
   const run = offer.getByRole('button', { name: /^Refresh 1 project$/ })
@@ -296,6 +302,6 @@ test('a dry run destroys no backup, and needs no acceptance to say so', async ({
 
 test('no existing backup, no warning — and nothing to accept', async ({ page }) => {
   const offer = await runStudioRefresh(page, seedFor('2.3.0'))
-  await expect(offer.getByText(/already has a studio backup/)).toBeHidden()
+  await expect(offer.getByText(/at risk/)).toBeHidden()
   await expect(offer.getByRole('button', { name: /^Refresh 1 project$/ })).toBeEnabled()
 })

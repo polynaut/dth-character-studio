@@ -200,13 +200,13 @@ as refreshed, so it's offered again next time. Close the projects in Houdini fir
 Houdini writes the whole scene on save and would overwrite the result.
 
 It's **one rolling copy per project**, which means saving a project replaces whatever
-copy is already there. If any of the projects it's about to sweep already has one, the
-dialog says so in red, lists them with their dates, and **won't let the run start**
-until you accept — a dry run isn't held, because it never saves and so never touches a
-backup. Only the projects the run actually saves lose their old copy, and nothing can
-say in advance which those are; a project that reports no change, or that fails, keeps
-the copy it had. If one of those copies is how you'd put a project back on an older
-DazToHue release, copy it somewhere else first: that dialog is the last point at which
-it's certainly still there.
+copy is already there. Projects that already have one are marked **backup at risk** in
+the dialog's list (hover for the file and its date), and the run **won't start** until
+you accept it on the red line underneath — a dry run isn't held, because it never saves
+and so never touches a backup. Only the projects the run actually saves lose their old
+copy, and nothing can say in advance which those are; a project that reports no change,
+or that fails, keeps the copy it had. If one of those copies is how you'd put a project
+back on an older DazToHue release, copy it somewhere else first: that dialog is the last
+point at which it's certainly still there.
 
 [← Guide overview](./README.md)

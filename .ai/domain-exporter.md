@@ -461,8 +461,9 @@ Part of the domain reference — `.ai/domain.md` is the index.
     plan probes `studioBackupPath` (houdini-material.ts — the pure mirror of the
     Python `_backup`, pinned to it by `houdini-material.test.ts`, and paired with
     `isStudioBackup`: what one derives the other must accept) for every project
-    the sweep would RUN on, and the dialog names them with dates in a destructive
-    block behind a Switch. A real run is DISABLED until it is accepted; a dry run
+    the sweep would RUN on, marks the affected rows in the project list ("backup
+    at risk", the file and its date on hover) and puts ONE destructive line with a
+    Switch under it. A real run is DISABLED until it is accepted; a dry run
     is not gated, because it never reaches `_backup`. After a real run the warning
     is gone: the copies beside the projects it saved are now that run's, and the
     report's Undo depends on them.
@@ -477,6 +478,19 @@ Part of the domain reference — `.ai/domain.md` is the index.
     warning therefore lists what is AT RISK, not what will go; no plan can know
     which projects the third-party tool will leave modified. Three smoke specs pin
     the three outcomes (saved / unchanged / failed).
+  - **The dialog is the decision; the caveats are one click away.** Everything
+    this action cannot promise is true and worth saying — third-party code, no
+    verdict on either side, a weaker dry run, a rolling backup — and it once
+    filled six paragraphs of the dialog's surface. Six paragraphs of hedging is
+    not honesty, it is a wall that gets skimmed, and skimming costs exactly the
+    attention the destructive line needs (measured against itself: the trim
+    roughly halved the dialog). The surface now carries the release, ONE list
+    (file · characters · at-risk marker · last release, under a "Last refreshed
+    by the studio" header — the header is what makes a bare "never" honest), the
+    consent line, and the buttons; the rest lives in the `OfferInfo` InfoPopup,
+    which is where the app already keeps this. At-risk backups are marked ON the
+    rows rather than listed again below: same projects, and a second list of the
+    same names reads as twice the work.
   - **`changed` is `hou.hipFile.hasUnsavedChanges()` read after the tool ran**,
     and a project is saved only when it says yes. That is an observation about
     the scene, NOT a claim about what the third-party tool touched — the UI
