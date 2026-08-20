@@ -215,10 +215,16 @@ export function EditorHeader({
     // that one clear sentence for a hython error).
     const repointing = impact.houdiniProjects.length > 0 && !impact.houdiniBlocked
     if (!impact.wipes && !repointing) return
+    // Names only the halves that are actually about to run. A character with no
+    // exports yet but a linked project reaches here for the repoint ALONE, and
+    // announcing that it is "clearing the old exports" describes work that has
+    // nothing to do — the one thing this whole flow is careful not to do.
     const running = toast.loading(
-      repointing
+      impact.wipes && repointing
         ? 'Clearing the old exports and repointing the Houdini projects…'
-        : 'Clearing the old exports…',
+        : impact.wipes
+          ? 'Clearing the old exports…'
+          : 'Repointing the Houdini projects…',
     )
     try {
       const report = await applyCharacterRenameCleanup({
@@ -230,8 +236,12 @@ export function EditorHeader({
         },
       })
       const cleared = report.wiped.reduce((sum, target) => sum + target.bytes, 0)
+      // Lower-case fragments joined with ' · ', capitalized once at the front —
+      // either half can be the one that happened, so neither can carry the
+      // capital of its own accord ("repointed 1 Houdini project." opening a
+      // toast was the tell).
       const parts = [
-        report.wiped.length > 0 ? `Cleared ${formatBytes(cleared)} of old exports` : '',
+        report.wiped.length > 0 ? `cleared ${formatBytes(cleared)} of old exports` : '',
         report.houdiniUpdated.length > 0
           ? `repointed ${report.houdiniUpdated.length === 1 ? '1 Houdini project' : `${report.houdiniUpdated.length} Houdini projects`}`
           : '',
@@ -240,7 +250,17 @@ export function EditorHeader({
       // happened: the warnings below are then the whole story, and a green
       // "done" above them would be the wrong half of it.
       if (parts.length > 0) {
-        toast.success(`${parts.join(' · ')}. Run DTH Export to rebuild them.`, { id: running })
+        const summary = parts.join(' · ')
+        toast.success(
+          `${summary[0].toUpperCase()}${summary.slice(1)}. ${
+            // Nothing was cleared when the character had no exports to begin
+            // with — there is no "them" to rebuild, only a first set to make.
+            report.wiped.length > 0
+              ? 'Run DTH Export to rebuild them.'
+              : 'Run DTH Export to fill them.'
+          }`,
+          { id: running },
+        )
       } else {
         toast.dismiss(running)
       }

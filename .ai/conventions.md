@@ -483,6 +483,26 @@ the same folder and must never be touched. It asks rather than sweeping: the one
 case where the copy is still worth its 8 MB is a failed run the user hasn't
 undone, which the prompt calls out in amber.
 
+**Two things that quietly break the net, both measured.** First, the collector
+is `backupsIn` (houdini-utils/shared.ts) and it spreads each per-project result
+list BY NAME — so a new op is one forgotten line from having its copies never
+offered and never cleared, and unlike the Python / Rust struct / zod schema /
+contract fixture (each of which fails loudly when a new op is missed) this one
+just returns fewer rows. `retarget` shipped exactly that way. `backups-in.test.ts`
+now walks the shared fixture and demands one row per `backupPath` in it, so the
+next omission is a red test.
+
+Second, **the backup is ROLLING per file** — `<dir>/backup/<name>_dthbak<ext>`,
+overwritten in place — so two write-ops run back-to-back over the SAME project
+leave only the second one's copy. Both pairings in the app do this: the rename's
+`defaults` → `retarget` and `character-zip`'s `defaults` → `repath`. The
+practical rule when reporting: only the LAST writer can name a backup path
+truthfully, so the rename surfaces `backupPath` on the retarget failure and
+deliberately not on the defaults one. And a flow outside the DRAWER has no
+session and no close prompt, so its copies are never collected at all — bounded
+(rolling, one per project) but real, and worth knowing before adding a third
+non-drawer caller.
+
 Modal footers: the Cancel button is always `variant="ghost"`, first child of
 the right-aligned `flex justify-end gap-2` footer row — immediately left of the
 affirmative/primary action (e.g. `bulk-delete-dialog.tsx`,

@@ -35,9 +35,9 @@ const EXPORTS = {
 const HOUDINI_INSTALL = 'C:/Program Files/Side Effects Software/Houdini 22.0.368'
 const HOUDINI_DOCS = 'C:/Users/dev/Documents/houdini22.0'
 
-function seedWithExports(opts: { houdini?: boolean } = {}) {
+function seedWithExports(opts: { houdini?: boolean; exports?: boolean } = {}) {
   const seed = buildSeed({ activeProjectFile: P.dcsp, houdiniProject: true })
-  Object.assign(seed.files, EXPORTS)
+  if (opts.exports !== false) Object.assign(seed.files, EXPORTS)
   if (opts.houdini) {
     const settingsPath = `${P.appData}/settings.json`
     seed.files[settingsPath] = JSON.stringify({
@@ -50,7 +50,10 @@ function seedWithExports(opts: { houdini?: boolean } = {}) {
   return seed
 }
 
-async function openCharacterWithExports(page: Page, opts: { houdini?: boolean } = {}) {
+async function openCharacterWithExports(
+  page: Page,
+  opts: { houdini?: boolean; exports?: boolean } = {},
+) {
   await page.addInitScript(installTauriMock, seedWithExports(opts))
   await page.goto('/')
   await page.getByRole('link', { name: /Kira/ }).click()
@@ -151,6 +154,33 @@ test('with Houdini paired, the rename is followed into the linked project', asyn
       folderTo: `${P.project}/Nova`,
     },
   ])
+
+  expect(await unhandledCommands(page)).toEqual([])
+})
+
+test('a character with no exports yet is repointed without a dialog', async ({ page }) => {
+  // The third state, and the one with no warning in it: nothing on disk to
+  // lose, so the rename just happens — but the linked project still imports by
+  // the old name, so the repoint runs anyway, behind its own toast.
+  await openCharacterWithExports(page, { houdini: true, exports: false })
+  await renameTo(page, 'Nova')
+
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(page.getByText(/Renamed to “Nova”/)).toBeVisible()
+
+  // The RESULT is what a spec can hold: it opens with a capital (either half
+  // can be the only one that happened, so neither carries its own) and asks for
+  // the export that has never run, rather than for a rebuild of something that
+  // never existed.
+  //
+  // Its in-flight line — "Repointing the Houdini projects…", the one that must
+  // NOT claim to be clearing exports that do not exist — is deliberately not
+  // asserted: the fake answers instantly, so the loading toast is replaced
+  // before it can be observed, and a spec that raced it would be flaky rather
+  // than strict.
+  await expect(
+    page.getByText('Repointed 1 Houdini project. Run DTH Export to fill them.'),
+  ).toBeVisible()
 
   expect(await unhandledCommands(page)).toEqual([])
 })
