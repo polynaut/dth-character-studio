@@ -503,6 +503,21 @@ session and no close prompt, so its copies are never collected at all — bounde
 (rolling, one per project) but real, and worth knowing before adding a third
 non-drawer caller.
 
+**A default is not a decision.** Skipping a control because its default is
+almost always right does not remove a question — it answers one on the user's
+behalf, silently, and takes away the only place the answer was visible. Prefill
+it instead: a control that opens on the right value costs the common case one
+glance and zero clicks, and it is the only thing telling the rare case that a
+choice was made at all. The worked example is the Generate Houdini project
+dialog's **Daz scene to import** picker, which #782 hid for a character's first
+project (the first project is the main one, wired to the primary — true of
+almost every character) and #939 put back: the wiring the shortcut chose was
+observable nowhere but inside the finished network, five import paths deep, and
+the character whose first project was for an outfit scene could not reach it at
+all. It is the counterpart to "a safety net is not a status line" above, not a
+contradiction of it: a mechanism the user cannot act on stays quiet, a choice
+made FOR them does not.
+
 Modal footers: the Cancel button is always `variant="ghost"`, first child of
 the right-aligned `flex justify-end gap-2` footer row — immediately left of the
 affirmative/primary action (e.g. `bulk-delete-dialog.tsx`,

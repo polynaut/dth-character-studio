@@ -1025,14 +1025,19 @@ function GenerateProjectDialog({
           </p>
         )}
       </div>
-      {/* Only worth asking when there IS a choice — and never for the FIRST
-          project: one scene has exactly one export set, and a character's
-          first project is its main one, wired to the primary scene without a
-          question. The picker earns its place from the second project on —
-          the per-outfit ones, where "which scene's export set?" genuinely
-          differs. (Unlink every project and the next generate counts as first
-          again.) */}
-      {scenes.length > 1 && character.houdiniProjects.length > 0 && (
+      {/* Only worth asking when there IS a choice: one linked scene has exactly
+          one export set, so the summary line above names it and there is
+          nothing to pick.
+
+          It used to skip the FIRST project too, on the reasoning that a
+          character's first project is its main one — but the guess was
+          invisible: nothing on screen said a choice had been made, and the
+          only way to notice was to open the finished network and find five
+          import paths aimed at a scene the user hadn't picked. The primary is
+          still the DEFAULT (`dazScenePath` starts there), so the fast path is
+          unchanged — the picker just says so out loud, and re-aiming it costs
+          one click instead of five hand edits in Houdini. */}
+      {scenes.length > 1 && (
         <div>
           <Label htmlFor="generate-houdini-scene" className="mb-1">
             Daz scene to import

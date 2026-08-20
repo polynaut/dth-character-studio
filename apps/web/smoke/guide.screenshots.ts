@@ -488,7 +488,7 @@ test('character-scripts-section', async ({ page }) => {
 test('houdini-generate-dialog', async ({ page }) => {
   // TWO scenes, so the dialog shows its "Daz scene to import" picker — the shot
   // is what the guide points at when it explains generating one project per
-  // scene. (A single-scene character isn't asked, and the picker is hidden.)
+  // scene. (A single-scene character has nothing to pick and isn't asked.)
   await openCharacter(page, { extraScene: true })
   // The demo character carries the new-character export setup (seeded export
   // dir + `<Project>_<Character>` project folder), so Generate project is
