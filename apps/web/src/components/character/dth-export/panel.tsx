@@ -430,13 +430,32 @@ export function DthExportPanel({
         ? null
         : [...runSets].sort()
 
+  /**
+   * The export sets this run would hand to ONE project — the chips on its row,
+   * and exactly the task rows the Unreal leg will carry for it.
+   *
+   * Narrowed to what the probe LOCATED there, because the send is re-import
+   * only and `unrealTaskCards` drops the rest: a chip for a set that project
+   * has never held would name a job the run then doesn't run.
+   *
+   * Empty whenever the studio cannot name the sets (`sendSets === null`) — the
+   * send hands over the whole export folder then, and the task list shows one
+   * unnamed row per project, so there is nothing honest to chip. The amber
+   * notice under the list is what says so.
+   */
+  function sendSetsFor(uproject: string): Array<string> {
+    if (sendSets === null) return []
+    const located = sendPlan?.located[uproject] ?? {}
+    return sendSets.filter((name) => located[name] !== undefined)
+  }
+
   /** Does this project already hold something this run is sending it? The
    *  pre-tick and the row's own subtitle ask exactly that — "has this
    *  character" is not "has what this run makes". */
   function holdsSendSet(uproject: string): boolean {
     const located = sendPlan?.located[uproject] ?? {}
     if (sendSets === null) return Object.keys(located).length > 0
-    return sendSets.some((name) => located[name] !== undefined)
+    return sendSetsFor(uproject).length > 0
   }
 
   /**
@@ -976,6 +995,10 @@ export function DthExportPanel({
                 <HipRow
                   key={hip}
                   hip={hip}
+                  // What the STORED scan says this project writes. Absent (an
+                  // unscanned project) is "not known" — the row shows no chips
+                  // rather than claiming it writes none.
+                  sets={hipImports.find((scan) => scan.hipPath === hip)?.exportSets ?? []}
                   checked={checkedHips.has(hip)}
                   missing={hipMissing.has(hip)}
                   onToggle={() => toggleHip(hip)}
@@ -1043,6 +1066,10 @@ export function DthExportPanel({
                   <UnrealRow
                     key={uproject}
                     uproject={uproject}
+                    // Only what this run can actually put in there — a send
+                    // that can't happen (nothing produced, or the leg can't
+                    // send at all) names nothing.
+                    sets={unrealSendable && !nothingToSend ? sendSetsFor(uproject) : []}
                     checked={checkedUnreal.has(uproject)}
                     has={has}
                     // `has === false` is a landed probe saying there is nothing
