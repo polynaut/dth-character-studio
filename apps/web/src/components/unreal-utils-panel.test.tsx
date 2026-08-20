@@ -11,6 +11,10 @@ const state = {
   engineAssociation: '5.7',
   dthPresent: false,
   installedPlugins: [] as Array<string>,
+  /** 0 = no bridge in the project. The real command always sends the field
+   *  (zod defaults it), and the drawer reads it to tell a CURRENT bridge from
+   *  a stale one — the one installed row it still pre-ticks. */
+  bridgeVersion: 0,
 }
 const unrealProjectState = vi.fn(async (_: { data: { uprojectPath: string } }) => ({ ...state }))
 // `buildId` on every entry — the native scan always sends the field, and a mock
@@ -73,18 +77,21 @@ vi.mock('#/lib/rom/api.ts', () => ({
   detectUnrealEngines: () => detectUnrealEngines(),
 }))
 
-import { UnrealInstallDialog } from './unreal-install-dialog'
+import { UnrealUtilsPanel } from './unreal-utils-panel'
 
 const UPROJECT = 'C:/UE/Game/Game.uproject'
 
-describe('UnrealInstallDialog', () => {
-  it('pre-checks DTH content, the bridge, and the builds matching the project engine', async () => {
-    render(<UnrealInstallDialog uprojectPath={UPROJECT} onClose={() => {}} onInstalled={() => {}} />)
+describe('UnrealUtilsPanel', () => {
+  it('pre-checks the MISSING items — content, bridge, and the builds matching the engine', async () => {
+    render(<UnrealUtilsPanel open uprojectPath={UPROJECT} onClose={() => {}} onInstalled={() => {}} />)
     await waitFor(() => expect(screen.getByText('DTH content')).toBeTruthy())
 
+    // A drawer with an Install tab, not the old modal.
+    expect(screen.getByRole('tab', { name: 'Install' })).toBeTruthy()
     // Engine read from the .uproject; the 5.6 build is filtered out — ONE
     // DazToUnreal row (the 5.7 build), plus the any-engine tool, plus the
-    // studio's own two engine-independent entries.
+    // studio's own two engine-independent entries. Nothing is installed in
+    // this project, so every row is something it is missing.
     expect(screen.getByText('Unreal Engine 5.7')).toBeTruthy()
     const boxes = screen.getAllByRole('checkbox') as Array<HTMLInputElement>
     expect(boxes).toHaveLength(4)
@@ -99,7 +106,7 @@ describe('UnrealInstallDialog', () => {
   it('installs the checked items with overwrite and reports back', async () => {
     const onClose = vi.fn()
     const onInstalled = vi.fn()
-    render(<UnrealInstallDialog uprojectPath={UPROJECT} onClose={onClose} onInstalled={onInstalled} />)
+    render(<UnrealUtilsPanel open uprojectPath={UPROJECT} onClose={onClose} onInstalled={onInstalled} />)
     await waitFor(() => expect(screen.getByText('DTH content')).toBeTruthy())
 
     // Uncheck the any-engine tool — only DTH content + DazToUnreal install.
@@ -122,16 +129,19 @@ describe('UnrealInstallDialog', () => {
     expect(onInstalled).toHaveBeenCalledWith(true)
   })
 
-  it('installs the bridge from the checklist — and says when the project has it', async () => {
+  it('leaves an already-installed item unticked — and installs it when ticked', async () => {
     // The studio's own plugin is an ITEM, not a side effect of sending a
-    // character: it lands in the user's `Plugins/` only because they ticked it,
-    // and a project that already has it says so like any other install.
+    // character: it lands in the user's `Plugins/` only because they ticked it.
+    // A project that already has the CURRENT copy is not missing it, so the
+    // drawer says so and leaves the row off — re-installing is a deliberate
+    // tick, never the default.
     unrealProjectState.mockResolvedValueOnce({
       engineAssociation: '5.7',
       dthPresent: false,
       installedPlugins: ['DTHCharacterStudioRunner'],
+      bridgeVersion: 2,
     })
-    render(<UnrealInstallDialog uprojectPath={UPROJECT} onClose={() => {}} onInstalled={() => {}} />)
+    render(<UnrealUtilsPanel open uprojectPath={UPROJECT} onClose={() => {}} onInstalled={() => {}} />)
     await waitFor(() => expect(screen.getByText('Plugins/DTHCharacterStudioRunner')).toBeTruthy())
 
     const row = screen.getByText('Plugins/DTHCharacterStudioRunner').closest('label')!
@@ -140,8 +150,10 @@ describe('UnrealInstallDialog', () => {
     // pointed the studio at, and this one arrives out of the app itself.
     expect(row.textContent).toContain('built in')
     expect(row.textContent).toContain('installed — a check overwrites it')
-    expect(row.querySelector('input')!.checked).toBe(true)
+    expect(row.querySelector('input')!.checked).toBe(false)
 
+    // Ticking it is what installs it.
+    fireEvent.click(row.querySelector('input')!)
     fireEvent.click(screen.getByRole('button', { name: /Install$/ }))
     await waitFor(() => expect(installUnrealBridge).toHaveBeenCalledTimes(1))
     expect(installUnrealBridge.mock.calls[0][0].data).toEqual({ uprojectPath: UPROJECT })
@@ -152,8 +164,9 @@ describe('UnrealInstallDialog', () => {
       engineAssociation: '{1AC42E62-5A4F-2D31-A3C4-9DA2BBBB78A2}',
       dthPresent: false,
       installedPlugins: [],
+      bridgeVersion: 0,
     })
-    render(<UnrealInstallDialog uprojectPath={UPROJECT} onClose={() => {}} onInstalled={() => {}} />)
+    render(<UnrealUtilsPanel open uprojectPath={UPROJECT} onClose={() => {}} onInstalled={() => {}} />)
     await waitFor(() => expect(screen.getByText('DTH content')).toBeTruthy())
 
     expect(screen.getByText(/Engine version unknown/)).toBeTruthy()
@@ -171,7 +184,7 @@ describe('UnrealInstallDialog', () => {
     // break there would silently answer "cannot tell" for every build, with
     // nothing to see.
     scanUnrealPlugins.mockResolvedValueOnce([{ ...KAWAII, buildId: '55116800' }])
-    render(<UnrealInstallDialog uprojectPath={UPROJECT} onClose={() => {}} onInstalled={() => {}} />)
+    render(<UnrealUtilsPanel open uprojectPath={UPROJECT} onClose={() => {}} onInstalled={() => {}} />)
     await waitFor(() => expect(screen.getByText('KawaiiPhysics')).toBeTruthy())
 
     expect(screen.getByText(/built for another engine build/)).toBeTruthy()
@@ -191,7 +204,7 @@ describe('UnrealInstallDialog', () => {
       { ...KAWAII, path: 'X:/plugins/KawaiiPhysics_5_8_0/Plugins/KawaiiPhysics', buildId: '55116800' },
       { ...KAWAII, path: 'X:/plugins/KawaiiPhysics_5_7_1/Plugins/KawaiiPhysics', buildId: '47537391' },
     ])
-    render(<UnrealInstallDialog uprojectPath={UPROJECT} onClose={() => {}} onInstalled={() => {}} />)
+    render(<UnrealUtilsPanel open uprojectPath={UPROJECT} onClose={() => {}} onInstalled={() => {}} />)
     await waitFor(() => expect(screen.getByText('KawaiiPhysics')).toBeTruthy())
 
     // ONE row, no warning on it, and pre-checked — it is the 5.7-matching build.
@@ -211,7 +224,7 @@ describe('UnrealInstallDialog', () => {
   it('stays open and re-probes when an install fails (the checklist must tell the truth)', async () => {
     const onClose = vi.fn()
     installUnrealPlugin.mockRejectedValue(new Error('locked'))
-    render(<UnrealInstallDialog uprojectPath={UPROJECT} onClose={onClose} onInstalled={() => {}} />)
+    render(<UnrealUtilsPanel open uprojectPath={UPROJECT} onClose={onClose} onInstalled={() => {}} />)
     await waitFor(() => expect(screen.getByText('DTH content')).toBeTruthy())
 
     fireEvent.click(screen.getByRole('button', { name: /Install$/ }))
@@ -225,5 +238,45 @@ describe('UnrealInstallDialog', () => {
       const boxes = screen.getAllByRole('checkbox') as Array<HTMLInputElement>
       expect(boxes.map((box) => box.checked)).toEqual([false, false, true, true])
     })
+  })
+
+  it('pre-ticks an installed-but-STALE bridge (present is not the same as current)', async () => {
+    // The card's amber mark says "re-install it" and points at this drawer —
+    // arriving to find the very row it meant left unticked (because it IS
+    // installed) would make the fix look like it wasn't offered.
+    unrealProjectState.mockResolvedValueOnce({
+      engineAssociation: '5.7',
+      dthPresent: true,
+      installedPlugins: ['DTHCharacterStudioRunner'],
+      bridgeVersion: 1,
+    })
+    render(<UnrealUtilsPanel open uprojectPath={UPROJECT} onClose={() => {}} onInstalled={() => {}} />)
+    await waitFor(() => expect(screen.getByText('Plugins/DTHCharacterStudioRunner')).toBeTruthy())
+
+    const bridge = screen.getByText('Plugins/DTHCharacterStudioRunner').closest('label')!
+    expect(bridge.textContent).toContain('out of date — a check re-installs it')
+    expect(bridge.querySelector('input')!.checked).toBe(true)
+    // …while the DTH content, installed and with nothing to say it is stale,
+    // stays off.
+    const content = screen.getByText('DTH content').closest('label')!
+    expect(content.querySelector('input')!.checked).toBe(false)
+  })
+
+  it('ticks nothing (and says so) when the project already has everything', async () => {
+    unrealProjectState.mockResolvedValueOnce({
+      engineAssociation: '5.7',
+      dthPresent: true,
+      installedPlugins: ['DTHCharacterStudioRunner', 'DazToUnreal', 'AnyTool'],
+      bridgeVersion: 2,
+    })
+    render(<UnrealUtilsPanel open uprojectPath={UPROJECT} onClose={() => {}} onInstalled={() => {}} />)
+    await waitFor(() => expect(screen.getByText('DTH content')).toBeTruthy())
+
+    const boxes = screen.getAllByRole('checkbox') as Array<HTMLInputElement>
+    expect(boxes.filter((box) => box.checked)).toHaveLength(0)
+    // An empty checklist must not read as "the drawer couldn't work out what I
+    // need" — it says which it is, and Install is off until something is ticked.
+    expect(screen.getByText(/Everything listed is already installed/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Install$/ })).toHaveProperty('disabled', true)
   })
 })

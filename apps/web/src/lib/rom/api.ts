@@ -163,6 +163,7 @@ export type { ProductScanResult } from './api/products'
 export {
   adoptUnrealImports,
   dismissUnrealImport,
+  fetchUnrealOpenEditors,
   fetchUnrealSendPlan,
   fetchUnrealImportProgress,
   installUnrealBridge,
@@ -174,6 +175,7 @@ export type {
   UnrealAdoptedImport,
   UnrealExportSet,
   UnrealImportStarted,
+  UnrealPendingJobOutcome,
   UnrealSendPlan,
 } from './api/unreal-import'
 
@@ -238,6 +240,11 @@ export {
 } from './api/houdini'
 export type { GeneratedHoudiniProject, HoudiniExportStarted, HoudiniRunPlan } from './api/houdini'
 
+// --- renaming a character: what the old name still owns (the export trees on
+// --- disk, the Houdini projects importing them by name)
+export { applyCharacterRenameCleanup, fetchCharacterRenameImpact } from './api/rename'
+export type { CharacterRenameCleanup, CharacterRenameImpact } from './api/rename'
+
 // --- houdini material utilities: scan DazToHueMaterial nodes, transfer a
 // --- node's texture-baker setup onto others, repair per-project $JOB (hython)
 export {
@@ -250,9 +257,11 @@ export {
   discardHoudiniBackups,
   prefillHoudiniNetwork,
   refreshHoudiniAssets,
+  houdiniUtilsReady,
   repairHoudiniDefaults,
   repathHoudiniReferences,
   restoreHoudiniBackup,
+  retargetHoudiniReferences,
   fetchCachedHoudiniScans,
   fetchHoudiniProjectStatus,
   fetchHoudiniSourceRecents,
@@ -283,6 +292,7 @@ export type {
   ProjectPrefillInfo,
   ProjectRefInfo,
   RepathResult,
+  RetargetResult,
 } from './api/native-types.ts'
 
 // --- generate: artifact generation + refresh sweep + version detection ------

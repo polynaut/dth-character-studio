@@ -194,6 +194,66 @@ export function WaitForDazCloseModal({
   )
 }
 
+/**
+ * The export sets a project row carries, as chips on their own line.
+ *
+ * One chip = one **DazToHue network**: the HDA's `character_name`, which is the
+ * export set the network writes and therefore the folder that reaches Unreal.
+ *
+ * What a list MEANS differs per leg, and only one of them is a statement about
+ * the run:
+ *
+ * - **Houdini** — what that PROJECT writes, ticked or not and whatever mode the
+ *   run is in. It describes the `.hip`, NOT the queue, and the three ways it
+ *   parts company with the task rows are all normal: `houdiniTaskCards` names
+ *   its rows from these only from TWO networks up (below that a project is one
+ *   row carrying the project's own name), `skip` runs no Houdini leg at all,
+ *   and an unticked project contributes nothing. What the chips buy is the
+ *   count — how much work a `.hip` is — before Start.
+ * - **Unreal** — what THIS RUN would send into that project, already narrowed
+ *   by the panel to the sets the probe located there. That one IS the leg's
+ *   rows: `unrealTaskCards` is one row per set per project and drops exactly
+ *   the sets this list does.
+ *
+ * Empty renders NOTHING rather than "no networks": an unscanned project reports
+ * an empty list, and empty means *not known* everywhere it is read (see the
+ * scan schema's own note on `exportSets`). A row that stated "0 networks" would
+ * turn that ignorance into a claim.
+ */
+function SetChips({
+  caption,
+  names,
+  tone,
+}: {
+  /** What the names ARE on this leg, since the chips sit under a cover button
+   *  that swallows their `title` — the word has to be on screen. */
+  caption: string
+  names: ReadonlyArray<string>
+  tone: 'houdini' | 'unreal'
+}) {
+  if (names.length === 0) return null
+  return (
+    // `data-sets`/`data-set` are the smoke's hook on the run's shape before it
+    // starts — the same role `data-task` plays on the pipeline list once it has.
+    <div data-sets={tone} className="mt-1 flex flex-wrap items-center gap-1">
+      <span className="text-[11px] leading-4 text-muted-foreground">{caption}</span>
+      {names.map((name) => (
+        <span
+          key={name}
+          data-set={name}
+          className={`max-w-full truncate rounded border px-1.5 py-px text-[11px] leading-4 ${
+            tone === 'houdini'
+              ? 'border-houdini-orange/40 bg-houdini-orange/10 text-houdini-orange'
+              : 'border-unreal-blue/40 bg-unreal-blue/10 text-unreal-blue'
+          }`}
+        >
+          {name}
+        </span>
+      ))}
+    </div>
+  )
+}
+
 /** One selectable scene row — a simplified Daz scene card: checkbox, `.tip.png`
  *  portrait, name, status hint, and the solo wand. Clicking the row toggles its
  *  checkbox, double-clicking selects EVERY row (the wand's counterpart); the
@@ -395,11 +455,20 @@ export const HOUDINI_MODE_OPTIONS: ReadonlyArray<{ mode: HoudiniRunMode; title: 
 
 export function HipRow({
   hip,
+  sets,
   checked,
   missing,
   onToggle,
 }: {
   hip: string
+  /** The DazToHue networks this project writes, from the STORED scan (each
+   *  export node's `character_name`) — read without opening the `.hip`, which
+   *  costs tens of seconds. A fact about the PROJECT: it holds whether the row
+   *  is ticked or not, and under "Skip Houdini", which runs no Houdini leg at
+   *  all. Empty = the scan has never reached this project, which is "not
+   *  known", not "writes none": the chips then say nothing at all (see
+   *  {@link SetChips}). */
+  sets: ReadonlyArray<string>
   checked: boolean
   /** The `.hip` can't be found on disk — the row is refused (an already-checked
    *  one can still be UNchecked, like the scene rows' stale-status rule). */
@@ -436,6 +505,12 @@ export function HipRow({
           >
             {missing ? 'Project file missing on disk — relink it in the editor' : shortPath}
           </p>
+          {/* What this project actually DOES, one chip per network. A project
+              can hold several, and until they were on the row the only way to
+              learn how many was to start the run and watch the task list fill
+              in. Not a claim about THIS run — the checkbox is what says whether
+              the project is in it (see {@link SetChips}). */}
+          <SetChips caption="Networks" names={sets} tone="houdini" />
         </div>
       </div>
       {/* Row-wide toggle as a transparent cover, like the scene rows. */}
@@ -457,12 +532,19 @@ export function HipRow({
  *  {@link HipRow} — checkbox, logo, name, one line of context. */
 export function UnrealRow({
   uproject,
+  sets,
   checked,
   has,
   disabled,
   onToggle,
 }: {
   uproject: string
+  /** The export sets this run would send INTO THIS PROJECT — the characters it
+   *  is getting, one import job (and one task row) each. Already narrowed to
+   *  what the probe located there, because the send is re-import only and
+   *  `unrealTaskCards` drops the rest. Empty when there is nothing to send or
+   *  the studio cannot name it. */
+  sets: ReadonlyArray<string>
   checked: boolean
   /** The project already holds at least one export set THIS RUN is sending it
    *  (assets named after it) — a re-import, and why the row comes pre-checked.
@@ -513,6 +595,11 @@ export function UnrealRow({
                 ? 'Nothing here to re-import — make the first import in Unreal itself'
                 : shortPath}
           </p>
+          {/* WHICH characters land in this project — one chip per import job,
+              the same rows the run's task list carries for it. The section
+              deliberately asks nothing about them (see the panel's `sendSets`);
+              this only shows what the studio already worked out. */}
+          <SetChips caption="Characters" names={sets} tone="unreal" />
         </div>
       </div>
       {!disabled && (

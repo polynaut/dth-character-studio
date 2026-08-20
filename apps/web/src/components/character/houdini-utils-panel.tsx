@@ -82,6 +82,7 @@ import {
   FOLDER_KIND_UI,
   FOLDER_KINDS,
   SECTION_LABELS,
+  TRANSIENT_TOAST_MS,
   backupsIn,
   fileName,
   hipStem,
@@ -904,10 +905,17 @@ export function HoudiniUtilsPanel({
       const removed = await discardHoudiniBackups({ data: { paths } })
       // Counted, not assumed: Houdini holding a file open is the ordinary way
       // one survives, and "removed" would be a lie about the disk.
+      const all = removed === paths.length
       utilsToast.success(
-        removed === paths.length
+        all
           ? `${removed} backup${removed === 1 ? '' : 's'} removed.`
           : `${removed} of ${paths.length} backups removed — the rest are in use and stay.`,
+        // The one drawer toast that does NOT stick around (see `utilsToast`):
+        // a clean sweep is housekeeping the user just asked for and watched
+        // happen, with nothing left to act on. The partial form keeps the
+        // drawer's sticky default — it names copies still sitting on disk, and
+        // the drawer closing behind it makes this their only mention.
+        all ? { duration: TRANSIENT_TOAST_MS } : undefined,
       )
     } catch (error) {
       utilsToast.error(error instanceof Error ? error.message : String(error))

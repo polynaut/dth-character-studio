@@ -320,6 +320,38 @@ pub struct RepathResult {
     pub backup_path: String,
 }
 
+/// What `retarget` did (or would do) to one project after a character rename.
+///
+/// The sibling of `RepathResult`, and deliberately not folded into it: a repath
+/// REPAIRS a break and may only ever write a path it has verified on disk,
+/// while this FOLLOWS a rename the studio just performed — the export set it
+/// aims at does not exist until the user re-exports, which is the whole point.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RetargetResult {
+    pub hip_path: String,
+    pub ok: bool,
+    pub error: String,
+    /// File references rewritten to the character's new folder / export name.
+    pub retargeted: Vec<RepairedRef>,
+    /// `import_character_name` parms moved to the new slug. Separate from
+    /// `retargeted` because it is not a path: the HDA concatenates it with
+    /// `export_directory` to build its OUTPUT folder, so a stale one keeps
+    /// writing into the old tree even when every import path is correct.
+    pub renamed_nodes: Vec<RepairedRef>,
+    /// `import_character_name` parms left alone because they held neither
+    /// spelling of the old name (the studio prefills the slug, the HDA's own
+    /// auto-fill takes the `.dth`'s figure name) — so it is the user's own
+    /// value, reported rather than overwritten (`<node> <parm> = <value>`).
+    pub kept_names: Vec<String>,
+    /// Matching references on the user's OWN nodes, as `<node> <parm>`. The
+    /// studio rewrites only the paths it emits itself, so these are named
+    /// instead of silently left looking handled.
+    pub foreign: Vec<String>,
+    /// Pre-retarget backup (empty for a dry run, and when nothing changed).
+    pub backup_path: String,
+}
+
 /// What `refresh` did (or would do) to one project.
 ///
 /// The operation runs the DazToHue shelf's own "Refresh Assets" tool against
@@ -472,7 +504,8 @@ pub struct MaterialTransferTarget {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MaterialUtilReport {
-    /// `scan`, `transfer`, `defaults`, `repath`, `prefill` or `refresh`.
+    /// `scan`, `transfer`, `defaults`, `repath`, `retarget`, `prefill` or
+    /// `refresh`.
     pub op: String,
     /// false = the operation itself failed (bad request, source node missing);
     /// per-project and per-target failures are reported in their own `ok`.
@@ -486,6 +519,8 @@ pub struct MaterialUtilReport {
     pub defaults: Vec<HoudiniDefaultsResult>,
     /// Populated by `repath` — one entry per project it was asked about.
     pub repath: Vec<RepathResult>,
+    /// Populated by `retarget` — one entry per project it was asked about.
+    pub retarget: Vec<RetargetResult>,
     /// Populated by `prefill` — one entry per project it was asked about.
     pub prefill: Vec<PrefillResult>,
     /// Populated by `refresh` — one entry per project it was asked about.

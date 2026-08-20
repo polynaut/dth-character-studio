@@ -319,6 +319,24 @@ async function resolveHython(): Promise<{ hythonPath: string; houdiniPrefDir: st
   return { hythonPath, houdiniPrefDir }
 }
 
+/**
+ * '' when a material-utility op can run here, else WHY it cannot, in the words
+ * {@link resolveHython} would have thrown.
+ *
+ * For flows that must decide up front rather than fail halfway: the rename
+ * dialog asks before clearing anything, because a user whose projects can't be
+ * repointed may want to fix Settings first and the clearing is not undoable.
+ */
+export async function houdiniUtilsReady(): Promise<string> {
+  if (!isTauri()) return 'Repointing a Houdini project needs the desktop app (it runs hython).'
+  try {
+    await resolveHython()
+    return ''
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e)
+  }
+}
+
 /** Write the script + request into app-data and run one operation. */
 async function runMaterialUtil(request: unknown): Promise<MaterialUtilReport> {
   const { hythonPath, houdiniPrefDir } = await resolveHython()
@@ -982,6 +1000,64 @@ export async function repathHoudiniReferences({
   return runMaterialUtil({
     op: 'repath',
     targets: targets.map(({ hipPath, jobDir }) => ({ hipPath, jobDir, exportDir })),
+    dryRun,
+  })
+}
+
+const retargetInput = z.object({
+  /** The linked `.hip` files to follow the rename into. */
+  hipPaths: z.array(z.string().min(1)).min(1),
+  /** The character's export base name before and after the rename
+   *  (`exporterFigureName` — what every exported file's name is built from). */
+  nameFrom: z.string().min(1),
+  nameTo: z.string().min(1),
+  /** `import_character_name`'s value before and after (`characterSlug`). */
+  slugFrom: z.string().default(''),
+  slugTo: z.string().default(''),
+  /** The character folder before and after — a rename MOVES it, so absolute
+   *  references into it name a folder that no longer exists. */
+  folderFrom: z.string().default(''),
+  folderTo: z.string().default(''),
+  dryRun: z.boolean(),
+})
+
+/**
+ * Follow a character rename through each project's stored references.
+ *
+ * The third `$JOB`-adjacent op, and the one that cannot be either of the other
+ * two: {@link repairHoudiniDefaults} fixes what the user picks afterwards,
+ * {@link repathHoudiniReferences} repairs a break — and may only ever write a
+ * path whose file it has VERIFIED — while a rename leaves nothing to verify.
+ * The old export set is wiped as part of the rename and the new one does not
+ * exist until the user re-exports, which is exactly why the paths have to be
+ * written on the strength of what the studio just did rather than on what is
+ * on disk.
+ *
+ * Two swaps per reference (the Python's `_retarget_value`): the character
+ * FOLDER on an exact prefix match, and the export BASE NAME on the last path
+ * segment — one rule that covers `<name>.dth`, `<name>_Summertide.abc`,
+ * `<name>_experimental_rom.fbx`, `<name>_pose_asset.csv`,
+ * `<name>_Hair_<item>_grooms.abc` and the final export tree's own `export/<name>/`
+ * folder. Plus `import_character_name`, which the HDA concatenates onto
+ * `export_directory` to build its OUTPUT folder — overwritten only while it
+ * still says the old name, never when the user typed their own.
+ *
+ * Writes a `.hip`, so it carries the same guarantees as its neighbours: a dry
+ * run that changes nothing, and one rolling backup before any save.
+ */
+export async function retargetHoudiniReferences({
+  data,
+}: {
+  data: unknown
+}): Promise<MaterialUtilReport> {
+  const input = retargetInput.parse(data)
+  if (!isTauri()) {
+    throw new Error('Following a rename into a Houdini project needs the desktop app (it runs hython).')
+  }
+  const { hipPaths, dryRun, ...rename } = input
+  return runMaterialUtil({
+    op: 'retarget',
+    targets: hipPaths.map((hipPath) => ({ hipPath, ...rename })),
     dryRun,
   })
 }

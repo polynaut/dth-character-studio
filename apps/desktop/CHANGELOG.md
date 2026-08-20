@@ -1,5 +1,35 @@
 # @dth/desktop
 
+## 0.87.0
+
+### Minor Changes
+
+- [#931](https://github.com/polynaut/dth-character-studio/pull/931) [`9068388`](https://github.com/polynaut/dth-character-studio/commit/9068388674b9dd55913e1f82de844597dc660e31) Thanks [@polynaut](https://github.com/polynaut)! - The **Unreal project cards** in the project footer now carry the same **Utils** wrench the Daz-scene and Houdini cards do, in place of their old install button. It opens a **Utils drawer** whose **Install** tab holds the list that used to be a modal — DTH content, the DTH Character Studio Runner, and every configured plugin build matching the project's engine version — as a full-height drawer with Install pinned to its bottom edge, so a long plugin list no longer scrolls the button out of reach.
+
+  **What is ticked for you has changed: it is now what the project is missing.** Anything already installed and current starts unticked — tick it to install it again (a checked row still overwrites). The one exception is an installed-but-outdated **DTH Character Studio Runner**: the card's amber ⚠ says "re-install it", so the drawer offers that row like an absent one and marks it _out of date_.
+
+  The card's amber ⚠ now covers both reasons a linked project still needs setting up — **no DTH content yet**, or an **out-of-date Runner** — and clicking it opens the drawer that fixes it. The wrench itself stays neutral, like every other card's.
+
+### Patch Changes
+
+- [#933](https://github.com/polynaut/dth-character-studio/pull/933) [`8419c52`](https://github.com/polynaut/dth-character-studio/commit/8419c52ac0c3a6725f664e31dc14fa3237acb65a) Thanks [@polynaut](https://github.com/polynaut)! - **Closing a dialog or drawer no longer pops the tooltip back up.** Tooltips are swept away when an overlay opens (they render above it), but closing one hands focus back to the control that opened it — and a tooltip on focus shows with no delay, so it reappeared over the app under a mouse that had never moved.
+
+  Focus now only shows a tooltip when the focus is the **keyboard's**: tab to an icon-only control and its description still appears immediately, while focus the app moved for you — an overlay closing, a click landing on a button — stays quiet. Hovering is unchanged.
+
+## 0.86.1
+
+### Patch Changes
+
+- [#929](https://github.com/polynaut/dth-character-studio/pull/929) [`fc17e9f`](https://github.com/polynaut/dth-character-studio/commit/fc17e9f72d3dfa5ebe1c664f18e908be22ee28b0) Thanks [@polynaut](https://github.com/polynaut)! - Fix: a failed export can no longer destroy the copy that survived the _previous_ failed export. Before running the DTH Exporter the studio parks the existing export set aside as `<name>.dthprev`, and puts it back if the run fails. But a run that dies outright — Daz closing, the exporter aborting — never reaches that step, so the backup stays parked with a half-written file beside it. The next export then deleted that backup to make room, on the assumption that the newer file must be the good one. It isn't: measured on a real project, the "newer" files were a 0-byte `.dth` and a 29 MB fragment of an 807 MB Alembic. An existing backup is now understood as the last copy anything finished writing, and it is kept.
+
+  Also fixed: the hair Alembics were matched by a name test loose enough to match their own backups, so every export parked the previous backup again — `.dthprev.dthprev.dthprev.dthprev` files, and no live hair Alembic left. Existing stacks clear themselves on the next successful export.
+
+  Runtime v99, so **Tools → Refresh assets** reinstalls the generated scripts.
+
+- [#928](https://github.com/polynaut/dth-character-studio/pull/928) [`fc64c34`](https://github.com/polynaut/dth-character-studio/commit/fc64c34bf8489c09c7b75318308cd6b307e6fdce) Thanks [@polynaut](https://github.com/polynaut)! - Fix: a DazToHue export that fails inside Houdini is no longer reported as a success. Houdini runs an HDA's button callback through a wrapper that catches the script's exception, prints it, and returns normally — so the studio saw a clean return and counted the node as exported. A run whose project could not load its PoseAsset CSV therefore finished in 17 seconds, wrote nothing, and toasted "2 exported". Failures are now read from what Houdini actually printed: 456.py marks the individual node failed, and the studio additionally checks the run's console log, which is the only channel carrying errors Houdini raises before or outside the in-process capture (a project that fails while _loading_ now says so instead of finishing quietly).
+
+- [#927](https://github.com/polynaut/dth-character-studio/pull/927) [`05ebed1`](https://github.com/polynaut/dth-character-studio/commit/05ebed1f05ea1ae167ff3e00433b46509ac1d438) Thanks [@polynaut](https://github.com/polynaut)! - Fix: a finished Houdini project no longer collapses its task rows back to one. The run's list is one row per DazToHue **network**, but only the project being exported right now could name its networks — so the rows went 1 → N → 1, and a two-project run that really exported four networks showed two rows for the whole thing. Each project's rows now survive its turn, keeping the status the run gave them: a failed network stays failed, and one an interrupted queue never reached stays unstarted rather than being ticked off.
+
 ## 0.86.0
 
 ### Minor Changes

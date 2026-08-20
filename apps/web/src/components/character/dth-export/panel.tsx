@@ -29,9 +29,12 @@ import {
   fetchExecuteScenes,
   fetchExportRunnerGate,
   fetchSceneDthPaths,
+  fetchUnrealOpenEditors,
   fetchUnrealSendPlan,
   fileExists,
 } from '#/lib/rom/api.ts'
+import { unidentifiedEditorTargets } from '#/lib/rom/unreal-jobs.ts'
+import type { UnrealEditorProbe } from '#/lib/rom/unreal-jobs.ts'
 import { MultipleDazModal } from '#/components/multiple-daz-modal.tsx'
 import {
   hipsForSelectedScenes,
@@ -168,6 +171,11 @@ export function DthExportPanel({
   // The character's export sets + which of them each linked project holds.
   // null = the probe hasn't landed.
   const [sendPlan, setSendPlan] = useState<UnrealSendPlan | null>(null)
+  // What the running Unreal editors have open (null = probe not landed / no
+  // Unreal leg). Probed at PANEL OPEN, not at send time: the send happens
+  // minutes after Start, and "the import may sit unclaimed" is a warning worth
+  // having before committing to the run, not after it.
+  const [editorProbe, setEditorProbe] = useState<UnrealEditorProbe | null>(null)
 
   /**
    * Every export set any linked Houdini project declares it writes — a superset
@@ -214,6 +222,26 @@ export function DthExportPanel({
     // sets a run could create. `scannedSets` IS `scannedSetsKey`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scannedSetsKey])
+
+  useEffect(() => {
+    if (unrealProjects.length === 0) return
+    let active = true
+    void fetchUnrealOpenEditors()
+      .then((probe) => {
+        if (active) setEditorProbe(probe)
+      })
+      .catch(() => {
+        // Leave it UNSET, like the send plan: a failed probe is "the studio
+        // cannot say", and null already renders as nothing — a warning built
+        // on a made-up answer would be worse than none.
+      })
+    return () => {
+      active = false
+    }
+    // Mount-only, like the probes around it: an editor started while the
+    // panel sits open is exactly as invisible to a re-run as to this one.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -430,13 +458,32 @@ export function DthExportPanel({
         ? null
         : [...runSets].sort()
 
+  /**
+   * The export sets this run would hand to ONE project — the chips on its row,
+   * and exactly the task rows the Unreal leg will carry for it.
+   *
+   * Narrowed to what the probe LOCATED there, because the send is re-import
+   * only and `unrealTaskCards` drops the rest: a chip for a set that project
+   * has never held would name a job the run then doesn't run.
+   *
+   * Empty whenever the studio cannot name the sets (`sendSets === null`) — the
+   * send hands over the whole export folder then, and the task list shows one
+   * unnamed row per project, so there is nothing honest to chip. The amber
+   * notice under the list is what says so.
+   */
+  function sendSetsFor(uproject: string): Array<string> {
+    if (sendSets === null) return []
+    const located = sendPlan?.located[uproject] ?? {}
+    return sendSets.filter((name) => located[name] !== undefined)
+  }
+
   /** Does this project already hold something this run is sending it? The
    *  pre-tick and the row's own subtitle ask exactly that — "has this
    *  character" is not "has what this run makes". */
   function holdsSendSet(uproject: string): boolean {
     const located = sendPlan?.located[uproject] ?? {}
     if (sendSets === null) return Object.keys(located).length > 0
-    return sendSets.some((name) => located[name] !== undefined)
+    return sendSetsFor(uproject).length > 0
   }
 
   /**
@@ -466,6 +513,21 @@ export function DthExportPanel({
           'Nothing in the export folder yet — there is no last export to send. Run the Houdini export instead.'
         : 'These Houdini projects write no export set, so this run produces nothing to send.'
       : ''
+
+  /**
+   * The checked send targets a running-but-UNIDENTIFIED editor might be
+   * holding: the one Unreal state the studio cannot resolve at send time. The
+   * detection usually answers outright — the editor's own command line names
+   * its project, and the send opens the target beside a different one — so
+   * this warns only about an editor whose line could not be read: the job
+   * would then sit queued (nothing may be launched blind next to what might
+   * be the target itself), and the person who pressed Start deserves to hear
+   * that BEFORE the Daz and Houdini legs spend their minutes, not after.
+   */
+  const unidentifiedTargets =
+    editorProbe === null || !unrealSendable || nothingToSend
+      ? []
+      : unidentifiedEditorTargets(editorProbe, [...checkedUnreal])
 
   /**
    * The Unreal selection FOLLOWS the Houdini one, the same way the Houdini list
@@ -976,6 +1038,10 @@ export function DthExportPanel({
                 <HipRow
                   key={hip}
                   hip={hip}
+                  // What the STORED scan says this project writes. Absent (an
+                  // unscanned project) is "not known" — the row shows no chips
+                  // rather than claiming it writes none.
+                  sets={hipImports.find((scan) => scan.hipPath === hip)?.exportSets ?? []}
                   checked={checkedHips.has(hip)}
                   missing={hipMissing.has(hip)}
                   onToggle={() => toggleHip(hip)}
@@ -1043,6 +1109,10 @@ export function DthExportPanel({
                   <UnrealRow
                     key={uproject}
                     uproject={uproject}
+                    // Only what this run can actually put in there — a send
+                    // that can't happen (nothing produced, or the leg can't
+                    // send at all) names nothing.
+                    sets={unrealSendable && !nothingToSend ? sendSetsFor(uproject) : []}
                     checked={checkedUnreal.has(uproject)}
                     has={has}
                     // `has === false` is a landed probe saying there is nothing
@@ -1077,6 +1147,27 @@ export function DthExportPanel({
                   so nothing is pre-selected and <strong>everything</strong> in the export folder
                   that a ticked project already holds would be re-imported. <strong>Rescan</strong>{' '}
                   them (Utils drawer) and it will send only what this run makes.
+                </span>
+              </p>
+            )}
+            {/* The one editor state the studio cannot resolve: something is
+                running, its project is unreadable, and it might be the very
+                target — so nothing will be auto-opened for the send. Said at
+                the START of the process on purpose; the send is minutes away. */}
+            {unidentifiedTargets.length > 0 && (
+              <p className="mt-1.5 flex items-start gap-1.5 text-xs text-amber-500">
+                <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                <span>
+                  An Unreal editor is already running, and the studio can&apos;t tell which project
+                  it has open. If it isn&apos;t{' '}
+                  <strong>
+                    {unidentifiedTargets
+                      .map((path) => (path.split(/[\\/]/).pop() ?? path).replace(/\.[^./\\]+$/, ''))
+                      .join(', ')}
+                  </strong>
+                  , the import will sit queued when this run gets there — the studio won&apos;t open
+                  a project next to an editor it can&apos;t identify. Open the right project
+                  yourself, or close the editor before the export finishes.
                 </span>
               </p>
             )}

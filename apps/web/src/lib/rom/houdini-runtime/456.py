@@ -441,6 +441,60 @@ def collect_targets(wanted):
     return targets
 
 
+# What a SWALLOWED failure looks like in the captured stream.
+#
+# `pressButton()` runs the HDA's callback through Houdini's own wrapper, and
+# that wrapper CATCHES whatever the script raises: it prints the traceback and
+# returns normally. So `export_one`'s try/except never fires and the node was
+# reported "ok" no matter what happened inside. Measured 2026-08-19 on a
+# project whose PoseAsset CSV was missing: both export nodes died on
+# `AttributeError: 'NoneType' object has no attribute 'attribValue'`, both were
+# reported ok, and the studio's toast said "2 exported in 17s" over an export
+# that wrote nothing. A false success is the most expensive answer this script
+# can give -- it sends the user looking anywhere but here.
+#
+# So the captured text is evidence, not just log colour. These are Houdini's
+# own wrapper headings plus the Python traceback banner; matched
+# case-insensitively on the tee'd stdout+stderr.
+SWALLOWED_FAILURE_MARKERS = (
+    "error running callback",
+    "error running event handler",
+    "traceback (most recent call last)",
+)
+
+
+def swallowed_failure(lines):
+    """The most INFORMATIVE line of a swallowed blow-up, or None.
+
+    A marker line alone can be information-free ("Traceback (most recent call
+    last):" says only that something died), so once one is found, the LAST
+    captured line is preferred - a printed traceback ends with the exception
+    itself ("AttributeError: ...", the line worth reading) and the capture
+    stops when the callback does.
+
+    Kept dumb on purpose: any marker means the run cannot be called clean, and
+    being wrong in the SAFE direction (reporting a failure that was
+    survivable) costs a look at the log, while being wrong the other way costs
+    the whole afternoon this was measured in. The capture is tail-capped
+    (NODE_LOG_LINES_KEPT); a marker evicted by a chatty export past the error
+    is caught by the studio-side console-log backstop instead
+    (houdiniConsoleFailure in houdini-jobs.ts - keep the marker lists in
+    step)."""
+    found = None
+    for line in lines:
+        low = str(line).lower()
+        for marker in SWALLOWED_FAILURE_MARKERS:
+            if marker in low:
+                found = str(line)
+                break
+        if found is not None:
+            break
+    if found is None:
+        return None
+    last = str(lines[-1]) if lines else found
+    return found if last == found else "{} ... {}".format(found, last)
+
+
 def export_one(node, fallback_directory, on_line=None):
     """Trigger one export node. Returns the report entry for it. `on_line`
     receives every line the HDA emits mid-export (see ActivityCapture)."""
@@ -477,6 +531,12 @@ def export_one(node, fallback_directory, on_line=None):
             with DialogAnswers() as dialogs:
                 node.parm("export_trigger").pressButton()
             entry["problems"] = dialogs.messages
+        # The button "returned" — which proves nothing (see
+        # SWALLOWED_FAILURE_MARKERS). Ask what it printed on the way.
+        blew_up = swallowed_failure(activity.lines)
+        if blew_up is not None:
+            entry["status"] = "failed"
+            entry["error"] = "the HDA raised behind Houdini's callback wrapper: {}".format(blew_up)
     except SystemExit:
         # do_export's own `exit()` guard. Pre-checked above, so reaching this
         # means the HDA bailed for a reason of its own — one node's bail must

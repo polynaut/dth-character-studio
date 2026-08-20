@@ -61,6 +61,11 @@ export interface TauriMockSeed {
     sourceFolder: string
     buildId?: string
   }>
+  /** What `unreal_open_projects` reports — which projects the running Unreal
+   *  editors have open, per their command lines. Omit for "no editor running",
+   *  which is what keeps the auto-open path reachable; a spec seeding editors
+   *  drives the beside-launch and the can't-identify warning. */
+  unrealOpenProjects?: { editors: number; projects: Array<string>; unknown: number }
   /** The `.dcsp` this "window" was opened with — '' for a Home window. */
   activeProjectFile: string
   /** What `getVersion()` reports. */
@@ -761,6 +766,7 @@ export function installTauriMock(seed: TauriMockSeed): void {
           targets: [],
           defaults: [],
           repath: [],
+          retarget: [],
           prefill: [],
           refresh: [],
           sourceBakers: 0,
@@ -773,6 +779,41 @@ export function installTauriMock(seed: TauriMockSeed): void {
           foreignPaths: [],
           dryRun: request.dryRun ?? false,
           replace: request.replace ?? false,
+        }
+        if (request.op === 'retarget') {
+          // No hython to walk real parms with, so this models the SHAPE, not
+          // the rule (`_retarget_value` is Python, pinned by
+          // `lib/rom/houdini-runtime/retarget-value.test.ts`, which execs the
+          // extracted function under a stock interpreter): one import path and
+          // one character-name parm per target, echoed
+          // straight back off the studio's own request. What a spec can assert
+          // is therefore the studio's half — that it asked for the right
+          // rename, and that it counted the answer correctly.
+          return {
+            ...base,
+            retarget: (request.targets as Array<Record<string, string>>).map((target) => ({
+              hipPath: target.hipPath,
+              ok: true,
+              error: '',
+              retargeted: [
+                {
+                  label: '/obj/DazToHue/DazToHueImport import_character_dtu_file',
+                  from: `$HIP/daz-export/primary/${target.nameFrom}.dth`,
+                  to: `$HIP/daz-export/primary/${target.nameTo}.dth`,
+                },
+              ],
+              renamedNodes: [
+                {
+                  label: '/obj/DazToHue/DazToHueImport import_character_name',
+                  from: target.slugFrom,
+                  to: target.slugTo,
+                },
+              ],
+              keptNames: [],
+              foreign: [],
+              backupPath: backupFor(target.hipPath),
+            })),
+          }
         }
         if (request.op === 'scan') {
           // See `materialScanDelayMs` — the window the card's busy bar lives in.
@@ -1040,10 +1081,11 @@ export function installTauriMock(seed: TauriMockSeed): void {
           bridgeVersion,
         }
       }
-      // No editor in the fake world — which is what makes the auto-open path
-      // reachable in a spec at all.
-      case 'unreal_editor_running':
-        return false
+      // Default: no editor in the fake world — which is what makes the
+      // auto-open path reachable in a spec at all (and nothing unknown, so no
+      // start-of-run warning either).
+      case 'unreal_open_projects':
+        return seed.unrealOpenProjects ?? { editors: 0, projects: [], unknown: 0 }
       case 'install_unreal_dth': {
         // The real command copies the release's Unreal content; the fake marks
         // the destination folder so presence probes flip, and answers with a

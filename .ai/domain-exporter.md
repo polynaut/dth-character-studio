@@ -131,6 +131,89 @@ Part of the domain reference — `.ai/domain.md` is the index.
   is contained, and a `keepHoudini` delete would then have recursively removed
   the folder the flag exists to spare. Pinned in `delete-character.test.ts`,
   including that case.
+- **What ONE scene's export set actually is** (measured 2026-08-20 on a real
+  character, `Ita`, primary scene): `Ita.dth` (670 KB), `Ita.fbx` (31 MB),
+  `Ita.abc` (24 MB), `Ita.zip` (**998 MB** — the exporter's own bundle, which
+  nothing in the studio reads or has ever documented), `Ita_experimental_rom.fbx`
+  (9 MB), one `Ita_Hair_<item>_grooms.abc` per groom (15–40 MB each) and the
+  delivered `Ita_pose_asset.csv`. The FINAL tree beside it is
+  `export/Ita/{DTH_Ita.dth, Animation Curves/*.txt, Skeletal Meshes/SKM_Ita.fbx}`
+  — that last one 178 MB. Two things follow and are load-bearing elsewhere:
+  every name in both trees is the export base name plus nothing, `_`, or `.`
+  (which is what lets ONE prefix rule retarget the lot), and one scene's exports
+  are routinely a gigabyte — so anything that deletes them says how much.
+- **Renaming a character DELETES its exports; it does not rename them.**
+  The trigger is that the name is baked in three places at once: the file NAMES
+  (`exporterFigureName` above), the character FOLDER the absolute references
+  point into, and — measured on that same real `.dth` — the file CONTENT:
+  `{"DTH Version": …, "Character Name": "Ita", "Fbx Rom Path":
+  "…/primary/Ita.fbx", "Alembic Rom Path": …, "Experimental Rom Path": …}`. A
+  file-level rename would leave the HDA importing a figure that still calls
+  itself by the old name, from sibling paths that no longer exist. So the honest
+  move is the one the user asked for: clear both trees, and re-export.
+  The flow (`api/rename.ts`, pure rules in `lib/rom/rename-exports.ts`):
+  `fetchCharacterRenameImpact` measures the two trees BEFORE the rename (that is
+  the only moment they are still findable) and the dialog itemizes them with
+  sizes; nothing is shown at all when both are empty, which is the "just rename
+  it" case. `applyCharacterRenameCleanup` then runs AFTER the save+generate —
+  by then the folder has moved and `exportPath` is re-derived, so the exports it
+  clears are the old-named files sitting under the NEW folder. It clears whole
+  ROOTS (both Daz candidates behind three rails — no `..`, inside the character
+  folder, NAMED like an export root — plus `<char>/<exportSubdir>`, which needs
+  a fourth: never the character folder ITSELF, which is what an empty
+  `exportSubdir` resolves to) and puts them back empty, because both are seeded
+  folders. `exportWipeTargets` is the single OWNER of that rule:
+  `deleteCharacter`'s keep-flag delete asks it for the same two Daz roots
+  (`kind: 'daz'`) rather than writing the rails out a second time — it wants the
+  Daz pair only, because a delete that spares the user's Houdini files must
+  spare what Houdini WROTE too.
+  It deliberately does NOT run the export: that is the user's twenty minutes.
+- **…and then follows itself into every linked Houdini project** — the `retarget`
+  op (`op_retarget`, material_utils.py; `retargetHoudiniReferences`,
+  api/houdini-material.ts). This is the THIRD `$JOB`-adjacent op and it cannot
+  be either of the other two: `defaults` fixes what the user picks afterwards,
+  `repath` REPAIRS a break and may only ever write a path whose file it has
+  VERIFIED — and a rename leaves nothing to verify, since the old set was just
+  cleared and the new one does not exist until the user re-exports. Writing on
+  the strength of what the studio just DID, rather than of what is on disk, is
+  the whole point. Two swaps per stored reference (`_retarget_value`): the
+  character folder on an exact case-insensitive prefix match (never a guess —
+  the caller hands over the pre-rename folder from the impact read rather than
+  re-deriving it from two names, which a hand-renamed folder or a `uniqueFolder`
+  fork to "Nova (2)" would get wrong), then the export base name on the LAST
+  path segment. That second rule covers `<name>.dth`, `<name>_Summertide.abc`,
+  `<name>_experimental_rom.fbx`, `<name>_pose_asset.csv`,
+  `<name>_Hair_<item>_grooms.abc`, the reference skeletons AND a hand-pointed
+  `export_directory` ending in `export/<name>/` — see the measured listing above
+  for why one rule is enough. Its KNOWN limit, pinned as a case in
+  `retarget-value.test.ts`: only the LAST segment is name-swapped, so a
+  reference reaching INTO the final tree
+  (`…/export/<name>/Skeletal Meshes/SKM_<name>.fbx`) comes back with its folder
+  swapped and the two `<name>`s intact. Nothing the studio emits stores such a
+  path — the HDA builds that tree from `export_directory` + the character name
+  at cook time — and on a user's own node it is reported as `foreign` rather
+  than rewritten; if either stops holding, that case is the one to fix. Plus `import_character_name`, which the HDA concatenates onto
+  `export_directory` to build its OUTPUT folder, so a stale one keeps writing
+  into the old tree even when every import path is right; it is overwritten only
+  while it still holds the old slug, and REPORTED (`keptNames`) when the user
+  has typed their own. Only DazToHue nodes are written — a matching path on the
+  user's own nodes comes back in `foreign`, the same line `_shorten_job_ref`
+  draws. `$JOB` is repointed first (a rename MOVES the folder), for projects
+  inside the character folder only, the same pairing `character-zip`'s import
+  uses. The rule itself
+  (`_retarget_value`) is Python, and `material_utils.py` imports `hou` at module
+  scope — so it is pinned by EXTRACTING the two functions and exec'ing them
+  under a stock interpreter (`houdini-runtime/retarget-value.test.ts`, 20
+  measured cases; skipped only OFF CI, when no `python3` is on PATH). The smoke
+  specs cannot reach it — the Playwright fake echoes the studio's request back —
+  so what they pin is the studio's half: the dialog, the cancel, the exact
+  payload. Best-effort throughout: hython may be unpaired, and the rename has
+  already landed — so `houdiniUtilsReady` is asked BEFORE the dialog, the dialog
+  says so, and every failure is a warning naming its fallback rather than an
+  exception. What the drawer's "Make paths portable" could do instead: nothing.
+  Its donor needs the file to exist, and after a rename NO stem matches either
+  the old set (gone) or the new one (different stem) — so this op is the only
+  thing that can fix it, which is why it is not optional.
 - **A Houdini project generated before a relocation still names the old folder.**
   Its imports break TOGETHER, so `_repair_import_refs`' sibling donor has nothing
   to read the new location off — hence the second donor, `_relocated_donor`
@@ -280,17 +363,24 @@ Part of the domain reference — `.ai/domain.md` is the index.
   for a pre-export generation). Full story + the scan/badge/repair legs:
   `domain-rom.md` → "The rate those frame numbers mean".
 - **The Unreal leg** (v0.75): the project window's footer bar links
-  `.uproject` files; each card's install button opens a DIALOG, not a one-shot
-  copy: DTH content (`install_unreal_dth` — the release's
-  `Unreal Engine Content/DazToHue` → `Content/DazToHue`) plus every configured
-  plugin build matching the project's engine version, all pre-checked, each
-  installed with overwrite (a checked item is explicit intent; installs copy
-  over, never delete first). The
-  engine version is read from the `.uproject`'s `EngineAssociation` at
-  dialog-open (`unreal_project_state`) and NEVER stored — a project can be
+  `.uproject` files; each card's Utils button (🔧, the linked-asset card
+  language — v0.86; it was a dedicated install button through v0.85) opens the
+  `UnrealUtilsPanel` DRAWER, whose **Install** tab is a checklist, not a
+  one-shot copy: DTH content (`install_unreal_dth` — the release's
+  `Unreal Engine Content/DazToHue` → `Content/DazToHue`), the studio's own
+  bridge, plus every configured plugin build matching the project's engine
+  version, each installed with overwrite (a checked item is explicit intent;
+  installs copy over, never delete first). **Pre-checked = what the project is
+  MISSING** (`preselected`): an item already installed starts OFF — the one
+  exception is an installed-but-STALE bridge (the only row whose version the
+  studio can judge, via `bridgeOutdated`), which is offered like an absent one.
+  The engine version is read from the `.uproject`'s `EngineAssociation` at
+  drawer-open (`unreal_project_state`) and NEVER stored — a project can be
   retargeted in Unreal any time; a GUID association (source build) lists every
   build UNCHECKED instead, because a wrong plugin binary is a startup error in
-  Unreal. Plugin sources are the `unrealPluginFolders` setting, scanned by
+  Unreal. The card carries ONE amber mark for "this project still needs
+  something" (no DTH content, or a stale bridge) and clicking it opens the same
+  drawer — the wrench itself is neutral, so the signal cannot live on it. Plugin sources are the `unrealPluginFolders` setting, scanned by
   Rust `scan_unreal_plugins` (a bounded 3-deep walk covering three shapes: a
   plugin folder, a folder of plugins, a multi-build root
   `…/UE_5.7/Plugins/…`). Which engine a build is FOR: the deepest PATH segment
@@ -857,6 +947,23 @@ Part of the domain reference — `.ai/domain.md` is the index.
   is what triggers mrpdean's pipeline (materials, curves, post-process ABP);
   the file list is for FINDING assets, not for importing. Two folders holding
   one set (a leftover duplicate) makes the pick arbitrary — first found wins.
+- **A job still unclaimed 5 s after the send opens its own editor — decided by
+  what the running editors' command lines say they have open.** MEASURED
+  2026-08-20 (UE 5.8, launcher start): `UnrealEditor.exe`'s command line
+  carries the `.uproject` path, read by ONE WMI query (~200 ms, Rust
+  `unreal_open_projects` — a PowerShell child, allowed because this runs per
+  user action, never in a poll; the ToolHelp snapshot can't read another
+  process's ARGUMENTS). The verdict is pure (`unrealLaunchVerdict`,
+  unreal-jobs.ts): target seen open → never launch (its editor claims, or the
+  status line says "restart the editor" — a bridge installed after editor
+  start never loads); only OTHER projects open, all identified → launch the
+  target BESIDE them (the old yes/no probe refused here, and the job sat
+  unclaimed forever — the reported bug); any editor UNIDENTIFIED → don't
+  launch (it might be the target; a wrong guess costs a duplicate editor), and
+  the status line says whose move it is. The unidentified case is also warned
+  about AT PANEL OPEN (`unidentifiedEditorTargets` → the panel's amber note):
+  the send happens minutes after Start, which is a late moment to learn the
+  import may sit unclaimed.
 - **Housekeeping's orphan GCs** (app launch + "Clean up now",
   api/maintenance.ts): per-project `.dcsmeta` character dirs + avatars, and —
   since the deferred-findings pass — per-character SCRIPT dirs in the Daz

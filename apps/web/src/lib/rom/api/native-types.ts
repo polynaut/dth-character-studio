@@ -170,6 +170,20 @@ export const unrealProjectStateSchema = z.object({
   bridgeVersion: z.number().default(0),
 })
 
+/** What the running Unreal editors have open, as far as their command lines
+ *  say (mirrors Rust `UnrealOpenProjects`) — the send leg's launch decision
+ *  and the DTH Export panel's start-of-run warning. `unknown` counts editors
+ *  whose project could not be read: "cannot tell", never "not the one you
+ *  asked about". */
+export const unrealOpenProjectsSchema = z.object({
+  /** Running `UnrealEditor*` processes, identified or not. */
+  editors: z.number(),
+  /** Absolute `.uproject` paths their command lines carry, verbatim, deduped. */
+  projects: z.array(z.string()),
+  /** Editors whose command line named no absolute `.uproject`. */
+  unknown: z.number(),
+})
+
 export const poseAssetFramesSchema = z.object({
   path: z.string(),
   /** Frames the asset occupies (0 when it couldn't be measured — see `error`). */
@@ -389,6 +403,38 @@ export const repathResultSchema = z.object({
   /** Absolute references left alone because they sit under no known root. */
   foreign: z.array(z.string()),
   /** Pre-repath backup (empty for a dry run, and when nothing changed). */
+  backupPath: z.string(),
+})
+
+/** What the `retarget` op did (or would do) to one project after a character
+ *  rename.
+ *
+ *  The sibling of {@link repathResultSchema}, kept separate for the reason the
+ *  two ops are separate: a repath REPAIRS a break and may only ever write a
+ *  path it has verified on disk, while this FOLLOWS a rename the studio just
+ *  performed — the export set it aims at does not exist until the user
+ *  re-exports, which is the whole point of it. */
+export const retargetResultSchema = z.object({
+  hipPath: z.string(),
+  ok: z.boolean(),
+  error: z.string(),
+  /** File references rewritten to the character's new folder / export name. */
+  retargeted: z.array(repairedRefSchema),
+  /** `import_character_name` parms moved to the new slug — not a path, and
+   *  load-bearing: the HDA concatenates it with `export_directory` to build its
+   *  OUTPUT folder, so a stale one keeps writing into the old tree even when
+   *  every import path is correct. */
+  renamedNodes: z.array(repairedRefSchema),
+  /** `import_character_name` parms left alone because they held neither
+   *  spelling of the old name (the studio prefills the slug, the HDA's own
+   *  auto-fill takes the `.dth`'s figure name) — so it is the user's own value,
+   *  reported rather than overwritten. */
+  keptNames: z.array(z.string()),
+  /** Matching references on the user's OWN nodes, as `<node> <parm>`: the
+   *  studio rewrites only the paths it emits itself, so these are named rather
+   *  than silently left looking handled. */
+  foreign: z.array(z.string()),
+  /** Pre-retarget backup (empty for a dry run, and when nothing changed). */
   backupPath: z.string(),
 })
 
@@ -638,6 +684,8 @@ export const materialUtilReportSchema = z.object({
   defaults: z.array(houdiniDefaultsResultSchema),
   /** Populated by `repath` — one entry per project it was asked about. */
   repath: z.array(repathResultSchema),
+  /** Populated by `retarget` — one entry per project it was asked about. */
+  retarget: z.array(retargetResultSchema),
   /** Populated by `prefill` — one entry per project it was asked about. */
   prefill: z.array(prefillResultSchema),
   /** Populated by `refresh` — one entry per project it was asked about. */
@@ -676,6 +724,7 @@ export type SceneWearables = z.infer<typeof sceneWearablesSchema>
 export type UnrealEngineInstall = z.infer<typeof unrealEngineInstallSchema>
 export type UnrealPluginSource = z.infer<typeof unrealPluginSourceSchema>
 export type UnrealProjectState = z.infer<typeof unrealProjectStateSchema>
+export type UnrealOpenProjects = z.infer<typeof unrealOpenProjectsSchema>
 export type MaterialSlotInfo = z.infer<typeof materialSlotInfoSchema>
 export type MaterialNodeInfo = z.infer<typeof materialNodeInfoSchema>
 export type MaterialSectionResult = z.infer<typeof materialSectionResultSchema>
@@ -685,6 +734,7 @@ export type MaterialTransferTarget = z.infer<typeof materialTransferTargetSchema
 export type HoudiniDefaultsResult = z.infer<typeof houdiniDefaultsResultSchema>
 export type ProjectRefInfo = z.infer<typeof projectRefInfoSchema>
 export type RepathResult = z.infer<typeof repathResultSchema>
+export type RetargetResult = z.infer<typeof retargetResultSchema>
 export type ProjectPrefillInfo = z.infer<typeof projectPrefillInfoSchema>
 export type PrefillResult = z.infer<typeof prefillResultSchema>
 /** Named for Houdini on purpose: the studio's OWN "Refresh assets" sweep

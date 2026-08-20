@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from '@tanstack/react-router'
-import { AlertTriangle, ChevronLeft, ChevronRight, ExternalLink, FolderOpen, HardDriveDownload, Plus, X } from 'lucide-react'
+import { AlertTriangle, ChevronLeft, ChevronRight, ExternalLink, FolderOpen, Plus, Wrench, X } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import { Button, RemoveAssetDialog, cn, useModifierHeld } from '@dth/ui'
 import unrealLogo from '#/assets/unreal-logo.svg'
-import { UnrealInstallDialog, uprojectDisplayName } from '#/components/unreal-install-dialog.tsx'
+import { UnrealUtilsPanel, uprojectDisplayName } from '#/components/unreal-utils-panel.tsx'
 import {
   openScene,
   revealPath,
@@ -25,12 +25,13 @@ import type { ProjectInfo } from '#/lib/rom/api.ts'
  * A linked Unreal project card in the footer bar: the U mark, name + a REAL
  * path chip (click = copy, Alt+click = Explorer). The card body itself is
  * inert — only the explicit buttons act: the open button launches the
- * `.uproject` (OS association → Unreal), and the tiny install button opens
- * the install dialog (DTH content + the plugin builds matching this project's
- * engine version, pre-checked): dimmed once `Content/DazToHue` is present,
- * still clickable — plugins and reinstalls live in the dialog. The hover ✕
- * only unlinks. The chip middle-truncates to a fixed budget + width so every
- * card lines up (only a long project NAME may widen one).
+ * `.uproject` (OS association → Unreal), and the 🔧 opens this project's
+ * {@link UnrealUtilsPanel} — the same Utils button the Daz-scene and Houdini
+ * cards carry, whose Install tab holds what used to be the install dialog. An
+ * amber mark appears when the project is missing DTH content or holds an
+ * out-of-date bridge. The hover ✕ only unlinks. The chip middle-truncates to a
+ * fixed budget + width so every card lines up (only a long project NAME may
+ * widen one).
  */
 function UnrealCard({
   uprojectPath,
@@ -38,25 +39,32 @@ function UnrealCard({
   bridgeStale,
   disabled,
   onOpen,
-  onInstall,
+  onUtils,
   onRemove,
 }: {
   uprojectPath: string
   /** undefined while the Content/DazToHue probe is still running — the button
-   *  stays usable either way; the dialog does its own probing. */
+   *  stays usable either way; the drawer does its own probing. Only a definite
+   *  `false` raises the attention mark: an unfinished (or failed) probe must
+   *  never claim the project is missing something. */
   dthPresent: boolean | undefined
   /** The project has a DTH Character Studio Runner, but not the one this app ships —
    *  a plugin folder keeps whatever was installed the day it was installed,
    *  and the studio ships fixes to it. */
   bridgeStale: boolean
   /** A list write is in flight — the whole bar is single-flight, so the card's
-   *  mutating actions (install / unlink) disable alongside the Add button. */
+   *  mutating actions (utils / unlink) disable alongside the Add button. */
   disabled: boolean
   onOpen: (e: React.MouseEvent) => void
-  onInstall: () => void
+  /** Opens this project's Utils drawer (its Install tab is the whole reason
+   *  the card has a wrench today). */
+  onUtils: () => void
   onRemove: () => void
 }) {
   const displayName = uprojectDisplayName(uprojectPath)
+  // Only a DEFINITE "no" counts — `undefined` is a probe still running or one
+  // that failed, and neither is evidence of a missing install.
+  const needsAttention = bridgeStale || dthPresent === false
   // Alt held → the open icon previews the alternate action (show in Explorer).
   const altHeld = useModifierHeld('Alt')
   const shownPath = displayPath(uprojectPath)
@@ -85,38 +93,53 @@ function UnrealCard({
             {chipText}
           </PathCode>
         </span>
-        {/* The one thing on this card that is WRONG rather than merely absent:
-            an out-of-date bridge imports with an older set of rules, or refuses
-            the job outright. It sits next to Install because Install is the
-            fix. */}
-        {bridgeStale && (
-          <span
-            className="shrink-0 text-amber-500"
-            title="The DTH Character Studio Runner in this project is older than the one this app ships — re-install it (and restart the editor once)."
-            aria-label="Bridge plugin out of date"
+        {/* What this project still needs, in ONE amber mark — the Utils button
+            beside it is neutral (it is a drawer, not an action), so without
+            this the card lost the at-a-glance "this one isn't set up yet" the
+            old highlighted install button carried. Two conditions, one fix
+            (Utils → Install), so one indicator: DTH content missing, or a
+            bridge older than the one this app ships (it imports with an older
+            set of rules, or refuses the job outright). Clickable like the
+            Houdini card's warning badge — the mark points at its own fix. It
+            opens the same drawer the wrench does, so it obeys the same
+            single-flight gate: mid-write the card's scope may be about to
+            change under the drawer. */}
+        {needsAttention && (
+          <button
+            type="button"
+            onClick={onUtils}
+            disabled={disabled}
+            className="shrink-0 rounded-md p-1 text-amber-500 transition-colors hover:bg-accent disabled:opacity-50"
+            title={
+              bridgeStale
+                ? 'The DTH Character Studio Runner in this project is older than the one this app ships — re-install it in Utils → Install (and restart the editor once).'
+                : 'No DTH content in this project yet — install it from Utils → Install.'
+            }
+            aria-label={`Needs attention: ${
+              bridgeStale ? 'bridge plugin out of date' : 'DTH content not installed'
+            } — fix it in Utils`}
           >
             <AlertTriangle className="size-4" />
-          </span>
+          </button>
         )}
-        {/* Install first, OPEN at the very right — the primary action sits at
-            the card's edge. */}
-        <button
-          type="button"
-          onClick={onInstall}
+        {/* Utils first, OPEN at the very right — the primary action sits at
+            the card's edge. Same 🔧 and the same corner-cluster adornment as
+            the Daz-scene and Houdini cards' Utils button, minus their
+            hover-reveal: those hide it in a cluster the card already shows on
+            hover, while this one is the ONLY way into the install list — a
+            control that isn't there until you hover reads as a missing
+            feature on a card this small. */}
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={onUtils}
           disabled={disabled}
-          aria-label={`Install DTH content and plugins into ${displayName}`}
-          title="Install DTH content & plugins…"
-          className={cn(
-            'shrink-0 rounded-md border p-1.5 transition-colors',
-            // DTH content installed → dimmed, but still clickable: the dialog
-            // is also where plugins and explicit reinstalls happen.
-            dthPresent
-              ? 'text-muted-foreground/50 hover:bg-accent hover:text-primary'
-              : 'text-primary hover:bg-accent hover:text-primary',
-          )}
+          aria-label={`Utils for ${displayName}`}
+          title="Utils — install DTH content & plugins"
+          className="group/utils shrink-0 border border-transparent hover:border-white/20 hover:bg-[#333] hover:shadow-sm dark:hover:bg-[#333]"
         >
-          <HardDriveDownload className="size-4" />
-        </button>
+          <Wrench className="size-3.5 text-muted-foreground transition-colors group-hover/utils:text-foreground" />
+        </Button>
         <button
           type="button"
           onClick={onOpen}
@@ -178,9 +201,9 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
   const [dthStatus, setDthStatus] = useState<Record<string, boolean | undefined>>({})
   /** Which linked projects hold a bridge older than the one this app ships. */
   const [bridgeStale, setBridgeStale] = useState<Record<string, boolean>>({})
-  // The card whose install button was clicked — installing runs in a dialog
-  // (what to install: DTH content + engine-matched plugins). '' = closed.
-  const [installFor, setInstallFor] = useState('')
+  // The card whose Utils button was clicked — the drawer's entire scope, like
+  // the Daz-scene and Houdini Utils drawers. '' = closed.
+  const [utilsFor, setUtilsFor] = useState('')
   // The card whose hover-✕ was clicked — unlinking pauses on a confirm dialog
   // (same recipe as removing a Daz scene / Houdini project from a character).
   const [pendingRemove, setPendingRemove] = useState('')
@@ -365,7 +388,7 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
                       toast.error(err instanceof Error ? err.message : String(err)),
                     )
                   }}
-                  onInstall={() => setInstallFor(path)}
+                  onUtils={() => setUtilsFor(path)}
                   onRemove={() => setPendingRemove(path)}
                 />
               ))}
@@ -398,14 +421,22 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
           </>
         )}
       </div>
-      {installFor && (
-        <UnrealInstallDialog
-          uprojectPath={installFor}
-          onClose={() => setInstallFor('')}
-          // The dialog's install just proved the content is there — adopt that
+      {/* Mounted only while open, like the Daz-scene and Houdini Utils drawers —
+          the drawer probes the project, scans the plugin folders and detects the
+          engines on mount, none of which may happen just because the bar
+          rendered. Guarded against the project unlinking underneath it (the
+          drawer's scope would be gone). */}
+      {utilsFor && project.unrealProjects.includes(utilsFor) && (
+        <UnrealUtilsPanel
+          open
+          // The drawer acts on THIS project alone — `utilsFor` is the card whose
+          // Utils button was pressed, and it is the drawer's entire scope.
+          uprojectPath={utilsFor}
+          onClose={() => setUtilsFor('')}
+          // The drawer's install just proved the content is there — adopt that
           // over whatever the card's probe said.
           onInstalled={(dthInstalled) => {
-            const path = installFor
+            const path = utilsFor
             if (dthInstalled) setDthStatus((s) => ({ ...s, [path]: true }))
             // …and the bridge's version with it. The amber warning's whole
             // message is "re-install it", and Install is where you do that —

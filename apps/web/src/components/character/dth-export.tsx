@@ -645,17 +645,31 @@ export function DthExportAction({
           if (target) {
             target.sets = started.sets.map((set) => ({ name: set.name, existing: set.existing }))
           }
-          // Nothing claims a job when no editor is open — so open one. Five
-          // seconds is the bridge's poll (1s) with room for a slow start; the
-          // api refuses when anything is already running.
+          // Nothing claims a job when nothing that could claim it is open — so
+          // open the project. Five seconds is the bridge's poll (1s) with room
+          // for a slow start; the api decides from what the running editors'
+          // command lines say they have open, and answers WHY when it doesn't
+          // launch — a job that quietly waits forever is exactly the failure
+          // this leg had (reported 2026-08-20: a different project was open,
+          // nothing launched, nothing said which).
           window.setTimeout(() => {
             void openUnrealForPendingJob({ data: { uprojectPath } })
-              .then((launched) => {
+              .then((outcome) => {
                 // The status line says what is actually happening — an editor
                 // takes a while to come up, and "waiting for the editor to
                 // pick the job up" over a splash screen reads as stuck.
-                if (!launched || unrealWatchRef.current !== uprojectPath) return
-                unrealStatusRef.current = `Unreal; opening ${name} — the import starts on its own once the editor is up`
+                if (outcome === 'no-job' || unrealWatchRef.current !== uprojectPath) return
+                unrealStatusRef.current =
+                  outcome === 'opened'
+                    ? `Unreal; opening ${name} — the import starts on its own once the editor is up`
+                    : outcome === 'opened-beside'
+                      ? `Unreal; opening ${name} next to the Unreal editor already running — the import starts once it is up`
+                      : outcome === 'target-open'
+                        ? // Open and not claiming after the grace period: the
+                          // likeliest cause is a Runner installed after the
+                          // editor started (Unreal loads plugins at startup).
+                          `Unreal; ${name} is open but hasn't picked the job up — if the Runner was just installed, restart the editor`
+                        : `Unreal; an editor is running and the studio can't tell which project — if it isn't ${name}, open that project to start the import`
                 publishPipeline(progressRef.current, houdiniRef.current)
               })
               .catch(() => {

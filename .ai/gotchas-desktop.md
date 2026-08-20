@@ -7,6 +7,38 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
 - **Never create a webview window from a synchronous `#[tauri::command]`** — it
   deadlocks (white frozen window). Use `#[tauri::command(async)]` and
   `tauri::async_runtime::spawn` (the single-instance handler does this).
+- **`pressButton()` on an HDA callback SWALLOWS the HDA's exception — a failed
+  export returned "ok" for a year.** Houdini runs a parm callback through its
+  own wrapper, which catches whatever the script raises, prints
+  `Error running callback:` + the traceback, and RETURNS NORMALLY. So
+  `export_one`'s try/except in `456.py` never fired and every HDA-side failure
+  was reported as an export. Measured 2026-08-19 on a real project: its
+  PoseAsset CSV was missing, so both `DazToHuePoseAsset` nodes threw
+  `FileNotFoundError` in their OnLoaded handler, both `DazToHueExport` nodes
+  then threw `AttributeError: 'NoneType' object has no attribute 'attribValue'`
+  inside `do_export`, and the studio toasted **"2 exported in 17s"** over an
+  export that wrote nothing. The 17s — hython booting, loading and failing
+  twice — was the only symptom, and it was noticed only because a human
+  thought it looked too fast. Same family as the DazToHue material bake that
+  reports success on a missing texture (below): in this pipeline a clean
+  return proves NOTHING, and anything that only checks for a raised exception
+  is not checking. Two detectors now, because one channel is not enough:
+  `SWALLOWED_FAILURE_MARKERS`/`swallowed_failure` in 456.py scans the tee'd
+  stdout+stderr and marks the NODE failed (per-node attribution), and
+  `houdiniConsoleFailure` (houdini-jobs.ts) scans the process console log —
+  the only channel that carries what Houdini prints from C++ or before the
+  in-process tee is entered, e.g. those load-time handler tracebacks. Keep the
+  two marker lists in step; matching a Houdini `Warning(...)` line must stay
+  OUT of both (the `sidefx_hud_button` warning is in every run of some
+  projects, so treating it as failure makes the signal permanent and therefore
+  invisible). And the backstop is only as good as its FEED: the api layer's
+  read guard (`houdiniConsoleWorthReading`) must hand the console to the
+  finished-claiming-clean poll, not just the dead one — the first version of
+  this fix checked the console in `houdiniRunStateFrom` but the guard only
+  read it for dead runs, so the backstop shipped dead with green tests (they
+  called the pure function directly). The general
+  lesson: a detector's wiring is part of the detector — verify what production
+  actually passes in, not what the test hands it.
 - **`pnpm dev:desktop` cannot run while the INSTALLED build is open** — and the
   failure names neither cause nor culprit. `tauri_plugin_single_instance` keys
   on the app identifier (`com.polynaut.dthcharacterstudio`, tauri.conf.json),

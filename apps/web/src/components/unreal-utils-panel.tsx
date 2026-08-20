@@ -2,7 +2,16 @@ import { useCallback, useEffect, useState } from 'react'
 import { AlertTriangle, HardDriveDownload } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { Button, InfoPopup, Modal } from '@dth/ui'
+import {
+  Button,
+  InfoPopup,
+  SidePanel,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@dth/ui'
+import unrealLogo from '#/assets/unreal-logo.svg'
 import {
   detectUnrealEngines,
   installUnrealBridge,
@@ -11,7 +20,7 @@ import {
   scanUnrealPlugins,
   unrealProjectState,
 } from '#/lib/rom/api.ts'
-import { UNREAL_BRIDGE_FOLDER, UNREAL_BRIDGE_NAME } from '#/lib/rom/unreal-jobs.ts'
+import { UNREAL_BRIDGE_FOLDER, UNREAL_BRIDGE_NAME, bridgeOutdated } from '#/lib/rom/unreal-jobs.ts'
 import {
   EMPTY_UNREAL_SCAN,
   allPluginBuilds,
@@ -44,6 +53,12 @@ interface ChecklistItem {
   detail: string
   /** Already in the project — a check reinstalls (overwrites) it. */
   installed: boolean
+  /** Installed, but not the copy this app ships (the bridge only — it is the
+   *  one row the studio owns end to end, so it is the one row whose VERSION we
+   *  can judge). An outdated item is pre-ticked despite being installed: this
+   *  drawer offers what the project is missing, and a stale bridge is missing
+   *  the fixes. */
+  outdated?: boolean
   /** Absent for the studio's own two entries (content and bridge). */
   plugin?: UnrealPluginSource
   /** Ships INSIDE the app rather than coming from the user's plugin folders —
@@ -62,7 +77,12 @@ interface ChecklistItem {
 function buildItems(
   scan: ReadonlyArray<UnrealPluginSource>,
   engineVersion: string | null,
-  state?: { dthPresent: boolean; installedPlugins: ReadonlyArray<string> },
+  state?: {
+    dthPresent: boolean
+    installedPlugins: ReadonlyArray<string>
+    /** The bridge version found in the project (0 = none/unreadable). */
+    bridgeVersion?: number
+  },
   /** The engine this project actually uses, when the studio found it — its
    *  `buildId` both PICKS the build to offer per name (a matching one beats a
    *  mismatching one that only sorts first) and marks the one that is left. */
@@ -86,6 +106,7 @@ function buildItems(
       label: 'DTH Character Studio Runner',
       detail: UNREAL_BRIDGE_FOLDER,
       installed: installed.has(UNREAL_BRIDGE_NAME.toLowerCase()),
+      outdated: bridgeOutdated(state?.bridgeVersion ?? 0),
       builtIn: true,
     },
     ...builds.map((plugin) => ({
@@ -99,7 +120,27 @@ function buildItems(
   ]
 }
 
-/** What one dialog install run produced, for the toast + the caller. */
+/**
+ * Which rows open pre-ticked: what this project does NOT have yet. The drawer
+ * answers "what is missing here?", so an item already installed starts OFF —
+ * re-installing stays one click away (tick it; a checked row overwrites), but
+ * it is never the default. The exception is an item that is present and STALE
+ * (the bridge, the only row whose version the studio can judge): a project
+ * holding an old copy is missing the fixes, so it is offered like an absent one.
+ *
+ * Two things are never pre-ticked even when absent — same reasoning both times
+ * (never pre-check what cannot be known to work): with an UNKNOWN engine only
+ * the engine-independent items qualify (DTH content and the bridge, neither of
+ * which carries a binary), and a build compiled against another engine build is
+ * left for the user to decide on.
+ */
+function preselected(item: ChecklistItem, engineVersion: string | null): boolean {
+  if (item.buildMismatch) return false
+  if (item.installed && !item.outdated) return false
+  return engineVersion !== null || ENGINE_FREE_KEYS.includes(item.key)
+}
+
+/** What one install run produced, for the toast + the caller. */
 interface InstallOutcome {
   /** Success summaries, in run order ("DTH content (12 files)"). */
   installed: Array<string>
@@ -201,11 +242,20 @@ function InstallChecklist({
                   built in
                 </span>
               )}
-              {item.installed && (
-                <span className="text-xs text-muted-foreground">
-                  installed — a check overwrites it
-                </span>
-              )}
+              {/* Why this row is (or isn't) pre-ticked, said on the row: an
+                  installed item is left alone unless the copy in the project is
+                  older than the one this app ships — which only the studio's
+                  own plugin can be judged for. */}
+              {item.installed &&
+                (item.outdated ? (
+                  <span className="text-xs text-amber-500">
+                    out of date — a check re-installs it
+                  </span>
+                ) : (
+                  <span className="text-xs text-muted-foreground">
+                    installed — a check overwrites it
+                  </span>
+                ))}
               {/* The one thing the version label CANNOT tell you: what the
                   binaries were actually compiled against. Left unchecked
                   rather than refused — the user may know something the
@@ -244,21 +294,29 @@ function NoPluginsHint() {
 }
 
 /**
- * The install dialog behind a linked Unreal card's install button: what to
- * install — DTH content plus every configured plugin build matching the
- * project's engine version — pre-checked, uncheckable, one primary Install.
+ * The Unreal project cards' **Utils drawer** — the third of the linked-asset
+ * Utils drawers (Daz scene, Houdini project, and this), scoped to the ONE
+ * `.uproject` whose 🔧 button opened it. One Install tab (the tab bar is the
+ * shared drawer shape, ready for more):
  *
- * The engine version is read from the `.uproject` when the dialog opens (never
+ * - **Install** — what to install into the project: DTH content, the studio's
+ *   own bridge plugin, plus every configured plugin build matching the
+ *   project's engine version. Pre-checked = what the project does NOT have yet
+ *   (see {@link preselected}); a checked row always overwrites.
+ *
+ * The engine version is read from the `.uproject` when the drawer opens (never
  * stored — the user can retarget a project in Unreal at any time). An unknown
  * association (a source build's GUID) lists every build UNCHECKED instead:
  * only the user knows what fits, and a wrong plugin binary is a startup error
  * in Unreal.
  */
-export function UnrealInstallDialog({
+export function UnrealUtilsPanel({
+  open,
   uprojectPath,
   onClose,
   onInstalled,
 }: {
+  open: boolean
   uprojectPath: string
   onClose: () => void
   /** DTH content was (re)installed — the card's probe cache adopts it. */
@@ -289,18 +347,8 @@ export function UnrealInstallDialog({
       setAssociation(state.engineAssociation)
       setEngineVersion(version)
       setItems(list)
-      // Everything pre-checked — the user unchecks. Two exceptions, same
-      // reasoning both times (never pre-check what cannot be known to work):
-      // an UNKNOWN engine leaves only the engine-independent items (DTH content
-      // and the bridge — neither carries a binary), and a build whose binaries
-      // are for another engine build is left off.
-      setChecked(
-        new Set(
-          version === null
-            ? ENGINE_FREE_KEYS
-            : list.filter((item) => !item.buildMismatch).map((item) => item.key),
-        ),
-      )
+      // What the project is MISSING is pre-checked; see `preselected`.
+      setChecked(new Set(list.filter((item) => preselected(item, version)).map((item) => item.key)))
       setLoadState('ready')
       return list
     } catch (e) {
@@ -338,80 +386,37 @@ export function UnrealInstallDialog({
     }
   }
 
+  // Nothing to offer: every listed item is present and current. Said out loud,
+  // because the alternative reading of a checklist with no ticks is "the drawer
+  // failed to work out what I need" — and the Install button is off either way.
+  const nothingMissing =
+    loadState === 'ready' && items.every((item) => item.installed && !item.outdated)
+
   return (
-    <Modal
-      open
-      onClose={onClose}
+    <SidePanel
+      open={open}
+      // An install mid-run holds the drawer: Escape / the backdrop / the ✕ are
+      // refused (and the ✕ greys out) until it lands — the same rule the dialog
+      // this replaced had.
       dismissible={!busy}
+      onClose={onClose}
+      // Names the KIND of thing being worked on, like the Daz-scene and Houdini
+      // drawers: it acts on this one `.uproject`, so the project's name leads.
       title={
-        <span className="flex items-center gap-1.5">
-          Install into {displayName}
-          <InfoPopup label="Install into Unreal project — more information">
-            <div className="space-y-2">
-              <p>
-                Installs the checked items into the linked Unreal project: the active DTH
-                release&apos;s <strong>Unreal Engine Content</strong> into{' '}
-                <code>Content/DazToHue</code>, and each checked plugin build into{' '}
-                <code>Plugins/</code>.
-              </p>
-              <p>
-                <strong>DTH Character Studio Runner</strong> is the studio&apos;s own small plugin (pure
-                Python, no binaries): it lets <em>Send to Unreal</em> hand this project a
-                character&apos;s Houdini export. Unreal loads plugins at startup, so restart the
-                editor once after installing it.
-              </p>
-              <p>
-                Plugins come from your configured folders (Settings → General →{' '}
-                <strong>Unreal Engine Plugins</strong>), matched to this project&apos;s engine
-                version — read from its <code>.uproject</code> when this dialog opens.
-              </p>
-              <p>Installing copies over existing files; it never deletes anything first.</p>
-            </div>
-          </InfoPopup>
+        <span className="flex items-center gap-2">
+          <img src={unrealLogo} alt="" aria-hidden className="size-5 shrink-0 object-contain" />
+          <span className="truncate">
+            Unreal project utils
+            <span className="ml-2 text-sm font-normal text-muted-foreground">{displayName}</span>
+          </span>
         </span>
       }
-    >
-      {loadState === 'loading' && (
-        <p className="text-sm text-muted-foreground">Reading the project…</p>
-      )}
-      {loadState === 'error' && (
-        <div className="space-y-2 text-sm">
-          <p className="text-destructive">Couldn&apos;t read the Unreal project: {loadError}</p>
-          <Button variant="outline" size="sm" onClick={() => void load()}>
-            Retry
-          </Button>
-        </div>
-      )}
-      {loadState === 'ready' && (
-        <>
-          {engineVersion !== null ? (
-            <p className="text-sm text-muted-foreground">
-              Project engine: <span className="font-medium text-foreground">Unreal Engine {engineVersion}</span>
-            </p>
-          ) : (
-            <p className="flex items-start gap-1.5 text-xs text-amber-500">
-              <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-              <span>
-                Engine version unknown ({association === '' ? 'no engine association' : `association “${association}”`}{' '}
-                — a source build?). Every found build is listed; check only what you know fits
-                this engine. DTH content is engine-independent.
-              </span>
-            </p>
-          )}
-          <InstallChecklist
-            items={items}
-            checked={checked}
-            busy={busy}
-            onToggle={(key, on) =>
-              setChecked((current) => {
-                const next = new Set(current)
-                if (on) next.add(key)
-                else next.delete(key)
-                return next
-              })
-            }
-          />
-          {!hasPluginBuilds(items) && <NoPluginsHint />}
+      // The tab's one action, pinned to the drawer's bottom edge instead of
+      // riding the end of the scroll: a machine with many plugin folders lists
+      // more rows than a full-height panel shows, and Install scrolling out of
+      // reach is exactly what the old modal never had to worry about.
+      footer={
+        loadState === 'ready' && (
           <div className="flex justify-end gap-2">
             <Button variant="ghost" disabled={busy} onClick={onClose}>
               Cancel
@@ -420,9 +425,94 @@ export function UnrealInstallDialog({
               <HardDriveDownload /> {busy ? 'Installing…' : 'Install'}
             </Button>
           </div>
-        </>
-      )}
-    </Modal>
+        )
+      }
+    >
+      <Tabs value="install">
+        <TabsList>
+          <TabsTrigger value="install">Install</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="install" className="space-y-4">
+          <p className="flex items-center gap-1 text-sm text-muted-foreground">
+            What this project is missing is ticked for you.
+            <InfoPopup label="Install into Unreal project — more information">
+              <div className="space-y-2">
+                <p>
+                  Installs the checked items into the linked Unreal project: the active DTH
+                  release&apos;s <strong>Unreal Engine Content</strong> into{' '}
+                  <code>Content/DazToHue</code>, and each checked plugin build into{' '}
+                  <code>Plugins/</code>.
+                </p>
+                <p>
+                  <strong>DTH Character Studio Runner</strong> is the studio&apos;s own small plugin (pure
+                  Python, no binaries): it lets <em>Send to Unreal</em> hand this project a
+                  character&apos;s Houdini export. Unreal loads plugins at startup, so restart the
+                  editor once after installing it.
+                </p>
+                <p>
+                  Plugins come from your configured folders (Settings → General →{' '}
+                  <strong>Unreal Engine Plugins</strong>), matched to this project&apos;s engine
+                  version — read from its <code>.uproject</code> when this drawer opens.
+                </p>
+                <p>
+                  Anything already installed and current starts unticked; tick it to install it
+                  again. Installing copies over existing files; it never deletes anything first.
+                </p>
+              </div>
+            </InfoPopup>
+          </p>
+          {loadState === 'loading' && (
+            <p className="text-sm text-muted-foreground">Reading the project…</p>
+          )}
+          {loadState === 'error' && (
+            <div className="space-y-2 text-sm">
+              <p className="text-destructive">Couldn&apos;t read the Unreal project: {loadError}</p>
+              <Button variant="outline" size="sm" onClick={() => void load()}>
+                Retry
+              </Button>
+            </div>
+          )}
+          {loadState === 'ready' && (
+            <>
+              {engineVersion !== null ? (
+                <p className="text-sm text-muted-foreground">
+                  Project engine: <span className="font-medium text-foreground">Unreal Engine {engineVersion}</span>
+                </p>
+              ) : (
+                <p className="flex items-start gap-1.5 text-xs text-amber-500">
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                  <span>
+                    Engine version unknown ({association === '' ? 'no engine association' : `association “${association}”`}{' '}
+                    — a source build?). Every found build is listed; check only what you know fits
+                    this engine. DTH content is engine-independent.
+                  </span>
+                </p>
+              )}
+              {nothingMissing && (
+                <p className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+                  Everything listed is already installed — tick a row to install it again.
+                </p>
+              )}
+              <InstallChecklist
+                items={items}
+                checked={checked}
+                busy={busy}
+                onToggle={(key, on) =>
+                  setChecked((current) => {
+                    const next = new Set(current)
+                    if (on) next.add(key)
+                    else next.delete(key)
+                    return next
+                  })
+                }
+              />
+              {!hasPluginBuilds(items) && <NoPluginsHint />}
+            </>
+          )}
+        </TabsContent>
+      </Tabs>
+    </SidePanel>
   )
 }
 

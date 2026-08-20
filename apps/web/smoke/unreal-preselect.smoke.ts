@@ -297,6 +297,74 @@ test('an unscanned Houdini project pre-selects nothing and says what sending any
   await expect(send).toBeEnabled()
   await send.check()
   await expect(send).toBeChecked()
+  // …and NEITHER list names anything: an unscanned project's chips would be
+  // the same guess the pre-tick refuses to make, and the send here hands over
+  // the whole export folder, which the run's task list can only show as one
+  // unnamed row per project.
+  await expect(dialog.locator('[data-sets]')).toHaveCount(0)
+})
+
+// The rows say how much work each project is BEFORE Start, off the two facts
+// the studio already holds: each Houdini project's stored export sets (one
+// DazToHue network each) and, per Unreal project, which of the run's sets that
+// project actually holds. The Houdini list describes the `.hip`; the Unreal one
+// describes THIS run.
+test('every project row names the jobs it will put on the run’s task list', async ({ page }) => {
+  const dialog = await openDialogWith(page, {
+    onDisk: ['KiraDefault', 'KiraSummertide'],
+    // DemoGame holds only KiraDefault — so of the two sets the first project
+    // writes, exactly one is a re-import and the other is dropped from the run.
+    inUnreal: ['KiraDefault'],
+    scans: [
+      // One project, TWO networks: the case a single row per `.hip` could never
+      // show, and the reason the chips are per SET rather than per project.
+      { hipPath: P.houdini, exportSets: ['KiraDefault', 'KiraDefault_THICK'] },
+      { hipPath: HOUDINI_2, exportSets: ['KiraSummertide'] },
+    ],
+  })
+
+  // Both rows, in row order — every network of every linked project, whether
+  // that project is ticked or not (the chips describe the project, and the
+  // checkbox says whether it is in the run).
+  await expect(dialog.locator('[data-sets="houdini"] [data-set]')).toHaveText([
+    'KiraDefault',
+    'KiraDefault_THICK',
+    'KiraSummertide',
+  ])
+
+  await dialog.getByRole('checkbox', { name: 'Run in Kira', exact: true }).check()
+  await dialog.getByRole('checkbox', { name: 'Run in KiraSummertide' }).uncheck()
+  // The Unreal row names the CHARACTERS landing in that project: this run
+  // writes two sets, DemoGame holds one of them, and the send is re-import
+  // only — so one job, one chip. Naming the other would promise a row
+  // `unrealTaskCards` then drops.
+  await expect(dialog.locator('[data-sets="unreal"] [data-set]')).toHaveText(['KiraDefault'])
+})
+
+test('a run that produces no export names no characters — a stale folder is not a promise', async ({
+  page,
+}) => {
+  // The pair that would let a row lie: an export IS on disk and DemoGame holds
+  // it, so both halves of "which characters land here" have an answer — from
+  // the PREVIOUS run. ROM only stops before Houdini and sends nothing at all
+  // (see the panel's `unrealSendable`), so naming that character would promise
+  // an import job Start never queues.
+  const dialog = await openDialogWith(page, {
+    onDisk: ['KiraDefault'],
+    inUnreal: ['KiraDefault'],
+    scans: [{ hipPath: P.houdini, exportSets: ['KiraDefault'] }],
+  })
+
+  await dialog.locator('#daz-mode').click()
+  await page.getByRole('option', { name: /ROM only/ }).click()
+
+  await expect(dialog.getByText(/writes no export — nothing to send/)).toBeVisible()
+  await expect(dialog.locator('[data-sets="unreal"]')).toHaveCount(0)
+  // The Houdini row keeps its chips through the same mode change: what a `.hip`
+  // writes is a fact about the project, and this run not running it does not
+  // make it untrue. That difference is the whole reason the two lists are
+  // worded apart.
+  await expect(dialog.locator('[data-sets="houdini"] [data-set]')).toHaveText(['KiraDefault'])
 })
 
 test('ONE task row per re-import — and a set the project never held is dropped, and said', async ({
@@ -501,6 +569,99 @@ test('nothing claims the job and no editor is running — the studio opens the p
   await expect
     .poll(() => callsNamed(page, 'shell_open_file'), { timeout: 15_000 })
     .toEqual([{ path: UPROJECT }])
+})
+
+test('a DIFFERENT project is open — the studio opens the target beside it', async ({ page }) => {
+  // The reported bug (2026-08-20): an editor holding some other project meant
+  // the old any-editor-running rule never launched anything, and the job sat
+  // unclaimed forever behind a status line that said "waiting". The editors'
+  // command lines say WHAT they have open now — an identified stranger is a
+  // reason to open the target next to it, not to wait.
+  const seed = buildSeed({
+    activeProjectFile: P.dcsp,
+    demo: true,
+    houdiniProject: true,
+    unrealProjects: [UPROJECT],
+    unrealOpenProjects: { editors: 1, projects: ['D:/Unreal Projects/Other/Other.uproject'], unknown: 0 },
+  })
+  seed.files[`${EXPORT_ROOT}/KiraDefault/DTH_KiraDefault.dth`] = '{}'
+  seed.files[IMPORTED] = 'uasset-fixture'
+  seed.files[`${UPROJECT_DIR}/Plugins/DTHCharacterStudioRunner/DTHCharacterStudioRunner.uplugin`] = JSON.stringify({
+    Version: UNREAL_BRIDGE_VERSION,
+  })
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+  await page.getByRole('button', { name: 'DTH Export' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.waitFor()
+
+  await dialog.locator('#daz-mode').click()
+  await page.getByRole('option', { name: /Skip Daz/ }).click()
+  await dialog.locator('#houdini-mode').click()
+  await page.getByRole('option', { name: /Skip Houdini/ }).click()
+  await dialog.getByRole('checkbox', { name: 'Send to DemoGame' }).check()
+  // An IDENTIFIED editor is not the warning case — the studio knows what to do.
+  await expect(dialog.getByText(/can't tell which project/)).toHaveCount(0)
+  await dialog.getByRole('button', { name: 'Start' }).click()
+
+  // After the grace period the target opens BESIDE the running editor…
+  await expect
+    .poll(() => callsNamed(page, 'shell_open_file'), { timeout: 15_000 })
+    .toEqual([{ path: UPROJECT }])
+  // …and the status line says that is what happened, not a bare "opening".
+  await expect(page.locator('[data-export-status]')).toContainText(
+    /opening DemoGame next to the Unreal editor already running/,
+  )
+})
+
+test('an editor the studio cannot identify: warned at panel open, nothing launched blind', async ({
+  page,
+}) => {
+  // The one state detection cannot resolve — an editor is up and its command
+  // line names no project, so it MIGHT be the target. Nothing may be launched
+  // (a wrong guess is a duplicate editor), and because the send happens
+  // minutes after Start, the warning belongs at the START of the process.
+  const seed = buildSeed({
+    activeProjectFile: P.dcsp,
+    demo: true,
+    houdiniProject: true,
+    unrealProjects: [UPROJECT],
+    unrealOpenProjects: { editors: 1, projects: [], unknown: 1 },
+  })
+  seed.files[`${EXPORT_ROOT}/KiraDefault/DTH_KiraDefault.dth`] = '{}'
+  seed.files[IMPORTED] = 'uasset-fixture'
+  seed.files[`${UPROJECT_DIR}/Plugins/DTHCharacterStudioRunner/DTHCharacterStudioRunner.uplugin`] = JSON.stringify({
+    Version: UNREAL_BRIDGE_VERSION,
+  })
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+  await page.getByRole('button', { name: 'DTH Export' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.waitFor()
+
+  await dialog.locator('#daz-mode').click()
+  await page.getByRole('option', { name: /Skip Daz/ }).click()
+  await dialog.locator('#houdini-mode').click()
+  await page.getByRole('option', { name: /Skip Houdini/ }).click()
+  await dialog.getByRole('checkbox', { name: 'Send to DemoGame' }).check()
+
+  // The warning is IN the panel, before Start — naming the target it is about.
+  await expect(
+    dialog.getByText(/can't tell which project it has open\. If it isn't DemoGame/),
+  ).toBeVisible()
+
+  await dialog.getByRole('button', { name: 'Start' }).click()
+  // The job queues; after the grace period the status line says whose move it
+  // is — and no project was handed to the OS.
+  await expect(page.locator('[data-export-status]')).toContainText(
+    /can't tell which project — if it isn't DemoGame/,
+    { timeout: 15_000 },
+  )
+  expect(await callsNamed(page, 'shell_open_file')).toEqual([])
 })
 
 test('a REFUSED send fails its rows and complains as an error, not a shrug', async ({ page }) => {
