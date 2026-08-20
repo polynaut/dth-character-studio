@@ -100,12 +100,16 @@ function UnrealCard({
             (Utils → Install), so one indicator: DTH content missing, or a
             bridge older than the one this app ships (it imports with an older
             set of rules, or refuses the job outright). Clickable like the
-            Houdini card's warning badge — the mark points at its own fix. */}
+            Houdini card's warning badge — the mark points at its own fix. It
+            opens the same drawer the wrench does, so it obeys the same
+            single-flight gate: mid-write the card's scope may be about to
+            change under the drawer. */}
         {needsAttention && (
           <button
             type="button"
             onClick={onUtils}
-            className="shrink-0 rounded-md p-1 text-amber-500 transition-colors hover:bg-accent"
+            disabled={disabled}
+            className="shrink-0 rounded-md p-1 text-amber-500 transition-colors hover:bg-accent disabled:opacity-50"
             title={
               bridgeStale
                 ? 'The DTH Character Studio Runner in this project is older than the one this app ships — re-install it in Utils → Install (and restart the editor once).'

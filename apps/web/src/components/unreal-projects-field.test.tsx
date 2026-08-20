@@ -71,7 +71,12 @@ describe('UnrealProjectsBar mutations', () => {
     setUnrealProjects.mockImplementationOnce(
       () => new Promise<void>((resolve) => (finish = resolve)),
     )
+    // Both cards missing DTH content — so their attention marks render, and the
+    // single-flight gate can be checked on the mark too (it opens the same
+    // drawer the wrench does).
+    unrealDthContentPresent.mockResolvedValueOnce(false).mockResolvedValueOnce(false)
     render(<UnrealProjectsBar project={projectWith([A, B])} />)
+    await screen.findAllByLabelText(/Needs attention: DTH content not installed/)
 
     fireEvent.click(screen.getByLabelText('Unlink A'))
     fireEvent.click(screen.getByRole('button', { name: 'Unlink' }))
@@ -82,6 +87,10 @@ describe('UnrealProjectsBar mutations', () => {
     // are reached by their labels, not by role.
     expect(screen.getByLabelText('Unlink B')).toHaveProperty('disabled', true)
     expect(screen.getByLabelText('Utils for B')).toHaveProperty('disabled', true)
+    // The amber mark is the drawer's other way in — same gate.
+    for (const mark of screen.getAllByLabelText(/Needs attention/)) {
+      expect(mark).toHaveProperty('disabled', true)
+    }
     // A disabled unlink can't even open its confirm — no interleaved write.
     fireEvent.click(screen.getByLabelText('Unlink B'))
     expect(setUnrealProjects).toHaveBeenCalledTimes(1)
