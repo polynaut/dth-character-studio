@@ -777,8 +777,10 @@ export function installTauriMock(seed: TauriMockSeed): void {
         }
         if (request.op === 'retarget') {
           // No hython to walk real parms with, so this models the SHAPE, not
-          // the rule (`_retarget_value` is Python and is unit-checked there):
-          // one import path and one character-name parm per target, echoed
+          // the rule (`_retarget_value` is Python, pinned by
+          // `lib/rom/houdini-runtime/retarget-value.test.ts`, which execs the
+          // extracted function under a stock interpreter): one import path and
+          // one character-name parm per target, echoed
           // straight back off the studio's own request. What a spec can assert
           // is therefore the studio's half — that it asked for the right
           // rename, and that it counted the answer correctly.

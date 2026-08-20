@@ -158,10 +158,15 @@ Part of the domain reference — `.ai/domain.md` is the index.
   it" case. `applyCharacterRenameCleanup` then runs AFTER the save+generate —
   by then the folder has moved and `exportPath` is re-derived, so the exports it
   clears are the old-named files sitting under the NEW folder. It clears whole
-  ROOTS (both Daz candidates, exactly the pair `deleteCharacter` uses and behind
-  the same three rails, plus `<char>/<exportSubdir>` — which needs a fourth:
-  never the character folder ITSELF, which is what an empty `exportSubdir`
-  resolves to) and puts them back empty, because both are seeded folders.
+  ROOTS (both Daz candidates behind three rails — no `..`, inside the character
+  folder, NAMED like an export root — plus `<char>/<exportSubdir>`, which needs
+  a fourth: never the character folder ITSELF, which is what an empty
+  `exportSubdir` resolves to) and puts them back empty, because both are seeded
+  folders. `exportWipeTargets` is the single OWNER of that rule:
+  `deleteCharacter`'s keep-flag delete asks it for the same two Daz roots
+  (`kind: 'daz'`) rather than writing the rails out a second time — it wants the
+  Daz pair only, because a delete that spares the user's Houdini files must
+  spare what Houdini WROTE too.
   It deliberately does NOT run the export: that is the user's twenty minutes.
 - **…and then follows itself into every linked Houdini project** — the `retarget`
   op (`op_retarget`, material_utils.py; `retargetHoudiniReferences`,
@@ -178,9 +183,16 @@ Part of the domain reference — `.ai/domain.md` is the index.
   fork to "Nova (2)" would get wrong), then the export base name on the LAST
   path segment. That second rule covers `<name>.dth`, `<name>_Summertide.abc`,
   `<name>_experimental_rom.fbx`, `<name>_pose_asset.csv`,
-  `<name>_Hair_<item>_grooms.abc`, the reference skeletons AND the final tree's
-  own `export/<name>/` folder — see the measured listing above for why one rule
-  is enough. Plus `import_character_name`, which the HDA concatenates onto
+  `<name>_Hair_<item>_grooms.abc`, the reference skeletons AND a hand-pointed
+  `export_directory` ending in `export/<name>/` — see the measured listing above
+  for why one rule is enough. Its KNOWN limit, pinned as a case in
+  `retarget-value.test.ts`: only the LAST segment is name-swapped, so a
+  reference reaching INTO the final tree
+  (`…/export/<name>/Skeletal Meshes/SKM_<name>.fbx`) comes back with its folder
+  swapped and the two `<name>`s intact. Nothing the studio emits stores such a
+  path — the HDA builds that tree from `export_directory` + the character name
+  at cook time — and on a user's own node it is reported as `foreign` rather
+  than rewritten; if either stops holding, that case is the one to fix. Plus `import_character_name`, which the HDA concatenates onto
   `export_directory` to build its OUTPUT folder, so a stale one keeps writing
   into the old tree even when every import path is right; it is overwritten only
   while it still holds the old slug, and REPORTED (`keptNames`) when the user
@@ -188,7 +200,14 @@ Part of the domain reference — `.ai/domain.md` is the index.
   user's own nodes comes back in `foreign`, the same line `_shorten_job_ref`
   draws. `$JOB` is repointed first (a rename MOVES the folder), for projects
   inside the character folder only, the same pairing `character-zip`'s import
-  uses. Best-effort throughout: hython may be unpaired, and the rename has
+  uses. The rule itself
+  (`_retarget_value`) is Python, and `material_utils.py` imports `hou` at module
+  scope — so it is pinned by EXTRACTING the two functions and exec'ing them
+  under a stock interpreter (`houdini-runtime/retarget-value.test.ts`, 20
+  measured cases; skipped only OFF CI, when no `python3` is on PATH). The smoke
+  specs cannot reach it — the Playwright fake echoes the studio's request back —
+  so what they pin is the studio's half: the dialog, the cancel, the exact
+  payload. Best-effort throughout: hython may be unpaired, and the rename has
   already landed — so `houdiniUtilsReady` is asked BEFORE the dialog, the dialog
   says so, and every failure is a warning naming its fallback rather than an
   exception. What the drawer's "Make paths portable" could do instead: nothing.

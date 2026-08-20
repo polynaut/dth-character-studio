@@ -22,12 +22,11 @@ import * as storage from '../storage'
 import { normalizeRelFolder } from '../library'
 import { normalizeSceneKey } from '../execute-jobs.ts'
 import {
-  EXPORTS_FOLDER,
-  LEGACY_EXPORTS_FOLDER,
   PRIMARY_SCENE_SUBFOLDER,
   characterExportRoot,
   deriveScenesRootRel,
 } from '#/lib/scene-subfolder.ts'
+import { exportWipeTargets } from '../rename-exports.ts'
 import {
   characterSchema,
   defaultSections,
@@ -455,33 +454,28 @@ export async function deleteCharacter({ data }: { data: unknown }): Promise<void
     // export root is only ever `daz-export` (or the pre-move `dth-exports`), so
     // requiring the last segment to say so costs nothing real and turns an
     // arbitrary stored string back into a bounded one.
-    const looksLikeExportRoot = (p: string) => {
-      const leaf = normalizePathLower(p).split('/').pop() ?? ''
-      return leaf === EXPORTS_FOLDER.toLowerCase() || leaf === LEGACY_EXPORTS_FOLDER.toLowerCase()
-    }
-    // `..` refused outright: the containment below is a plain prefix compare,
+    // `..` refused outright: the containment test is a plain prefix compare,
     // and `<char>/houdini/../../../X/daz-export` passes BOTH tests while
     // resolving outside the character folder. `exportPath` is user data for any
     // character not saved since v29 — exactly the poisoned-input class the
     // Rust delete rails canonicalize against, and this delete never reaches
     // Rust (it goes through the fs plugin).
-    const deletable = (p: string) =>
-      p.trim() !== '' &&
-      !hasParentTraversal(p) &&
-      normalizePathLower(p).startsWith(normalizePathLower(location.folderAbs) + '/') &&
-      looksLikeExportRoot(p)
-    // Deduped by a case-folded KEY while keeping the original spelling: the two
-    // answers coincide for an already-migrated character, and two concurrent
-    // recursive deletes of one folder would race each other — but the path that
-    // gets deleted has to be the real one (macOS is case-SENSITIVE).
-    const byKey = new Map<string, string>()
-    for (const root of [
-      characterExportRoot(location.folderAbs, project.houdiniSubdir),
-      character?.exportPath ?? '',
-    ]) {
-      if (deletable(root)) byKey.set(normalizePathLower(root), root)
-    }
-    const roots = [...byKey.values()]
+    //
+    // All three rails, the two roots and the case-folded dedup are
+    // `exportWipeTargets` — the same rule the RENAME clears its export trees
+    // with, and owned in one pure module rather than written out twice (a
+    // fourth rail added to one copy is exactly the drift that costs a user's
+    // folder). The final `<char>/<exportSubdir>` tree is that rule's other
+    // half and is deliberately NOT asked for here: a delete that spares the
+    // user's Houdini files must spare what Houdini WROTE too.
+    const roots = exportWipeTargets({
+      charFolderAbs: location.folderAbs,
+      derivedExportRoot: characterExportRoot(location.folderAbs, project.houdiniSubdir),
+      storedExportRoot: character?.exportPath ?? '',
+      finalExportDir: '',
+    })
+      .filter((target) => target.kind === 'daz')
+      .map((target) => target.path)
     await Promise.all(
       roots.map(async (root) => {
         try {

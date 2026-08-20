@@ -97,6 +97,12 @@ test('cancelling the warning renames nothing and keeps the exports', async ({ pa
 
   const dialog = page.getByRole('dialog')
   await expect(dialog.getByText('Rename “Kira” to “Nova”?')).toBeVisible()
+  // Houdini is NOT paired in this seed, so the linked project cannot be
+  // repointed — and the heading says the thing that will actually happen. A
+  // "1 Houdini project is repointed" above a note explaining that it can't be
+  // is the half a user reads.
+  await expect(dialog.getByText('1 Houdini project imports the old exports')).toBeVisible()
+  await expect(dialog.getByText(/can’t be repointed right now/)).toBeVisible()
   await dialog.getByRole('button', { name: 'Cancel' }).click()
 
   // The title goes back to the old name (EditableTitle renders the character's

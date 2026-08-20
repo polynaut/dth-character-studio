@@ -476,10 +476,6 @@ export function EditorHeader({
           fromName={character.name}
           toName={renamePrompt.next}
           impact={renamePrompt.impact}
-          // The rename itself is `saving`, and the dialog is gone by the time it
-          // starts — but the flag exists so a slow persist can't be triggered
-          // twice from a double-click on the confirm button.
-          busy={draft.saving}
           onConfirm={() => renamePrompt.resolve(true)}
           onClose={() => renamePrompt.resolve(false)}
         />

@@ -6,7 +6,7 @@ the polling: this one is synchronous and the studio waits for the process).
 
     hython material_utils.py <requestFile> <resultFile>
 
-Six operations:
+Seven operations:
 
   scan      list every DazToHueMaterial node in a set of `.hip` files, with the
             counts the panel shows (materials / UV channels / bakers / layers)
@@ -25,6 +25,12 @@ Six operations:
             each absolute one relative to `$HIP`/`$JOB`/`$DAZ3D_LIB`, and
             rebuild any DazToHue import path whose file isn't there
             (`op_repath`).
+  retarget  follow a character RENAME through the references a project already
+            stores — the character folder, the export base name every exported
+            file is built from, and `import_character_name`. Unlike `repath` it
+            writes paths it cannot verify, because the rename just cleared the
+            old export set and the new one exists only after a re-export
+            (`op_retarget`).
   refresh   run the DazToHue shelf's own "Refresh Assets" tool against a
             project, the way a user would from inside Houdini (`op_refresh`).
 

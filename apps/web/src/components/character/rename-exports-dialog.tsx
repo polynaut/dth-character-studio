@@ -40,26 +40,25 @@ export function RenameExportsDialog({
   fromName,
   toName,
   impact,
-  busy,
   onConfirm,
   onClose,
 }: {
   fromName: string
   toName: string
   impact: CharacterRenameImpact
-  busy: boolean
   onConfirm: () => void
   onClose: () => void
 }) {
   const wiping = impact.targets.filter((target) => target.files > 0)
   const total = wiping.reduce((sum, target) => sum + target.bytes, 0)
+  // Never a "busy" state, deliberately. Nothing here is awaited while the
+  // dialog is up — the caller resolves its promise on the click and unmounts
+  // this — so a busy flag could only ever come from an UNRELATED save already
+  // in flight, and disabling on that took Escape, the backdrop AND Cancel away
+  // for the length of a save+generate. Double-clicking the confirm is already
+  // free: settling a settled promise is a no-op.
   return (
-    <Modal
-      open
-      onClose={onClose}
-      title={`Rename “${fromName}” to “${toName}”?`}
-      dismissible={!busy}
-    >
+    <Modal open onClose={onClose} title={`Rename “${fromName}” to “${toName}”?`}>
       <p className="text-sm text-muted-foreground">
         Every file the pipeline exports is named after the character — and names it inside, too: a{' '}
         <code className="rounded bg-muted px-1 py-0.5 text-xs">.dth</code> carries the figure’s name
@@ -92,16 +91,22 @@ export function RenameExportsDialog({
       </div>
       {impact.houdiniProjects.length > 0 && (
         <div className="space-y-2 rounded-md border bg-card p-3">
+          {/* Headed by what will ACTUALLY happen. Saying "is repointed" above a
+              note explaining that it can't be is the half a user reads. */}
           <div className="flex items-center gap-2 text-sm font-medium">
             <FolderOpen className="size-4 shrink-0" />
             {impact.houdiniProjects.length === 1
-              ? '1 Houdini project is repointed'
-              : `${impact.houdiniProjects.length} Houdini projects are repointed`}
+              ? `1 Houdini project ${impact.houdiniBlocked ? 'imports the old exports' : 'is repointed'}`
+              : `${impact.houdiniProjects.length} Houdini projects ${
+                  impact.houdiniBlocked ? 'import the old exports' : 'are repointed'
+                }`}
           </div>
-          <p className="text-xs text-muted-foreground">
-            Their DazToHue import paths and character name are rewritten to “{toName}”, so the next
-            export lands where they are already looking. Each project is backed up first.
-          </p>
+          {!impact.houdiniBlocked && (
+            <p className="text-xs text-muted-foreground">
+              Their DazToHue import paths and character name are rewritten to “{toName}”, so the
+              next export lands where they are already looking. Each project is backed up first.
+            </p>
+          )}
           <ul className="space-y-0.5 text-xs text-muted-foreground">
             {impact.houdiniProjects.map((hip) => (
               <li key={hip}>
@@ -126,11 +131,11 @@ export function RenameExportsDialog({
         exported files go.
       </p>
       <div className="flex justify-end gap-2">
-        <Button variant="ghost" disabled={busy} onClick={onClose}>
+        <Button variant="ghost" onClick={onClose}>
           Cancel
         </Button>
-        <Button variant="destructive" disabled={busy} onClick={onConfirm}>
-          {busy ? 'Renaming…' : 'Delete exports and rename'}
+        <Button variant="destructive" onClick={onConfirm}>
+          Delete exports and rename
         </Button>
       </div>
     </Modal>
