@@ -82,6 +82,7 @@ import {
   FOLDER_KIND_UI,
   FOLDER_KINDS,
   SECTION_LABELS,
+  TRANSIENT_TOAST_MS,
   backupsIn,
   fileName,
   hipStem,
@@ -914,7 +915,7 @@ export function HoudiniUtilsPanel({
         // happen, with nothing left to act on. The partial form keeps the
         // drawer's sticky default — it names copies still sitting on disk, and
         // the drawer closing behind it makes this their only mention.
-        all ? { duration: 4000 } : undefined,
+        all ? { duration: TRANSIENT_TOAST_MS } : undefined,
       )
     } catch (error) {
       utilsToast.error(error instanceof Error ? error.message : String(error))

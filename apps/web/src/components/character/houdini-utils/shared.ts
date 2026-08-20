@@ -176,6 +176,15 @@ export const utilsToast = {
     toast.error(message, { duration: Infinity, ...options }),
 }
 
+/**
+ * How long the one opted-out drawer toast lives.
+ *
+ * The value is sonner's own default, stated here rather than borrowed: the
+ * exception belongs next to the rule it opts out of, and a house-wide default
+ * on `<Toaster>` would otherwise move every toast in the app EXCEPT this one.
+ */
+export const TRANSIENT_TOAST_MS = 4000
+
 /** A material node identified across files — the selection key everywhere here. */
 export function nodeKey(hipPath: string, nodePath: string): string {
   return `${normalizePath(hipPath).toLowerCase()}|${nodePath}`
