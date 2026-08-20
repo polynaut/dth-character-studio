@@ -66,7 +66,7 @@ describe('UnrealProjectsBar mutations', () => {
     expect(setUnrealProjects.mock.calls[1][0].data.paths).toEqual([])
   })
 
-  it('is single-flight: while a write is in flight the card unlink/install buttons disable', async () => {
+  it('is single-flight: while a write is in flight the card unlink/utils buttons disable', async () => {
     let finish!: () => void
     setUnrealProjects.mockImplementationOnce(
       () => new Promise<void>((resolve) => (finish = resolve)),
@@ -81,10 +81,7 @@ describe('UnrealProjectsBar mutations', () => {
     // busy dialog is modal (the background tree is aria-hidden), so the cards
     // are reached by their labels, not by role.
     expect(screen.getByLabelText('Unlink B')).toHaveProperty('disabled', true)
-    expect(screen.getByLabelText('Install DTH content and plugins into B')).toHaveProperty(
-      'disabled',
-      true,
-    )
+    expect(screen.getByLabelText('Utils for B')).toHaveProperty('disabled', true)
     // A disabled unlink can't even open its confirm — no interleaved write.
     fireEvent.click(screen.getByLabelText('Unlink B'))
     expect(setUnrealProjects).toHaveBeenCalledTimes(1)
@@ -95,31 +92,41 @@ describe('UnrealProjectsBar mutations', () => {
     )
   })
 
-  it('a failed Content/DazToHue probe leaves the install button usable (unknown ≠ disabled)', async () => {
+  it('a failed Content/DazToHue probe leaves the utils button usable (unknown ≠ disabled)', async () => {
     unrealDthContentPresent.mockRejectedValueOnce(new Error('share offline'))
     render(<UnrealProjectsBar project={projectWith([A])} />)
 
     await waitFor(() => expect(unrealDthContentPresent).toHaveBeenCalledTimes(1))
-    // The probe only drives the button's dim — the dialog does its own probing,
-    // so a failed (or pending) probe must never disable the entry point.
-    expect(screen.getByLabelText('Install DTH content and plugins into A')).toHaveProperty(
-      'disabled',
-      false,
-    )
+    // The probe only drives the card's attention mark — the drawer does its own
+    // probing, so a failed (or pending) probe must never disable the entry point.
+    expect(screen.getByLabelText('Utils for A')).toHaveProperty('disabled', false)
   })
 
-  it('the install button opens the install dialog for that project', async () => {
+  it('the utils button opens the drawer, on its Install tab, for that project', async () => {
     unrealDthContentPresent.mockResolvedValueOnce(false)
     render(<UnrealProjectsBar project={projectWith([A])} />)
 
     // The CARD already probes this project once, for the bridge-staleness
-    // warning — so the dialog's own probe is the second call, not the first.
+    // warning — so the drawer's own probe is the second call, not the first.
     await waitFor(() => expect(unrealProjectState).toHaveBeenCalledTimes(1))
-    fireEvent.click(screen.getByLabelText('Install DTH content and plugins into A'))
-    // The dialog probes THIS project and renders its checklist.
+    fireEvent.click(screen.getByLabelText('Utils for A'))
+    // The drawer probes THIS project and renders its checklist.
     await waitFor(() => expect(unrealProjectState).toHaveBeenCalledTimes(2))
     expect(unrealProjectState.mock.calls[1][0].data.uprojectPath).toBe(A)
     await waitFor(() => expect(screen.getByText('DTH content')).toBeTruthy())
+    expect(screen.getByRole('tab', { name: 'Install' })).toBeTruthy()
     expect(screen.getByRole('button', { name: /Install$/ })).toBeTruthy()
+  })
+
+  it('a project missing DTH content raises the card attention mark — and it opens Utils', async () => {
+    unrealDthContentPresent.mockResolvedValueOnce(false)
+    render(<UnrealProjectsBar project={projectWith([A])} />)
+
+    // The wrench is neutral, so the "not set up yet" signal the highlighted
+    // install button used to carry lives in this mark instead.
+    const mark = await screen.findByLabelText(/Needs attention: DTH content not installed/)
+    await waitFor(() => expect(unrealProjectState).toHaveBeenCalledTimes(1))
+    fireEvent.click(mark)
+    await waitFor(() => expect(unrealProjectState).toHaveBeenCalledTimes(2))
   })
 })

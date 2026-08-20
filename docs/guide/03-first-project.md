@@ -67,21 +67,30 @@ never deletes anything.
 
 - **The open button** launches the project in Unreal Engine; **Alt+click** shows
   it in Explorer. The rest of the card is inert — no accidental launches.
-- **The install button** opens the **install dialog**: everything is pre-checked,
-  so uncheck what you don't want and press **Install**.
+- **The Utils button** (🔧, the same one the Daz-scene and Houdini cards carry)
+  opens the project's **Utils** drawer. Its **Install** tab lists what can go into
+  the project, with **whatever the project doesn't have yet already ticked** — so
+  the usual move on a freshly linked project is to press **Install**.
   - the linked DTH release's *Unreal Engine Content* (into `Content/DazToHue`);
   - the **DTH Character Studio Runner**, marked **built in** because it ships
     inside the app — the small Python plugin that makes
     [Send to Unreal](./06-into-houdini.md#send-to-unreal) work. Restart the editor
-    once after installing it; a card shows an amber ⚠ when its project holds an
-    older copy than the app ships;
+    once after installing it;
   - every plugin build from your
     [Unreal Engine Plugins folders](./02-setup.md#unreal-engine-plugins) matching
     this project's engine version.
 
-  A checked item already in the project is overwritten with the offered build
-  (project-local additions inside the folders survive). A project whose engine
-  association is a source-build GUID lists every build unchecked instead.
+  Anything already installed and current starts **unticked** — tick it to install
+  it again, which overwrites it with the offered build (project-local additions
+  inside the folders survive). Two things are never ticked for you even when
+  missing: a build compiled against another engine build, and — on a project whose
+  engine association is a source-build GUID — every plugin build, since only you
+  know which one fits.
+- **An amber ⚠ on a card** means that project still needs something: no DTH
+  content in it yet, or a **DTH Character Studio Runner** older than the one this
+  app ships (a [send](./06-into-houdini.md#send-to-unreal) is then refused rather
+  than attempted). Click the ⚠ — it opens the same Utils drawer, with the fix
+  ticked.
 - **Creating the Unreal project itself is Unreal's job** — its New Project screen
   is where the templates live. Make it in Unreal, then link it here.
 

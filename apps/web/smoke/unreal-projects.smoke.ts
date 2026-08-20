@@ -34,7 +34,7 @@ test('unreal unlink pauses on a confirm dialog', async ({ page }) => {
   await expect(page.getByText('DemoGame', { exact: true })).toHaveCount(0)
 })
 
-test('the install dialog offers DTH content + the engine-matched plugin builds', async ({
+test('the Utils drawer offers DTH content + the engine-matched plugin builds', async ({
   page,
 }) => {
   const bridge = 'D:/Unreal Plugins/DazToUnrealBridge'
@@ -64,19 +64,20 @@ test('the install dialog offers DTH content + the engine-matched plugin builds',
   await page.goto('/')
   await expect(page.getByText('DemoGame', { exact: true })).toBeVisible()
 
-  await page.getByRole('button', { name: 'Install DTH content and plugins into DemoGame' }).click()
-  const dialog = page.getByRole('dialog', { name: /Install into DemoGame/ })
+  await page.getByRole('button', { name: 'Utils for DemoGame' }).click()
+  const dialog = page.getByRole('dialog', { name: /Unreal project utils/ })
   await expect(dialog).toBeVisible()
-  // The engine is read from the .uproject; every offered item is pre-checked,
-  // and only the 5.7 build of the bridge plugin is offered (one row, not two).
-  // Three rows: DTH content, the studio's own DTHCharacterStudioRunner, that one build.
+  // The engine is read from the .uproject; the project holds NONE of the three,
+  // so every offered item is pre-checked, and only the 5.7 build of the bridge
+  // plugin is offered (one row, not two). Three rows: DTH content, the studio's
+  // own DTHCharacterStudioRunner, that one build.
   await expect(dialog.getByText('Unreal Engine 5.7')).toBeVisible()
   const boxes = dialog.getByRole('checkbox')
   await expect(boxes).toHaveCount(3)
   for (const box of await boxes.all()) await expect(box).toBeChecked()
 
   await dialog.getByRole('button', { name: 'Install', exact: true }).click()
-  // Success toast names every install; the dialog closes.
+  // Success toast names every install; the drawer closes.
   await expect(page.getByText(/Installed into DemoGame/)).toBeVisible()
   await expect(page.getByText(/DTH content \(7 files\)/)).toBeVisible()
   await expect(page.getByText(/DazToUnreal \(3 files\)/)).toBeVisible()
@@ -86,11 +87,11 @@ test('the install dialog offers DTH content + the engine-matched plugin builds',
   await expect(dialog).toHaveCount(0)
 })
 
-test('the install dialog judges plugin builds by BuildId, not by their folder name', async ({
+test('the Install tab judges plugin builds by BuildId, not by their folder name', async ({
   page,
 }) => {
   // The whole path, unmocked above the native boundary: the fake's wire shape →
-  // the zod schema → `buildUnrealScan` → the dialog. The component tests can't
+  // the zod schema → `buildUnrealScan` → the drawer. The component tests can't
   // prove this stretch — they mock `detectUnrealEngines` — and it is precisely
   // where the check was inert once already (a mapper that named its fields
   // dropped `buildId` on the way to the UI). See `.ai/gotchas.md`.
@@ -135,8 +136,8 @@ test('the install dialog judges plugin builds by BuildId, not by their folder na
   await page.goto('/')
   await expect(page.getByText('DemoGame', { exact: true })).toBeVisible()
 
-  await page.getByRole('button', { name: 'Install DTH content and plugins into DemoGame' }).click()
-  const dialog = page.getByRole('dialog', { name: /Install into DemoGame/ })
+  await page.getByRole('button', { name: 'Utils for DemoGame' }).click()
+  const dialog = page.getByRole('dialog', { name: /Unreal project utils/ })
   await expect(dialog).toBeVisible()
 
   // KawaiiPhysics has only a 5.8 build: listed, marked, and NOT pre-checked —
@@ -156,8 +157,8 @@ test('the install dialog judges plugin builds by BuildId, not by their folder na
 test('a project holding an OLD bridge is flagged on its card', async ({ page }) => {
   // The studio ships that plugin, so a project keeps whatever was installed the
   // day it was installed — and an out-of-date bridge imports with older rules
-  // or refuses the job outright. The card says so; Install is the fix, and the
-  // warning sits next to it.
+  // or refuses the job outright. The card says so; Utils → Install is the fix,
+  // and the mark opens it.
   const seed = buildSeed({ activeProjectFile: P.dcsp, unrealProjects: [UPROJECT] })
   const dir = UPROJECT.replace(/\/[^/]*$/, '')
   seed.files[`${dir}/Plugins/DTHCharacterStudioRunner/DTHCharacterStudioRunner.uplugin`] = JSON.stringify({
@@ -166,7 +167,15 @@ test('a project holding an OLD bridge is flagged on its card', async ({ page }) 
   await page.addInitScript(installTauriMock, seed)
   await page.goto('/')
   await expect(page.getByText('DemoGame', { exact: true })).toBeVisible()
-  await expect(page.getByLabel('Bridge plugin out of date')).toBeVisible()
+  const mark = page.getByLabel(/Needs attention: bridge plugin out of date/)
+  await expect(mark).toBeVisible()
+  // The mark IS the way in — clicking it opens the drawer that fixes it, with
+  // the stale bridge re-ticked despite being installed.
+  await mark.click()
+  const drawer = page.getByRole('dialog', { name: /Unreal project utils/ })
+  const bridge = drawer.locator('li').filter({ hasText: 'DTH Character Studio Runner' })
+  await expect(bridge.getByText('out of date — a check re-installs it')).toBeVisible()
+  await expect(bridge.getByRole('checkbox')).toBeChecked()
 })
 
 test('a project with the CURRENT bridge — and one with none — are not flagged', async ({
@@ -182,5 +191,15 @@ test('a project with the CURRENT bridge — and one with none — are not flagge
   await page.addInitScript(installTauriMock, seed)
   await page.goto('/')
   await expect(page.getByText('DemoGame', { exact: true })).toBeVisible()
-  await expect(page.getByLabel('Bridge plugin out of date')).toHaveCount(0)
+  await expect(page.getByLabel(/bridge plugin out of date/)).toHaveCount(0)
+  // The card DOES mark this project — it has no DTH content — but for the other
+  // reason, and with the other fix. One mark, two messages.
+  await expect(page.getByLabel(/Needs attention: DTH content not installed/)).toBeVisible()
+  // …and the drawer it opens leaves the CURRENT bridge alone: installed and not
+  // stale is not "missing".
+  await page.getByLabel(/Needs attention: DTH content not installed/).click()
+  const drawer = page.getByRole('dialog', { name: /Unreal project utils/ })
+  const bridge = drawer.locator('li').filter({ hasText: 'DTH Character Studio Runner' })
+  await expect(bridge.getByRole('checkbox')).not.toBeChecked()
+  await expect(drawer.locator('li').filter({ hasText: 'DTH content' }).getByRole('checkbox')).toBeChecked()
 })

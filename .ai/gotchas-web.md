@@ -552,7 +552,7 @@ Measured while adding **Interrupt** beside the export progress button, whose Ctr
 branch then rendered one button where the normal branch rendered two. Those two
 modifier hatches are gone now (v0.77 — Interrupt replaced them), so the export
 buttons no longer hit this, but `useModifierHeld` is still behind the path chips
-and the Unreal install button. If a spec has to hold a modifier:
+and the Unreal card's open button. If a spec has to hold a modifier:
 
 - park the pointer off the affected element first (`page.mouse.move(0, 0)`), and
 - design the reveal so it does not move anything: **a modifier may swap what a
