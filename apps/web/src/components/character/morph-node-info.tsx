@@ -50,7 +50,7 @@ export function MorphNodeInfo({
   if (!node) {
     return (
       <div className="mt-1 flex items-center pl-1">
-        <span className="text-[10px] text-muted-foreground/70 italic" title={fallbackTitle}>
+        <span className="text-xs text-muted-foreground/70 italic" title={fallbackTitle}>
           {fallback}
         </span>
       </div>
@@ -63,9 +63,11 @@ export function MorphNodeInfo({
         muted && 'text-muted-foreground',
       )}
     >
-      {/* The node badge — the stored scope, styled like the suggestion's. */}
+      {/* The node badge — the stored scope, styled like the suggestion's but a
+          size up (text-xs): under the field it carries the scope on its own,
+          with no suggestion row around it to read it against. */}
       <span
-        className="flex items-center gap-1 rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground"
+        className="flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
         title={scopedTitle}
       >
         {node}
@@ -76,11 +78,11 @@ export function MorphNodeInfo({
           className="rounded p-0.5 hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
           onClick={onClear}
         >
-          <X className="size-3" />
+          <X className="size-3.5" />
         </button>
       </span>
       {entry?.fromScene && (
-        <span className="rounded bg-primary/20 px-1 py-0.5 text-[10px] text-primary">
+        <span className="rounded bg-primary/20 px-1.5 py-0.5 text-xs text-primary">
           this scene
         </span>
       )}
