@@ -1664,6 +1664,85 @@ def _repair_import_refs(node, roots, dry_run, export_dir=""):
     return fixed
 
 
+# --- following a character rename --------------------------------------------
+#
+# A rename changes two things a stored reference can name: the character FOLDER
+# (`<lib>/<Old>/` becomes `<lib>/<New>/`) and the export BASE NAME every file
+# the DTH Exporter writes is built from. The studio has just performed both, so
+# unlike `_repair_import_refs` — which may only ever write a path it has
+# verified on disk — this one KNOWS the answer and writes it whether or not the
+# file is there yet. It has to: a rename wipes the old export set, so nothing
+# exists until the user re-exports, and the whole point is that the re-export
+# lands where the network is already looking.
+
+
+def _swap_leaf(segment, name_from, name_to):
+    """`Kira_Summertide.abc` → `Nova_Summertide.abc`, or None to leave it.
+
+    Measured on a real export folder (Ita, 2026-08-20), one scene's set is:
+    `Ita.dth` / `Ita.fbx` / `Ita.abc` / `Ita.zip` /
+    `Ita_experimental_rom.fbx` / `Ita_pose_asset.csv` /
+    `Ita_Hair_<item>_grooms.abc` — plus `Reference Skeletons/Ita_frame_<N>.fbx`
+    for a bone-scale ROM, and the final Houdini-side tree
+    `export/Ita/{DTH_Ita.dth, Skeletal Meshes/SKM_Ita.fbx}`. Every one of them
+    is the base name followed by nothing, `_`, or `.` — so ONE prefix rule on a
+    whole path segment covers the lot, including the scene suffix a rename does
+    not change (`_Summertide` rides along untouched) and the folder `export/Ita`
+    that the HDA builds by concatenating `export_directory + character_name`.
+
+    Case-insensitive, because Windows paths are and a case-only rename
+    (`kira` → `Kira`) is a real one the compare must still notice.
+    """
+    if not segment or not name_from:
+        return None
+    lowered, prefix = segment.lower(), name_from.lower()
+    if lowered != prefix and not lowered.startswith(prefix + "_") and not lowered.startswith(prefix + "."):
+        return None
+    return name_to + segment[len(name_from) :]
+
+
+def _retarget_value(value, name_from, name_to, folder_from, folder_to):
+    """The stored reference `value` as it should read after the rename, or None.
+
+    Two independent swaps, applied to the UNEXPANDED string so a portable
+    `$HIP/…` stays portable:
+
+    1. **The character folder**, on an exact case-insensitive prefix match
+       against the folder the studio actually renamed. Never a guess: an
+       absolute path into some OTHER tree that merely shares a name is left
+       alone, and a `$JOB`/`$HIP` path has no folder to swap (`$JOB` itself is
+       repointed by `op_defaults`, which the rename runs first).
+    2. **The last path segment**, via {@link _swap_leaf} — the file's own name,
+       or the name-derived folder of the final export tree.
+
+    Returns None when neither applies, so "not mine" and "unchanged" are the
+    same answer and the caller counts only real rewrites.
+    """
+    if not value:
+        return None
+    out = value.replace("\\", "/")
+    changed = False
+    if folder_from and folder_to:
+        lowered = out.lower()
+        root = folder_from.lower()
+        if lowered == root:
+            out, changed = folder_to, True
+        elif lowered.startswith(root + "/"):
+            out, changed = folder_to + out[len(folder_from) :], True
+    # A trailing slash is load-bearing on `export_directory` (the HDA
+    # concatenates it with the character name), so split it off, swap the real
+    # last segment, and put it back exactly as it was.
+    trailing = "/" if out.endswith("/") else ""
+    body = out[:-1] if trailing else out
+    head, _, leaf = body.rpartition("/")
+    swapped = _swap_leaf(leaf, name_from, name_to)
+    if swapped is not None:
+        body = (head + "/" + swapped) if head else swapped
+        out = body + trailing
+        changed = True
+    return out if changed else None
+
+
 # --- prefilling an existing network ------------------------------------------
 
 
@@ -2185,6 +2264,118 @@ def op_repath(request):
             result["repaired"] = []
         results.append(result)
     return {"op": "repath", "projects": [], "targets": [], "repath": results, "dryRun": dry_run}
+
+
+def op_retarget(request):
+    """Follow a character rename through a project's stored references.
+
+    The studio renames a character by moving its folder and re-deriving every
+    name the exporter builds from it. A `.hip` cannot be re-generated, so the
+    references it already stores are rewritten here instead: the character
+    folder in absolute paths, the export base name in every file name, and the
+    DazToHueImport's own `import_character_name`.
+
+    **Only DazToHue nodes are written.** `_file_ref_parms` hands us every file
+    parm in the scene, and the studio only ever rewrites the paths it emits
+    itself — the same line `_shorten_job_ref` draws. A matching path on one of
+    the USER's nodes (their own File SOP reading the export) is REPORTED in
+    `foreign` instead, because silently leaving it looking handled is how a
+    rename turns into a mystery a week later.
+
+    **`import_character_name` is only overwritten when it still says the old
+    name** (or is blank). The HDA builds its output folder as
+    `export_directory + character_name`, so a stale value keeps writing into the
+    old tree — but a value the user typed themselves is theirs, and it is
+    reported in `keptNames` rather than replaced.
+
+    Same guarantees as its neighbours: a dry run that writes nothing and reports
+    exactly what a real run would do, and one rolling backup before any save.
+    """
+    dry_run = bool(request.get("dryRun"))
+    results = []
+    for target in request.get("targets", []):
+        path = target.get("hipPath", "")
+        name_from = str(target.get("nameFrom") or "")
+        name_to = str(target.get("nameTo") or "")
+        slug_from = str(target.get("slugFrom") or "")
+        slug_to = str(target.get("slugTo") or "")
+        folder_from = _norm_path(str(target.get("folderFrom") or ""))
+        folder_to = _norm_path(str(target.get("folderTo") or ""))
+        result = {
+            "hipPath": path,
+            "ok": True,
+            "error": "",
+            "retargeted": [],
+            "renamedNodes": [],
+            "keptNames": [],
+            "foreign": [],
+            "backupPath": "",
+        }
+        try:
+            if not name_from or not name_to:
+                raise hou.Error("The rename has no old/new export name to follow.")
+            _load(path)
+            changed = 0
+            for node in hou.node("/").allSubChildren():
+                try:
+                    is_dth = "daztohue" in node.type().name().lower()
+                except Exception:
+                    continue
+                for parm, raw in _file_ref_parms(node):
+                    new = _retarget_value(raw, name_from, name_to, folder_from, folder_to)
+                    if new is None:
+                        continue
+                    label = node.path() + " " + parm.name()
+                    if not is_dth:
+                        result["foreign"].append(label)
+                        continue
+                    if not dry_run:
+                        parm.set(new)
+                    result["retargeted"].append({"label": label, "from": raw, "to": new})
+                    changed += 1
+                if not is_dth or not slug_to:
+                    continue
+                parm = node.parm("import_character_name")
+                if parm is None:
+                    continue
+                try:
+                    current = str(parm.unexpandedString() or "").strip()
+                except Exception:
+                    continue
+                label = node.path() + " import_character_name"
+                # Two spellings of "the old name" are legitimate here and the
+                # replacement keeps whichever one it finds. The studio prefills
+                # the SLUG (`characterSlug`, `[A-Za-z0-9_]`), but the HDA's own
+                # auto-fill takes the `.dth`'s "Character Name", which is the
+                # exporter's figure name — and those differ the moment a
+                # character's name has a space in it ("Kira Smith" vs
+                # "KiraSmith"). Rewriting one convention into the other would
+                # silently move where the HDA writes its output.
+                if not current:
+                    wanted = slug_to
+                elif current.lower() == slug_from.lower():
+                    wanted = slug_to
+                elif name_from and current.lower() == name_from.lower():
+                    wanted = name_to
+                else:
+                    result["keptNames"].append(label + " = " + current)
+                    continue
+                if current == wanted:
+                    continue
+                if not dry_run:
+                    parm.set(wanted)
+                result["renamedNodes"].append({"label": label, "from": current, "to": wanted})
+                changed += 1
+            if changed and not dry_run:
+                result["backupPath"] = _backup(path)
+                hou.hipFile.save(path)
+        except Exception as exc:
+            result["ok"] = False
+            result["error"] = str(exc).strip() or exc.__class__.__name__
+            result["retargeted"] = []
+            result["renamedNodes"] = []
+        results.append(result)
+    return {"op": "retarget", "projects": [], "targets": [], "retarget": results, "dryRun": dry_run}
 
 
 #: How close a scene's FPS has to be to count as the wanted one. Houdini's FPS
@@ -2969,6 +3160,7 @@ OPS = {
     "transfer": op_transfer,
     "defaults": op_defaults,
     "repath": op_repath,
+    "retarget": op_retarget,
     "prefill": op_prefill,
     "refresh": op_refresh,
 }
@@ -3015,6 +3207,7 @@ def main():
     payload.setdefault("replace", False)
     payload.setdefault("defaults", [])
     payload.setdefault("repath", [])
+    payload.setdefault("retarget", [])
     payload.setdefault("prefill", [])
     payload.setdefault("refresh", [])
 

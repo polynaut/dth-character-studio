@@ -237,6 +237,13 @@ you need:
   and scene thumbnail at once, and the dialog previews the result while you
   drag. 0 is the default.
 - **Name** — click to rename. The folder, notes and generated scripts follow.
+  If the character has already been **exported**, renaming also *deletes* those
+  exports — the exporter names every file after the character and writes the
+  name *inside* them too, so the set on disk belongs to the old name and nothing
+  will write to it again. A dialog lists exactly what goes (both export folders,
+  with sizes) before anything happens, and your linked Houdini projects are
+  repointed at the new names in the same step. Re-run **DTH Export** afterwards
+  to rebuild them; your Daz scenes and saved ROM animations are untouched.
 - **Subtitle** — the generation, the **skinning** the ROM targets (DQS or Linear,
   derived from the preset assets), and the custom-frame count.
 - **Path chip** — where the definition lives on disk.
