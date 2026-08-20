@@ -76,8 +76,11 @@ test('a changed DTH release offers the linked projects, and a clean run records 
   // one linked project has never been swept, which the offer says plainly
   // rather than dressing up as a verdict.
   await expect(offer.getByText('Kira.hip')).toBeVisible()
-  await expect(offer.getByText(/never refreshed by the studio/)).toBeVisible()
-  await expect(offer.getByText(/it was 2\.3\.0 the last time/)).toBeVisible()
+  await expect(offer.getByText(/was 2\.3\.0/)).toBeVisible()
+  // The column header is what makes the row's bare "never" honest: it reads
+  // "last refreshed BY THE STUDIO", which is the absence of a verdict, not one.
+  await expect(offer.getByText('Last refreshed by the studio')).toBeVisible()
+  await expect(offer.getByText('never', { exact: true })).toBeVisible()
 
   await offer.getByRole('button', { name: /^Refresh 1 project$/ }).click()
   await expect(page.getByText('1 project refreshed and saved.')).toBeVisible()
@@ -202,8 +205,11 @@ test('an existing backup is named, and the run is held until that is accepted', 
   seed.files[BACKUP] = 'an-older-backup'
   const offer = await runStudioRefresh(page, seed)
 
-  await expect(offer.getByText(/1 project already has a studio backup/)).toBeVisible()
-  await expect(offer.getByText('Kira_dthbak.hip')).toBeVisible()
+  await expect(offer.getByText('Running may replace 1 existing backup.')).toBeVisible()
+  // Marked on the project's own row, not listed a second time underneath. AT
+  // RISK, not "will be replaced": only a project the tool leaves modified is
+  // saved, and nothing here can know in advance which those are.
+  await expect(offer.getByText('backup at risk', { exact: true })).toBeVisible()
 
   // Held: the destructive step has to be accepted before the run can start.
   const run = offer.getByRole('button', { name: /^Refresh 1 project$/ })
@@ -294,8 +300,34 @@ test('a dry run destroys no backup, and needs no acceptance to say so', async ({
   expect(await fileAt(page, BACKUP)).toBe('an-older-backup')
 })
 
+/**
+ * The trim's whole premise: the caveats did not go away, they went one click
+ * away. That is only true if they can actually be READ — and the popup is a
+ * portaled, absolutely-positioned panel the page cannot be scrolled to reach,
+ * so content taller than the room under the "i" is not "one click away", it is
+ * gone. It was: 664px of it in a 900px window, with the paragraph that says to
+ * close Houdini first sitting 57px below the fold. Hence the viewport
+ * assertion rather than a visibility one — `toBeVisible` passed the whole time.
+ */
+test('the caveats are one click away, and on screen when they get there', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 700 })
+  const offer = await runStudioRefresh(page, seedFor('2.3.0'))
+  await offer.getByRole('button', { name: /more information/i }).click()
+
+  // The popup portals ABOVE the dialog (z-[60]), so it is not inside `offer`.
+  const popup = page.getByRole('dialog').filter({ hasText: /rather than doing the refresh/ })
+  await expect(popup).toBeInViewport({ ratio: 1 })
+  // …and the paragraph the panel had to scroll to reach is reachable: the
+  // content scrolls INSIDE the popup, which is what `toBeVisible` alone could
+  // never tell apart from "rendered 282px below the window".
+  const last = page.getByText(/Close the projects in Houdini first/)
+  await last.scrollIntoViewIfNeeded()
+  await expect(last).toBeInViewport({ ratio: 1 })
+})
+
 test('no existing backup, no warning — and nothing to accept', async ({ page }) => {
   const offer = await runStudioRefresh(page, seedFor('2.3.0'))
-  await expect(offer.getByText(/already has a studio backup/)).toBeHidden()
+  await expect(offer.getByText(/may replace/)).toBeHidden()
+  await expect(offer.getByText('backup at risk', { exact: true })).toBeHidden()
   await expect(offer.getByRole('button', { name: /^Refresh 1 project$/ })).toBeEnabled()
 })

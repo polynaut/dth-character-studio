@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Loader2, TriangleAlert, Undo2 } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { Button, Modal, Switch } from '@dth/ui'
+import { Button, InfoPopup, Modal, Switch } from '@dth/ui'
 import {
   noteHoudiniRefreshUndone,
   refreshTargetPaths,
@@ -32,6 +32,16 @@ import type {
  * say what the refresh changed (it executes third-party code it cannot
  * inspect). What it can say — and does — is which projects it has run this on
  * before, and under which release.
+ *
+ * **All of which is true, and none of which belongs on the surface.** Those
+ * caveats once filled six paragraphs of the dialog, and six paragraphs of
+ * hedging is not honesty — it is a wall that gets skimmed, and skimming costs
+ * exactly the attention the one destructive line needs. So the dialog carries
+ * the release, ONE list, the consent line when there is something to consent
+ * to, and the buttons; the caveats live in {@link OfferInfo}, where the rest of
+ * the app keeps this kind of thing. The at-risk backups are marked ON the
+ * project rows rather than listed again underneath — same projects, and a
+ * second list of the same names reads as twice the work.
  */
 
 /** Basename for display; the full path is the row's title attribute. */
@@ -43,95 +53,83 @@ function plural(count: number, one: string, many = `${one}s`): string {
   return `${count} ${count === 1 ? one : many}`
 }
 
-/** A backup's date, in the user's locale; '' when it could not be stat'd. */
+/** " (8/20/2026)" for a backup's mtime; '' when it could not be stat'd. */
 function backupDate(modifiedAt: string): string {
   if (!modifiedAt) return ''
   const at = new Date(modifiedAt)
-  return Number.isNaN(at.getTime()) ? '' : at.toLocaleDateString()
+  return Number.isNaN(at.getTime()) ? '' : ` (${at.toLocaleDateString()})`
 }
 
-/**
- * The one destructive thing this dialog does, said before it happens.
- *
- * `_backup` keeps ONE rolling copy per project, so saving a project overwrites
- * whatever is already beside it — and the copy sitting there is, by
- * construction, the one somebody kept to get that project back onto an older
- * DazToHue release. That is too easy to lose by pressing a button labelled
- * "Refresh", so the loss gets its own block, its own list, and its own switch:
- * the run does not start until it is acknowledged.
- *
- * What the switch consents to is the overwrite itself, and the dialog does not
- * pre-empt it by deleting anything: `_backup` copies only for a project the
- * tool leaves modified, so deleting up front would take the copies beside every
- * project that reports no change or fails outright — and all of them if the run
- * cannot start at all. Left to the overwrite, a copy is lost exactly when it is
- * replaced, and never otherwise. Which is also why this lists what is AT RISK
- * rather than what will go: nothing here can know which projects the tool will
- * leave modified.
- */
-function ReplaceBackupsWarning({
-  backups,
-  accepted,
-  onAccept,
-  disabled,
-}: {
-  backups: ReadonlyArray<ExistingBackup>
-  accepted: boolean
-  onAccept: (value: boolean) => void
-  disabled: boolean
-}) {
+/** The caveats, in full, one click from the decision. */
+function OfferInfo() {
   return (
-    <div className="space-y-3 rounded-md border-2 border-destructive/60 bg-destructive/10 p-4">
-      <p className="flex items-start gap-2 text-sm font-semibold text-destructive">
-        <TriangleAlert className="mt-0.5 size-5 shrink-0" />
-        <span>
-          {plural(backups.length, 'project')} already {backups.length === 1 ? 'has' : 'have'} a
-          studio backup — this run <strong>replaces</strong>{' '}
-          {backups.length === 1 ? 'it' : 'them'}
-        </span>
-      </p>
-      <p className="text-sm">
-        Each project keeps <strong>one rolling copy</strong>, so saving a project overwrites what
-        is there. Only the projects this run actually saves lose theirs — and nothing here can say
-        in advance which those are. If one of these is how you would put a project back on an
-        older DazToHue release, copy it somewhere else first: this is the last point at which it
-        is certainly still there.
-      </p>
-      <ul className="max-h-32 space-y-1 overflow-y-auto text-xs text-muted-foreground">
-        {backups.map((backup) => (
-          <li key={backup.backupPath} title={backup.backupPath}>
-            <code className="text-foreground">{fileName(backup.backupPath)}</code>
-            {backupDate(backup.modifiedAt) && <span> · saved {backupDate(backup.modifiedAt)}</span>}
-          </li>
-        ))}
-      </ul>
-      <div className="flex items-start gap-3">
-        <Switch
-          id="replace-houdini-backups"
-          checked={accepted}
-          disabled={disabled}
-          onCheckedChange={onAccept}
-        />
-        <label htmlFor="replace-houdini-backups" className="text-sm">
-          Let this run overwrite {backups.length === 1 ? 'it' : 'them'} with its own backups.
-        </label>
+    <InfoPopup label="Refreshing DazToHue assets — more information">
+      <div className="space-y-2">
+        <p>
+          The studio runs DazToHue&apos;s <strong>own</strong> tool rather than doing the refresh
+          itself, so it can&apos;t say in advance what will change — and no check anywhere says a
+          project needs this.
+        </p>
+        <p>
+          <strong>&ldquo;never&rdquo; in the list is not a verdict.</strong> Nothing in a{' '}
+          <code>.hip</code> records which DazToHue release its assets came from, so all the studio
+          knows is which projects <em>it</em> has run this on. A project is saved only if the scene
+          reports itself modified afterwards.
+        </p>
+        <p>
+          A project is copied into its <code>backup/</code> folder before it is saved — and only
+          then, because a project the tool leaves unchanged is not saved at all. Each saved project
+          keeps an <strong>Undo this run</strong> button in the report, which also stops the studio
+          counting that project as refreshed. It is <strong>one rolling copy per project</strong>,
+          so a save overwrites the copy already there. If one of those is how you would put a
+          project back on an older DazToHue release, copy it somewhere else first.
+        </p>
+        <p>
+          <strong>Close the projects in Houdini first</strong> — Houdini writes the whole scene on
+          save and would overwrite this. A <strong>dry run</strong> still opens each project and
+          runs the tool; it just never saves the file.
+        </p>
       </div>
-    </div>
+    </InfoPopup>
   )
 }
 
-/** One offered project: what it is, who links it, and what the studio knows. */
-function CandidateRow({ candidate }: { candidate: RefreshCandidate }) {
+/**
+ * One offered project: the file, who links it, whether its backup is at risk,
+ * and when the studio last ran this on it.
+ *
+ * The list's column header is what makes a bare "never" honest — it reads "last
+ * refreshed by the studio", which is the absence of a verdict rather than one.
+ * The backup marker says AT RISK, not "will be replaced": `_backup` only copies
+ * for a project the tool leaves modified, and nothing here can know in advance
+ * which those are.
+ */
+function CandidateRow({
+  candidate,
+  riskedBackup,
+}: {
+  candidate: RefreshCandidate
+  /** The existing copy this project's save would overwrite, if there is one. */
+  riskedBackup: ExistingBackup | undefined
+}) {
   return (
-    <li title={candidate.hipPath}>
-      <code className="text-foreground">{fileName(candidate.hipPath)}</code>
-      {candidate.characters.length > 0 && <span> · {candidate.characters.join(', ')}</span>}
-      <span>
-        {' '}
-        —{' '}
-        {candidate.bucket === 'stale'
-          ? `last refreshed under DazToHue ${candidate.lastVersion}`
-          : 'never refreshed by the studio'}
+    <li title={candidate.hipPath} className="flex items-baseline gap-2">
+      <code className="shrink-0 text-foreground">{fileName(candidate.hipPath)}</code>
+      {candidate.characters.length > 0 && (
+        <span className="truncate">{candidate.characters.join(', ')}</span>
+      )}
+      {riskedBackup && (
+        <span
+          className="shrink-0 text-destructive"
+          // The date is not worth a line on the dialog, but it is worth a hover:
+          // "is this the copy I kept?" is the whole question.
+          title={`${fileName(riskedBackup.backupPath)}${backupDate(riskedBackup.modifiedAt)} — overwritten if this run saves the project`}
+        >
+          backup at risk
+        </span>
+      )}
+      <span className="ml-auto shrink-0">
+        {candidate.bucket === 'stale' ? candidate.lastVersion : 'never'}
       </span>
     </li>
   )
@@ -231,8 +229,8 @@ export function HoudiniRefreshOffer({
 }) {
   const [running, setRunning] = useState<'' | 'dry' | 'run'>('')
   const [report, setReport] = useState<MaterialUtilReport | null>(null)
-  /** The user accepted losing the backups already on disk (see
-   *  {@link ReplaceBackupsWarning}). Gates the run, nothing else. */
+  /** The user accepted losing the backups already on disk (the destructive
+   *  line below). Gates the run, nothing else. */
   const [replaceAccepted, setReplaceAccepted] = useState(false)
   /** A real run has been through, so the copies beside the projects it saved
    *  are now THIS run's — the report's Undo depends on them. From here on the
@@ -241,12 +239,15 @@ export function HoudiniRefreshOffer({
   const [replaced, setReplaced] = useState(false)
   const busy = running !== ''
 
-  const targets = plan.candidates.filter((c) => c.bucket !== 'current')
-  const stale = targets.filter((c) => c.bucket === 'stale')
-  const unknown = targets.filter((c) => c.bucket === 'unknown')
+  // Stale first, then never-run: the ones the studio can say something about
+  // lead, and one sorted list replaces what used to be two.
+  const targets = plan.candidates
+    .filter((c) => c.bucket !== 'current')
+    .sort((a, b) => Number(b.bucket === 'stale') - Number(a.bucket === 'stale'))
   const skipped = plan.candidates.length - targets.length
   const hipPaths = refreshTargetPaths(plan.candidates)
   const doomedBackups = replaced ? [] : plan.existingBackups
+  const riskedByHip = new Map(doomedBackups.map((b) => [b.hipPath, b]))
   /** A real run is held until the overwrite is acknowledged. The dry run is
    *  not: it never saves, so it never reaches `_backup` and destroys nothing. */
   const blockedByBackups = doomedBackups.length > 0 && !replaceAccepted
@@ -288,77 +289,72 @@ export function HoudiniRefreshOffer({
       dismissible={!busy}
       title="Also refresh the DazToHue assets in Houdini?"
     >
-      <div className="space-y-2 text-sm">
+      <div className="flex items-baseline gap-1.5 text-sm">
         <p>
-          The active DazToHue release is <strong>{plan.activeDthVersion}</strong>
-          {plan.lastSeenDthVersion && plan.lastSeenDthVersion !== plan.activeDthVersion
-            ? ` — it was ${plan.lastSeenDthVersion} the last time assets were refreshed.`
-            : '.'}{' '}
-          A <code>.hip</code> keeps the DazToHue definitions it was built with, so your linked
-          projects are still on the old ones until DazToHue&apos;s own{' '}
-          <strong>Refresh Assets</strong> runs in each of them.
+          DazToHue is now <strong>{plan.activeDthVersion}</strong>
+          {plan.lastSeenDthVersion && plan.lastSeenDthVersion !== plan.activeDthVersion && (
+            <> (was {plan.lastSeenDthVersion})</>
+          )}{' '}
+          — a <code>.hip</code> keeps the asset definitions it was built with until DazToHue&apos;s
+          own <strong>Refresh Assets</strong> runs in it. The studio can run that in each project
+          below through <code>hython</code>, without opening Houdini.
         </p>
-        <p>
-          The studio can run that tool headlessly, through hython, on{' '}
-          <strong>{plural(targets.length, 'linked project')}</strong>
-          {skipped > 0 && (
-            <>
-              {' '}
-              (skipping {plural(skipped, 'project')} already refreshed under {plan.activeDthVersion})
-            </>
-          )}
-          .
-        </p>
+        <OfferInfo />
       </div>
 
-      <ul className="max-h-40 space-y-1 overflow-y-auto rounded-md border p-3 text-xs text-muted-foreground">
-        {stale.map((candidate) => (
-          <CandidateRow key={candidate.hipPath} candidate={candidate} />
-        ))}
-        {unknown.map((candidate) => (
-          <CandidateRow key={candidate.hipPath} candidate={candidate} />
-        ))}
-      </ul>
+      <div className="rounded-md border p-3 text-xs text-muted-foreground">
+        <p className="mb-1.5 flex items-baseline gap-2 font-medium">
+          Last refreshed by the studio
+          {skipped > 0 && (
+            <span className="ml-auto font-normal">
+              {skipped} already on {plan.activeDthVersion}, skipped
+            </span>
+          )}
+        </p>
+        <ul className="max-h-40 space-y-0.5 overflow-y-auto">
+          {targets.map((candidate) => (
+            <CandidateRow
+              key={candidate.hipPath}
+              candidate={candidate}
+              riskedBackup={riskedByHip.get(candidate.hipPath)}
+            />
+          ))}
+        </ul>
+      </div>
 
+      {/* The one thing here that can lose something, and the only thing on this
+          dialog holding a control.
+          ONE short sentence, and "may" is doing the honest work: the consent is
+          to the OVERWRITE, and only a project the tool leaves modified is saved
+          — so which of these actually go cannot be known here. That distinction
+          is real and belongs in OfferInfo, NOT in the sentence somebody reads
+          while reaching for the switch. It was on this line once, as "one
+          rolling copy per project, overwritten for whichever projects this run
+          saves", which is accurate and unreadable. A precise sentence nobody
+          parses protects nobody. */}
       {doomedBackups.length > 0 && (
-        <ReplaceBackupsWarning
-          backups={doomedBackups}
-          accepted={replaceAccepted}
-          onAccept={setReplaceAccepted}
-          disabled={busy}
-        />
+        <div className="flex items-center gap-2.5 rounded-md border-2 border-destructive/60 bg-destructive/10 p-3 text-sm">
+          <TriangleAlert className="size-4 shrink-0 text-destructive" />
+          <span id="replace-houdini-backups-risk">
+            Running may replace {plural(doomedBackups.length, 'existing backup')}.
+          </span>
+          {/* The risk is a STATEMENT and the switch is the consent, so they are
+              two elements rather than one: a switch whose only label is
+              "Running may replace 2 existing backups" announces the loss and
+              never says what turning it on means. `aria-describedby` puts the
+              sentence back on the control for a screen reader. */}
+          <label htmlFor="replace-houdini-backups" className="ml-auto">
+            Let it
+          </label>
+          <Switch
+            id="replace-houdini-backups"
+            aria-describedby="replace-houdini-backups-risk"
+            checked={replaceAccepted}
+            disabled={busy}
+            onCheckedChange={setReplaceAccepted}
+          />
+        </div>
       )}
-
-      {/* The honest limits, stated where the decision is made — the same three
-          the Utils drawer states for the single-character version of this. */}
-      <p className="rounded-md border p-3 text-xs text-muted-foreground">
-        The studio runs DazToHue&apos;s own tool rather than doing the refresh itself, so it
-        can&apos;t tell you in advance what will change — and no check anywhere says a project
-        needs this. &ldquo;Never refreshed by the studio&rdquo; means exactly that: it is not a
-        verdict about the project, only the absence of one. A project is saved only if the scene
-        reports itself modified afterwards.
-      </p>
-
-      <p className="text-xs text-muted-foreground">
-        A project is copied into its <code>backup/</code> folder before it is saved — and only
-        then, because a project the tool leaves unchanged is not saved at all. Each saved project
-        keeps an <strong>Undo this run</strong> button in the report below — the way back if you
-        ever need one of them on the previous DazToHue release.
-        {/* The rolling-copy caveat belongs to whichever block is doing the work:
-            when copies are actually about to be destroyed the warning above
-            states it in full, and repeating it here only teaches the eye to
-            skim past both. */}
-        {doomedBackups.length === 0 && (
-          <>
-            {' '}
-            It is <strong>one rolling copy per project</strong>, so the next run of this replaces
-            it.
-          </>
-        )}{' '}
-        Close the projects in Houdini first: Houdini writes the whole scene on save and would
-        overwrite this. A <strong>dry run</strong> still opens each project and runs the tool; it
-        just never saves the file.
-      </p>
 
       {report && <SweepReport report={report} />}
 
@@ -373,7 +369,7 @@ export function HoudiniRefreshOffer({
           disabled={busy || blockedByBackups}
           title={
             blockedByBackups
-              ? 'Existing backups would be destroyed — accept that above to run'
+              ? 'An existing backup could be overwritten — accept that above to run'
               : undefined
           }
           onClick={() => void run(false)}

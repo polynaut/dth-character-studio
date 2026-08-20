@@ -273,6 +273,12 @@ export const TRIGGERS = [
     anchor: 'A floating layer that renders ABOVE the overlays must be SWEPT',
   },
   {
+    id: 'info-popup-height',
+    path: /packages\/ui\/src\/primitives\/info-popup/,
+    doc: GOTCHAS_WEB,
+    anchor: 'An InfoPopup longer than the room under its "i"',
+  },
+  {
     id: 'smoke-tooltip-title',
     path: /apps\/web\/smoke\/.*\.smoke\.ts$/,
     doc: GOTCHAS_WEB,
