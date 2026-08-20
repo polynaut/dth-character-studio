@@ -1250,6 +1250,32 @@ export function isStudioBackup(path: string): boolean {
   return /_dthbak\.[^./\\]+$/i.test(path.trim())
 }
 
+/**
+ * Where `_backup` (material_utils.py) WILL write this project's copy —
+ * `<dir>/backup/<name>_dthbak<ext>`, forward slashes.
+ *
+ * The other half of the pair above: `isStudioBackup` validates a path a report
+ * handed back, this one derives the path a run has not taken yet. It exists
+ * because the copy is ROLLING — a run overwrites whatever is already there — so
+ * anything that wants to WARN before destroying an older copy has to be able to
+ * name it without starting hython. Mirrors the Python exactly; the two are
+ * pinned together by `houdini-material.test.ts`, because a drift here would
+ * warn about a file the run then does not touch (or, worse, stay quiet about
+ * one it does).
+ */
+export function studioBackupPath(hipPath: string): string {
+  const normalized = hipPath.trim().replace(/\\/g, '/')
+  const slash = normalized.lastIndexOf('/')
+  const dir = slash < 0 ? '' : normalized.slice(0, slash)
+  const base = normalized.slice(slash + 1)
+  const dot = base.lastIndexOf('.')
+  // `os.path.splitext` treats a leading dot as part of the NAME, not an
+  // extension (".hip" → name ".hip", ext ""), and so does this.
+  const name = dot <= 0 ? base : base.slice(0, dot)
+  const ext = dot <= 0 ? '' : base.slice(dot)
+  return `${dir}/backup/${name}_dthbak${ext}`
+}
+
 const discardInput = z.object({
   /** The `…_dthbak` files to delete — anything else is skipped, not deleted. */
   paths: z.array(z.string().min(1)),

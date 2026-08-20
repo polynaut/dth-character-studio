@@ -1,12 +1,17 @@
 import { useState } from 'react'
-import { Loader2, Undo2 } from 'lucide-react'
+import { Loader2, TriangleAlert, Undo2 } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { Button, Modal } from '@dth/ui'
+import { Button, Modal, Switch } from '@dth/ui'
 import { restoreHoudiniBackup, runHoudiniAssetRefresh } from '#/lib/rom/api.ts'
 import { refreshTargetPaths } from '#/lib/rom/houdini-refresh-store.ts'
 
-import type { HoudiniRefreshPlan, MaterialUtilReport, RefreshCandidate } from '#/lib/rom/api.ts'
+import type {
+  ExistingBackup,
+  HoudiniRefreshPlan,
+  MaterialUtilReport,
+  RefreshCandidate,
+} from '#/lib/rom/api.ts'
 
 /**
  * The offer that follows a Refresh-assets run when the DTH release changed:
@@ -32,6 +37,73 @@ function fileName(path: string): string {
 
 function plural(count: number, one: string, many = `${one}s`): string {
   return `${count} ${count === 1 ? one : many}`
+}
+
+/** A backup's date, in the user's locale; '' when it could not be stat'd. */
+function backupDate(modifiedAt: string): string {
+  if (!modifiedAt) return ''
+  const at = new Date(modifiedAt)
+  return Number.isNaN(at.getTime()) ? '' : at.toLocaleDateString()
+}
+
+/**
+ * The one destructive thing this dialog does, said before it happens.
+ *
+ * `_backup` keeps ONE rolling copy per project, so a run overwrites whatever is
+ * already beside it — and the copy sitting there is, by construction, the one
+ * somebody kept to get that project back onto an older DazToHue release. That
+ * is too easy to lose by pressing a button labelled "Refresh", so the loss gets
+ * its own block, its own list, and its own switch: the run does not start until
+ * this is acknowledged, and the accepted copies are deleted in one visible step
+ * rather than overwritten one at a time.
+ */
+function ReplaceBackupsWarning({
+  backups,
+  accepted,
+  onAccept,
+  disabled,
+}: {
+  backups: ReadonlyArray<ExistingBackup>
+  accepted: boolean
+  onAccept: (value: boolean) => void
+  disabled: boolean
+}) {
+  return (
+    <div className="space-y-3 rounded-md border-2 border-destructive/60 bg-destructive/10 p-4">
+      <p className="flex items-start gap-2 text-sm font-semibold text-destructive">
+        <TriangleAlert className="mt-0.5 size-5 shrink-0" />
+        <span>
+          {plural(backups.length, 'project')} already {backups.length === 1 ? 'has' : 'have'} a
+          studio backup — running this <strong>destroys</strong>{' '}
+          {backups.length === 1 ? 'it' : 'them'}
+        </span>
+      </p>
+      <p className="text-sm">
+        Each project keeps <strong>one rolling copy</strong>, so this run replaces what is there.
+        If one of these is how you would put a project back on an older DazToHue release, copy it
+        somewhere else first — this is the last point at which it exists.
+      </p>
+      <ul className="max-h-32 space-y-1 overflow-y-auto text-xs text-muted-foreground">
+        {backups.map((backup) => (
+          <li key={backup.backupPath} title={backup.backupPath}>
+            <code className="text-foreground">{fileName(backup.backupPath)}</code>
+            {backupDate(backup.modifiedAt) && <span> · saved {backupDate(backup.modifiedAt)}</span>}
+          </li>
+        ))}
+      </ul>
+      <div className="flex items-start gap-3">
+        <Switch
+          id="replace-houdini-backups"
+          checked={accepted}
+          disabled={disabled}
+          onCheckedChange={onAccept}
+        />
+        <label htmlFor="replace-houdini-backups" className="text-sm">
+          Delete {backups.length === 1 ? 'it' : 'them'} and take fresh backups of this run.
+        </label>
+      </div>
+    </div>
+  )
 }
 
 /** One offered project: what it is, who links it, and what the studio knows. */
@@ -140,6 +212,15 @@ export function HoudiniRefreshOffer({
 }) {
   const [running, setRunning] = useState<'' | 'dry' | 'run'>('')
   const [report, setReport] = useState<MaterialUtilReport | null>(null)
+  /** The user accepted losing the backups already on disk (see
+   *  {@link ReplaceBackupsWarning}). Gates the run, nothing else. */
+  const [replaceAccepted, setReplaceAccepted] = useState(false)
+  /** A real run has been through, so the copies beside the projects are now
+   *  THIS run's — the report's Undo depends on them. From here on the warning
+   *  is gone and a re-run deletes nothing: the thing it warned about has
+   *  already happened, and the copies it would now be aimed at are the ones the
+   *  user may still want to use. */
+  const [replaced, setReplaced] = useState(false)
   const busy = running !== ''
 
   const targets = plan.candidates.filter((c) => c.bucket !== 'current')
@@ -147,16 +228,26 @@ export function HoudiniRefreshOffer({
   const unknown = targets.filter((c) => c.bucket === 'unknown')
   const skipped = plan.candidates.length - targets.length
   const hipPaths = refreshTargetPaths(plan.candidates)
+  const doomedBackups = replaced ? [] : plan.existingBackups
+  /** A real run is held until the destruction is acknowledged. The dry run is
+   *  not: it never saves, so it never reaches `_backup` and destroys nothing. */
+  const blockedByBackups = doomedBackups.length > 0 && !replaceAccepted
 
   async function run(dryRun: boolean) {
     setRunning(dryRun ? 'dry' : 'run')
     setReport(null)
     try {
       const result = await runHoudiniAssetRefresh({
-        data: { hipPaths, dthVersion: plan.activeDthVersion, dryRun },
+        data: {
+          hipPaths,
+          dthVersion: plan.activeDthVersion,
+          dryRun,
+          replaceBackups: dryRun ? [] : doomedBackups.map((b) => b.backupPath),
+        },
       })
       setReport(result)
       if (dryRun) return
+      setReplaced(true)
       const failed = result.refresh.filter((r) => !r.ok)
       if (failed.length > 0) {
         toast.error(
@@ -216,6 +307,15 @@ export function HoudiniRefreshOffer({
         ))}
       </ul>
 
+      {doomedBackups.length > 0 && (
+        <ReplaceBackupsWarning
+          backups={doomedBackups}
+          accepted={replaceAccepted}
+          onAccept={setReplaceAccepted}
+          disabled={busy}
+        />
+      )}
+
       {/* The honest limits, stated where the decision is made — the same three
           the Utils drawer states for the single-character version of this. */}
       <p className="rounded-md border p-3 text-xs text-muted-foreground">
@@ -229,11 +329,21 @@ export function HoudiniRefreshOffer({
       <p className="text-xs text-muted-foreground">
         Every project is copied into its <code>backup/</code> folder before it is saved, and each
         saved project keeps an <strong>Undo this run</strong> button in the report below — the way
-        back if you ever need one of them on the previous DazToHue release. It is{' '}
-        <strong>one rolling copy per project</strong>, so the next run of this replaces it. Close
-        the projects in Houdini first: Houdini writes the whole scene on save and would overwrite
-        this. A <strong>dry run</strong> still opens each project and runs the tool; it just never
-        saves the file.
+        back if you ever need one of them on the previous DazToHue release.
+        {/* The rolling-copy caveat belongs to whichever block is doing the work:
+            when copies are actually about to be destroyed the warning above
+            states it in full, and repeating it here only teaches the eye to
+            skim past both. */}
+        {doomedBackups.length === 0 && (
+          <>
+            {' '}
+            It is <strong>one rolling copy per project</strong>, so the next run of this replaces
+            it.
+          </>
+        )}{' '}
+        Close the projects in Houdini first: Houdini writes the whole scene on save and would
+        overwrite this. A <strong>dry run</strong> still opens each project and runs the tool; it
+        just never saves the file.
       </p>
 
       {report && <SweepReport report={report} />}
@@ -245,7 +355,15 @@ export function HoudiniRefreshOffer({
         <Button variant="outline" disabled={busy} onClick={() => void run(true)}>
           {running === 'dry' ? <Loader2 className="animate-spin" /> : null} Dry run
         </Button>
-        <Button disabled={busy} onClick={() => void run(false)}>
+        <Button
+          disabled={busy || blockedByBackups}
+          title={
+            blockedByBackups
+              ? 'Existing backups would be destroyed — accept that above to run'
+              : undefined
+          }
+          onClick={() => void run(false)}
+        >
           {running === 'run' ? <Loader2 className="animate-spin" /> : null} Refresh{' '}
           {plural(targets.length, 'project')}
         </Button>

@@ -194,8 +194,16 @@ What it can and can't say, which is the same short list as the
 
 Every project is copied into its `backup/` folder before it's saved, and each saved
 project keeps an **Undo this run** button in the report — the way back if you ever
-need one project on the previous DazToHue release. It's **one rolling copy per
-project**, so the next run of this replaces it. Close the projects in Houdini first:
-Houdini writes the whole scene on save and would overwrite the result.
+need one project on the previous DazToHue release. Close the projects in Houdini
+first: Houdini writes the whole scene on save and would overwrite the result.
+
+It's **one rolling copy per project**, which means a run replaces whatever copy is
+already there. If any of the projects it's about to sweep already has one, the dialog
+says so in red, lists them with their dates, and **won't let the run start** until you
+accept losing them — a dry run isn't held, because it never saves and so never touches
+a backup. Accept, and they're deleted in one step before Houdini is even started, then
+remade fresh by the run. If one of those copies is how you'd put a project back on an
+older DazToHue release, copy it somewhere else first: that dialog is the last point at
+which it exists.
 
 [← Guide overview](./README.md)

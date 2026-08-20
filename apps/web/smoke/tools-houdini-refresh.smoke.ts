@@ -21,6 +21,9 @@ const HOUDINI_DOCS = 'C:/Users/dev/Documents/houdini22.0'
 const ACTIVE_DTH = '2.4.3'
 /** The store the app keeps of what it has refreshed, and under which release. */
 const STORE = `${P.appData}/houdini-refresh.json`
+/** Where `_backup` writes the demo character's linked project — the ROLLING
+ *  copy a run replaces, which is what the fat warning is about. */
+const BACKUP = `${P.charFolder}/houdini/backup/Kira_dthbak.hip`
 
 /**
  * A machine where the sweep CAN run (hython resolvable), with the studio's
@@ -174,4 +177,82 @@ test('dismissing writes nothing, so the offer returns on the next refresh', asyn
   await expect(
     page.getByRole('dialog', { name: 'Also refresh the DazToHue assets in Houdini?' }),
   ).toBeVisible()
+})
+
+// --- the existing-backup warning -------------------------------------------
+//
+// `_backup` keeps ONE rolling copy per project, so a run overwrites whatever is
+// beside it — including the copy somebody kept to get a project back onto an
+// older DazToHue release. These hold down that the loss is named, gated and
+// then actually performed, rather than happening quietly inside the run.
+
+/** Does the fake world still hold this file? */
+function fileExists(page: Page, path: string) {
+  return page.evaluate(
+    (p) => ((window as any).__tauriMock.files as Map<string, string>).has(p),
+    path,
+  )
+}
+
+test('an existing backup is named, and the run is held until that is accepted', async ({
+  page,
+}) => {
+  const seed = seedFor('2.3.0')
+  seed.files[BACKUP] = 'an-older-backup'
+  const offer = await runStudioRefresh(page, seed)
+
+  await expect(offer.getByText(/1 project already has a studio backup/)).toBeVisible()
+  await expect(offer.getByText('Kira_dthbak.hip')).toBeVisible()
+
+  // Held: the destructive step has to be accepted before the run can start.
+  const run = offer.getByRole('button', { name: /^Refresh 1 project$/ })
+  await expect(run).toBeDisabled()
+
+  await offer.getByRole('switch').click()
+  await expect(run).toBeEnabled()
+  await run.click()
+
+  await expect(page.getByText('1 project refreshed and saved.')).toBeVisible()
+
+  // The delete is the claim, so it is what gets asserted — and that it happened
+  // BEFORE hython, in one visible step, rather than being an overwrite noticed
+  // afterwards. (`files` alone cannot tell the two apart: the run's own
+  // `_backup` puts a copy back at the same path either way.)
+  const order = await page.evaluate((backup) => {
+    const calls = (window as any).__tauriMock.calls as Array<{ cmd: string; args: any }>
+    return {
+      removed: calls.findIndex(
+        (c) => c.cmd === 'plugin:fs|remove' && c.args?.path === backup,
+      ),
+      ran: calls.findIndex((c) => c.cmd === 'run_houdini_material_util'),
+    }
+  }, BACKUP)
+  expect(order.removed).toBeGreaterThanOrEqual(0)
+  expect(order.ran).toBeGreaterThan(order.removed)
+
+  // And the run put its OWN copy back, which is what the report's Undo needs.
+  expect(await fileExists(page, BACKUP)).toBe(true)
+})
+
+test('a dry run destroys no backup, and needs no acceptance to say so', async ({ page }) => {
+  const seed = seedFor('2.3.0')
+  seed.files[BACKUP] = 'an-older-backup'
+  const offer = await runStudioRefresh(page, seed)
+
+  // A dry run never saves, so it never reaches `_backup` — it is not gated.
+  const dry = offer.getByRole('button', { name: 'Dry run' })
+  await expect(dry).toBeEnabled()
+  await dry.click()
+
+  await expect(offer.getByText('Dry run — no project file was saved')).toBeVisible()
+  expect(await page.evaluate(
+    (p) => ((window as any).__tauriMock.files as Map<string, string>).get(p),
+    BACKUP,
+  )).toBe('an-older-backup')
+})
+
+test('no existing backup, no warning — and nothing to accept', async ({ page }) => {
+  const offer = await runStudioRefresh(page, seedFor('2.3.0'))
+  await expect(offer.getByText(/already has a studio backup/)).toBeHidden()
+  await expect(offer.getByRole('button', { name: /^Refresh 1 project$/ })).toBeEnabled()
 })

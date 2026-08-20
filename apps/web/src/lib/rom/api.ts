@@ -307,6 +307,7 @@ export {
   shouldOfferRefresh,
 } from './api/houdini-refresh.ts'
 export type {
+  ExistingBackup,
   HoudiniRefreshPlan,
   RefreshBucket,
   RefreshCandidate,
