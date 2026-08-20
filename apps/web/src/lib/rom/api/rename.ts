@@ -296,15 +296,26 @@ export async function applyCharacterRenameCleanup({
         result.houdiniUpdated.push(entry.hipPath)
       }
       // Reported, never silently swallowed: both are places the old name
-      // survives ON PURPOSE, and the user is the only one who can decide.
-      for (const kept of entry.keptNames) {
+      // survives ON PURPOSE, and the user is the only one who can decide. ONE
+      // warning per project per kind, listing the parms — a toast per parm is
+      // a storm on a project that has a dozen of them, and a storm is read as
+      // noise rather than as the two lines that actually need a decision.
+      if (entry.keptNames.length > 0) {
         result.warnings.push(
-          `${basename(entry.hipPath)}: “${kept}” was left alone — it doesn’t hold the old name, so it looks like a value you set yourself.`,
+          `${basename(entry.hipPath)}: ${nameList(entry.keptNames)} left alone — ${
+            entry.keptNames.length === 1 ? 'it doesn’t' : 'they don’t'
+          } hold the old name, so ${
+            entry.keptNames.length === 1 ? 'it looks' : 'they look'
+          } like values you set yourself.`,
         )
       }
-      for (const foreign of entry.foreign) {
+      if (entry.foreign.length > 0) {
         result.warnings.push(
-          `${basename(entry.hipPath)}: “${foreign}” still points at the old export — it’s on one of your own nodes, so the studio left it to you.`,
+          `${basename(entry.hipPath)}: ${nameList(entry.foreign)} still ${
+            entry.foreign.length === 1 ? 'points' : 'point'
+          } at the old export — on your own nodes, so the studio left ${
+            entry.foreign.length === 1 ? 'it' : 'them'
+          } to you.`,
         )
       }
     }
@@ -316,4 +327,13 @@ export async function applyCharacterRenameCleanup({
     )
   }
   return result
+}
+
+/** `"a"`, `"a" and "b"`, `"a", "b" and 4 more` — a warning has to fit in a
+ *  toast, and the first few names are what makes it actionable. */
+function nameList(items: ReadonlyArray<string>): string {
+  const quoted = items.slice(0, 2).map((item) => `“${item}”`)
+  const rest = items.length - quoted.length
+  if (rest > 0) return `${quoted.join(', ')} and ${rest} more`
+  return quoted.length === 2 ? `${quoted[0]} and ${quoted[1]}` : quoted[0]
 }
