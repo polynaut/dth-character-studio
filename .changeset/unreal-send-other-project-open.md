@@ -1,4 +1,7 @@
 ---
+# bump: patch is deliberate — fetchUnrealOpenEditors() is plumbing for the launch
+# decision this fix corrects (a queued import waited forever behind another open
+# project); the send-to-Unreal capability itself shipped in v0.75.
 '@dth/web': patch
 '@dth/desktop': patch
 ---
