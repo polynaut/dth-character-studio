@@ -605,3 +605,34 @@ and the Unreal install button. If a spec has to hold a modifier:
   overlay primitives silently changes what the page underneath can still
   receive, and any comment that leans on modality has to be re-read, not just
   the visible layout.
+
+## An overlay's focus RESTORE re-shows the tooltip its sweep just hid (measured 2026-08-20)
+
+`Modal` / `SidePanel` sweep the floating layers on open (`closeFloatingLayers`)
+precisely because tooltips are `z-[100]`, above the z-50 overlay. The other end
+of the same interaction undid it: Radix `FocusScope` restores focus to the
+control that opened the overlay on unmount, `TooltipHost` shows on `focusin`
+with **no delay** (700 ms is hover only), and the pointer has not moved — so
+closing a drawer put the opener's tooltip straight back over the app.
+
+Measured in Chromium with the smoke fake: hover a card's Utils button → tooltip
+shows → click → swept → close with the ✕ → **`display: block` again**, focus on
+the button, `:focus-visible` **false**. Closing with **Escape** gives
+`:focus-visible` **true** — the modality split is the whole answer.
+
+The fix is a `keyboardInput` flag in the host (set in its existing `keydown` /
+`pointerdown` capture listeners), gating the `focusin` show. Deliberately NOT
+`el.matches(':focus-visible')`, which was tried first:
+
+- **jsdom's answer is not stable across a test file.** It is not "`:focus` with
+  a different name" — it tracks modality too, so a `mouseDown` in an *earlier*
+  test leaves the document in pointer modality and the next test's real
+  `.focus()` reports `false`. The keyboard test passed alone and failed in the
+  file. `fireEvent.pointerDown` does **not** flip it back; `fireEvent.mouseDown`
+  does. Own the flag and both branches are one `fireEvent` away.
+- `matches` **throws** on a pseudo the engine doesn't know, and this runs inside
+  a document-level listener — one throw takes every tooltip in the app with it.
+
+Testing note for the smoke half: a single `hover()` onto a control that is
+`opacity-0` until its card is hovered does not arm the tooltip in Playwright.
+Hover the **card** first, then the control — which is also the real gesture.
