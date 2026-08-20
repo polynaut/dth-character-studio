@@ -299,18 +299,27 @@ export interface RunBackup {
 }
 
 /**
- * The backups a report says are now on disk, across all four operations.
+ * The backups a report says are now on disk, across EVERY operation that saves.
  *
  * `backupPath` is empty for a dry run and for an entry that changed nothing, so
  * this is exactly "what a real run wrote a copy of". A transfer reports one
  * entry per NODE and several nodes share a file — the caller keys by `hipPath`,
  * which is also what the Python's rolling `_backup` does.
+ *
+ * Every per-project list in the report has to be spread below, and that is easy
+ * to miss: a new op is added to the Python, the Rust struct, the zod schema and
+ * the contract fixture — all of which fail loudly when skipped — while THIS one
+ * just returns fewer rows, so the drawer never offers to restore or clear that
+ * op's copies. `backups-in.test.ts` walks the shared fixture and demands a row
+ * per `backupPath` in it, which is what turns the omission into a red test
+ * instead of a quiet gap. (Measured: `retarget` shipped exactly that way.)
  */
 export function backupsIn(report: MaterialUtilReport): Array<RunBackup> {
   const rows: Array<RunBackup> = [
     ...report.targets,
     ...report.defaults,
     ...report.repath,
+    ...report.retarget,
     ...report.prefill,
     ...report.refresh,
   ].map(({ hipPath, backupPath, ok }) => ({ hipPath, backupPath, ok }))

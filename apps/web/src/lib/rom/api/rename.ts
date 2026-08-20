@@ -267,6 +267,12 @@ export async function applyCharacterRenameCleanup({
       })
       for (const entry of defaults.defaults) {
         if (!entry.ok) {
+          // Deliberately does NOT name `entry.backupPath`, unlike the retarget
+          // failure below. `_backup` is ROLLING — one `<name>_dthbak` per
+          // project, overwritten in place — and the retarget runs over this
+          // same file straight after, so a path named here can point at a copy
+          // taken AFTER the state this warning is about. The retarget is the
+          // last writer, which is the only one that can name it truthfully.
           result.warnings.push(
             `${basename(entry.hipPath)}: the project folder ($JOB) could not be repointed — ${entry.error}`,
           )
@@ -287,7 +293,17 @@ export async function applyCharacterRenameCleanup({
     })
     for (const entry of report.retarget) {
       if (!entry.ok) {
-        result.warnings.push(`${basename(entry.hipPath)}: ${entry.error}`)
+        // The one moment a backup is worth mentioning — the drawer's own rule
+        // (`RestoreProps`: never on success, exactly once beside the entry that
+        // FAILED). There is no drawer here to hang a Restore button on, so the
+        // warning names the file instead, and only when there IS one:
+        // `backupPath` survives the Python's failure path but stays '' when the
+        // run died before it got as far as saving.
+        result.warnings.push(
+          entry.backupPath
+            ? `${basename(entry.hipPath)}: ${entry.error} The project was left part-way through — the studio's copy from just before it is ${entry.backupPath}.`
+            : `${basename(entry.hipPath)}: ${entry.error}`,
+        )
         continue
       }
       result.referencesUpdated += entry.retargeted.length
