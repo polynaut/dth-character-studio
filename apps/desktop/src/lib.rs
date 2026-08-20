@@ -180,7 +180,7 @@ pub fn run() {
             install::install_houdini_presets,
             install::install_unreal_dth,
             install::unreal_dth_present,
-            unreal_install::unreal_editor_running,
+            unreal_install::unreal_open_projects,
             unreal_install::unreal_engine_installs,
             unreal_install::scan_unreal_plugins,
             unreal_install::unreal_project_state,

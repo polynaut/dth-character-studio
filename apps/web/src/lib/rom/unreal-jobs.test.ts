@@ -9,11 +9,13 @@ import {
   dthExportFiles,
   parseUnrealJob,
   parseUnrealResult,
+  unidentifiedEditorTargets,
   unrealContentPath,
   unrealDestinationFor,
   unrealImportStateFrom,
   unrealJobJson,
   unrealJobPaths,
+  unrealLaunchVerdict,
 } from './unreal-jobs.ts'
 
 // The Unreal handoff is pure by construction so the protocol can be pinned
@@ -354,5 +356,86 @@ describe('unrealImportStateFrom', () => {
   it('treats a torn read as "ask again", not as a failure', () => {
     expect(parseUnrealResult('{"version":1,"sta')).toBeNull()
     expect(parseUnrealResult('')).toBeNull()
+  })
+})
+
+describe('unrealLaunchVerdict', () => {
+  const probe = (editors: number, projects: Array<string>, unknown: number) => ({
+    editors,
+    projects,
+    unknown,
+  })
+
+  it('launches when nothing is running at all', () => {
+    expect(unrealLaunchVerdict(probe(0, [], 0), UPROJECT)).toEqual({
+      launch: true,
+      reason: 'no-editor',
+    })
+  })
+
+  it('never launches a second editor of the TARGET — spelling notwithstanding', () => {
+    // The probe reports what the editor's command line said, which on a real
+    // machine (measured 2026-08-20) is backslashed while the linked project is
+    // stored with whatever slashes the picker returned. Same project.
+    const open = probe(1, ['D:\\Unreal Projects\\DemoGame\\DEMOGAME.uproject'], 0)
+    expect(unrealLaunchVerdict(open, UPROJECT)).toEqual({ launch: false, reason: 'target-open' })
+  })
+
+  it('launches the target BESIDE identified editors of other projects', () => {
+    // The reported bug: a different project open meant nothing was ever
+    // launched and the job sat unclaimed forever. Editors of different
+    // projects run side by side by design.
+    const open = probe(1, ['D:/Other/Other.uproject'], 0)
+    expect(unrealLaunchVerdict(open, UPROJECT)).toEqual({
+      launch: true,
+      reason: 'other-project',
+    })
+  })
+
+  it('refuses to launch blind next to an editor it cannot identify', () => {
+    // The unidentified editor might BE the target — a wrong guess costs a
+    // duplicate editor, not launching costs a job that waits and says so.
+    const open = probe(2, ['D:/Other/Other.uproject'], 1)
+    expect(unrealLaunchVerdict(open, UPROJECT)).toEqual({
+      launch: false,
+      reason: 'unknown-editor',
+    })
+  })
+
+  it('an unidentified editor never overrides a SEEN target', () => {
+    const open = probe(2, [UPROJECT], 1)
+    expect(unrealLaunchVerdict(open, UPROJECT)).toEqual({ launch: false, reason: 'target-open' })
+  })
+})
+
+describe('unidentifiedEditorTargets', () => {
+  const OTHER = 'D:/Unreal Projects/Other/Other.uproject'
+
+  it('warns about nothing when every editor is identified', () => {
+    // Identified editors are the launch verdict's business — either the
+    // target is open (claims the job) or it gets opened beside them.
+    expect(
+      unidentifiedEditorTargets({ editors: 1, projects: [OTHER], unknown: 0 }, [UPROJECT]),
+    ).toEqual([])
+    expect(unidentifiedEditorTargets({ editors: 0, projects: [], unknown: 0 }, [UPROJECT])).toEqual(
+      [],
+    )
+  })
+
+  it('names the targets an unidentified editor might be holding', () => {
+    expect(
+      unidentifiedEditorTargets({ editors: 1, projects: [], unknown: 1 }, [UPROJECT, OTHER]),
+    ).toEqual([UPROJECT, OTHER])
+  })
+
+  it('a target SEEN open needs no warning even next to an unknown editor', () => {
+    // Its job gets claimed by the editor that has it — the unknown one is
+    // irrelevant to this target.
+    expect(
+      unidentifiedEditorTargets(
+        { editors: 2, projects: ['d:\\unreal projects\\demogame\\demogame.uproject'], unknown: 1 },
+        [UPROJECT, OTHER],
+      ),
+    ).toEqual([OTHER])
   })
 })

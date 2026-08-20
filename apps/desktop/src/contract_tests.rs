@@ -59,6 +59,13 @@ fn unreal_project_state_matches_the_shared_fixture() {
 }
 
 #[test]
+fn unreal_open_projects_match_the_shared_fixture() {
+    round_trip::<crate::unreal_install::UnrealOpenProjects>(include_str!(
+        "../../../contracts/unreal-open-projects.json"
+    ));
+}
+
+#[test]
 fn scene_wearables_matches_the_shared_fixture() {
     round_trip::<crate::poses::SceneWearables>(include_str!(
         "../../../contracts/scene-wearables.json"

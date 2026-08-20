@@ -61,6 +61,11 @@ export interface TauriMockSeed {
     sourceFolder: string
     buildId?: string
   }>
+  /** What `unreal_open_projects` reports — which projects the running Unreal
+   *  editors have open, per their command lines. Omit for "no editor running",
+   *  which is what keeps the auto-open path reachable; a spec seeding editors
+   *  drives the beside-launch and the can't-identify warning. */
+  unrealOpenProjects?: { editors: number; projects: Array<string>; unknown: number }
   /** The `.dcsp` this "window" was opened with — '' for a Home window. */
   activeProjectFile: string
   /** What `getVersion()` reports. */
@@ -1040,10 +1045,11 @@ export function installTauriMock(seed: TauriMockSeed): void {
           bridgeVersion,
         }
       }
-      // No editor in the fake world — which is what makes the auto-open path
-      // reachable in a spec at all.
-      case 'unreal_editor_running':
-        return false
+      // Default: no editor in the fake world — which is what makes the
+      // auto-open path reachable in a spec at all (and nothing unknown, so no
+      // start-of-run warning either).
+      case 'unreal_open_projects':
+        return seed.unrealOpenProjects ?? { editors: 0, projects: [], unknown: 0 }
       case 'install_unreal_dth': {
         // The real command copies the release's Unreal content; the fake marks
         // the destination folder so presence probes flip, and answers with a

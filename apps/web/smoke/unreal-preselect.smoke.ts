@@ -503,6 +503,99 @@ test('nothing claims the job and no editor is running — the studio opens the p
     .toEqual([{ path: UPROJECT }])
 })
 
+test('a DIFFERENT project is open — the studio opens the target beside it', async ({ page }) => {
+  // The reported bug (2026-08-20): an editor holding some other project meant
+  // the old any-editor-running rule never launched anything, and the job sat
+  // unclaimed forever behind a status line that said "waiting". The editors'
+  // command lines say WHAT they have open now — an identified stranger is a
+  // reason to open the target next to it, not to wait.
+  const seed = buildSeed({
+    activeProjectFile: P.dcsp,
+    demo: true,
+    houdiniProject: true,
+    unrealProjects: [UPROJECT],
+    unrealOpenProjects: { editors: 1, projects: ['D:/Unreal Projects/Other/Other.uproject'], unknown: 0 },
+  })
+  seed.files[`${EXPORT_ROOT}/KiraDefault/DTH_KiraDefault.dth`] = '{}'
+  seed.files[IMPORTED] = 'uasset-fixture'
+  seed.files[`${UPROJECT_DIR}/Plugins/DTHCharacterStudioRunner/DTHCharacterStudioRunner.uplugin`] = JSON.stringify({
+    Version: UNREAL_BRIDGE_VERSION,
+  })
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+  await page.getByRole('button', { name: 'DTH Export' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.waitFor()
+
+  await dialog.locator('#daz-mode').click()
+  await page.getByRole('option', { name: /Skip Daz/ }).click()
+  await dialog.locator('#houdini-mode').click()
+  await page.getByRole('option', { name: /Skip Houdini/ }).click()
+  await dialog.getByRole('checkbox', { name: 'Send to DemoGame' }).check()
+  // An IDENTIFIED editor is not the warning case — the studio knows what to do.
+  await expect(dialog.getByText(/can't tell which project/)).toHaveCount(0)
+  await dialog.getByRole('button', { name: 'Start' }).click()
+
+  // After the grace period the target opens BESIDE the running editor…
+  await expect
+    .poll(() => callsNamed(page, 'shell_open_file'), { timeout: 15_000 })
+    .toEqual([{ path: UPROJECT }])
+  // …and the status line says that is what happened, not a bare "opening".
+  await expect(page.locator('[data-export-status]')).toContainText(
+    /opening DemoGame next to the Unreal editor already running/,
+  )
+})
+
+test('an editor the studio cannot identify: warned at panel open, nothing launched blind', async ({
+  page,
+}) => {
+  // The one state detection cannot resolve — an editor is up and its command
+  // line names no project, so it MIGHT be the target. Nothing may be launched
+  // (a wrong guess is a duplicate editor), and because the send happens
+  // minutes after Start, the warning belongs at the START of the process.
+  const seed = buildSeed({
+    activeProjectFile: P.dcsp,
+    demo: true,
+    houdiniProject: true,
+    unrealProjects: [UPROJECT],
+    unrealOpenProjects: { editors: 1, projects: [], unknown: 1 },
+  })
+  seed.files[`${EXPORT_ROOT}/KiraDefault/DTH_KiraDefault.dth`] = '{}'
+  seed.files[IMPORTED] = 'uasset-fixture'
+  seed.files[`${UPROJECT_DIR}/Plugins/DTHCharacterStudioRunner/DTHCharacterStudioRunner.uplugin`] = JSON.stringify({
+    Version: UNREAL_BRIDGE_VERSION,
+  })
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+  await page.getByRole('button', { name: 'DTH Export' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.waitFor()
+
+  await dialog.locator('#daz-mode').click()
+  await page.getByRole('option', { name: /Skip Daz/ }).click()
+  await dialog.locator('#houdini-mode').click()
+  await page.getByRole('option', { name: /Skip Houdini/ }).click()
+  await dialog.getByRole('checkbox', { name: 'Send to DemoGame' }).check()
+
+  // The warning is IN the panel, before Start — naming the target it is about.
+  await expect(
+    dialog.getByText(/can't tell which project it has open\. If it isn't DemoGame/),
+  ).toBeVisible()
+
+  await dialog.getByRole('button', { name: 'Start' }).click()
+  // The job queues; after the grace period the status line says whose move it
+  // is — and no project was handed to the OS.
+  await expect(page.locator('[data-export-status]')).toContainText(
+    /can't tell which project — if it isn't DemoGame/,
+    { timeout: 15_000 },
+  )
+  expect(await callsNamed(page, 'shell_open_file')).toEqual([])
+})
+
 test('a REFUSED send fails its rows and complains as an error, not a shrug', async ({ page }) => {
   // The live shape (2026-08-19): the bridge plugin had been deleted from the
   // Unreal project (a `p4 clean` — it was neither in the depot nor ignored),

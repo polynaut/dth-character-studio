@@ -14,6 +14,7 @@ import {
   remapResultSchema,
   sceneWearablesSchema,
   unrealEngineInstallSchema,
+  unrealOpenProjectsSchema,
   unrealPluginSourceSchema,
   unrealProjectStateSchema,
 } from './native-types.ts'
@@ -41,6 +42,7 @@ const CASES = [
   ['unreal-installs.json', z.array(unrealEngineInstallSchema)],
   ['unreal-plugins.json', z.array(unrealPluginSourceSchema)],
   ['unreal-project-state.json', unrealProjectStateSchema],
+  ['unreal-open-projects.json', unrealOpenProjectsSchema],
   ['export-zip-report.json', exportZipReportSchema],
 ] as const
 

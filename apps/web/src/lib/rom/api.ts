@@ -163,6 +163,7 @@ export type { ProductScanResult } from './api/products'
 export {
   adoptUnrealImports,
   dismissUnrealImport,
+  fetchUnrealOpenEditors,
   fetchUnrealSendPlan,
   fetchUnrealImportProgress,
   installUnrealBridge,
@@ -174,6 +175,7 @@ export type {
   UnrealAdoptedImport,
   UnrealExportSet,
   UnrealImportStarted,
+  UnrealPendingJobOutcome,
   UnrealSendPlan,
 } from './api/unreal-import'
 

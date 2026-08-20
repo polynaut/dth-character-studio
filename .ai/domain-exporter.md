@@ -848,6 +848,23 @@ Part of the domain reference — `.ai/domain.md` is the index.
   is what triggers mrpdean's pipeline (materials, curves, post-process ABP);
   the file list is for FINDING assets, not for importing. Two folders holding
   one set (a leftover duplicate) makes the pick arbitrary — first found wins.
+- **A job still unclaimed 5 s after the send opens its own editor — decided by
+  what the running editors' command lines say they have open.** MEASURED
+  2026-08-20 (UE 5.8, launcher start): `UnrealEditor.exe`'s command line
+  carries the `.uproject` path, read by ONE WMI query (~200 ms, Rust
+  `unreal_open_projects` — a PowerShell child, allowed because this runs per
+  user action, never in a poll; the ToolHelp snapshot can't read another
+  process's ARGUMENTS). The verdict is pure (`unrealLaunchVerdict`,
+  unreal-jobs.ts): target seen open → never launch (its editor claims, or the
+  status line says "restart the editor" — a bridge installed after editor
+  start never loads); only OTHER projects open, all identified → launch the
+  target BESIDE them (the old yes/no probe refused here, and the job sat
+  unclaimed forever — the reported bug); any editor UNIDENTIFIED → don't
+  launch (it might be the target; a wrong guess costs a duplicate editor), and
+  the status line says whose move it is. The unidentified case is also warned
+  about AT PANEL OPEN (`unidentifiedEditorTargets` → the panel's amber note):
+  the send happens minutes after Start, which is a late moment to learn the
+  import may sit unclaimed.
 - **Housekeeping's orphan GCs** (app launch + "Clean up now",
   api/maintenance.ts): per-project `.dcsmeta` character dirs + avatars, and —
   since the deferred-findings pass — per-character SCRIPT dirs in the Daz

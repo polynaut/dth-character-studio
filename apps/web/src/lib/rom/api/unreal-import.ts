@@ -17,8 +17,10 @@ import {
   unrealImportStateFrom,
   unrealJobJson,
   unrealJobPaths,
+  unrealLaunchVerdict,
 } from '../unreal-jobs'
-import type { UnrealImportState } from '../unreal-jobs'
+import type { UnrealEditorProbe, UnrealImportState } from '../unreal-jobs'
+import { unrealOpenProjectsSchema } from './native-types'
 import { charScopeInput, joinPath, locateCharacter, charsRoot, resolveProject } from './core'
 // The `.uproject` opens through the same OS-association path as a `.hip` or a
 // `.duf` — one place that decides what is safe to hand to the shell.
@@ -482,9 +484,37 @@ export async function fetchUnrealImportProgress({
   return unrealImportStateFrom(jobStillPending, result)
 }
 
+/** What the running Unreal editors have open — the `unreal_open_projects`
+ *  probe, parsed. Browser answer: no editors, nothing unknown (nothing to
+ *  decide about either). */
+export async function fetchUnrealOpenEditors(): Promise<UnrealEditorProbe> {
+  if (!isTauri()) return { editors: 0, projects: [], unknown: 0 }
+  return unrealOpenProjectsSchema.parse(await invoke('unreal_open_projects'))
+}
+
+/** What became of a queued job left unclaimed — the caller's status line reads
+ *  each case differently (see {@link openUnrealForPendingJob}). */
+export type UnrealPendingJobOutcome =
+  /** The job is no longer pending (claimed, or dismissed) — nothing to say. */
+  | 'no-job'
+  /** No editor was running; the studio opened the project. */
+  | 'opened'
+  /** Editors of OTHER projects are running; the studio opened the target
+   *  beside them. */
+  | 'opened-beside'
+  /** The target project is already open — and still hasn't claimed, which
+   *  after the caller's grace period usually means its bridge wasn't loaded
+   *  when the editor started (install → restart the editor). */
+  | 'target-open'
+  /** An editor is running whose project the studio cannot read — it might be
+   *  the target, so nothing is launched. The one case only the user can
+   *  resolve. */
+  | 'unknown-editor'
+
 /**
- * Open the project in Unreal when its job is still sitting unclaimed and no
- * editor is running at all. Answers whether it launched one.
+ * Open the project in Unreal when its job is still sitting unclaimed and
+ * nothing that could claim it is up. Answers what it did (or why not) —
+ * the caller says it on the status line.
  *
  * The studio deliberately does not START Unreal to run an import — an editor
  * takes minutes to come up and holds its project, so a "launch and wait" leg
@@ -493,28 +523,32 @@ export async function fetchUnrealImportProgress({
  * pressed Start. Opening the project IS the rest of the leg: the bridge claims
  * the job on startup.
  *
- * TWO conditions, and both are about not guessing:
+ * TWO gates, both about not guessing:
  *
  * - The job must still be PENDING. The claim is the only honest liveness probe
  *   the studio has — an editor with the bridge renames the file within about a
  *   second, so a job still sitting there means nothing is watching.
- * - No editor may be running AT ALL (`unreal_editor_running`). "Is THAT project
- *   open" cannot be answered from a process list, so this errs the safe way: an
- *   editor that is up — with the bridge missing, or with another project — is a
- *   reason not to launch a second one. A wrong guess costs a duplicate editor
- *   and several gigabytes; not launching costs a job that waits, which is what
- *   it did before this existed. The panel's amber notice covers that case.
+ * - The launch decision is {@link unrealLaunchVerdict} over what the editors'
+ *   own command lines say they have open (`unreal_open_projects`). This used
+ *   to be a yes/no process check — "any editor running = don't launch" — which
+ *   left a job queued against project B sitting unclaimed forever because
+ *   project A was open (reported 2026-08-20). Editors of DIFFERENT projects
+ *   run side by side by design; only an editor the probe cannot identify still
+ *   refuses the launch, because it might be the target itself.
  */
-export async function openUnrealForPendingJob({ data }: { data: unknown }): Promise<boolean> {
+export async function openUnrealForPendingJob({
+  data,
+}: {
+  data: unknown
+}): Promise<UnrealPendingJobOutcome> {
   const { uprojectPath } = z.object({ uprojectPath: z.string().min(1) }).parse(data)
-  if (!isTauri()) return false
+  if (!isTauri()) return 'no-job'
   const paths = unrealJobPaths(uprojectPath)
-  if (!(await exists(paths.jobFile).catch(() => false))) return false
-  // A primitive return — parsed, never a bare `invoke<T>()` cast.
-  const running = z.boolean().parse(await invoke('unreal_editor_running'))
-  if (running) return false
+  if (!(await exists(paths.jobFile).catch(() => false))) return 'no-job'
+  const verdict = unrealLaunchVerdict(await fetchUnrealOpenEditors(), uprojectPath)
+  if (!verdict.launch) return verdict.reason
   await openScene({ data: { scenePath: uprojectPath } })
-  return true
+  return verdict.reason === 'no-editor' ? 'opened' : 'opened-beside'
 }
 
 /** Clear a finished run's files so the next poll reports nothing. */
