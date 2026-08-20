@@ -229,7 +229,7 @@ describe('TooltipHost (global title → floating tooltip)', () => {
     hidden.mockRestore()
   })
 
-  it('shows immediately on keyboard focus and never overwrites an existing label', async () => {
+  it('shows immediately on KEYBOARD focus and never overwrites an existing label', async () => {
     render(
       <>
         <button title="Save the character" aria-label="Save">
@@ -239,9 +239,40 @@ describe('TooltipHost (global title → floating tooltip)', () => {
       </>,
     )
     const button = screen.getByRole('button')
-    fireEvent.focusIn(button)
+    // The keypress is the point, not test decoration: focus shows a tooltip
+    // only when the user's last input was the keyboard (see the next test).
+    fireEvent.keyDown(document, { key: 'Tab' })
+    button.focus()
     expect(button.getAttribute('aria-label')).toBe('Save') // untouched
     await vi.advanceTimersByTimeAsync(0)
     expect(screen.getByRole('tooltip', { hidden: true }).textContent).toBe('Save the character')
+  })
+
+  it('stays hidden for focus the APP moved — a closing overlay restoring its opener', async () => {
+    // The bug this guards: Modal/SidePanel sweep the tooltip away on open
+    // (closeTooltip), then restore focus to the control that opened them on
+    // close — and a focus tooltip shows at 0ms, so the tooltip the sweep hid
+    // came straight back over the app, under a cursor that had never moved.
+    render(
+      <>
+        <button title="Utils — install DTH content & plugins" aria-label="Utils">
+          <svg />
+        </button>
+        <TooltipHost />
+      </>,
+    )
+    const button = screen.getByRole('button')
+    // The user CLICKED it open; they did not tab to it.
+    fireEvent.pointerDown(button)
+    // …and now the overlay closes and hands focus back, as Radix's FocusScope
+    // does on unmount.
+    button.focus()
+    expect(document.activeElement).toBe(button)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(screen.getByRole('tooltip', { hidden: true }).style.display).toBe('none')
+    // The gate is about FOCUS: a real hover over the same control still shows.
+    fireEvent.mouseOver(button)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(screen.getByRole('tooltip', { hidden: true }).style.display).toBe('block')
   })
 })

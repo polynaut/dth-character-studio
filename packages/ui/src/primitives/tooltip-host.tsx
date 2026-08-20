@@ -68,6 +68,16 @@ export function TooltipHost() {
     // title (PathCode's "Copied!"), the observer below brings the tooltip back.
     let clicked: HTMLElement | null = null
     let timer = 0
+    // Was the user's last input the KEYBOARD? It decides whether a `focusin` is
+    // someone asking for the description or the app moving focus around (see
+    // the gate in onEnter). Tracked here rather than read off `:focus-visible`:
+    // the two listeners that answer it are already installed below, and the
+    // selector is an engine heuristic — Chromium agrees with this, jsdom's
+    // answer shifts with whatever ran before it, and an engine that doesn't know
+    // the pseudo at all makes `matches` throw inside a document-level listener.
+    // Starts false: focus arriving with no input behind it (an autofocus on
+    // mount) is nobody asking for a tooltip either.
+    let keyboardInput = false
 
     const hide = () => {
       window.clearTimeout(timer)
@@ -143,6 +153,15 @@ export function TooltipHost() {
       // mouseover on one of its children) — bail before restarting the delay
       // or attaching a second cancel-listener pair.
       if (!text || target === anchor || target === pending) return
+      // A focusin that isn't the keyboard's is focus the APP moved: an overlay
+      // closing restores focus to the control that opened it, and a mouse click
+      // lands focus on the button it pressed. Neither is a request for the
+      // description, and a focus tooltip shows at 0ms — so closing a side panel
+      // put the opener's tooltip straight back over the app, under a cursor that
+      // never moved, undoing the sweep that hid it on open (see closeTooltip).
+      // Keyboard focus still shows immediately: tabbing to an icon-only control
+      // is exactly when its description is wanted.
+      if (e.type === 'focusin' && !keyboardInput) return
       window.clearTimeout(timer)
       pending = target
       timer = window.setTimeout(
@@ -196,6 +215,7 @@ export function TooltipHost() {
     })
 
     const onPointerDown = (e: Event) => {
+      keyboardInput = false
       // Clicking usually stales the position — get out of the way. But when the
       // click lands on the anchor itself, remember it: a title flip right after
       // ("Copied!") re-shows the tooltip with the fresh text.
@@ -206,6 +226,7 @@ export function TooltipHost() {
     }
 
     const onKey = (e: KeyboardEvent) => {
+      keyboardInput = true
       if (e.key === 'Escape') hide()
     }
 
