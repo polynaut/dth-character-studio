@@ -1,5 +1,21 @@
 # @dth/desktop
 
+## 0.87.0
+
+### Minor Changes
+
+- [#931](https://github.com/polynaut/dth-character-studio/pull/931) [`9068388`](https://github.com/polynaut/dth-character-studio/commit/9068388674b9dd55913e1f82de844597dc660e31) Thanks [@polynaut](https://github.com/polynaut)! - The **Unreal project cards** in the project footer now carry the same **Utils** wrench the Daz-scene and Houdini cards do, in place of their old install button. It opens a **Utils drawer** whose **Install** tab holds the list that used to be a modal — DTH content, the DTH Character Studio Runner, and every configured plugin build matching the project's engine version — as a full-height drawer with Install pinned to its bottom edge, so a long plugin list no longer scrolls the button out of reach.
+
+  **What is ticked for you has changed: it is now what the project is missing.** Anything already installed and current starts unticked — tick it to install it again (a checked row still overwrites). The one exception is an installed-but-outdated **DTH Character Studio Runner**: the card's amber ⚠ says "re-install it", so the drawer offers that row like an absent one and marks it _out of date_.
+
+  The card's amber ⚠ now covers both reasons a linked project still needs setting up — **no DTH content yet**, or an **out-of-date Runner** — and clicking it opens the drawer that fixes it. The wrench itself stays neutral, like every other card's.
+
+### Patch Changes
+
+- [#933](https://github.com/polynaut/dth-character-studio/pull/933) [`8419c52`](https://github.com/polynaut/dth-character-studio/commit/8419c52ac0c3a6725f664e31dc14fa3237acb65a) Thanks [@polynaut](https://github.com/polynaut)! - **Closing a dialog or drawer no longer pops the tooltip back up.** Tooltips are swept away when an overlay opens (they render above it), but closing one hands focus back to the control that opened it — and a tooltip on focus shows with no delay, so it reappeared over the app under a mouse that had never moved.
+
+  Focus now only shows a tooltip when the focus is the **keyboard's**: tab to an icon-only control and its description still appears immediately, while focus the app moved for you — an overlay closing, a click landing on a button — stays quiet. Hovering is unchanged.
+
 ## 0.86.1
 
 ### Patch Changes
