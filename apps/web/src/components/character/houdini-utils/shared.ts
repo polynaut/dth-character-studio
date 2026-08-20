@@ -164,6 +164,10 @@ export function sectionLabel(key: string): string {
  *
  * Same treatment for errors: a failure that scrolls past unseen is worse than a
  * success that does.
+ *
+ * A caller can pass its own `duration` to opt out, and one does: the backup
+ * cleanup on drawer close, which reports pure housekeeping rather than the
+ * result of a run.
  */
 export const utilsToast = {
   success: (message: string, options?: Parameters<typeof toast.success>[1]) =>
@@ -171,6 +175,15 @@ export const utilsToast = {
   error: (message: string, options?: Parameters<typeof toast.error>[1]) =>
     toast.error(message, { duration: Infinity, ...options }),
 }
+
+/**
+ * How long the one opted-out drawer toast lives.
+ *
+ * The value is sonner's own default, stated here rather than borrowed: the
+ * exception belongs next to the rule it opts out of, and a house-wide default
+ * on `<Toaster>` would otherwise move every toast in the app EXCEPT this one.
+ */
+export const TRANSIENT_TOAST_MS = 4000
 
 /** A material node identified across files — the selection key everywhere here. */
 export function nodeKey(hipPath: string, nodePath: string): string {
