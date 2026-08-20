@@ -1,5 +1,6 @@
 ---
 '@dth/web': patch
+'@dth/ui': patch
 ---
 
 The Houdini refresh offer is a dialog again, not a form
@@ -26,12 +27,19 @@ the file and its date on hover) rather than listed a second time underneath:
 they're the same projects, and a second list of the same names reads as twice
 the work. What's left of the warning is one red line and its switch, and that
 line is now a sentence rather than a specification: **"Running may replace 2
-existing backups."** It used to read *"2 existing backups at risk — one rolling
-copy per project, overwritten for whichever projects this run saves"*, which is
-accurate and unreadable, and a precise sentence nobody parses protects nobody.
-The distinction it was carrying — only the projects the run actually saves lose
-their old copy, and nothing can know in advance which those are — is real, and
-now lives behind the ⓘ where there is room to say it properly.
+existing backups."**, with a **Let it** switch beside it. It used to read *"2
+existing backups at risk — one rolling copy per project, overwritten for
+whichever projects this run saves"*, which is accurate and unreadable, and a
+precise sentence nobody parses protects nobody. The distinction it was carrying
+— only the projects the run actually saves lose their old copy, and nothing can
+know in advance which those are — is real, and now lives behind the ⓘ where
+there is room to say it properly.
+
+**An "i" popup now scrolls instead of running off the bottom of the window.**
+Found by this change and fixed underneath it: a popup taller than the room under
+its "i" was simply rendered off-screen, unreachable — the page cannot be scrolled
+to it. This one was, so the paragraph telling you to close Houdini first was not
+in fact "one click away". Every info popup in the app gets the fix.
 
 Nothing about the gate changed: a real run is still held until you accept, and a
 dry run is still never held.

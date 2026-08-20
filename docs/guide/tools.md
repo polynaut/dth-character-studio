@@ -181,8 +181,9 @@ What it can and can't say, which is the same short list as the
 
 - **It still isn't a check.** Nothing in a project says which DazToHue release its
   assets came from. What the studio remembers is only which projects *it* has run
-  this on, and under which release — so a project reads as *"never refreshed by the
-  studio"* rather than as out of date.
+  this on, and under which release — which is what the dialog's list is: a **Last
+  refreshed by the studio** column, where a project reads as *never* rather than as
+  out of date.
 - **Already done is skipped.** A project refreshed under the release that's active
   now isn't offered again.
 - **A failed project comes back.** If any project fails, the release stays
@@ -201,8 +202,9 @@ Houdini writes the whole scene on save and would overwrite the result.
 
 It's **one rolling copy per project**, which means saving a project replaces whatever
 copy is already there. Projects that already have one are marked **backup at risk** in
-the dialog's list (hover for the file and its date), and the run **won't start** until
-you accept it on the red line underneath (*"Running may replace 2 existing backups"*) — a dry run isn't held, because it never saves
+the dialog's list (hover for the file and its date), and the red line underneath says so
+— *"Running may replace 2 existing backups"* — with a **Let it** switch beside it. The
+run **won't start** until that switch is on; a dry run isn't held, because it never saves
 and so never touches a backup. Only the projects the run actually saves lose their old
 copy, and nothing can say in advance which those are; a project that reports no change,
 or that fails, keeps the copy it had. If one of those copies is how you'd put a project

@@ -464,7 +464,12 @@ Part of the domain reference — `.ai/domain.md` is the index.
     the sweep would RUN on, marks the affected rows in the project list ("backup
     at risk", the file and its date on hover) and puts ONE destructive line with a
     Switch under it — "Running may replace N existing backups.", where `may` is
-    doing the honest work. The distinction that only a SAVED project loses its
+    doing the honest work. The sentence and the switch are two elements, not a
+    single `<label>`: the risk is a STATEMENT and the switch is the CONSENT ("Let
+    it", with the sentence attached as its `aria-describedby`), because a switch
+    whose only accessible name is "Running may replace 2 existing backups"
+    announces the loss and never says what turning it on means.
+    The distinction that only a SAVED project loses its
     copy is real, but it belongs in `OfferInfo`, not in the sentence somebody
     reads while reaching for the switch: it sat on that line once, as "one
     rolling copy per project, overwritten for whichever projects this run saves",
@@ -490,13 +495,24 @@ Part of the domain reference — `.ai/domain.md` is the index.
     filled six paragraphs of the dialog's surface. Six paragraphs of hedging is
     not honesty, it is a wall that gets skimmed, and skimming costs exactly the
     attention the destructive line needs (measured against itself: the trim
-    roughly halved the dialog). The surface now carries the release, ONE list
+    roughly halved the dialog — measured at 1280×900, 523px → 284px). The surface now carries
+    the release line (which still names the MECHANISM, "a `.hip` keeps the asset
+    definitions it was built with until DazToHue's own Refresh Assets runs in
+    it", and not the verdict "your `.hip` files still hold the old definitions" —
+    the studio cannot know that, which is the whole point of the list below it),
+    ONE list
     (file · characters · at-risk marker · last release, under a "Last refreshed
     by the studio" header — the header is what makes a bare "never" honest), the
     consent line, and the buttons; the rest lives in the `OfferInfo` InfoPopup,
     which is where the app already keeps this. At-risk backups are marked ON the
     rows rather than listed again below: same projects, and a second list of the
     same names reads as twice the work.
+    **Moving text behind an "i" is only honest if it can be read there.** The
+    first version of this popup was 664px tall in a 900px window and ran off the
+    bottom, taking "close the projects in Houdini first" with it — see
+    `gotchas-web.md`, "An InfoPopup longer than the room under its 'i'". The
+    popup scrolls now, and the smoke spec asserts `toBeInViewport`, not
+    `toBeVisible`.
   - **`changed` is `hou.hipFile.hasUnsavedChanges()` read after the tool ran**,
     and a project is saved only when it says yes. That is an observation about
     the scene, NOT a claim about what the third-party tool touched — the UI

@@ -285,6 +285,31 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   pin. Gating the hook off while pinned reintroduces the Escape re-peek loop;
   both edges are test-pinned in `info-popup.test.tsx` (with a switchable
   `:focus-visible` stub — a permanently-mouse stub masks the re-peek bug).
+- **An InfoPopup longer than the room under its "i" used to run off the bottom
+  of the window, unreachably.** Measured 2026-08-20 on the Houdini-refresh
+  offer's `OfferInfo` (1088 characters, the longest in the app — the next is
+  872): a **664 px** panel in a 900 px window, bottom edge at 1082 px, with the
+  paragraph that says to close Houdini first sitting 57 px below the fold; at
+  768 px and 700 px it was worse. Nothing recovers it — `shift()` only moves
+  along the CROSS axis, so it cannot pull a tall panel up, and the floating
+  element is portaled and absolutely positioned, so scrolling the page just
+  makes `autoUpdate` re-anchor it to the "i". The panel had `max-w-xs` and no
+  height cap at all, which is why 51 short popups never found it.
+  Fixed in `info-popup.tsx` with floating-ui's `size` middleware capping an
+  INNER scroller at `availableHeight`. Two details that are not decoration: the
+  scroller is a child rather than the floating element itself, because
+  `FloatingArrow` is positioned outside the padding box and an `overflow` on
+  that element clips it away; and the scroller becomes a tab stop
+  (`tabIndex = scrollHeight > max ? 0 : -1`) only when it actually overflows, so
+  a keyboard user can scroll it without adding a pointless focus stop to every
+  popup that fits.
+  **The lesson beyond the primitive:** `toBeVisible()` passed the entire time —
+  the element was rendered, unclipped and non-transparent, 282 px below the
+  window. Content that has to be READ needs `toBeInViewport({ ratio: 1 })`;
+  visibility is not readability. The regression test is in
+  `tools-houdini-refresh.smoke.ts` (fail-then-pass verified) rather than
+  `info-popup.test.tsx`, because jsdom has no layout and `availableHeight` there
+  is meaningless.
 - **`role="combobox"` removes an input from `getByRole('textbox')` queries** —
   after the morph-autocomplete a11y work, tests locate those cells by
   `combobox`/`option` roles (rom-sections tests hit this). The JCM **bone** field

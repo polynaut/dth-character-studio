@@ -115,7 +115,9 @@ function CandidateRow({
   return (
     <li title={candidate.hipPath} className="flex items-baseline gap-2">
       <code className="shrink-0 text-foreground">{fileName(candidate.hipPath)}</code>
-      <span className="truncate">{candidate.characters.join(', ')}</span>
+      {candidate.characters.length > 0 && (
+        <span className="truncate">{candidate.characters.join(', ')}</span>
+      )}
       {riskedBackup && (
         <span
           className="shrink-0 text-destructive"
@@ -227,8 +229,8 @@ export function HoudiniRefreshOffer({
 }) {
   const [running, setRunning] = useState<'' | 'dry' | 'run'>('')
   const [report, setReport] = useState<MaterialUtilReport | null>(null)
-  /** The user accepted losing the backups already on disk (see
-   *  {@link ReplaceBackupsWarning}). Gates the run, nothing else. */
+  /** The user accepted losing the backups already on disk (the destructive
+   *  line below). Gates the run, nothing else. */
   const [replaceAccepted, setReplaceAccepted] = useState(false)
   /** A real run has been through, so the copies beside the projects it saved
    *  are now THIS run's — the report's Undo depends on them. From here on the
@@ -293,7 +295,9 @@ export function HoudiniRefreshOffer({
           {plan.lastSeenDthVersion && plan.lastSeenDthVersion !== plan.activeDthVersion && (
             <> (was {plan.lastSeenDthVersion})</>
           )}{' '}
-          — your <code>.hip</code> files still hold the old asset definitions.
+          — a <code>.hip</code> keeps the asset definitions it was built with until DazToHue&apos;s
+          own <strong>Refresh Assets</strong> runs in it. The studio can run that in each project
+          below through <code>hython</code>, without opening Houdini.
         </p>
         <OfferInfo />
       </div>
@@ -331,12 +335,20 @@ export function HoudiniRefreshOffer({
       {doomedBackups.length > 0 && (
         <div className="flex items-center gap-2.5 rounded-md border-2 border-destructive/60 bg-destructive/10 p-3 text-sm">
           <TriangleAlert className="size-4 shrink-0 text-destructive" />
-          <label htmlFor="replace-houdini-backups">
+          <span id="replace-houdini-backups-risk">
             Running may replace {plural(doomedBackups.length, 'existing backup')}.
+          </span>
+          {/* The risk is a STATEMENT and the switch is the consent, so they are
+              two elements rather than one: a switch whose only label is
+              "Running may replace 2 existing backups" announces the loss and
+              never says what turning it on means. `aria-describedby` puts the
+              sentence back on the control for a screen reader. */}
+          <label htmlFor="replace-houdini-backups" className="ml-auto">
+            Let it
           </label>
           <Switch
             id="replace-houdini-backups"
-            className="ml-auto"
+            aria-describedby="replace-houdini-backups-risk"
             checked={replaceAccepted}
             disabled={busy}
             onCheckedChange={setReplaceAccepted}

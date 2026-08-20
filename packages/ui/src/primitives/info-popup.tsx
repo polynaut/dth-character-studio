@@ -9,6 +9,8 @@ import {
   offset,
   safePolygon,
   shift,
+  // Aliased: the component takes a `size` PROP, which would shadow it.
+  size as sizeMiddleware,
   useDismiss,
   useFloating,
   useFocus,
@@ -26,6 +28,14 @@ const ARROW_HEIGHT = 7
 const GAP = 4
 /** Minimum breathing room the popup keeps from the viewport edges. */
 const EDGE = 8
+/** The panel's own vertical chrome (`py-3` + the 1px border, both sides) — the
+ *  part of the available height the SCROLLER never gets. */
+const CHROME = 26
+/** Floor for the scroller: below this a popup pinned against an edge would
+ *  shrink to a peephole, and a scrollbar on two lines of text reads as broken.
+ *  It overflows the padding instead — deliberately, and only in the corner
+ *  case where nowhere on screen has room. */
+const MIN_CONTENT = 160
 
 /** Every OPEN popup registers a close callback here so the overlay layers can
  *  sweep them — see {@link closeAllInfoPopups}. */
@@ -109,6 +119,15 @@ export function InfoPopup({
   const [pinned, setPinned] = React.useState(false)
   const arrowRef = React.useRef<SVGSVGElement>(null)
   /**
+   * The scrolling half of the panel — see the `size` middleware below.
+   *
+   * Separate from the floating element on purpose: the arrow is positioned
+   * absolutely against the floating element and hangs OUTSIDE its padding box,
+   * so making that element the scroller would clip the arrow off and scroll it
+   * away from the "i" it points at. The scroller is the content only.
+   */
+  const scrollRef = React.useRef<HTMLDivElement>(null)
+  /**
    * Set when the overlay sweep ran while this popup was NOT yet open — i.e.
    * with a hover peek still counting down (`delay.open` below).
    *
@@ -162,6 +181,31 @@ export function InfoPopup({
       // header collapsing on scroll — see overflowPadding.
       flip(() => ({ padding: overflowPadding() })),
       shift(() => ({ padding: overflowPadding() })),
+      // Cap the CONTENT at whatever the chosen placement actually has room for,
+      // and let it scroll past that. Without this a popup taller than the space
+      // under its "i" simply runs off the bottom of the window, unreachable:
+      // `shift` only moves along the CROSS axis, and the floating element is
+      // portaled and absolutely positioned, so the page cannot be scrolled to
+      // reach it either — `autoUpdate` re-anchors it to the "i" as you go.
+      // Measured 2026-08-20 on the Houdini-refresh offer: a 664px popup in a
+      // 900px window ended 182px below the fold, taking the "close Houdini
+      // first" warning with it. After `flip`/`shift` so it measures the
+      // placement they settled on.
+      sizeMiddleware(() => ({
+        padding: overflowPadding(),
+        apply({ availableHeight }) {
+          const el = scrollRef.current
+          if (!el) return
+          const max = Math.max(MIN_CONTENT, availableHeight - CHROME)
+          el.style.maxHeight = `${max}px`
+          // Only a popup that ACTUALLY overflows becomes a tab stop: a
+          // scrollable region no keyboard can reach is not readable, and a
+          // focus stop on the 51 popups that fit is noise. FloatingFocusManager
+          // focuses the first tabbable node, so when this is 0 the pinned popup
+          // lands on the scroller and arrow keys work.
+          el.tabIndex = el.scrollHeight > max ? 0 : -1
+        },
+      })),
       arrow({ element: arrowRef }),
     ],
     whileElementsMounted: autoUpdate,
@@ -310,7 +354,11 @@ export function InfoPopup({
               className="z-[60] max-w-xs rounded-lg border border-white/10 bg-neutral-900 px-4 py-3 text-sm leading-relaxed text-neutral-100 shadow-2xl [&_a]:text-primary [&_a]:underline [&_a]:underline-offset-2 [&_em]:italic [&_strong]:font-semibold"
               {...getFloatingProps({ onClick: onContentClick })}
             >
-              {children}
+              {/* `overscroll-contain`: scrolling to the end of a popup must not
+                  hand the wheel on to the page (or the dialog) underneath. */}
+              <div ref={scrollRef} tabIndex={-1} className="overflow-y-auto overscroll-contain focus-visible:outline-none">
+                {children}
+              </div>
               <FloatingArrow
                 ref={arrowRef}
                 context={context}
