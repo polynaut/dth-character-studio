@@ -164,6 +164,10 @@ export function sectionLabel(key: string): string {
  *
  * Same treatment for errors: a failure that scrolls past unseen is worse than a
  * success that does.
+ *
+ * A caller can pass its own `duration` to opt out, and one does: the backup
+ * cleanup on drawer close, which reports pure housekeeping rather than the
+ * result of a run.
  */
 export const utilsToast = {
   success: (message: string, options?: Parameters<typeof toast.success>[1]) =>
