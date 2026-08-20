@@ -24,8 +24,14 @@ right-hand column instead of a sentence per row.
 Backups at risk are marked on the rows they belong to (**backup at risk**, with
 the file and its date on hover) rather than listed a second time underneath:
 they're the same projects, and a second list of the same names reads as twice
-the work. What's left of the warning is one red line and its switch. Nothing
-about the gate changed — a real run is still held until you accept, a dry run is
-still never held, and the wording still says *at risk* rather than naming what
-will go, because only the projects the run actually saves lose their old copy
-and nothing can know in advance which those are.
+the work. What's left of the warning is one red line and its switch, and that
+line is now a sentence rather than a specification: **"Running may replace 2
+existing backups."** It used to read *"2 existing backups at risk — one rolling
+copy per project, overwritten for whichever projects this run saves"*, which is
+accurate and unreadable, and a precise sentence nobody parses protects nobody.
+The distinction it was carrying — only the projects the run actually saves lose
+their old copy, and nothing can know in advance which those are — is real, and
+now lives behind the ⓘ where there is room to say it properly.
+
+Nothing about the gate changed: a real run is still held until you accept, and a
+dry run is still never held.

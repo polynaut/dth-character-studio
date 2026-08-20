@@ -319,15 +319,20 @@ export function HoudiniRefreshOffer({
       </div>
 
       {/* The one thing here that can lose something, and the only thing on this
-          dialog holding a control. Marked per project above; this is the
-          consent — to the OVERWRITE, which is why it says at risk rather than
-          naming what will go. */}
+          dialog holding a control.
+          ONE short sentence, and "may" is doing the honest work: the consent is
+          to the OVERWRITE, and only a project the tool leaves modified is saved
+          — so which of these actually go cannot be known here. That distinction
+          is real and belongs in OfferInfo, NOT in the sentence somebody reads
+          while reaching for the switch. It was on this line once, as "one
+          rolling copy per project, overwritten for whichever projects this run
+          saves", which is accurate and unreadable. A precise sentence nobody
+          parses protects nobody. */}
       {doomedBackups.length > 0 && (
         <div className="flex items-center gap-2.5 rounded-md border-2 border-destructive/60 bg-destructive/10 p-3 text-sm">
           <TriangleAlert className="size-4 shrink-0 text-destructive" />
           <label htmlFor="replace-houdini-backups">
-            {plural(doomedBackups.length, 'existing backup')} at risk — one rolling copy per
-            project, overwritten for whichever projects this run saves.
+            Running may replace {plural(doomedBackups.length, 'existing backup')}.
           </label>
           <Switch
             id="replace-houdini-backups"

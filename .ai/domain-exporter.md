@@ -463,7 +463,13 @@ Part of the domain reference — `.ai/domain.md` is the index.
     `isStudioBackup`: what one derives the other must accept) for every project
     the sweep would RUN on, marks the affected rows in the project list ("backup
     at risk", the file and its date on hover) and puts ONE destructive line with a
-    Switch under it. A real run is DISABLED until it is accepted; a dry run
+    Switch under it — "Running may replace N existing backups.", where `may` is
+    doing the honest work. The distinction that only a SAVED project loses its
+    copy is real, but it belongs in `OfferInfo`, not in the sentence somebody
+    reads while reaching for the switch: it sat on that line once, as "one
+    rolling copy per project, overwritten for whichever projects this run saves",
+    which is accurate and unparseable. A precise sentence nobody reads protects
+    nobody. A real run is DISABLED until it is accepted; a dry run
     is not gated, because it never reaches `_backup`. After a real run the warning
     is gone: the copies beside the projects it saved are now that run's, and the
     report's Undo depends on them.

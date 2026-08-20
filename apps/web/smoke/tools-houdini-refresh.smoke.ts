@@ -205,7 +205,7 @@ test('an existing backup is named, and the run is held until that is accepted', 
   seed.files[BACKUP] = 'an-older-backup'
   const offer = await runStudioRefresh(page, seed)
 
-  await expect(offer.getByText(/1 existing backup at risk/)).toBeVisible()
+  await expect(offer.getByText('Running may replace 1 existing backup.')).toBeVisible()
   // Marked on the project's own row, not listed a second time underneath. AT
   // RISK, not "will be replaced": only a project the tool leaves modified is
   // saved, and nothing here can know in advance which those are.
@@ -302,6 +302,7 @@ test('a dry run destroys no backup, and needs no acceptance to say so', async ({
 
 test('no existing backup, no warning — and nothing to accept', async ({ page }) => {
   const offer = await runStudioRefresh(page, seedFor('2.3.0'))
-  await expect(offer.getByText(/at risk/)).toBeHidden()
+  await expect(offer.getByText(/may replace/)).toBeHidden()
+  await expect(offer.getByText('backup at risk', { exact: true })).toBeHidden()
   await expect(offer.getByRole('button', { name: /^Refresh 1 project$/ })).toBeEnabled()
 })

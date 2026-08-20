@@ -202,7 +202,7 @@ Houdini writes the whole scene on save and would overwrite the result.
 It's **one rolling copy per project**, which means saving a project replaces whatever
 copy is already there. Projects that already have one are marked **backup at risk** in
 the dialog's list (hover for the file and its date), and the run **won't start** until
-you accept it on the red line underneath — a dry run isn't held, because it never saves
+you accept it on the red line underneath (*"Running may replace 2 existing backups"*) — a dry run isn't held, because it never saves
 and so never touches a backup. Only the projects the run actually saves lose their old
 copy, and nothing can say in advance which those are; a project that reports no change,
 or that fails, keeps the copy it had. If one of those copies is how you'd put a project
