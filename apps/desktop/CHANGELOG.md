@@ -1,5 +1,41 @@
 # @dth/desktop
 
+## 0.88.0
+
+### Minor Changes
+
+- [#938](https://github.com/polynaut/dth-character-studio/pull/938) [`935b6ae`](https://github.com/polynaut/dth-character-studio/commit/935b6ae3653a4b18d2fd1d02f30c7448d571a43d) Thanks [@polynaut](https://github.com/polynaut)! - DTH Export names the jobs each project will contribute, before the run starts
+
+  The panel's Houdini rows now carry one chip per **DazToHue network** the stored
+  scan says that project writes, and the Unreal rows one chip per **character**
+  this run would land in that project. So the size of a run — two networks in one
+  `.hip`, one character re-imported and another dropped — is readable before
+  pressing Start, instead of only once the task list has filled in.
+
+  The two lists answer different questions, and the rows are worded for it. The
+  Houdini chips describe the **project**: they stand whether the row is ticked or
+  not, and under "Skip Houdini", which runs no Houdini leg at all. The Unreal
+  chips describe **this run**, already narrowed to the sets the studio located in
+  that project — the send is re-import only, so those are exactly the import jobs
+  the run will queue for it.
+
+  Both stay silent where the studio cannot say: an unscanned Houdini project names
+  nothing rather than claiming it writes none, a run that produces no export names
+  no characters rather than promising the stale folder on disk, and a set the
+  Unreal project has never held is left off, because the run would drop it too.
+
+- [#937](https://github.com/polynaut/dth-character-studio/pull/937) [`4dddfb1`](https://github.com/polynaut/dth-character-studio/commit/4dddfb1ce91a7796da4e30354223c6bb0765b02d) Thanks [@polynaut](https://github.com/polynaut)! - **Renaming a character now takes its exports with it.** The exporter names every file it writes after the character — and, measured on a real export, writes the name _inside_ them too: a `.dth` carries `"Character Name"` and absolute paths to its own `.fbx`/`.abc` siblings. So a rename used to leave a full export set on disk that nothing would ever write to again, while the Houdini projects went on importing it by the old name — silently, because those files still exist and still load.
+
+  Renaming a character that has **no** exports yet is unchanged: it just renames. Renaming one that **does** now opens a dialog first, itemizing both export folders (the Daz→Houdini `daz-export` set and the final `export/` tree) with their file counts and sizes — one scene's set is routinely a gigabyte — and saying plainly that they are deleted, not renamed, and that a **DTH Export** run rebuilds them. Cancel and nothing happens at all. Your Daz scenes, saved ROM animations and Houdini project files are never touched.
+
+  Confirming clears both folders and then **follows the rename into every linked Houdini project**: each DazToHue import path is rewritten to the new export names (and to the new character folder, whose `$JOB` is repointed in the same pass), and each import node's **character name** is moved to the new name — unless you had typed your own there, which is reported and left alone. Paths on your _own_ nodes are reported too, never rewritten. Each project is backed up before it is saved, and if Houdini isn't paired in Settings the dialog says so _before_ you commit to anything.
+
+  Under the hood this is a new `retarget` operation on the Houdini utilities. It is deliberately not the existing **Make paths portable**: that one only ever writes a path it has verified on disk, and after a rename there is nothing to verify — the old set is gone and the new one doesn't exist until you re-export. Which is exactly the point: the projects are pointed at what the _next_ export will produce.
+
+### Patch Changes
+
+- [#932](https://github.com/polynaut/dth-character-studio/pull/932) [`d13bc86`](https://github.com/polynaut/dth-character-studio/commit/d13bc86123835de4ccee3d632254bf74f8cc7390) Thanks [@polynaut](https://github.com/polynaut)! - Fix: a DTH Export whose Unreal project is not the one already open no longer sits unclaimed forever. The studio can now read WHICH projects the running Unreal editors have open (their command lines name their `.uproject`), so a queued import job opens its own project next to a different one instead of refusing to launch because "an editor is running" — and the run's status line says what actually happened in every case: opened, opened beside the running editor, target open but not claiming (restart the editor if the Runner was just installed), or an editor the studio can't identify. That last case — the one the studio cannot resolve — is now also warned about when the DTH Export panel opens, before the Daz and Houdini legs spend their minutes, instead of surfacing as an import that silently never runs.
+
 ## 0.87.0
 
 ### Minor Changes

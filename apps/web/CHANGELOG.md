@@ -1,7 +1,116 @@
 # @dth/web
 
-## 0.87.0
+## 0.88.0
 
+### Minor Changes
+
+- [#942](https://github.com/polynaut/dth-character-studio/pull/942) [`5105021`](https://github.com/polynaut/dth-character-studio/commit/5105021ea415a0850a458ec98748cf5e2752a754) Thanks [@polynaut](https://github.com/polynaut)! - Refresh assets offers to carry a new DazToHue release into your Houdini projects
+
+  A refresh only ever fixed half the pipeline. Your `.hip` files keep the DazToHue
+  asset definitions they were built with, so a new DazToHue release left every
+  project on the old ones until you opened each one in Houdini and pressed
+  **Refresh Assets** on the shelf. The studio could already run that tool headlessly
+  for one character (Utils → Refresh assets); it just never connected the two ends.
+
+  Now, when **Tools → Refresh assets** notices the DazToHue release has changed
+  since it last looked, it offers to sweep every linked Houdini project through
+  DazToHue's own tool — all of them, in one `hython` run, without opening Houdini.
+  The offer needs the Houdini installation folder and its matching documents folder
+  in Settings; without them it stays away.
+
+  It is still not a check, and does not pretend to be one. Nothing in a `.hip`
+  records which DazToHue release its assets came from, so what the studio keeps is
+  only its own record: which projects **it** has run this on, and under which
+  release. A project it has never swept reads as _"never refreshed by the studio"_ —
+  the absence of a verdict, not a verdict. A project already refreshed under the
+  active release is skipped and said to be skipped.
+
+  The parts that decide what happens next are built so a bad run cannot strand
+  work. Dismissing writes nothing, so the offer returns on the next refresh. A
+  sweep where any project fails records the ones that worked but leaves the release
+  outstanding, so the next refresh re-offers exactly the remainder — the usual cause
+  of a failure here is DazToHue not being installed for the Houdini version the
+  studio points at, which is something you fix and then expect to retry.
+
+  Each project is copied into its `backup/` folder before it is saved, and this
+  report keeps **Undo this run** on the projects that succeeded, not only on the
+  ones that failed: putting one project back on the previous DazToHue release is a
+  want that arrives days later. Undoing also makes the studio stop counting that
+  project as refreshed, so it comes back into the offer instead of quietly reading
+  as done while sitting on the old assets.
+
+  That copy is **rolling — one per project** — so saving a project replaces whatever
+  is already beside it, which is precisely the copy somebody kept in order to go
+  back a release. It would have gone silently, inside a run started by a button
+  labelled "Refresh". Now it doesn't: if any project the sweep would touch already
+  has a studio backup, the dialog says so in red, lists them with their dates, and
+  **refuses to start** until you accept. Only the projects the run actually saves
+  lose their old copy — one that reports no change, or that fails, keeps what it
+  had — and a **dry run** is never held and never touches a backup at all.
+
+### Patch Changes
+
+- [#939](https://github.com/polynaut/dth-character-studio/pull/939) [`2af90b4`](https://github.com/polynaut/dth-character-studio/commit/2af90b47b9fbd9aad2226ad31d324b39eb30b8f2) Thanks [@polynaut](https://github.com/polynaut)! - **Generate Houdini project asks which Daz scene on the first project too.**
+
+  A multi-scene character's first generated project was wired to the primary scene without asking — a choice made on the user's behalf that nothing on screen admitted to, and that only surfaced as five import paths aimed at the wrong scene inside the finished network. The **Daz scene to import** picker now appears whenever more than one scene is linked, first project included. The primary is still the default, so pressing Generate straight away wires it exactly as before; a first project for an outfit scene now costs one click instead of a throwaway project or five hand edits in Houdini.
+
+- [#936](https://github.com/polynaut/dth-character-studio/pull/936) [`275c70d`](https://github.com/polynaut/dth-character-studio/commit/275c70dcb30a470fa3c62b765cf527882ee804f5) Thanks [@polynaut](https://github.com/polynaut)! - Fix: the Houdini Utils drawer's "backups removed" confirmation now disappears on its own after a few seconds. Every other toast the drawer raises reports the result of a run that took hython tens of seconds, so it stays until dismissed — but a clean backup sweep on drawer close is housekeeping the user just asked for and watched happen, and leaving it pinned meant hand-dismissing a message with nothing to act on. The partial form ("2 of 3 backups removed — the rest are in use and stay") still sticks, because it names copies still sitting on disk and the drawer closing behind it makes that toast their only mention.
+
+- [#943](https://github.com/polynaut/dth-character-studio/pull/943) [`296df39`](https://github.com/polynaut/dth-character-studio/commit/296df39e55983384022776619fdbbd7935d44515) Thanks [@polynaut](https://github.com/polynaut)! - The Houdini refresh offer is a dialog again, not a form
+
+  Everything that dialog said was true and worth saying — it runs DazToHue's own
+  tool so it can't say in advance what will change, no check anywhere says a
+  project needs it, the dry run is a weaker promise than elsewhere, the backup is
+  one rolling copy. It said all of it on the surface, in six paragraphs, and six
+  paragraphs of hedging is not honesty: it's a wall that gets skimmed, and
+  skimming costs exactly the attention the one destructive line needs.
+
+  The caveats moved behind the **ⓘ**, where the rest of the app keeps this kind of
+  thing. What's left on the surface is the decision: the release line, one list,
+  the consent line when there's something to consent to, and the buttons. It's
+  about half the height it was.
+
+  The list absorbed what used to be prose. A **Last refreshed by the studio**
+  header is what makes a bare _never_ honest — it's the column's meaning, not a
+  verdict about the project — and each project's last release moved to its own
+  right-hand column instead of a sentence per row.
+
+  Backups at risk are marked on the rows they belong to (**backup at risk**, with
+  the file and its date on hover) rather than listed a second time underneath:
+  they're the same projects, and a second list of the same names reads as twice
+  the work. What's left of the warning is one red line and its switch, and that
+  line is now a sentence rather than a specification: **"Running may replace 2
+  existing backups."**, with a **Let it** switch beside it. It used to read _"2
+  existing backups at risk — one rolling copy per project, overwritten for
+  whichever projects this run saves"_, which is accurate and unreadable, and a
+  precise sentence nobody parses protects nobody. The distinction it was carrying
+  — only the projects the run actually saves lose their old copy, and nothing can
+  know in advance which those are — is real, and now lives behind the ⓘ where
+  there is room to say it properly.
+
+  **An "i" popup now scrolls instead of running off the bottom of the window.**
+  Found by this change and fixed underneath it: a popup taller than the room under
+  its "i" was simply rendered off-screen, unreachable — the page cannot be scrolled
+  to it. This one was, so the paragraph telling you to close Houdini first was not
+  in fact "one click away". Every info popup in the app gets the fix.
+
+  Nothing about the gate changed: a real run is still held until you accept, and a
+  dry run is still never held.
+
+- [#941](https://github.com/polynaut/dth-character-studio/pull/941) [`f031a08`](https://github.com/polynaut/dth-character-studio/commit/f031a089ae02fdc4f0c7e3e1424ebb34810752c9) Thanks [@polynaut](https://github.com/polynaut)! - **Follow-ups to the rename cleanup.** Three fixes to what renaming a character reports and remembers.
+
+  The Houdini Utils drawer keeps a copy of every project it saves — that copy is what **Undo this run** restores, and what the drawer offers to clear when you close it. The new `retarget` operation's copies were missing from the list the drawer builds, so they would have been offered for neither. Nothing routes a retarget through the drawer today, so this was not reachable; it is fixed before it is.
+
+  Renaming a character that has **no exports yet** but does have a linked Houdini project now says what it is actually doing. It used to announce "Clearing the old exports…" when there were none, and then report back with a lower-case "repointed 1 Houdini project." asking you to _rebuild_ a set that had never been built. It now says "Repointing the Houdini projects…" and "Repointed 1 Houdini project. Run DTH Export to fill them."
+
+  And when the rename cannot follow itself into one of your projects, the warning now tells you where the studio's copy of that project from just before the attempt is, instead of only suggesting you repoint the paths by hand.
+
+- [#940](https://github.com/polynaut/dth-character-studio/pull/940) [`963cb6e`](https://github.com/polynaut/dth-character-studio/commit/963cb6ee3c25c8be9a04a576e8c181761e58a44d) Thanks [@polynaut](https://github.com/polynaut)! - The item-scope row under a frame-0 morph now reads at the same size as the rest of the form. The node badge, the `this scene` badge and the unscoped "All items" text were set at 10px — small enough that the scope a row applies at, which is the thing that decides whether a fit value lands on one bag or on the whole outfit, was the least legible part of the row. They match the "Daz UI name" line beside them now.
+- Updated dependencies [[`935b6ae`](https://github.com/polynaut/dth-character-studio/commit/935b6ae3653a4b18d2fd1d02f30c7448d571a43d), [`296df39`](https://github.com/polynaut/dth-character-studio/commit/296df39e55983384022776619fdbbd7935d44515)]:
+  - @dth/rom@0.88.0
+  - @dth/ui@0.88.0
+
+## 0.87.0
 
 ### Patch Changes
 
