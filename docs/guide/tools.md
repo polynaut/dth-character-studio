@@ -164,4 +164,49 @@ studio generates):
   <sub><em>The Refresh assets tab.</em></sub>
 </p>
 
+### …and the Houdini half
+
+A refresh only fixes the Daz end. Your `.hip` files keep the DazToHue asset
+definitions they were built with, so a new DazToHue release leaves every project on
+the old ones until DazToHue's own **Refresh Assets** runs inside each of them.
+
+So when the studio notices the DazToHue release has **changed since it last looked**,
+the refresh offers to do that too — across every linked Houdini project at once,
+through `hython`, without you opening Houdini. It needs the **Houdini installation
+folder** and its matching documents folder in Settings; without them the offer stays
+away.
+
+What it can and can't say, which is the same short list as the
+[per-project button](./houdini-project-checks.md#refresh-assets):
+
+- **It still isn't a check.** Nothing in a project says which DazToHue release its
+  assets came from. What the studio remembers is only which projects *it* has run
+  this on, and under which release — so a project reads as *"never refreshed by the
+  studio"* rather than as out of date.
+- **Already done is skipped.** A project refreshed under the release that's active
+  now isn't offered again.
+- **A failed project comes back.** If any project fails, the release stays
+  outstanding and the next refresh re-offers exactly the ones that didn't get
+  done — so fixing the cause (usually DazToHue not installed for the Houdini
+  version the studio points at) and refreshing again picks up where it left off.
+- **Dismissing costs nothing.** *Not now* writes nothing; the offer returns on your
+  next refresh.
+
+A project is copied into its `backup/` folder before it's saved — and only then, since
+a project the tool leaves unchanged isn't saved at all. Each saved project keeps an
+**Undo this run** button in the report, the way back if you ever need one project on
+the previous DazToHue release; undoing also makes the studio stop counting that project
+as refreshed, so it's offered again next time. Close the projects in Houdini first:
+Houdini writes the whole scene on save and would overwrite the result.
+
+It's **one rolling copy per project**, which means saving a project replaces whatever
+copy is already there. If any of the projects it's about to sweep already has one, the
+dialog says so in red, lists them with their dates, and **won't let the run start**
+until you accept — a dry run isn't held, because it never saves and so never touches a
+backup. Only the projects the run actually saves lose their old copy, and nothing can
+say in advance which those are; a project that reports no change, or that fails, keeps
+the copy it had. If one of those copies is how you'd put a project back on an older
+DazToHue release, copy it somewhere else first: that dialog is the last point at which
+it's certainly still there.
+
 [← Guide overview](./README.md)

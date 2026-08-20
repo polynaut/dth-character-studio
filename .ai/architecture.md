@@ -89,6 +89,10 @@ a plain browser with native features as no-ops):
   holder object, because an imported `let` binding cannot be assigned across a
   module boundary),
   `houdini.ts` (Generate project via hython + the leftover-junction sweep),
+  `houdini-refresh.ts` (the Houdini half of Tools → Refresh assets: enumerate every
+  linked `.hip` across `sweepTargets`, bucket it against the app-data record in
+  `lib/rom/houdini-refresh-store.ts` — pure — and run DazToHue's own Refresh
+  Assets over what the DTH release change left behind; see domain-exporter.md),
   `install.ts`, `maintenance.ts`, `avatars.ts`, `attachments.ts`, `notes.ts`,
   `products.ts`, `move.ts` (the shared folder-move lock gate: `assertMovable`
   throws `LockedFilesError` off `probeLockedFiles`), `data-url.ts`,

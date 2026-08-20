@@ -421,9 +421,62 @@ Part of the domain reference — `.ai/domain.md` is the index.
   - **Nothing detects staleness, before or after.** A `.hip` records no DazToHue
     release, so the refresh is an ACTION on every readable project and never a
     check with a verdict (and it is excluded from the General tab's "N of 3
-    checks" count for that reason). Backlog C9 wants a studio-side record of the
-    release each generated project was made with; that is the only route to a
-    real staleness warning.
+    checks" count for that reason).
+  - **The studio keeps its own record instead** (v0.88,
+    `lib/rom/houdini-refresh-store.ts` → app-data `houdini-refresh.json`): per
+    linked `.hip`, the DTH release that was active when the studio last RAN the
+    tool on it, plus a `lastSeenDthVersion` for the machine. That is a fact
+    about what the app did, never a reading of the file — so a project with no
+    entry is `unknown` (offered, not diagnosed), never `stale`, and the entry
+    carries no mtime (re-saving a scene in Houdini does not undo a refresh).
+    It is what makes the cross-project offer possible at all (below); it is
+    still not the staleness warning backlog C9 asks for, which would need the
+    release each project was BUILT with, and only DazToHue can record that.
+  - **Tools → Refresh assets offers the Houdini half** (v0.88,
+    `api/houdini-refresh.ts` + `components/tools/houdini-refresh-offer.tsx`).
+    The studio's own refresh fixes the DAZ side; when the record above shows the
+    DTH release CHANGED since it last looked, the run then offers to sweep every
+    linked `.hip` (union of `character.houdiniProjects` across `sweepTargets`,
+    deduped case-insensitively, existence-filtered) through the same `op_refresh`.
+    Four rules earn their keep, all tested in `houdini-refresh-store.test.ts`:
+    a first-ever look records the release and offers NOTHING ("never looked" is
+    not "it changed"); dismissing writes nothing, so the offer returns next
+    refresh; a project stamped with the active release is skipped; and a sweep
+    with ANY failure stamps the successes but does **not** advance
+    `lastSeenDthVersion`, so the next refresh re-offers exactly the remainder —
+    the common failure here (DazToHue not installed for this Houdini) is one the
+    user fixes and then expects to retry. The sweep's backups are never handed
+    to `discardHoudiniBackups` on the way out, and its report shows **Undo this
+    run** on SUCCESS too (unlike the drawer's `RefreshReport`): reverting one
+    project to the previous DTH release is a want that arrives days later. An
+    Undo also DROPS that project's entry (`forgetRefreshed` →
+    `noteHoudiniRefreshUndone`) — the file is back on the old definitions, so a
+    kept entry would bucket it `current` and retire it from every future offer.
+    And `clean` is measured against the paths REQUESTED, not against the report's
+    own length: a short report is a partial sweep, and comparing it to itself
+    would mark the release handled for projects the tool never reached.
+  - **The rolling copy is replaced LOUDLY, not silently.** `_backup` keeps ONE
+    copy per project, so a sweep overwrites whatever is there — which is exactly
+    the copy somebody kept to get a project back onto an older release. So the
+    plan probes `studioBackupPath` (houdini-material.ts — the pure mirror of the
+    Python `_backup`, pinned to it by `houdini-material.test.ts`, and paired with
+    `isStudioBackup`: what one derives the other must accept) for every project
+    the sweep would RUN on, and the dialog names them with dates in a destructive
+    block behind a Switch. A real run is DISABLED until it is accepted; a dry run
+    is not gated, because it never reaches `_backup`. After a real run the warning
+    is gone: the copies beside the projects it saved are now that run's, and the
+    report's Undo depends on them.
+    **The consent does NOT become a pre-emptive delete** — the accepted copies are
+    left for `_backup` to overwrite. Deleting them before hython was tried and is
+    wrong, because `_backup` writes only for a project the tool leaves modified
+    (`op_refresh` saves nothing otherwise): the delete would take the copies beside
+    every project that reports no change, every project that fails, and ALL of them
+    when the run cannot start at all — with the missing shelf tool, the common
+    failure, that is "every kept backup destroyed, nothing refreshed". Letting the
+    overwrite destroy makes the loss coincide exactly with the replacement. The
+    warning therefore lists what is AT RISK, not what will go; no plan can know
+    which projects the third-party tool will leave modified. Three smoke specs pin
+    the three outcomes (saved / unchanged / failed).
   - **`changed` is `hou.hipFile.hasUnsavedChanges()` read after the tool ran**,
     and a project is saved only when it says yes. That is an observation about
     the scene, NOT a claim about what the third-party tool touched — the UI

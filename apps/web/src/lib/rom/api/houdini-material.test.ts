@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { discardHoudiniBackups, isSameNode, isStudioBackup, transferHoudiniMaterials } from './houdini-material.ts'
+import {
+  discardHoudiniBackups,
+  isSameNode,
+  isStudioBackup,
+  studioBackupPath,
+  transferHoudiniMaterials,
+} from './houdini-material.ts'
 
 // The transfer itself needs hython and a real `.hip`, so what is unit-testable
 // here is the guard that decides a transfer must not run at all — the one rule
@@ -32,6 +38,41 @@ describe('isSameNode', () => {
 
   it('compares node paths case-SENSITIVELY (Houdini node names are)', () => {
     expect(isSameNode(node, { ...node, nodePath: '/obj/daztohue/daztohuematerial' })).toBe(false)
+  })
+})
+
+describe('studioBackupPath', () => {
+  // Mirrors `_backup` in material_utils.py. It has to, exactly: this is what
+  // the refresh sweep warns about BEFORE the run, so a drift either warns about
+  // a file the run never touches or — the bad direction — stays quiet about one
+  // it destroys.
+  it('derives the copy `_backup` will write', () => {
+    expect(studioBackupPath('D:/chars/Ita/houdini/Ita.hiplc')).toBe(
+      'D:/chars/Ita/houdini/backup/Ita_dthbak.hiplc',
+    )
+    expect(studioBackupPath('D:\\chars\\Ita\\houdini\\Ita.hip')).toBe(
+      'D:/chars/Ita/houdini/backup/Ita_dthbak.hip',
+    )
+  })
+
+  it('round-trips through the delete gate — what it derives is deletable', () => {
+    // The pair has to agree, or the sweep would ask to delete files
+    // `discardHoudiniBackups` then silently refuses.
+    expect(isStudioBackup(studioBackupPath('D:/chars/Ita/houdini/Ita.hiplc'))).toBe(true)
+    expect(isStudioBackup(studioBackupPath('D:/chars/Ita/houdini/Ita.hip'))).toBe(true)
+  })
+
+  it('splits the extension the way os.path.splitext does', () => {
+    // A dotted name keeps everything up to the LAST dot.
+    expect(studioBackupPath('D:/p/Kira_v2.1.hip')).toBe('D:/p/backup/Kira_v2.1_dthbak.hip')
+    // No extension at all — no dot to invent.
+    expect(studioBackupPath('D:/p/Kira')).toBe('D:/p/backup/Kira_dthbak')
+    // A LEADING dot is part of the name, not an extension (as in Python).
+    expect(studioBackupPath('D:/p/.hip')).toBe('D:/p/backup/.hip_dthbak')
+  })
+
+  it('tolerates the whitespace a stored path can carry', () => {
+    expect(studioBackupPath('  D:/p/Kira.hip  ')).toBe('D:/p/backup/Kira_dthbak.hip')
   })
 })
 
