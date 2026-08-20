@@ -275,6 +275,9 @@ export interface SeedOptions {
     sourceFolder: string
     buildId?: string
   }>
+  /** What `unreal_open_projects` reports — the running editors and what their
+   *  command lines say they have open (see tauri-mock). Omit for "no editor". */
+  unrealOpenProjects?: { editors: number; projects: Array<string>; unknown: number }
   /** settings.json: the DIM manifests folder (Settings → Project product config). */
   dimManifestsFolder?: string
   /** settings.json: the Daz Studio install folder. The DTH Export panel's
@@ -507,6 +510,7 @@ export function buildSeed(opts: SeedOptions = {}): TauriMockSeed {
     lockedFiles: opts.lockedFiles,
     unrealEngineInstalls: opts.unrealEngineInstalls,
     unrealPlugins: opts.unrealPlugins,
+    unrealOpenProjects: opts.unrealOpenProjects,
     version: '0.0.0-e2e',
   }
 }

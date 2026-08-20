@@ -380,9 +380,85 @@ export type UnrealImportState =
  * Deliberately has no `dead`: unlike Daz and Houdini there is no liveness
  * probe here — an editor the user closed mid-import leaves a `running` result
  * that never advances. Reporting that as failure would be a guess; the user
- * can see their own editor. (A process check could be added, but "is THAT
- * project open" is not answerable from a process list.)
+ * can see their own editor. (The command-line probe behind
+ * {@link unrealLaunchVerdict} answers "which projects are open NOW" — a launch
+ * decision. It is not a liveness verdict on the editor that CLAIMED this job,
+ * and guessing one from it would report `dead` about an editor whose line
+ * merely read unknown.)
  */
+/** What the studio can see of the running Unreal editors — the TS face of the
+ *  Rust `unreal_open_projects` probe (see `unrealOpenProjectsSchema`).
+ *  `unknown` editors are "cannot tell", never "not the one you asked about". */
+export interface UnrealEditorProbe {
+  editors: number
+  projects: ReadonlyArray<string>
+  unknown: number
+}
+
+/** One `.uproject` path as an identity: slashes and case folded, spelling
+ *  ignored — the same folding the send's own paths get. */
+function uprojectKey(path: string): string {
+  return path.replace(/\\/g, '/').toLowerCase()
+}
+
+/** {@link UnrealEditorProbe.projects} holds this `.uproject`. */
+export function editorHoldsProject(probe: UnrealEditorProbe, uprojectPath: string): boolean {
+  const wanted = uprojectKey(uprojectPath)
+  return probe.projects.some((open) => uprojectKey(open) === wanted)
+}
+
+/**
+ * Whether the studio may open a queued job's `.uproject` itself, given what
+ * the editor probe saw. The reasons are the caller's status line — each case
+ * reads differently to the person watching a job that "does nothing".
+ *
+ * The old rule was "no editor may be running AT ALL", because the yes/no
+ * probe could not tell WHAT was running — so a job queued while a different
+ * project was open sat unclaimed forever behind an amber notice (reported
+ * 2026-08-20). The command lines answer most of that:
+ *
+ * - the TARGET is open → never launch (a second editor on one project is the
+ *   duplicate the old rule feared) — the open one claims the job, or says by
+ *   not claiming that its bridge needs an editor restart.
+ * - only OTHER projects are open, every editor identified → launch: editors
+ *   of different projects run side by side by design, and the target opening
+ *   is the rest of the leg.
+ * - any editor UNIDENTIFIED → don't launch. It might be the target itself,
+ *   and a wrong guess costs a duplicate editor; not launching costs a job
+ *   that waits, which the status line now says out loud.
+ */
+export type UnrealLaunchVerdict =
+  | { launch: true; reason: 'no-editor' | 'other-project' }
+  | { launch: false; reason: 'target-open' | 'unknown-editor' }
+
+export function unrealLaunchVerdict(
+  probe: UnrealEditorProbe,
+  uprojectPath: string,
+): UnrealLaunchVerdict {
+  if (editorHoldsProject(probe, uprojectPath)) return { launch: false, reason: 'target-open' }
+  if (probe.editors === 0) return { launch: true, reason: 'no-editor' }
+  if (probe.unknown === 0) return { launch: true, reason: 'other-project' }
+  return { launch: false, reason: 'unknown-editor' }
+}
+
+/**
+ * The send targets an UNIDENTIFIED running editor might be holding — or not.
+ *
+ * Empty means nothing to warn about: no editors, or every editor identified
+ * (the launch verdict then handles each target for certain), or every target
+ * seen open. Non-empty is the one state the studio cannot resolve at send
+ * time, and the DTH Export panel warns about it AT THE START of the process —
+ * the send happens minutes later, after the Daz and Houdini legs, which is a
+ * late moment to learn the import may sit unclaimed.
+ */
+export function unidentifiedEditorTargets(
+  probe: UnrealEditorProbe,
+  targets: ReadonlyArray<string>,
+): Array<string> {
+  if (probe.unknown === 0) return []
+  return targets.filter((target) => !editorHoldsProject(probe, target))
+}
+
 export function unrealImportStateFrom(
   jobStillPending: boolean,
   result: UnrealImportResult | null,

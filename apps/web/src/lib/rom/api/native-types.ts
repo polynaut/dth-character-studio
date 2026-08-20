@@ -170,6 +170,20 @@ export const unrealProjectStateSchema = z.object({
   bridgeVersion: z.number().default(0),
 })
 
+/** What the running Unreal editors have open, as far as their command lines
+ *  say (mirrors Rust `UnrealOpenProjects`) — the send leg's launch decision
+ *  and the DTH Export panel's start-of-run warning. `unknown` counts editors
+ *  whose project could not be read: "cannot tell", never "not the one you
+ *  asked about". */
+export const unrealOpenProjectsSchema = z.object({
+  /** Running `UnrealEditor*` processes, identified or not. */
+  editors: z.number(),
+  /** Absolute `.uproject` paths their command lines carry, verbatim, deduped. */
+  projects: z.array(z.string()),
+  /** Editors whose command line named no absolute `.uproject`. */
+  unknown: z.number(),
+})
+
 export const poseAssetFramesSchema = z.object({
   path: z.string(),
   /** Frames the asset occupies (0 when it couldn't be measured — see `error`). */
@@ -676,6 +690,7 @@ export type SceneWearables = z.infer<typeof sceneWearablesSchema>
 export type UnrealEngineInstall = z.infer<typeof unrealEngineInstallSchema>
 export type UnrealPluginSource = z.infer<typeof unrealPluginSourceSchema>
 export type UnrealProjectState = z.infer<typeof unrealProjectStateSchema>
+export type UnrealOpenProjects = z.infer<typeof unrealOpenProjectsSchema>
 export type MaterialSlotInfo = z.infer<typeof materialSlotInfoSchema>
 export type MaterialNodeInfo = z.infer<typeof materialNodeInfoSchema>
 export type MaterialSectionResult = z.infer<typeof materialSectionResultSchema>

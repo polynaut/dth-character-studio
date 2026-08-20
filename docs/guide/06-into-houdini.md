@@ -162,10 +162,14 @@ attempted**, and the drawer re-ticks the row so the fix is one press.
 
 **The studio does not start Unreal to run an import.** The job is *queued* and the
 Runner picks it up within about a second; an editor you open later claims it on
-startup. If the job is still unclaimed after five seconds **and no editor is
-running at all**, the studio opens the `.uproject` for you. While the Runner works,
-Unreal shows its own progress dialog — the import holds the editor's main thread
-for minutes.
+startup. If the job is still unclaimed after five seconds, the studio checks what
+the running editors have open: with no editor at all — or only *other* projects
+open — it opens the `.uproject` for you, beside them. It never opens a project
+blind: when an editor is running whose project it can't identify, the job stays
+queued and the status line says whose move it is — and the DTH Export panel warns
+about that state up front, before the run starts. While the Runner works, Unreal
+shows its own progress dialog — the import holds the editor's main thread for
+minutes.
 
 **A send is always a re-import.** The studio looks through the project's
 `Content/` for assets belonging to each export set — all named `<PREFIX>_<set>`,

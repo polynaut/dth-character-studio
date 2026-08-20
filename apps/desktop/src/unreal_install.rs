@@ -1546,6 +1546,79 @@ mod tests {
             println!("{} -> {}", install.version, install.path);
         }
     }
+
+    /// See what the probe makes of THIS machine's running editors — the same
+    /// shape as `unreal_engine_installs_here`:
+    ///
+    /// ```text
+    /// cargo test unreal_open_projects_here -- --ignored --nocapture
+    /// ```
+    #[test]
+    #[ignore = "machine-dependent: reads this machine's running processes"]
+    fn unreal_open_projects_here() {
+        let open = unreal_open_projects();
+        println!("editors: {}, unknown: {}", open.editors, open.unknown);
+        for project in open.projects {
+            println!("open: {project}");
+        }
+    }
+
+    #[test]
+    fn the_uproject_comes_out_of_a_real_editor_command_line() {
+        // Verbatim the command line measured 2026-08-20 (UE 5.8, launcher
+        // start): exe quoted with FORWARD slashes, project quoted with
+        // backslashes, trailing space. The exe token must lose (it ends
+        // `.exe`), the project token must win.
+        let line = r#""D:/Unreal Library/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "D:\Perforce\3d-workflow\unreal\workflow3d\workflow3d.uproject" "#;
+        assert_eq!(
+            uproject_from_command_line(line),
+            Some(r"D:\Perforce\3d-workflow\unreal\workflow3d\workflow3d.uproject".to_string())
+        );
+        // Unquoted (no spaces in the path) + trailing switches.
+        assert_eq!(
+            uproject_from_command_line(
+                r"C:\UE\UnrealEditor-Cmd.exe D:\proj\Game.uproject -run=Cook"
+            ),
+            Some(r"D:\proj\Game.uproject".to_string())
+        );
+        // The project browser: no project argument at all.
+        assert_eq!(uproject_from_command_line(r#""C:\UE\UnrealEditor.exe" -log"#), None);
+        // A name-only or relative argument identifies no comparable project —
+        // "cannot tell", not a project (see the absolute-path rule).
+        assert_eq!(uproject_from_command_line(r"C:\UE\UnrealEditor.exe Game.uproject"), None);
+        // UNC is absolute too.
+        assert_eq!(
+            uproject_from_command_line(r#""C:\UE\UnrealEditor.exe" "\\nas\share\Game.uproject""#),
+            Some(r"\\nas\share\Game.uproject".to_string())
+        );
+    }
+
+    #[test]
+    fn open_projects_count_dedup_and_admit_ignorance() {
+        let lines = vec![
+            Some(r#""C:\UE\UnrealEditor.exe" "D:\a\Game.uproject""#.to_string()),
+            // The same project, other slashes and case — ONE project, first
+            // spelling kept.
+            Some(r#""C:\UE\UnrealEditor.exe" "d:/A/game.UPROJECT""#.to_string()),
+            // A second, different project.
+            Some(r#""C:\UE\UnrealEditor.exe" "D:\b\Other.uproject""#.to_string()),
+            // The project browser: an editor, no identifiable project.
+            Some(r#""C:\UE\UnrealEditor.exe" -log"#.to_string()),
+            // WMI could not read this one's command line at all.
+            None,
+        ];
+        let open = open_projects_from_command_lines(&lines);
+        assert_eq!(open.editors, 5);
+        assert_eq!(
+            open.projects,
+            vec![r"D:\a\Game.uproject".to_string(), r"D:\b\Other.uproject".to_string()]
+        );
+        assert_eq!(open.unknown, 2);
+        // No editors at all — every count zero, nothing invented.
+        let none = open_projects_from_command_lines(&[]);
+        assert_eq!((none.editors, none.unknown), (0, 0));
+        assert!(none.projects.is_empty());
+    }
 }
 
 /// The installed bridge's `Version`, or 0 — one small JSON read.
@@ -1567,35 +1640,184 @@ fn bridge_version_at(project_dir: &Path) -> u32 {
         .unwrap_or(0)
 }
 
-/// Whether ANY Unreal editor is running on this machine.
-///
-/// Deliberately coarse — "is THAT project open" is not answerable from a
-/// process list, and this is used for one decision only: whether the studio may
-/// open a `.uproject` itself after queueing an import. An editor that is
-/// already up, whatever it has loaded, is a reason NOT to launch a second one:
-/// a wrong guess there costs the user a duplicate editor and a lot of RAM,
-/// while the cost of not launching is a job that waits, which is what it did
-/// before this existed.
+/// Whether ANY Unreal editor is running on this machine — the coarse fallback
+/// behind [`unreal_open_projects`], for when the WMI query fails and the studio
+/// is back to knowing only that SOMETHING is up.
 ///
 /// Same shape as `houdini_running`'s fallback: `tasklist` filtered by image
 /// name, no window, and any failure answers "not running" rather than blocking
 /// the caller.
+#[cfg(windows)]
+fn unreal_editor_running_probe() -> bool {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    std::process::Command::new("tasklist")
+        .args(["/FI", "IMAGENAME eq UnrealEditor*", "/NH", "/FO", "CSV"])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .map(|o| {
+            let out = String::from_utf8_lossy(&o.stdout).to_ascii_lowercase();
+            out.contains("unrealeditor.exe") || out.contains("unrealeditor-cmd.exe")
+        })
+        .unwrap_or(false)
+}
+
+/// What the running Unreal editors have open, as far as their command lines
+/// say — the studio's answer to "is THAT project open", which the old
+/// yes/no process probe deliberately refused to guess at.
+///
+/// The editor names its own project: MEASURED 2026-08-20 (UE 5.8, launcher
+/// start), a running editor's command line is
+/// `"…/UnrealEditor.exe" "D:\…\workflow3d.uproject" `. Launch shapes that
+/// carry no path have not been measured here — which is fine, because what
+/// this cannot see stays counted rather than guessed: `unknown` is the
+/// editors whose command line named no absolute `.uproject` (the project
+/// browser, a denied read, a launch shape the parser has not met), and every
+/// caller treats unknown as "might be the one you asked about".
+#[derive(Debug, serde::Serialize)]
+#[cfg_attr(test, derive(serde::Deserialize, PartialEq))]
+#[serde(rename_all = "camelCase")]
+pub struct UnrealOpenProjects {
+    /// Running editor processes (`UnrealEditor*` — the editor and its
+    /// commandlet twin), whether or not their project could be read.
+    pub editors: u32,
+    /// Absolute `.uproject` paths those editors' command lines carry, verbatim,
+    /// deduped case- and slash-insensitively (first spelling wins), sorted.
+    pub projects: Vec<String>,
+    /// Editors whose command line named no absolute `.uproject` — "cannot
+    /// tell", never "not the one you asked about" (see `procs.rs` for the same
+    /// rule about Daz).
+    pub unknown: u32,
+}
+
+/// Which Unreal projects the running editors have open.
+///
+/// The command lines come from ONE WMI query through PowerShell (~200 ms
+/// measured) — a child process, which `procs.rs` forbids for probes inside
+/// one-second UI polls; this one runs on explicit user actions only (the DTH
+/// Export panel opening, a queued job looking for its editor). ToolHelp
+/// cannot replace it: `QueryFullProcessImageNameW` reads the exe path, and the
+/// project is an ARGUMENT — reading another process's arguments in-process
+/// means walking its PEB, which is not worth an unsafe block that runs twice a
+/// run. A failed query degrades to the `tasklist` yes/no probe: everything
+/// unknown, nothing invented.
 #[tauri::command(async)]
-pub fn unreal_editor_running() -> bool {
+pub fn unreal_open_projects() -> UnrealOpenProjects {
     #[cfg(windows)]
     {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        std::process::Command::new("tasklist")
-            .args(["/FI", "IMAGENAME eq UnrealEditor*", "/NH", "/FO", "CSV"])
-            .creation_flags(CREATE_NO_WINDOW)
-            .output()
-            .map(|o| {
-                let out = String::from_utf8_lossy(&o.stdout).to_ascii_lowercase();
-                out.contains("unrealeditor.exe") || out.contains("unrealeditor-cmd.exe")
-            })
-            .unwrap_or(false)
+        match editor_command_lines() {
+            Some(lines) => open_projects_from_command_lines(&lines),
+            None => {
+                let running = unreal_editor_running_probe();
+                UnrealOpenProjects {
+                    editors: u32::from(running),
+                    projects: Vec::new(),
+                    unknown: u32::from(running),
+                }
+            }
+        }
     }
     #[cfg(not(windows))]
-    false
+    UnrealOpenProjects { editors: 0, projects: Vec::new(), unknown: 0 }
+}
+
+/// Every running `UnrealEditor*` process's command line, `None` per process
+/// whose line WMI could not read — and `None` overall when the query itself
+/// failed (PowerShell missing, non-zero exit, unparseable output), which the
+/// caller must treat as "cannot tell", never as "no editors".
+///
+/// `ConvertTo-Json -InputObject @(…)` on purpose: piping INTO `ConvertTo-Json`
+/// serializes a single row as a bare object, not a one-element array
+/// (measured 2026-08-20 — the wrapper keeps zero/one/many the same shape).
+#[cfg(windows)]
+fn editor_command_lines() -> Option<Vec<Option<String>>> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    #[derive(Deserialize)]
+    struct Row {
+        #[serde(rename = "CommandLine")]
+        command_line: Option<String>,
+    }
+    let query = r#"ConvertTo-Json -InputObject @(Get-CimInstance Win32_Process -Filter "Name LIKE 'UnrealEditor%'" | Select-Object CommandLine) -Compress"#;
+    let output = std::process::Command::new("powershell")
+        .args(["-NoProfile", "-NonInteractive", "-Command", query])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let raw = String::from_utf8_lossy(&output.stdout);
+    let rows: Vec<Row> = serde_json::from_str(raw.trim()).ok()?;
+    Some(rows.into_iter().map(|row| row.command_line).collect())
+}
+
+/// The parse half of [`unreal_open_projects`], pure so the rules are testable
+/// without an editor running. (Gated with `test`: only the Windows command
+/// calls it, and a macOS build must not carry dead code past `-D warnings`.)
+#[cfg(any(windows, test))]
+fn open_projects_from_command_lines(lines: &[Option<String>]) -> UnrealOpenProjects {
+    let mut projects: Vec<String> = Vec::new();
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut unknown = 0u32;
+    for line in lines {
+        match line.as_deref().and_then(uproject_from_command_line) {
+            Some(path) => {
+                // Dedup folds slashes AND case (two editors of one project, or
+                // one path spelled two ways) — the kept spelling is verbatim.
+                // Unicode fold, not ASCII: NTFS folds `Ärger`/`ärger` too.
+                if seen.insert(path.replace('\\', "/").to_lowercase()) {
+                    projects.push(path);
+                }
+            }
+            None => unknown += 1,
+        }
+    }
+    projects.sort();
+    UnrealOpenProjects { editors: lines.len() as u32, projects, unknown }
+}
+
+/// The absolute `.uproject` path out of one editor command line, or `None`.
+///
+/// Tokenized on whitespace with double quotes honored (a quote is not legal in
+/// a Windows filename, so no escape handling) — the first token that IS an
+/// absolute path ending `.uproject` wins. Absolute is part of the rule, not a
+/// nicety: a relative or name-only argument identifies no project the studio
+/// could compare against a linked `.uproject`, and counting it as one would
+/// turn "cannot tell" into a wrong answer.
+#[cfg(any(windows, test))]
+fn uproject_from_command_line(line: &str) -> Option<String> {
+    let mut tokens = Vec::new();
+    let mut current = String::new();
+    let mut in_quotes = false;
+    for ch in line.chars() {
+        match ch {
+            '"' => in_quotes = !in_quotes,
+            c if c.is_whitespace() && !in_quotes => {
+                if !current.is_empty() {
+                    tokens.push(std::mem::take(&mut current));
+                }
+            }
+            c => current.push(c),
+        }
+    }
+    if !current.is_empty() {
+        tokens.push(current);
+    }
+    tokens
+        .into_iter()
+        .find(|token| token.to_ascii_lowercase().ends_with(".uproject") && is_absolute_path(token))
+}
+
+/// Drive-lettered (`D:\…`, `D:/…`) or UNC (`\\server\…`) — the only shapes the
+/// studio can meaningfully compare against a linked `.uproject` path.
+#[cfg(any(windows, test))]
+fn is_absolute_path(token: &str) -> bool {
+    let bytes = token.as_bytes();
+    (bytes.len() > 2
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && (bytes[2] == b'\\' || bytes[2] == b'/'))
+        || token.starts_with("\\\\")
+        || token.starts_with("//")
 }
