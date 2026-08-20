@@ -304,10 +304,11 @@ test('an unscanned Houdini project pre-selects nothing and says what sending any
   await expect(dialog.locator('[data-sets]')).toHaveCount(0)
 })
 
-// The rows say what work they contribute BEFORE Start — the queue the run will
-// build, read off the same two facts the task list is built from: each Houdini
-// project's stored export sets (one DazToHue network each) and, per Unreal
-// project, which of the run's sets that project actually holds.
+// The rows say how much work each project is BEFORE Start, off the two facts
+// the studio already holds: each Houdini project's stored export sets (one
+// DazToHue network each) and, per Unreal project, which of the run's sets that
+// project actually holds. The Houdini list describes the `.hip`; the Unreal one
+// describes THIS run.
 test('every project row names the jobs it will put on the run’s task list', async ({ page }) => {
   const dialog = await openDialogWith(page, {
     onDisk: ['KiraDefault', 'KiraSummertide'],
@@ -338,6 +339,32 @@ test('every project row names the jobs it will put on the run’s task list', as
   // only — so one job, one chip. Naming the other would promise a row
   // `unrealTaskCards` then drops.
   await expect(dialog.locator('[data-sets="unreal"] [data-set]')).toHaveText(['KiraDefault'])
+})
+
+test('a run that produces no export names no characters — a stale folder is not a promise', async ({
+  page,
+}) => {
+  // The pair that would let a row lie: an export IS on disk and DemoGame holds
+  // it, so both halves of "which characters land here" have an answer — from
+  // the PREVIOUS run. ROM only stops before Houdini and sends nothing at all
+  // (see the panel's `unrealSendable`), so naming that character would promise
+  // an import job Start never queues.
+  const dialog = await openDialogWith(page, {
+    onDisk: ['KiraDefault'],
+    inUnreal: ['KiraDefault'],
+    scans: [{ hipPath: P.houdini, exportSets: ['KiraDefault'] }],
+  })
+
+  await dialog.locator('#daz-mode').click()
+  await page.getByRole('option', { name: /ROM only/ }).click()
+
+  await expect(dialog.getByText(/writes no export — nothing to send/)).toBeVisible()
+  await expect(dialog.locator('[data-sets="unreal"]')).toHaveCount(0)
+  // The Houdini row keeps its chips through the same mode change: what a `.hip`
+  // writes is a fact about the project, and this run not running it does not
+  // make it untrue. That difference is the whole reason the two lists are
+  // worded apart.
+  await expect(dialog.locator('[data-sets="houdini"] [data-set]')).toHaveText(['KiraDefault'])
 })
 
 test('ONE task row per re-import — and a set the project never held is dropped, and said', async ({

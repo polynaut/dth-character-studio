@@ -199,10 +199,21 @@ export function WaitForDazCloseModal({
  *
  * One chip = one **DazToHue network**: the HDA's `character_name`, which is the
  * export set the network writes and therefore the folder that reaches Unreal.
- * The run's task list is built from exactly these names — one row per network
- * on the Houdini leg (`houdiniTaskCards`), one row per set per project on the
- * Unreal leg (`unrealTaskCards`) — so reading a row here is reading the queue
- * that Start will produce.
+ *
+ * What a list MEANS differs per leg, and only one of them is a statement about
+ * the run:
+ *
+ * - **Houdini** — what that PROJECT writes, ticked or not and whatever mode the
+ *   run is in. It describes the `.hip`, NOT the queue, and the three ways it
+ *   parts company with the task rows are all normal: `houdiniTaskCards` names
+ *   its rows from these only from TWO networks up (below that a project is one
+ *   row carrying the project's own name), `skip` runs no Houdini leg at all,
+ *   and an unticked project contributes nothing. What the chips buy is the
+ *   count — how much work a `.hip` is — before Start.
+ * - **Unreal** — what THIS RUN would send into that project, already narrowed
+ *   by the panel to the sets the probe located there. That one IS the leg's
+ *   rows: `unrealTaskCards` is one row per set per project and drops exactly
+ *   the sets this list does.
  *
  * Empty renders NOTHING rather than "no networks": an unscanned project reports
  * an empty list, and empty means *not known* everywhere it is read (see the
@@ -451,10 +462,12 @@ export function HipRow({
 }: {
   hip: string
   /** The DazToHue networks this project writes, from the STORED scan (each
-   *  export node's `character_name`) — the same list the run's task cards are
-   *  named from before hython has opened the file. Empty = the scan has never
-   *  reached this project, which is "not known", not "writes none": the chips
-   *  then say nothing at all (see {@link SetChips}). */
+   *  export node's `character_name`) — read without opening the `.hip`, which
+   *  costs tens of seconds. A fact about the PROJECT: it holds whether the row
+   *  is ticked or not, and under "Skip Houdini", which runs no Houdini leg at
+   *  all. Empty = the scan has never reached this project, which is "not
+   *  known", not "writes none": the chips then say nothing at all (see
+   *  {@link SetChips}). */
   sets: ReadonlyArray<string>
   checked: boolean
   /** The `.hip` can't be found on disk — the row is refused (an already-checked
@@ -492,10 +505,11 @@ export function HipRow({
           >
             {missing ? 'Project file missing on disk — relink it in the editor' : shortPath}
           </p>
-          {/* What this project actually DOES, one chip per network — the rows
-              the Houdini leg contributes to the run's task list. A project can
-              hold several, and until they were on the row the only way to know
-              how many was to start the run and watch the list fill in. */}
+          {/* What this project actually DOES, one chip per network. A project
+              can hold several, and until they were on the row the only way to
+              learn how many was to start the run and watch the task list fill
+              in. Not a claim about THIS run — the checkbox is what says whether
+              the project is in it (see {@link SetChips}). */}
           <SetChips caption="Networks" names={sets} tone="houdini" />
         </div>
       </div>
