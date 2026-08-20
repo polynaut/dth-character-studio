@@ -246,6 +246,15 @@ Part of the domain reference — `.ai/domain.md` is the index.
     a scene-carrying name, so the pick IS the wiring: before it, a multi-scene
     character's every generated project imported the primary's set and re-aiming
     it was five hand edits. One project per scene.
+    **The gate is the scene COUNT and nothing else — that has history.** #782
+    also hid the picker for a character's FIRST project, reasoning that the
+    first project is the main one and the primary is what everyone answered
+    anyway. True of the common case and still the wrong trade: the shortcut
+    did not remove a question, it answered one silently, and the answer was
+    only observable by opening the finished network. #939 put it back. A
+    character whose first project is for an outfit scene had no route to it at
+    all — a throwaway project first, or those same five hand edits. See "A
+    default is not a decision" in `.ai/conventions.md`.
   - **`export_directory` is the OTHER end of the pipeline** and must never be
     derived from the import paths. The imports READ the Daz→Houdini
     intermediates under `daz-export` (large, regenerable, not backed up);
