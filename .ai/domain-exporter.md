@@ -412,9 +412,35 @@ Part of the domain reference — `.ai/domain.md` is the index.
   - **Nothing detects staleness, before or after.** A `.hip` records no DazToHue
     release, so the refresh is an ACTION on every readable project and never a
     check with a verdict (and it is excluded from the General tab's "N of 3
-    checks" count for that reason). Backlog C9 wants a studio-side record of the
-    release each generated project was made with; that is the only route to a
-    real staleness warning.
+    checks" count for that reason).
+  - **The studio keeps its own record instead** (v0.88,
+    `lib/rom/houdini-refresh-store.ts` → app-data `houdini-refresh.json`): per
+    linked `.hip`, the DTH release that was active when the studio last RAN the
+    tool on it, plus a `lastSeenDthVersion` for the machine. That is a fact
+    about what the app did, never a reading of the file — so a project with no
+    entry is `unknown` (offered, not diagnosed), never `stale`, and the entry
+    carries no mtime (re-saving a scene in Houdini does not undo a refresh).
+    It is what makes the cross-project offer possible at all (below); it is
+    still not the staleness warning backlog C9 asks for, which would need the
+    release each project was BUILT with, and only DazToHue can record that.
+  - **Tools → Refresh assets offers the Houdini half** (v0.88,
+    `api/houdini-refresh.ts` + `components/tools/houdini-refresh-offer.tsx`).
+    The studio's own refresh fixes the DAZ side; when the record above shows the
+    DTH release CHANGED since it last looked, the run then offers to sweep every
+    linked `.hip` (union of `character.houdiniProjects` across `sweepTargets`,
+    deduped case-insensitively, existence-filtered) through the same `op_refresh`.
+    Four rules earn their keep, all tested in `houdini-refresh-store.test.ts`:
+    a first-ever look records the release and offers NOTHING ("never looked" is
+    not "it changed"); dismissing writes nothing, so the offer returns next
+    refresh; a project stamped with the active release is skipped; and a sweep
+    with ANY failure stamps the successes but does **not** advance
+    `lastSeenDthVersion`, so the next refresh re-offers exactly the remainder —
+    the common failure here (DazToHue not installed for this Houdini) is one the
+    user fixes and then expects to retry. The sweep's backups are never handed
+    to `discardHoudiniBackups`, and its report shows **Undo this run** on
+    SUCCESS too (unlike the drawer's `RefreshReport`): reverting one project to
+    the previous DTH release is a want that arrives days later. Still ONE rolling
+    copy per project, so it undoes the last sweep, not a chain of them.
   - **`changed` is `hou.hipFile.hasUnsavedChanges()` read after the tool ran**,
     and a project is saved only when it says yes. That is an observation about
     the scene, NOT a claim about what the third-party tool touched — the UI

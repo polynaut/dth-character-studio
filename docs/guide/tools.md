@@ -164,4 +164,38 @@ studio generates):
   <sub><em>The Refresh assets tab.</em></sub>
 </p>
 
+### …and the Houdini half
+
+A refresh only fixes the Daz end. Your `.hip` files keep the DazToHue asset
+definitions they were built with, so a new DazToHue release leaves every project on
+the old ones until DazToHue's own **Refresh Assets** runs inside each of them.
+
+So when the studio notices the DazToHue release has **changed since it last looked**,
+the refresh offers to do that too — across every linked Houdini project at once,
+through `hython`, without you opening Houdini. It needs the **Houdini installation
+folder** and its matching documents folder in Settings; without them the offer stays
+away.
+
+What it can and can't say, which is the same short list as the
+[per-project button](./houdini-project-checks.md#refresh-assets):
+
+- **It still isn't a check.** Nothing in a project says which DazToHue release its
+  assets came from. What the studio remembers is only which projects *it* has run
+  this on, and under which release — so a project reads as *"never refreshed by the
+  studio"* rather than as out of date.
+- **Already done is skipped.** A project refreshed under the release that's active
+  now isn't offered again.
+- **A failed project comes back.** If any project fails, the release stays
+  outstanding and the next refresh re-offers exactly the ones that didn't get
+  done — so fixing the cause (usually DazToHue not installed for the Houdini
+  version the studio points at) and refreshing again picks up where it left off.
+- **Dismissing costs nothing.** *Not now* writes nothing; the offer returns on your
+  next refresh.
+
+Every project is copied into its `backup/` folder before it's saved, and each saved
+project keeps an **Undo this run** button in the report — the way back if you ever
+need one project on the previous DazToHue release. It's **one rolling copy per
+project**, so the next run of this replaces it. Close the projects in Houdini first:
+Houdini writes the whole scene on save and would overwrite the result.
+
 [← Guide overview](./README.md)

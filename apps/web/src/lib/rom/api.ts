@@ -295,6 +295,23 @@ export type {
   RetargetResult,
 } from './api/native-types.ts'
 
+// --- houdini refresh: the Houdini half of "Refresh assets" ------------------
+// When the DTH release changes, the studio's own refresh brings the DAZ side up
+// to date and this brings the linked `.hip` files with it — DazToHue's own
+// Refresh Assets, run headlessly across every linked project.
+export {
+  linkedHoudiniProjects,
+  noteDthReleaseSeen,
+  planHoudiniAssetRefresh,
+  runHoudiniAssetRefresh,
+  shouldOfferRefresh,
+} from './api/houdini-refresh.ts'
+export type {
+  HoudiniRefreshPlan,
+  RefreshBucket,
+  RefreshCandidate,
+} from './api/houdini-refresh.ts'
+
 // --- generate: artifact generation + refresh sweep + version detection ------
 export {
   characterStaleTargets,

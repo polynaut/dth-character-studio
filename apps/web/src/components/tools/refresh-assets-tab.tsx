@@ -4,11 +4,18 @@ import { CircleAlert, RefreshCw, RotateCcw, TriangleAlert } from 'lucide-react'
 import { Button, InfoPopup, useModifierHeld } from '@dth/ui'
 import { GuideLink } from '#/components/guide-link.tsx'
 import { CHARACTER_SCHEMA_VERSION } from '@dth/rom'
-import { detectAssetVersions, refreshAllAssets } from '#/lib/rom/api.ts'
+import {
+  detectAssetVersions,
+  noteDthReleaseSeen,
+  planHoudiniAssetRefresh,
+  refreshAllAssets,
+  shouldOfferRefresh,
+} from '#/lib/rom/api.ts'
 import { RefreshDetection } from '#/components/tools/refresh-detection.tsx'
+import { HoudiniRefreshOffer } from '#/components/tools/houdini-refresh-offer.tsx'
 import { toast } from 'sonner'
 
-import type { AssetVersionReport, RefreshSummary } from '#/lib/rom/api.ts'
+import type { AssetVersionReport, HoudiniRefreshPlan, RefreshSummary } from '#/lib/rom/api.ts'
 
 /**
  * "Refresh assets" tab — re-generate the Daz scripts + PoseAsset CSVs (e.g. after a
@@ -29,6 +36,9 @@ export function RefreshAssetsTab() {
   const [refreshing, setRefreshing] = useState(false)
   const [resetting, setResetting] = useState(false)
   const [summary, setSummary] = useState<RefreshSummary | null>(null)
+  /** The Houdini half of a refresh, when the DTH release changed — see
+   *  {@link offerHoudiniRefresh}. Null = nothing to offer (the common case). */
+  const [houdiniPlan, setHoudiniPlan] = useState<HoudiniRefreshPlan | null>(null)
   const working = refreshing || resetting
   // Power-user: holding Ctrl turns Refresh into "Refresh + rebuild avatars" —
   // scene-sourced avatar masters are re-derived from their scenes' pristine tips,
@@ -118,6 +128,37 @@ export function RefreshAssetsTab() {
     })
   }
 
+  /**
+   * The other end of the pipeline.
+   *
+   * A refresh brings the DAZ side up to date; it cannot touch the linked
+   * Houdini projects, which keep the DazToHue asset definitions they were built
+   * with until DazToHue's own **Refresh Assets** runs inside each of them. So
+   * when the DTH release has demonstrably changed since the studio last looked,
+   * the run offers to do that too — headlessly, across every linked project.
+   *
+   * Only ever an OFFER, and only after a refresh the user asked for. When there
+   * is nothing to offer, the run still records the release it saw, which is what
+   * makes the NEXT change detectable on a library where no project has been
+   * swept yet.
+   *
+   * Never throws: this is the optional half of the button, and a Houdini that
+   * cannot be reached must not turn a successful refresh into an error.
+   */
+  async function offerHoudiniRefresh() {
+    try {
+      const plan = await planHoudiniAssetRefresh()
+      // Blocked (browser build, no Houdini configured) — deliberately NOT
+      // recorded as "seen": doing so would consume the one release change the
+      // user could have acted on once Houdini is set up.
+      if (plan.blocked) return
+      if (shouldOfferRefresh(plan)) setHoudiniPlan(plan)
+      else await noteDthReleaseSeen(plan)
+    } catch {
+      // planning failed — the refresh itself still succeeded
+    }
+  }
+
   async function run(opts: { resetTooNew?: boolean; rebuildAvatars?: boolean } = {}) {
     const setBusy = opts.resetTooNew ? setResetting : setRefreshing
     setBusy(true)
@@ -127,6 +168,7 @@ export function RefreshAssetsTab() {
       setSummary(result)
       reportSummary(result, opts.rebuildAvatars === true)
       await reload() // re-detect so the version table reflects the regeneration
+      await offerHoudiniRefresh()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
     } finally {
@@ -252,6 +294,12 @@ export function RefreshAssetsTab() {
           <RefreshDetection report={report} />
         ) : null}
       </div>
+
+      {/* Dismissing writes nothing, so the offer returns on the next refresh —
+          a release change stays outstanding until it is acted on. */}
+      {houdiniPlan && (
+        <HoudiniRefreshOffer plan={houdiniPlan} onClose={() => setHoudiniPlan(null)} />
+      )}
     </div>
   )
 }
