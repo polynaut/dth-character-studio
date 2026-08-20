@@ -297,6 +297,74 @@ test('an unscanned Houdini project pre-selects nothing and says what sending any
   await expect(send).toBeEnabled()
   await send.check()
   await expect(send).toBeChecked()
+  // …and NEITHER list names anything: an unscanned project's chips would be
+  // the same guess the pre-tick refuses to make, and the send here hands over
+  // the whole export folder, which the run's task list can only show as one
+  // unnamed row per project.
+  await expect(dialog.locator('[data-sets]')).toHaveCount(0)
+})
+
+// The rows say how much work each project is BEFORE Start, off the two facts
+// the studio already holds: each Houdini project's stored export sets (one
+// DazToHue network each) and, per Unreal project, which of the run's sets that
+// project actually holds. The Houdini list describes the `.hip`; the Unreal one
+// describes THIS run.
+test('every project row names the jobs it will put on the run’s task list', async ({ page }) => {
+  const dialog = await openDialogWith(page, {
+    onDisk: ['KiraDefault', 'KiraSummertide'],
+    // DemoGame holds only KiraDefault — so of the two sets the first project
+    // writes, exactly one is a re-import and the other is dropped from the run.
+    inUnreal: ['KiraDefault'],
+    scans: [
+      // One project, TWO networks: the case a single row per `.hip` could never
+      // show, and the reason the chips are per SET rather than per project.
+      { hipPath: P.houdini, exportSets: ['KiraDefault', 'KiraDefault_THICK'] },
+      { hipPath: HOUDINI_2, exportSets: ['KiraSummertide'] },
+    ],
+  })
+
+  // Both rows, in row order — every network of every linked project, whether
+  // that project is ticked or not (the chips describe the project, and the
+  // checkbox says whether it is in the run).
+  await expect(dialog.locator('[data-sets="houdini"] [data-set]')).toHaveText([
+    'KiraDefault',
+    'KiraDefault_THICK',
+    'KiraSummertide',
+  ])
+
+  await dialog.getByRole('checkbox', { name: 'Run in Kira', exact: true }).check()
+  await dialog.getByRole('checkbox', { name: 'Run in KiraSummertide' }).uncheck()
+  // The Unreal row names the CHARACTERS landing in that project: this run
+  // writes two sets, DemoGame holds one of them, and the send is re-import
+  // only — so one job, one chip. Naming the other would promise a row
+  // `unrealTaskCards` then drops.
+  await expect(dialog.locator('[data-sets="unreal"] [data-set]')).toHaveText(['KiraDefault'])
+})
+
+test('a run that produces no export names no characters — a stale folder is not a promise', async ({
+  page,
+}) => {
+  // The pair that would let a row lie: an export IS on disk and DemoGame holds
+  // it, so both halves of "which characters land here" have an answer — from
+  // the PREVIOUS run. ROM only stops before Houdini and sends nothing at all
+  // (see the panel's `unrealSendable`), so naming that character would promise
+  // an import job Start never queues.
+  const dialog = await openDialogWith(page, {
+    onDisk: ['KiraDefault'],
+    inUnreal: ['KiraDefault'],
+    scans: [{ hipPath: P.houdini, exportSets: ['KiraDefault'] }],
+  })
+
+  await dialog.locator('#daz-mode').click()
+  await page.getByRole('option', { name: /ROM only/ }).click()
+
+  await expect(dialog.getByText(/writes no export — nothing to send/)).toBeVisible()
+  await expect(dialog.locator('[data-sets="unreal"]')).toHaveCount(0)
+  // The Houdini row keeps its chips through the same mode change: what a `.hip`
+  // writes is a fact about the project, and this run not running it does not
+  // make it untrue. That difference is the whole reason the two lists are
+  // worded apart.
+  await expect(dialog.locator('[data-sets="houdini"] [data-set]')).toHaveText(['KiraDefault'])
 })
 
 test('ONE task row per re-import — and a set the project never held is dropped, and said', async ({
