@@ -30,17 +30,18 @@ outstanding, so the next refresh re-offers exactly the remainder — the usual c
 of a failure here is DazToHue not being installed for the Houdini version the
 studio points at, which is something you fix and then expect to retry.
 
-Every project is copied into its `backup/` folder before it is saved, and this
+Each project is copied into its `backup/` folder before it is saved, and this
 report keeps **Undo this run** on the projects that succeeded, not only on the
 ones that failed: putting one project back on the previous DazToHue release is a
-want that arrives days later.
+want that arrives days later. Undoing also makes the studio stop counting that
+project as refreshed, so it comes back into the offer instead of quietly reading
+as done while sitting on the old assets.
 
-That copy is **rolling — one per project** — so a run replaces whatever is already
-beside it, which is precisely the copy somebody kept in order to go back a
-release. It would have been destroyed silently, inside a run started by a button
-labelled "Refresh". Now it isn't: if any project the sweep would touch already has
-a studio backup, the dialog says so in red, lists them with their dates, and
-**refuses to start** until you accept losing them. Accepting deletes them in one
-visible step *before* Houdini is even started, and the run then takes its own
-fresh copies. A **dry run** is never held and never deletes anything — it saves
-nothing, so it never reaches a backup at all.
+That copy is **rolling — one per project** — so saving a project replaces whatever
+is already beside it, which is precisely the copy somebody kept in order to go
+back a release. It would have gone silently, inside a run started by a button
+labelled "Refresh". Now it doesn't: if any project the sweep would touch already
+has a studio backup, the dialog says so in red, lists them with their dates, and
+**refuses to start** until you accept. Only the projects the run actually saves
+lose their old copy — one that reports no change, or that fails, keeps what it
+had — and a **dry run** is never held and never touches a backup at all.

@@ -439,8 +439,14 @@ Part of the domain reference — `.ai/domain.md` is the index.
     user fixes and then expects to retry. The sweep's backups are never handed
     to `discardHoudiniBackups` on the way out, and its report shows **Undo this
     run** on SUCCESS too (unlike the drawer's `RefreshReport`): reverting one
-    project to the previous DTH release is a want that arrives days later.
-  - **The rolling copy is destroyed LOUDLY, not silently.** `_backup` keeps ONE
+    project to the previous DTH release is a want that arrives days later. An
+    Undo also DROPS that project's entry (`forgetRefreshed` →
+    `noteHoudiniRefreshUndone`) — the file is back on the old definitions, so a
+    kept entry would bucket it `current` and retire it from every future offer.
+    And `clean` is measured against the paths REQUESTED, not against the report's
+    own length: a short report is a partial sweep, and comparing it to itself
+    would mark the release handled for projects the tool never reached.
+  - **The rolling copy is replaced LOUDLY, not silently.** `_backup` keeps ONE
     copy per project, so a sweep overwrites whatever is there — which is exactly
     the copy somebody kept to get a project back onto an older release. So the
     plan probes `studioBackupPath` (houdini-material.ts — the pure mirror of the
@@ -448,12 +454,20 @@ Part of the domain reference — `.ai/domain.md` is the index.
     `isStudioBackup`: what one derives the other must accept) for every project
     the sweep would RUN on, and the dialog names them with dates in a destructive
     block behind a Switch. A real run is DISABLED until it is accepted; a dry run
-    is not gated and deletes nothing, because it never reaches `_backup`. The
-    accepted set is deleted through `discardHoudiniBackups` BEFORE hython starts,
-    so the loss is one visible consented step rather than an overwrite noticed
-    later. After a real run the warning is gone and a re-run passes nothing: the
-    copies beside the projects are now that run's, and the report's Undo depends
-    on them.
+    is not gated, because it never reaches `_backup`. After a real run the warning
+    is gone: the copies beside the projects it saved are now that run's, and the
+    report's Undo depends on them.
+    **The consent does NOT become a pre-emptive delete** — the accepted copies are
+    left for `_backup` to overwrite. Deleting them before hython was tried and is
+    wrong, because `_backup` writes only for a project the tool leaves modified
+    (`op_refresh` saves nothing otherwise): the delete would take the copies beside
+    every project that reports no change, every project that fails, and ALL of them
+    when the run cannot start at all — with the missing shelf tool, the common
+    failure, that is "every kept backup destroyed, nothing refreshed". Letting the
+    overwrite destroy makes the loss coincide exactly with the replacement. The
+    warning therefore lists what is AT RISK, not what will go; no plan can know
+    which projects the third-party tool will leave modified. Three smoke specs pin
+    the three outcomes (saved / unchanged / failed).
   - **`changed` is `hou.hipFile.hasUnsavedChanges()` read after the tool ran**,
     and a project is saved only when it says yes. That is an observation about
     the scene, NOT a claim about what the third-party tool touched — the UI

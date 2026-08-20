@@ -203,6 +203,31 @@ export function stampRefreshed(
   return { ...store, projects }
 }
 
+/**
+ * Drop a project's entry — what an UNDO of a sweep means for the record.
+ *
+ * The entry says "the studio refreshed this file while release X was active".
+ * Restoring the pre-run backup takes that back, so keeping the entry would have
+ * the store assert something that is no longer true, and — because a stamped
+ * project buckets as `current` — quietly retire it from every future offer while
+ * it sits on the old definitions. Removing it returns the project to `unknown`,
+ * which is precisely its state again: never refreshed by the studio.
+ *
+ * `lastSeenDthVersion` is deliberately untouched. The release WAS seen; one
+ * project going back does not unsee it, and clearing it would re-offer the whole
+ * library to undo a single project.
+ */
+export function forgetRefreshed(
+  store: HoudiniRefreshStore,
+  hipPath: string,
+): HoudiniRefreshStore {
+  const key = refreshStoreKey(hipPath)
+  if (!key || !(key in store.projects)) return store
+  const projects = { ...store.projects }
+  delete projects[key]
+  return { ...store, projects }
+}
+
 /** Record the active release without claiming anything was refreshed — what a
  *  run that offered nothing leaves behind, so the next change is detectable. */
 export function noteReleaseSeen(store: HoudiniRefreshStore, version: string): HoudiniRefreshStore {

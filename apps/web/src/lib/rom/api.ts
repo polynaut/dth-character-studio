@@ -302,7 +302,9 @@ export type {
 export {
   linkedHoudiniProjects,
   noteDthReleaseSeen,
+  noteHoudiniRefreshUndone,
   planHoudiniAssetRefresh,
+  refreshTargetPaths,
   runHoudiniAssetRefresh,
   shouldOfferRefresh,
 } from './api/houdini-refresh.ts'

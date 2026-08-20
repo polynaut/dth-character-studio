@@ -8,17 +8,13 @@ import { z } from 'zod'
 
 import * as storage from '../storage'
 import { charsRoot, fetchPoseAssetsCurrent, sweepTargets } from './core'
-import {
-  discardHoudiniBackups,
-  houdiniUtilsReady,
-  refreshHoudiniAssets,
-  studioBackupPath,
-} from './houdini-material.ts'
+import { houdiniUtilsReady, refreshHoudiniAssets, studioBackupPath } from './houdini-material.ts'
 import {
   HOUDINI_REFRESH_FILE,
   classifyRefreshTargets,
   dthReleaseChanged,
   emptyRefreshStore,
+  forgetRefreshed,
   houdiniRefreshStoreJson,
   noteReleaseSeen,
   parseRefreshStore,
@@ -35,6 +31,7 @@ import type {
   RefreshCandidate,
 } from '../houdini-refresh-store.ts'
 
+export { refreshTargetPaths } from '../houdini-refresh-store.ts'
 export type { RefreshBucket, RefreshCandidate } from '../houdini-refresh-store.ts'
 
 /**
@@ -169,10 +166,17 @@ export async function linkedHoudiniProjects(): Promise<{
 /**
  * A studio backup that ALREADY sits beside a project this sweep would run.
  *
- * `_backup` keeps one rolling copy per project, so a run overwrites whatever is
- * there — which is exactly the copy somebody kept in order to put that project
- * back on an older DazToHue release. Naming them before the run is what turns a
- * silent overwrite into a decision.
+ * `_backup` keeps one rolling copy per project, so saving a project overwrites
+ * whatever is there — which is exactly the copy somebody kept in order to put
+ * that project back on an older DazToHue release. Naming them before the run is
+ * what turns a silent overwrite into a decision.
+ *
+ * "Would run on" is as far as the warning can honestly reach. Whether a copy is
+ * actually replaced depends on something no plan can know in advance: `_backup`
+ * runs only for a project the tool leaves modified (`op_refresh` saves nothing
+ * otherwise), so an offered project may finish with its old copy untouched. The
+ * warning therefore covers every project at risk and claims nothing about which
+ * of them the run will reach.
  */
 export interface ExistingBackup {
   hipPath: string
@@ -222,7 +226,8 @@ export function shouldOfferRefresh(plan: HoudiniRefreshPlan): boolean {
  * late: `_backup` overwrites in the same breath as it copies, so by the time a
  * report exists the older copy is already gone. Best-effort per path — a
  * backup folder that cannot be read simply is not warned about, which is the
- * safe direction (the run still takes its own fresh copy either way).
+ * safe direction (nothing is destroyed that the run was not going to destroy
+ * anyway).
  */
 async function existingBackupsFor(
   hipPaths: ReadonlyArray<string>,
@@ -316,15 +321,13 @@ export async function noteDthReleaseSeen(plan: HoudiniRefreshPlan): Promise<void
 
 const runInput = z.object({
   hipPaths: z.array(z.string().min(1)).min(1),
-  /** The release the run is being stamped with — the plan's active version. */
-  dthVersion: z.string(),
+  /** The release the run is being stamped with — the plan's active version.
+   *  Never '': an unresolvable release cannot produce an offer in the first
+   *  place, and a blank stamp would file entries that read back as `unknown`. */
+  dthVersion: z.string().min(1),
   /** true = load each project and run the tool, but never save (and never
    *  stamp: a dry run leaves the file on its old definitions). */
   dryRun: z.boolean(),
-  /** Studio backups to DELETE before the run, from the plan's
-   *  `existingBackups`. Only ever the ones the user was shown and accepted —
-   *  see {@link runHoudiniAssetRefresh}. */
-  replaceBackups: z.array(z.string().min(1)).default([]),
 })
 
 /**
@@ -347,17 +350,17 @@ const runInput = z.object({
  * user reverts one of these is to put a project back on an older DTH release,
  * which is a want that arrives days later, not on the way out of a dialog.
  *
- * **`replaceBackups` is the consented delete.** A copy already beside a project
- * is one a run would silently overwrite — and it is exactly the copy somebody
- * kept in order to put that project back on an older DazToHue release. So the
- * dialog names every one of them, refuses to run until that is acknowledged,
- * and the accepted set is deleted HERE, before the first project is opened,
- * through `discardHoudiniBackups` — which only ever removes files matching the
- * studio's own `_dthbak` naming, so a stale plan can never aim this at
- * anything else. Deleting rather than letting `_backup` overwrite is the point:
- * the destruction happens because the user said so, in one visible step, not as
- * a side effect noticed later. A dry run passes nothing here, because it saves
- * nothing and therefore replaces nothing.
+ * **The consented destruction is `_backup`'s own overwrite, and nothing more.**
+ * A copy already beside a project is one this run may replace, and it is exactly
+ * the copy somebody kept in order to go back a DazToHue release — so the dialog
+ * names every one of them and refuses to start until that is acknowledged. What
+ * it must NOT do is delete them up front. `_backup` writes only for a project
+ * the tool left modified, so a pre-emptive delete would destroy the copies
+ * beside every project that reports no change, every project that fails, and —
+ * worst — all of them when the run cannot start at all (the shelf tool missing
+ * for this Houdini is the common failure). Letting the overwrite do its own
+ * destroying makes the loss coincide exactly with the replacement: a project is
+ * only ever left without a copy if it was never going to lose one.
  *
  * **The release is marked seen only on a CLEAN sweep.** If any project failed,
  * `lastSeenDthVersion` is left where it was, so the next Refresh-assets run
@@ -374,20 +377,38 @@ export async function runHoudiniAssetRefresh({
   data: unknown
 }): Promise<MaterialUtilReport> {
   const input = runInput.parse(data)
-  // Before hython, and only on a real run: a dry run never reaches `_backup`.
-  if (!input.dryRun && input.replaceBackups.length > 0) {
-    await discardHoudiniBackups({ data: { paths: input.replaceBackups } })
-  }
   const report = await refreshHoudiniAssets({
     data: { hipPaths: input.hipPaths, dryRun: input.dryRun },
   })
   if (!input.dryRun) {
     const refreshed = report.refresh.filter((entry) => entry.ok).map((entry) => entry.hipPath)
-    const clean = refreshed.length === report.refresh.length
+    // Measured against what was ASKED FOR, never against what came back: a
+    // report that is short of the requested projects is a partial sweep, and
+    // comparing it to itself would call that clean and mark the release handled
+    // for projects the tool never reached.
+    const clean = refreshed.length === input.hipPaths.length
     await queueStoreWrite((store) => {
       const stamped = stampRefreshed(store, refreshed, input.dthVersion, new Date().toISOString())
       return clean ? noteReleaseSeen(stamped, input.dthVersion) : stamped
     })
   }
   return report
+}
+
+/**
+ * Forget that the studio ever refreshed this project — what an **Undo this
+ * run** actually means for the record.
+ *
+ * Restoring puts the `.hip` back on the definitions it had before the sweep, so
+ * leaving the entry behind would have the store assert a refresh that has been
+ * taken back: the project would bucket as `current` and never be offered again,
+ * while sitting on the old assets. Dropping the entry returns it to `unknown` —
+ * offered, not diagnosed, which is exactly what is true of it again.
+ *
+ * Never throws (and never advances anything): the restore itself already
+ * succeeded, and a store that cannot be written costs one missed offer.
+ */
+export async function noteHoudiniRefreshUndone(hipPath: string): Promise<void> {
+  if (!hipPath.trim()) return
+  await queueStoreWrite((store) => forgetRefreshed(store, hipPath))
 }

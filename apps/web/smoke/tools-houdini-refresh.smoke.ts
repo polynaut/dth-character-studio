@@ -181,15 +181,16 @@ test('dismissing writes nothing, so the offer returns on the next refresh', asyn
 
 // --- the existing-backup warning -------------------------------------------
 //
-// `_backup` keeps ONE rolling copy per project, so a run overwrites whatever is
-// beside it — including the copy somebody kept to get a project back onto an
-// older DazToHue release. These hold down that the loss is named, gated and
-// then actually performed, rather than happening quietly inside the run.
+// `_backup` keeps ONE rolling copy per project, so saving a project overwrites
+// whatever is beside it — including the copy somebody kept to get a project back
+// onto an older DazToHue release. These hold down that the loss is named and
+// gated, and — the part that is easy to get wrong — that it happens ONLY where
+// the run actually replaces the copy.
 
-/** Does the fake world still hold this file? */
-function fileExists(page: Page, path: string) {
+/** What the fake world holds at this path, or undefined. */
+function fileAt(page: Page, path: string) {
   return page.evaluate(
-    (p) => ((window as any).__tauriMock.files as Map<string, string>).has(p),
+    (p) => ((window as any).__tauriMock.files as Map<string, string>).get(p),
     path,
   )
 }
@@ -214,24 +215,69 @@ test('an existing backup is named, and the run is held until that is accepted', 
 
   await expect(page.getByText('1 project refreshed and saved.')).toBeVisible()
 
-  // The delete is the claim, so it is what gets asserted — and that it happened
-  // BEFORE hython, in one visible step, rather than being an overwrite noticed
-  // afterwards. (`files` alone cannot tell the two apart: the run's own
-  // `_backup` puts a copy back at the same path either way.)
-  const order = await page.evaluate((backup) => {
-    const calls = (window as any).__tauriMock.calls as Array<{ cmd: string; args: any }>
-    return {
-      removed: calls.findIndex(
-        (c) => c.cmd === 'plugin:fs|remove' && c.args?.path === backup,
-      ),
-      ran: calls.findIndex((c) => c.cmd === 'run_houdini_material_util'),
-    }
-  }, BACKUP)
-  expect(order.removed).toBeGreaterThanOrEqual(0)
-  expect(order.ran).toBeGreaterThan(order.removed)
+  // The project WAS saved, so `_backup` replaced the copy with its own — which
+  // is what the report's Undo restores to.
+  expect(await fileAt(page, BACKUP)).not.toBe('an-older-backup')
+})
 
-  // And the run put its OWN copy back, which is what the report's Undo needs.
-  expect(await fileExists(page, BACKUP)).toBe(true)
+test('a project the tool leaves unchanged keeps the backup that was already there', async ({
+  page,
+}) => {
+  // The rule a pre-emptive delete would get wrong. `_backup` copies only for a
+  // project the tool leaves modified (op_refresh saves nothing otherwise), so
+  // deleting the accepted copies up front would destroy this one and put
+  // nothing back — a project the run never touched, left with no way home.
+  const seed = seedFor('2.3.0')
+  seed.files[BACKUP] = 'an-older-backup'
+  seed.materialRefresh = { [P.houdini]: { changed: false } }
+  const offer = await runStudioRefresh(page, seed)
+
+  await offer.getByRole('switch').click()
+  await offer.getByRole('button', { name: /^Refresh 1 project$/ }).click()
+
+  await expect(
+    page.getByText('Refreshed — no project reported a change, so nothing was re-saved.'),
+  ).toBeVisible()
+  expect(await fileAt(page, BACKUP)).toBe('an-older-backup')
+})
+
+test('a run that fails destroys no backup at all', async ({ page }) => {
+  // The worst case of the same rule: the shelf tool is missing for this Houdini
+  // (the common failure), so nothing is refreshed and nothing is backed up. The
+  // copies the user kept have to survive that untouched.
+  const seed = seedFor('2.3.0')
+  seed.files[BACKUP] = 'an-older-backup'
+  seed.materialRefresh = {
+    [P.houdini]: {
+      ok: false,
+      error: 'No "Refresh Assets" tool was found on the DazToHue shelf.',
+      availableTools: ['DazToHue'],
+    },
+  }
+  const offer = await runStudioRefresh(page, seed)
+
+  await offer.getByRole('switch').click()
+  await offer.getByRole('button', { name: /^Refresh 1 project$/ }).click()
+
+  await expect(page.getByText('1 of 1 projects failed — see the report.')).toBeVisible()
+  expect(await fileAt(page, BACKUP)).toBe('an-older-backup')
+})
+
+test('undoing a run stops the studio counting the project as refreshed', async ({ page }) => {
+  const offer = await runStudioRefresh(page, seedFor('2.3.0'))
+  await offer.getByRole('button', { name: /^Refresh 1 project$/ }).click()
+  await expect(page.getByText('1 project refreshed and saved.')).toBeVisible()
+  await expect
+    .poll(async () => (await readStore(page))?.projects[P.houdini.toLowerCase()]?.dthVersion)
+    .toBe(ACTIVE_DTH)
+
+  await offer.getByRole('button', { name: /Undo this run/ }).click()
+  await expect(offer.getByText('Restored to the state before this run.')).toBeVisible()
+
+  // The file is back on the previous release's definitions, so the record must
+  // stop claiming otherwise — else the project reads as already done and is
+  // never offered again.
+  await expect.poll(async () => (await readStore(page))?.projects).toEqual({})
 })
 
 test('a dry run destroys no backup, and needs no acceptance to say so', async ({ page }) => {
@@ -245,10 +291,7 @@ test('a dry run destroys no backup, and needs no acceptance to say so', async ({
   await dry.click()
 
   await expect(offer.getByText('Dry run — no project file was saved')).toBeVisible()
-  expect(await page.evaluate(
-    (p) => ((window as any).__tauriMock.files as Map<string, string>).get(p),
-    BACKUP,
-  )).toBe('an-older-backup')
+  expect(await fileAt(page, BACKUP)).toBe('an-older-backup')
 })
 
 test('no existing backup, no warning — and nothing to accept', async ({ page }) => {

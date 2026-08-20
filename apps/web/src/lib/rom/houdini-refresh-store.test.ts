@@ -4,6 +4,7 @@ import {
   classifyRefreshTargets,
   dthReleaseChanged,
   emptyRefreshStore,
+  forgetRefreshed,
   noteReleaseSeen,
   parseRefreshStore,
   pruneRefreshStore,
@@ -165,6 +166,32 @@ describe('noteReleaseSeen', () => {
   it('never records an unresolved release — that would consume a real change', () => {
     const store = storeWith({}, '2.5')
     expect(noteReleaseSeen(store, '')).toBe(store)
+  })
+})
+
+describe('forgetRefreshed', () => {
+  it('returns an undone project to `unknown`, so it is offered again', () => {
+    const store = storeWith({ [KIRA]: '2.6', [NOVA]: '2.6' }, '2.6')
+    const undone = forgetRefreshed(store, KIRA)
+    // The restore put the file back on the previous release's definitions, so
+    // the record must stop claiming otherwise — a kept entry would bucket the
+    // project as `current` and quietly retire it from every future offer.
+    const [kira, nova] = classifyRefreshTargets(linked(KIRA, NOVA), undone, '2.6')
+    expect(kira?.bucket).toBe('unknown')
+    expect(nova?.bucket).toBe('current')
+  })
+
+  it('leaves the release seen — one project going back does not unsee it', () => {
+    // Clearing lastSeen would re-offer the WHOLE library to undo one project.
+    expect(forgetRefreshed(storeWith({ [KIRA]: '2.6' }, '2.6'), KIRA).lastSeenDthVersion).toBe('2.6')
+  })
+
+  it('matches the stored key however the path is spelled, and is a no-op otherwise', () => {
+    const store = storeWith({ [KIRA]: '2.6' }, '2.6')
+    expect(forgetRefreshed(store, 'd:\\Projects\\Demo\\Kira\\houdini\\Kira.hip').projects).toEqual(
+      {},
+    )
+    expect(forgetRefreshed(store, NOVA)).toBe(store)
   })
 })
 

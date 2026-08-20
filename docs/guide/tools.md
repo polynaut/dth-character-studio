@@ -192,18 +192,21 @@ What it can and can't say, which is the same short list as the
 - **Dismissing costs nothing.** *Not now* writes nothing; the offer returns on your
   next refresh.
 
-Every project is copied into its `backup/` folder before it's saved, and each saved
-project keeps an **Undo this run** button in the report — the way back if you ever
-need one project on the previous DazToHue release. Close the projects in Houdini
-first: Houdini writes the whole scene on save and would overwrite the result.
+A project is copied into its `backup/` folder before it's saved — and only then, since
+a project the tool leaves unchanged isn't saved at all. Each saved project keeps an
+**Undo this run** button in the report, the way back if you ever need one project on
+the previous DazToHue release; undoing also makes the studio stop counting that project
+as refreshed, so it's offered again next time. Close the projects in Houdini first:
+Houdini writes the whole scene on save and would overwrite the result.
 
-It's **one rolling copy per project**, which means a run replaces whatever copy is
-already there. If any of the projects it's about to sweep already has one, the dialog
-says so in red, lists them with their dates, and **won't let the run start** until you
-accept losing them — a dry run isn't held, because it never saves and so never touches
-a backup. Accept, and they're deleted in one step before Houdini is even started, then
-remade fresh by the run. If one of those copies is how you'd put a project back on an
-older DazToHue release, copy it somewhere else first: that dialog is the last point at
-which it exists.
+It's **one rolling copy per project**, which means saving a project replaces whatever
+copy is already there. If any of the projects it's about to sweep already has one, the
+dialog says so in red, lists them with their dates, and **won't let the run start**
+until you accept — a dry run isn't held, because it never saves and so never touches a
+backup. Only the projects the run actually saves lose their old copy, and nothing can
+say in advance which those are; a project that reports no change, or that fails, keeps
+the copy it had. If one of those copies is how you'd put a project back on an older
+DazToHue release, copy it somewhere else first: that dialog is the last point at which
+it's certainly still there.
 
 [← Guide overview](./README.md)

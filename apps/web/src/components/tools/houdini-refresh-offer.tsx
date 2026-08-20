@@ -3,8 +3,12 @@ import { Loader2, TriangleAlert, Undo2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button, Modal, Switch } from '@dth/ui'
-import { restoreHoudiniBackup, runHoudiniAssetRefresh } from '#/lib/rom/api.ts'
-import { refreshTargetPaths } from '#/lib/rom/houdini-refresh-store.ts'
+import {
+  noteHoudiniRefreshUndone,
+  refreshTargetPaths,
+  restoreHoudiniBackup,
+  runHoudiniAssetRefresh,
+} from '#/lib/rom/api.ts'
 
 import type {
   ExistingBackup,
@@ -49,13 +53,21 @@ function backupDate(modifiedAt: string): string {
 /**
  * The one destructive thing this dialog does, said before it happens.
  *
- * `_backup` keeps ONE rolling copy per project, so a run overwrites whatever is
- * already beside it — and the copy sitting there is, by construction, the one
- * somebody kept to get that project back onto an older DazToHue release. That
- * is too easy to lose by pressing a button labelled "Refresh", so the loss gets
- * its own block, its own list, and its own switch: the run does not start until
- * this is acknowledged, and the accepted copies are deleted in one visible step
- * rather than overwritten one at a time.
+ * `_backup` keeps ONE rolling copy per project, so saving a project overwrites
+ * whatever is already beside it — and the copy sitting there is, by
+ * construction, the one somebody kept to get that project back onto an older
+ * DazToHue release. That is too easy to lose by pressing a button labelled
+ * "Refresh", so the loss gets its own block, its own list, and its own switch:
+ * the run does not start until it is acknowledged.
+ *
+ * What the switch consents to is the overwrite itself, and the dialog does not
+ * pre-empt it by deleting anything: `_backup` copies only for a project the
+ * tool leaves modified, so deleting up front would take the copies beside every
+ * project that reports no change or fails outright — and all of them if the run
+ * cannot start at all. Left to the overwrite, a copy is lost exactly when it is
+ * replaced, and never otherwise. Which is also why this lists what is AT RISK
+ * rather than what will go: nothing here can know which projects the tool will
+ * leave modified.
  */
 function ReplaceBackupsWarning({
   backups,
@@ -74,14 +86,16 @@ function ReplaceBackupsWarning({
         <TriangleAlert className="mt-0.5 size-5 shrink-0" />
         <span>
           {plural(backups.length, 'project')} already {backups.length === 1 ? 'has' : 'have'} a
-          studio backup — running this <strong>destroys</strong>{' '}
+          studio backup — this run <strong>replaces</strong>{' '}
           {backups.length === 1 ? 'it' : 'them'}
         </span>
       </p>
       <p className="text-sm">
-        Each project keeps <strong>one rolling copy</strong>, so this run replaces what is there.
-        If one of these is how you would put a project back on an older DazToHue release, copy it
-        somewhere else first — this is the last point at which it exists.
+        Each project keeps <strong>one rolling copy</strong>, so saving a project overwrites what
+        is there. Only the projects this run actually saves lose theirs — and nothing here can say
+        in advance which those are. If one of these is how you would put a project back on an
+        older DazToHue release, copy it somewhere else first: this is the last point at which it
+        is certainly still there.
       </p>
       <ul className="max-h-32 space-y-1 overflow-y-auto text-xs text-muted-foreground">
         {backups.map((backup) => (
@@ -99,7 +113,7 @@ function ReplaceBackupsWarning({
           onCheckedChange={onAccept}
         />
         <label htmlFor="replace-houdini-backups" className="text-sm">
-          Delete {backups.length === 1 ? 'it' : 'them'} and take fresh backups of this run.
+          Let this run overwrite {backups.length === 1 ? 'it' : 'them'} with its own backups.
         </label>
       </div>
     </div>
@@ -141,6 +155,11 @@ function SweepReport({ report }: { report: MaterialUtilReport }) {
     setRestoring(hipPath)
     try {
       await restoreHoudiniBackup({ data: { hipPath, backupPath } })
+      // The record follows the file: the project is back on the definitions it
+      // had before the sweep, so the studio must stop claiming it refreshed it.
+      // Left stamped it would read as already-on-this-release and never be
+      // offered again — retired by the very act of being put back.
+      await noteHoudiniRefreshUndone(hipPath)
       setRestored((prev) => new Set(prev).add(hipPath))
       toast.success(`${fileName(hipPath)} is back to the state it was in before the run.`)
     } catch (e) {
@@ -189,7 +208,7 @@ function SweepReport({ report }: { report: MaterialUtilReport }) {
                   size="sm"
                   className="mt-1.5"
                   disabled={restoring !== ''}
-                  title={`Put ${fileName(entry.hipPath)} back the way it was before this run — the copy in its backup folder. Close it in Houdini first: an open copy would save over the restore.`}
+                  title={`Put ${fileName(entry.hipPath)} back the way it was before this run — the copy in its backup folder. The studio also stops counting it as refreshed, so it is offered again. Close it in Houdini first: an open copy would save over the restore.`}
                   onClick={() => void restore(entry.hipPath, entry.backupPath)}
                 >
                   {restoring === entry.hipPath ? <Loader2 className="animate-spin" /> : <Undo2 />}{' '}
@@ -215,11 +234,10 @@ export function HoudiniRefreshOffer({
   /** The user accepted losing the backups already on disk (see
    *  {@link ReplaceBackupsWarning}). Gates the run, nothing else. */
   const [replaceAccepted, setReplaceAccepted] = useState(false)
-  /** A real run has been through, so the copies beside the projects are now
-   *  THIS run's — the report's Undo depends on them. From here on the warning
-   *  is gone and a re-run deletes nothing: the thing it warned about has
-   *  already happened, and the copies it would now be aimed at are the ones the
-   *  user may still want to use. */
+  /** A real run has been through, so the copies beside the projects it saved
+   *  are now THIS run's — the report's Undo depends on them. From here on the
+   *  warning is gone: the loss it named has already happened, and the copies it
+   *  would now be aimed at are the ones the user may still want to use. */
   const [replaced, setReplaced] = useState(false)
   const busy = running !== ''
 
@@ -229,7 +247,7 @@ export function HoudiniRefreshOffer({
   const skipped = plan.candidates.length - targets.length
   const hipPaths = refreshTargetPaths(plan.candidates)
   const doomedBackups = replaced ? [] : plan.existingBackups
-  /** A real run is held until the destruction is acknowledged. The dry run is
+  /** A real run is held until the overwrite is acknowledged. The dry run is
    *  not: it never saves, so it never reaches `_backup` and destroys nothing. */
   const blockedByBackups = doomedBackups.length > 0 && !replaceAccepted
 
@@ -238,12 +256,7 @@ export function HoudiniRefreshOffer({
     setReport(null)
     try {
       const result = await runHoudiniAssetRefresh({
-        data: {
-          hipPaths,
-          dthVersion: plan.activeDthVersion,
-          dryRun,
-          replaceBackups: dryRun ? [] : doomedBackups.map((b) => b.backupPath),
-        },
+        data: { hipPaths, dthVersion: plan.activeDthVersion, dryRun },
       })
       setReport(result)
       if (dryRun) return
@@ -327,9 +340,10 @@ export function HoudiniRefreshOffer({
       </p>
 
       <p className="text-xs text-muted-foreground">
-        Every project is copied into its <code>backup/</code> folder before it is saved, and each
-        saved project keeps an <strong>Undo this run</strong> button in the report below — the way
-        back if you ever need one of them on the previous DazToHue release.
+        A project is copied into its <code>backup/</code> folder before it is saved — and only
+        then, because a project the tool leaves unchanged is not saved at all. Each saved project
+        keeps an <strong>Undo this run</strong> button in the report below — the way back if you
+        ever need one of them on the previous DazToHue release.
         {/* The rolling-copy caveat belongs to whichever block is doing the work:
             when copies are actually about to be destroyed the warning above
             states it in full, and repeating it here only teaches the eye to
