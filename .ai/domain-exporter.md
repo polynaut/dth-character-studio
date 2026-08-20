@@ -271,17 +271,24 @@ Part of the domain reference — `.ai/domain.md` is the index.
   for a pre-export generation). Full story + the scan/badge/repair legs:
   `domain-rom.md` → "The rate those frame numbers mean".
 - **The Unreal leg** (v0.75): the project window's footer bar links
-  `.uproject` files; each card's install button opens a DIALOG, not a one-shot
-  copy: DTH content (`install_unreal_dth` — the release's
-  `Unreal Engine Content/DazToHue` → `Content/DazToHue`) plus every configured
-  plugin build matching the project's engine version, all pre-checked, each
-  installed with overwrite (a checked item is explicit intent; installs copy
-  over, never delete first). The
-  engine version is read from the `.uproject`'s `EngineAssociation` at
-  dialog-open (`unreal_project_state`) and NEVER stored — a project can be
+  `.uproject` files; each card's Utils button (🔧, the linked-asset card
+  language — v0.86; it was a dedicated install button through v0.85) opens the
+  `UnrealUtilsPanel` DRAWER, whose **Install** tab is a checklist, not a
+  one-shot copy: DTH content (`install_unreal_dth` — the release's
+  `Unreal Engine Content/DazToHue` → `Content/DazToHue`), the studio's own
+  bridge, plus every configured plugin build matching the project's engine
+  version, each installed with overwrite (a checked item is explicit intent;
+  installs copy over, never delete first). **Pre-checked = what the project is
+  MISSING** (`preselected`): an item already installed starts OFF — the one
+  exception is an installed-but-STALE bridge (the only row whose version the
+  studio can judge, via `bridgeOutdated`), which is offered like an absent one.
+  The engine version is read from the `.uproject`'s `EngineAssociation` at
+  drawer-open (`unreal_project_state`) and NEVER stored — a project can be
   retargeted in Unreal any time; a GUID association (source build) lists every
   build UNCHECKED instead, because a wrong plugin binary is a startup error in
-  Unreal. Plugin sources are the `unrealPluginFolders` setting, scanned by
+  Unreal. The card carries ONE amber mark for "this project still needs
+  something" (no DTH content, or a stale bridge) and clicking it opens the same
+  drawer — the wrench itself is neutral, so the signal cannot live on it. Plugin sources are the `unrealPluginFolders` setting, scanned by
   Rust `scan_unreal_plugins` (a bounded 3-deep walk covering three shapes: a
   plugin folder, a folder of plugins, a multi-build root
   `…/UE_5.7/Plugins/…`). Which engine a build is FOR: the deepest PATH segment

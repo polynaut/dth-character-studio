@@ -147,10 +147,11 @@ each set it re-imports, one row per import job.
 **Install the Runner first.** The **DTH Character Studio Runner** for Unreal
 (`Plugins\DTHCharacterStudioRunner`, pure Python) is an ordinary item in the
 project card's
-[install dialog](./03-first-project.md#linking-unreal-projects), pre-checked
-alongside DTH content. Every Install rewrites it, so a re-install is how you
-refresh it; the card shows an amber ⚠ when its copy is older than the one this app
-ships, and a send is then **refused rather than attempted**.
+[Utils → Install](./03-first-project.md#linking-unreal-projects), ticked for you
+alongside DTH content while the project doesn't have it. Every Install rewrites
+it, so a re-install is how you refresh it; the card shows an amber ⚠ when its copy
+is older than the one this app ships — a send is then **refused rather than
+attempted**, and the drawer re-ticks the row so the fix is one press.
 
 > [!NOTE]
 > **Restart the editor once after installing it.** Unreal loads plugins at

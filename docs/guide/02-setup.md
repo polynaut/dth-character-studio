@@ -173,13 +173,13 @@ the `.uplugin`'s `EngineVersion`; no version anywhere means it is offered for ev
 engine. A number that could not be an engine version is skipped rather than
 believed: in `KawaiiPhysics_5.7_1.21.0` only `5.7` is one.
 
-Nothing installs from here — the install dialog on a project's Unreal card does
+Nothing installs from here — the **Utils** drawer on a project's Unreal card does
 that, per project. See
 [Linking Unreal projects](./03-first-project.md#linking-unreal-projects).
 
 > **A name is a label; the binaries are the truth.** A built plugin carries a
 > **`BuildId`**, and Unreal refuses to load one whose id differs from the engine's.
-> The install dialog checks it, marks a mismatch **built for another engine build**
+> The Install tab checks it, marks a mismatch **built for another engine build**
 > and leaves it unchecked — and it also decides which build you are offered when
 > two look alike.
 
