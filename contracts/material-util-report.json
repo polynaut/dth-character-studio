@@ -293,6 +293,39 @@
       "backupPath": "D:/chars/Ita/houdini/backup/Ita_dthbak.hiplc"
     }
   ],
+  "retarget": [
+    {
+      "hipPath": "D:/chars/Nova/houdini/Nova.hiplc",
+      "ok": true,
+      "error": "",
+      "retargeted": [
+        {
+          "label": "/obj/DazToHue/DazToHueImport import_character_dtu_file",
+          "from": "$HIP/daz-export/primary/Ita.dth",
+          "to": "$HIP/daz-export/primary/Nova.dth"
+        },
+        {
+          "label": "/obj/DazToHue/DazToHueExport export_directory",
+          "from": "D:/chars/Ita/export/",
+          "to": "D:/chars/Nova/export/"
+        }
+      ],
+      "renamedNodes": [
+        {
+          "label": "/obj/DazToHue/DazToHueImport import_character_name",
+          "from": "Ita",
+          "to": "Nova"
+        }
+      ],
+      "keptNames": [
+        "/obj/DazToHue/DazToHueImport1 import_character_name = ItaBackup"
+      ],
+      "foreign": [
+        "/obj/geo1/file1 file"
+      ],
+      "backupPath": "D:/chars/Nova/houdini/backup/Nova_dthbak.hiplc"
+    }
+  ],
   "prefill": [
     {
       "hipPath": "D:/chars/Ita/houdini/Ita.hiplc",

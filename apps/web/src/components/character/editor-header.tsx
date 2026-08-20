@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { Link } from '@tanstack/react-router'
+import { toast } from 'sonner'
 import { ArrowLeft, CircleX, Pencil, Save, TriangleAlert, Undo2 } from 'lucide-react'
 
 import { Avatar } from '#/components/avatar.tsx'
@@ -8,11 +9,15 @@ import { DthExportAction } from '#/components/character/dth-export.tsx'
 import { ExportPipelinePanel } from '#/components/character/export-pipeline-panel.tsx'
 import { FolderMoveChip } from '#/components/folder-move-chip.tsx'
 import { ImageDialog } from '#/components/image-dialog.tsx'
+import { RenameExportsDialog } from '#/components/character/rename-exports-dialog.tsx'
 import { Button, EditableTitle, useModifierHeld, useStickyHeaderInset } from '@dth/ui'
+import { applyCharacterRenameCleanup, fetchCharacterRenameImpact } from '#/lib/rom/api.ts'
+import { formatBytes } from '#/lib/rom/rename-exports.ts'
 import { useConfirm } from '#/lib/use-confirm.tsx'
 import { characterSkinning, countPoses } from '@dth/rom'
 
 import type { RootedDir } from '#/lib/character-paths.ts'
+import type { CharacterRenameImpact } from '#/lib/rom/api.ts'
 import type { ExportPipelineView } from '#/components/character/export-pipeline-panel.tsx'
 import type { CharacterDraft } from '#/lib/use-character-draft.ts'
 
@@ -121,6 +126,14 @@ export function EditorHeader({
   // rendered as the task list + progress bar anchored above the whole button
   // row (which spans more than that component's own buttons). Null = no run.
   const [exportPipeline, setExportPipeline] = useState<ExportPipelineView | null>(null)
+  // The rename's confirm dialog, promise-based like `useConfirm`: the inline
+  // title editor stays open (disabled) until this resolves, so cancelling puts
+  // the old name straight back.
+  const [renamePrompt, setRenamePrompt] = useState<{
+    next: string
+    impact: CharacterRenameImpact
+    resolve: (confirmed: boolean) => void
+  } | null>(null)
   const swallowNavRef = useRef(false)
   const headerRef = useRef<HTMLElement>(null)
 
@@ -146,11 +159,98 @@ export function EditorHeader({
   // `rethrow` hands a persist failure to EditableTitle, which resets its own
   // text and toasts. A refusal (validation / a save in flight) has already
   // toasted inside persistPatch — returning normally just closes the editor.
+  //
+  // What persistPatch does NOT cover is everything the OLD name still owns on
+  // disk: the export sets (named after the character, and naming it inside —
+  // see `lib/rom/rename-exports.ts`) and the Houdini projects importing them.
+  // Those are cleared + repointed by `applyCharacterRenameCleanup` AFTER the
+  // save lands, and the dialog above asks first whenever there is anything to
+  // lose.
   async function onRenameCharacter(next: string) {
-    await draft.persistPatch(
+    // A rename mid-run would delete the very files the export is writing.
+    if (exportPipeline) {
+      toast.error('A DTH Export run is in progress — rename the character once it has finished.')
+      return
+    }
+    // Read what the rename costs while the OLD name's files are still where
+    // this can find them. A failure here is not fatal to the rename itself, but
+    // it does mean the dialog cannot be trusted to be complete — so it stops,
+    // rather than clearing folders it could not enumerate.
+    const impact = await fetchCharacterRenameImpact({
+      data: { projectId, id: character.id },
+    })
+    if (impact.wipes) {
+      const confirmed = await new Promise<boolean>((resolve) => {
+        setRenamePrompt({ next, impact, resolve })
+      })
+      setRenamePrompt(null)
+      if (!confirmed) return
+    }
+    const previousName = character.name
+    const saved = await draft.persistPatch(
       { name: next },
-      { toast: `Renamed to “${next}”`, previousName: character.name, rethrow: true },
+      { toast: `Renamed to “${next}”`, previousName, rethrow: true },
     )
+    // Refused (validation, or a save in flight) — persistPatch has toasted, and
+    // nothing was renamed, so there is nothing to clean up after.
+    if (!saved) return
+    // Deliberately NOT awaited: the rename is on disk and the title is free to
+    // settle, while this runs hython over every linked project (tens of seconds
+    // each) behind its own toast.
+    void cleanUpAfterRename(previousName, impact)
+  }
+
+  /**
+   * Clear the old name's export trees and follow the rename into the Houdini
+   * projects, reporting as it goes.
+   *
+   * Runs after the rename has landed, so nothing here can fail it: every
+   * problem is a warning naming its own manual fallback. Silent when there is
+   * nothing to do — a character with no exports and no linked projects gets the
+   * plain “Renamed to …” and no second toast.
+   */
+  async function cleanUpAfterRename(previousName: string, impact: CharacterRenameImpact) {
+    // Nothing to clear, and nothing that CAN be repointed (a blocked Houdini
+    // was already named in the dialog — attempting it here would only trade
+    // that one clear sentence for a hython error).
+    const repointing = impact.houdiniProjects.length > 0 && !impact.houdiniBlocked
+    if (!impact.wipes && !repointing) return
+    const running = toast.loading(
+      repointing
+        ? 'Clearing the old exports and repointing the Houdini projects…'
+        : 'Clearing the old exports…',
+    )
+    try {
+      const report = await applyCharacterRenameCleanup({
+        data: {
+          projectId,
+          id: character.id,
+          previousName,
+          previousFolder: impact.folderAbs,
+        },
+      })
+      const cleared = report.wiped.reduce((sum, target) => sum + target.bytes, 0)
+      const parts = [
+        report.wiped.length > 0 ? `Cleared ${formatBytes(cleared)} of old exports` : '',
+        report.houdiniUpdated.length > 0
+          ? `repointed ${report.houdiniUpdated.length === 1 ? '1 Houdini project' : `${report.houdiniUpdated.length} Houdini projects`}`
+          : '',
+      ].filter(Boolean)
+      // Dismissed rather than reported as a success when nothing actually
+      // happened: the warnings below are then the whole story, and a green
+      // "done" above them would be the wrong half of it.
+      if (parts.length > 0) {
+        toast.success(`${parts.join(' · ')}. Run DTH Export to rebuild them.`, { id: running })
+      } else {
+        toast.dismiss(running)
+      }
+      for (const warning of report.warnings) toast.warning(warning)
+    } catch (e) {
+      toast.error(
+        `The rename landed, but the old exports could not be cleaned up: ${e instanceof Error ? e.message : String(e)}`,
+        { id: running },
+      )
+    }
   }
 
   return (
@@ -368,6 +468,16 @@ export function EditorHeader({
           // regenerates and rolls back on failure.
           onApply={(produce) => draft.persistPatch(produce, { toast: 'Image updated' })}
           onClose={() => setImageDialogOpen(false)}
+        />
+      )}
+
+      {renamePrompt && (
+        <RenameExportsDialog
+          fromName={character.name}
+          toName={renamePrompt.next}
+          impact={renamePrompt.impact}
+          onConfirm={() => renamePrompt.resolve(true)}
+          onClose={() => renamePrompt.resolve(false)}
         />
       )}
     </>
