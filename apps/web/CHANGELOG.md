@@ -1,5 +1,14 @@
 # @dth/web
 
+## 0.86.1
+
+### Patch Changes
+
+- [#926](https://github.com/polynaut/dth-character-studio/pull/926) [`2726f37`](https://github.com/polynaut/dth-character-studio/commit/2726f37d571ace2360515ffa73cd2278bbe4d929) Thanks [@polynaut](https://github.com/polynaut)! - The PRIMARY label leads the primary scene card's badge row, with the hair-export glyph to its right. The label is the card's identity and the glyph a per-scene state indicator — on the one card that shows both, identity reads first.
+- Updated dependencies [[`fc17e9f`](https://github.com/polynaut/dth-character-studio/commit/fc17e9f72d3dfa5ebe1c664f18e908be22ee28b0), [`fc64c34`](https://github.com/polynaut/dth-character-studio/commit/fc64c34bf8489c09c7b75318308cd6b307e6fdce), [`05ebed1`](https://github.com/polynaut/dth-character-studio/commit/05ebed1f05ea1ae167ff3e00433b46509ac1d438)]:
+  - @dth/rom@0.86.1
+  - @dth/ui@0.86.1
+
 ## 0.86.0
 
 ### Minor Changes
