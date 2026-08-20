@@ -61,10 +61,11 @@ says so). A parameter your installed DazToHue doesn't have yet is skipped.
   imports read the `daz-export` intermediates, while Houdini writes its
   Unreal-bound output to the character's **`export/`** folder (`$JOB/export/`).
   One `export/` per character, shared by every scene's project.
-- A character with several Daz scenes gets a **Daz scene to import** picker — from
-  the **second** project on; the first is wired to the primary scene. Each scene
-  exports into its own folder, so the pick decides which export set the imports
-  point at. Generate one project per scene to cover them all.
+- A character with several Daz scenes gets a **Daz scene to import** picker, on
+  every project including the first. It starts on the primary scene, so pressing
+  Generate straight away wires that one. Each scene exports into its own folder,
+  so the pick decides which export set the imports point at. Generate one project
+  per scene to cover them all.
 
 Generate a second or third project and they land in the same houdini folder,
 sharing both `$JOB` and `$HIP` — the

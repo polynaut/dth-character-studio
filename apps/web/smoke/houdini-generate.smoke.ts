@@ -51,7 +51,7 @@ async function openGenerateDialog(
   })
   if (opts.noProjects) {
     // The FIRST-project state: the demo character links one Houdini project,
-    // and the scene picker only appears from the second project on.
+    // so a character with none has to be built by hand.
     const charPath = `${P.charFolder}/Kira.json`
     const char = JSON.parse(seed.files[charPath] ?? '{}') as Record<string, unknown>
     char.houdiniProjects = []
@@ -96,17 +96,21 @@ test('a single-scene character is not asked which scene — there is only one', 
   expect(await commandCalls(page, 'create_houdini_project')).toHaveLength(1)
 })
 
-test('the first project is not asked either — it is the primary scene\'s', async ({ page }) => {
+test('the FIRST project is asked too — the primary is the default, not a decision', async ({
+  page,
+}) => {
   const dialog = await openGenerateDialog(page, { extraScene: true, noProjects: true })
 
-  // TWO scenes are linked, but no Houdini project is yet: the character's
-  // first project is its main one, wired to the primary without a question.
-  await expect(dialog.getByLabel('Daz scene to import')).toHaveCount(0)
-  // The one that MATTERS: two scenes linked, no picker — so the line naming
-  // the primary is the only thing telling the user which of them this project
-  // will be wired to.
-  await expect(dialog).toContainText('KiraDefault_G9_GP')
-  await expect(dialog).not.toContainText('KiraSummertide')
+  // TWO scenes are linked and no Houdini project is yet. This case used to skip
+  // the picker and wire the primary silently — a choice made on the user's
+  // behalf that nothing on screen admitted to, and that surfaced only as five
+  // import paths aimed at the wrong scene inside the finished network.
+  await expect(dialog.getByLabel('Daz scene to import')).toBeVisible()
+  // The primary is still where it STARTS, so nothing got slower for the case
+  // the old shortcut was built for: open, press Generate, and the project is
+  // wired to the primary exactly as before.
+  await expect(dialog.getByText(/wired to/)).toContainText('KiraDefault_G9_GP')
+  await expect(dialog.getByText(/wired to/)).toContainText('(primary)')
   await dialog.getByRole('button', { name: 'Generate', exact: true }).click()
   await expect(page.getByRole('dialog')).toHaveCount(0)
 
@@ -115,12 +119,30 @@ test('the first project is not asked either — it is the primary scene\'s', asy
   expect(prefill.dth).not.toContain('KiraSummertide')
 })
 
+test('…and the pick is honoured on that first project', async ({ page }) => {
+  // The half that makes showing the picker worth it: a character whose FIRST
+  // project is for an outfit scene. Under the old rule this was unreachable —
+  // the only ways to it were generating a throwaway project first, or re-aiming
+  // five paths by hand in Houdini.
+  const dialog = await openGenerateDialog(page, { extraScene: true, noProjects: true })
+
+  await dialog.getByLabel('Daz scene to import').click()
+  await page.getByRole('option', { name: /KiraSummertide/ }).click()
+  await expect(dialog.getByText(/wired to/)).toContainText('KiraSummertide')
+  await dialog.getByRole('button', { name: 'Generate', exact: true }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+
+  const prefill = await lastPrefill(page)
+  expect(prefill.dth).toBe('$HIP/daz-export/KiraSummertide_G9_GP/Kira_KiraSummertide_G9_GP.dth')
+  expect(prefill.dth).not.toContain('KiraDefault')
+})
+
 test('the chosen scene decides the import paths', async ({ page }) => {
   const dialog = await openGenerateDialog(page, { extraScene: true })
 
-  // With two scenes AND a project already linked (the demo's — load-bearing:
-  // the first project never asks) the picker appears, defaulting to the
-  // primary.
+  // Two scenes linked, so the picker appears, defaulting to the primary. (The
+  // demo character already links a project; that no longer decides anything —
+  // the two first-project specs above cover the other side.)
   const picker = dialog.getByLabel('Daz scene to import')
   await expect(picker).toBeVisible()
   // Before the pick, the summary line names the DEFAULT — the primary.
