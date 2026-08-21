@@ -210,6 +210,83 @@ export function sceneDthPath(
   return [root, entry.folder, `${name}.dth`].filter(Boolean).join('/')
 }
 
+/** What the disk says about one export set — see {@link exportSetDeath}. */
+export interface ExportSetVerdict {
+  /** Why the set did NOT land ('' = it did). Fails the scene. */
+  dead: string
+  /** Something is off but the export itself landed — reported, never fatal. */
+  warning: string
+}
+
+/**
+ * Did this scene's Daz export actually LAND — judged from the export folder's
+ * own state, because every report channel above it can lie. The Runner marks a
+ * job row `done` when the script it started returns, success or not; the ROM
+ * run log is stamped by the ROM leg BEFORE the export block; and a script that
+ * dies at the C++ level (measured 2026-08-21: the DTH Exporter crashed Daz's
+ * script engine 2 s into the Alembic export — `dzscript.cpp(1192): Unhandled
+ * error`) runs neither its own failure alert nor its backup restore. What that
+ * death cannot fake is the disk: the `.dthprev` backups the export sweep took
+ * are still sitting there (only the script's finish step removes them), and
+ * the `.dth` the exporter opens first is 0 bytes. Feeding that folder to the
+ * Houdini leg produced a 17-second "success" over garbage — this verdict is
+ * what stops the cascade.
+ *
+ * Pure — the caller lists the folder and stats the `.dth`; this only judges.
+ * Returns '' when the set looks landed, else the reason it did not.
+ *
+ * KNOWN HOLE, stated rather than pretended shut: this asks "is a real `.dth`
+ * here", never "is it THIS run's". A script the engine kills BEFORE the export
+ * block's move-aside sweep (scene load, figure resolution, the ROM rebuild
+ * under `rom-export`) leaves the previous run's full set untouched — so every
+ * channel reads green and the Houdini leg cooks last week's export under this
+ * run's checkmark. The measured crash lands 1–2 s INTO the Alembic export,
+ * past the sweep, which is why the corpse is what the disk holds there. The
+ * obvious close — compare the `.dth` mtime against the run's start — is NOT
+ * taken on purpose: the export folder is routinely a network drive, and a NAS
+ * clock minutes behind the machine's would fail every healthy scene at once.
+ * That trade (a rare stale set passes vs. every export fails on a clock skew)
+ * is why the freshness question stays unanswered. See `.ai/gotchas-daz.md`.
+ */
+export function exportSetDeath(
+  /** File names in the scene's export folder (names only, no paths). */
+  entryNames: ReadonlyArray<string>,
+  /** The set's `.dth` file name, e.g. `LaraCroft_G81.dth` — its stem scopes
+   *  which files belong to this set, same prefix rule the generated script's
+   *  own sweep uses. */
+  dthFileName: string,
+  /** The `.dth` file's size in bytes, or null when it does not exist. Pass
+   *  undefined to skip the `.dth` checks entirely — the hair-only mode never
+   *  touches it, so its absence proves nothing there. */
+  dthSize?: number | null,
+): ExportSetVerdict {
+  const base = dthFileName.replace(/\.dth$/i, '')
+  const lower = base.toLowerCase()
+  const leftover = entryNames.find(
+    (name) => name.toLowerCase().startsWith(lower) && name.toLowerCase().endsWith('.dthprev'),
+  )
+  // A leftover backup is a WARNING, never a verdict. It says the export
+  // script's finish step did not complete — which is not the same claim as
+  // "this export did not land", and reading it as one cost a healthy scene its
+  // Houdini leg (measured 2026-08-21: a successful export whose backups the
+  // runtime failed to purge was reported as a failure, while its `.abc` and
+  // `.dth` sat there full-size and correct). The runtime bug behind that is
+  // fixed in v100, but every older generated script in the field still leaves
+  // them, so the rule has to be honest on its own. The `.dth` is the witness
+  // that actually answers the question.
+  const warning = leftover
+    ? `the export folder still holds backup files from an earlier run (${leftover}) — harmless, but a sign the export script did not finish cleanly`
+    : ''
+  if (dthSize === undefined) return { dead: '', warning }
+  if (dthSize === null) {
+    return { dead: `no ${dthFileName} was written — the export never produced its manifest`, warning }
+  }
+  if (dthSize === 0) {
+    return { dead: `${dthFileName} is empty (0 bytes) — the exporter was cut off before writing it`, warning }
+  }
+  return { dead: '', warning }
+}
+
 /**
  * Build the job for a set of SELECTED scenes. Only scenes that resolve to a
  * `.dth` path are included — a scene with no export path has nothing for a
@@ -468,8 +545,27 @@ const DEATH_SHORT_LOG = 8
  *  error line beats a confident wrong summary, but it has to be an error. */
 const DEATH_ERROR_LINE =
   /\b(error|fatal|traceback|exception|segmentation fault|aborted|cannot|could not|unable to|not found|denied|refused|failed)\b/i
+/** The run's OWN narration — the step lines 456.py and the HDA print. Only
+ *  these count as "the run was demonstrably still working": generic cook
+ *  chatter says a node was busy, these say the batch itself moved forward. */
+const DEATH_STEP_LINE = /^(?:DazToHue|DTH Character Studio): /
 
-export function houdiniDeathReason(consoleText: string): string {
+/** How much of a quoted line a death reason may carry — it ends up in a toast,
+ *  and a step line naming an absolute `.hiplc` path is as long as any error. */
+const DEATH_LINE_CAP = 160
+const clampLine = (line: string): string =>
+  line.length > DEATH_LINE_CAP ? `${line.slice(0, DEATH_LINE_CAP - 1)}…` : line
+
+/** The exit-code clause appended to a death reason when the spawn recorded
+ *  one. Negative codes on Windows are NTSTATUS values (a crash, not a return)
+ *  — the hex spelling is the one crash databases and search engines know. */
+function exitCodeClause(exitCode: number | null | undefined): string {
+  if (exitCode === null || exitCode === undefined || exitCode === 0) return ''
+  const hex = exitCode < 0 ? ` / 0x${(exitCode >>> 0).toString(16).toUpperCase()}` : ''
+  return ` (hython exit code ${exitCode}${hex})`
+}
+
+export function houdiniDeathReason(consoleText: string, exitCode: number | null = null): string {
   const lines = consoleText
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -481,12 +577,36 @@ export function houdiniDeathReason(consoleText: string): string {
   ) {
     return 'Houdini could not get a license'
   }
+  const lastIndexMatching = (pattern: RegExp): number => {
+    for (let i = tail.length - 1; i >= 0; i--) {
+      if (pattern.test(tail[i] ?? '')) return i
+    }
+    return -1
+  }
+  const lastError = lastIndexMatching(DEATH_ERROR_LINE)
+  const lastStep = lastIndexMatching(DEATH_STEP_LINE)
+  // A run that kept narrating AFTER its newest error-shaped line did not die
+  // of that line — it survived it. Naming the last step it reached is the
+  // honest answer, where quoting the stale "error" was a confident wrong one
+  // (measured 2026-08-21: hython died silently mid "exporting animation
+  // curves" and the toast blamed a benign HDA load warning from minutes
+  // earlier). Same rule when there is no error-shaped line at all: the step
+  // is the run's own last word, not cook chatter dressed up as a diagnosis.
+  if (lastStep >= 0 && lastStep > lastError) {
+    const step = clampLine(tail[lastStep] ?? '')
+    return `Houdini exited during "${step}"${exitCodeClause(exitCode)}`
+  }
   // The newest error-shaped line in the tail; failing that, the last line of a
   // log too short to have said anything else.
   const spoken =
-    [...tail].reverse().find((line) => DEATH_ERROR_LINE.test(line)) ??
+    (lastError >= 0 ? tail[lastError] : undefined) ??
     (lines.length <= DEATH_SHORT_LOG ? (lines[lines.length - 1] ?? '') : '')
-  return spoken.length > 160 ? `${spoken.slice(0, 159)}…` : spoken
+  if (!spoken) {
+    // Nothing quotable at all — the exit code is then the only witness left.
+    const clause = exitCodeClause(exitCode)
+    return clause ? `Houdini exited${clause}` : ''
+  }
+  return `${clampLine(spoken)}${exitCodeClause(exitCode)}`
 }
 
 /**
@@ -607,9 +727,12 @@ export function houdiniRunStateFrom(
    *  claims nothing went wrong: "a finished run explains itself" was the
    *  assumption that let an export of nothing be reported as an export. */
   consoleText = '',
+  /** The dead hython's exit code, when the spawn recorded one (null = alive,
+   *  never tracked, or killed without a code). Only the dead branch reads it. */
+  exitCode: number | null = null,
 ): HoudiniRunState {
   const dead = (): HoudiniRunState => {
-    const reason = houdiniDeathReason(consoleText)
+    const reason = houdiniDeathReason(consoleText, exitCode)
     return reason ? { state: 'dead', reason } : { state: 'dead' }
   }
   if (!result) return houdiniRunning ? { state: 'starting' } : dead()
