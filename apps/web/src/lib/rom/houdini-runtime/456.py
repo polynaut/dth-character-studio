@@ -111,17 +111,82 @@ def is_export_node(node):
     return node.type().name().lower() in EXPORT_TYPES
 
 
-def import_path_of(network):
-    """The `.dth` a network imports — the studio WROTE that file at a path it
-    computes, which makes it an exact identity for the Daz scene behind this
-    network. Far steadier than a node name, which the user may rename."""
-    for node in network.children():
-        if "daztohueimport" not in node.type().name().lower():
+def upstream_import_node(node, limit=256):
+    """THIS node's own DazToHueImport, found by walking its inputs upstream.
+
+    An export node's payload arrives down the WIRE from its import node, so the
+    import that feeds it is the one connected to it. Asking the export node's
+    PARENT instead is only right when a subnet holds exactly one network —
+    measured 2026-08-21 on a real project whose `/obj/DazToHue` held TWO
+    complete networks side by side, where every export node answered with the
+    FIRST import node's `.dth`.
+
+    Breadth-first so the nearest import wins; a visited set and a hard limit so
+    neither a cycle nor a very long chain can hang a run.
+    """
+    seen = set()
+    queue = [node]
+    while queue and len(seen) < limit:
+        current = queue.pop(0)
+        try:
+            inputs = current.inputs()
+        except Exception:
             continue
-        parm = node.parm("import_character_dtu_file")
-        if parm is not None:
-            return parm.evalAsString()
-    return ""
+        for src in inputs:
+            if src is None:
+                continue
+            try:
+                key = src.path()
+                name = src.type().name().lower()
+            except Exception:
+                continue
+            if key in seen:
+                continue
+            seen.add(key)
+            # `daztohuegroomimport` does NOT contain `daztohueimport`.
+            if "daztohueimport" in name:
+                return src
+            queue.append(src)
+    return None
+
+
+def import_path_of(node):
+    """The `.dth` THIS export node's network imports — the studio WROTE that
+    file at a path it computes, which makes it an exact identity for the Daz
+    scene behind this network. Far steadier than a node name, which the user
+    may rename.
+
+    Resolved from the NODE (its own wired import), falling back to the parent's
+    SOLE import node when no wire can be followed. Two imports in one parent and
+    no wire is '' — "cannot tell" — and `collect_targets` then leaves the node
+    alone, which is the safe direction: exporting a network the user did not
+    tick writes over a set this run was never asked to touch.
+    """
+    found = upstream_import_node(node)
+    if found is None:
+        try:
+            children = node.parent().children()
+        except Exception:
+            return ""
+        # Per child, not per list: one node whose type() raises must cost this
+        # ONE node's answer, not the whole run. `collect_targets` calls this
+        # inside the loop that builds the export list, so an exception escaping
+        # here takes every remaining network with it.
+        candidates = []
+        for child in children:
+            try:
+                if "daztohueimport" in child.type().name().lower():
+                    candidates.append(child)
+            except Exception:
+                continue
+        if len(candidates) != 1:
+            return ""
+        found = candidates[0]
+    try:
+        parm = found.parm("import_character_dtu_file")
+        return parm.evalAsString() if parm is not None else ""
+    except Exception:
+        return ""
 
 
 class DialogAnswers(object):
@@ -432,7 +497,7 @@ def collect_targets(wanted):
     for node in hou.node("/obj").allSubChildren():
         if not is_export_node(node):
             continue
-        source = normalize(import_path_of(node.parent()))
+        source = normalize(import_path_of(node))
         label = wanted.get(source)
         if label is None:
             continue
@@ -601,7 +666,7 @@ def run(job):
                 continue
             found_any = True
             print("DTH Character Studio: export node {} imports {}".format(
-                node.path(), normalize(import_path_of(node.parent())) or "(nothing)"))
+                node.path(), normalize(import_path_of(node)) or "(nothing)"))
         if not found_any:
             print("DTH Character Studio: the scene has NO DazToHue export nodes at all - "
                   "did the DazToHue otls load in this session? (scene: {})".format(

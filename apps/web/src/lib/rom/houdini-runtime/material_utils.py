@@ -1868,9 +1868,118 @@ def fire_import_callback(node):
 EXPORT_TYPE_NAMES = ("daztohueexport", "daztohuegroomexport")
 
 
-def _network_character_name(network):
-    """The character name of one DazToHue network — its import node's
-    `import_character_name`.
+def _import_nodes_in(parent):
+    """Every DazToHueImport node directly inside `parent`, in child order.
+
+    `daztohuegroomimport` does NOT contain `daztohueimport`, so the groom
+    importer is excluded by the same substring test used everywhere else.
+    """
+    if parent is None:
+        return []
+    try:
+        children = parent.children()
+    except Exception:
+        return []
+    found = []
+    for child in children:
+        try:
+            if "daztohueimport" in child.type().name().lower():
+                found.append(child)
+        except Exception:
+            continue
+    return found
+
+
+def _upstream_import_node(node, limit=256):
+    """THIS node's own DazToHueImport, found by walking its inputs upstream.
+
+    The character name an export node writes under travels down the WIRE: the
+    HDA reads a `character_name` GEOMETRY attribute that the import node put
+    there. So the import feeding a given export node is the one connected to
+    it, which is what this follows.
+
+    Asking the export node's PARENT instead — the shape this replaced — is only
+    right when a subnet holds exactly one network. Measured 2026-08-21 on a real
+    project: `/obj/DazToHue` held TWO complete networks side by side
+    (`DazToHueSkeleton` + `DazToHueSkeleton1`, `DazToHueMaterial` +
+    `DazToHueMaterial1`, and so on), so both export nodes resolved to the FIRST
+    import node's name, the caller deduped the two identical answers, and a
+    two-network project reported ONE export set. The run list showed both all
+    along, because it names each node by its own network box.
+
+    Breadth-first so the NEAREST import wins, with a visited set and a hard
+    limit: a hand-built network can be long, and neither a cycle nor a
+    thousand-node chain may hang a scan whose whole point is to be cheap.
+    """
+    seen = set()
+    queue = [node]
+    while queue and len(seen) < limit:
+        current = queue.pop(0)
+        try:
+            inputs = current.inputs()
+        except Exception:
+            continue
+        for src in inputs:
+            if src is None:
+                continue
+            try:
+                key = src.path()
+                name = src.type().name().lower()
+            except Exception:
+                continue
+            if key in seen:
+                continue
+            seen.add(key)
+            # Same exclusion as everywhere else: `daztohuegroomimport` does NOT
+            # contain `daztohueimport`.
+            if "daztohueimport" in name:
+                return src
+            queue.append(src)
+    return None
+
+
+def _import_parm_text(node, parm_name):
+    """One import node's parm as trimmed text — '' for absent/blank/unreadable."""
+    if node is None:
+        return ""
+    parm = node.parm(parm_name)
+    if parm is None:
+        return ""
+    try:
+        return str(parm.evalAsString() or "").strip()
+    except Exception:
+        return ""
+
+
+def _own_import_node(node):
+    """The import node whose values describe THIS node, or None.
+
+    Three steps, and the third is the one that matters:
+
+    1. The import wired upstream ({@link _upstream_import_node}) — the answer.
+    2. Failing that, the parent's SOLE import node. Unambiguous, and the shape
+       every studio-generated project has, so nothing regresses for them.
+    3. Several imports in the parent and no wire to follow: **None**, i.e.
+       "cannot tell". A wrong name is worse than a missing one here — the
+       reader treats a name it cannot match as "not in this project", which
+       un-ticks a row, while a confidently wrong one ticks the WRONG row. Step
+       3 used to be "take the first", which is how a two-network project came
+       to report one export set.
+    """
+    found = _upstream_import_node(node)
+    if found is not None:
+        return found
+    try:
+        parent = node.parent()
+    except Exception:
+        return None
+    candidates = _import_nodes_in(parent)
+    return candidates[0] if len(candidates) == 1 else None
+
+
+def _network_character_name(export_node):
+    """The character name THIS export node writes under — its own import
+    node's `import_character_name` ({@link _own_import_node}).
 
     MEASURED off the installed HDA (2.5) and off two real `.hip` files, because
     the first attempt at this read a parm that does not exist. The export node
@@ -1893,48 +2002,35 @@ def _network_character_name(network):
     rather than ticking a wrong one.
 
     Verified against `3d-workflow_LaraCroft_G81.hiplc` (LaraClassic, LaraNaked)
-    and `..._THICK.hiplc` (LaraClassic_Thick, LaraNaked_Thick) — the first
-    project's two names being exactly the two folders in that character's
-    `export/`.
+    and `..._THICK.hiplc` (LaraClassic_Thick, LaraNaked_Thick). NOTE what that
+    verification did and did not cover: the two names were confirmed to EXIST in
+    the file, not that this function returned both — and it did not, because
+    both networks share one `/obj/DazToHue` parent. Confirming a fact about the
+    input is not confirming the output.
     """
-    for child in network.children():
-        # `daztohuegroomimport` does NOT contain `daztohueimport`, so the groom
-        # importer is excluded by the same test 456.py uses for the scene id.
-        if "daztohueimport" not in child.type().name().lower():
-            continue
-        parm = child.parm("import_character_name")
-        if parm is None:
-            continue
-        try:
-            value = str(parm.evalAsString() or "").strip()
-        except Exception:
-            continue
-        if value:
-            return value
-    return ""
+    return _import_parm_text(_own_import_node(export_node), "import_character_name")
 
 
-def _network_dth(network):
-    """The `.dth` one DazToHue network imports — its import node's
-    `import_character_dtu_file`, expanded and normalized exactly like
-    `_scene_dth_imports` (normpath + lowercase, never realpath: the value is
-    cached for months and must not bake in one machine's mount layout).
-    '' when the network has no wired import node."""
-    for child in network.children():
-        # Same exclusion as everywhere else: `daztohuegroomimport` does NOT
-        # contain `daztohueimport`.
-        if "daztohueimport" not in child.type().name().lower():
-            continue
-        parm = child.parm("import_character_dtu_file")
-        if parm is None:
-            continue
-        try:
-            value = str(parm.evalAsString() or "").strip()
-        except Exception:
-            continue
-        if value:
-            return _norm_path(os.path.normpath(value)).lower()
-    return ""
+def _network_dth(node):
+    """The `.dth` THIS node's network imports — its own import node's
+    `import_character_dtu_file` ({@link _own_import_node}), expanded and
+    normalized exactly like `_scene_dth_imports` (normpath + lowercase, never
+    realpath: the value is cached for months and must not bake in one machine's
+    mount layout). '' when no import node can be attributed to it.
+
+    Resolved from the NODE, not from its parent, for the same reason
+    `_network_character_name` is: a parent holding two networks answered both of
+    them with the first one's import, so both PoseAsset nodes in such a project
+    were paired against the same network's `.dth` — and pairing a CSV with the
+    wrong set is precisely what the csv-consistency check exists to catch.
+
+    Where the walk cannot follow a wire (a PoseAsset node outside the geometry
+    stream, say) the sole-import fallback still answers every single-network
+    project, and '' is the honest result otherwise — the check reads '' as
+    "not known", which is what it is.
+    """
+    value = _import_parm_text(_own_import_node(node), "import_character_dtu_file")
+    return _norm_path(os.path.normpath(value)).lower() if value else ""
 
 
 def _scene_pose_assets():
@@ -1947,8 +2043,12 @@ def _scene_pose_assets():
     So a csv parm that is NOT the sibling `<name>_pose_asset.csv` of the
     network's `.dth` reads another set's CSV — wrong frame layout the moment
     the scenes diverge, and wrong baked reference paths even while they don't.
-    The pairing is per NETWORK (the poseasset node's parent), because one hip
-    can import several scenes.
+    The pairing is per NODE, resolved through its own wired import
+    ({@link _network_dth}) — NOT per parent. One `.hip` can import several
+    scenes, and measured 2026-08-21 a single `/obj/DazToHue` held two complete
+    networks side by side: asking the parent paired both CSVs against the FIRST
+    network's `.dth`, which reported a fault against a project that had none
+    and was blind to a real one.
 
     Nodes whose HDA predates the CSV-path parm (DazToHue 2.5) contribute
     nothing — absence of the parm is a release gap, not a fault. A blank parm
@@ -1965,9 +2065,9 @@ def _scene_pose_assets():
         except Exception:
             continue
         csv = _norm_path(os.path.normpath(value)).lower() if value else ""
-        parent = node.parent()
-        dth = _network_dth(parent) if parent is not None else ""
-        found.append({"dth": dth, "csv": csv})
+        # From the NODE: its parent may hold more than one network, and asking
+        # the parent paired every CSV in it against the first network's `.dth`.
+        found.append({"dth": _network_dth(node), "csv": csv})
     return found
 
 
@@ -1991,7 +2091,7 @@ def _scene_export_sets():
     for node in hou.node("/").allSubChildren():
         if node.type().name().lower() not in EXPORT_TYPE_NAMES:
             continue
-        value = _network_character_name(node.parent())
+        value = _network_character_name(node)
         key = value.lower()
         if not value or key in seen:
             continue

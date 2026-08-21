@@ -297,6 +297,14 @@ export const TRIGGERS = [
     anchor: 'A map keyed by `normalizeSceneKey` must normalize AT THE ACCESSOR',
   },
   {
+    // Reading a `.hip` node's network by its parent is wrong on a real-world
+    // layout, and the wrong answer looks completely reasonable.
+    id: 'hip-network-per-node',
+    path: /apps\/web\/src\/lib\/rom\/houdini-runtime\/(material_utils|456)\.py$/,
+    doc: GOTCHAS_DESKTOP,
+    anchor: 'A `.hip` can hold several DazToHue networks in ONE parent',
+  },
+  {
     // The finish report's failure count is a SUM of channels that dedupe by
     // scene. Anyone touching it is one un-deduped `+ n` away from reporting a
     // healthy scene as failed and dropping its continuation.
