@@ -32,6 +32,7 @@ import {
 } from '#/lib/rom/export-cards.ts'
 import {
   formatElapsed,
+  normalizeSceneKey,
   scenesRetiredByRun,
   scriptFailureLines,
   tidyRunErrors,
@@ -1044,13 +1045,29 @@ export function DthExportAction({
       // "success"). The landed guard judges the files the Houdini leg would
       // actually consume; a dead set fails its scene and drops out of the
       // continuation scope. ROM-only wrote no set — nothing to judge.
+      //
+      // Judged only for the scenes nothing has counted YET. `failed +
+      // scriptFailures.length` is a true failure count precisely because those
+      // two are deduped against each other (see `scriptRunFailures`); a third
+      // channel added on top has to join that dedupe or it breaks the sum. It
+      // is not a theoretical overlap: `rom-export` stamps the run log before
+      // the export block, so a scene whose ROM leg errored AND whose export
+      // then crashed hits both — counted twice, `failedTotal` reaches
+      // `run.total`, and a HEALTHY sibling scene loses its Houdini leg under a
+      // "0 exported" report.
+      const countedFailed = new Set(
+        [...run.failedScenes, ...run.scriptFailures.map((failure) => failure.scene)].map(
+          normalizeSceneKey,
+        ),
+      )
+      const alreadyCounted = (scene: string): boolean => countedFailed.has(normalizeSceneKey(scene))
       const deadSets =
         !interrupted && run.mode !== 'rom-only'
           ? await verifyDazExportsLanded({
               data: {
                 projectId,
                 id: character.id,
-                scenes: run.scenes,
+                scenes: run.scenes.filter((scene) => !alreadyCounted(scene)),
                 requireDth: run.mode !== 'hair-only',
               },
             }).catch(() => [])
@@ -1071,7 +1088,16 @@ export function DthExportAction({
         ),
       ]
       const deadScenes = new Set(deadSets.map((set) => set.scene))
-      const landedScenes = run.scenes.filter((scene) => !deadScenes.has(scene))
+      // The Houdini scope is what this run VERIFIED — and every failure
+      // channel drops its scene, not only the disk one. A scene that failed
+      // out loud has a folder that looks LANDED: the script's failure path
+      // renames the sweep's `.dthprev` backups back, so what sits there is the
+      // PREVIOUS export. Handing it on imports last week's character wearing
+      // this run's green checkmark — the same cascade the disk guard exists to
+      // stop, entered through the door that reported itself honestly.
+      const landedScenes = run.scenes.filter(
+        (scene) => !deadScenes.has(scene) && !alreadyCounted(scene),
+      )
       const continuing =
         !interrupted &&
         run.houdiniProjects.length > 0 &&

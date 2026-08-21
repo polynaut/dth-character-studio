@@ -516,6 +516,12 @@ const DEATH_ERROR_LINE =
  *  chatter says a node was busy, these say the batch itself moved forward. */
 const DEATH_STEP_LINE = /^(?:DazToHue|DTH Character Studio): /
 
+/** How much of a quoted line a death reason may carry — it ends up in a toast,
+ *  and a step line naming an absolute `.hiplc` path is as long as any error. */
+const DEATH_LINE_CAP = 160
+const clampLine = (line: string): string =>
+  line.length > DEATH_LINE_CAP ? `${line.slice(0, DEATH_LINE_CAP - 1)}…` : line
+
 /** The exit-code clause appended to a death reason when the spawn recorded
  *  one. Negative codes on Windows are NTSTATUS values (a crash, not a return)
  *  — the hex spelling is the one crash databases and search engines know. */
@@ -553,7 +559,7 @@ export function houdiniDeathReason(consoleText: string, exitCode: number | null 
   // earlier). Same rule when there is no error-shaped line at all: the step
   // is the run's own last word, not cook chatter dressed up as a diagnosis.
   if (lastStep >= 0 && lastStep > lastError) {
-    const step = tail[lastStep] ?? ''
+    const step = clampLine(tail[lastStep] ?? '')
     return `Houdini exited during "${step}"${exitCodeClause(exitCode)}`
   }
   // The newest error-shaped line in the tail; failing that, the last line of a
@@ -566,8 +572,7 @@ export function houdiniDeathReason(consoleText: string, exitCode: number | null 
     const clause = exitCodeClause(exitCode)
     return clause ? `Houdini exited${clause}` : ''
   }
-  const line = spoken.length > 160 ? `${spoken.slice(0, 159)}…` : spoken
-  return `${line}${exitCodeClause(exitCode)}`
+  return `${clampLine(spoken)}${exitCodeClause(exitCode)}`
 }
 
 /**

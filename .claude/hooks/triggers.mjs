@@ -297,6 +297,30 @@ export const TRIGGERS = [
     anchor: 'A map keyed by `normalizeSceneKey` must normalize AT THE ACCESSOR',
   },
   {
+    // The finish report's failure count is a SUM of channels that dedupe by
+    // scene. Anyone touching it is one un-deduped `+ n` away from reporting a
+    // healthy scene as failed and dropping its continuation.
+    id: 'export-finish-count',
+    path: /apps\/web\/src\/components\/character\/dth-export\.tsx$|apps\/web\/src\/lib\/rom\/api\/execute\/run-state\.ts$/,
+    doc: GOTCHAS_WEB,
+    anchor: "A finish report's failure count is a SUM of deduped channels",
+  },
+  {
+    // Editing the death reason without this fact re-invents the bug it fixed:
+    // quoting the newest error-shaped line the run demonstrably survived.
+    id: 'houdini-death-reason',
+    path: /apps\/web\/src\/lib\/rom\/houdini-jobs\.ts$/,
+    doc: GOTCHAS_WEB,
+    anchor: 'A dead hython can exit with NOTHING',
+  },
+  {
+    // Judging a Daz export from any channel ABOVE the disk is judging a liar.
+    id: 'daz-export-landed',
+    path: /apps\/web\/src\/lib\/rom\/api\/houdini\.ts$/,
+    doc: GOTCHAS_DAZ,
+    anchor: 'A Daz-side script the engine kills at the C++ level',
+  },
+  {
     id: 'project-id-is-path',
     path: /apps\/web\/src\/lib\/rom\/storage\/projects\.ts$|apps\/web\/src\/routes\/projects/,
     doc: GOTCHAS_WEB,

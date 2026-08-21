@@ -660,6 +660,17 @@ describe('houdiniDeathReason — the console log is the only witness', () => {
     expect(houdiniDeathReason(log)).toBe('Fatal: out of memory')
   })
 
+  it('caps a long step line like it caps a long error line — both end in a toast', () => {
+    // The step lines carry absolute paths ("loading D:/…/x.hiplc (headless)"),
+    // so the branch that quotes them needs the same 160-char cap the error
+    // branch has always had.
+    const step = `DTH Character Studio: loading ${'D:/very/long/project/path'.repeat(12)}/Kira.hiplc (headless)`
+    const reason = houdiniDeathReason(`DazToHue: export started
+${step}`)
+    expect(reason.length).toBeLessThanOrEqual('Houdini exited during ""'.length + 160)
+    expect(reason).toContain('…')
+  })
+
   it('falls back to the exit code alone when the log has nothing quotable', () => {
     const chatter = Array.from({ length: 40 }, (_, i) => `[${i}] cooking /obj/x${i}`).join('\n')
     expect(houdiniDeathReason(chatter, 139)).toBe('Houdini exited (hython exit code 139)')

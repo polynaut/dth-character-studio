@@ -629,3 +629,73 @@ test('a Daz batch whose export set never landed FAILS its scene instead of cooki
 
   expect(await unhandledCommands(page)).toEqual([])
 })
+
+test('a Houdini leg that dies with nothing to say names its last step and its exit code', async ({
+  page,
+}) => {
+  // The other half of the measured 2026-08-21 morning: the headless export
+  // exited mid "exporting animation curves" with no traceback, no Houdini
+  // crash log and no WER entry, and the only error-shaped line in the console
+  // was a benign HDA load-time warning from minutes earlier — which the death
+  // toast dutifully served as the cause. The rule since: a run that kept
+  // narrating AFTER its newest error-shaped line survived that line, so the
+  // honest answer is where it STOPPED, plus the exit code the fire-and-forget
+  // spawn used to throw away (`houdini_job_exit_code`, FFI #57). This is the
+  // only spec that drives a dead Houdini run, so it is also the only one that
+  // reaches that command at all.
+  const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true, dazInstallFolder: DAZ_INSTALL, landedExports: true })
+  seed.houdiniRunning = true
+  // 0xC0000005 as Windows spells it back through `ExitStatus::code()`.
+  seed.houdiniExitCode = -1073741819
+  const settingsPath = `${P.appData}/settings.json`
+  seed.files[settingsPath] = JSON.stringify({
+    ...JSON.parse(seed.files[settingsPath] ?? '{}'),
+    houdiniInstallFolder: HOUDINI_INSTALL,
+    houdiniDocsFolder: HOUDINI_DOCS,
+  })
+  seed.files[`${HOUDINI_INSTALL}/bin/hython.exe`] = 'hython-exe-fixture'
+  seed.files[`${SCRIPTS_ROOT}/Demo/Kira/.Bulk_ROM_Export.dsa`] = '// bulk-export fixture'
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+
+  await page.getByRole('button', { name: 'DTH Export' }).click()
+  await page.getByRole('button', { name: 'Start' }).click()
+  await expect.poll(() => fileContent(page, PENDING_JOB)).not.toBeNull()
+  await runnerFinishesBatch(page)
+  // The Daz half landed, so the baton passes — the Houdini job file is written
+  // and hython "launched".
+  await expect.poll(() => fileContent(page, HOUDINI_JOB), { timeout: 15_000 }).not.toBeNull()
+
+  // Now hython dies: the console holds the shape of the measured log — a
+  // load-time warning, then real progress, then silence — and no result file
+  // is ever written. Houdini stops being "running", which is all the studio
+  // can see from outside.
+  await page.evaluate(
+    ([consolePath]) => {
+      const mock = (window as any).__tauriMock
+      ;(mock.files as Map<string, string>).set(consolePath, [
+        'DTH Character Studio: loading D:/DTH Projects/Demo/Kira/houdini/Kira.hiplc (headless)',
+        "oplib:/Sop/DazToHuePoseAsset?Sop/DazToHuePoseAsset Warning(11): error binding handle sidefx_hud_button because it doesn't exist.",
+        'DTH Character Studio: 1 export node(s) match the selected scenes',
+        'DazToHue: export started',
+        'DazToHue: exporting animation curves',
+        '',
+      ].join('\n'))
+      mock.houdiniRunning = false
+    },
+    [`${P.charFolder}/.dth_houdini_console.log`],
+  )
+
+  // The toast names the last step reached — NOT the stale warning — and
+  // carries the exit code the poll went and asked for, hex spelling included.
+  const toast = page.getByText(/The Houdini export did not finish/)
+  await expect(toast).toBeVisible({ timeout: 15_000 })
+  await expect(toast).toContainText('exporting animation curves')
+  await expect(toast).toContainText('0xC0000005')
+  await expect(toast).not.toContainText('sidefx_hud_button')
+  expect(await callsNamed(page, 'houdini_job_exit_code')).not.toEqual([])
+
+  expect(await unhandledCommands(page)).toEqual([])
+})
