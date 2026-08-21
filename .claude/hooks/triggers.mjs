@@ -297,6 +297,14 @@ export const TRIGGERS = [
     anchor: 'A map keyed by `normalizeSceneKey` must normalize AT THE ACCESSOR',
   },
   {
+    // The run's task list drops finished rows on a timer. Both the memory and
+    // the "don't assert on a transient" half are easy to walk straight into.
+    id: 'task-row-retire',
+    path: /apps\/web\/src\/components\/character\/export-pipeline-panel\.tsx$/,
+    doc: GOTCHAS_WEB,
+    anchor: 'A row that retires from a live list needs MEMORY',
+  },
+  {
     id: 'project-id-is-path',
     path: /apps\/web\/src\/lib\/rom\/storage\/projects\.ts$|apps\/web\/src\/routes\/projects/,
     doc: GOTCHAS_WEB,

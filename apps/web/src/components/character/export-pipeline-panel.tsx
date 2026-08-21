@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Check, Loader2, X } from 'lucide-react'
 
 import { cn } from '@dth/ui'
@@ -85,7 +85,18 @@ const APP: Record<ExportTaskKind, string> = {
   unreal: 'Unreal Engine',
 }
 
-function ExportTaskCard({ task, ordinal }: { task: ExportTask; ordinal: number }) {
+function ExportTaskCard({
+  task,
+  ordinal,
+  leaving,
+}: {
+  task: ExportTask
+  ordinal: number
+  /** This row is on its way out — see {@link useRetiringTasks}. Still in the
+   *  DOM (and still `data-task-status="done"`, because that is what it is)
+   *  wearing the exit animation. */
+  leaving?: boolean
+}) {
   const active = task.status === 'active'
   const failed = task.status === 'failed'
   const done = task.status === 'done'
@@ -99,8 +110,13 @@ function ExportTaskCard({ task, ordinal }: { task: ExportTask; ordinal: number }
     <li
       data-task={task.id}
       data-task-status={task.status}
+      // Marked in the DOM as well as styled: "is this row leaving?" is a state
+      // a test can wait on, and `task-retire` is unknown to tailwind-merge so
+      // it survives `cn()`.
+      data-task-leaving={leaving ? '' : undefined}
       className={cn(
         'relative flex items-center gap-2.5 overflow-hidden rounded-md py-1.5 pr-2 pl-3 transition-colors',
+        leaving && 'task-retire',
         active
           ? 'bg-accent text-foreground'
           : failed
@@ -163,23 +179,147 @@ function ExportTaskCard({ task, ordinal }: { task: ExportTask; ordinal: number }
   )
 }
 
+/**
+ * How long a ticked-off row STAYS on the list before it starts leaving.
+ *
+ * The tick is the acknowledgement — the row has to wear it long enough to be
+ * seen, or the work appears to vanish unmarked and the user is left counting
+ * what is missing. Retiring on the same frame as the tick would make the list
+ * a place where things silently stop existing; this is the beat between "done"
+ * and "gone".
+ */
+const RETIRE_DWELL_MS = 1100
+/** How long the leaving animation runs. Must match `dth-task-retire` in
+ *  `styles.css` — React drops the row when this elapses, so a shorter value
+ *  here cuts the animation off mid-way. */
+const RETIRE_EXIT_MS = 420
+
+const NO_IDS: ReadonlySet<string> = new Set()
+
+const without = (ids: ReadonlySet<string>, drop: ReadonlySet<string>): ReadonlySet<string> => {
+  if (![...drop].some((id) => ids.has(id))) return ids
+  const next = new Set(ids)
+  for (const id of drop) next.delete(id)
+  return next
+}
+
+/**
+ * Finished work leaves the list: a `done` row wears its tick for
+ * {@link RETIRE_DWELL_MS}, then animates out and is dropped.
+ *
+ * The list is a QUEUE readout, and a queue that only ever grows stops being
+ * one — on a multi-scene run into several Houdini projects the rows still to
+ * come scroll out of a five-row box behind rows that are over. Retiring the
+ * finished ones keeps what is left of the run on screen, which is the only
+ * thing the list is for.
+ *
+ * Only `done` retires. A `failed` row STAYS, permanently: it is the one row
+ * that has to catch the eye after the run has moved on, and a list that
+ * quietly disposed of failures beside successes would be the same lie the row
+ * colour exists to prevent.
+ *
+ * Retirement is MEMORY, not a function of the props: the run keeps reporting a
+ * finished task as `done` on every 2.5 s poll for the rest of the run, so
+ * "has this row already had its moment?" is something only this hook knows.
+ */
+function useRetiringTasks(tasks: Array<ExportTask>): {
+  /** Ids that are OVER — animated out and no longer rendered. */
+  retired: ReadonlySet<string>
+  /** Ids mid-exit: still rendered, wearing the animation. */
+  leaving: ReadonlySet<string>
+} {
+  const [leaving, setLeaving] = useState(NO_IDS)
+  const [retired, setRetired] = useState(NO_IDS)
+  // Which ids already have a retirement running, with their timers so unmount
+  // can cancel them. A ref rather than state because arming is a side effect
+  // that must happen exactly ONCE per id — deriving "already armed" from
+  // `leaving`/`retired` would re-arm all through the dwell, when the row is in
+  // neither set yet.
+  const armed = useRef(new Map<string, Array<ReturnType<typeof setTimeout>>>())
+
+  useEffect(() => {
+    for (const task of tasks) {
+      if (task.status !== 'done' || armed.current.has(task.id)) continue
+      const id = task.id
+      const timers: Array<ReturnType<typeof setTimeout>> = []
+      timers.push(
+        setTimeout(() => {
+          setLeaving((prev) => new Set(prev).add(id))
+          timers.push(
+            setTimeout(() => {
+              setRetired((prev) => new Set(prev).add(id))
+              setLeaving((prev) => without(prev, new Set([id])))
+            }, RETIRE_EXIT_MS),
+          )
+        }, RETIRE_DWELL_MS),
+      )
+      armed.current.set(id, timers)
+    }
+    // An id the run no longer lists — a leg cleared wholesale at a baton pass,
+    // or a whole new run in this same panel — is FORGOTTEN. Without this the
+    // same scene in the next run would start life already retired, and never
+    // appear at all.
+    const live = new Set(tasks.map((task) => task.id))
+    const forgotten = new Set<string>()
+    for (const [id, timers] of armed.current) {
+      if (live.has(id)) continue
+      for (const timer of timers) clearTimeout(timer)
+      armed.current.delete(id)
+      forgotten.add(id)
+    }
+    if (forgotten.size > 0) {
+      setRetired((prev) => without(prev, forgotten))
+      setLeaving((prev) => without(prev, forgotten))
+    }
+  }, [tasks])
+
+  // Timers outlive the render that made them; a panel torn down mid-dwell (the
+  // run ends, the user navigates away) must not fire into a dead component.
+  useEffect(() => {
+    const running = armed.current
+    return () => {
+      for (const timers of running.values()) for (const timer of timers) clearTimeout(timer)
+      running.clear()
+    }
+  }, [])
+
+  return { retired, leaving }
+}
+
 export function ExportTaskList({ tasks }: { tasks: Array<ExportTask> }) {
+  // Finished rows tick off, then leave — see {@link useRetiringTasks}. The
+  // ORDINAL still counts over the whole run, retired rows included, so a row's
+  // number never changes under the user: "3." is the run's third job whether
+  // or not jobs 1 and 2 are still on screen.
+  const { retired, leaving } = useRetiringTasks(tasks)
+  // What the pin effect below re-runs on: the rows actually ON SCREEN, by
+  // identity and state. `tasks` is rebuilt every 2.5 s poll and `shown` is a
+  // fresh array each render, so either as a dependency would re-pin the scroll
+  // on every tick — including ticks that changed nothing.
+  const shownKey = tasks
+    .filter((task) => !retired.has(task.id))
+    .map((task) => `${task.id}:${task.status}`)
+    .join('|')
   const boxRef = useRef<HTMLOListElement>(null)
   const pinnedRef = useRef(false)
   // The list runs BOTTOM-UP — the first job at the bottom, later ones stacked
   // above — so the freshest row (the one being worked) sits at the bottom
   // edge, right above the bar, with the queue readable above it and finished
-  // rows sliding below the fold. This effect pins that edge: scrollTop
+  // rows retiring off it. This effect pins that edge: scrollTop
   // arithmetic rather than scrollIntoView, because only the LIST may move —
   // scrollIntoView walks every scrollable ancestor and can drag the page.
   useEffect(() => {
     const box = boxRef.current
     if (!box) return
     // The run's front: the active row, else the freshest finished one (the
-    // legs' baton passes leave short stretches with nothing active).
+    // legs' baton passes leave short stretches with nothing active). A row
+    // mid-exit is explicitly NOT the front — pinning the view to something
+    // collapsing to nothing scrolls to where the list is about to not be.
     const front =
       box.querySelector<HTMLElement>('[data-task-status="active"]') ??
-      box.querySelector<HTMLElement>('[data-task-status="done"], [data-task-status="failed"]')
+      box.querySelector<HTMLElement>(
+        '[data-task-status="done"]:not([data-task-leaving]), [data-task-status="failed"]',
+      )
     if (!front) {
       // Nothing worked yet (a handoff waiting to be claimed): start the view
       // at the bottom — the run's beginning — then leave the user's own
@@ -195,7 +335,7 @@ export function ExportTaskList({ tasks }: { tasks: Array<ExportTask> }) {
     // courtesy): a 2.5s poll must not yank a user reading the queue.
     if (rect.top >= boxRect.top && rect.bottom <= boxRect.bottom + 1) return
     box.scrollTop += rect.bottom - boxRect.bottom
-  }, [tasks])
+  }, [shownKey])
   return (
     <ol
       data-export-tasks
@@ -210,9 +350,15 @@ export function ExportTaskList({ tasks }: { tasks: Array<ExportTask> }) {
           is "1." and the numbers climb up the queue. */}
       {tasks
         .map((task, index) => ({ task, ordinal: index + 1 }))
+        .filter(({ task }) => !retired.has(task.id))
         .reverse()
         .map(({ task, ordinal }) => (
-          <ExportTaskCard key={task.id} task={task} ordinal={ordinal} />
+          <ExportTaskCard
+            key={task.id}
+            task={task}
+            ordinal={ordinal}
+            leaving={leaving.has(task.id)}
+          />
         ))}
     </ol>
   )

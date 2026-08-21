@@ -4,6 +4,20 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
 
 ## Web app
 
+- **A row that retires from a live list needs MEMORY, and a smoke spec must
+  not assert on its transient.** The DTH Export task list drops a `done` row
+  1.1 s after its tick (`useRetiringTasks`, export-pipeline-panel.tsx). Two
+  things bite. The run keeps re-reporting every finished job as `done` on each
+  2.5 s poll for the rest of the run, so "already retired?" cannot be derived
+  from the props — without a remembered set the row retires, the next poll
+  re-adds it, and the list blinks. And the remembered set has to be FORGOTTEN
+  when an id leaves `tasks` (a leg cleared wholesale, a second run in the same
+  panel), or that scene's row never appears again. On the test side, `done` is
+  now a state that lasts ~1.5 s: a Playwright assertion on
+  `data-task-status="done"` is a race by construction (it cost the one such
+  assertion in `houdini-export.smoke.ts`). Assert the retirement — `toHaveCount(0)`
+  — and leave the dwell to the panel's own fake-timer unit tests.
+
 - **A picker built from the OUTPUT folder can only ever re-pick the past.**
   Reported 2026-08-13 on the DTH Export dialog's Unreal section: under the
   project rows sat a tick list of export sets, read from the character's
