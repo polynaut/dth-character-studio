@@ -514,6 +514,63 @@ a {
   }
 }
 
+/* A finished task row leaving the run's list (see `useRetiringTasks` in
+   export-pipeline-panel.tsx). Two beats, because they say different things:
+   the row first fades and drifts a little toward the list's leading edge
+   (acknowledged, filed away), THEN collapses so the rows still to come close
+   up over it. Collapsing first would look like a layout glitch; fading alone
+   would leave a hole where the work used to be.
+
+   `max-height` rather than `height`: every row is one line and cannot animate
+   from `auto`, and it is the same idiom `dth-pipeline-hide` above already
+   uses. The negative `margin-block-start` swallows the flex `gap-1` the
+   collapsed row would otherwise still contribute. `both` fill so the end state
+   holds for the ~0 frames between the animation ending and React dropping the
+   row — without it the row snaps back to full height first.
+
+   EVERY collapsing property is restated at 0% AND 45%, tedious as that reads.
+   A property named only in the 100% keyframe gets an implicit 0% one from the
+   element's own value and interpolates across the WHOLE run — so with
+   `padding-block` and `margin-block-start` declared once, the row began
+   shrinking on frame 1 and was 25.09px of its natural 28px by the time the
+   fade finished (measured in Chromium). That is the "collapse first" the two
+   beats exist to avoid, arriving through the back door.
+
+   Reduced motion keeps the DWELL (the tick still gets its moment) and skips
+   the movement: the row simply stops being there. */
+@keyframes dth-task-retire {
+  0% {
+    opacity: 1;
+    transform: translateX(0);
+    max-height: 3rem;
+    margin-block-start: 0;
+    padding-block: 0.375rem;
+  }
+  45% {
+    opacity: 0;
+    transform: translateX(-0.75rem);
+    max-height: 3rem;
+    margin-block-start: 0;
+    padding-block: 0.375rem;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-0.75rem);
+    max-height: 0;
+    margin-block-start: -0.25rem;
+    padding-block: 0;
+  }
+}
+.task-retire {
+  animation: dth-task-retire 420ms ease-in both;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .task-retire {
+    animation-duration: 1ms;
+  }
+}
+
 /* Isolates the character-editor body from the sticky header's collapse. When the
    header's height animates on scroll, every following element would normally be
    re-laid-out on the main thread each frame (the heavy form = the lag). Layout +

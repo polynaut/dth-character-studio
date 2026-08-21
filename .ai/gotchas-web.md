@@ -35,6 +35,32 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   backups back over it — passing it on imports the PREVIOUS export under this
   run's green checkmark.
 
+- **A `@keyframes` property declared only at `100%` animates for the WHOLE
+  run, not from where you wrote it.** The missing `0%` is filled in implicitly
+  from the element's own computed value, so a "fade first, THEN collapse"
+  two-beat needs every collapsing property restated at the earlier stops —
+  otherwise the collapse starts on frame 1 while the fade is still going.
+  Measured in Chromium on `dth-task-retire` (styles.css): with `padding-block`
+  and `margin-block-start` written once at `100%`, the row was already 25.09px
+  of its natural 28px by the moment the fade ended. `max-height` masked it in
+  review — that one WAS pinned at `0%`/`45%`, so the animation looked staged
+  while the box was quietly shrinking underneath. A browser check that only
+  asserts the animation is *running* cannot catch this; sample the height.
+
+- **A row that retires from a live list needs MEMORY, and a smoke spec must
+  not assert on its transient.** The DTH Export task list drops a `done` row
+  1.1 s after its tick (`useRetiringTasks`, export-pipeline-panel.tsx). Two
+  things bite. The run keeps re-reporting every finished job as `done` on each
+  2.5 s poll for the rest of the run, so "already retired?" cannot be derived
+  from the props — without a remembered set the row retires, the next poll
+  re-adds it, and the list blinks. And the remembered set has to be FORGOTTEN
+  when an id leaves `tasks` (a leg cleared wholesale, a second run in the same
+  panel), or that scene's row never appears again. On the test side, `done` is
+  now a state that lasts ~1.5 s: a Playwright assertion on
+  `data-task-status="done"` is a race by construction (it cost the one such
+  assertion in `houdini-export.smoke.ts`). Assert the retirement — `toHaveCount(0)`
+  — and leave the dwell to the panel's own fake-timer unit tests.
+
 - **A picker built from the OUTPUT folder can only ever re-pick the past.**
   Reported 2026-08-13 on the DTH Export dialog's Unreal section: under the
   project rows sat a tick list of export sets, read from the character's

@@ -230,13 +230,18 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
   await runnerFinishesBatch(page)
   await expect(page.getByText(/Starting the Houdini export/)).toHaveCount(0)
   await expect(page.getByText(/DTH Export finished/)).toHaveCount(0)
-  // The baton passed: the Houdini project's row is the active one now (the
-  // scene row stays in the list, ticked off).
+  // The baton passed: the Houdini project's row is the active one now, and the
+  // finished scene row RETIRES — it wears its tick for a beat, then leaves, so
+  // the rows still to come are not pushed out of the box behind work that is
+  // over (`useRetiringTasks`). The dwell itself is a transient and belongs to
+  // the panel's own unit tests; what a spec can assert without racing it is
+  // that the row does eventually go.
   await expect(page.locator(`[data-task="hou:${P.houdini}"]`)).toHaveAttribute(
     'data-task-status',
     'active',
     { timeout: 15_000 },
   )
+  await expect(page.locator(`[data-task="daz:${P.scene}"]`)).toHaveCount(0, { timeout: 15_000 })
 
   // The hand-over: the job file lands in the character folder, both runner
   // scripts are staged in app-data, and HEADLESS hython is launched at them.
@@ -295,10 +300,11 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
   )
   await expect(page.getByRole('button', { name: /Working/ })).toBeVisible()
   // …and the run's own list is still the whole story: the finished Daz scene
-  // is ticked off above the Houdini row being worked.
-  await expect(page.locator(`[data-task="daz:${P.scene}"]`)).toHaveAttribute(
+  // has retired off the top of it, leaving the Houdini row being worked.
+  await expect(page.locator(`[data-task="daz:${P.scene}"]`)).toHaveCount(0)
+  await expect(page.locator(`[data-task="hou:${P.houdini}"]`)).toHaveAttribute(
     'data-task-status',
-    'done',
+    'active',
   )
   // ONE bar, over the whole run: the scene row is done and the Houdini row is
   // roughly a fifth in (2 of the ~9 phase lines a full node run emits — the

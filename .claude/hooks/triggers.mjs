@@ -321,6 +321,24 @@ export const TRIGGERS = [
     anchor: 'A Daz-side script the engine kills at the C++ level',
   },
   {
+    // Every hand-written animation in the app lives in this one file, and the
+    // implicit-keyframe rule bites silently — the animation still LOOKS right.
+    id: 'keyframe-implicit-zero',
+    path: /apps\/web\/src\/styles\.css$/,
+    doc: GOTCHAS_WEB,
+    anchor: 'A `@keyframes` property declared only at `100%` animates for the WHOLE',
+  },
+  {
+    // The run's task list drops finished rows on a timer. Both the memory and
+    // the "don't assert on a transient" half are easy to walk straight into —
+    // and the second half is a hazard for the SMOKE specs, not the panel, so
+    // the path has to reach them or the note never fires where it is needed.
+    id: 'task-row-retire',
+    path: /apps\/web\/src\/components\/character\/export-pipeline-panel\.tsx$|apps\/web\/smoke\/.*\.smoke\.ts$/,
+    doc: GOTCHAS_WEB,
+    anchor: 'A row that retires from a live list needs MEMORY',
+  },
+  {
     id: 'project-id-is-path',
     path: /apps\/web\/src\/lib\/rom\/storage\/projects\.ts$|apps\/web\/src\/routes\/projects/,
     doc: GOTCHAS_WEB,
