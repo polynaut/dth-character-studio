@@ -164,8 +164,19 @@ export function scanCacheKey(
  *     the Import node's timeline routine, per mrpdean). An older entry
  *     defaults both sides to unknown, which the range check correctly treats
  *     as "not known" — and without the bump it would stay not-known forever.
+ * 9 — fixes what 5–8 READ for `exportSets` and `poseAssets`. Both resolved a
+ *     node's network by its PARENT and took the first `daztohueimport` child
+ *     there. Measured 2026-08-21 on a real project: `/obj/DazToHue` held TWO
+ *     complete networks side by side, so both export nodes answered with the
+ *     first import's name, the dedupe collapsed them, and a two-network
+ *     project reported ONE export set (the run list showed both, because it
+ *     names nodes by their network box). Resolution is per NODE now, walking
+ *     its inputs upstream. Same argument as 6: a version is owed for a scan
+ *     that starts answering CORRECTLY, not only for one that starts answering
+ *     at all — and doubly so here, where the old answer is a legitimate value
+ *     ('this project writes one set') that would otherwise be served forever.
  */
-export const SCAN_ANSWER_VERSION = 8
+export const SCAN_ANSWER_VERSION = 9
 
 /**
  * Fold the installed operator libraries into one comparable string — name, mtime

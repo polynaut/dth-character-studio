@@ -294,6 +294,27 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   when it actually exists. Related dry-run trap: the repaired value is stored
   in its already-collapsed form, because collapsing it in the following pass
   made a real run report one more rewrite than its own dry run.
+- **A `.hip` can hold several DazToHue networks in ONE parent, so a node's
+  network is NOT its parent.** Measured 2026-08-21 on a real project: `/obj/DazToHue`
+  held two complete networks side by side — `DazToHueImport`/`DazToHueImport1`,
+  `DazToHueExport`/`DazToHueExport1`, `DazToHueSkeleton`/`DazToHueSkeleton1`,
+  and so on — not `/obj/DazToHue` and `/obj/DazToHue1`. Every reader that asked
+  `node.parent()` and took the FIRST `daztohueimport` child therefore answered
+  both networks with the first one's values: `exportSets` reported one set for a
+  two-set project (the stored scan said `['LaraClassic']` where the file holds
+  LaraClassic and LaraNaked), `_scene_pose_assets` checked both CSVs against the
+  first network's `.dth`, and 456.py's `collect_targets` matched both export
+  nodes on the first import's `.dth`. Resolve from the NODE — walk its inputs
+  upstream to its own `daztohueimport` (`_upstream_import_node` /
+  `upstream_import_node`) — with the parent's sole import as a fallback and ''
+  when a node is unwired in an ambiguous parent: a wrong name ticks the wrong
+  row, a missing one only un-ticks a row. **The trap that hid it for four
+  versions:** the docstring said "Verified against `3d-workflow_LaraCroft_G81.hiplc`
+  (LaraClassic, LaraNaked)" — and that verification confirmed the two names
+  EXISTED in the file, never that the function returned both. Confirming a fact
+  about the input is not confirming the output, and a claim of verification is
+  worth exactly what was actually run.
+
 - **A DazToHue bake with a MISSING layer texture reports SUCCESS.** Measured
   2026-08-13 on DazToHue 2.5 / Houdini 22.0, on a real project: point
   `material_texture_baker_layer_texture<b>_<l>` at a file that does not exist,

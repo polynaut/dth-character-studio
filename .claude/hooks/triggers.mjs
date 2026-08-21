@@ -297,6 +297,14 @@ export const TRIGGERS = [
     anchor: 'A map keyed by `normalizeSceneKey` must normalize AT THE ACCESSOR',
   },
   {
+    // Reading a `.hip` node's network by its parent is wrong on a real-world
+    // layout, and the wrong answer looks completely reasonable.
+    id: 'hip-network-per-node',
+    path: /apps\/web\/src\/lib\/rom\/houdini-runtime\/(material_utils|456)\.py$/,
+    doc: GOTCHAS_DESKTOP,
+    anchor: 'A `.hip` can hold several DazToHue networks in ONE parent',
+  },
+  {
     id: 'project-id-is-path',
     path: /apps\/web\/src\/lib\/rom\/storage\/projects\.ts$|apps\/web\/src\/routes\/projects/,
     doc: GOTCHAS_WEB,
