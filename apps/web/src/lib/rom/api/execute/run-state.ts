@@ -248,6 +248,9 @@ export type ExportRunProgress =
       houdiniMode: HoudiniRunMode
       /** The scenes the batch ran — the Houdini job's scope. */
       scenes: Array<string>
+      /** What the batch did to them — the continuation's export-landed guard
+       *  keys off this (a ROM-only run wrote no export set to verify). */
+      mode: ExportMode
       /** Linked Unreal projects to send to once the Houdini queue drains. */
       unrealProjects: Array<string>
       /** The export sets to hand them. */
@@ -561,6 +564,7 @@ export async function fetchExportRunProgress(watcher?: string): Promise<ExportRu
           houdiniProjects: run.houdiniProjects,
           houdiniMode: run.houdiniMode,
           scenes: run.scenes,
+          mode: run.mode,
           unrealProjects: run.unrealProjects,
           unrealSets: run.unrealSets,
         }

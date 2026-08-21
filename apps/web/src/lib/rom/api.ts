@@ -237,8 +237,14 @@ export {
   removeGeneratedHoudiniProject,
   renameHoudiniProject,
   startHoudiniExport,
+  verifyDazExportsLanded,
 } from './api/houdini'
-export type { GeneratedHoudiniProject, HoudiniExportStarted, HoudiniRunPlan } from './api/houdini'
+export type {
+  DeadExportScene,
+  GeneratedHoudiniProject,
+  HoudiniExportStarted,
+  HoudiniRunPlan,
+} from './api/houdini'
 
 // --- renaming a character: what the old name still owns (the export trees on
 // --- disk, the Houdini projects importing them by name)

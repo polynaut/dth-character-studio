@@ -251,6 +251,12 @@ export interface SeedOptions {
   /** Link a second (outfit) Daz scene with its own hair item — the multi-scene
    *  states (per-scene hair, the header scene tag, ROM overrides). Demo only. */
   extraScene?: boolean
+  /** Seed a LANDED Daz export set per linked scene (non-empty `.dth`, no
+   *  `.dthprev`). REQUIRED by any spec that drives an exporting batch to
+   *  `done` — the export-landed guard judges the set from disk and fails the
+   *  scene otherwise. Off by default: several specs' premise is an empty
+   *  export dir. */
+  landedExports?: boolean
   /** `.dcsp` manifest: opt-in Attachments feature (adds the Attachments tab). */
   assetsEnabled?: boolean
   /** `.dcsp` manifest: opt-in Daz Products feature (adds the Products tab). */
@@ -437,6 +443,28 @@ export function buildSeed(opts: SeedOptions = {}): TauriMockSeed {
     // (upscale-on-write); the tip seeds above stay the raw 256², as on disk.
     [`${P.project}/.dcsmeta/images/${AVATAR_FILE}`]: AVATAR_MASTER,
     ...(opts.extraScene ? { [P.scene2]: 'duf-fixture', [`${P.scene2}.tip.png`]: AVATAR_SUMMERTIDE } : {}),
+    // A LANDED export set per scene (non-empty `.dth`, no `.dthprev` backups):
+    // the export-landed guard judges these files after every finished Daz
+    // batch, and a fake batch that "exported" with nothing on disk fails its
+    // scenes — exactly the corpse state the guard exists to catch (the real
+    // 2026-08-21 crash). OPT-IN: a spec that drives an exporting batch to
+    // `done` needs it, while several specs' whole premise is an EMPTY export
+    // dir (rename-without-exports, houdini-only's disabled scene) — and a new
+    // batch-driving spec without the flag fails loudly at the guard, which is
+    // the failure that explains itself. Paths are what `sceneDthPath` resolves
+    // for the demo layout: scenes sit directly in `daz3d/`, so each folder is
+    // the scene stem and only the primary keeps the bare character name.
+    ...(opts.landedExports
+      ? {
+          [`${P.exportDir}/KiraDefault_G9_GP/Kira.dth`]: '{"fixture":"landed export set"}',
+          ...(opts.extraScene
+            ? {
+                [`${P.exportDir}/KiraSummertide_G9_GP/Kira_KiraSummertide_G9_GP.dth`]:
+                  '{"fixture":"landed export set"}',
+              }
+            : {}),
+        }
+      : {}),
     [P.houdini]: 'hip-fixture',
     // A release root is marked by copyright.txt; the version parses from the
     // folder name (single-release mode).

@@ -4,6 +4,26 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
 
 ## Daz Studio integration (measured behavior)
 
+- **A Daz-side script the engine kills at the C++ level reports as a fully
+  successful export — only the DISK says otherwise.** Measured 2026-08-21 (DS4,
+  DTH Exporter 2.0.2.0 DLL of Aug 18): the exporter intermittently crashes the
+  script engine 1–2 s into the Alembic export (`dzscript.cpp(1192): Unhandled
+  error while executing script.` + `QScriptEngine::popContext() doesn't match
+  with pushContext()`; twice preceded by `Could not remove stale output file
+  …abc - locked by another application` → `Could not create alembic archive`,
+  once silent mid-frame-write; 4 crashes vs 3 clean runs Aug 19–21). The JS
+  `catch`/restore around `doExport` never runs (the unwind is C++-level), the
+  Runner marks the row `done` (its contract: script returned, success or not),
+  and the ROM run log was stamped by the ROM leg BEFORE the export block — so
+  every channel says ok while the folder holds a 0-byte `.dth`, a truncated
+  `.abc` and the sweep's `.dthprev` backups still standing (the v99 backup
+  design worked; only the finish step removes them). The Houdini leg then
+  cooked that corpse into a 17-second "success". Defense: `exportSetDeath`
+  (houdini-jobs.ts) + `verifyDazExportsLanded` judge the export SET from the
+  folder itself before the Houdini continuation; a dead set fails its scene
+  and drops out of the scope. The exporter crash itself is mrpdean's —
+  reported privately, never in repo docs.
+
 - **The DTH Exporter's FBX pass excludes every morph whose ROM keys VARY from
   the base mesh — on every export path.** Measured 2026-08-17 (DS4 4.24,
   exporter 2.0.2.0; ~10 live probes on a stock G8.1F with `FBMHeavy` dialed

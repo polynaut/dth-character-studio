@@ -4,6 +4,19 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
 
 ## Web app
 
+- **A dead hython can exit with NOTHING — no traceback, no Houdini crash log,
+  no WER entry — and the death-reason must not then quote a stale warning.**
+  Measured 2026-08-21: the headless export died mid "exporting animation
+  curves" (never reproduced — GUI and a byte-identical headless re-run both
+  passed), and the only error-shaped line in the console was a benign HDA
+  load-time warning (`error binding handle sidefx_hud_button`), which the old
+  `houdiniDeathReason` served as the cause. The rule since: a run that kept
+  printing step lines (`DazToHue: …` / `DTH Character Studio: …`) AFTER its
+  newest error-shaped line did not die of that line — name the last step
+  reached instead, plus the child's exit code, which `launch_houdini_job`'s
+  spawn used to discard entirely (`houdini_job_exit_code` keeps it now;
+  negative codes are NTSTATUS — the hex spelling is the searchable one).
+
 - **A picker built from the OUTPUT folder can only ever re-pick the past.**
   Reported 2026-08-13 on the DTH Export dialog's Unreal section: under the
   project rows sat a tick list of export sets, read from the character's

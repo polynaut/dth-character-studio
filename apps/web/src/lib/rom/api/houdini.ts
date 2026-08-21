@@ -5,7 +5,7 @@
 // loop; a loop here that genuinely CAN run in parallel should use `Promise.all`
 // on its own merits.
 /* oxlint-disable no-await-in-loop */
-import { copyFile, exists, mkdir, readTextFile, remove, rename } from '@tauri-apps/plugin-fs'
+import { copyFile, exists, mkdir, readDir, readTextFile, remove, rename, stat } from '@tauri-apps/plugin-fs'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
@@ -27,6 +27,7 @@ import {
   HOUDINI_SCRIPTS_FOLDER,
   buildHoudiniJob,
   buildHoudiniPrefill,
+  exportSetDeath,
   houdiniRunFilesToClear,
   houdiniConsoleWorthReading,
   houdiniRunStateFrom,
@@ -1052,7 +1053,17 @@ export async function fetchHoudiniRunProgress(): Promise<
       // unreadable — the caller falls back to the plain "no longer running"
     }
   }
-  const state = houdiniRunStateFrom(result, houdiniUp, consoleText)
+  // A dead run's exit code — the one machine-readable witness a silent death
+  // leaves (measured 2026-08-21: hython exited mid-step with no traceback, no
+  // crash log, no WER entry, and the old fire-and-forget spawn had already
+  // discarded the code). Asked for only when the process is gone; a primitive
+  // return like `houdini_running` above, so a plain zod parse and no fixture.
+  const exitCode = houdiniUp
+    ? null
+    : await invoke('houdini_job_exit_code')
+        .then((code) => z.number().int().nullable().parse(code))
+        .catch(() => null)
+  const state = houdiniRunStateFrom(result, houdiniUp, consoleText, exitCode)
   if (state.state === 'finished' || state.state === 'dead') {
     if (activeHoudiniRun === run) activeHoudiniRun = null
     // The interrupt flag dies with the run it was aimed at. It is the LAST leg
@@ -1157,5 +1168,100 @@ export async function fetchSceneDthPaths({
   } catch {
     // Read-only convenience: without it the dialog simply doesn't auto-adjust.
     return {}
+  }
+}
+
+const verifyExportsInput = charScopeInput.extend({
+  /** The scenes the finished Daz batch claims to have exported. */
+  scenes: z.array(z.string()),
+  /** Whether the batch's mode wrote the main export (`.dth` + siblings).
+   *  A hair-only run rewrites grooms beside an older set — its `.dth` proves
+   *  nothing, so only the leftover-backup check applies there. */
+  requireDth: z.boolean().default(true),
+})
+
+/** One scene whose export set did NOT land — see {@link verifyDazExportsLanded}. */
+export interface DeadExportScene {
+  /** The scene key as the caller passed it (the batch's own list). */
+  scene: string
+  /** The scene's display stem for report lines. */
+  label: string
+  /** Why the set is judged dead — {@link exportSetDeath}'s verdict. */
+  reason: string
+}
+
+/**
+ * The export-landed guard: after a Daz batch reports done, judge each scene's
+ * export SET from the disk before the Houdini leg consumes it. Every report
+ * channel above the disk can vouch for a run that wrote garbage — the Runner
+ * marks a row `done` when its script returns, success or not; the ROM run log
+ * is stamped before the export block; and a script the Daz script engine kills
+ * at the C++ level (measured 2026-08-21: the DTH Exporter died 2 s into the
+ * Alembic export) leaves a 0-byte `.dth`, a truncated `.abc` and the sweep's
+ * `.dthprev` backups still in place, then reads as "1/1 scene exported in
+ * 32s". The Houdini leg then cooked that corpse into a 17-second "success".
+ * {@link exportSetDeath} holds the pure verdict; this resolves the paths and
+ * reads the folder.
+ *
+ * Only ever REPORTS — the caller decides what a dead set does to the run
+ * (drop the scene from the Houdini scope, fail the run, both). Errs on
+ * silence: an unreadable folder is "can't tell", never a manufactured failure.
+ */
+export async function verifyDazExportsLanded({
+  data,
+}: {
+  data: unknown
+}): Promise<Array<DeadExportScene>> {
+  const { projectId, id, scenes, requireDth } = verifyExportsInput.parse(data)
+  if (!isTauri()) return []
+  try {
+    const project = await resolveProject(projectId)
+    const lib = charsRoot(project)
+    const location = await locateCharacter(lib, id)
+    const character = location ? await storage.getCharacter(lib, id, location.definitionAbs) : null
+    if (!location || !character) return []
+    const scenesRootAbs = characterScenesRoot(character, location, project.dazSubdir ?? 'daz3d')
+    const dead: Array<DeadExportScene> = []
+    for (const scene of scenes) {
+      if (!scene) continue
+      // Same resolution the Houdini job itself uses — the guard judges exactly
+      // the files the leg would consume. A scene with no export path has no
+      // set to judge (the job builder skips it for the same reason).
+      const dth = sceneDthPath(character, scene, scenesRootAbs)
+      if (!dth) continue
+      const slash = dth.lastIndexOf('/')
+      const dir = slash > 0 ? dth.slice(0, slash) : dth
+      const dthName = slash > 0 ? dth.slice(slash + 1) : dth
+      let reason = ''
+      try {
+        const entries = await readDir(dir)
+        const size = requireDth
+          ? await stat(dth).then(
+              (info) => info.size,
+              () => null,
+            )
+          : undefined
+        reason = exportSetDeath(
+          entries.map((entry) => entry.name),
+          dthName,
+          size,
+        )
+      } catch {
+        // The folder itself is unreadable/missing. Missing after a batch that
+        // claims this scene exported IS a dead set — nothing was written.
+        reason = (await exists(dir).catch(() => true))
+          ? '' // readable-not-listable: can't tell — never manufacture a failure
+          : `the export folder was never written (${dir})`
+      }
+      if (reason) {
+        const label = (scene.replace(/\\/g, '/').split('/').pop() ?? scene).replace(/\.[^.]+$/, '')
+        dead.push({ scene, label, reason })
+      }
+    }
+    return dead
+  } catch {
+    // Resolution failed — the guard can't tell, and "can't tell" must never
+    // stop a run that every other channel calls good.
+    return []
   }
 }

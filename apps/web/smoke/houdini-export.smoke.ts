@@ -123,7 +123,7 @@ async function houdiniReportsDone(page: Page) {
 test('export too: hands the batch on to Houdini, then clears its own job files', async ({
   page,
 }) => {
-  const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true, dazInstallFolder: DAZ_INSTALL })
+  const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true, dazInstallFolder: DAZ_INSTALL, landedExports: true })
   // Houdini counts as running for the whole spec. The app polls every 2.5s and
   // reads "no result + not running" as a DEAD run (it kills the watch and the
   // finished toast never comes) — so the seed's default `false` opened a flake
@@ -415,7 +415,7 @@ test('the run OWNER reloads mid-batch: the sidecar restores clock, Houdini card 
   // start time), the chosen Houdini project's card is back, and — the part
   // that used to be silently LOST on reload — the "Export too" continuation
   // still fires when the batch finishes.
-  const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true })
+  const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true, landedExports: true })
   seed.files[RUNNING_JOB] = JSON.stringify({
     version: 1,
     type: 'bulk-export',
@@ -485,7 +485,7 @@ test('a reload whose FIRST poll finds the batch finished still shows the Houdini
   // running. Here the window opens onto a batch that is ALREADY at 100 — the
   // continuation path is the first thing that runs, and it used to arm no
   // cards at all (the re-arm lived in the 'running' branch alone).
-  const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true })
+  const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true, landedExports: true })
   seed.files[RUNNING_JOB] = JSON.stringify({
     version: 1,
     type: 'bulk-export',
@@ -532,7 +532,7 @@ test('rom only: the Houdini list cannot export — no auto-select, no continuati
   // re-consume the PREVIOUS exports while the report reads as "the new ROM
   // reached Houdini". The dialog therefore never auto-selects projects under
   // ROM only and the export mode is dead — the batch ends with the ROM build.
-  const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true, dazInstallFolder: DAZ_INSTALL })
+  const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true, dazInstallFolder: DAZ_INSTALL, landedExports: true })
   // ROM only runs the visible ROM-animation build script, not the bulk export.
   seed.files[`${SCRIPTS_ROOT}/Demo/Kira/.Build_ROM_Animation.dsa`] = '// rom-build fixture'
   await page.addInitScript(installTauriMock, seed)
@@ -573,6 +573,58 @@ test('rom only: the Houdini list cannot export — no auto-select, no continuati
   })
   expect(await callsNamed(page, 'launch_houdini_job')).toEqual([])
   expect(await callsNamed(page, 'shell_open_file')).toEqual([])
+  expect(await fileKeys(page)).not.toContain(HOUDINI_JOB)
+
+  expect(await unhandledCommands(page)).toEqual([])
+})
+
+test('a Daz batch whose export set never landed FAILS its scene instead of cooking the corpse', async ({
+  page,
+}) => {
+  // The measured 2026-08-21 cascade this guard exists for: the DTH Exporter
+  // crashed Daz's script engine 2 s into the Alembic export — the Runner still
+  // marked the row `done` (its contract: the script returned), the ROM run log
+  // (stamped before the export block) said ok, and the Houdini leg cooked a
+  // 0-byte `.dth` beside the sweep's un-restored `.dthprev` backups into a
+  // 17-second "success". The disk is the one witness the crash cannot fake —
+  // so the continuation judges it before Houdini gets the baton.
+  const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true, dazInstallFolder: DAZ_INSTALL, landedExports: true })
+  seed.houdiniRunning = true
+  const settingsPath = `${P.appData}/settings.json`
+  seed.files[settingsPath] = JSON.stringify({
+    ...JSON.parse(seed.files[settingsPath] ?? '{}'),
+    houdiniInstallFolder: HOUDINI_INSTALL,
+    houdiniDocsFolder: HOUDINI_DOCS,
+  })
+  seed.files[`${HOUDINI_INSTALL}/bin/hython.exe`] = 'hython-exe-fixture'
+  seed.files[`${SCRIPTS_ROOT}/Demo/Kira/.Bulk_ROM_Export.dsa`] = '// bulk-export fixture'
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+
+  await page.getByRole('button', { name: 'DTH Export' }).click()
+  await expect(page.getByRole('checkbox', { name: /Run in Kira/ })).toBeChecked()
+  await page.getByRole('button', { name: 'Start' }).click()
+  await expect.poll(() => fileContent(page, PENDING_JOB)).not.toBeNull()
+
+  // The Daz leg "succeeds" — every row done — but what it leaves on disk is
+  // the crash corpse: the 0-byte manifest and the backups the finish step
+  // never got to purge.
+  await page.evaluate(() => {
+    const files = (window as any).__tauriMock.files as Map<string, string>
+    const dth = 'D:/DTH Projects/Demo/Kira/houdini/daz-export/KiraDefault_G9_GP/Kira.dth'
+    files.set(dth, '')
+    files.set(`${dth}.dthprev`, '{"fixture":"the previous good export"}')
+    files.set(`${dth.replace(/\.dth$/, '.abc')}.dthprev`, 'previous-abc')
+  })
+  await runnerFinishesBatch(page)
+
+  // No baton: the Houdini leg never starts — no job file, no launch — and the
+  // report says WHY, naming the scene and pointing back at Daz.
+  await expect(page.getByText(/did not land/)).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByText(/export this scene again/)).toBeVisible()
+  expect(await callsNamed(page, 'launch_houdini_job')).toEqual([])
   expect(await fileKeys(page)).not.toContain(HOUDINI_JOB)
 
   expect(await unhandledCommands(page)).toEqual([])

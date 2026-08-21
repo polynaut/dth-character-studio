@@ -5,6 +5,7 @@ import { characterSchema } from '@dth/rom'
 import {
   buildHoudiniJob,
   buildHoudiniPrefill,
+  exportSetDeath,
   houdiniResultSummary,
   houdiniRunFilesToClear,
   houdiniDeathReason,
@@ -617,6 +618,54 @@ describe('houdiniDeathReason — the console log is the only witness', () => {
     expect(houdiniDeathReason(chatter)).toBe('')
   })
 
+  it('names the last step instead of a stale warning the run outlived', () => {
+    // The measured 2026-08-21 log, verbatim shape: a benign HDA load warning
+    // (error-shaped — "error binding handle"), then ten lines of real progress,
+    // then silence. The old rule quoted the warning as the cause of death; the
+    // run demonstrably survived it, and the honest answer is where it stopped.
+    const log = [
+      'DTH Character Studio: loading D:/x/LaraCroft_G81.hiplc (headless)',
+      "oplib:/Sop/DazToHuePoseAsset?Sop/DazToHuePoseAsset Warning(11): error binding handle sidefx_hud_button because it doesn't exist.",
+      'DTH Character Studio: 2 export node(s) match the selected scenes',
+      'DazToHue: export started',
+      'DazToHue: baking material textures',
+      'DazToHue: exporting animation curves',
+    ].join('\n')
+    expect(houdiniDeathReason(log)).toBe(
+      'Houdini exited during "DazToHue: exporting animation curves"',
+    )
+  })
+
+  it('appends the exit code when the spawn recorded one — hex for a Windows crash status', () => {
+    const log = 'DazToHue: export started\nDazToHue: exporting animation curves'
+    expect(houdiniDeathReason(log, -1073741819)).toBe(
+      'Houdini exited during "DazToHue: exporting animation curves" (hython exit code -1073741819 / 0xC0000005)',
+    )
+    expect(houdiniDeathReason(log, 1)).toBe(
+      'Houdini exited during "DazToHue: exporting animation curves" (hython exit code 1)',
+    )
+    // Code 0 proves nothing about the cause — a clean-looking exit that still
+    // never finished must not wear a "(exit code 0)" that reads like a verdict.
+    expect(houdiniDeathReason(log, 0)).toBe(
+      'Houdini exited during "DazToHue: exporting animation curves"',
+    )
+  })
+
+  it('still quotes an error that came AFTER the last step — that one did kill the run', () => {
+    const log = [
+      'DazToHue: export started',
+      'DazToHue: exporting animation curves',
+      'Fatal: out of memory',
+    ].join('\n')
+    expect(houdiniDeathReason(log)).toBe('Fatal: out of memory')
+  })
+
+  it('falls back to the exit code alone when the log has nothing quotable', () => {
+    const chatter = Array.from({ length: 40 }, (_, i) => `[${i}] cooking /obj/x${i}`).join('\n')
+    expect(houdiniDeathReason(chatter, 139)).toBe('Houdini exited (hython exit code 139)')
+    expect(houdiniDeathReason(chatter)).toBe('')
+  })
+
   it('quotes the last line of a log too short to say anything else', () => {
     // hython that died on startup: the whole file IS the failure, even when no
     // keyword matches. This is the shape the measured licensing log had.
@@ -634,6 +683,71 @@ describe('houdiniDeathReason — the console log is the only witness', () => {
   it('says nothing when the log says nothing', () => {
     expect(houdiniDeathReason('')).toBe('')
     expect(houdiniDeathReason('\n \r\n')).toBe('')
+  })
+})
+
+describe('exportSetDeath — the disk is the one witness the crash cannot fake', () => {
+  // The measured 2026-08-21 corpse, name for name: the sweep's backups still
+  // in place, the 0-byte manifest, the truncated abc — beside the previous
+  // run's survivors.
+  const corpse = [
+    'LaraCroft_G81.abc',
+    'LaraCroft_G81.abc.dthprev',
+    'LaraCroft_G81.dth',
+    'LaraCroft_G81.dth.dthprev',
+    'LaraCroft_G81.fbx.dthprev',
+    'LaraCroft_G81.log',
+    'LaraCroft_G81_Hair_Victoria8Eyebrows_grooms.abc.dthprev',
+    'LaraCroft_G81_pose_asset.csv.dthprev',
+  ]
+
+  it('judges the measured crash corpse dead — backups first, they prove it alone', () => {
+    const reason = exportSetDeath(corpse, 'LaraCroft_G81.dth', 0)
+    expect(reason).toContain('.dthprev')
+    expect(reason).toContain('died')
+  })
+
+  it('judges a 0-byte manifest dead even with the backups already purged', () => {
+    const reason = exportSetDeath(['LaraCroft_G81.abc', 'LaraCroft_G81.dth'], 'LaraCroft_G81.dth', 0)
+    expect(reason).toContain('0 bytes')
+  })
+
+  it('judges a missing manifest dead', () => {
+    const reason = exportSetDeath(['LaraCroft_G81.abc'], 'LaraCroft_G81.dth', null)
+    expect(reason).toContain('LaraCroft_G81.dth')
+    expect(reason).toContain('never produced')
+  })
+
+  it('calls a clean landed set landed', () => {
+    expect(
+      exportSetDeath(
+        ['LaraCroft_G81.abc', 'LaraCroft_G81.dth', 'LaraCroft_G81.fbx', 'LaraCroft_G81.log'],
+        'LaraCroft_G81.dth',
+        607436,
+      ),
+    ).toBe('')
+  })
+
+  it("scopes the backup check to THIS set's prefix — another character's leftovers prove nothing", () => {
+    expect(
+      exportSetDeath(
+        ['LaraCroft_G81.dth', 'OtherChar.dth.dthprev'],
+        'LaraCroft_G81.dth',
+        607436,
+      ),
+    ).toBe('')
+  })
+
+  it('matches case-insensitively — the folder listing spells names, not keys', () => {
+    const reason = exportSetDeath(['laracroft_g81.ABC.DTHPREV'], 'LaraCroft_G81.dth', 607436)
+    expect(reason).toContain('died')
+  })
+
+  it('skips the manifest checks for a hair-only run (undefined size) but keeps the backup check', () => {
+    expect(exportSetDeath(['LaraCroft_G81_Hair_X_grooms.abc'], 'LaraCroft_G81.dth')).toBe('')
+    expect(
+      exportSetDeath(['LaraCroft_G81_Hair_X_grooms.abc.dthprev'], 'LaraCroft_G81.dth'),
+    ).toContain('died')
   })
 })
 

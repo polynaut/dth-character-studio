@@ -63,6 +63,59 @@ static JOB_CHILD: Mutex<Option<std::process::Child>> = Mutex::new(None);
 /// handle it came from.
 static JOB_CHILD_EXITED: AtomicBool = AtomicBool::new(false);
 
+/// The exited child's exit code, recorded in the same breath as
+/// `JOB_CHILD_EXITED` and cleared by the next launch. `None` while the child
+/// is alive, was never tracked, or died without a code (killed). Kept because
+/// a run that dies SILENTLY (measured 2026-08-21: hython exited mid
+/// "exporting animation curves" with no traceback, no crash log, no WER
+/// entry) leaves the exit code as the only machine-readable witness — and the
+/// old fire-and-forget spawn threw it away.
+static JOB_CHILD_EXIT_CODE: Mutex<Option<i32>> = Mutex::new(None);
+
+/// Probe the tracked child once: alive → `Some(true)`; exited → record the
+/// exit code + the exited flag, drop the handle, `Some(false)`; never tracked
+/// (no handle and no exited flag) → `None`. The single site both commands
+/// below share, so the code cannot be recorded by one and missed by the other.
+fn probe_job_child() -> Option<bool> {
+    if let Ok(mut slot) = JOB_CHILD.lock() {
+        if let Some(child) = slot.as_mut() {
+            match child.try_wait() {
+                Ok(None) => return Some(true),
+                // Exited (or unprobeable) — drop the handle, but REMEMBER that
+                // there was one: the answer stays "dead" until the next launch.
+                Ok(Some(status)) => {
+                    if let Ok(mut code) = JOB_CHILD_EXIT_CODE.lock() {
+                        *code = status.code();
+                    }
+                    *slot = None;
+                    JOB_CHILD_EXITED.store(true, Ordering::SeqCst);
+                }
+                Err(_) => {
+                    *slot = None;
+                    JOB_CHILD_EXITED.store(true, Ordering::SeqCst);
+                }
+            }
+        }
+    }
+    if JOB_CHILD_EXITED.load(Ordering::SeqCst) {
+        return Some(false);
+    }
+    None
+}
+
+/// The last tracked headless job's exit code, once it has exited — the poll
+/// asks when `houdini_running` says the run is dead, so a silent death can at
+/// least be reported as "hython exited with code N". `None` while alive,
+/// never tracked, or exited without a code. Primitive return (number|null),
+/// parsed with a plain zod primitive like `houdini_running` — no fixture.
+#[tauri::command(async)]
+pub fn houdini_job_exit_code() -> Option<i32> {
+    match probe_job_child() {
+        Some(false) => JOB_CHILD_EXIT_CODE.lock().ok().and_then(|code| *code),
+        _ => None,
+    }
+}
+
 /// Whether the export job is still alive — the liveness half of the export
 /// poll, exactly like `daz_studio_running` is for the Daz batch. A result file
 /// stuck at "running" with nothing left to write it means the run died and the
@@ -88,21 +141,8 @@ static JOB_CHILD_EXITED: AtomicBool = AtomicBool::new(false);
 /// the window, so closing it answered the question.
 #[tauri::command(async)]
 pub fn houdini_running() -> bool {
-    if let Ok(mut slot) = JOB_CHILD.lock() {
-        if let Some(child) = slot.as_mut() {
-            match child.try_wait() {
-                Ok(None) => return true,
-                // Exited (or unprobeable) — drop the handle, but REMEMBER that
-                // there was one: the answer stays "dead" until the next launch.
-                _ => {
-                    *slot = None;
-                    JOB_CHILD_EXITED.store(true, Ordering::SeqCst);
-                }
-            }
-        }
-    }
-    if JOB_CHILD_EXITED.load(Ordering::SeqCst) {
-        return false;
+    if let Some(alive) = probe_job_child() {
+        return alive;
     }
     #[cfg(windows)]
     {
@@ -169,8 +209,13 @@ pub fn launch_houdini_job(request: LaunchHoudiniJobRequest) -> Result<(), String
     if let Ok(mut slot) = JOB_CHILD.lock() {
         *slot = Some(child);
         // A fresh run answers for itself — clear the previous one's verdict, or
-        // `houdini_running` would report this launch dead before it started.
+        // `houdini_running` would report this launch dead before it started
+        // (and `houdini_job_exit_code` would hand it the previous corpse's
+        // code).
         JOB_CHILD_EXITED.store(false, Ordering::SeqCst);
+        if let Ok(mut code) = JOB_CHILD_EXIT_CODE.lock() {
+            *code = None;
+        }
     }
     Ok(())
 }
