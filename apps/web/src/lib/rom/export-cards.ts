@@ -135,14 +135,33 @@ export function houdiniTaskCards(
   /** The last snapshot THIS project's run reported, kept by the caller past the
    *  end of that project's turn (see source 4 above). Its statuses are final. */
   remembered?: HoudiniNetworkMemo | null,
+  /**
+   * Did THIS project's leg fail — the verdict the run report already carries
+   * for it (`report.houdini[index].failed`).
+   *
+   * Only the memo paths below can name WHICH network failed. The two
+   * positional paths — one row for the whole project, or the scan's names with
+   * no run behind them — had no verdict at all, so they ticked a failed
+   * project off green: the one row the list exists to make impossible to miss,
+   * wearing a checkmark. It matters most for the commonest shape there is, a
+   * `.hip` with a single DazToHue network, and for a project that could not
+   * START (nothing ran, so there is no memo to read).
+   *
+   * Read from the SAME array whose length is `finishedProjects`, at the same
+   * index — so this verdict cannot be less aligned with the queue than the
+   * `done` it replaces. Absent = no verdict, which reads as before.
+   */
+  legFailed?: boolean,
 ): Array<ExportTask> {
+  /** `done`, unless this project's leg says otherwise — see {@link legFailed}. */
+  const finishedStatus = legFailed === true ? ('failed' as const) : ('done' as const)
   const single = (): Array<ExportTask> => [
     {
       id: `hou:${project.path}`,
       label: project.label,
       detail: 'DazToHue export',
       kind: 'houdini',
-      status: index < finishedProjects ? 'done' : isActive ? 'active' : 'waiting',
+      status: index < finishedProjects ? finishedStatus : isActive ? 'active' : 'waiting',
     },
   ]
   if (live && live.total > 1) {
@@ -202,13 +221,21 @@ export function houdiniTaskCards(
   if (live || sets.length < 2) return single()
   // Not running yet, and the scan knows what this project writes: name the rows
   // now rather than showing one for two networks.
+  //
+  // A failed leg fails EVERY one of these rows, which over-claims per network
+  // and is still the honest option: these are the scan's guesses at names, not
+  // per-network verdicts — the moment a run knows which network failed, the
+  // memo branch above has already returned and this code is unreachable. What
+  // is left to say here is "this project's export failed", which is true of
+  // each row, and for the case that lands here most often (a project that
+  // could not START, so nothing ran at all) it is true network by network too.
   return sets.map((name, n) => ({
     id: `hou:${project.path}#${n}`,
     label: name,
     detail: 'DazToHue network',
     context: project.label,
     kind: 'houdini',
-    status: index < finishedProjects ? 'done' : 'waiting',
+    status: index < finishedProjects ? finishedStatus : 'waiting',
   }))
 }
 

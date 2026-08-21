@@ -438,6 +438,14 @@ export function DthExportAction({
           // so it is exactly the boundary between "these rows are this run's
           // past" and "that snapshot is some other run's".
           index < houdiniDone ? hipNetworkMemoRef.current[hip.path] : undefined,
+          // This project's own verdict — the same array whose LENGTH is
+          // `houdiniDone`, at the same index, so a row cannot be told it is
+          // finished by one and green by the other. Without it a one-network
+          // project (the commonest `.hip` there is) that failed ticked off
+          // beside the ones that worked: `houdiniTaskCards` can only read a
+          // failure out of the per-network memo, and a single-network project
+          // never renders from one.
+          report?.houdini[index]?.failed,
         )
       }),
       // Last, because it happens last: the send waits for every Houdini project
