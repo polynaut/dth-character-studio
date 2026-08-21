@@ -723,6 +723,7 @@ test('a Daz run with Skip Houdini arms the send’s own task rows — visible fr
     houdiniProject: true,
     dazInstallFolder: DAZ_INSTALL,
     unrealProjects: [UPROJECT],
+    landedExports: true,
   })
   seed.files[`${EXPORT_ROOT}/KiraDefault/DTH_KiraDefault.dth`] = '{}'
   seed.files[IMPORTED] = 'uasset-fixture'

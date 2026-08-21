@@ -110,7 +110,9 @@ a plain browser with native features as no-ops):
   startup empty scene runs a 456.py found there and eats the job; measured
   2026-08-11) — driven by `api/houdini.ts`
   (`startHoudiniExport` / `fetchHoudiniRunProgress`) and Rust
-  `launch_houdini_job`/`houdini_running`. **Live since v0.59** — the DTH Export
+  `launch_houdini_job`/`houdini_running`/`houdini_job_exit_code` (the dead
+  child's exit code — a silent hython death's only machine-readable witness;
+  primitive `number|null` return, no fixture). **Live since v0.59** — the DTH Export
   panel's Houdini list continues a Daz batch straight into Houdini (sequential
   multi-project queue: `startHoudiniQueue` in `components/character/dth-export.tsx`;
   see `.ai/domain.md` § the Houdini export handoff).
@@ -210,8 +212,8 @@ Renaming a project
 (`storage.renameManifestFile`) and calls `sync_renamed_project_window` to
 live-re-title + re-pin every open window on the old file (no close/reopen).
 
-**FFI surface: 56 commands** (count re-verified 2026-08-19 — it read "54" while
-55 were registered, drifted again; count it, don't trust it) registered in
+**FFI surface: 57 commands** (count re-verified 2026-08-21 — it has drifted
+twice before; count it, don't trust it) registered in
 `generate_handler!` — installs
 (`install_dth_release/plugin/daz_assets/daz_merge/houdini_presets/unreal_dth`,
 plus `install_unreal_plugin` and `install_dth_plugins_elevated` — the same plugin
@@ -249,7 +251,7 @@ drives
 `app_release_tags`, `unreal_dth_present`, `probe_locked_files`, and the Houdini
 side (`create_houdini_project`, `remove_junction` — the best-effort sweep of
 leftover `dth-exports` junctions from the retired feature —
-`launch_houdini_job`/`houdini_running` for
+`launch_houdini_job`/`houdini_running`/`houdini_job_exit_code` for
 the "Export too" handoff, `run_houdini_material_util` (scan a set of `.hip`
 files for DazToHueMaterial nodes / transfer one node's texture bakers onto
 others — the Houdini card's **Utils** drawer), plus `move_exports` for the v29

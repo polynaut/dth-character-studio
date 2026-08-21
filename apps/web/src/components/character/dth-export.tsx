@@ -15,6 +15,7 @@ import {
   fetchUnrealImportProgress,
   fetchHoudiniRunProgress,
   interruptExportRun,
+  verifyDazExportsLanded,
   openUnrealForPendingJob,
   startHoudiniExport,
   startUnrealImport,
@@ -31,6 +32,7 @@ import {
 } from '#/lib/rom/export-cards.ts'
 import {
   formatElapsed,
+  normalizeSceneKey,
   scenesRetiredByRun,
   scriptFailureLines,
   tidyRunErrors,
@@ -191,7 +193,12 @@ export function DthExportAction({
      *  adopted: the job file it reads never carried the panel's choice. */
     dazMode?: ExportMode
     /** `networks` = the scene stems the project will export (the DazToHue
-     *  networks are matched per scene) — the card tooltip names them. */
+     *  networks are matched per scene). NOTHING RENDERS IT: `houdiniTaskCards`
+     *  names its rows from the run's own network list, that project's last
+     *  snapshot, or the stored scan's `sets` — never from here. Kept as the
+     *  record of what each project's scope WAS (and so of what the landed
+     *  guard narrowed it to), not as display data; don't add a caller without
+     *  first checking whether `sets` is the field you actually want. */
     houdini: Array<{
       path: string
       label: string
@@ -1032,15 +1039,88 @@ export function DthExportAction({
       // the scripts wrote about themselves (`scriptFailures`) — without it a
       // run that produced NOTHING reports "1 scene exported", which is the one
       // thing a finish report must never do.
-      const failedTotal = Math.min(run.total, run.failed + run.scriptFailures.length)
+      //
+      // And the THIRD half is the disk: a script the Daz script engine kills
+      // at the C++ level writes neither a row failure nor a run-log entry —
+      // its row is `done`, the ROM log (stamped before the export block) says
+      // ok, and the export folder holds a 0-byte `.dth` beside the sweep's
+      // un-restored `.dthprev` backups (measured 2026-08-21: the DTH Exporter
+      // crashed 2 s into the Alembic export and the run reported "1/1 scene
+      // exported in 32s", then Houdini cooked the corpse into a 17-second
+      // "success"). The landed guard judges the files the Houdini leg would
+      // actually consume; a dead set fails its scene and drops out of the
+      // continuation scope. ROM-only wrote no set — nothing to judge.
+      //
+      // Judged only for the scenes nothing has counted YET. `failed +
+      // scriptFailures.length` is a true failure count precisely because those
+      // two are deduped against each other (see `scriptRunFailures`); a third
+      // channel added on top has to join that dedupe or it breaks the sum. It
+      // is not a theoretical overlap: `rom-export` stamps the run log before
+      // the export block, so a scene whose ROM leg errored AND whose export
+      // then crashed hits both — counted twice, `failedTotal` reaches
+      // `run.total`, and a HEALTHY sibling scene loses its Houdini leg under a
+      // "0 exported" report.
+      const countedFailed = new Set(
+        [...run.failedScenes, ...run.scriptFailures.map((failure) => failure.scene)].map(
+          normalizeSceneKey,
+        ),
+      )
+      const alreadyCounted = (scene: string): boolean => countedFailed.has(normalizeSceneKey(scene))
+      const verified =
+        !interrupted && run.mode !== 'rom-only'
+          ? await verifyDazExportsLanded({
+              data: {
+                projectId,
+                id: character.id,
+                scenes: run.scenes.filter((scene) => !alreadyCounted(scene)),
+                requireDth: run.mode !== 'hair-only',
+              },
+            }).catch(() => [])
+          : []
+      // Only the DEAD ones fail a scene. A set that merely carries leftover
+      // backups landed — reporting it as a failure cost a healthy scene its
+      // Houdini leg (measured 2026-08-21, on a run whose `.abc` and `.dth`
+      // were both correct and full-size).
+      const deadSets = verified.filter((set) => set.reason)
+      const setWarnings = verified.filter((set) => !set.reason && set.warning)
+      const failedTotal = Math.min(
+        run.total,
+        run.failed + run.scriptFailures.length + deadSets.length,
+      )
       // Composed RAW: the stashed report tidies when it renders, and the toast
       // below tidies its own copy — one cap over the whole list either way,
       // rather than one per half (which would count the elided tail twice).
-      const errors = [...run.errors, ...scriptFailureLines(run.scriptFailures)]
+      const errors = [
+        ...run.errors,
+        ...scriptFailureLines(run.scriptFailures),
+        ...deadSets.map(
+          (set) =>
+            `${set.label}: the Daz export did not land — ${set.reason}. Check Daz's log, then export this scene again.`,
+        ),
+        // Not failures — the export landed. Said once, where the run's other
+        // observations are, so the folder state is visible without pretending
+        // the scene is broken.
+        ...setWarnings.map((set) => `${set.label}: ${set.warning}`),
+      ]
+      const deadScenes = new Set(deadSets.map((set) => set.scene))
+      // The Houdini scope is what this run VERIFIED — and every failure
+      // channel drops its scene, not only the disk one. A scene that failed
+      // out loud has a folder that looks LANDED: the script's failure path
+      // renames the sweep's `.dthprev` backups back, so what sits there is the
+      // PREVIOUS export. Handing it on imports last week's character wearing
+      // this run's green checkmark — the same cascade the disk guard exists to
+      // stop, entered through the door that reported itself honestly.
+      const landedScenes = run.scenes.filter(
+        (scene) => !deadScenes.has(scene) && !alreadyCounted(scene),
+      )
       const continuing =
         !interrupted &&
         run.houdiniProjects.length > 0 &&
         failedTotal < run.total &&
+        // A continuation with NOTHING verified behind it would cook whatever
+        // the export folder held before this run — today's stale files wearing
+        // this run's green checkmark.
+        landedScenes.length > 0 &&
         // `skip` means no Houdini leg at all — the projects may still be
         // CHECKED in the panel (the list goes inert, it doesn't clear).
         run.houdiniMode !== 'skip'
@@ -1065,7 +1145,7 @@ export function DthExportAction({
             houdini: run.houdiniProjects.map((path) => ({
               path,
               label: stemOf(path),
-              networks: run.scenes.map(stemOf),
+              networks: landedScenes.map(stemOf),
               sets: hipSetsRef.current[path],
             })),
             unreal: unrealTargetsFrom(run.unrealProjects, run.unrealSets),
@@ -1081,7 +1161,9 @@ export function DthExportAction({
         unrealSetsRef.current = run.unrealSets
         void startHoudiniQueue(
           run.houdiniProjects,
-          run.scenes,
+          // Only the VERIFIED scenes — a dead set's networks would import
+          // whatever its export folder held before this run.
+          landedScenes,
         )
         return
       }

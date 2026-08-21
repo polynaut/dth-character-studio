@@ -115,6 +115,12 @@ export interface TauriMockSeed {
    *  window, not a neutral default. Exercising the dead path is what flipping
    *  `__tauriMock.houdiniRunning` to false mid-run is for. */
   houdiniRunning?: boolean
+  /** What `houdini_job_exit_code` answers — the dead child's exit code, which
+   *  the poll asks for ONLY once `houdini_running` says the run is gone. Null
+   *  (the default) is the honest "never tracked / no code", the same answer
+   *  the real command gives a run this window did not spawn. A spec driving
+   *  the DEAD path seeds a number to see it reach the death reason. */
+  houdiniExitCode?: number | null
   /** DazToHue nodes the fake material-utility SCAN reports, per `.hip` path —
    *  what the Utils drawer lists as targets and sources. Node objects are
    *  passed through verbatim and must satisfy `materialNodeInfoSchema` (the
@@ -208,6 +214,8 @@ export interface TauriMockState {
   releaseHeld: () => void
   /** Mutable: the answer `houdini_running` gives from now on. */
   houdiniRunning: boolean
+  /** Mutable: the answer `houdini_job_exit_code` gives from now on. */
+  houdiniExitCode: number | null
 }
 
 export function installTauriMock(seed: TauriMockSeed): void {
@@ -253,6 +261,7 @@ export function installTauriMock(seed: TauriMockSeed): void {
     materialRequests,
     unhandled,
     houdiniRunning: seed.houdiniRunning ?? false,
+    houdiniExitCode: seed.houdiniExitCode ?? null,
     releaseHeld: () => {
       holdPaths.clear()
       for (const resolve of held.splice(0)) resolve()
@@ -733,6 +742,12 @@ export function installTauriMock(seed: TauriMockSeed): void {
         return null
       case 'houdini_running':
         return state.houdiniRunning
+      // Asked only when the run is GONE — a primitive `number|null`, and the
+      // poll treats an unparseable answer as "can't tell". Handled here so the
+      // first spec to drive a dead run gets its death reason instead of an
+      // "unhandled command" that names the wrong problem.
+      case 'houdini_job_exit_code':
+        return state.houdiniExitCode
       case 'run_houdini_material_util': {
         // The studio writes its request to disk and hands hython the two paths,
         // so this fake reads the SAME request file the real Python parses —

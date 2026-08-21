@@ -293,6 +293,23 @@ describe('a finished batch reports what the SCRIPTS did, not just what the Runne
     // Only the SECOND scene is new information; the first is already counted.
     expect(run.scriptFailures.map((f) => f.errors)).toEqual([[RUNTIME_GONE]])
     expect(run.failed + run.scriptFailures.length).toBe(2)
+    // …and the report says WHICH scene the count belongs to, not just how
+    // many. A third channel judging the same batch (the export-landed guard,
+    // which reads the disk after the Daz leg) can only join this dedupe if it
+    // can ask "already counted?" — a bare number cannot answer that, and a
+    // scene counted twice pushes `failed` to `total` and takes a HEALTHY
+    // sibling's Houdini continuation down with it.
+    expect(run.failedScenes).toEqual([SCENE])
+  })
+
+  it('a clean batch names no failed scenes', async () => {
+    await armRun([SCENE, SCENE_B])
+    batchFinished([{ scene: SCENE }, { scene: SCENE_B }])
+
+    const run = await fetchExportRunProgress('c1')
+
+    if (run?.state !== 'finished') throw new Error('not finished')
+    expect(run.failedScenes).toEqual([])
   })
 
   it('a morph that would not apply is NOT a failed export', async () => {
