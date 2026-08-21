@@ -168,14 +168,25 @@ def import_path_of(node):
             children = node.parent().children()
         except Exception:
             return ""
-        candidates = [
-            child for child in children if "daztohueimport" in child.type().name().lower()
-        ]
+        # Per child, not per list: one node whose type() raises must cost this
+        # ONE node's answer, not the whole run. `collect_targets` calls this
+        # inside the loop that builds the export list, so an exception escaping
+        # here takes every remaining network with it.
+        candidates = []
+        for child in children:
+            try:
+                if "daztohueimport" in child.type().name().lower():
+                    candidates.append(child)
+            except Exception:
+                continue
         if len(candidates) != 1:
             return ""
         found = candidates[0]
-    parm = found.parm("import_character_dtu_file")
-    return parm.evalAsString() if parm is not None else ""
+    try:
+        parm = found.parm("import_character_dtu_file")
+        return parm.evalAsString() if parm is not None else ""
+    except Exception:
+        return ""
 
 
 class DialogAnswers(object):

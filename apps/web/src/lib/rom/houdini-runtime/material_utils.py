@@ -2043,8 +2043,12 @@ def _scene_pose_assets():
     So a csv parm that is NOT the sibling `<name>_pose_asset.csv` of the
     network's `.dth` reads another set's CSV — wrong frame layout the moment
     the scenes diverge, and wrong baked reference paths even while they don't.
-    The pairing is per NETWORK (the poseasset node's parent), because one hip
-    can import several scenes.
+    The pairing is per NODE, resolved through its own wired import
+    ({@link _network_dth}) — NOT per parent. One `.hip` can import several
+    scenes, and measured 2026-08-21 a single `/obj/DazToHue` held two complete
+    networks side by side: asking the parent paired both CSVs against the FIRST
+    network's `.dth`, which reported a fault against a project that had none
+    and was blind to a real one.
 
     Nodes whose HDA predates the CSV-path parm (DazToHue 2.5) contribute
     nothing — absence of the parm is a release gap, not a fault. A blank parm

@@ -52,12 +52,6 @@ function findPython(): string {
 }
 
 const python = findPython()
-// Skipping quietly is how a check dies unnoticed, so CI does not get the
-// option: ubuntu-latest ships python3, and a runner that stops shipping it
-// should fail here loudly rather than go green on nothing.
-if (!python && !process.env.CI) {
-  console.warn('[export-sets] no python3 on PATH — the Houdini network rule was NOT tested')
-}
 
 /** A `.hip` as this test describes one: nodes with a type, a parent, wired
  *  inputs and parms. Enough for the rules under test and nothing more. */
@@ -255,6 +249,20 @@ function network(
     })
   }
   return nodes
+}
+
+// Skipping quietly is how a check dies unnoticed, so CI does not get the
+// option: ubuntu-latest ships python3, and a runner that stops shipping it
+// FAILS here rather than going green on nothing. This is a real test, not a
+// comment about one — the version that only `console.warn`ed while
+// `describe.skip` swallowed the suite in CI too said exactly this and did
+// none of it. On a dev box without python the suite skips, and says so.
+if (process.env.CI) {
+  it('CI has a python3 to run the Houdini network rule under', () => {
+    expect(python).not.toBe('')
+  })
+} else if (!python) {
+  console.warn('[export-sets] no python3 on PATH — the Houdini network rule was NOT tested')
 }
 
 const maybe = python ? describe : describe.skip
