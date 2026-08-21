@@ -255,6 +255,61 @@ describe('houdiniTaskCards', () => {
       houdiniTaskCards(project({ sets: ['A', 'B'] }), 0, null, false, 1).map((c) => c.status),
     ).toEqual(['done', 'done'])
   })
+
+  it('does NOT tick off a one-network project that failed', () => {
+    // The commonest `.hip` there is holds a single DazToHue network, and its
+    // row is positional — "the queue has passed it" was the whole verdict. So
+    // the shape most users run was the one shape whose failure rendered green,
+    // struck through and ticked, beside the projects that worked. The
+    // per-network branches could always say `failed`; this row had nothing to
+    // say it with until the leg's own verdict was handed in.
+    const cards = houdiniTaskCards(project(), 0, null, false, 1, null, true)
+    expect(cards).toHaveLength(1)
+    expect(cards[0].status).toBe('failed')
+  })
+
+  it('fails the scan-named rows of a project that never ran', () => {
+    // No memo at all — the project could not START, so nothing named a
+    // network and nothing ran. Every row the scan guessed is a job that did
+    // not happen, and `waiting` would be the same lie pointing the other way.
+    expect(
+      houdiniTaskCards(project({ sets: ['A', 'B'] }), 0, null, false, 1, null, true).map(
+        (c) => c.status,
+      ),
+    ).toEqual(['failed', 'failed'])
+  })
+
+  it('leaves a project the queue has not reached alone, verdict or not', () => {
+    // The verdict only ever colours a FINISHED row. A stray `true` against a
+    // project still queued (or being worked) must not fail it early — the
+    // report cannot hold a verdict for a leg that has not reported, and a row
+    // that failed before it ran is worse than no row at all.
+    expect(houdiniTaskCards(project(), 0, null, false, 0, null, true)[0].status).toBe('waiting')
+    expect(houdiniTaskCards(project(), 0, null, true, 0, null, true)[0].status).toBe('active')
+  })
+
+  it('still prefers the per-network verdict when the memo has one', () => {
+    // A leg that failed says nothing about WHICH network did. Where the memo
+    // knows, it wins — one failed row among the ones that worked, not three
+    // red rows claiming a failure each.
+    expect(
+      houdiniTaskCards(
+        project(),
+        0,
+        null,
+        false,
+        1,
+        {
+          total: 2,
+          networks: [
+            { label: 'LaraClassic', status: 'ok' },
+            { label: 'LaraNaked', status: 'failed' },
+          ],
+        },
+        true,
+      ).map((c) => c.status),
+    ).toEqual(['done', 'failed'])
+  })
 })
 
 describe('houdiniNetworkMemoAtFinish', () => {
