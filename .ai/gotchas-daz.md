@@ -21,8 +21,22 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   cooked that corpse into a 17-second "success". Defense: `exportSetDeath`
   (houdini-jobs.ts) + `verifyDazExportsLanded` judge the export SET from the
   folder itself before the Houdini continuation; a dead set fails its scene
-  and drops out of the scope. The exporter crash itself is mrpdean's —
-  reported privately, never in repo docs.
+  and drops out of the scope. Same verdict gates "Skip Daz — use last exports"
+  (the panel's `houdini-only` pre-flight): its `exportExists` test is
+  `mtime > 0`, which a 0-byte corpse passes, and that mode's whole input is
+  whatever is on disk. The exporter crash itself is mrpdean's — reported
+  privately, never in repo docs.
+  **The guard's known hole, stated because it is not shut:** it asks "is a real
+  `.dth` here", never "is it THIS run's". A script killed BEFORE the export
+  block's move-aside sweep (scene load, figure resolution, the `rom-export` ROM
+  rebuild) leaves the previous set intact — every channel then reads green and
+  Houdini cooks last week's export under this run's checkmark. The measured
+  crash lands 1–2 s INTO the Alembic export, past the sweep, which is why the
+  disk holds a corpse there and not a survivor. The obvious close — `.dth`
+  mtime vs. the run's start — is deliberately NOT taken: export folders are
+  routinely network drives, and a NAS clock minutes behind the machine's would
+  fail every healthy scene at once. A rare stale set passing beats every export
+  failing on a clock skew, so the freshness question stays open.
 
 - **The DTH Exporter's FBX pass excludes every morph whose ROM keys VARY from
   the base mesh — on every export path.** Measured 2026-08-17 (DS4 4.24,

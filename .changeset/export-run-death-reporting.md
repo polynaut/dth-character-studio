@@ -22,7 +22,11 @@ A Daz or Houdini export leg that dies silently can no longer report as a success
   a failed Runner row, or a script that reported its own failure — now drops
   out of that continuation as well: its export folder looks landed only
   because the failure path put the previous export back, and handing it on
-  imported last week's character under this run's checkmark.
+  imported last week's character under this run's checkmark. **"Skip Daz — use
+  last exports" gets the same verdict**: its readiness test was "a `.dth` is
+  there", which a 0-byte corpse passes — the mode whose whole input is what
+  happens to be on disk now refuses to run Houdini over a dead export, and
+  says which scene and why.
 - **The export backup sweep finishes its job again** (runtime v100): the
   `.dthprev` step that restores the previous export on failure and purges it on
   success was listing through a directory handle read *before* its own renames,

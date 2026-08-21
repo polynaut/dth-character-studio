@@ -210,6 +210,14 @@ export function sceneDthPath(
   return [root, entry.folder, `${name}.dth`].filter(Boolean).join('/')
 }
 
+/** What the disk says about one export set — see {@link exportSetDeath}. */
+export interface ExportSetVerdict {
+  /** Why the set did NOT land ('' = it did). Fails the scene. */
+  dead: string
+  /** Something is off but the export itself landed — reported, never fatal. */
+  warning: string
+}
+
 /**
  * Did this scene's Daz export actually LAND — judged from the export folder's
  * own state, because every report channel above it can lie. The Runner marks a
@@ -226,14 +234,20 @@ export function sceneDthPath(
  *
  * Pure — the caller lists the folder and stats the `.dth`; this only judges.
  * Returns '' when the set looks landed, else the reason it did not.
+ *
+ * KNOWN HOLE, stated rather than pretended shut: this asks "is a real `.dth`
+ * here", never "is it THIS run's". A script the engine kills BEFORE the export
+ * block's move-aside sweep (scene load, figure resolution, the ROM rebuild
+ * under `rom-export`) leaves the previous run's full set untouched — so every
+ * channel reads green and the Houdini leg cooks last week's export under this
+ * run's checkmark. The measured crash lands 1–2 s INTO the Alembic export,
+ * past the sweep, which is why the corpse is what the disk holds there. The
+ * obvious close — compare the `.dth` mtime against the run's start — is NOT
+ * taken on purpose: the export folder is routinely a network drive, and a NAS
+ * clock minutes behind the machine's would fail every healthy scene at once.
+ * That trade (a rare stale set passes vs. every export fails on a clock skew)
+ * is why the freshness question stays unanswered. See `.ai/gotchas-daz.md`.
  */
-export interface ExportSetVerdict {
-  /** Why the set did NOT land ('' = it did). Fails the scene. */
-  dead: string
-  /** Something is off but the export itself landed — reported, never fatal. */
-  warning: string
-}
-
 export function exportSetDeath(
   /** File names in the scene's export folder (names only, no paths). */
   entryNames: ReadonlyArray<string>,

@@ -32,6 +32,7 @@ import {
   fetchUnrealOpenEditors,
   fetchUnrealSendPlan,
   fileExists,
+  verifyDazExportsLanded,
 } from '#/lib/rom/api.ts'
 import { unidentifiedEditorTargets } from '#/lib/rom/unreal-jobs.ts'
 import type { UnrealEditorProbe } from '#/lib/rom/unreal-jobs.ts'
@@ -778,6 +779,27 @@ export function DthExportPanel({
             )
             toast.error(
               `No Daz export on disk for ${names.join(', ')} — run ROM + Export first, or unselect ${missing.length === 1 ? 'it' : 'them'}.`,
+            )
+            return
+          }
+          // PRESENT is not LANDED. `exportExists` above is `mtime > 0` — which
+          // a 0-byte `.dth` has too, and that is exactly what a Daz export the
+          // script engine killed mid-Alembic leaves behind (see
+          // `verifyDazExportsLanded`). "Skip Daz — use last exports" is the one
+          // mode whose entire input is what happens to be on disk, so it is the
+          // one that most needs the same verdict the after-batch continuation
+          // gets: without it the corpse a crashed export left days ago cooks
+          // into a green Houdini checkmark, which is the cascade this guard
+          // exists to stop, reached from the other end.
+          const dead = (
+            await verifyDazExportsLanded({
+              data: { projectId, id: character.id, scenes: chosenScenes, requireDth: true },
+            }).catch(() => [])
+          ).filter((set) => set.reason)
+          if (dead.length > 0) {
+            toast.error(
+              `The Daz export on disk did not land for ${dead.map((set) => set.label).join(', ')} — export ${dead.length === 1 ? 'that scene' : 'those scenes'} again before running Houdini over it.`,
+              { description: dead.map((set) => `${set.label}: ${set.reason}`).join('\n') },
             )
             return
           }

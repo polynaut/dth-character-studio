@@ -193,7 +193,12 @@ export function DthExportAction({
      *  adopted: the job file it reads never carried the panel's choice. */
     dazMode?: ExportMode
     /** `networks` = the scene stems the project will export (the DazToHue
-     *  networks are matched per scene) — the card tooltip names them. */
+     *  networks are matched per scene). NOTHING RENDERS IT: `houdiniTaskCards`
+     *  names its rows from the run's own network list, that project's last
+     *  snapshot, or the stored scan's `sets` — never from here. Kept as the
+     *  record of what each project's scope WAS (and so of what the landed
+     *  guard narrowed it to), not as display data; don't add a caller without
+     *  first checking whether `sets` is the field you actually want. */
     houdini: Array<{
       path: string
       label: string
