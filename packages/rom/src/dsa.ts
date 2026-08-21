@@ -633,7 +633,17 @@ ${refDirBlock}
     };
     // Success => purge this set's backups; failure => delete partial new
     // output and rename the backups back. Only THIS set's names are touched.
-    var dthFinishPreviousSet = function (dthDirObj, dthRestore) {
+    // Takes the PATH, not the DzDir the sweep above used, and lists through a
+    // FRESH one. Measured 2026-08-21, live: handed the sweep's own DzDir, this
+    // function did nothing at all — neither purged on success nor restored on
+    // failure — because that object's entryList() still answered with the
+    // listing read BEFORE the renames, which by definition cannot contain the
+    // ".dthprev" names the renames just created. The tell was that it worked
+    // only where backups happened to exist already (their names were in the
+    // stale listing): one run purged 4 old backups and left the new one
+    // standing, and a folder that started clean kept every backup it made.
+    var dthFinishPreviousSet = function (dthDirPath, dthRestore) {
+        var dthDirObj = new DzDir(dthDirPath);
         if (!dthDirObj.exists()) return;
         var dthNames = dthDirObj.entryList();
         for (var dthFi = 0; dthFi < dthNames.length; dthFi++) {
@@ -692,8 +702,8 @@ ${refFramesBlock}${
     // puts the previous set back, so a failed run never costs the last good
     // export (measured 2026-08-18: it used to leave the folder empty).
     dthExportLanded = dthExportThrew === null && new DzFile(dthOldSetDir.absoluteFilePath(dthExportName + ".dth")).exists();
-    dthFinishPreviousSet(dthOldSetDir, !dthExportLanded);
-    dthFinishPreviousSet(dthOldRefDir, !dthExportLanded);
+    dthFinishPreviousSet(dthExportDir, !dthExportLanded);
+    dthFinishPreviousSet(dthExportDir + "/Reference Skeletons", !dthExportLanded);
     if (dthExportThrew !== null) throw dthExportThrew;
     if (!dthExportLanded) {
         dthExportAlert("The DTH Exporter produced no " + dthExportName + ".dth - the previous export files were put back untouched.\\n\\nCheck Daz's log for the exporter's own error, then run the export again.");

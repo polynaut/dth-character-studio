@@ -4,6 +4,37 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
 
 ## Web app
 
+- **A dead hython can exit with NOTHING — no traceback, no Houdini crash log,
+  no WER entry — and the death-reason must not then quote a stale warning.**
+  Measured 2026-08-21: the headless export died mid "exporting animation
+  curves" (never reproduced — GUI and a byte-identical headless re-run both
+  passed), and the only error-shaped line in the console was a benign HDA
+  load-time warning (`error binding handle sidefx_hud_button`), which the old
+  `houdiniDeathReason` served as the cause. The rule since: a run that kept
+  printing step lines (`DazToHue: …` / `DTH Character Studio: …`) AFTER its
+  newest error-shaped line did not die of that line — name the last step
+  reached instead, plus the child's exit code, which `launch_houdini_job`'s
+  spawn used to discard entirely (`houdini_job_exit_code` keeps it now;
+  negative codes are NTSTATUS — the hex spelling is the searchable one).
+
+- **A finish report's failure count is a SUM of deduped channels — a new
+  channel that skips the dedupe breaks the healthy scenes, not the dead one.**
+  The DTH Export finish counts `failed` (Runner rows) + `scriptFailures` (the
+  ROM run log) + the export-landed guard's dead sets, and the first two are
+  deduped by normalized scene key on purpose (`scriptRunFailures` drops any
+  scene already in a failed row). The third was added on top without joining
+  that dedupe, and the overlap is routine rather than exotic: `rom-export`
+  stamps the run log BEFORE the export block, so a scene whose ROM leg errored
+  and whose export then crashed appears in both. Counted twice, `failedTotal`
+  is capped at `run.total` — the report reads "2 of 2 scenes failed" and
+  `continuing` goes false, so a HEALTHY sibling scene silently loses its
+  Houdini leg. Any fourth channel must exclude the scenes already counted
+  (`run.failedScenes` + `scriptFailures[].scene`), and must exclude them from
+  the Houdini scope too: a scene that failed OUT LOUD has a folder that looks
+  landed, because the script's failure path renames the sweep's `.dthprev`
+  backups back over it — passing it on imports the PREVIOUS export under this
+  run's green checkmark.
+
 - **A picker built from the OUTPUT folder can only ever re-pick the past.**
   Reported 2026-08-13 on the DTH Export dialog's Unreal section: under the
   project rows sat a tick list of export sets, read from the character's

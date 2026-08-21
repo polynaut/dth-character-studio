@@ -189,6 +189,37 @@ test('houdini only: a scene with no export on disk is disabled and blocks Start'
   expect(await unhandledCommands(page)).toEqual([])
 })
 
+test('houdini only: a 0-byte .dth is PRESENT but not landed — Start refuses it', async ({
+  page,
+}) => {
+  // The gate above is `mtime > 0` ("is a file there"), and a Daz export the
+  // script engine killed mid-Alembic leaves a file there: a 0-byte `.dth`. So
+  // the row looks ready, comes pre-checked, and Start used to hand the corpse
+  // straight to Houdini — which cooks it into a green checkmark, the exact
+  // cascade the after-batch landed guard exists to stop, reached from the mode
+  // whose entire input is whatever happens to be on disk.
+  const seed = houdiniSeed(true)
+  seed.files[DELIVERED_DTH] = ''
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+
+  await page.getByRole('button', { name: 'DTH Export' }).click()
+  await page.locator('#daz-mode').click()
+  await page.getByRole('option', { name: /Skip Daz/ }).click()
+  await expect(page.getByRole('checkbox', { name: /Export Kira/ })).toBeChecked()
+  await page.getByRole('button', { name: 'Start' }).click()
+
+  // Refused, with the disk's own reason — and nothing was launched.
+  await expect(page.getByText(/did not land/)).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByText(/0 bytes/)).toBeVisible()
+  expect(await callsNamed(page, 'launch_houdini_job')).toEqual([])
+  expect(await fileKeys(page)).not.toContain(HOUDINI_JOB)
+
+  expect(await unhandledCommands(page)).toEqual([])
+})
+
 test('changing the Mode keeps a selection the user made themselves', async ({ page }) => {
   // Each Daz mode has its own "outstanding work" rule, and switching used to
   // re-run it over the whole list — so picking one scene and then changing the

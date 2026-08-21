@@ -1283,3 +1283,23 @@ v99 — the export set's ".dthprev" backup stops eating itself, and stops
       use a number > 99 (and post-v99 its premise is half-spent; see the
       gotchas-web entry).
 ```
+v100 — the ".dthprev" finish step actually runs: it lists through a FRESH
+      DzDir instead of the one the sweep already listed.
+      Measured 2026-08-21, live, on a run where the DTH Exporter (2.1.3) had
+      just stopped killing the script engine — which is what let a FAILED
+      export reach the restore branch for the first time since v99 shipped.
+      `dthFinishPreviousSet` was handed `dthOldSetDir`, the same DzDir the
+      move-aside had already called `entryList()` on. That listing is read
+      BEFORE the renames, so it cannot contain a single ".dthprev" name: the
+      loop iterated over nothing and the finish step did neither of its jobs —
+      a successful export kept every backup it made, and a failed one never
+      got the previous set back.
+      The tell, and why it looked intermittent: it "worked" only where backups
+      already existed at sweep time (their names WERE in the stale listing).
+      One measured run purged 4 pre-existing backups and left the one it had
+      just created standing; folders that started clean kept all of them.
+      Fix: the function takes a PATH and opens its own DzDir. Bumped so
+      Refresh assets regenerates every installed script — a v99 script in the
+      field still leaves its backups behind, which is why the studio's
+      export-landed guard treats leftover ".dthprev" as a WARNING and lets the
+      `.dth` decide whether the export landed.

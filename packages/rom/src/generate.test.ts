@@ -1750,9 +1750,31 @@ describe('exporter integration', () => {
     // PoseAsset CSV gone with it). The restore-or-purge runs AFTER doExport,
     // keyed on the exporter's own .dth landing.
     expect(content).toContain('var dthPrevSuffix = ".dthprev";')
-    const finishAt = content.indexOf('dthFinishPreviousSet(dthOldSetDir, !dthExportLanded);')
+    const finishAt = content.indexOf('dthFinishPreviousSet(dthExportDir, !dthExportLanded);')
     expect(finishAt).toBeGreaterThan(exportAt)
     expect(content).toContain('the previous export files were put back untouched')
+  })
+
+  it('the finish step lists through a FRESH DzDir — the swept one is stale by then (runtime v100)', () => {
+    // Measured 2026-08-21, live: handed the DzDir the move-aside had already
+    // listed through, the finish step did NOTHING — a successful export kept
+    // every backup it made, and a FAILED one never got the previous set back
+    // (the first failure ever to reach that code, once the exporter stopped
+    // killing the script engine). That object's entryList() still answered
+    // with the pre-rename listing, which cannot contain a single ".dthprev"
+    // name. So the finish step takes a PATH and opens its own DzDir; passing
+    // an already-listed one is the bug, and these two assertions are what say
+    // so.
+    const content = toExportScriptDsa(
+      withReferencePose({ name: 'Electra', exportPath: 'X:\\exports\\electra' }),
+      FRAMES,
+    ).content
+    expect(content).toContain('var dthFinishPreviousSet = function (dthDirPath, dthRestore) {')
+    expect(content).toContain('var dthDirObj = new DzDir(dthDirPath);')
+    // The callers hand over paths — never the swept DzDir.
+    expect(content).not.toContain('dthFinishPreviousSet(dthOldSetDir')
+    expect(content).not.toContain('dthFinishPreviousSet(dthOldRefDir')
+    expect(content).toContain('dthFinishPreviousSet(dthExportDir + "/Reference Skeletons"')
   })
 
   it('an existing .dthprev is the LAST GOOD COPY — the corpse beside it is dropped, not it', () => {

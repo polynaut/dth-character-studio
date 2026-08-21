@@ -240,6 +240,12 @@ export type ExportRunProgress =
       characterId: string
       total: number
       failed: number
+      /** WHICH scenes those failed rows were — `failed` as a list. The count
+       *  alone cannot be deduped against, and every later channel that judges
+       *  the same scenes (the export-landed guard) has to know which ones this
+       *  run already counted, or one scene is counted twice and a healthy
+       *  sibling's continuation is dropped with it. */
+      failedScenes: Array<string>
       errors: Array<string>
       /** The run's after-export Houdini projects ([] = none picked). */
       houdiniProjects: Array<string>
@@ -248,6 +254,9 @@ export type ExportRunProgress =
       houdiniMode: HoudiniRunMode
       /** The scenes the batch ran — the Houdini job's scope. */
       scenes: Array<string>
+      /** What the batch did to them — the continuation's export-landed guard
+       *  keys off this (a ROM-only run wrote no export set to verify). */
+      mode: ExportMode
       /** Linked Unreal projects to send to once the Houdini queue drains. */
       unrealProjects: Array<string>
       /** The export sets to hand them. */
@@ -541,6 +550,7 @@ export async function fetchExportRunProgress(watcher?: string): Promise<ExportRu
         // The run is over however it got here — the flag has no business
         // outliving it (a leftover would skip the NEXT run silently).
         await clearCancelFlag(run.cancelPath)
+        const failedScenes = parsed.jobs.filter((j) => j.status === 'failed').map((j) => j.scenePath)
         return {
           state: 'finished',
           characterId: run.characterId,
@@ -548,11 +558,8 @@ export async function fetchExportRunProgress(watcher?: string): Promise<ExportRu
           interrupted: run.interrupted === true,
           elapsedMs: Date.now() - run.startedAtMs,
           failed,
-          scriptFailures: await scriptRunFailures(
-            run.cancelPath,
-            run.startedAtMs,
-            parsed.jobs.filter((j) => j.status === 'failed').map((j) => j.scenePath),
-          ),
+          failedScenes,
+          scriptFailures: await scriptRunFailures(run.cancelPath, run.startedAtMs, failedScenes),
           errors: parsed.jobs
             .filter((j) => j.error)
             // An empty scenePath (the contract's "new empty scene" row, e.g.
@@ -561,6 +568,7 @@ export async function fetchExportRunProgress(watcher?: string): Promise<ExportRu
           houdiniProjects: run.houdiniProjects,
           houdiniMode: run.houdiniMode,
           scenes: run.scenes,
+          mode: run.mode,
           unrealProjects: run.unrealProjects,
           unrealSets: run.unrealSets,
         }
