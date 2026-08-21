@@ -130,6 +130,32 @@ describe('retirement is memory, not a redraw', () => {
     rerender(<ExportTaskList tasks={[task('daz:a', 'waiting')]} />)
     await tick(10)
     expect(rows(container)).toEqual(['daz:a'])
+
+    // …and forgotten all the way down: the id must be able to RETIRE again.
+    // Clearing only the remembered set would leave it armed with spent timers,
+    // and the second run's row — done, ticked — would sit there for good.
+    rerender(<ExportTaskList tasks={[task('daz:a', 'done')]} />)
+    await tick(DWELL_MS + EXIT_MS)
+    expect(rows(container)).toEqual([])
+  })
+
+  it('forgetting an id MID-DWELL cancels its timer, so the row it comes back as survives', async () => {
+    // The narrow window the baton pass actually opens: a row goes `done` and
+    // the leg is cleared wholesale before its 1.1 s is up. The pending timer
+    // belongs to a list that no longer exists — left running, it fires into
+    // the NEXT run and retires a row that never had its moment.
+    const { container, rerender } = render(<ExportTaskList tasks={[task('daz:a', 'done')]} />)
+    await tick(DWELL_MS - 100)
+    expect(rows(container)).toEqual(['daz:a'])
+
+    // The leg goes, and the same id comes back in a fresh run, still waiting.
+    rerender(<ExportTaskList tasks={[]} />)
+    await tick(10)
+    rerender(<ExportTaskList tasks={[task('daz:a', 'waiting')]} />)
+
+    // Past where the ORPHANED timers would have fired. The row is still here.
+    await tick(EXIT_MS + 200)
+    expect(rows(container)).toEqual(['daz:a'])
   })
 })
 
@@ -156,12 +182,15 @@ describe('the ordinal counts the RUN, not the list', () => {
 })
 
 describe('the panel is torn down mid-dwell', () => {
-  it('does not fire a retirement into a dead component', async () => {
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+  it('cancels the pending retirement rather than firing it into a dead component', async () => {
+    // Asserted on the TIMER, not on a console warning: React 19 dropped the
+    // "setState on an unmounted component" warning, so a spy on console.error
+    // passes whether or not the teardown clears anything — a test that cannot
+    // fail. What "torn down safely" actually means here is that the dwell
+    // timer is gone, so that is what is measured.
     const { unmount } = render(<ExportTaskList tasks={[task('daz:a', 'done')]} />)
+    expect(vi.getTimerCount()).toBeGreaterThan(0)
     unmount()
-    await tick(DWELL_MS + EXIT_MS + 1_000)
-    expect(spy).not.toHaveBeenCalled()
-    spy.mockRestore()
+    expect(vi.getTimerCount()).toBe(0)
   })
 })

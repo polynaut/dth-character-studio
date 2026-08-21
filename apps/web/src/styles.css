@@ -528,6 +528,14 @@ a {
    holds for the ~0 frames between the animation ending and React dropping the
    row — without it the row snaps back to full height first.
 
+   EVERY collapsing property is restated at 0% AND 45%, tedious as that reads.
+   A property named only in the 100% keyframe gets an implicit 0% one from the
+   element's own value and interpolates across the WHOLE run — so with
+   `padding-block` and `margin-block-start` declared once, the row began
+   shrinking on frame 1 and was 25.09px of its natural 28px by the time the
+   fade finished (measured in Chromium). That is the "collapse first" the two
+   beats exist to avoid, arriving through the back door.
+
    Reduced motion keeps the DWELL (the tick still gets its moment) and skips
    the movement: the row simply stops being there. */
 @keyframes dth-task-retire {
@@ -535,11 +543,15 @@ a {
     opacity: 1;
     transform: translateX(0);
     max-height: 3rem;
+    margin-block-start: 0;
+    padding-block: 0.375rem;
   }
   45% {
     opacity: 0;
     transform: translateX(-0.75rem);
     max-height: 3rem;
+    margin-block-start: 0;
+    padding-block: 0.375rem;
   }
   100% {
     opacity: 0;

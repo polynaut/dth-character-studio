@@ -469,7 +469,12 @@ test('ONE task row per re-import — and a set the project never held is dropped
   await expect(page.getByText(/Unreal: re-imported 1 asset in .Game.Characters.Kira/)).toBeVisible(
     { timeout: 15_000 },
   )
+  // The run ENDED — the panel went with it. An empty row set alone stopped
+  // saying that once finished rows started retiring on a timer: a panel still
+  // hanging in the header, its last row simply retired, reads as zero rows too.
+  // The meter is the panel, so the meter is the honest assertion.
   await expect(rows).toHaveCount(0)
+  await expect(page.locator('[data-progressbar]')).toHaveCount(0)
 })
 
 test('the just-re-import run needs no Daz-mode change: no scenes + Skip Houdini starts the send', async ({
@@ -848,7 +853,12 @@ test('a reloaded window finds the send again — the job file is the leg’s sid
   await expect(page.getByText(/Unreal: re-imported 1 asset in .Game.Characters.Kira/)).toBeVisible(
     { timeout: 15_000 },
   )
+  // The run ENDED — the panel went with it. An empty row set alone stopped
+  // saying that once finished rows started retiring on a timer: a panel still
+  // hanging in the header, its last row simply retired, reads as zero rows too.
+  // The meter is the panel, so the meter is the honest assertion.
   await expect(rows).toHaveCount(0)
+  await expect(page.locator('[data-progressbar]')).toHaveCount(0)
 })
 
 test('another character’s pending job is NOT adopted', async ({ page }) => {

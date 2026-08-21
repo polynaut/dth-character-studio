@@ -4,6 +4,18 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
 
 ## Web app
 
+- **A `@keyframes` property declared only at `100%` animates for the WHOLE
+  run, not from where you wrote it.** The missing `0%` is filled in implicitly
+  from the element's own computed value, so a "fade first, THEN collapse"
+  two-beat needs every collapsing property restated at the earlier stops —
+  otherwise the collapse starts on frame 1 while the fade is still going.
+  Measured in Chromium on `dth-task-retire` (styles.css): with `padding-block`
+  and `margin-block-start` written once at `100%`, the row was already 25.09px
+  of its natural 28px by the moment the fade ended. `max-height` masked it in
+  review — that one WAS pinned at `0%`/`45%`, so the animation looked staged
+  while the box was quietly shrinking underneath. A browser check that only
+  asserts the animation is *running* cannot catch this; sample the height.
+
 - **A row that retires from a live list needs MEMORY, and a smoke spec must
   not assert on its transient.** The DTH Export task list drops a `done` row
   1.1 s after its tick (`useRetiringTasks`, export-pipeline-panel.tsx). Two
