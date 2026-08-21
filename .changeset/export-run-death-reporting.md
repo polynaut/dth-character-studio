@@ -1,4 +1,10 @@
 ---
+# bump: patch is deliberate — nothing here is a new capability. Both signals
+# the gate caught (`verifyDazExportsLanded`, `houdini_job_exit_code`) are
+# internal WITNESSES: they exist only so an existing feature stops reporting a
+# success it never earned. No new page, no new button, nothing the user can do
+# that they could not do before — a run that used to show a green checkmark
+# now shows the failure it was hiding. That is a fix, not an addition.
 '@dth/web': patch
 '@dth/desktop': patch
 '@dth/rom': patch
