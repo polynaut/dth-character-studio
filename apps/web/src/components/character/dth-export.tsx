@@ -1061,7 +1061,7 @@ export function DthExportAction({
         ),
       )
       const alreadyCounted = (scene: string): boolean => countedFailed.has(normalizeSceneKey(scene))
-      const deadSets =
+      const verified =
         !interrupted && run.mode !== 'rom-only'
           ? await verifyDazExportsLanded({
               data: {
@@ -1072,6 +1072,12 @@ export function DthExportAction({
               },
             }).catch(() => [])
           : []
+      // Only the DEAD ones fail a scene. A set that merely carries leftover
+      // backups landed — reporting it as a failure cost a healthy scene its
+      // Houdini leg (measured 2026-08-21, on a run whose `.abc` and `.dth`
+      // were both correct and full-size).
+      const deadSets = verified.filter((set) => set.reason)
+      const setWarnings = verified.filter((set) => !set.reason && set.warning)
       const failedTotal = Math.min(
         run.total,
         run.failed + run.scriptFailures.length + deadSets.length,
@@ -1086,6 +1092,10 @@ export function DthExportAction({
           (set) =>
             `${set.label}: the Daz export did not land — ${set.reason}. Check Daz's log, then export this scene again.`,
         ),
+        // Not failures — the export landed. Said once, where the run's other
+        // observations are, so the folder state is visible without pretending
+        // the scene is broken.
+        ...setWarnings.map((set) => `${set.label}: ${set.warning}`),
       ]
       const deadScenes = new Set(deadSets.map((set) => set.scene))
       // The Houdini scope is what this run VERIFIED — and every failure

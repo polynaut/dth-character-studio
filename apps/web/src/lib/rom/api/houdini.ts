@@ -1186,8 +1186,11 @@ export interface DeadExportScene {
   scene: string
   /** The scene's display stem for report lines. */
   label: string
-  /** Why the set is judged dead — {@link exportSetDeath}'s verdict. */
+  /** Why the set is judged dead ('' when this entry is a warning only). */
   reason: string
+  /** A non-fatal observation about the folder — leftover backups from an
+   *  earlier run. Reported beside the outcome; never fails the scene. */
+  warning: string
 }
 
 /**
@@ -1233,6 +1236,7 @@ export async function verifyDazExportsLanded({
       const dir = slash > 0 ? dth.slice(0, slash) : dth
       const dthName = slash > 0 ? dth.slice(slash + 1) : dth
       let reason = ''
+      let warning = ''
       try {
         const entries = await readDir(dir)
         const size = requireDth
@@ -1241,11 +1245,13 @@ export async function verifyDazExportsLanded({
               () => null,
             )
           : undefined
-        reason = exportSetDeath(
+        const verdict = exportSetDeath(
           entries.map((entry) => entry.name),
           dthName,
           size,
         )
+        reason = verdict.dead
+        warning = verdict.warning
       } catch {
         // The folder itself is unreadable/missing. Missing after a batch that
         // claims this scene exported IS a dead set — nothing was written.
@@ -1253,9 +1259,9 @@ export async function verifyDazExportsLanded({
           ? '' // readable-not-listable: can't tell — never manufacture a failure
           : `the export folder was never written (${dir})`
       }
-      if (reason) {
+      if (reason || warning) {
         const label = (scene.replace(/\\/g, '/').split('/').pop() ?? scene).replace(/\.[^.]+$/, '')
-        dead.push({ scene, label, reason })
+        dead.push({ scene, label, reason, warning })
       }
     }
     return dead

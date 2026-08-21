@@ -712,53 +712,71 @@ describe('exportSetDeath — the disk is the one witness the crash cannot fake',
     'LaraCroft_G81_pose_asset.csv.dthprev',
   ]
 
-  it('judges the measured crash corpse dead — backups first, they prove it alone', () => {
-    const reason = exportSetDeath(corpse, 'LaraCroft_G81.dth', 0)
-    expect(reason).toContain('.dthprev')
-    expect(reason).toContain('died')
+  it('judges the measured crash corpse dead — the 0-byte manifest is the verdict', () => {
+    const verdict = exportSetDeath(corpse, 'LaraCroft_G81.dth', 0)
+    expect(verdict.dead).toContain('0 bytes')
+    // The backups are reported too, but they are not what makes it dead.
+    expect(verdict.warning).toContain('.dthprev')
   })
 
-  it('judges a 0-byte manifest dead even with the backups already purged', () => {
-    const reason = exportSetDeath(['LaraCroft_G81.abc', 'LaraCroft_G81.dth'], 'LaraCroft_G81.dth', 0)
-    expect(reason).toContain('0 bytes')
+  it('a LANDED export with leftover backups is not a failure — it is a warning', () => {
+    // Measured 2026-08-21, live: the runtime's finish step failed to purge, so
+    // a successful export (full-size abc, 607 KB .dth, "doExport finished")
+    // sat beside its own backups — and the guard failed the scene and took its
+    // Houdini leg with it. The backups say the SCRIPT did not finish tidying;
+    // only the `.dth` says whether the EXPORT landed.
+    const verdict = exportSetDeath(
+      ['LaraCroft_G81_Thick.abc', 'LaraCroft_G81_Thick.dth', 'LaraCroft_G81_Thick.abc.dthprev'],
+      'LaraCroft_G81_Thick.dth',
+      607341,
+    )
+    expect(verdict.dead).toBe('')
+    expect(verdict.warning).toContain('LaraCroft_G81_Thick.abc.dthprev')
+  })
+
+  it('judges a 0-byte manifest dead with the backups already purged', () => {
+    expect(
+      exportSetDeath(['LaraCroft_G81.abc', 'LaraCroft_G81.dth'], 'LaraCroft_G81.dth', 0).dead,
+    ).toContain('0 bytes')
   })
 
   it('judges a missing manifest dead', () => {
-    const reason = exportSetDeath(['LaraCroft_G81.abc'], 'LaraCroft_G81.dth', null)
-    expect(reason).toContain('LaraCroft_G81.dth')
-    expect(reason).toContain('never produced')
+    const verdict = exportSetDeath(['LaraCroft_G81.abc'], 'LaraCroft_G81.dth', null)
+    expect(verdict.dead).toContain('never produced')
+    expect(verdict.warning).toBe('')
   })
 
-  it('calls a clean landed set landed', () => {
+  it('calls a clean landed set landed, with nothing to report', () => {
     expect(
       exportSetDeath(
         ['LaraCroft_G81.abc', 'LaraCroft_G81.dth', 'LaraCroft_G81.fbx', 'LaraCroft_G81.log'],
         'LaraCroft_G81.dth',
         607436,
       ),
-    ).toBe('')
+    ).toEqual({ dead: '', warning: '' })
   })
 
   it("scopes the backup check to THIS set's prefix — another character's leftovers prove nothing", () => {
     expect(
-      exportSetDeath(
-        ['LaraCroft_G81.dth', 'OtherChar.dth.dthprev'],
-        'LaraCroft_G81.dth',
-        607436,
-      ),
-    ).toBe('')
+      exportSetDeath(['LaraCroft_G81.dth', 'OtherChar.dth.dthprev'], 'LaraCroft_G81.dth', 607436),
+    ).toEqual({ dead: '', warning: '' })
   })
 
   it('matches case-insensitively — the folder listing spells names, not keys', () => {
-    const reason = exportSetDeath(['laracroft_g81.ABC.DTHPREV'], 'LaraCroft_G81.dth', 607436)
-    expect(reason).toContain('died')
+    expect(
+      exportSetDeath(['laracroft_g81.ABC.DTHPREV'], 'LaraCroft_G81.dth', 607436).warning,
+    ).toContain('.DTHPREV')
   })
 
-  it('skips the manifest checks for a hair-only run (undefined size) but keeps the backup check', () => {
-    expect(exportSetDeath(['LaraCroft_G81_Hair_X_grooms.abc'], 'LaraCroft_G81.dth')).toBe('')
-    expect(
-      exportSetDeath(['LaraCroft_G81_Hair_X_grooms.abc.dthprev'], 'LaraCroft_G81.dth'),
-    ).toContain('died')
+  it('skips the manifest checks for a hair-only run (undefined size)', () => {
+    expect(exportSetDeath(['LaraCroft_G81_Hair_X_grooms.abc'], 'LaraCroft_G81.dth')).toEqual({
+      dead: '',
+      warning: '',
+    })
+    // …and a hair-only run never fails on backups either.
+    const verdict = exportSetDeath(['LaraCroft_G81_Hair_X_grooms.abc.dthprev'], 'LaraCroft_G81.dth')
+    expect(verdict.dead).toBe('')
+    expect(verdict.warning).toContain('.dthprev')
   })
 })
 

@@ -227,6 +227,13 @@ export function sceneDthPath(
  * Pure — the caller lists the folder and stats the `.dth`; this only judges.
  * Returns '' when the set looks landed, else the reason it did not.
  */
+export interface ExportSetVerdict {
+  /** Why the set did NOT land ('' = it did). Fails the scene. */
+  dead: string
+  /** Something is off but the export itself landed — reported, never fatal. */
+  warning: string
+}
+
 export function exportSetDeath(
   /** File names in the scene's export folder (names only, no paths). */
   entryNames: ReadonlyArray<string>,
@@ -238,19 +245,32 @@ export function exportSetDeath(
    *  undefined to skip the `.dth` checks entirely — the hair-only mode never
    *  touches it, so its absence proves nothing there. */
   dthSize?: number | null,
-): string {
+): ExportSetVerdict {
   const base = dthFileName.replace(/\.dth$/i, '')
   const lower = base.toLowerCase()
   const leftover = entryNames.find(
     (name) => name.toLowerCase().startsWith(lower) && name.toLowerCase().endsWith('.dthprev'),
   )
-  if (leftover) {
-    return `the previous export's backup files are still in place (${leftover}) — the export script died before it could finish`
+  // A leftover backup is a WARNING, never a verdict. It says the export
+  // script's finish step did not complete — which is not the same claim as
+  // "this export did not land", and reading it as one cost a healthy scene its
+  // Houdini leg (measured 2026-08-21: a successful export whose backups the
+  // runtime failed to purge was reported as a failure, while its `.abc` and
+  // `.dth` sat there full-size and correct). The runtime bug behind that is
+  // fixed in v100, but every older generated script in the field still leaves
+  // them, so the rule has to be honest on its own. The `.dth` is the witness
+  // that actually answers the question.
+  const warning = leftover
+    ? `the export folder still holds backup files from an earlier run (${leftover}) — harmless, but a sign the export script did not finish cleanly`
+    : ''
+  if (dthSize === undefined) return { dead: '', warning }
+  if (dthSize === null) {
+    return { dead: `no ${dthFileName} was written — the export never produced its manifest`, warning }
   }
-  if (dthSize === undefined) return ''
-  if (dthSize === null) return `no ${dthFileName} was written — the export never produced its manifest`
-  if (dthSize === 0) return `${dthFileName} is empty (0 bytes) — the exporter was cut off before writing it`
-  return ''
+  if (dthSize === 0) {
+    return { dead: `${dthFileName} is empty (0 bytes) — the exporter was cut off before writing it`, warning }
+  }
+  return { dead: '', warning }
 }
 
 /**

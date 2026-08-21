@@ -699,3 +699,56 @@ test('a Houdini leg that dies with nothing to say names its last step and its ex
 
   expect(await unhandledCommands(page)).toEqual([])
 })
+
+
+test('leftover backups beside a LANDED export warn — they do not fail the scene', async ({
+  page,
+}) => {
+  // Measured 2026-08-21, live: the runtime's finish step failed to purge, so a
+  // GOOD export (full-size .abc, 607 KB .dth, "doExport finished") sat beside
+  // its own .dthprev files — and the guard failed that scene and dropped its
+  // Houdini leg. The backups say the script did not finish TIDYING; only the
+  // `.dth` says whether the export landed. Runtime v100 fixes the purge, but
+  // every v99 script still in the field leaves them, so the studio has to be
+  // right on its own.
+  const seed = buildSeed({
+    activeProjectFile: P.dcsp,
+    demo: true,
+    dazInstallFolder: DAZ_INSTALL,
+    landedExports: true,
+  })
+  seed.houdiniRunning = true
+  const settingsPath = `${P.appData}/settings.json`
+  seed.files[settingsPath] = JSON.stringify({
+    ...JSON.parse(seed.files[settingsPath] ?? '{}'),
+    houdiniInstallFolder: HOUDINI_INSTALL,
+    houdiniDocsFolder: HOUDINI_DOCS,
+  })
+  seed.files[`${HOUDINI_INSTALL}/bin/hython.exe`] = 'hython-exe-fixture'
+  seed.files[`${SCRIPTS_ROOT}/Demo/Kira/.Bulk_ROM_Export.dsa`] = '// bulk-export fixture'
+  // The landed set, plus the backups the v99 finish step failed to purge.
+  seed.files[
+    'D:/DTH Projects/Demo/Kira/houdini/daz-export/KiraDefault_G9_GP/Kira.abc.dthprev'
+  ] = 'the previous export'
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+
+  await page.getByRole('button', { name: 'DTH Export' }).click()
+  await page.getByRole('button', { name: 'Start' }).click()
+  await expect.poll(() => fileContent(page, PENDING_JOB)).not.toBeNull()
+  await runnerFinishesBatch(page)
+
+  // The baton PASSES: the export landed, so Houdini gets its job.
+  await expect(page.locator(`[data-task="hou:${P.houdini}"]`)).toHaveAttribute(
+    'data-task-status',
+    'active',
+    { timeout: 15_000 },
+  )
+  expect(await fileKeys(page)).toContain(HOUDINI_JOB)
+  // …and nothing calls this scene a failed export.
+  await expect(page.getByText(/did not land/)).toHaveCount(0)
+
+  expect(await unhandledCommands(page)).toEqual([])
+})
