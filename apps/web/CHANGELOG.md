@@ -1,5 +1,56 @@
 # @dth/web
 
+## 0.88.1
+
+### Patch Changes
+
+- [#945](https://github.com/polynaut/dth-character-studio/pull/945) [`ab8bab6`](https://github.com/polynaut/dth-character-studio/commit/ab8bab698dec58f74c0fdb528b05b2ae1ca833f7) Thanks [@polynaut](https://github.com/polynaut)! - Finished rows leave the DTH Export run list. A job that completes wears its
+  tick for a beat — long enough to be seen — then fades, drifts aside and
+  collapses, and the rows still to come close up over it. The list is a queue
+  readout, and on a run into several Houdini projects the work still ahead used
+  to scroll out of its five-row box behind work that was already over.
+
+  A **failed** row never retires. It is the one row that has to catch the eye
+  after the run has moved on, and disposing of failures beside successes would
+  be exactly the lie its red edge exists to prevent. Row numbers count the whole
+  run, retired rows included, so a row's ordinal never changes under the reader.
+
+- [#946](https://github.com/polynaut/dth-character-studio/pull/946) [`87d6dba`](https://github.com/polynaut/dth-character-studio/commit/87d6dbad99f64b87f36458f0519de44d5132f210) Thanks [@polynaut](https://github.com/polynaut)! - A Houdini project holding two DazToHue networks in ONE subnet now reports both
+  of them, not one twice. The scan resolved a node's network by its **parent** and
+  took the first `daztohueimport` child it found there — right for a subnet with
+  one network, wrong for `/obj/DazToHue` holding two side by side, where both
+  export nodes answered with the first import's name and the dedupe collapsed
+  them. The DTH Export dialog showed such a project as writing a single export
+  set; the run list showed both all along, because it names nodes by their own
+  network box.
+
+  Resolution is per NODE now, walking its inputs upstream to its own import node,
+  with the parent's sole import as a fallback and an honest "cannot tell" when a
+  node is unwired in an ambiguous parent. The same correction lands on the
+  PoseAsset CSV pairing (both CSVs in such a project were checked against the
+  first network's `.dth`) and on the run's own node targeting.
+
+  Stored scans are re-earned automatically: `SCAN_ANSWER_VERSION` goes to 9,
+  because the old answer is a legitimate value — "this project writes one set" —
+  and would otherwise be served forever.
+
+- [#948](https://github.com/polynaut/dth-character-studio/pull/948) [`45f7a75`](https://github.com/polynaut/dth-character-studio/commit/45f7a759178feb6e326197d94de39830bf3d7d40) Thanks [@polynaut](https://github.com/polynaut)! - A Houdini project that failed no longer ticks itself off. The run's task list
+  could only read a failure out of the per-network memo — so the commonest `.hip`
+  there is, one holding a single DazToHue network, rendered its row positionally:
+  "the queue has passed it" was the whole verdict, and a failed export came out
+  struck through and green beside the projects that worked. The same held for a
+  project that could not START, whose scan-named rows never had a run behind them
+  at all.
+
+  Both positional paths now take the leg's own verdict — the same run-report entry
+  whose count already decides that the row is finished, so the two cannot disagree.
+  Where the memo knows which network failed, it still wins: one red row among the
+  ones that worked, not a project painted red.
+
+- Updated dependencies [[`647229b`](https://github.com/polynaut/dth-character-studio/commit/647229b1d326780d21eea5b28897a78f1d96be56)]:
+  - @dth/rom@0.88.1
+  - @dth/ui@0.88.1
+
 ## 0.88.0
 
 ### Minor Changes
