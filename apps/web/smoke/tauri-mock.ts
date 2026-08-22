@@ -139,6 +139,16 @@ export interface TauriMockSeed {
   materialScanDelayMs?: number
   /** The `$JOB` a scanned project reports — the General tab's input. Omit and
    *  the project reads as unreadable, which the tab reports and never repairs. */
+  /** What a SCANNED project reports it writes / imports, per `.hip` path — the
+   *  `exportSets` and `imports` the real `_scene_export_sets` /
+   *  `_scene_dth_imports` read out of the file. Default `[]` = a project that
+   *  was scanned and writes nothing nameable, which is how every spec that
+   *  seeds the STORE directly used to be the only way to model these at all.
+   *  A spec needs them whenever the scan itself has to LAND during the run
+   *  (the panel's Networks chips, the scene→project auto-selection, the task
+   *  list's one-row-per-network count). */
+  materialExportSets?: Record<string, Array<string>>
+  materialImports?: Record<string, Array<string>>
   materialJob?: Record<string, string>
   /** The timeline FPS a scanned project reports, per `.hip` path. Omit and the
    *  project reads as the pipeline's 30 — i.e. nothing to repair, which is what
@@ -842,6 +852,13 @@ export function installTauriMock(seed: TauriMockSeed): void {
               ok: true,
               error: '',
               nodes: seed.materialScan?.[norm(hipPath)] ?? [],
+              // What this project WRITES and IMPORTS. Both default to `[]`,
+              // which every reader treats as "not known" — the same posture the
+              // real scan has, and why a spec that wants chips or an
+              // auto-selection has to say so.
+              exportSets: seed.materialExportSets?.[norm(hipPath)] ?? [],
+              imports: seed.materialImports?.[norm(hipPath)] ?? [],
+              poseAssets: [],
               // $JOB/$HIP come off the same scan in the real Python. The seed
               // may name a $JOB; without one the project reads as already
               // correct, so the General tab is quiet unless a spec asks for it.

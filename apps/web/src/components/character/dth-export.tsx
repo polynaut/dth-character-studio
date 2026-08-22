@@ -17,6 +17,7 @@ import {
   interruptExportRun,
   verifyDazExportsLanded,
   openUnrealForPendingJob,
+  scanCharacterHoudiniProjects,
   startHoudiniExport,
   startUnrealImport,
   watchExportRunFiles,
@@ -573,22 +574,53 @@ export function DthExportAction({
   const hipNetworkMemoRef = useRef<Record<string, HoudiniNetworkMemo>>({})
   useEffect(() => {
     let active = true
-    void fetchCachedHoudiniScans({ data: { projectId, id: character.id } })
-      .then((scans) => {
+    const readSets = async (): Promise<number> => {
+      const scans = await fetchCachedHoudiniScans({ data: { projectId, id: character.id } })
+      if (!active) return 0
+      hipSetsRef.current = Object.fromEntries(scans.map((scan) => [scan.hipPath, scan.exportSets]))
+      return scans.length
+    }
+    void (async () => {
+      try {
+        // The same late-scan problem the panel has, on the other half of it:
+        // these names are what let the task list show ONE ROW PER NETWORK
+        // before the run starts (`houdiniTaskCards` falls back to a single
+        // project row while it has fewer than two). Read once and only once,
+        // a `.hip` scanned after this editor mounted still listed as one row
+        // for a project that exports two — the count only became right when
+        // 456.py reported it, minutes in.
+        if ((await readSets()) >= character.houdiniProjects.length) return
+        // No "already swept" guard here, deliberately. This effect re-runs when
+        // the dialog opens, and re-running tears the PREVIOUS instance down
+        // (`active = false`) — so an instance that was still awaiting the sweep
+        // abandons its re-read. If the new instance then skipped the sweep as
+        // "already asked", nothing would ever read the result and the whole fix
+        // would be inert. `scanCharacterHoudiniProjects` coalesces per
+        // character, so asking again JOINS the run in flight rather than
+        // starting a second, and short-circuits on the mtime key once warm.
+        await scanCharacterHoudiniProjects({ data: { projectId, id: character.id } })
         if (!active) return
-        hipSetsRef.current = Object.fromEntries(
-          scans.map((scan) => [scan.hipPath, scan.exportSets]),
-        )
-      })
-      .catch(() => {
+        await readSets()
+      } catch {
         // No scan, no names — the cards fall back to one per project.
-      })
+      }
+    })()
     return () => {
       active = false
     }
-    // Mount-only: a character cannot change under a mounted editor.
+    // Re-read whenever the dialog OPENS — not mount-only.
+    //
+    // These names decide how many rows the Houdini leg contributes before the
+    // run starts (`houdiniTaskCards` shows one row per project until it knows
+    // two or more sets). Read once at mount, a scan earned LATER never reached
+    // them: reported live 2026-08-22, where a manual Rescan of both projects
+    // filled the store and the task list still showed a single row for a `.hip`
+    // holding two DazToHue networks. Reloading the app was the only way out.
+    //
+    // The dialog opening is the right moment because it is the one that always
+    // precedes a run, and `hipSetsRef` is consumed when that run is armed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [open])
   /** Set once the send has run — the Unreal cards' `done`. (The targets ref is
    *  emptied by the send itself, so it cannot answer this.) */
   const unrealSentRef = useRef(false)

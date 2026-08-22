@@ -32,6 +32,7 @@ import {
   fetchUnrealOpenEditors,
   fetchUnrealSendPlan,
   fileExists,
+  scanCharacterHoudiniProjects,
   verifyDazExportsLanded,
 } from '#/lib/rom/api.ts'
 import { unidentifiedEditorTargets } from '#/lib/rom/unreal-jobs.ts'
@@ -275,28 +276,53 @@ export function DthExportPanel({
 
   useEffect(() => {
     let active = true
-    void Promise.all([
-      fetchCachedHoudiniScans({ data: { projectId, id: character.id } }),
-      fetchSceneDthPaths({ data: { projectId, id: character.id } }),
-    ])
-      .then(([scans, dthPaths]) => {
+    const readScans = async (): Promise<number> => {
+      const scans = await fetchCachedHoudiniScans({ data: { projectId, id: character.id } })
+      if (!active) return 0
+      setHipImports(
+        scans.map((scan) => ({
+          hipPath: scan.hipPath,
+          imports: scan.imports,
+          // The sets this project WRITES — what the Unreal pre-selection
+          // asks about. Dropping it here is what made every run read as
+          // "cannot tell" no matter how fresh the scan was.
+          exportSets: scan.exportSets,
+        })),
+      )
+      return scans.length
+    }
+    void (async () => {
+      try {
+        const [known, dthPaths] = await Promise.all([
+          readScans(),
+          fetchSceneDthPaths({ data: { projectId, id: character.id } }),
+        ])
         if (!active) return
         setSceneDth(dthPaths)
-        setHipImports(
-          scans.map((scan) => ({
-            hipPath: scan.hipPath,
-            imports: scan.imports,
-            // The sets this project WRITES — what the Unreal pre-selection
-            // asks about. Dropping it here is what made every run read as
-            // "cannot tell" no matter how fresh the scan was.
-            exportSets: scan.exportSets,
-          })),
-        )
-      })
-      .catch(() => {
+        // A scan that lands WHILE this panel is open used to be invisible: the
+        // read above was the only one, so a panel opened during the background
+        // sweep kept the unscanned answer for its whole life — no Networks
+        // chips, and no project auto-ticked when a scene was picked. Both read
+        // "empty", and empty means NOT KNOWN everywhere here, so the panel had
+        // no way to tell "this project writes nothing" from "nobody has looked
+        // yet". Reported 2026-08-22 right after the scan-version bump (v9)
+        // invalidated every stored scan at once, which is when the window
+        // between opening the panel and the sweep landing is widest.
+        //
+        // `fetchCachedHoudiniScans` returns only FRESH hits, so fewer hits than
+        // linked projects is exactly "a sweep would tell us more". The sweep
+        // coalesces per character, so this joins the one the character page
+        // already started rather than starting a second, and it short-circuits
+        // on the mtime key when everything is warm.
+        if (known >= character.houdiniProjects.length) return
+        await scanCharacterHoudiniProjects({ data: { projectId, id: character.id } })
+        if (!active) return
+        await readScans()
+      } catch {
         // Read-only convenience: no scan, no auto-adjust — the list simply
         // keeps whatever the user picked.
-      })
+      }
+    })()
     return () => {
       active = false
     }
