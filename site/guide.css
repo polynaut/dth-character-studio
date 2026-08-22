@@ -96,6 +96,108 @@
   cursor: zoom-in;
 }
 
+/* ------------------------------------------------- Interaction clips */
+
+/* The four guide clips are animated WebPs, and an animated WebP cannot be
+   paused: dropped in as a plain <img> it loops at the reader forever. The build
+   (`clickToPlayClips` in build-guide-site.mjs) therefore ships the clip's first
+   frame as a still with a real <button> over it, and guide.js swaps the src on
+   click. Nothing on a guide page moves until the reader asks it to — which also
+   means there is no prefers-reduced-motion case left to answer here. */
+
+.guide-content .clip {
+  position: relative;
+  display: inline-block;
+  /* Kill the inline-box descender gap so the button's `inset: 0` lands exactly
+     on the image edges instead of a few pixels below them. */
+  line-height: 0;
+  max-width: 100%;
+}
+
+/* Not the `zoom-in` every other guide image gets: a clip's click plays it, and
+   clips deliberately do NOT open the lightbox (guide.js bails on `.clip`). */
+.guide-content .clip img {
+  cursor: pointer;
+}
+
+.clip-play {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: color-mix(in oklab, #000 34%, transparent);
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+
+/* The disc. */
+.clip-play::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 50%;
+  inset-block-start: 50%;
+  width: 54px;
+  height: 54px;
+  transform: translate(-50%, -50%);
+  border: 1px solid color-mix(in oklab, #fff 42%, transparent);
+  border-radius: 50%;
+  background: color-mix(in oklab, #000 58%, transparent);
+  transition: opacity 140ms ease;
+}
+
+/* The glyph: a play triangle, nudged right of centre so it LOOKS centred in the
+   disc (a triangle's optical centre is left of its bounding box). */
+.clip-play::after {
+  content: '';
+  position: absolute;
+  inset-inline-start: 50%;
+  inset-block-start: 50%;
+  width: 18px;
+  height: 20px;
+  transform: translate(-38%, -50%);
+  background: #fff;
+  clip-path: polygon(0 0, 100% 50%, 0 100%);
+  transition: opacity 140ms ease;
+}
+
+.clip-play:hover {
+  background: color-mix(in oklab, #000 22%, transparent);
+}
+
+.clip-play:focus-visible {
+  outline: 2px solid var(--primary-soft);
+  outline-offset: 2px;
+}
+
+/* Playing: the clip is why the reader is here, so nothing sits on top of it.
+   The button stays (it is the stop control) and shows itself again on hover or
+   keyboard focus, with the glyph swapped to a stop square. */
+.clip.is-playing .clip-play {
+  background: transparent;
+}
+
+.clip.is-playing .clip-play::before,
+.clip.is-playing .clip-play::after {
+  opacity: 0;
+}
+
+.clip.is-playing .clip-play:hover::before,
+.clip.is-playing .clip-play:focus-visible::before,
+.clip.is-playing .clip-play:hover::after,
+.clip.is-playing .clip-play:focus-visible::after {
+  opacity: 1;
+}
+
+.clip.is-playing .clip-play:hover::after,
+.clip.is-playing .clip-play:focus-visible::after {
+  width: 16px;
+  height: 16px;
+  transform: translate(-50%, -50%);
+  clip-path: inset(0 round 2px);
+}
+
 /* ------------------------------------------------------------- Lightbox */
 
 .guide-lightbox {

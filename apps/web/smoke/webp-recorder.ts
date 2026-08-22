@@ -122,10 +122,33 @@ export class WebpRecorder {
     await this.frame(90)
   }
 
-  /** Encode all frames and write the animated WebP. */
+  /**
+   * Encode all frames and write the animated WebP — plus `<name>.poster.webp`,
+   * the FIRST frame as a still.
+   *
+   * The poster is what the guide site shows until the reader presses play.
+   * There is no pause API for an animated WebP, so the only way to stop four
+   * clips autoplaying at a reader is to show a still and swap the `src` on
+   * click — which needs a still to exist. Written here rather than decoded at
+   * build time on purpose: frame 0 is already in hand, and
+   * `build-guide-site.mjs` deliberately carries no image library (it sniffs
+   * dimensions by magic number).
+   *
+   * The `docs/guide/*.md` markdown keeps pointing at the ANIMATED file, because
+   * those pages also render on GitHub, where no script runs — a GitHub reader
+   * gets the clip as before. Only the built site swaps in the poster.
+   */
   async save(path: string) {
     if (!this.size) throw new Error('no frames recorded')
     const { width, height } = this.size
+    const first = this.frames[0]
+    if (!first) throw new Error('no frames recorded')
+    writeFileSync(
+      path.replace(/\.webp$/, '.poster.webp'),
+      await sharp(first.data, { raw: { width, height, channels: 4 } })
+        .webp({ lossless: true, effort: 6 })
+        .toBuffer(),
+    )
     // sharp joins an array of images into one animation; it needs decodable
     // inputs (raw pixel buffers aren't accepted by `join`), so encode each frame
     // to PNG first, then join to a lossless animated WebP with per-frame delays.

@@ -219,11 +219,21 @@ for (const md of pages) {
   for (const m of text.matchAll(/clips\/([\w.-]+\.webp)/g)) referencedClips.add(m[1])
 }
 const clipsOnDisk = existsSync(clipsDir) ? readdirSync(clipsDir).filter((f) => f.endsWith('.webp')) : []
+// Each clip ships a `<name>.poster.webp` too — its first frame as a still, which
+// is what the site shows until the reader presses play (see `clickToPlayClips`).
+// A poster belongs to its clip: referenced exactly when the clip is, so a
+// missing one fails the build like any other asset, and one whose clip is gone
+// is an orphan like any other. Written by webp-recorder.ts, never by hand.
+const posterOf = (clip) => clip.replace(/\.webp$/, '.poster.webp')
+const isPoster = (f) => f.endsWith('.poster.webp')
+for (const clip of [...referencedClips]) referencedClips.add(posterOf(clip))
 const missingClips = [...referencedClips].filter((f) => !clipsOnDisk.includes(f)).sort()
 const orphanClips = clipsOnDisk.filter((f) => !referencedClips.has(f)).sort()
 if (missingClips.length)
   throw new Error(
-    `guide references clips that don't exist (run \`pnpm --filter @dth/web clips\` or fix the reference): ${missingClips.join(', ')}`,
+    missingClips.every(isPoster)
+      ? `clips are missing their poster still (re-run \`pnpm --filter @dth/web clips\`): ${missingClips.join(', ')}`
+      : `guide references clips that don't exist (run \`pnpm --filter @dth/web clips\` or fix the reference): ${missingClips.join(', ')}`,
   )
 if (orphanClips.length)
   throw new Error(
@@ -399,6 +409,46 @@ async function externalImageDims(url) {
   return dims
 }
 
+/**
+ * Turn each interaction clip into a CLICK-TO-PLAY still.
+ *
+ * The four clips are animated WebPs, and an animated WebP has no pause API —
+ * dropped into a page as a plain `<img>` it simply loops at the reader forever,
+ * which is three moving things competing with the prose on `advanced.md`. There
+ * is no CSS for it either: `animation-play-state` governs CSS animations, not
+ * decoded image frames.
+ *
+ * So the site shows `<name>.poster.webp` (the clip's first frame, written
+ * beside it by webp-recorder.ts) behind a play button, and `guide.js` swaps the
+ * `src` to the animated file on click — clicking again puts the still back.
+ * Re-assigning `src` is what restarts an animated WebP from frame 0, so a
+ * replay always begins at the beginning.
+ *
+ * Deliberately a BUILD-TIME transform rather than markup in the markdown:
+ * `docs/guide/*.md` is the single source of truth and also renders on GitHub,
+ * where no script of ours runs. Left as a plain `<img>` there, a GitHub reader
+ * still gets the clip exactly as before; only the built site gains the button.
+ *
+ * Runs BEFORE `reserveImageSpace`, so the aspect ratio is stamped from the
+ * poster that is actually loaded (identical dimensions — same frame).
+ */
+function clickToPlayClips(html) {
+  return html.replace(/<img\b[^>]*?>/g, (tag) => {
+    const src = /\bsrc="(clips\/[^"]+\.webp)"/.exec(tag)?.[1]
+    if (!src || src.endsWith('.poster.webp')) return tag
+    const alt = /\balt="([^"]*)"/.exec(tag)?.[1] ?? ''
+    const still = tag.replace(src, src.replace(/\.webp$/, '.poster.webp'))
+    // A real <button>, so the keyboard and a screen reader get the control the
+    // mouse gets. The label says "Play" up front — `guide.js` rewrites it to
+    // "Stop" while the clip runs.
+    return (
+      `<span class="clip" data-clip="${src}">${still}` +
+      `<button class="clip-play" type="button" aria-label="Play${alt ? `: ${alt}` : ''}"></button>` +
+      `</span>`
+    )
+  })
+}
+
 /** Stamp every `<img>` with its natural aspect ratio — local assets
  *  (screenshots/clips/gifs) from disk, http(s) sources via fetch. The attrs
  *  stay untouched: CSS already governs display width, the ratio just gives the
@@ -492,7 +542,9 @@ const searchIndex = []
 rmSync(OUT, { recursive: true, force: true })
 mkdirSync(OUT, { recursive: true })
 for (const md of pages) {
-  const html = await reserveImageSpace(renderPage(stripMdFooterNav(readFileSync(join(SRC, md), 'utf8'))))
+  const html = await reserveImageSpace(
+    clickToPlayClips(renderPage(stripMdFooterNav(readFileSync(join(SRC, md), 'utf8')))),
+  )
   const pageEntries = indexPage(md, html)
   // Every page has at least its own H1 (titleOf enforces the "# " first line) —
   // a page yielding nothing means indexPage no longer matches renderPage's
