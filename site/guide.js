@@ -42,6 +42,10 @@ document.addEventListener('click', (e) => {
     close() // any click inside the open overlay closes it
     return
   }
+  // A clip's click PLAYS it (see the click-to-play block below). Stated here
+  // rather than left to the play button covering the image, so the rule
+  // survives someone giving that button a smaller hit area.
+  if (e.target.closest('.clip')) return
   const img = e.target.closest('.guide-content img')
   if (!img) return
   const full = document.createElement('img')
@@ -260,3 +264,40 @@ async function initGuideDownload() {
   }
 }
 void initGuideDownload()
+
+// ── Interaction clips: click to play ─────────────────────────────────────────
+// The guide's four clips are animated WebPs, which have no pause API — as a
+// plain <img> each one loops at the reader for as long as the page is open. The
+// build (`clickToPlayClips` in scripts/build-guide-site.mjs) wraps every clip in
+// `.clip[data-clip]`, pointing the <img> at `<name>.poster.webp` (the first
+// frame, still) with a play button over it. All this does is swap the two.
+//
+// Re-assigning `src` is what restarts an animated WebP from frame 0, so every
+// play begins at the beginning — including a replay of the clip that just
+// stopped. Only one clip runs at a time: starting one stops the others, since
+// two looping clips on a page is the problem this exists to remove.
+document.addEventListener('click', (e) => {
+  const button = e.target.closest('.clip-play')
+  if (!button) return
+  const clip = button.closest('.clip')
+  const img = clip?.querySelector('img')
+  const animated = clip?.dataset.clip
+  if (!img || !animated) return
+  const playing = clip.classList.contains('is-playing')
+  for (const other of document.querySelectorAll('.clip.is-playing')) stopClip(other)
+  if (playing) return // it was the running one — the stop above is the whole job
+  img.dataset.poster = img.getAttribute('src')
+  img.setAttribute('src', animated)
+  clip.classList.add('is-playing')
+  button.setAttribute('aria-label', button.getAttribute('aria-label').replace(/^Play/, 'Stop'))
+})
+
+function stopClip(clip) {
+  const img = clip.querySelector('img')
+  const button = clip.querySelector('.clip-play')
+  if (img?.dataset.poster) img.setAttribute('src', img.dataset.poster)
+  clip.classList.remove('is-playing')
+  if (button) {
+    button.setAttribute('aria-label', button.getAttribute('aria-label').replace(/^Stop/, 'Play'))
+  }
+}
