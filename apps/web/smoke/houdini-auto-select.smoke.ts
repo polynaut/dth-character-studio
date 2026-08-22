@@ -31,7 +31,7 @@ const DTH_EXTRA = `${P.exportDir}/KiraSummertide_G9_GP/Kira_KiraSummertide_G9_GP
 /** A stored scan entry's freshness key — see `scanStoreEntryKey` in fixtures.ts. */
 const storeKey = (hipPath: string) => scanStoreEntryKey(hipPath, P.exportDir)
 
-function scan(hipPath: string, imports: Array<string>) {
+function scan(hipPath: string, imports: Array<string>, exportSets: Array<string> = []) {
   return {
     hipPath,
     ok: true,
@@ -40,9 +40,47 @@ function scan(hipPath: string, imports: Array<string>) {
     job: P.charFolder,
     fps: 30,
     imports,
+    exportSets,
     refs: { collapsible: 0, foreign: 0, broken: [], hipRelative: [] },
     prefill: { fillable: [], missing: [] },
   }
+}
+
+/** The seed the three late-scan specs share: one linked project holding TWO
+ *  DazToHue networks, a Houdini to sweep with, and enough of Daz for Start.
+ *  Nothing is in the STORE — filling it is the sweep's job, mid-dialog. */
+function sweepSeed() {
+  const seed = buildSeed({
+    activeProjectFile: P.dcsp,
+    demo: true,
+    houdiniProject: true,
+    dazInstallFolder: 'C:/Program Files/DAZ 3D/DAZStudio4',
+  })
+  const settingsPath = `${P.appData}/settings.json`
+  seed.files[settingsPath] = JSON.stringify({
+    ...JSON.parse(seed.files[settingsPath] ?? '{}'),
+    houdiniInstallFolder: HOUDINI_INSTALL,
+    houdiniDocsFolder: HOUDINI_DOCS,
+  })
+  seed.files[`${HOUDINI_INSTALL}/bin/hython.exe`] = 'hython-exe-fixture'
+  seed.files[`${P.dazLib}/Scripts/DTH-Character-Studio/Demo/Kira/.Bulk_ROM_Export.dsa`] =
+    '// bulk-export fixture'
+  // The RACE, made deterministic. Without a delay the fake answers instantly and
+  // the character page's own sweep is finished before the dialog is even opened
+  // - so the dialog's first read is already warm and these specs pass with the
+  // bug still in. A real sweep is one hython start per project (tens of
+  // seconds); 2.5 s is enough to make the dialog open into the same gap the
+  // live report came from.
+  seed.materialScanDelayMs = 2500
+  // What the sweep will find: ONE project holding TWO DazToHue networks - the
+  // very shape #946 taught the scan to read, and the reason the task list should
+  // say two rows before anything starts.
+  // Keyed as the fake's `norm()` spells it - separators folded, case KEPT. A
+  // lowercased key here silently misses and the seed reads as "scanned, writes
+  // nothing", which is the same empty these specs are about.
+  seed.materialExportSets = { [P.houdini]: ['KiraClassic', 'KiraNaked'] }
+  seed.materialImports = { [P.houdini]: [DTH_PRIMARY] }
+  return seed
 }
 
 /** Two linked projects; `scans` decides which of them the store knows about. */
@@ -152,37 +190,7 @@ test('a scan that lands WHILE the dialog is open reaches it — chips, tick and 
   // honest empty state forever.
   //
   // No stored scan at all here; the SWEEP is what fills it, mid-dialog.
-  const seed = buildSeed({
-    activeProjectFile: P.dcsp,
-    demo: true,
-    houdiniProject: true,
-    dazInstallFolder: 'C:/Program Files/DAZ 3D/DAZStudio4',
-  })
-  const settingsPath = `${P.appData}/settings.json`
-  seed.files[settingsPath] = JSON.stringify({
-    ...JSON.parse(seed.files[settingsPath] ?? '{}'),
-    houdiniInstallFolder: HOUDINI_INSTALL,
-    houdiniDocsFolder: HOUDINI_DOCS,
-  })
-  seed.files[`${HOUDINI_INSTALL}/bin/hython.exe`] = 'hython-exe-fixture'
-  seed.files[`${P.dazLib}/Scripts/DTH-Character-Studio/Demo/Kira/.Bulk_ROM_Export.dsa`] =
-    '// bulk-export fixture'
-  // The RACE, made deterministic. Without a delay the fake answers instantly and
-  // the character page's own sweep is finished before the dialog is even opened
-  // — so the dialog's first read is already warm and this spec passes with the
-  // bug still in. A real sweep is one hython start per project (tens of
-  // seconds); 2.5 s is enough to make the dialog open into the same gap the
-  // live report came from.
-  seed.materialScanDelayMs = 2500
-  // What the sweep will find: ONE project holding TWO DazToHue networks — the
-  // very shape #946 taught the scan to read, and the reason the task list should
-  // say two rows before anything starts.
-  // Keyed as the fake's `norm()` spells it — separators folded, case KEPT. A
-  // lowercased key here silently misses and the seed reads as "scanned, writes
-  // nothing", which is the same empty this whole spec is about.
-  seed.materialExportSets = { [P.houdini]: ['KiraClassic', 'KiraNaked'] }
-  seed.materialImports = { [P.houdini]: [DTH_PRIMARY] }
-  await page.addInitScript(installTauriMock, seed)
+  await page.addInitScript(installTauriMock, sweepSeed())
   await page.goto('/')
   await page.getByRole('link', { name: /Kira/ }).click()
   await page.getByText(/custom ROM frames/).waitFor()
@@ -207,6 +215,105 @@ test('a scan that lands WHILE the dialog is open reaches it — chips, tick and 
   // Rescan filled the store and the list STILL showed one row, because the
   // names behind it were read once when the editor mounted and never again.
   await page.getByRole('button', { name: 'Start' }).click()
+  await expect(page.locator(`[data-task="hou:${P.houdini}#0"]`)).toBeVisible({ timeout: 15_000 })
+  await expect(page.locator(`[data-task="hou:${P.houdini}#1"]`)).toBeVisible()
+  await expect(page.locator(`[data-task="hou:${P.houdini}"]`)).toHaveCount(0)
+})
+
+test('a project the user unticked stays unticked when the scan lands on top of it', async ({
+  page,
+}) => {
+  // The other end of the fix above. Re-reading the store mid-panel means
+  // `hipImports` now changes UNDER an open dialog, and the scene->project
+  // auto-selection re-runs on it - so the scan landing re-ticked a project the
+  // user had just unticked, seconds after they did it, with no input of their
+  // own. Measured on the first cut of this fix: this spec passed on `main` (the
+  // scan never landed) and failed on the branch, which is the whole shape of an
+  // introduced regression.
+  //
+  // The rule the panel now keeps: the auto-selection may add a project when the
+  // USER changes the scene selection, and never when the only new thing is a
+  // scan.
+  await page.addInitScript(installTauriMock, sweepSeed())
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+  await page.getByRole('button', { name: 'DTH Export' }).click()
+
+  // Ticked by default (the scenes are), and unticked by hand while the sweep is
+  // still out - the window this whole fix is about.
+  const projectOne = page.getByRole('checkbox', { name: /Run in Kira\b/ })
+  await expect(projectOne).toBeChecked()
+  await projectOne.uncheck()
+
+  // The scan lands: the chips prove it reached the panel (see the spec above).
+  const chips = page.locator('[data-sets="houdini"]').first()
+  await expect(chips.locator('[data-set="KiraClassic"]')).toBeVisible({ timeout: 15_000 })
+  // ...and the user's "no" survived it.
+  await expect(projectOne).not.toBeChecked()
+
+  // Not a freeze, though: the selection is still DERIVED. Changing the scene
+  // pick retires the hand-untick and the default answer comes back - the same
+  // reset the Unreal list documents for its own hand-picks.
+  const primaryScene = page.getByRole('checkbox', { name: /Export KiraDefault/ })
+  await primaryScene.uncheck()
+  await primaryScene.check()
+  await expect(projectOne).toBeChecked()
+})
+
+test('reopening the dialog picks up a Rescan that landed while it was shut', async ({ page }) => {
+  // The second half of the live report: a manual Rescan filled the store and
+  // the task list STILL showed one row. The panel remounts on every open, so it
+  // re-reads for free - but the task list's copy of the names lives in the
+  // BUTTON's component, which outlives the dialog and is mounted once with the
+  // character page. Read only at that mount, it could never see a Rescan.
+  //
+  // Pinned by making the two answers differ, the way the drawer's own cache
+  // spec does: the store says one network, the fake hython says two. Which
+  // count the task list shows says which read ran.
+  const seed = sweepSeed()
+  // No race to stage here - this spec is about a store that changes between two
+  // opens, not about one that fills during one.
+  delete seed.materialScanDelayMs
+  seed.files[STORE] = JSON.stringify({
+    version: 1,
+    projects: {
+      [P.houdini.toLowerCase()]: {
+        key: storeKey(P.houdini),
+        scannedAt: '2026-08-12T00:00:00.000Z',
+        project: scan(P.houdini, [DTH_PRIMARY], ['KiraSolo']),
+      },
+    },
+  })
+  await page.addInitScript(installTauriMock, seed)
+  await page.addInitScript((storePath: string) => {
+    const mock = (window as any).__tauriMock
+    const raw = mock.files.get(storePath) as string
+    mock.files.set(storePath, raw.split('__MTIME__').join(String(mock.mtimeMs)))
+  }, STORE)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+
+  // The button's mount read has happened by now, and it read ONE network.
+  // Rescan goes past both cache layers, all the way to the fake hython, and
+  // stores the two the project really holds.
+  await page.getByRole('button', { name: /^Utils/ }).first().click()
+  const drawer = page.getByRole('dialog')
+  await drawer.getByRole('tab', { name: 'Material' }).click()
+  await drawer.getByRole('button', { name: 'Rescan' }).click()
+  await expect(page.getByText(/Rescanned the Houdini project/)).toBeVisible({ timeout: 15_000 })
+  await drawer.getByRole('button', { name: /^Close/ }).click()
+
+  // Open the dialog for the first time SINCE the rescan and start: two rows.
+  await page.getByRole('button', { name: 'DTH Export' }).click()
+  await page.getByRole('button', { name: 'Start' }).click()
+  // Reaching the project card scrolled the page, and the header's task list is
+  // the collapsed half of a sticky header — rendered, `visibility: hidden`.
+  // Back to the top, where the run is actually watched.
+  await page.evaluate(() => {
+    window.scrollTo(0, 0)
+  })
   await expect(page.locator(`[data-task="hou:${P.houdini}#0"]`)).toBeVisible({ timeout: 15_000 })
   await expect(page.locator(`[data-task="hou:${P.houdini}#1"]`)).toBeVisible()
   await expect(page.locator(`[data-task="hou:${P.houdini}"]`)).toHaveCount(0)

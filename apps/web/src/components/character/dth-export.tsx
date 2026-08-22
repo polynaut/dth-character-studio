@@ -574,9 +574,11 @@ export function DthExportAction({
   const hipNetworkMemoRef = useRef<Record<string, HoudiniNetworkMemo>>({})
   useEffect(() => {
     let active = true
-    const readSets = async (): Promise<number> => {
+    /** How many projects the store could name — null once this instance has
+     *  been torn down, which is NOT the same fact as "the store named none". */
+    const readSets = async (): Promise<number | null> => {
       const scans = await fetchCachedHoudiniScans({ data: { projectId, id: character.id } })
-      if (!active) return 0
+      if (!active) return null
       hipSetsRef.current = Object.fromEntries(scans.map((scan) => [scan.hipPath, scan.exportSets]))
       return scans.length
     }
@@ -589,7 +591,14 @@ export function DthExportAction({
         // a `.hip` scanned after this editor mounted still listed as one row
         // for a project that exports two — the count only became right when
         // 456.py reported it, minutes in.
-        if ((await readSets()) >= character.houdiniProjects.length) return
+        const known = await readSets()
+        if (known === null) return
+        // The sweep-join is for the OPEN dialog only. The effect re-runs on
+        // BOTH edges of `open`, and joining a sweep on the way out would spend
+        // a store prune (and, on a cold cache, hython) on a panel nobody is
+        // looking at. The read above still runs on every edge — it is one small
+        // JSON, and the run-resume paths read `hipSetsRef` with the dialog shut.
+        if (!open || known >= character.houdiniProjects.length) return
         // No "already swept" guard here, deliberately. This effect re-runs when
         // the dialog opens, and re-running tears the PREVIOUS instance down
         // (`active = false`) — so an instance that was still awaiting the sweep
@@ -608,7 +617,8 @@ export function DthExportAction({
     return () => {
       active = false
     }
-    // Re-read whenever the dialog OPENS — not mount-only.
+    // Re-read on every edge of `open` — not mount-only. (Both edges: the close
+    // is a cheap store read whose sweep-join is gated off above.)
     //
     // These names decide how many rows the Houdini leg contributes before the
     // run starts (`houdiniTaskCards` shows one row per project until it knows

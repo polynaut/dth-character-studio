@@ -137,8 +137,6 @@ export interface TauriMockSeed {
    *  and closes inside one frame and no spec could ever see it. Scans only: the
    *  other ops have no such window. */
   materialScanDelayMs?: number
-  /** The `$JOB` a scanned project reports — the General tab's input. Omit and
-   *  the project reads as unreadable, which the tab reports and never repairs. */
   /** What a SCANNED project reports it writes / imports, per `.hip` path — the
    *  `exportSets` and `imports` the real `_scene_export_sets` /
    *  `_scene_dth_imports` read out of the file. Default `[]` = a project that
@@ -149,6 +147,8 @@ export interface TauriMockSeed {
    *  list's one-row-per-network count). */
   materialExportSets?: Record<string, Array<string>>
   materialImports?: Record<string, Array<string>>
+  /** The `$JOB` a scanned project reports — the General tab's input. Omit and
+   *  the project reads as unreadable, which the tab reports and never repairs. */
   materialJob?: Record<string, string>
   /** The timeline FPS a scanned project reports, per `.hip` path. Omit and the
    *  project reads as the pipeline's 30 — i.e. nothing to repair, which is what
@@ -858,7 +858,6 @@ export function installTauriMock(seed: TauriMockSeed): void {
               // auto-selection has to say so.
               exportSets: seed.materialExportSets?.[norm(hipPath)] ?? [],
               imports: seed.materialImports?.[norm(hipPath)] ?? [],
-              poseAssets: [],
               // $JOB/$HIP come off the same scan in the real Python. The seed
               // may name a $JOB; without one the project reads as already
               // correct, so the General tab is quiet unless a spec asks for it.

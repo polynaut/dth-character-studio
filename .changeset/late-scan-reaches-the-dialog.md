@@ -17,3 +17,7 @@ themselves were correct the whole time.
 Both readers now re-read: the dialog joins the sweep already in flight when it
 finds fewer scanned projects than linked ones, and the task list's copy refreshes
 every time the dialog opens — the moment that always precedes a run.
+
+A scan arriving under an open dialog cannot un-do the user's own picks: a
+Houdini project unticked by hand stays unticked when the scan lands on top of
+it, and only a fresh scene selection brings the default answer back.
