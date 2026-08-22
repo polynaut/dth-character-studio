@@ -32,6 +32,7 @@ import {
   fetchUnrealOpenEditors,
   fetchUnrealSendPlan,
   fileExists,
+  scanCharacterHoudiniProjects,
   verifyDazExportsLanded,
 } from '#/lib/rom/api.ts'
 import { unidentifiedEditorTargets } from '#/lib/rom/unreal-jobs.ts'
@@ -147,6 +148,27 @@ export function DthExportPanel({
   // default the moment a project joins the run; `skip` runs no Houdini at all
   // and is offered only when the project has a linked `.uproject` to send to.
   const [checkedHips, setCheckedHips] = useState<ReadonlySet<string>>(new Set())
+  /**
+   * Houdini projects the user unticked BY HAND, and the scene selection that
+   * was live when they did.
+   *
+   * The auto-selection re-adds a project the moment it can see that it imports
+   * a ticked scene. That is right when the TRIGGER is the user ticking that
+   * scene, and wrong when the trigger is a stored scan LANDING seconds later —
+   * which is now a thing that happens, because the panel re-reads the store
+   * after joining the sweep. Measured 2026-08-22: untick a project in the
+   * unscanned window, wait for the scan, and it ticks itself back on under the
+   * cursor.
+   *
+   * Held against `checked`'s identity rather than forever: "a hand-picked
+   * Houdini project is reset when its scene goes and returns" is the list's
+   * documented rule (see the Unreal effect), so a new scene selection clears
+   * these and the default answer comes back.
+   */
+  const untickedHipsRef = useRef<{ scenePick: ReadonlySet<string> | null; hips: Set<string> }>({
+    scenePick: null,
+    hips: new Set(),
+  })
   const [houdiniMode, setHoudiniMode] = useState<HoudiniRunMode>('export-selected')
   // Projects whose `.hip` is gone from disk — their rows are refused up front
   // (startHoudiniExport would throw, but only after the run was armed). The
@@ -275,28 +297,62 @@ export function DthExportPanel({
 
   useEffect(() => {
     let active = true
-    void Promise.all([
-      fetchCachedHoudiniScans({ data: { projectId, id: character.id } }),
-      fetchSceneDthPaths({ data: { projectId, id: character.id } }),
-    ])
-      .then(([scans, dthPaths]) => {
+    /** How many projects the store could name. The torn-down `0` is only safe
+     *  because the caller re-checks `active` before reading it — keep that
+     *  check ahead of any use, or "this panel is gone" starts reading as
+     *  "nothing is scanned" and asks for a sweep nobody is waiting on. */
+    const readScans = async (): Promise<number> => {
+      const scans = await fetchCachedHoudiniScans({ data: { projectId, id: character.id } })
+      if (!active) return 0
+      setHipImports(
+        scans.map((scan) => ({
+          hipPath: scan.hipPath,
+          imports: scan.imports,
+          // The sets this project WRITES — what the Unreal pre-selection
+          // asks about. Dropping it here is what made every run read as
+          // "cannot tell" no matter how fresh the scan was.
+          exportSets: scan.exportSets,
+        })),
+      )
+      return scans.length
+    }
+    void (async () => {
+      try {
+        const [known, dthPaths] = await Promise.all([
+          readScans(),
+          fetchSceneDthPaths({ data: { projectId, id: character.id } }),
+        ])
         if (!active) return
         setSceneDth(dthPaths)
-        setHipImports(
-          scans.map((scan) => ({
-            hipPath: scan.hipPath,
-            imports: scan.imports,
-            // The sets this project WRITES — what the Unreal pre-selection
-            // asks about. Dropping it here is what made every run read as
-            // "cannot tell" no matter how fresh the scan was.
-            exportSets: scan.exportSets,
-          })),
-        )
-      })
-      .catch(() => {
+        // A scan that lands WHILE this panel is open used to be invisible: the
+        // read above was the only one, so a panel opened during the background
+        // sweep kept the unscanned answer for its whole life — no Networks
+        // chips, and no project auto-ticked when a scene was picked. Both read
+        // "empty", and empty means NOT KNOWN everywhere here, so the panel had
+        // no way to tell "this project writes nothing" from "nobody has looked
+        // yet". Reported 2026-08-22 right after the scan-version bump (v9)
+        // invalidated every stored scan at once, which is when the window
+        // between opening the panel and the sweep landing is widest.
+        //
+        // `fetchCachedHoudiniScans` returns only FRESH hits, so fewer hits than
+        // linked projects means a sweep MIGHT tell us more — a nudge, not a
+        // guarantee. It stays under permanently for a `.hip` linked from
+        // OUTSIDE the character folder, which the sweep skips by design, so
+        // such a character re-asks on every open. That is affordable and
+        // already how the page behaves: `houdini-projects-field` fires the same
+        // sweep unconditionally on every window focus. The sweep coalesces per
+        // character, so this joins the one the character page already started
+        // rather than starting a second, and it short-circuits on the mtime key
+        // when everything is warm.
+        if (known >= character.houdiniProjects.length) return
+        await scanCharacterHoudiniProjects({ data: { projectId, id: character.id } })
+        if (!active) return
+        await readScans()
+      } catch {
         // Read-only convenience: no scan, no auto-adjust — the list simply
         // keeps whatever the user picked.
-      })
+      }
+    })()
     return () => {
       active = false
     }
@@ -541,6 +597,15 @@ export function DthExportPanel({
    * A hand-picked selection is reset by that round trip, exactly as a
    * hand-picked Houdini project is when its scene goes and returns. The default
    * IS the answer to "which projects is this export for".
+   *
+   * A stored scan LANDING is now one of those round trips too (`hipImports`
+   * changes when the panel re-reads after joining the sweep), and it is left
+   * that way ON PURPOSE: before the scan, `sendSets` is null and this list can
+   * only say "nothing" — the moment it can name the sets, its answer is
+   * strictly better than the one the user was working around. The Houdini list
+   * above takes the opposite line ({@link untickedHipsRef}) because a hand
+   * untick THERE is a decision about the run, not a stand-in for missing
+   * information.
    */
   useEffect(() => {
     if (!unrealSendable || sendPlan === null) {
@@ -641,6 +706,16 @@ export function DthExportPanel({
   // ignorance). Missing `.hip`s stay out. Not under rom-only — that list is a
   // manual OPEN pick.
   useEffect(() => {
+    // A NEW scene pick retires the hand-unticks — see {@link untickedHipsRef}.
+    // Identity, not contents: every path that changes the selection builds a
+    // fresh Set, and re-running on a landed scan must NOT read as a new pick.
+    // ABOVE the early return on purpose: the scan lands long after the scene
+    // probe seeded the selection, so a tracker that only ran once there was
+    // something to select would still see that first landing as a fresh pick
+    // and throw the unticks away (measured — the guard was inert).
+    if (untickedHipsRef.current.scenePick !== checked) {
+      untickedHipsRef.current = { scenePick: checked, hips: new Set() }
+    }
     if (mode === 'rom-only' || mode === 'hair-only' || hipImports.length === 0) return
     const dthFor = (scene: string): string => sceneDth[normalizeSceneKey(scene)] ?? ''
     const scenesDth = [...checked].map(dthFor).filter((dth) => dth !== '')
@@ -663,6 +738,8 @@ export function DthExportPanel({
     setCheckedHips((prev) => {
       const next = hipsForSelectedScenes(judged, scenesDth, prev, deselectedDth)
       for (const hip of hipMissing) next.delete(hip)
+      // The user's own "no" outranks anything the studio learns afterwards.
+      for (const hip of untickedHipsRef.current.hips) next.delete(hip)
       // Same members → same object, so the Houdini list doesn't re-render on
       // every unrelated poll (and the Unreal effects, which key on this set,
       // don't re-seed a selection the user has since made their own).
@@ -706,6 +783,9 @@ export function DthExportPanel({
     // on (`executeCharacterJobs` refuses both combinations outright).
     if (next === 'rom-only' || next === 'hair-only') {
       setCheckedHips(new Set())
+      // The list is emptied, so the hand-unticks it held have nothing left to
+      // say — and the mode round trip is exactly the reset the list documents.
+      untickedHipsRef.current = { scenePick: null, hips: new Set() }
       setHoudiniMode('skip')
     }
   }
@@ -715,8 +795,15 @@ export function DthExportPanel({
    *  projects, so there is no combination to steer the user out of. */
   function toggleHip(hip: string) {
     const next = new Set(checkedHips)
-    if (next.has(hip)) next.delete(hip)
-    else next.add(hip)
+    // Recorded either way, so the auto-selection can tell a hand-untick from a
+    // project that simply hasn't been reached yet ({@link untickedHipsRef}).
+    if (next.has(hip)) {
+      next.delete(hip)
+      untickedHipsRef.current.hips.add(hip)
+    } else {
+      next.add(hip)
+      untickedHipsRef.current.hips.delete(hip)
+    }
     setCheckedHips(next)
   }
 
