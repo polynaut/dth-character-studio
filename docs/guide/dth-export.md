@@ -33,7 +33,7 @@ what their run does:
 | **ROM + Export** | the full run — a fresh ROM, the saved ROM animation scene, and the export of everything (skeletal mesh and hair) |
 | **ROM only** | build the ROM and save the [`rom-animations` scene](./05-rom-in-daz.md#what-a-run-exports); no export |
 | **Export only** | export the saved ROM animations as they stand, without rebuilding. Pre-selects the scenes whose ROM animation is newer than their last export; skips scenes that have none |
-| **Skip Daz — use last exports** | nothing runs in Daz — the Houdini projects work off each scene's last export on disk. Scenes that never delivered an export are kept out |
+| **Skip Daz — use last exports** | nothing runs in Daz — the Houdini projects work off each scene's last export on disk. Scenes that never delivered an export are kept out, and one whose export **didn't land** (a crashed run leaves a 0-byte `.dth`) is refused by name |
 
 ## Houdini projects
 
@@ -82,8 +82,6 @@ Press **Start**: the panel closes and the batch is handed to Daz Studio, where t
 bundled [**Runner plugin**](./02-setup.md#daz-studio-plugins) works through it
 unattended. A closed Daz is **opened where you can see it** — this is a run you are
 watching. A running Daz picks the batch up by itself and is left as you had it.
-(An unattended [scan](./tools.md#tab-1--scan-amp-index), by contrast, starts Daz
-**minimized**.)
 
 The panel refuses to start while the Runner plugin is missing or older than the one
 bundled with the app; the notice links straight to Settings. A skip-Daz run doesn't
@@ -102,19 +100,22 @@ The character header becomes the run's display for as long as it lasts.
 - **One task list**, numbered in run order and stacked **bottom-up** like a log,
   with **one row per job**: every selected **Daz scene**, every **DazToHue
   network** (not merely every `.hip` — a project holding two networks is two
-  rows), and every **export set going into an Unreal project**. The row being
-  worked spins; a finished one is ticked off and stays.
+  rows), and every **export set going into an Unreal project**. A finished row is
+  ticked, then **retires** so the work still ahead stays in view — a **failed** row
+  never does. Numbering counts the whole run, so a row's number never changes.
 - **One progress bar** underneath, with the **newest thing the run said** printed
-  on it. Only the newest line is shown; each leg's full output stays on disk — the
-  Runner's progress log, `.dth_houdini_console.log` in the character folder, and
-  Unreal's own log.
+  on it. Only the newest line is shown; each leg's full output stays on disk (the
+  Runner's progress log, Houdini's console log, Unreal's own).
 
 The button beside it reads **Working** with the elapsed time. Nothing is announced
 mid-run: **one report** at the end covers every leg, with any per-scene failures and
 the total time. **A run that produced nothing is never reported as a success** —
 the report also reads the character's own **ROM run log**, so a scene that failed
 mid-ROM is named as a failure, and when nothing survived the Houdini and Unreal
-legs are **held back**. A **morph that could not be applied** deliberately does
+legs are **held back**. It checks the **export folder** too: a Daz script the
+exporter kills mid-export still returns cleanly, so a missing or 0-byte `.dth` is
+what gives it away. Such a scene is reported as *“the Daz export did not land”*
+and dropped from the Houdini leg, rather than cooked into a green tick. A **morph that could not be applied** deliberately does
 *not* count: its frame stays in the ROM (empty) and the export still runs.
 
 ### Interrupting
@@ -131,9 +132,8 @@ mark — *Click to interrupt* — through both legs:
   an interrupt the studio can no longer tell a scene that exported from one that
   was skipped. The ROM run log names the scene that was cut off.
 
-What is already written stays. The interrupt cannot cut short a synchronous call
-inside someone else's plugin — a Daz scene load, one DTH Exporter export, one
-DazToHue node — so on a long node the button can sit at **Stopping** for a while.
+What is already written stays. The interrupt cannot cut short a call already
+running inside Daz or Houdini, so the button can sit at **Stopping** for a while.
 Before Daz has picked the batch up at all it reads **Abort** instead.
 
 > **If a run is stuck rather than running** — Daz sitting on a dialog, or a batch
@@ -142,9 +142,8 @@ Before Daz has picked the batch up at all it reads **Abort** instead.
 > handoff, so the next export isn't refused with *"a batch is waiting for Daz
 > Studio"*.
 
-**Reloading the app doesn't lose the run.** Every handoff writes its plan down, so
-the character's editor picks the run back up when it opens. Any *other* window
-shows the same run read-only.
+**Reloading the app doesn't lose the run** — the character's editor picks it back
+up when it opens; any *other* window shows the same run read-only.
 
 ## Carry on into Houdini
 
@@ -166,12 +165,14 @@ Two things it deliberately won't do: **overwrite an export directory you
 configured** (only a blank one is filled in from the run), and **save the project**
 (any parameter it touches is put back afterwards). If the DazToHue pre-flight check
 reports problems, the studio answers its *"Continue anyway?"* prompt and **keeps
-the message**, so those problems reach the report instead of vanishing behind an
-unattended dialog.
+the message**, so those problems reach the report.
 
 Everything Houdini printed lands in **`.dth_houdini_console.log`** in the character
 folder — one file per character, overwritten by that character's next run, and
-deliberately not cleaned up with the run's other files.
+deliberately not cleaned up with the run's other files. A headless run that dies
+without a word is reported as **Houdini exited during** *its last step*, with
+`hython`'s exit code: a negative one (`0xC0000005`) is a crash inside Houdini, not
+a studio failure.
 
 &nbsp;
 

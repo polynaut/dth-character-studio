@@ -42,9 +42,10 @@ There is nothing to set up: every character has an **Export directory**, fixed a
 each **Bone scale** frame, under a `Reference Skeletons` subfolder the CSV already
 points at.
 
-- Each run **deletes that scene's previous export set first**, so files from an
-  earlier layout never linger beside a fresh one. Anything else you keep in the
-  folder is left alone.
+- Each run **moves that scene's previous export set aside** first (a `.dthprev`
+  suffix), so files from an earlier layout never linger beside a fresh one — and if
+  the export then fails, that set is **put back**, so a failed run never costs you
+  the last good one. Anything else you keep in the folder is left alone.
 - A clean ROM build also **saves the ROM'd scene** as `<scene>_ROM.duf` into a
   `rom-animations/` subfolder next to the scene file. Open it any time to get the
   built ROM animation back without the slow rebuild.
