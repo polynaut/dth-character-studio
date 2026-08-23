@@ -1,5 +1,33 @@
 # @dth/web
 
+## 0.88.2
+
+### Patch Changes
+
+- [#951](https://github.com/polynaut/dth-character-studio/pull/951) [`aba3003`](https://github.com/polynaut/dth-character-studio/commit/aba3003d84f98a3b710bb6a8fd5ccc3fb9365d3c) Thanks [@polynaut](https://github.com/polynaut)! - A Houdini scan that lands after the DTH Export dialog opened now reaches it. The
+  dialog read the stored scan ONCE when it mounted, so a project scanned later —
+  by the background sweep, or by a manual **Rescan** — stayed invisible to it:
+  picking a scene auto-selected no Houdini project, the **Networks** and
+  **Characters** chips never appeared, and the run's task list showed a single row
+  for a `.hip` that exports two networks. Reloading the app was the only way out.
+
+  It surfaced right after the scan-version bump that shipped with the two-network
+  scan fix, because that invalidates every stored scan at once and makes the gap
+  between opening the dialog and the sweep landing as wide as it gets. The scans
+  themselves were correct the whole time.
+
+  Both readers now re-read: the dialog joins the sweep already in flight when it
+  finds fewer scanned projects than linked ones, and the task list's copy refreshes
+  every time the dialog opens — the moment that always precedes a run.
+
+  A scan arriving under an open dialog cannot un-do the user's own picks: a
+  Houdini project unticked by hand stays unticked when the scan lands on top of
+  it, and only a fresh scene selection brings the default answer back.
+
+- Updated dependencies []:
+  - @dth/rom@0.88.2
+  - @dth/ui@0.88.2
+
 ## 0.88.1
 
 ### Patch Changes
