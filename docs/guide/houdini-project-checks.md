@@ -21,6 +21,7 @@ sit in the footer, in the order they have to be run.
 | --- | --- | --- |
 | **Project folder (`$JOB`)** | `$JOB` is saved *inside* each `.hip`, so a project keeps whatever it was created with. It is what reaches the character's **`export/`** folder, so a project carrying another character's `$JOB` aims its finals at that character's tree. | Repair project settings |
 | **Timeline (FPS)** | The ROM is one pose per frame at **30 fps**, the rate the CSV's frame numbers mean; Houdini's default is 24. DazToHue's import node sets this when it *loads* files, so this row is about projects where that never happened. | Repair project settings |
+| **Timeline (range)** | The playbar next to what the project's own Alembic says it should be. A scene left on Houdini's default 1–240 over a longer ROM puts part of it outside the timeline. | Repair project settings |
 | **PoseAsset CSV path** | A read-out: *filled in*, *not filled in*, or *your DazToHue has no such parameter*. | Fill network |
 | **Reference paths** / **Import references** | What is already written down, and whether it resolves. | Make paths portable |
 | **Baker textures** | Material baker layer textures whose file is no longer on disk — usually an uninstalled Daz product. **Nothing to press**: putting the file back is a reinstall. | — |
