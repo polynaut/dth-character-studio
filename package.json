@@ -30,9 +30,9 @@
   },
   "devDependencies": {
     "@changesets/changelog-github": "^1.0.0",
-    "@changesets/cli": "^3.0.0",
-    "marked": "^18.0.9",
-    "oxlint": "^1.78.0",
+    "@changesets/cli": "^3.0.1",
+    "marked": "^18.0.10",
+    "oxlint": "^1.79.0",
     "oxlint-tsgolint": "^7.0.2001"
   },
   "pnpm": {
