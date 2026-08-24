@@ -239,7 +239,15 @@ jobs:
     if: github.event_name == 'pull_request'
     env:
       # Version PR (changeset-release/main) and Dependabot: requirement waived.
-      EXEMPT: ${{ github.head_ref == 'changeset-release/main' || github.actor == 'dependabot[bot]' }}
+      #
+      # Both tests read the PULL REQUEST, never the event. `github.actor` is
+      # whoever triggered THIS RUN, which on a Dependabot PR is Dependabot only
+      # until a human touches the branch — rebase it, push a lockfile fix, or
+      # re-run the checks, and the actor becomes that human while the PR's
+      # author is unchanged. #959 failed the gate exactly there (actor
+      # `polynaut`, author `dependabot[bot]`), so the exemption documented in
+      # CLAUDE.md silently didn't apply.
+      EXEMPT: ${{ github.head_ref == 'changeset-release/main' || github.event.pull_request.user.login == 'dependabot[bot]' }}
     steps:
       - name: Changeset requirement waived (version PR / Dependabot)
         if: env.EXEMPT == 'true'
