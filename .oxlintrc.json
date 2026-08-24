@@ -58,6 +58,25 @@
     // off, not one to apologise to at every call site.
     "oxc/no-map-spread": "off",
 
+    // oxlint 1.79 promoted six React-compiler-derived rules into the
+    // error-enabled categories, flagging 51 pre-existing sites at once. The
+    // advice is real (cascading-render effects, refs read during render), but
+    // every fix is a per-site behavioural judgement that must not ride in as a
+    // side effect of a dependency bump. OFF is deferral, not rejection:
+    // adoption — one rule at a time, each site fixed or reason-disabled — is
+    // tracked in #960, and each entry here dies when its rule's tree is clean.
+    "react/set-state-in-effect": "off",
+    "react/refs": "off",
+    "react/exhaustive-effect-dependencies": "off",
+    "react/purity": "off",
+    "react/incompatible-library": "off",
+    "react/immutability": "off",
+
+    // A leading underscore marks a parameter that exists only for its type —
+    // the vi.fn mocks type their call signature with `(_: {…})`. oxlint 1.79
+    // stopped ignoring that by default, so the convention is now stated here.
+    "no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+
     // A stylesheet import has nothing to assign — that IS the import. Both hits
     // were `main.tsx`'s CSS entry points, so the rule keeps its teeth for an
     // unassigned JS import (which really is usually a leftover).
