@@ -731,6 +731,50 @@ Testing note for the smoke half: a single `hover()` onto a control that is
 `opacity-0` until its card is hovered does not arm the tooltip in Playwright.
 Hover the **card** first, then the control — which is also the real gesture.
 
+## A mount-only read of an eventually-consistent store is a permanent lie — and un-freezing it stomps the user (measured 2026-08-22)
+
+The Houdini scan store fills in the background (`scanCharacterHoudiniProjects`,
+tens of seconds per `.hip`), and the DTH Export dialog read it **once** per
+mount. Anything scanned after that mount — the sweep landing, a manual
+**Rescan** — was invisible for the rest of that component's life, so the panel
+showed the honest empty state forever: no **Networks** chips, no scene→project
+auto-tick, and a single task row for a `.hip` that exports two networks. The
+store was correct throughout. It only became visible when `SCAN_ANSWER_VERSION`
+was bumped, which invalidates every stored scan at once and makes the gap as
+wide as it gets — i.e. **the bug was always there and the version bump was the
+witness, not the cause.** Anything reading a store that a background job fills
+needs a second read; the two components here differ in where it hangs, and both
+answers are forced by their lifetimes:
+
+- The **panel** unmounts with the drawer, so a plain mount read already catches
+  anything that landed while it was shut. What it needed was to catch a scan
+  landing *during* its own life → join the sweep, then re-read.
+- The **button** (`DthExportAction`) outlives every open — it is mounted with
+  the character page — so its mount read is the ONLY one, and a Rescan between
+  two opens could never reach it. It needs the read keyed on `open`. Nothing
+  weaker works, and the difference is invisible in a spec that opens the dialog
+  once: reverting `[open]` to `[]` left the whole first regression suite green.
+
+The trap on the way out is bigger than the bug. Re-reading turns a value that
+used to settle milliseconds after mount into one that changes **seconds later,
+under the user's cursor** — and everything derived from it re-runs then. Here
+`hipImports` feeds the scene→project auto-selection, whose `hipsForSelectedScenes`
+re-adds a project the moment it learns the project imports a ticked scene. That
+is right when the trigger is the user ticking that scene and wrong when the
+trigger is a scan landing: untick a project in the unscanned window, wait, and
+it ticks itself back on. Measured as a clean introduced regression — the same
+spec passed on `main` and failed on the branch. The fix is to record hand
+unticks and honour them until the SCENE selection changes (identity compare, so
+a landed scan never reads as a fresh pick) — and the tracker has to sit **above**
+the effect's early return, or its first real run still reads as a fresh pick and
+throws the unticks away. Not every derived list wants that: the Unreal
+pre-selection deliberately keeps re-seeding, because before the scan it can only
+say "nothing" and the landed answer is strictly better.
+
+So: **when you un-freeze a read, enumerate what re-runs on it and ask of each
+one whether the new trigger carries the same intent the old one did.** A scan
+arriving is not a user changing their mind.
+
 
 ## A leg that ends with a FILE WRITE has not ended (measured 2026-08-24)
 
