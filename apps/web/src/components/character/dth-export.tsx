@@ -54,7 +54,6 @@ import type { Character } from '@dth/rom'
 
 import {
   DthLogo,
-  EXPORT_TOAST_ID,
   ExportProgressButton,
   exportFinishToast,
   HOUDINI_TOAST_ID,
@@ -385,7 +384,11 @@ export function DthExportAction({
       )
       return
     }
-    const report = runReportRef.current
+    // The live run's report — or, once it has been composed and the panel
+    // outlived it, the copy kept for exactly that (see {@link finishedReportRef}).
+    // Without the fallback every row this run finished came back `waiting` the
+    // moment the Unreal leg republished.
+    const report = runReportRef.current ?? finishedReportRef.current
     const dazFinished = report?.daz !== undefined || armed.daz.length === 0
     const processed =
       progressNow?.state === 'running' ? progressNow.processed : dazFinished ? armed.daz.length : 0
@@ -473,6 +476,8 @@ export function DthExportAction({
   /** The run is over (reported, dead or aborted) — drop the panel. */
   function clearPipeline() {
     pipelineRef.current = null
+    // The finished report exists to render THIS panel; it goes with it.
+    finishedReportRef.current = null
     unrealStatusRef.current = ''
     dazLaunchedRef.current = false
     // The button pair is gone with the run; a fresh one starts un-interrupted.
@@ -484,6 +489,15 @@ export function DthExportAction({
   // start with its rows already ticked. Every run start goes through here.
   function resetUnrealLeg() {
     unrealSentRef.current = false
+    // A report still waiting on the PREVIOUS run's import belongs to a run this
+    // one supersedes — the same rule dismissFinishToasts applies to the ones
+    // already on screen.
+    heldFinishRef.current = null
+    // …and so does the report that panel was rendering from: a new run's rows
+    // read the SAME ref, and the previous run's finished-project count would
+    // tick them off before anything had started.
+    finishedReportRef.current = null
+    unrealStartedAtRef.current = 0
     // The WATCH belongs to the run that armed it. Only a finished import clears
     // it, so a send whose editor was never opened keeps it forever — and since
     // `sendToUnreal` only arms a watch when there is none, the next run's
@@ -539,6 +553,28 @@ export function DthExportAction({
      *  end (it runs after the last Houdini project). */
     unreal?: Array<string>
   } | null>(null)
+  /**
+   * The same report AFTER it has been composed, kept only while a panel
+   * outlives it — the Unreal wait ({@link heldFinishRef}).
+   *
+   * `publishPipeline` derives every Daz and Houdini row FROM the run report:
+   * `report.daz` is what makes the Daz rows done, `report.houdini.length` is
+   * how many projects are behind us, and `report.houdini[n].failed` is the one
+   * thing that keeps a failed leg RED. `emitFinalReport` clears the ref as
+   * those facts become the toast — which was fine while the report also tore
+   * the panel down, and is not fine now that it doesn't: the leg's own status
+   * changes republish into that panel for minutes afterwards, and with the
+   * report gone every finished row came back `waiting` (measured on the
+   * Houdini→Unreal spec below: a project that had just exported read `waiting`
+   * for the whole import). A failed leg fared worse — `failed` rows never
+   * retire, so it sat there as ordinary pending work, and the bar counting it
+   * unfinished ran backwards.
+   *
+   * Read only as a FALLBACK, so the live report always wins; dropped with the
+   * panel it serves ({@link clearPipeline}) and by the next run
+   * ({@link resetUnrealLeg}).
+   */
+  const finishedReportRef = useRef<typeof runReportRef.current>(null)
   /** The project the LIVE Houdini run belongs to — attribution for its line. */
   const currentHipRef = useRef('')
   /**
@@ -656,6 +692,50 @@ export function DthExportAction({
     setUnrealRun(state)
   }
   const unrealWatchRef = useRef('')
+  /** When the send armed its watch — the Unreal line's own duration. 0 = no
+   *  send this run, so the line carries no time rather than a wrong one. */
+  const unrealStartedAtRef = useRef(0)
+  /**
+   * The run's finish report, BUILT but not yet said, because the Unreal leg is
+   * still out.
+   *
+   * The send is a file write: it returns the moment the job lands, and the
+   * editor answers minutes later on its own clock. Reporting at the write put
+   * "DTH Export finished in 8m 15s" on screen over an import that was 50%
+   * through (reported 2026-08-24) — and the report's `clearPipeline` then tore
+   * down the panel the leg was still publishing into, so the next status change
+   * rebuilt it with no task rows at all: a ghost bar, from a run the studio had
+   * already declared over.
+   *
+   * {@link refreshUnreal} says it when the editor answers, with the outcome as
+   * its last line. Superseded by a new run and dropped with the editor, exactly
+   * like the toast it would otherwise have been.
+   */
+  const heldFinishRef = useRef<{
+    kind: 'success' | 'warning' | 'info' | 'error'
+    title: string
+    body?: string
+  } | null>(null)
+
+  /**
+   * Say the run's finish report — or hold it while the Unreal leg is still out.
+   *
+   * The ONE gate every end-of-run path goes through, because "is the run over"
+   * and "has the last leg answered" are the same question and only one place
+   * should decide it. A send that armed no watch (refused, no bridge, nothing
+   * selected) reports immediately: there is nothing left to wait for.
+   */
+  function finishOrHoldReport(
+    kind: 'success' | 'warning' | 'info' | 'error',
+    title: string,
+    body?: string,
+  ) {
+    if (unrealWatchRef.current) {
+      heldFinishRef.current = { kind, title, body }
+      return
+    }
+    exportFinishToast(kind, title, body)
+  }
 
   /** One send line, typed by what happened so the toast layer never has to
    *  sniff its own strings: `queued` = clean, `skipped` = queued but with
@@ -673,10 +753,13 @@ export function DthExportAction({
    *
    * Runs when the WHOLE Houdini queue has drained: one job file per Unreal
    * project, each naming the export sets this run put in play (or every set in
-   * the export folder, when the studio could not name them). Nothing is
-   * watched afterwards — the send is a file write, and the editor picks it up
-   * whenever it is next open (the character page's panel is where a live
-   * import is followed).
+   * the export folder, when the studio could not name them).
+   *
+   * It returns at the file WRITE, which is not the end of anything: the editor
+   * claims the job whenever it is next open and the import takes minutes more.
+   * So one project is watched from here ({@link unrealWatchRef}), and the run's
+   * finish report waits on that watch ({@link finishOrHoldReport}) — the write
+   * used to end the run on its own, which said "finished" over a live import.
    */
   async function sendToUnreal(): Promise<Array<UnrealSendLine>> {
     const targets = unrealTargetsRef.current
@@ -737,7 +820,10 @@ export function DthExportAction({
           unrealStatusRef.current = `Unreal; queued for ${name} — waiting for the editor to pick the job up`
           // One project is watched — the handoff is one job at a time, and the
           // rows name the rest.
-          if (!unrealWatchRef.current) unrealWatchRef.current = uprojectPath
+          if (!unrealWatchRef.current) {
+            unrealWatchRef.current = uprojectPath
+            unrealStartedAtRef.current = Date.now()
+          }
           setUnrealState({ state: 'waiting' })
           // A skipped set is said, never swallowed: the run would otherwise
           // read as "everything reached Unreal" about a set that was dropped
@@ -850,7 +936,11 @@ export function DthExportAction({
   function emitFinalReport() {
     // The run's own facts, before clearPipeline resets this window's state.
     const interrupted = interruptedRef.current
-    clearPipeline()
+    // A HELD report keeps its panel: the Unreal rows are the run's remaining
+    // work and the status line is the only place the wait is visible. Tearing
+    // it down here is what left the leg republishing into nothing (see
+    // {@link heldFinishRef}). `refreshUnreal` clears it when the leg answers.
+    if (!unrealWatchRef.current) clearPipeline()
     const report = runReportRef.current
     runReportRef.current = null
     interruptedRef.current = false
@@ -919,9 +1009,20 @@ export function DthExportAction({
         exportWarningToast(`${leg.label ?? 'Houdini'}: exported with warnings`, problem)
       }
     }
-    if (interrupted) exportFinishToast('info', title, body)
-    else if (anyFailed) exportFinishToast('warning', title, body)
-    else exportFinishToast('success', title, body)
+    if (interrupted) finishOrHoldReport('info', title, body)
+    else if (anyFailed) finishOrHoldReport('warning', title, body)
+    else finishOrHoldReport('success', title, body)
+    // A HELD report left the panel up, so the two things `clearPipeline` would
+    // have done for it still have to happen: the finished legs keep the report
+    // their rows are derived from, and the run's button pair stands down — an
+    // interrupt pressed during the send would otherwise leave it saying
+    // "interrupting" for the whole import.
+    if (unrealWatchRef.current) {
+      finishedReportRef.current = report
+      dazLaunchedRef.current = false
+      setInterrupting(false)
+      publishPipeline(progressRef.current, houdiniRef.current)
+    }
   }
 
   /** Start the next Houdini export run and park the rest in the queue. */
@@ -1002,8 +1103,47 @@ export function DthExportAction({
   async function refreshUnreal() {
     const uprojectPath = unrealWatchRef.current
     if (!uprojectPath) return
-    const state = await fetchUnrealImportProgress({ data: { uprojectPath } }).catch(() => null)
+    // `undefined` = the READ failed, which is not news about the import. It
+    // used to null the state, and `unrealRun` being non-null is the whole
+    // reason the poll interval stays armed — so one unlucky read disarmed the
+    // watch for good. Survivable while the report fired at the send; fatal now
+    // that the report waits behind this leg. A real `null` still means "job
+    // gone" and is passed through.
+    const state = await fetchUnrealImportProgress({ data: { uprojectPath } }).catch(
+      () => undefined,
+    )
+    if (state === undefined) return
     setUnrealState(state)
+    // A real `null`: the job, the claim AND the result are all gone, so nothing
+    // will ever answer for this leg. Harmless while the report had already
+    // fired — but the report waits behind this leg now, and `unrealRun` going
+    // null DISARMS the poll (it is what gates `watching`), so passing it
+    // through would strand the whole run's report behind a watch that is no
+    // longer even being polled: a panel spinning forever under no report at
+    // all. The bridge's claim is an atomic rename and its result is written
+    // before the claim is removed, so this is never a transient — it means the
+    // job was dismissed, wiped or lost.
+    if (state === null) {
+      unrealWatchRef.current = ''
+      unrealStartedAtRef.current = 0
+      const stranded = heldFinishRef.current
+      heldFinishRef.current = null
+      clearPipeline()
+      // Said, not guessed: the export legs are on disk and the import's outcome
+      // is genuinely unknown — which is the one thing this leg must not paper
+      // over in either direction.
+      const line = `Unreal: handed over to ${stemOf(uprojectPath)}, but the job disappeared before the editor answered — the studio can't say how the import went.`
+      if (stranded) {
+        exportFinishToast(
+          stranded.kind === 'success' ? 'warning' : stranded.kind,
+          stranded.title,
+          [stranded.body, line].filter(Boolean).join('\n') || undefined,
+        )
+      } else {
+        unrealOutcomeToast('warning', line)
+      }
+      return
+    }
     // The claim is news, and the panel must SAY it: the bridge writes a
     // `running` result before the work, but nothing here re-published, so the
     // line sat on "waiting for the editor to pick the job up" through the
@@ -1015,7 +1155,11 @@ export function DthExportAction({
       const running = `Unreal; ${stemOf(uprojectPath)} is importing — the editor freezes while the DazToHue pipeline runs`
       if (unrealStatusRef.current !== running) {
         unrealStatusRef.current = running
-        publishPipeline(progressRef.current, houdiniRef.current)
+        // Only into a panel that still exists. `publishPipeline` renders a
+        // status line with NO task rows when nothing is armed, which is the
+        // ghost bar this leg used to leave behind: a bar at 50%, no cards,
+        // under a report that had already said the run was over.
+        if (pipelineRef.current) publishPipeline(progressRef.current, houdiniRef.current)
       }
     }
     if (state?.state !== 'finished') return
@@ -1024,20 +1168,45 @@ export function DthExportAction({
     const landed = `${what} ${state.assets} asset${state.assets === 1 ? '' : 's'}${
       state.destination ? ` in ${state.destination}` : ''
     }`
+    // The leg's own clock: it starts at the file write and ends here, which is
+    // the stretch the run report could never account for — the title's total is
+    // the export legs', and this is the wait that came after it.
+    const took =
+      unrealStartedAtRef.current > 0
+        ? ` in ${formatElapsed(Date.now() - unrealStartedAtRef.current)}`
+        : ''
+    unrealStartedAtRef.current = 0
     // THREE outcomes, not two. The bridge imports each export set on its own and
     // reports `done` as long as one landed, so "some worked, some didn't" is a
     // real state — and it used to be reported as unqualified success, which is
     // the one thing this leg must never do.
-    //
-    // The outcome is a sticky toast, and it ENDS the run: this leg is always
-    // the run's last, so its answer is the moment the panel has nothing left
-    // to show. It used to become the status line of a panel that then sat at
-    // 100% forever (measured 2026-08-19, the first live in-place re-import) —
-    // done work with no way to be done.
-    if (!state.error) unrealOutcomeToast('success', `Unreal: ${landed}.`)
-    else if (state.sets > 0) unrealOutcomeToast('warning', `Unreal: ${landed} — but ${state.error}`)
-    else unrealOutcomeToast('error', `Unreal: import failed — ${state.error}`)
+    const outcome: { kind: 'success' | 'warning' | 'error'; line: string } = !state.error
+      ? { kind: 'success', line: `Unreal: ${landed}${took}.` }
+      : state.sets > 0
+        ? { kind: 'warning', line: `Unreal: ${landed}${took} — but ${state.error}` }
+        : { kind: 'error', line: `Unreal: import failed${took} — ${state.error}` }
+    // This leg is always the run's LAST, so its answer is the moment the panel
+    // has nothing left to show — and, when the run built a report, the moment
+    // that report is finally true.
+    const held = heldFinishRef.current
+    heldFinishRef.current = null
     clearPipeline()
+    if (held) {
+      // ONE report for the whole run, said now: the outcome is its last LINE,
+      // not a toast beside a title that already claimed the run had finished.
+      // A failed import sours the report it belongs to — it cannot ride under
+      // the green checkmark the export legs earned.
+      exportFinishToast(
+        outcome.kind === 'success' ? held.kind : outcome.kind,
+        held.title,
+        [held.body, outcome.line].filter(Boolean).join('\n') || undefined,
+      )
+    } else {
+      // No report waiting: an Unreal-ONLY run, or one adopted by a window that
+      // never saw the export legs. The outcome is the whole story, so it is its
+      // own sticky toast.
+      unrealOutcomeToast(outcome.kind, outcome.line)
+    }
     void dismissUnrealImport({ data: { uprojectPath } })
   }
 
@@ -1238,16 +1407,18 @@ export function DthExportAction({
         clearPipeline()
         return
       }
-      if (failedTotal > 0) {
-        const shown = tidyRunErrors(errors)
-        toast.warning(`DTH Export finished — ${failedTotal} of ${scenes} failed${took}.`, {
-          id: EXPORT_TOAST_ID,
-          duration: Infinity,
-          description: shown.length ? shown.join('\n') : undefined,
-        })
-      } else {
-        exportFinishToast('success', `DTH Export finished — ${scenes} exported${took}.`)
-      }
+      // The report this batch earned — SAID below, once it is known whether an
+      // Unreal leg still has to answer for it.
+      const finish: { kind: 'success' | 'warning'; title: string; body?: string } =
+        failedTotal > 0
+          ? {
+              kind: 'warning',
+              title: `DTH Export finished — ${failedTotal} of ${scenes} failed${took}.`,
+              // Always passed, even when empty — see exportFinishToast on why
+              // an absent description inherits the PREVIOUS run's body.
+              body: tidyRunErrors(errors).join('\n') || undefined,
+            }
+          : { kind: 'success', title: `DTH Export finished — ${scenes} exported${took}.` }
       // No Houdini continuation — the Daz cards end here. A SKIP run still has
       // its third leg: no Houdini means the send happens now, off the exports
       // already on disk, instead of after a queue.
@@ -1256,19 +1427,34 @@ export function DthExportAction({
         unrealTargetsRef.current = run.unrealProjects
         unrealSetsRef.current = run.unrealSets
         // The send is still the run: its rows + the bar carry it (the clean
-        // queue toasts nothing — see emitUnrealSendToasts), and the outcome
-        // toast ends it — the same shape as the Unreal-only run. Without this
-        // the leg was invisible from the file write until the editor answered.
+        // queue toasts nothing — see emitUnrealSendToasts). Without this the
+        // leg was invisible from the file write until the editor answered.
         pipelineRef.current = {
           daz: [],
           houdini: [],
           unreal: unrealTargetsFrom(run.unrealProjects, run.unrealSets, undefined),
         }
         publishPipeline(null, null)
-        void sendToUnreal().then((lines) => {
-          publishPipeline(null, null)
-          emitUnrealSendToasts(lines)
-        })
+        void sendToUnreal()
+          .then((lines) => {
+            publishPipeline(null, null)
+            emitUnrealSendToasts(lines)
+          })
+          // Only NOW is it known whether a watch was armed — so only now can
+          // the report tell "the run is over" from "its last leg is still
+          // out". Said before the send, it announced a finish over an import
+          // that had not started yet.
+          //
+          // `finally`, not `then`: the report used to be said BEFORE the send,
+          // so nothing the send did could lose it. Now it lives behind one, and
+          // a throw here (the per-target refusals are already caught inside, so
+          // this would be a bug in the leg itself) would leave a run that
+          // really exported with no report at all.
+          .finally(() => {
+            finishOrHoldReport(finish.kind, finish.title, finish.body)
+          })
+      } else {
+        finishOrHoldReport(finish.kind, finish.title, finish.body)
       }
       return
     }

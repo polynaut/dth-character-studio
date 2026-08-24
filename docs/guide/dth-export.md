@@ -59,10 +59,17 @@ export mode is disabled.
 
 The third leg, shown once the studio project has
 [linked `.uproject` files](./03-first-project.md#linking-unreal-projects). Tick one
-and the finished export is **queued for import** when the whole run ends. Nothing
-waits on Unreal: the job is a file, and the project's
+and the finished export is **queued for import** when the whole run ends: the job
+is a file, and the project's
 [DTH Character Studio Runner](./06-into-houdini.md#send-to-unreal) picks it up
-whenever that editor is next open.
+whenever that editor is next open — the studio opens the project for it if nothing
+does.
+
+**The run is not over until the editor answers.** Writing that job file takes a
+moment; the import behind it takes minutes. So the report waits for it, and the
+import's outcome — with the time the import itself took — is the report's last
+line. Nothing waits when there is nothing to wait for: a send that was refused, or
+a run with no Unreal project ticked, reports the moment its export legs are done.
 
 **The project is the only thing you tick.** Which export sets go is worked out from
 what the checked Houdini projects write (or, under *Skip Houdini*, from what is on
@@ -109,7 +116,8 @@ The character header becomes the run's display for as long as it lasts.
 
 The button beside it reads **Working** with the elapsed time. Nothing is announced
 mid-run: **one report** at the end covers every leg, with any per-scene failures and
-the total time. **A run that produced nothing is never reported as a success** —
+the total time. The end is the **last leg's** answer — with an Unreal project
+ticked, that is the editor's, minutes after the export itself finished. **A run that produced nothing is never reported as a success** —
 the report also reads the character's own **ROM run log**, so a scene that failed
 mid-ROM is named as a failure, and when nothing survived the Houdini and Unreal
 legs are **held back**. It checks the **export folder** too: a Daz script the
