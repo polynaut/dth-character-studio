@@ -1216,9 +1216,16 @@ test('coverage: guide references and generated screenshots match 1:1', async () 
   expect(missing, `referenced in docs/guide but missing from screenshots/: ${missing.join(', ')}`).toEqual([])
   expect(orphans, `in screenshots/ but referenced by no guide page: ${orphans.join(', ')}`).toEqual([])
   // Same lockstep for the interaction clips (guide.clips.ts → docs/guide/clips).
-  const clipsOnDisk = await readdir(join(guideDir, 'clips')).catch(() => [] as string[])
+  // A clip also ships `<name>.poster.webp` (its first frame, written by
+  // webp-recorder.ts and shown by the built site until the reader presses play).
+  // The poster is referenced exactly when its clip is, so derive it rather than
+  // skip it — same rule as the build's guard in scripts/build-guide-site.mjs.
+  const clipsOnDisk = (await readdir(join(guideDir, 'clips')).catch(() => [] as string[])).filter((f) =>
+    f.endsWith('.webp'),
+  )
+  for (const clip of [...referencedClips]) referencedClips.add(clip.replace(/\.webp$/, '.poster.webp'))
   const missingClips = [...referencedClips].filter((f) => !clipsOnDisk.includes(f)).sort()
-  const orphanClips = clipsOnDisk.filter((f) => f.endsWith('.webp') && !referencedClips.has(f)).sort()
+  const orphanClips = clipsOnDisk.filter((f) => !referencedClips.has(f)).sort()
   expect(missingClips, `referenced in docs/guide but missing from clips/: ${missingClips.join(', ')}`).toEqual([])
   expect(orphanClips, `in clips/ but referenced by no guide page: ${orphanClips.join(', ')}`).toEqual([])
 })
