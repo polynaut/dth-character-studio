@@ -147,9 +147,14 @@ markdown would trade the site's problem for a GitHub page showing a dead still.
 
 Two consequences worth knowing before touching this:
 
-- The poster is **referenced exactly when its clip is** — the build's clip guard
-  derives it, so a missing poster fails the build and a stale one is an orphan,
-  same as any other asset. Never hand-author one; re-run `pnpm clips`.
+- The poster is **referenced exactly when its clip is** — the clip guard derives
+  it, so a missing poster fails and a stale one is an orphan, same as any other
+  asset. Never hand-author one; re-run `pnpm clips`. That guard exists **twice**
+  — `scripts/build-guide-site.mjs` (CI runs it via `pnpm build:guide`) and the
+  `coverage:` test in `apps/web/smoke/guide.screenshots.ts` (local only, CI
+  never runs `pnpm screenshots`). Teach both or the one CI doesn't run rots
+  unnoticed: posters landed in the build guard alone, and `pnpm screenshots`
+  failed on four "orphan" posters for two commits while CI stayed green.
 - **Clips no longer open the lightbox.** `guide.js` bails on `.clip` before the
   lightbox handler, because one click cannot mean both "play" and "zoom".
 
