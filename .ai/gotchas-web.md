@@ -730,3 +730,38 @@ The fix is a `keyboardInput` flag in the host (set in its existing `keydown` /
 Testing note for the smoke half: a single `hover()` onto a control that is
 `opacity-0` until its card is hovered does not arm the tooltip in Playwright.
 Hover the **card** first, then the control — which is also the real gesture.
+
+
+## A leg that ends with a FILE WRITE has not ended (measured 2026-08-24)
+
+The DTH Export run's third leg hands a job file to Unreal. The write is fast and
+returns; the import behind it takes minutes, on an editor that may not even be
+open yet. The run ended at the write — so a green "DTH Export finished in 8m 15s"
+sat directly above a progress bar reading "workflow3d is importing — 50%". Two
+wrong claims in one screenshot, and the second was a side effect of the first:
+the report's `clearPipeline()` tore the panel down, and the leg's next status
+change re-published into nothing, which renders a bar with **no task rows at
+all** — a ghost of a run already declared over.
+
+Three things worth keeping from it:
+
+- **The code already knew.** `publishPipeline` carried the comment *"Queued is
+  not done: the Unreal leg is done when the editor has imported it"* and gave the
+  rows `active`; `refreshUnreal` said its outcome *"ENDS the run"*. Both were
+  true of the ROWS and false of the REPORT, and nothing reconciled them. When two
+  comments in one file disagree about when something is over, one of them is
+  describing code that never got written.
+- **A torn-down panel is not an inert panel.** `publishPipeline` publishes a
+  status line even with zero tasks, so "clear it and forget it" is not a state —
+  anything that can still publish has to check the panel still exists first.
+- **Deferring an outcome makes its poll load-bearing.** The Unreal poll's
+  interval is armed by `unrealRun !== null`, and a failed READ used to null that
+  state — survivable while the report had already fired, fatal once the report
+  waits behind the leg. Read failure and "no such job" must be different values
+  the moment anything depends on the poll surviving.
+
+Shape of the fix: one gate (`finishOrHoldReport`) that every end-of-run path goes
+through, because "is the run over" and "has the last leg answered" are the same
+question. A leg that armed no watch (a refused send, no project selected) reports
+immediately — there is nothing to wait for — and the held report is superseded by
+a new run exactly like the toast it would have been.
