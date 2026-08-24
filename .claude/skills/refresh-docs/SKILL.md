@@ -147,11 +147,28 @@ grep -rn "<removed setting or button>" docs/guide
 When a paragraph documents something that still exists but works differently now,
 rewrite it — never append a correction beneath the stale text.
 
-Then measure. Word count, not line count — reflowing hides growth:
+Then measure. Word count, not line count — reflowing hides growth. And count
+**prose**: `<details>` accordions do not count against the budget (§4), so a raw
+`wc -w` measures the wrong thing — it inflates exactly the pages that use the
+reading device this skill tells you to protect.
 
 ```sh
-wc -w docs/guide/*.md
+python3 - <<'PY'
+import glob, re, os
+for f in sorted(glob.glob('docs/guide/*.md')):
+    s = open(f, encoding='utf-8').read()
+    prose = len(re.sub(r'<details.*?</details>', '', s, flags=re.S | re.I).split())
+    print(f"{prose:6}  {len(s.split()):6} raw  {os.path.basename(f)}")
+PY
 ```
+
+*Earned by:* the 2026-08-24 pass measured with `wc -w`, reported
+`04-first-character.md` as the guide's worst page at 2,228 words, and put a trim
+of it to the user. Counted as prose it is **896** — 1,332 of that raw number is
+the six accordions §4 exists to preserve. `custom-morphs.md` was wrong the same
+way (1,570 raw, 490 prose). Two of five pages in that proposal were not over
+budget at all, and the guide as a whole reads ~15% smaller than raw counting
+says.
 
 **Per-page budget: ~1,200 words of prose; ~1,800 for a page the whole workflow
 runs through.** A page over budget is doing two jobs or restating a third page.
@@ -194,6 +211,14 @@ static mirror of the `coverage` test in `guide.screenshots.ts`, so a reference t
 a missing PNG *and* a PNG no page references both fail it. The Playwright side
 (`pnpm screenshots`) only needs running when you actually changed which shots
 exist — note it is **not** part of `pnpm smoke`, which matches `*.smoke.ts` only.
+
+**Adding or reshooting a screenshot makes the pass no longer prose-only.**
+`guide.screenshots.ts` is TypeScript in the lint tree, so it needs `pnpm lint`
+(and `pnpm --filter @dth/web typecheck`) on top of the two above — a green
+`build:guide` and 45 passing shots say nothing about it. *Earned by:* the
+2026-08-24 pass reshot one panel, declared a `HOUDINI_INSTALL` that shadowed the
+module-scope one 140 lines above, and shipped it to CI — `--deny-warnings` means
+one shadowed const is a red PR.
 
 Anchor gotchas — `build:guide` is the only gate that catches these, and it is NOT
 part of `/verify`:
