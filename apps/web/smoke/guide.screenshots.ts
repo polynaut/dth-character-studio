@@ -652,7 +652,6 @@ test('dth-export-panel', async ({ page }) => {
   // here rather than through `openCharacter`. The panel joins the sweep when it
   // finds fewer scanned projects than linked ones (#951), so the shot waits for
   // the chip itself rather than assuming the scan beat the click.
-  const HOUDINI_INSTALL = 'C:/Program Files/Side Effects Software/Houdini 22.0.368'
   const seed = buildSeed({
     demo: true,
     activeProjectFile: P.dcsp,
@@ -663,7 +662,7 @@ test('dth-export-panel', async ({ page }) => {
   seed.files[settingsPath] = JSON.stringify({
     ...JSON.parse(seed.files[settingsPath] ?? '{}'),
     houdiniInstallFolder: HOUDINI_INSTALL,
-    houdiniDocsFolder: 'C:/Users/dev/Documents/houdini22.0',
+    houdiniDocsFolder: HOUDINI_DOCS,
   })
   seed.files[`${HOUDINI_INSTALL}/bin/hython.exe`] = 'hython-exe-fixture'
   seed.materialExportSets = { [P.houdini]: ['KiraDefault'] }
