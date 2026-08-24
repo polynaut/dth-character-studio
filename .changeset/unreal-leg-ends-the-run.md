@@ -16,3 +16,13 @@ the import itself took, instead of a finish toast and a separate outcome toast
 minutes apart. Nothing waits when there is nothing to wait for: a send that was
 refused, or a run with no Unreal project selected, reports the moment its export
 legs are done, exactly as before.
+
+The panel that now stays up for the wait keeps the run behind it: the Daz scenes
+and Houdini projects that finished stay ticked off and retire out of the list —
+and a leg that **failed** keeps its red row — instead of all of them dropping
+back to "waiting" and running the progress bar backwards.
+
+And an import that can never answer no longer takes the report down with it. If
+the job disappears before the editor picks it up, the run reports what its export
+legs really did and says the import's outcome is unknown, rather than waiting
+forever behind a job that is gone.

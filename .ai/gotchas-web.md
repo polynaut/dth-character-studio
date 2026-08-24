@@ -758,7 +758,27 @@ Three things worth keeping from it:
   interval is armed by `unrealRun !== null`, and a failed READ used to null that
   state — survivable while the report had already fired, fatal once the report
   waits behind the leg. Read failure and "no such job" must be different values
-  the moment anything depends on the poll surviving.
+  the moment anything depends on the poll surviving. And **three** values, not
+  two: a real "no such job" (dismissed, wiped, lost with the folder) also
+  disarms that poll, so it cannot be passed through either — it has to RELEASE
+  the held report, saying the import's outcome is unknown rather than green.
+  The general rule: every way the awaited answer can fail to arrive needs its
+  own exit, or the thing waiting on it waits forever.
+- **A deferred report has to leave behind whatever the panel was rendering
+  FROM.** `publishPipeline` derives the Daz and Houdini rows from the run
+  report — `report.daz` is what makes a Daz row done, `report.houdini.length`
+  is how many projects are behind us, `report.houdini[n].failed` is the only
+  thing that keeps a failed leg red — and `emitFinalReport` clears that ref as
+  the run's facts become the toast. Fine while the report also tore the panel
+  down; wrong the moment it doesn't, because the leg still republishes into
+  that panel for minutes. Every finished row came back `waiting`: a project
+  that had just exported read as pending work for the whole import, a FAILED
+  one lost its red (and failed rows never retire, so it simply sat there), and
+  the bar counting them unfinished ran backwards. Caught by the grill, not by
+  the spec written with the fix — that spec asserted the Unreal rows and the
+  report, which is what the fix was ABOUT. **When you make a teardown
+  conditional, the question is not "does the new path work" but "what did the
+  teardown used to guarantee to everything else".**
 
 Shape of the fix: one gate (`finishOrHoldReport`) that every end-of-run path goes
 through, because "is the run over" and "has the last leg answered" are the same

@@ -1068,6 +1068,13 @@ test('the run is over when the EDITOR answers, not when the job file lands', asy
   })
   await expect(page.locator('[data-task^="ue:"]')).toBeVisible()
   await expect(page.getByText(/DTH Export finished/)).toHaveCount(0)
+  // The panel the report left up is still THIS run's, so the legs behind us
+  // stay behind us: the finished Houdini project keeps its tick and retires
+  // out of the list. It read `waiting` for the whole import instead — the
+  // report's facts are what `publishPipeline` derives the rows from, and the
+  // report had just been composed and cleared. A leg that FAILED fared worse:
+  // failed rows never retire, so it sat there as ordinary pending work.
+  await expect(page.locator('[data-task^="hou:"]')).toHaveCount(0, { timeout: 10_000 })
 
   // The editor claims the job and reports `running`: the panel says so — into
   // the SAME panel, still carrying the run's rows. A bar with no rows under it
@@ -1111,6 +1118,113 @@ test('the run is over when the EDITOR answers, not when the job file lands', asy
   await expect(page.getByText(/Kira: 1 exported/)).toBeVisible()
   await expect(page.getByText(/Unreal: re-imported 1 asset in .Game.Characters.Kira/)).toBeVisible()
   // The panel goes with the run — no ghost left to republish into.
+  await expect(page.locator('[data-task^="ue:"]')).toHaveCount(0)
+  await expect(page.locator('[data-progressbar]')).toHaveCount(0)
+})
+
+test('a job that DISAPPEARS still releases the run’s report', async ({ page }) => {
+  // The other half of holding the report behind the Unreal leg: what happens
+  // when that leg can never answer. The poll reads three files (the job, the
+  // claim, the result) and `null` means all three are gone — the job was
+  // dismissed, wiped, or lost with the folder.
+  //
+  // Passing that through was survivable while the report fired at the file
+  // write. It is not now: `null` also DISARMS the poll (`unrealRun !== null`
+  // is what keeps the interval alive), so the run's whole report — the Daz leg
+  // and everything it said — would sit held behind a watch nothing polls any
+  // more, under a panel spinning forever. The export legs really happened, and
+  // the run has to say so; what it must NOT do is claim the import went fine.
+  const DAZ_INSTALL = 'C:/Program Files/DAZ 3D/DAZStudio4'
+  const SCRIPTS_ROOT = `${P.dazLib}/Scripts/DTH-Character-Studio`
+  const PENDING_JOB = `${SCRIPTS_ROOT}/dth_exporter_jobs.json`
+  const RUNNING_JOB = `${SCRIPTS_ROOT}/running_dth_exporter_jobs.json`
+  const seed = buildSeed({
+    activeProjectFile: P.dcsp,
+    demo: true,
+    houdiniProject: true,
+    dazInstallFolder: DAZ_INSTALL,
+    unrealProjects: [UPROJECT],
+    landedExports: true,
+  })
+  seed.files[`${EXPORT_ROOT}/KiraDefault/DTH_KiraDefault.dth`] = '{}'
+  seed.files[IMPORTED] = 'uasset-fixture'
+  seed.files[`${UPROJECT_DIR}/Plugins/DTHCharacterStudioRunner/DTHCharacterStudioRunner.uplugin`] =
+    JSON.stringify({ Version: UNREAL_BRIDGE_VERSION })
+  seed.files[`${SCRIPTS_ROOT}/Demo/Kira/.Bulk_ROM_Export.dsa`] = '// bulk-export fixture'
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+  await page.getByRole('button', { name: 'DTH Export' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.waitFor()
+  await dialog.locator('#houdini-mode').click()
+  await page.getByRole('option', { name: /Skip Houdini/ }).click()
+  await dialog.getByRole('checkbox', { name: 'Send to DemoGame' }).check()
+  await dialog.getByRole('button', { name: 'Start' }).click()
+
+  // The Runner (played here) claims the batch and finishes it.
+  await expect
+    .poll(() =>
+      page.evaluate(
+        (job) => ((window as any).__tauriMock.files as Map<string, string>).has(job),
+        PENDING_JOB,
+      ),
+    )
+    .toBe(true)
+  await page.evaluate(
+    ([pending, running]) => {
+      const files = (window as any).__tauriMock.files as Map<string, string>
+      const job = JSON.parse(files.get(pending) ?? '{}')
+      files.delete(pending)
+      files.set(
+        running,
+        JSON.stringify({
+          ...job,
+          progress: 100,
+          jobsDone: job.jobs.length,
+          jobs: job.jobs.map((row: Record<string, unknown>) => ({ ...row, status: 'done' })),
+        }),
+      )
+    },
+    [PENDING_JOB, RUNNING_JOB],
+  )
+
+  // The send has gone out and the report is waiting on it.
+  await expect(page.locator('[data-task^="ue:"]')).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByText(/DTH Export finished/)).toHaveCount(0)
+
+  // …and now the job vanishes without a word — no result, no claim.
+  //
+  // It has to be ON DISK before it can be taken away: the Unreal rows are armed
+  // AHEAD of the send, so the row being visible does not mean the job file
+  // exists yet. Taking it on the row cost this spec a false red — the delete
+  // landed first, the send then wrote the file, and the leg was never gone.
+  const JOB = `${UPROJECT_DIR}/Saved/DTHStudio/job.json`
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          (job) => ((window as any).__tauriMock.files as Map<string, string>).has(job),
+          JOB,
+        ),
+      { timeout: 15_000 },
+    )
+    .toBe(true)
+  await page.evaluate((job: string) => {
+    const files = (window as any).__tauriMock.files as Map<string, string>
+    for (const name of ['job.json', 'running_job.json', 'result.json']) {
+      files.delete(job.replace(/job\.json$/, name))
+    }
+  }, JOB)
+
+  // The run reports — the Daz leg as it happened, the import as UNKNOWN. Not a
+  // green tick over an import nobody watched, and not silence.
+  await expect(page.getByText(/DTH Export finished — 1 scene exported/)).toBeVisible({
+    timeout: 15_000,
+  })
+  await expect(page.getByText(/the job disappeared before the editor answered/)).toBeVisible()
+  // …and the panel goes with it, rather than spinning behind a dead poll.
   await expect(page.locator('[data-task^="ue:"]')).toHaveCount(0)
   await expect(page.locator('[data-progressbar]')).toHaveCount(0)
 })
