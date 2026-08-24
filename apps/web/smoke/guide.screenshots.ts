@@ -646,7 +646,31 @@ test('dth-export-panel', async ({ page }) => {
   // A configured Daz install folder lets the panel's Runner-update check
   // settle open (the fake holds no readable install, and an unreadable Runner
   // state deliberately never blocks exporting).
-  await openCharacter(page, { dazInstallFolder: 'C:/Program Files/DAZ 3D/DAZStudio6' })
+  //
+  // The project row's export-set CHIPS need a SCANNED project, and the fake only
+  // answers a scan when it is told what the `.hip` writes — so the seed is built
+  // here rather than through `openCharacter`. The panel joins the sweep when it
+  // finds fewer scanned projects than linked ones (#951), so the shot waits for
+  // the chip itself rather than assuming the scan beat the click.
+  const HOUDINI_INSTALL = 'C:/Program Files/Side Effects Software/Houdini 22.0.368'
+  const seed = buildSeed({
+    demo: true,
+    activeProjectFile: P.dcsp,
+    dazInstallFolder: 'C:/Program Files/DAZ 3D/DAZStudio6',
+  })
+  const settingsPath = `${P.appData}/settings.json`
+  // A scan is an hython run, so it needs somewhere to run it.
+  seed.files[settingsPath] = JSON.stringify({
+    ...JSON.parse(seed.files[settingsPath] ?? '{}'),
+    houdiniInstallFolder: HOUDINI_INSTALL,
+    houdiniDocsFolder: 'C:/Users/dev/Documents/houdini22.0',
+  })
+  seed.files[`${HOUDINI_INSTALL}/bin/hython.exe`] = 'hython-exe-fixture'
+  seed.materialExportSets = { [P.houdini]: ['KiraDefault'] }
+  await prime(page, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
   await page.getByRole('button', { name: 'DTH Export' }).click()
   const panel = page.getByRole('dialog')
   // One page now: Daz scenes + their Mode, Houdini projects + theirs. Wait for
@@ -654,6 +678,8 @@ test('dth-export-panel', async ({ page }) => {
   // "changed", which is what the full run pre-checks (and what auto-selects
   // the Houdini projects).
   await panel.getByText('Changed since the last export').waitFor()
+  // …and for the scan to land, or the shot races it and captures a bare row.
+  await panel.locator('[data-set="KiraDefault"]').first().waitFor()
   await shoot(page, join(OUT, 'dth-export-panel.png'), panel)
 })
 

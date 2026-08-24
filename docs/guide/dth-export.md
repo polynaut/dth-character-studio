@@ -33,6 +33,7 @@ what their run does:
 | **ROM + Export** | the full run — a fresh ROM, the saved ROM animation scene, and the export of everything (skeletal mesh and hair) |
 | **ROM only** | build the ROM and save the [`rom-animations` scene](./05-rom-in-daz.md#what-a-run-exports); no export |
 | **Export only** | export the saved ROM animations as they stand, without rebuilding. Pre-selects the scenes whose ROM animation is newer than their last export; skips scenes that have none |
+| **Hair items only** | export each scene's [hair items](./advanced.md#hair-items--per-scene-kept-out-of-the-export) alone, one Alembic each — no ROM, no mesh, no CSV, and no saved ROM animation needed. Lists only scenes with **Export hair items** switched on |
 | **Skip Daz — use last exports** | nothing runs in Daz — the Houdini projects work off each scene's last export on disk. Scenes that never delivered an export are kept out, and one whose export **didn't land** (a crashed run leaves a 0-byte `.dth`) is refused by name |
 
 ## Houdini projects
@@ -42,6 +43,13 @@ The character's linked projects, pre-selected whenever scenes are — so a plain
 own **Mode** is either **Export selected scenes** (the default) or **Skip Houdini
 — use last exports**, which hands the exports already on disk to the Unreal
 projects below (offered only when the studio project has a linked `.uproject`).
+
+**Each row names what that project contributes.** A Houdini row's **Networks**
+chips are the export sets it writes — a `.hip` holding two DazToHue networks
+shows two, so the size of the run is visible before you press Start. The Unreal
+rows chip the **Characters** they would receive. A project the background scan
+hasn't reached yet shows none, which means *not known* rather than "writes
+nothing" — [Rescan](./houdini-utils.md) it and the chips appear.
 
 **The project list follows the scene selection.** Untick a Daz scene and the
 projects that only import *that* scene leave the run with it — matched on the
