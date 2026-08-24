@@ -12,20 +12,22 @@ import type { ReactNode } from 'react'
  * and must not float in empty space without it.
  */
 export function ScenePreview({ scenePath, badge }: { scenePath: string; badge?: ReactNode }) {
-  const [src, setSrc] = useState('')
+  // The resolved thumbnail is KEYED by the path it belongs to; validity is
+  // derived during render instead of a reset-effect, so a cleared or changed
+  // scene never shows another path's preview while its own resolves.
+  const path = scenePath.trim()
+  const [resolved, setResolved] = useState({ key: '', src: '' })
   useEffect(() => {
+    if (!path) return
     let active = true
-    if (!scenePath.trim()) {
-      setSrc('')
-      return
-    }
-    resolveScenePreview(scenePath.trim())
-      .then((s) => active && setSrc(s))
-      .catch(() => active && setSrc(''))
+    resolveScenePreview(path)
+      .then((s) => active && setResolved({ key: path, src: s }))
+      .catch(() => active && setResolved({ key: path, src: '' }))
     return () => {
       active = false
     }
-  }, [scenePath])
+  }, [path])
+  const src = path && resolved.key === path ? resolved.src : ''
   if (!src) return null
   return (
     <div className="relative w-fit">

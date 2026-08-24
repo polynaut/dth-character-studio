@@ -89,6 +89,9 @@ export function SceneFooter({
       el.removeEventListener('scroll', update)
       ro?.disconnect()
     }
+    // The chip count is the re-measure TRIGGER — the fades read only the DOM,
+    // which changes exactly when chips are added or removed (#960).
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies
   }, [scenes.length])
 
   if (scenes.length === 0) return null

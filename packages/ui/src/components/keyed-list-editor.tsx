@@ -77,6 +77,10 @@ export function KeyedListEditor<T>({
           {emptyHint}
         </p>
       ) : (
+        // keyOf memoizes per item INSTANCE in a WeakMap ref — an idempotent
+        // identity cache (re-running a discarded render re-reads the same uid),
+        // which is the lazy-init exception, not a render-order bug.
+        // oxlint-disable-next-line react/refs
         items.map((item, index) => (
           <div key={keyOf(item, index)} className={rowClassName}>
             {children(item, (next) => setAt(index, next), index)}

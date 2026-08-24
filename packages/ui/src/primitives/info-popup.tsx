@@ -1,3 +1,9 @@
+/* Every hit here is floating-ui's documented API, not a render-time ref read
+   of our own: the ref OBJECT handed to the arrow() middleware, the prop getters
+   (getReferenceProps/getFloatingProps) and refs.setFloating produced by
+   useFloating/useInteractions. The library touches .current only in effects
+   and DOM callbacks; the rule cannot see through its API surface. */
+/* oxlint-disable react/refs */
 import * as React from 'react'
 import {
   arrow,

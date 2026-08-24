@@ -111,6 +111,29 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   exactly the baseline's per-rule sums. The three rules that were never
   baselined report 0 today, so `--deny-warnings` covers them going forward
   rather than cleaning anything up.)
+- **oxlint's React-compiler rules (adopted in #960) have three measured
+  behaviours that dictate the fix shapes used across the tree.** (1)
+  `react/set-state-in-effect` flags ANY setState reachable through a function
+  the effect calls — even after that function's first `await` (measured on
+  `network-drives-section`, whose `load()` has no sync setState at all) — so a
+  load-on-mount `useEffect(() => { void load() })` can never comply and carries
+  a reasoned `disable-next-line` instead; don't try to restructure it. Genuinely
+  fixable shapes got real fixes: draft-follows-prop cells use `useDraftValue`
+  (`@dth/ui`, the render-adjust pattern), async results that needed a sync
+  reset are now KEYED by their inputs with validity derived during render.
+  (2) `react/refs` forbids the render-time `ref.current = x` latest-ref write,
+  but the classic `react-hooks/exhaustive-deps` rule (also enabled) does NOT
+  recognise a ref returned from a custom hook — a shared `useLatest` hook traded
+  10 flags for 15. The shape that satisfies BOTH rules is inline: a local
+  `useRef` (classic-rule exempt) whose write moves into a bare
+  `useInsertionEffect` (runs before every other effect of the same commit).
+  (3) `react/refs` diagnostics anchor on the enclosing render-scope callback
+  (e.g. the `items.map(...)` arrow), not on the line that touches `.current` —
+  a `disable-next-line` must sit above THAT expression, not above the access.
+  Also: `react/exhaustive-effect-dependencies` calls a deliberate re-run
+  trigger dep "extra" (and an identity-stable `useCallback([])` dep too, which
+  the classic rule simultaneously REQUIRES listed) — those sites keep the dep
+  plus a reasoned disable naming the trigger.
 - **"A `.hip` always holds absolute paths" is FALSE — the real constraint is
   `$JOB`.** A Houdini project can be authored entirely relative, and the
   studio's own Generate project does exactly that (`$JOB/<houdiniSubdir>/

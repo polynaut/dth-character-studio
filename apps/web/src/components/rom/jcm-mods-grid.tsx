@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { ChevronRight, FlipHorizontal2, Plus, Trash2 } from 'lucide-react'
 
-import { Button, InfoPopup, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@dth/ui'
+import { Button, InfoPopup, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, useDraftValue } from '@dth/ui'
 import { GuideLink } from '#/components/guide-link.tsx'
 
 import { cellInputClass, pctToValue, valueToPct } from './cells.tsx'
@@ -99,8 +99,7 @@ function RawNumberCell({
   invalid?: boolean
 }) {
   const format = useCallback((v: number) => (percent ? valueToPct(v) : String(v)), [percent])
-  const [draft, setDraft] = useState(() => format(value))
-  useEffect(() => setDraft(format(value)), [value, format])
+  const [draft, setDraft] = useDraftValue(format(value))
   const input = (
     <input
       className={`${cellInputClass} w-16 text-right tabular-nums ${percent ? 'pr-5' : ''} ${

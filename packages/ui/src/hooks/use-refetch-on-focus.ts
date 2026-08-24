@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useInsertionEffect, useRef } from 'react'
 import type { DependencyList } from 'react'
 
 /**
@@ -17,7 +17,9 @@ export function useRefetchOnFocus(
   opts: { immediate?: boolean } = {},
 ): void {
   const fnRef = useRef(fn)
-  fnRef.current = fn
+  useInsertionEffect(() => {
+    fnRef.current = fn
+  })
   const immediate = opts.immediate ?? false
   useEffect(() => {
     const run = () => fnRef.current()

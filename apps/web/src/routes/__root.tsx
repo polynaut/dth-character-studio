@@ -132,10 +132,13 @@ function RootComponent() {
 
   // Dev-only: the smoke/screenshot harness fires demo toasts through the app's
   // OWN sonner instance (a spec-side `import('sonner')` gets its own module
-  // copy, which the mounted <Toaster/> never sees). Never shipped.
-  if (import.meta.env.DEV) {
-    ;(window as unknown as { __dthToast?: typeof toast }).__dthToast = toast
-  }
+  // copy, which the mounted <Toaster/> never sees). Never shipped. An effect,
+  // not a render-time global write — the harness only reads it after mount.
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      ;(window as unknown as { __dthToast?: typeof toast }).__dthToast = toast
+    }
+  }, [])
 
   return (
     <UiConfigProvider value={{ onNavigate, onOpenExternal, onError, dismissToasts }}>

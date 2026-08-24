@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { CircleAlert, RefreshCw, RotateCcw, TriangleAlert } from 'lucide-react'
 
 import { Button, InfoPopup, useModifierHeld } from '@dth/ui'
@@ -46,7 +46,7 @@ export function RefreshAssetsTab() {
   // (mirrors the Ctrl force-save affordance in the character header).
   const ctrlHeld = useModifierHeld('Control')
 
-  async function reload() {
+  const reload = useCallback(async () => {
     setLoading(true)
     try {
       setReport(await detectAssetVersions())
@@ -55,10 +55,14 @@ export function RefreshAssetsTab() {
     } finally {
       setLoading(false)
     }
-  }
-  useEffect(() => {
-    void reload()
   }, [])
+  useEffect(() => {
+  // Load-on-mount: the flagged setState is the async load's own bookkeeping —
+  // the rule flags ANY setState reachable through the called function, even
+  // after its first await, so an async load can never satisfy it (#960).
+  // oxlint-disable-next-line react/set-state-in-effect
+    void reload()
+  }, [reload])
 
   function reportSummary(result: RefreshSummary, rebuiltAvatars: boolean) {
     if (result.runtime && !result.runtime.ok) {

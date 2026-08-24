@@ -237,6 +237,10 @@ function SettingsPage() {
   }, [])
 
   useEffect(() => {
+  // Load-on-mount: the flagged setState is the async scan's own bookkeeping —
+  // the rule flags ANY setState reachable through the called function, even
+  // after its first await, so an async load can never satisfy it (#960).
+  // oxlint-disable-next-line react/set-state-in-effect
     void rescanDazInstalls()
   }, [rescanDazInstalls])
 
@@ -367,6 +371,10 @@ function SettingsPage() {
   }, [])
 
   useEffect(() => {
+  // Load-on-mount: the flagged setState is the async scan's own bookkeeping —
+  // the rule flags ANY setState reachable through the called function, even
+  // after its first await, so an async load can never satisfy it (#960).
+  // oxlint-disable-next-line react/set-state-in-effect
     void rescanHoudiniInstalls()
   }, [rescanHoudiniInstalls])
 
@@ -523,6 +531,9 @@ function SettingsPage() {
   useEffect(() => {
     const folder = settings.dthPosesFolder
     if (!folder) {
+      // Clearing the pane when the folder empties IS this effect's job — the
+      // debounced inspection below has nothing to run for (#960).
+      // oxlint-disable-next-line react/set-state-in-effect
       setReleases({ mode: 'none', version: '', releases: [], error: null })
       // Clear the spinner too: the previous run's `finally` is skipped once its
       // effect is cancelled, so without this "Looking for DTH releases…" sticks
@@ -573,6 +584,10 @@ function SettingsPage() {
   // the value instead of copying it makes the list the whole input, which is
   // what the merge is a fallback for. One Save persists both halves.
   useEffect(() => {
+    // A one-shot EDIT of form state keyed to the loaded value, not a render
+    // derivation: moving the legacy field into the list must happen exactly
+    // once per loaded settings and persist through the user's Save (#960).
+    // oxlint-disable-next-line react/set-state-in-effect
     setSettings((s) => {
       const legacy = s.dthExporterFolder.trim()
       if (!legacy) return s
@@ -582,6 +597,9 @@ function SettingsPage() {
         dthExporterFolder: '',
       }
     })
+    // Keyed to the LOADED value on purpose: re-run only when a (re)loaded
+    // settings file brings a legacy folder — never on the edit clearing it (#960).
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies
   }, [initial.dthExporterFolder])
 
   // Multi-release with no valid selection yet → pre-select the latest. That
@@ -589,6 +607,9 @@ function SettingsPage() {
   // later releases never switch the active version on their own.
   useEffect(() => {
     if (releases.mode !== 'multi' || releases.releases.length === 0) return
+    // Also a deliberate EDIT (marks the form dirty so the user saves the
+    // pre-selected version), reacting to the async inspection above (#960).
+    // oxlint-disable-next-line react/set-state-in-effect
     setSettings((s) => {
       if (releases.releases.some((r) => r.version === s.currentDthVersion)) return s
       // Prefer the newest extracted folder — a zip can't be scanned.

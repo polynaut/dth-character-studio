@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { FolderOpen } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -46,7 +46,7 @@ export function AssetForm({
   // Character tab's scene derivation, and feeding a `.hip` into it would derive
   // a character from a Houdini project.
   const [hipPath, setHipPath] = useState('')
-  const [name, setName] = useState('')
+  const [name, setName] = useState(() => (scenePath ? sceneStem(scenePath) : ''))
   const [description, setDescription] = useState('')
   const [copy, setCopy] = useState(true)
   const [subfolder, setSubfolder] = useState('')
@@ -54,25 +54,27 @@ export function AssetForm({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
-  // Seed the attachment name from the scene whenever one arrives (mount with a
-  // Character-tab pick included) — but never overwrite a name the user typed.
-  useEffect(() => {
-    if (scenePath) setName((current) => (current.trim() ? current : sceneStem(scenePath)))
-  }, [scenePath])
+  // Seed the attachment name whenever a scene arrives (the mount case is the
+  // useState initializer above) — but never overwrite a name the user typed.
+  // Adjusted during render, not in an effect: the seed paints with the scene.
+  const [prevScenePath, setPrevScenePath] = useState(scenePath)
+  if (scenePath !== prevScenePath) {
+    setPrevScenePath(scenePath)
+    if (scenePath && !name.trim()) setName(sceneStem(scenePath))
+  }
 
   /** The path this form is actually about, whichever kind is selected. */
   const activePath = kind === 'houdini-project' ? hipPath : scenePath
-
-  useEffect(() => {
-    if (hipPath) setName((current) => (current.trim() ? current : sceneStem(hipPath)))
-  }, [hipPath])
 
   async function pick() {
     // Re-picking opens at the file already chosen (preselected), not at
     // wherever the OS last happened to be.
     if (kind === 'houdini-project') {
       const picked = await pickHipPath('Choose a Houdini project', browseStart(hipPath))
-      if (picked) setHipPath(picked)
+      if (picked) {
+        setHipPath(picked)
+        setName((current) => (current.trim() ? current : sceneStem(picked)))
+      }
       return
     }
     const picked = await pickDufPath('Choose a Daz scene', browseStart(scenePath))
@@ -140,8 +142,10 @@ export function AssetForm({
         onDrop={(paths) => {
           const dropped = paths[0]
           if (!dropped) return
-          if (kind === 'houdini-project') setHipPath(dropped)
-          else onScenePathChange(dropped)
+          if (kind === 'houdini-project') {
+            setHipPath(dropped)
+            setName((current) => (current.trim() ? current : sceneStem(dropped)))
+          } else onScenePathChange(dropped)
         }}
       >
         <div className="flex flex-wrap items-center gap-3">

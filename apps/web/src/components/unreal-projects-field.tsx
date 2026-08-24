@@ -229,6 +229,9 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
       el.removeEventListener('scroll', update)
       ro?.disconnect()
     }
+    // The card count is the re-measure TRIGGER — the fades read only the DOM,
+    // which changes exactly when project cards are added or removed (#960).
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies
   }, [project.unrealProjects.length])
 
   useEffect(() => {

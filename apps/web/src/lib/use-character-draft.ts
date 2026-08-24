@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useInsertionEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
 
@@ -109,7 +109,9 @@ export function useCharacterDraft(options: {
 
   // Latest-ref: the stable callbacks below always read the CURRENT values.
   const stateRef = useRef({ character, baseline, saving, projectId, onValidationErrors: options.onValidationErrors })
-  stateRef.current = { character, baseline, saving, projectId, onValidationErrors: options.onValidationErrors }
+  useInsertionEffect(() => {
+    stateRef.current = { character, baseline, saving, projectId, onValidationErrors: options.onValidationErrors }
+  })
 
   const patch = useCallback((p: Partial<Character>) => {
     setCharacter((c) => ({ ...c, ...p }))

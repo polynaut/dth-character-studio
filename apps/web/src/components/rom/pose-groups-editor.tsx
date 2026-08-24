@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useInsertionEffect, useRef, useState } from 'react'
 
 import { createPortal } from 'react-dom'
 import {
@@ -83,16 +83,21 @@ export const PoseGroupsEditor = memo(function PoseGroupsEditor({
     requestAnimationFrame(() => {
       justMoved.current = false
     })
+    // `display` is the TRIGGER: release the just-moved latch one frame after
+    // any reflow of the drag copy; nothing in the body reads it (#960).
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies
   }, [display])
 
   // Latest-ref: the stable id-routing callbacks below always see the CURRENT
   // groups/section/onGroupsChange while keeping ONE identity for GroupCard memo.
   const groupsRef = useRef(groups)
-  groupsRef.current = groups
   const sectionRef = useRef(section)
-  sectionRef.current = section
   const emitRef = useRef(onGroupsChange)
-  emitRef.current = onGroupsChange
+  useInsertionEffect(() => {
+    groupsRef.current = groups
+    sectionRef.current = section
+    emitRef.current = onGroupsChange
+  })
   const emitGroups = useCallback((next: Array<RomGroup>) => {
     emitRef.current(sectionRef.current, next)
   }, [])

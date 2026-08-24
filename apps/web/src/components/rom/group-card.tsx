@@ -241,6 +241,9 @@ export const GroupCard = memo(function GroupCard({
       : undefined,
   }
 
+  // TanStack Table's documented API: useReactTable returns unmemoizable
+  // functions, so the React compiler skips this component — accepted (#960).
+  // oxlint-disable-next-line react/incompatible-library
   const table = useReactTable({
     data: displayPoses,
     columns: poseColumns,
