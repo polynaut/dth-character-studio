@@ -212,6 +212,14 @@ a missing PNG *and* a PNG no page references both fail it. The Playwright side
 (`pnpm screenshots`) only needs running when you actually changed which shots
 exist — note it is **not** part of `pnpm smoke`, which matches `*.smoke.ts` only.
 
+**Adding or reshooting a screenshot makes the pass no longer prose-only.**
+`guide.screenshots.ts` is TypeScript in the lint tree, so it needs `pnpm lint`
+(and `pnpm --filter @dth/web typecheck`) on top of the two above — a green
+`build:guide` and 45 passing shots say nothing about it. *Earned by:* the
+2026-08-24 pass reshot one panel, declared a `HOUDINI_INSTALL` that shadowed the
+module-scope one 140 lines above, and shipped it to CI — `--deny-warnings` means
+one shadowed const is a red PR.
+
 Anchor gotchas — `build:guide` is the only gate that catches these, and it is NOT
 part of `/verify`:
 
