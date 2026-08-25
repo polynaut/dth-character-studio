@@ -1670,7 +1670,13 @@ function memorizeRawDials(oNodes){
 }
 
 function restoreZeroedDials(oNodes, oBaseline){
-	if(!oBaseline || !oBaseline.values) return 0;
+	// A missing/mis-shaped snapshot must say so: the silent form of this
+	// return cost a live run on 2026-08-25, when the call site still passed
+	// the plain memorizeBaseMorphs map and the pass quietly did nothing.
+	if(!oBaseline || !oBaseline.values){
+		print("restoreZeroedDials: no raw baseline snapshot (memorizeRawDials) - nothing restored.");
+		return 0;
+	}
 	var iRestored = 0, iSeen = 0, iDialed = 0, iDialedKeyed = 0, iSkippedDriven = 0;
 	for(var x = 0; x < oNodes.length; x++){
 		var oNode = oNodes[x];

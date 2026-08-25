@@ -255,6 +255,19 @@ describe('restoreZeroedDials', () => {
     expect(printed()).toContain('1 skipped as driven')
   })
 
+  // The workflow is not executed in this sandbox, so its call site can drift
+  // from the function's contract without any test noticing — which is exactly
+  // what happened live on 2026-08-25: the workflow still passed the plain
+  // memorizeBaseMorphs map, the .values guard early-returned, and the pass
+  // silently did nothing. Pin the wiring textually.
+  it('ApplyDTHWorkflow feeds the pass the RAW snapshot, not the close-out map', () => {
+    const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
+    const workflow = readFileSync(join(dir, 'DthWorkflow.dsa'), 'utf8')
+    expect(workflow).toContain('var baseRawDials = memorizeRawDials([oNodeRoot])')
+    expect(workflow).toContain('restoreZeroedDials([oNodeRoot], baseRawDials)')
+    expect(workflow).not.toMatch(/restoreZeroedDials\(\[oNodeRoot\], baseMorphValues\)/)
+  })
+
   it('round-trips with memorizeRawDials: snapshot, preset stomp, restore', () => {
     const { utils } = loadUtils()
     const breasts = new FakeProp('body_ctrl_BreastsUp-Down', 1)

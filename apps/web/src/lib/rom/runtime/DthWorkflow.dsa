@@ -197,7 +197,7 @@ function ApplyDTHWorkflow(options){
 	// a restored dial, and BEFORE the custom frames: a restored dial that a
 	// custom section also walks must be visible to the dialed-walked gate,
 	// which fails that combination loudly instead of letting it drift.
-	restoreZeroedDials([oNodeRoot], baseMorphValues);
+	restoreZeroedDials([oNodeRoot], baseRawDials);
 
 	if(dthStopHere("before the custom frames")) return false;
 

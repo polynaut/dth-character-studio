@@ -55,7 +55,7 @@ const RUNTIME_ASSETS = [
 // Bump this together with RUNTIME_VERSION whenever a runtime file legitimately
 // changes (this run prints the new value in the failure message).
 const EXPECTED_RUNTIME_HASH =
-  'f7afb0048bec83d9dbf2045b30f637f64003a592e569ea9e26d0823e5a501c2d'
+  'f96c68e6ef20bfe0c420fa9fbcd345c8505da788de96df8d2e96207f78d51d61'
 
 function runtimeHash(): string {
   const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
