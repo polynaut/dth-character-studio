@@ -1,5 +1,102 @@
 # @dth/web
 
+## 0.88.4
+
+### Patch Changes
+
+- [#966](https://github.com/polynaut/dth-character-studio/pull/966) [`33a5aaf`](https://github.com/polynaut/dth-character-studio/commit/33a5aaf09cf3a8c3853845b215b7f02cbcedfd5f) Thanks [@polynaut](https://github.com/polynaut)! - G9 characters keep their dialed pose-control shape through the ROM build
+  (runtime v101). DTH's G9 base ROM presets carry explicit zero keys for ~700
+  value channels the ROM never walks — every stock breast pose control among
+  them — so a character's dialed 100% "Breasts Up-Down" read 0% across the
+  whole generated ROM, and a hand-fix at frame 0 died at the preset's next
+  zero key. (The G8/G8.1 presets carry none of these channels, which is why
+  the retired "Preserve morphs after ROM loading" option looked obsolete.)
+
+  The runtime now restores such dials automatically, with no option or list:
+  after all preset blocks, a root-figure dial that was non-zero before the ROM
+  loaded and whose keys are ALL zero afterwards (zeroed flat — never walked)
+  is flattened back to its pre-ROM value. Genuinely walked channels have a
+  non-zero key somewhere and are never touched; ERC-driven halves are left to
+  their master. A flat channel matches the base mesh on every frame, so the
+  FBX and Alembic artifacts stay aligned.
+
+  The same pass fixed a blind spot it would otherwise have exposed: the
+  dialed-walked gate and the frame-0 morph anchor each resolved a morph name
+  through their own truncated copy of the walk the ROM writer uses, so a
+  node-owned G9 pose control could be walked while neither of them could see
+  it. All three now share one resolver, and a walked pose control is reported
+  and anchored like any other morph.
+
+  Run Tools → Refresh assets to regenerate installed scripts onto the new
+  runtime.
+
+- [#967](https://github.com/polynaut/dth-character-studio/pull/967) [`dd5bbeb`](https://github.com/polynaut/dth-character-studio/commit/dd5bbebaa708e79fb64ffad52063878aceaebf81) Thanks [@polynaut](https://github.com/polynaut)! - A DTH export that sampled no motion is no longer reported as success
+  (runtime v102). The DTH Exporter (2.1.9+) can intermittently walk every ROM
+  frame while the scene never re-evaluates — its own motion summary then reads
+  "moved on 0 of N frames" — producing a statue alembic that used to land as a
+  successful export and even purge the backups of the last good set. The
+  export carrier now reads that summary: an all-zero verdict is a failed
+  export (the previous set is restored, the report says why), and a run whose
+  liveliest node barely moved lands with a run-log warning telling you not to
+  trust the set. Only a summary written by the export that just ran can judge
+  it, and every export now says in Daz's log what the audit concluded — so an
+  un-audited export (older exporter, no summary) reads as un-audited rather
+  than as clean. Exports from older exporter builds are otherwise unaffected.
+
+- [#962](https://github.com/polynaut/dth-character-studio/pull/962) [`311f9b4`](https://github.com/polynaut/dth-character-studio/commit/311f9b442a01a86e47aed64cadfef70ac7fd8b3d) Thanks [@polynaut](https://github.com/polynaut)! - Adopted oxlint 1.79's six React-compiler rules (deferred in [#959](https://github.com/polynaut/dth-character-studio/issues/959), tracked in
+  [#960](https://github.com/polynaut/dth-character-studio/issues/960)): all 52 flagged sites are now either genuinely fixed or carry a stated,
+  per-site reason. The fixes are behaviour-preserving hardening, not features:
+
+  - Latest-ref writes (`ref.current = x` during render — the drag editor, the
+    unsaved-changes guard, the character draft, file drop, two kit hooks) moved
+    into `useInsertionEffect`, so a render React discards can never leak into a
+    ref.
+  - Draft-follows-prop table cells (pose/bone/morph/JCM cells, the kit's
+    NumberField) now reset through the new `useDraftValue` hook — adjusted during
+    render instead of one frame late from an effect, so an outside commit never
+    paints the stale draft first.
+  - Async results that used a reset-effect (scene previews, the avatar size
+    variant, the Houdini name-collision probe, the delete dialog's keep-Houdini
+    probe) are now keyed by the inputs that produced them, so a stale result
+    stops matching instead of needing to be cleared — a changed scene can no
+    longer flash the previous scene's preview.
+  - The attachment form seeds its name from the picked scene at initialization /
+    in the pick itself, not via effects.
+
+  Deliberate patterns (load-on-mount effects, trigger-only effect deps,
+  floating-ui and TanStack Table API shapes, the drawer's two-phase mount, the
+  live elapsed clock) keep their code and now state their reason at the site; the
+  six config-off entries are deleted, so the rules gate new code at full strength.
+
+- [#965](https://github.com/polynaut/dth-character-studio/pull/965) [`b6ea25c`](https://github.com/polynaut/dth-character-studio/commit/b6ea25ccb48ca5e6cfa869734ee97e5af3607284) Thanks [@polynaut](https://github.com/polynaut)! - A scene card's open menu now always offers **Generate new ROM**. It used to
+  disappear whenever the saved ROM animation looked _current_ — newer than both
+  the scene file and the character's generated ROM script — with **Ctrl** as an
+  undiscoverable way to force it back. That test assumes a file's mtime is an edit
+  time, which stops being true in a Perforce or otherwise synced project: a sync
+  that writes `rom-animations/` after the scenes marks every animation "current",
+  and the rebuild quietly vanishes from every scene with nothing on screen to
+  explain it. The menu's two ROM rows now say what they mean — **Open last ROM**
+  whenever the file is on disk, **Generate new ROM** always — and an animation
+  older than the current definition keeps its "saved by an earlier run" tooltip,
+  informing the choice instead of removing it.
+
+- [#964](https://github.com/polynaut/dth-character-studio/pull/964) [`391bae2`](https://github.com/polynaut/dth-character-studio/commit/391bae2207b986e9ed8d978a387e557a83e78de8) Thanks [@polynaut](https://github.com/polynaut)! - The header's DTH Export button now stays in its **Working** state through the
+  run's Unreal leg. Since the run learned to wait for the editor's answer, the
+  task panel stayed up for the whole import — but the button had no face for
+  that leg, so it dropped back to the idle "DTH Export" the moment the export
+  legs were done, right under a panel saying the import was half way through.
+  It now shows the Unreal mark with the leg's status and its own clock, and is
+  deliberately inert: the import runs inside the Unreal editor, so there is
+  nothing a click here could stop.
+
+  The import's status line also lost its tail: "…is importing — the editor
+  freezes while the DazToHue pipeline runs" overflowed the status bar and now
+  reads just "…is importing".
+
+- Updated dependencies [[`33a5aaf`](https://github.com/polynaut/dth-character-studio/commit/33a5aaf09cf3a8c3853845b215b7f02cbcedfd5f), [`dd5bbeb`](https://github.com/polynaut/dth-character-studio/commit/dd5bbebaa708e79fb64ffad52063878aceaebf81), [`311f9b4`](https://github.com/polynaut/dth-character-studio/commit/311f9b442a01a86e47aed64cadfef70ac7fd8b3d)]:
+  - @dth/rom@0.88.4
+  - @dth/ui@0.88.4
+
 ## 0.88.3
 
 ### Patch Changes
