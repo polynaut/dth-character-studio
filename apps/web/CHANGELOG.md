@@ -1,7 +1,31 @@
 # @dth/web
 
-## 0.89.0
+## 0.90.0
 
+### Minor Changes
+
+- [#973](https://github.com/polynaut/dth-character-studio/pull/973) [`776b26f`](https://github.com/polynaut/dth-character-studio/commit/776b26f6e668da51e69b365cfda2e42b50fea69f) Thanks [@polynaut](https://github.com/polynaut)! - The Daz product scan can now read MULTIPLE DAZ Install Manager manifests
+  folders. Users who organize their installs across several DIM libraries
+  (ManifestFiles, ManifestFiles2, …) add the extra folders in Settings —
+  General (Home window) or the Project tab, under the primary field, which an
+  activated Daz installation may still derive. The generated scan scripts bake
+  all folders as one '|'-joined spec (runtime v104 splits it; '|' is illegal in
+  Windows paths), a missing folder skips only its own manifests, and adding or
+  removing a folder re-flags the characters' scripts for Tools → Refresh assets
+  exactly like moving the single folder always has.
+
+### Patch Changes
+
+- [#972](https://github.com/polynaut/dth-character-studio/pull/972) [`e29e1a0`](https://github.com/polynaut/dth-character-studio/commit/e29e1a042feda3387be150abf0e50f2622c61542) Thanks [@polynaut](https://github.com/polynaut)! - The character page's scripts pane now shows both pipeline directories: the
+  "Export directory" row is renamed to "Daz export directory" (with a shorter
+  hint), and a new "Export directory" row below it shows the character's FINAL
+  export folder — where the Houdini DTH networks write the files that are then
+  imported into Unreal Engine.
+- Updated dependencies [[`776b26f`](https://github.com/polynaut/dth-character-studio/commit/776b26f6e668da51e69b365cfda2e42b50fea69f)]:
+  - @dth/rom@0.90.0
+  - @dth/ui@0.90.0
+
+## 0.89.0
 
 ### Patch Changes
 
