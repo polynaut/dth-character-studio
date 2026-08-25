@@ -101,6 +101,61 @@ describe('generated DAZ Script parses', () => {
     })
   }
 
+  /**
+   * A runtime-less carrier may not CALL what only the runtime defines.
+   *
+   * `new Script` above compiles; it cannot see that `dthFoo()` resolves to
+   * nothing at run time. And the runtime-less carriers are exactly where that
+   * bites hardest: `Export_<name>.dsa` and `.Bulk_Export_Only.dsa` carry NO
+   * `include()` at all (deliberately — they must run after the ROM without a
+   * runtime install), so a helper borrowed from DthUtils.dsa is a
+   * ReferenceError thrown right after a SUCCESSFUL export, before
+   * dthFinishPreviousSet runs. That leaves the previous set's `.dthprev`
+   * backups standing, and the next run's sweep then reads them as the newest
+   * finished copy and deletes the good live export beside them (the v99 corpse
+   * rule). Caught in review on runtime v102's motion-summary gate.
+   */
+  const INCLUDE_RE = /^[^\n]*\binclude\s*\(/m
+
+  for (const [name, character] of variants) {
+    it(`a runtime-less carrier defines everything it calls — ${name}`, () => {
+      const files = generateAll(character, {}, FRAMES, 'C:/DTH/Project/.dcsmeta/c', '2.4.3')
+      const carriers = files
+        .filter((f) => f.fileName.endsWith('.dsa'))
+        .filter((f) => !INCLUDE_RE.test(f.content))
+      // Not asserted non-empty here — the export-less variant emits none. The
+      // guard test below pins that the export variants really do produce them.
+      for (const file of carriers) {
+        // Comments name helpers in prose; only real code counts.
+        const code = file.content.replace(/^\s*\/\/.*$/gm, '')
+        const defined = new Set<string>()
+        for (const m of code.matchAll(/(?:function\s+(dth\w+)\s*\(|var\s+(dth\w+)\s*=\s*function)/g)) {
+          defined.add(m[1] ?? m[2])
+        }
+        const called = new Set<string>()
+        // `.dthFoo(` is a method on some object, not a free helper.
+        for (const m of code.matchAll(/(^|[^\w.])(dth\w+)\s*\(/g)) called.add(m[2])
+        const missing = [...called].filter((n) => !defined.has(n))
+        expect(missing, `${file.fileName} (${name}) calls undefined helper(s)`).toEqual([])
+      }
+    })
+  }
+
+  it('the runtime-less carrier check really does see the export carriers', () => {
+    // Guards the guard: if generateAll ever stopped emitting an include-free
+    // carrier, the loop above would pass vacuously on an empty list.
+    const files = generateAll(make(), {}, FRAMES, 'C:/DTH/Project/.dcsmeta/c', '2.4.3')
+    const carriers = files.filter((f) => f.fileName.endsWith('.dsa') && !INCLUDE_RE.test(f.content))
+    const names = carriers.map((f) => f.fileName)
+    expect(names).toContain('Export_ElectraG9_G9.dsa')
+    expect(names.some((n) => n.indexOf('Bulk_Export_Only') >= 0)).toBe(true)
+    // And they really are the ones that run the exporter's motion audit.
+    for (const f of carriers) {
+      if (f.fileName.indexOf('Hair') >= 0) continue
+      expect(f.content, f.fileName).toContain('dthMotionSummaryVerdict(')
+    }
+  })
+
   it('the groom variant really does emit the groom bracket AND the hair pass', () => {
     // Guards the guard: `hair` hangs off a SCENE OVERRIDE, not the character, so
     // a wrong fixture shape would parse identical no-groom scripts and report

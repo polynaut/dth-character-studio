@@ -105,6 +105,46 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   won't happen (Remo's call, 2026-08-25 — same read as the declined HDA
   feature pitches), so the runtime pass is the PERMANENT fix, not a stopgap —
   don't re-pitch the report; any mention of these presets stays private.
+- **The DTH Exporter can walk every ROM frame while the scene never
+  re-evaluates — the export "succeeds" as a statue.** Measured 2026-08-25
+  (Ita/G9, DS4 4.24, exporter DLL 2.1.9): a 2m48s "successful" export whose
+  own motion summary read "moved on **0 of 484** frames" for every node —
+  23 MB alembic vs a healthy 1.1 GB — plus a DETERMINISTIC partial form
+  (best node 69%; identical 131/110/335 counts across three runs, one
+  pre-dating runtime v101, so it is not a studio regression). The exporter's
+  "Alembic ROM motion summary" (2.1.9+, in the per-character export `.log`)
+  is the ONLY health signal — alembics are not bit-reproducible and size
+  proves nothing. Runtime v102's carrier gate reads it: all-zero = failed
+  export (previous set restored), a suspect best-node fraction = run-log
+  warning. Healthy calibration: best node ~99.8% (483 of 484 — a healthy run
+  is one frame SHORT of the walk, so the bar is 90% of the reachable
+  `(total-1)/total`, not a flat 0.9, or every short ROM is condemned), worst
+  ~60%. Two traps the gate has to dodge, both found in review: the exporter
+  **appends** to one per-character `.log` and that log is NOT in the set the
+  export sweep moves aside, so a verdict must be pinned to a summary written
+  past a mark taken BEFORE the export — otherwise a run that wrote none of
+  its own inherits an older run's, and a stale all-zero block discards a good
+  export; and the gate must PRINT its conclusion on every run, because a
+  fail-open audit (log moved, exporter too old) is otherwise
+  indistinguishable from one that passed. The root cause (evaluation not
+  pumped after the 2.1.x per-frame-forcing removal) is exporter-side work in
+  D:/DazToHue-Daz-Plugins — a too-fast export or tiny `.abc` means "read the
+  motion summary first", not "debug the studio".
+- **The `Export_` carriers and `.Bulk_Export_Only` include NO runtime — a
+  helper they call must be defined IN them.** `Export_<name>.dsa` and
+  `.Bulk_Export_Only.dsa` carry zero `include()` calls by design: they run
+  after the ROM, on a Daz that may have no DTH runtime installed. Calling a
+  `DthUtils.dsa` function from one of them is a ReferenceError, and the place
+  it lands is the worst possible: right after a SUCCESSFUL export and before
+  `dthFinishPreviousSet`, so the previous set's `.dthprev` backups stay
+  standing — and the next run's sweep reads a standing backup as the newest
+  thing anything finished writing and deletes the good live export beside it
+  (the v99 corpse rule). Nothing catches it upstream: `dsa-syntax.test.ts`'s
+  `new Script` compiles fine, and the goldens re-record whatever was emitted.
+  Carrier-side helpers therefore live in `dsa.ts` (`dthExportLogProblem`,
+  `MOTION_SUMMARY_HELPER`), and `dsa-syntax.test.ts` pins that an
+  include-free carrier DEFINES every `dth*` helper it calls. Caught in review
+  on runtime v102, 2026-08-25.
 - **The DAZ Install Manager already knows every Daz path, and stores them at a
   FIXED location — never search the disk for DIM.** Measured on DIM 1.4.1.96
   (2026-08-07), three plain INI files under `%APPDATA%/DAZ 3D`
