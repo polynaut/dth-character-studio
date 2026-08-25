@@ -1671,6 +1671,12 @@ function forEachZeroableDial(oNode, fnVisit){
  * its master restores it. A Daz build without getRawValue stores the
  * EVALUATED value and says so (`raw: false`), which tells the restore pass
  * to fall back to skipping ERC-driven channels — the conservative behaviour.
+ * `raw` is ONE flag for the whole snapshot, flipped by the first channel that
+ * cannot answer: getRawValue is a build-wide capability, so all-or-nothing is
+ * the realistic shape, and degrading everything is safe in the one direction
+ * that matters — it only ADDS skips. A channel that did answer still holds a
+ * raw value, and one that did not is either driven (skipped) or undriven, in
+ * which case its evaluated value IS its raw one.
  * Taken before any preset loads. A dial can still carry ONE key here - the
  * frame-0 morph pass runs first by design (v74) and setValue(0, v) keys what
  * it sets - and a single key evaluates the same at every time, so the no-arg
@@ -1724,17 +1730,22 @@ function memorizeRawDials(oNodes){
  * targets the SHAPE of the accident instead of any name list.
  *
  * A channel is restored iff ALL of:
- *   - its pre-ROM RAW baseline (memorizeRawDials, taken before any preset
- *     loads - NOT memorizeBaseMorphs, whose evaluated map feeds the close-out
- *     and once got passed here by mistake) is non-zero — the dial is part of the character's shape;
+ *   - its pre-ROM RAW baseline is non-zero — the dial is part of the
+ *     character's shape. RAW, from memorizeRawDials, NOT memorizeBaseMorphs:
+ *     that one's evaluated map feeds the close-out and once got passed here
+ *     by mistake, which is why the guard below says so out loud;
  *   - it now HAS keys — a preset actually touched it;
  *   - every key is ~0 — it was zeroed flat, not walked. A genuinely walked
  *     channel has a non-zero key somewhere and is never touched, so no ROM
- *     information can be lost;
- *   - it is not ERC-driven (getNumControllers > 0): a driven half (Breasts
- *     Up-Down Left/Right) reads non-zero only through its master — restoring
- *     it raw would double-apply once the master is restored. Restoring the
- *     master restores the halves.
+ *     information can be lost.
+ *
+ * ERC-driven channels are NOT excluded, and that is the point of the raw
+ * baseline: raw restores raw, so a controller's share rides back on top by
+ * itself and cannot double-apply, and a purely driven half (Breasts Up-Down
+ * Left/Right — raw 0) never becomes a candidate at all. The driven skip
+ * below is reached ONLY on the fallback path, where a Daz build without
+ * getRawValue left an EVALUATED baseline in the snapshot (raw: false) and
+ * writing it back WOULD double-apply.
  *
  * Restore = flatten every key back to the baseline value (the verified
  * setValue(t, v) route — same mechanism as restoreNodeTransforms' fallback);
