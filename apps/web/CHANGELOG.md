@@ -1,5 +1,41 @@
 # @dth/web
 
+## 0.89.0
+
+
+### Patch Changes
+
+- [#970](https://github.com/polynaut/dth-character-studio/pull/970) [`00edb12`](https://github.com/polynaut/dth-character-studio/commit/00edb129f25daae67596359d471aeb5ffdeb27f3) Thanks [@polynaut](https://github.com/polynaut)! - Running a character's visible `ROM_…` script by hand no longer saves the
+  scene as `rom-animations/<stem>_ROM.duf` (runtime v103). That save is the
+  DTH-Export flow's job — the hidden carriers still write it — but the manual
+  script did it too, silently overwriting the flow-built ROM on disk and
+  repointing the open scene's filename to the `_ROM.duf`. A manual run now
+  builds the ROM on the timeline and stops. Run Tools → Refresh assets to
+  regenerate installed scripts.
+
+- [#968](https://github.com/polynaut/dth-character-studio/pull/968) [`0df7e1f`](https://github.com/polynaut/dth-character-studio/commit/0df7e1f266e17fda6564859080296415b72f7fe8) Thanks [@polynaut](https://github.com/polynaut)! - A crashed Unreal editor no longer leaves the DTH Export button Working
+  forever. The import's state is derived from files in the project's
+  `Saved/DTHStudio/` folder, so an editor that died mid-import — leaving a
+  claimed job and a result frozen at `running` — kept re-deriving a live
+  import on every poll, across app restarts, behind a deliberately inert
+  button. The poll now measures liveness for a CLAIMED import: when no editor
+  process exists at all, or every running editor is identified and none holds
+  that project, the import is reported as the failure it is and the run ends
+  through the normal outcome path (failure toast, files cleaned).
+
+  The verdict abstains wherever the studio cannot actually see: an editor whose
+  project can't be read might be the one running the import; a platform that
+  cannot enumerate editors at all (everything off Windows, where the probe is a
+  stub) decides nothing; a failed probe read is a read hiccup, not a dead editor;
+  and a job still queued unclaimed is just waiting — that is the normal
+  queue-then-open flow. A dead verdict also re-reads the result file before
+  believing itself, so an import that finished in the moment the probe took
+  is reported as the success it was.
+
+- Updated dependencies [[`2d8b5fc`](https://github.com/polynaut/dth-character-studio/commit/2d8b5fc696282e0fe0ca910705c729c026f3ec77), [`00edb12`](https://github.com/polynaut/dth-character-studio/commit/00edb129f25daae67596359d471aeb5ffdeb27f3)]:
+  - @dth/rom@0.89.0
+  - @dth/ui@0.89.0
+
 ## 0.88.4
 
 ### Patch Changes
