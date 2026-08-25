@@ -36,7 +36,7 @@ import {
 } from '../houdini-jobs'
 import { normalizeSceneKey } from '../execute-jobs'
 import type { HoudiniResult, HoudiniRunState } from '../houdini-jobs'
-import { cancelFlagPath, motionGateVerdict, parseLastMotionSummary } from '@dth/rom'
+import { cancelFlagPath, motionGateVerdict, parseMotionSummaries } from '@dth/rom'
 import type { Character } from '@dth/rom'
 // Houdini's half of the handoff, bundled as source and written into app-data
 // before each launch (see startHoudiniExport).
@@ -1260,8 +1260,10 @@ export async function verifyDazExportsLanded({
         // The motion-summary gate (exporter >= 2.1.9): a set can LAND —
         // full-size `.dth`, no leftover backups — and still be a statue or a
         // follower-frozen walk (the measured session-wear degradation). The
-        // exporter's own per-set log is the only artifact that can tell, and
-        // only a log written by THIS run is evidence (`sinceMs`; the log
+        // exporter's own per-set log is the only artifact that can tell. The
+        // newest summary is judged against the SAME log's earlier ones (the
+        // history gate — motion-summary.ts says why absolutes lie), and only
+        // a log written by THIS run may be judged at all (`sinceMs`; the log
         // accretes and survives the sweep). No new log = no verdict — an
         // older exporter gates nothing. Skipped for hair-only batches
         // (`requireDth` false): the hair pass writes no character walk.
@@ -1273,7 +1275,7 @@ export async function verifyDazExportsLanded({
           )
           if (logMtime >= sinceMs) {
             const motion = motionGateVerdict(
-              parseLastMotionSummary(await readTextFile(logPath).catch(() => '')),
+              parseMotionSummaries(await readTextFile(logPath).catch(() => '')),
             )
             if (motion.degraded) {
               reason = `the exported meshes barely moved (${motion.reasons.join('; ')})`

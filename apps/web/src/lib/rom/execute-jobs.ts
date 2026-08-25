@@ -785,11 +785,13 @@ export const SESSION_ROW_TIMEOUT_MS = 45 * 60_000
 
 /**
  * How long a mid-batch PENDING file may sit while a Daz process is still up —
- * the window in which the just-finished session is quitting. A healthy quit
- * takes seconds; past this the session is stuck on its way out and the
- * supervisor kills it so the next row's fresh session can start.
+ * the window in which the just-finished session is quitting. A NORMAL DS4
+ * exit after an export session measured ~180 s (live, 2026-08-25), so the
+ * bar is twice that; past it the session is stuck on its way out (session 1
+ * of the same live run sat 8+ minutes) and the supervisor kills it so the
+ * next row's fresh session can start.
  */
-export const SESSION_EXIT_TIMEOUT_MS = 3 * 60_000
+export const SESSION_EXIT_TIMEOUT_MS = 6 * 60_000
 
 /** Grace before the supervisor launches for an UNTOUCHED pending file with no
  *  Daz up — room for the handoff's own launch (and the wait-for-close modal's)
