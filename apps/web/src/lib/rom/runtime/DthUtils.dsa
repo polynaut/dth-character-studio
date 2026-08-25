@@ -1647,7 +1647,12 @@ function closeDanglingMorphKeys(oNodes, iBoundaryFrame, baselineValues){
  * no-arg read is time-independent.
  */
 function memorizeRawDials(oNodes){
-	var oSnapshot = { raw: true, values: {} };
+	// `evals` (getValue — WITH any ERC share) rides along purely so the
+	// restore pass can NAME a dial that is visible-but-not-raw instead of
+	// silently not listing it: the difference between "the user dialed it"
+	// and "a controller shows it" is the whole diagnosis when a restore
+	// comes up empty.
+	var oSnapshot = { raw: true, values: {}, evals: {} };
 	for(var x = 0; x < oNodes.length; x++){
 		var oNode = oNodes[x];
 		if(!oNode) continue;
@@ -1658,12 +1663,23 @@ function memorizeRawDials(oNodes){
 			if(!oMod || !oMod.inherits("DzMorph")) continue;
 			var oProp = oMod.getValueControl();
 			if(!oProp) continue;
+			oSnapshot.evals[oMod.getName()] = oProp.getValue(0);
+			// getRawValue's no-arg return is not measured on every Daz build:
+			// accept it only when it is actually a number, retry with an
+			// explicit time, and otherwise fall back to the evaluated value
+			// (flipping `raw` off so the restore pass keeps its conservative
+			// driven-skip there).
+			var fRaw;
 			if(typeof oProp.getRawValue == "function"){
-				oSnapshot.values[oMod.getName()] = oProp.getRawValue();
-			} else {
-				oSnapshot.raw = false;
-				oSnapshot.values[oMod.getName()] = oProp.getValue(0);
+				fRaw = oProp.getRawValue();
+				if(typeof fRaw != "number") fRaw = oProp.getRawValue(0);
+				if(typeof fRaw != "number") fRaw = undefined;
 			}
+			if(fRaw === undefined){
+				oSnapshot.raw = false;
+				fRaw = oProp.getValue(0);
+			}
+			oSnapshot.values[oMod.getName()] = fRaw;
 		}
 	}
 	return oSnapshot;
@@ -1690,16 +1706,38 @@ function restoreZeroedDials(oNodes, oBaseline){
 			if(!oProp) continue;
 			iSeen++;
 			var fBase = oBaseline.values[oMod.getName()];
-			if(fBase === undefined || approx_eq(fBase, 0)) continue;
+			var fEval = oBaseline.evals ? oBaseline.evals[oMod.getName()] : undefined;
+			if(fBase === undefined || approx_eq(fBase, 0)){
+				// Not raw-dialed — but if it was VISIBLE (evaluated non-zero)
+				// and a preset keyed it, name it: this is the ERC-driven face
+				// of the accident, and the silent version of this skip is
+				// undiagnosable from the log (measured 2026-08-25: run 3's
+				// job was to find out which branch swallowed Breasts Up-Down).
+				if(fEval !== undefined && !approx_eq(fEval, 0) && oProp.getNumKeys() > 0){
+					print("Zeroed dial (driven):", oProp.getLabel(), "was visible at", fEval,
+						"but raw", (fBase === undefined ? "unknown" : fBase),
+						"- a controller shows it; restoring its controlling dial covers it.");
+				}
+				continue;
+			}
 			iDialed++;
 			var iKeys = oProp.getNumKeys();
 			if(iKeys < 1) continue;
 			iDialedKeyed++;
 			var bAllZero = true;
+			var iBadKey = -1;
 			for(var k = 0; k < iKeys; k++){
-				if(!approx_eq(oProp.getKeyValue(k), 0)){ bAllZero = false; break; }
+				if(!approx_eq(oProp.getKeyValue(k), 0)){ bAllZero = false; iBadKey = k; break; }
 			}
-			if(!bAllZero) continue;
+			if(!bAllZero){
+				// A dialed candidate rejected for holding a real key is the
+				// one branch that must name its evidence — "0 restored" with
+				// six of these was undiagnosable until they printed.
+				print("Zeroed-dial candidate left alone:", oProp.getLabel(), "dialed at", fBase,
+					"but key", iBadKey, "of", iKeys, "holds", oProp.getKeyValue(iBadKey),
+					"at t", oProp.getKeyTime(iBadKey), "- keyed non-zero, so it is walked/driven, not zeroed flat.");
+				continue;
+			}
 			// Only the no-getRawValue fallback needs the driven skip: an
 			// EVALUATED baseline on a driven channel would double-apply the
 			// controller's share. A raw baseline cannot (raw restores raw).

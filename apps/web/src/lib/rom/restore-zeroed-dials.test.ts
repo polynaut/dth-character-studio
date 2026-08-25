@@ -177,8 +177,8 @@ describe('restoreZeroedDials', () => {
     expect(printed()).toContain('Restored zeroed dial: body_ctrl_BreastsUp-Down label back to 1')
   })
 
-  it('never touches a walked channel — one non-zero key disqualifies it', () => {
-    const { utils } = loadUtils()
+  it('never touches a walked channel — one non-zero key disqualifies it, and says so', () => {
+    const { utils, printed } = loadUtils()
     const walked = new FakeProp('FBMHeavy', 0, [
       [0, 0],
       [330 * TICKS, 1],
@@ -190,6 +190,25 @@ describe('restoreZeroedDials', () => {
 
     expect(restored).toBe(0)
     expect(walked.keys.map(([, v]) => v)).toEqual([0, 1, 0])
+    // The rejection names its evidence — six silent ones made a live run
+    // undiagnosable (2026-08-25).
+    expect(printed()).toContain('Zeroed-dial candidate left alone: FBMHeavy label dialed at 0.5')
+  })
+
+  it('names a keyed dial that is visible only through ERC (raw ~0) instead of skipping it silently', () => {
+    const { utils, printed } = loadUtils()
+    const driven = new FakeProp('body_ctrl_BreastsUp-Down', 0, stompKeys(), 2)
+    const root = morphNode('Genesis9', [driven])
+
+    const restored = utils.restoreZeroedDials([root], {
+      raw: true,
+      values: { 'body_ctrl_BreastsUp-Down': 0 },
+      evals: { 'body_ctrl_BreastsUp-Down': 1 },
+    } as never)
+
+    expect(restored).toBe(0)
+    expect(driven.keys.map(([, v]) => v)).toEqual([0, 0, 0, 0])
+    expect(printed()).toContain('Zeroed dial (driven): body_ctrl_BreastsUp-Down label was visible at 1 but raw 0')
   })
 
   it('skips a zero baseline, an unkeyed channel, and baseline noise below the tolerance', () => {
