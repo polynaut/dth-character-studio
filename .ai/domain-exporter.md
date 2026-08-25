@@ -1040,9 +1040,11 @@ Part of the domain reference — `.ai/domain.md` is the index.
   what the running editors' command lines say they have open.** MEASURED
   2026-08-20 (UE 5.8, launcher start): `UnrealEditor.exe`'s command line
   carries the `.uproject` path, read by ONE WMI query (~200 ms, Rust
-  `unreal_open_projects` — a PowerShell child, allowed because this runs per
-  user action, never in a poll; the ToolHelp snapshot can't read another
-  process's ARGUMENTS). The verdict is pure (`unrealLaunchVerdict`,
+  `unreal_open_projects` — a PowerShell child, which `procs.rs` bars from
+  per-tick polls; it runs per user action, and in the ONE poll that needs it
+  (the import-liveness verdict below) at most once per 10 s per project, never
+  on the 2.5 s tick. The ToolHelp snapshot can't replace it: it can't read
+  another process's ARGUMENTS). The verdict is pure (`unrealLaunchVerdict`,
   unreal-jobs.ts): target seen open → never launch (its editor claims, or the
   status line says "restart the editor" — a bridge installed after editor
   start never loads); only OTHER projects open, all identified → launch the
@@ -1053,6 +1055,35 @@ Part of the domain reference — `.ai/domain.md` is the index.
   about AT PANEL OPEN (`unidentifiedEditorTargets` → the panel's amber note):
   the send happens minutes after Start, which is a late moment to learn the
   import may sit unclaimed.
+- **A CLAIMED import whose editor is gone is FAILED, not "Working" forever.**
+  The import's state is derived from `Saved/DTHStudio/` files, and the first
+  real editor crash mid-import (2026-08-25) proved what that costs on its own:
+  `running_job.json` + a `result.json` frozen at `running` re-derived a live
+  import on every poll, across app restarts, behind a deliberately inert
+  button, with no dismiss offered for a state that never finishes. The missing
+  half is a PROCESS measurement, not a timeout — the import runs INSIDE an
+  editor, so "no editor could be running this" is decisive.
+  `unrealImportAbandoned` (unreal-jobs.ts, pure) says dead on two shapes only:
+  no editor process at all (a crashed editor has no process; a frozen or
+  launching one still does), or every editor identified and none holding this
+  project. Four abstentions, all the same rule — what the studio cannot see
+  stays unseen:
+  - any UNIDENTIFIED editor might be the target → alive;
+  - `probed: false` — the non-Windows stub answers `editors: 0` WITHOUT
+    looking, and nothing gates the Unreal leg to Windows (the guide's
+    Windows-only list does not name it), so believing that zero would fail
+    every macOS import the moment its bridge claimed the job;
+  - a failed probe READ is not a dead editor — the poll stays running and asks
+    again;
+  - the job file still PENDING → not claimed, so no editor is expected up for
+    it yet; failing there would kill the queue-then-open flow (reachable via
+    the best-effort stale-result delete at queue time).
+  A dead verdict RE-READS `result.json` before believing itself: the result was
+  read ~200 ms earlier, and an editor that wrote its final result and exited
+  inside that window would otherwise have a SUCCESS reported as failure — and
+  then dismissed, deleting the file that proved otherwise. The fabricated
+  finish carries the error, so the run ends through the normal outcome path
+  (failure toast, failed row, `dismissUnrealImport` cleaning the three files).
 - **Housekeeping's orphan GCs** (app launch + "Clean up now",
   api/maintenance.ts): per-project `.dcsmeta` character dirs + avatars, and —
   since the deferred-findings pass — per-character SCRIPT dirs in the Daz

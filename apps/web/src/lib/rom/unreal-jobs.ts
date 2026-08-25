@@ -374,18 +374,6 @@ export type UnrealImportState =
       destination: string
     }
 
-/**
- * What the studio should show, from the two files it can see.
- *
- * Deliberately has no `dead`: unlike Daz and Houdini there is no liveness
- * probe here — an editor the user closed mid-import leaves a `running` result
- * that never advances. Reporting that as failure would be a guess; the user
- * can see their own editor. (The command-line probe behind
- * {@link unrealLaunchVerdict} answers "which projects are open NOW" — a launch
- * decision. It is not a liveness verdict on the editor that CLAIMED this job,
- * and guessing one from it would report `dead` about an editor whose line
- * merely read unknown.)
- */
 /** What the studio can see of the running Unreal editors — the TS face of the
  *  Rust `unreal_open_projects` probe (see `unrealOpenProjectsSchema`).
  *  `unknown` editors are "cannot tell", never "not the one you asked about". */
@@ -393,6 +381,12 @@ export interface UnrealEditorProbe {
   editors: number
   projects: ReadonlyArray<string>
   unknown: number
+  /** Whether the platform could enumerate editors AT ALL — false off Windows,
+   *  where the Rust probe is a stub. A stub answers `editors: 0`, which is
+   *  "nobody looked", not "nothing is running": any verdict that reads ZERO
+   *  editors as a measurement must check this first (see
+   *  {@link unrealImportAbandoned}). */
+  probed: boolean
 }
 
 /** One `.uproject` path as an identity: slashes and case folded, spelling
@@ -405,6 +399,42 @@ function uprojectKey(path: string): string {
 export function editorHoldsProject(probe: UnrealEditorProbe, uprojectPath: string): boolean {
   const wanted = uprojectKey(uprojectPath)
   return probe.projects.some((open) => uprojectKey(open) === wanted)
+}
+
+/**
+ * A CLAIMED import whose editor is gone can never finish — and until this
+ * verdict existed, it didn't fail either: the first real editor crash
+ * mid-import (2026-08-25, the day #964 shipped) left `running_job.json` and a
+ * `result.json` frozen at `running` on disk, so every poll — across app
+ * restarts, forever — re-derived "Working" from files no process would ever
+ * update again, behind a deliberately inert button.
+ *
+ * The verdict is a liveness MEASUREMENT, not a timeout: the import runs
+ * inside an editor process, so "no editor could be running this import" is
+ * decisive. Two decisive shapes, same caution as {@link unrealLaunchVerdict}:
+ *
+ * - NO editor process at all — a crashed editor has no process; a frozen or
+ *   just-launching one still does, so this cannot misfire on a slow import.
+ * - every running editor identified, and none holds THIS project — editors
+ *   of other projects can't be running our import.
+ *
+ * Any UNIDENTIFIED editor might be the target: not abandoned. Only ever asked
+ * about a CLAIMED job — an unclaimed one waiting with no editor open is the
+ * normal queue-then-open flow, not a death.
+ *
+ * And an UNPROBED platform decides nothing. Off Windows the Rust probe is a
+ * stub answering `editors: 0` — which is "nobody looked", and reading it as a
+ * measurement would fail every macOS import the moment its bridge claimed the
+ * job. The Unreal leg is not Windows-only (nothing gates it, and the guide's
+ * Windows-only list does not name it), so this is the one shape where zero
+ * editors must NOT be believed. Same rule as `unknown`: what the studio
+ * cannot see stays unseen, never guessed.
+ */
+export function unrealImportAbandoned(probe: UnrealEditorProbe, uprojectPath: string): boolean {
+  if (!probe.probed) return false
+  if (probe.editors === 0) return true
+  if (probe.unknown > 0) return false
+  return !editorHoldsProject(probe, uprojectPath)
 }
 
 /**
@@ -459,6 +489,24 @@ export function unidentifiedEditorTargets(
   return targets.filter((target) => !editorHoldsProject(probe, target))
 }
 
+/**
+ * What the studio should show, from the two files it can see.
+ *
+ * Has no `dead` of its own: the FILES cannot say whether the editor that
+ * claimed the job is still alive — an editor closed mid-import leaves a
+ * `running` result that never advances, and this function would report it as
+ * running forever. That was the whole reading until 2026-08-25, when the first
+ * real editor crash proved the cost: "Working", across app restarts, with no
+ * dismiss offered for a state that never finishes.
+ *
+ * The missing half is a PROCESS measurement, and it lives outside this
+ * function on purpose — {@link unrealImportAbandoned}, applied by
+ * `fetchUnrealImportProgress` over the same command-line probe
+ * {@link unrealLaunchVerdict} uses. Keeping the two apart is the point: this
+ * one stays pure over the files, and the liveness verdict stays as cautious
+ * about `unknown` (and about a platform that cannot look at all) as the launch
+ * decision is.
+ */
 export function unrealImportStateFrom(
   jobStillPending: boolean,
   result: UnrealImportResult | null,

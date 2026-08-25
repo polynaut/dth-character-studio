@@ -1645,21 +1645,25 @@ fn bridge_version_at(project_dir: &Path) -> u32 {
 /// is back to knowing only that SOMETHING is up.
 ///
 /// Same shape as `houdini_running`'s fallback: `tasklist` filtered by image
-/// name, no window, and any failure answers "not running" rather than blocking
-/// the caller.
+/// name, no window. `None` when the command could not be RUN (missing, or a
+/// non-zero exit) — distinct from `Some(false)`, which is a look that saw
+/// nothing. It used to collapse both into "not running", which was free while
+/// the answer only decided whether to LAUNCH an editor; a caller that reads
+/// "no editors" as "the editor running this import died" needs the two apart.
 #[cfg(windows)]
-fn unreal_editor_running_probe() -> bool {
+fn unreal_editor_running_probe() -> Option<bool> {
     use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    std::process::Command::new("tasklist")
+    let output = std::process::Command::new("tasklist")
         .args(["/FI", "IMAGENAME eq UnrealEditor*", "/NH", "/FO", "CSV"])
         .creation_flags(CREATE_NO_WINDOW)
         .output()
-        .map(|o| {
-            let out = String::from_utf8_lossy(&o.stdout).to_ascii_lowercase();
-            out.contains("unrealeditor.exe") || out.contains("unrealeditor-cmd.exe")
-        })
-        .unwrap_or(false)
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let out = String::from_utf8_lossy(&output.stdout).to_ascii_lowercase();
+    Some(out.contains("unrealeditor.exe") || out.contains("unrealeditor-cmd.exe"))
 }
 
 /// What the running Unreal editors have open, as far as their command lines
@@ -1688,37 +1692,57 @@ pub struct UnrealOpenProjects {
     /// tell", never "not the one you asked about" (see `procs.rs` for the same
     /// rule about Daz).
     pub unknown: u32,
+    /// Whether this platform can enumerate editors AT ALL. False off Windows,
+    /// where the probe is a stub — and a stub's `editors: 0` is "nobody
+    /// looked", not "nothing is running". Every reading that treats zero
+    /// editors as a MEASUREMENT must check this first: the import-liveness
+    /// verdict would otherwise call every macOS import dead the moment the
+    /// bridge claimed it.
+    pub probed: bool,
 }
 
 /// Which Unreal projects the running editors have open.
 ///
 /// The command lines come from ONE WMI query through PowerShell (~200 ms
 /// measured) — a child process, which `procs.rs` forbids for probes inside
-/// one-second UI polls; this one runs on explicit user actions only (the DTH
-/// Export panel opening, a queued job looking for its editor). ToolHelp
-/// cannot replace it: `QueryFullProcessImageNameW` reads the exe path, and the
-/// project is an ARGUMENT — reading another process's arguments in-process
-/// means walking its PEB, which is not worth an unsafe block that runs twice a
-/// run. A failed query degrades to the `tasklist` yes/no probe: everything
-/// unknown, nothing invented.
+/// one-second UI polls. Callers keep it OFF the per-tick path: the DTH Export
+/// panel opening and a queued job looking for its editor are explicit user
+/// actions, and the one poll that needs it — the import-liveness verdict in
+/// `api/unreal-import.ts` — asks at most once every 10 s per project (its own
+/// throttle) rather than on every 2.5 s tick. ToolHelp cannot replace it:
+/// `QueryFullProcessImageNameW` reads the exe path, and the project is an
+/// ARGUMENT — reading another process's arguments in-process means walking its
+/// PEB, which is not worth an unsafe block that runs a handful of times a run.
+/// A failed query degrades to the `tasklist` yes/no probe: everything unknown,
+/// nothing invented. Off Windows there is no probe at all — `probed: false`,
+/// which is NOT the same answer as "no editors are running".
 #[tauri::command(async)]
 pub fn unreal_open_projects() -> UnrealOpenProjects {
     #[cfg(windows)]
     {
         match editor_command_lines() {
             Some(lines) => open_projects_from_command_lines(&lines),
-            None => {
-                let running = unreal_editor_running_probe();
-                UnrealOpenProjects {
+            // The WMI query failed; `tasklist` still looks, and everything it
+            // sees is counted unknown. If IT could not run either, nothing
+            // looked at all — which is `probed: false`, not "no editors".
+            None => match unreal_editor_running_probe() {
+                Some(running) => UnrealOpenProjects {
                     editors: u32::from(running),
                     projects: Vec::new(),
                     unknown: u32::from(running),
-                }
-            }
+                    probed: true,
+                },
+                None => UnrealOpenProjects {
+                    editors: 0,
+                    projects: Vec::new(),
+                    unknown: 0,
+                    probed: false,
+                },
+            },
         }
     }
     #[cfg(not(windows))]
-    UnrealOpenProjects { editors: 0, projects: Vec::new(), unknown: 0 }
+    UnrealOpenProjects { editors: 0, projects: Vec::new(), unknown: 0, probed: false }
 }
 
 /// Every running `UnrealEditor*` process's command line, `None` per process
@@ -1774,7 +1798,7 @@ fn open_projects_from_command_lines(lines: &[Option<String>]) -> UnrealOpenProje
         }
     }
     projects.sort();
-    UnrealOpenProjects { editors: lines.len() as u32, projects, unknown }
+    UnrealOpenProjects { editors: lines.len() as u32, projects, unknown, probed: true }
 }
 
 /// The absolute `.uproject` path out of one editor command line, or `None`.
