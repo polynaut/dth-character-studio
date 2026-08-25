@@ -148,6 +148,7 @@ describe('settings (settings.json)', () => {
     houdiniInstallKey: '',
     unrealPluginFolders: [],
     dimManifestsFolder: '',
+    extraDimManifestsFolders: [],
     dazAssetsFolders: [],
     dazMorphsSource: '',
     dazMorphsDest: '',
@@ -200,6 +201,7 @@ describe('settings (settings.json)', () => {
       houdiniInstallKey: '22.0.0.368',
       unrealPluginFolders: ['X:/unreal/DazToUnrealBridge', 'X:/unreal/MyPlugin_5.7'],
       dimManifestsFolder: 'C:/Users/Public/Documents/DAZ 3D/InstallManager/ManifestFiles',
+      extraDimManifestsFolders: ['D:/DIM Library 2/ManifestFiles'],
       dazAssetsFolders: ['X:/assets/a', 'X:/assets/b'],
       dazMorphsSource: 'X:/morphs',
       dazMorphsDest: 'X:/My Library/data/Daz 3D',
@@ -1091,5 +1093,34 @@ describe('exporterSourceFolders — where the exporter builds come from', () => 
     expect(
       storage.exporterSourceFolders(base({ dthExporterFolders: [], dthExporterFolder: '' })),
     ).toEqual([])
+  })
+})
+
+describe('dimManifestsPathSpec (the product-scan folder spec)', () => {
+  const base = { dimManifestsFolder: '', extraDimManifestsFolders: [] as Array<string> }
+
+  it('joins primary + extras with | (illegal in Windows paths, JSON-safe)', () => {
+    expect(
+      storage.dimManifestsPathSpec({
+        dimManifestsFolder: 'E:/DIM/ManifestFiles',
+        extraDimManifestsFolders: ['D:/DIM 2/ManifestFiles', 'D:/DIM 3/ManifestFiles'],
+      }),
+    ).toBe('E:/DIM/ManifestFiles|D:/DIM 2/ManifestFiles|D:/DIM 3/ManifestFiles')
+  })
+
+  it('drops blanks and case-insensitive duplicates, keeps order', () => {
+    expect(
+      storage.dimManifestsFolderList({
+        dimManifestsFolder: ' E:/DIM/ManifestFiles ',
+        extraDimManifestsFolders: ['', 'e:/dim/manifestfiles', 'D:/DIM 2/ManifestFiles'],
+      }),
+    ).toEqual(['E:/DIM/ManifestFiles', 'D:/DIM 2/ManifestFiles'])
+  })
+
+  it('extras alone still arm the scan; nothing configured reads empty', () => {
+    expect(
+      storage.dimManifestsPathSpec({ ...base, extraDimManifestsFolders: ['D:/DIM 2/MF'] }),
+    ).toBe('D:/DIM 2/MF')
+    expect(storage.dimManifestsPathSpec(base)).toBe('')
   })
 })

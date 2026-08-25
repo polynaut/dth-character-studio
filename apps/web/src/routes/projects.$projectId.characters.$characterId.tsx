@@ -41,7 +41,7 @@ import { HoudiniProjectsField } from '#/components/houdini-projects-field.tsx'
 import { characterFolderDisplay, characterScriptsDisplay } from '#/lib/character-paths.ts'
 import { displayPath, parentDir } from '#/lib/path.ts'
 import { failedMorphKeysForScene, matchLinkedScene } from '#/lib/rom/run-log.ts'
-import { repointCharacterPaths } from '#/lib/rom/storage.ts'
+import { dimManifestsPathSpec, repointCharacterPaths } from '#/lib/rom/storage.ts'
 import { useCharacterDraft } from '#/lib/use-character-draft.ts'
 import { useDetectedFiles } from '#/lib/use-detected-files.ts'
 import { useFolderMove } from '#/lib/use-folder-move.tsx'
@@ -668,7 +668,7 @@ function CharacterPage({ onImportRemount }: { onImportRemount: () => void }) {
               projectId={projectId}
               character={character}
               productScan={productScan}
-              dimManifestsFolder={settings.dimManifestsFolder}
+              dimManifestsFolder={dimManifestsPathSpec(settings)}
               scriptsPath={scriptsPath}
             />
           </SceneLock>

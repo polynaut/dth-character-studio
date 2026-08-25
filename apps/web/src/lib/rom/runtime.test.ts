@@ -55,7 +55,7 @@ const RUNTIME_ASSETS = [
 // Bump this together with RUNTIME_VERSION whenever a runtime file legitimately
 // changes (this run prints the new value in the failure message).
 const EXPECTED_RUNTIME_HASH =
-  '2d1f76f45aa238083717b94961ce263ddb9c1e040022bf1b023e4660081cd1ca'
+  '24ee6b3376551e39225b13e0c763541c0018b91235f16bd112721dcca6809ea9'
 
 function runtimeHash(): string {
   const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
@@ -1089,6 +1089,24 @@ describe('product scan under the Runner (DthProducts.dsa)', () => {
     // fails the ROW loudly instead of parking the batch on a modal.
     expect(products.writeProductsCsv('C:/out/scene.csv', NO_MATCHES, 'Scene', 'C:/s.duf', true))
       .toBe(false)
+    expect(dialogs).toEqual([])
+  })
+
+  it("splits a '|'-joined folder spec and keeps scanning past a missing folder (v104)", () => {
+    // Both folders are missing in this sandbox — the point is ONE dialog PER
+    // folder (the loop reached the second after the first failed) instead of
+    // a single refusal for the whole spec.
+    const { products, dialogs } = loadProducts()
+    expect(
+      products.getInstalledProducts('D:/DIM/ManifestFiles|E:/DIM 2/ManifestFiles'),
+    ).toEqual([])
+    expect(dialogs).toEqual(['Directory Not Found', 'Directory Not Found'])
+  })
+
+  it('a spec of only separators/blanks reads as unconfigured (v104)', () => {
+    const { products, dialogs } = loadProducts()
+    expect(products.getInstalledProducts('|', true)).toEqual([])
+    expect(products.getInstalledProducts(' | ', true)).toEqual([])
     expect(dialogs).toEqual([])
   })
 

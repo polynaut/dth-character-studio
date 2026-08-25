@@ -360,9 +360,9 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   // "Daz Products" toggle no longer gates the scanning — it only decides whether
   // the character page shows the tab that reads the results. So a scan runs, and
   // its results are picked up, whether or not anybody is looking at them.
-  const scanProducts = settings.dimManifestsFolder.trim()
+  const scanProducts = storage.dimManifestsPathSpec(settings)
     ? {
-        dimManifestPath: settings.dimManifestsFolder,
+        dimManifestPath: storage.dimManifestsPathSpec(settings),
         outputDir: await storage.productScanDir(project.id, character.id),
         dazLibraryFolder: settings.dazLibraryFolder,
       }
@@ -1160,7 +1160,7 @@ async function refreshAllAssetsInner(refreshOpts: {
   const opts = {
     hasDazLibrary,
     hasDthRelease: activeRelease !== '',
-    dimManifestsFolder: settings.dimManifestsFolder,
+    dimManifestsFolder: storage.dimManifestsPathSpec(settings),
   }
   const app = { schema: CHARACTER_SCHEMA_VERSION, runtime: RUNTIME_VERSION, dthRelease: activeRelease }
 
@@ -1582,7 +1582,10 @@ export interface StaleTargets {
 export interface StaleJudgeOpts {
   hasDazLibrary: boolean
   hasDthRelease: boolean
-  /** `settings.dimManifestsFolder` — '' when unset. */
+  /** The CURRENT DIM manifests spec — `dimManifestsPathSpec(settings)`, the
+   *  same '|'-joined string generation bakes as `dimManifestPath`, so adding
+   *  or removing an extra folder re-flags scripts exactly like moving the
+   *  single folder always has. '' when nothing is configured. */
   dimManifestsFolder: string
 }
 
@@ -1688,7 +1691,7 @@ export async function detectAssetVersions(): Promise<AssetVersionReport> {
     isCharacterStale(c, app, {
       hasDazLibrary,
       hasDthRelease,
-      dimManifestsFolder: settings.dimManifestsFolder,
+      dimManifestsFolder: storage.dimManifestsPathSpec(settings),
     }),
   ).length
   return {

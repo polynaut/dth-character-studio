@@ -1423,3 +1423,14 @@ v103 — the VISIBLE `ROM_<name>` script no longer saves the ROM scene: it
       contract with the scene-open menu and the export flow is unchanged;
       only the visible script's save is gone, replaced by a comment saying
       so. (v102 is the motion-summary gate, #967.)
+v104 — `dimManifestPath` may carry SEVERAL DIM ManifestFiles folders, joined
+      with `|` (illegal in Windows paths, so collision-free, and JSON-safe so
+      the baked `dthProductScanConfig` and the regex read-back in
+      `readScriptRuntimeInfo` both survive it — a newline join would read back
+      as a literal `
+` escape and compare stuck-stale forever).
+      `getInstalledProducts` (DthProducts.dsa) splits and aggregates across
+      the folders. Feature: users organize DIM installs across multiple
+      manifest libraries (Discord request, 2026-08-25); the studio side is
+      `settings.extraDimManifestsFolders` + `dimManifestsPathSpec`. Additive —
+      a single folder bakes the same string as v103.

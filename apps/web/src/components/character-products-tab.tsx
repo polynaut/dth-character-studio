@@ -52,7 +52,8 @@ function CharacterProductsTabImpl({
   /** The character's stored product results as loaded by the route
    *  (`fetchProductScan`, which ingests any fresh Daz output first). */
   productScan: Awaited<ReturnType<typeof fetchProductScan>> | null
-  /** settings.dimManifestsFolder — empty means no scan can name products. */
+  /** The DIM manifests spec (`dimManifestsPathSpec` — primary + extra
+   *  folders) — empty means no scan can name products. */
   dimManifestsFolder: string
   /** Where the generated scripts land in the Daz library (null until "My DAZ 3D
    *  Library" is set) — rendered as the dim-root/bright-remainder chip. */

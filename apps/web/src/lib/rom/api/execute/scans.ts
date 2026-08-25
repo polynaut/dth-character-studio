@@ -120,8 +120,8 @@ export async function fetchProjectScanPlan({ data }: { data: unknown }): Promise
   return {
     characters: out,
     totalScenes,
-    productsEnabled: settings.dimManifestsFolder.trim() !== '',
-    dimConfigured: settings.dimManifestsFolder.trim() !== '',
+    productsEnabled: storage.dimManifestsPathSpec(settings) !== '',
+    dimConfigured: storage.dimManifestsPathSpec(settings) !== '',
   }
 }
 
@@ -248,7 +248,7 @@ export async function startProjectScan({ data }: { data: unknown }): Promise<Pro
             characterId: character.id,
             characterName: character.name,
             genesis: character.genesis,
-            dimManifestPath: settings.dimManifestsFolder.replace(/\\/g, '/'),
+            dimManifestPath: storage.dimManifestsPathSpec(settings).replace(/\\/g, '/'),
             outputDir: (await storage.productScanDir(project.id, character.id)).replace(/\\/g, '/'),
             dazLibraryFolder: settings.dazLibraryFolder.replace(/\\/g, '/'),
           }

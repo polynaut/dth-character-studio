@@ -2536,9 +2536,11 @@ export function toBulkHairExportScriptDsa(
  *  (the studio), never by the pure core. Present ⇔ the project opted into the
  *  Daz Products feature. */
 export interface ScanProductsOptions {
-  /** The DAZ Install Manager `ManifestFiles` folder the scan reads installed
-   *  products from (app-global setting). May be '' — the runtime then warns and
-   *  reports every asset as unmatched. */
+  /** The DAZ Install Manager `ManifestFiles` folder(s) the scan reads
+   *  installed products from (app-global setting; `dimManifestsPathSpec` —
+   *  several folders arrive '|'-joined, which runtime v104 splits again; '|'
+   *  is illegal in Windows paths and JSON-safe). May be '' — the runtime then
+   *  warns and reports every asset as unmatched. */
   dimManifestPath: string
   /** Absolute path of the FOLDER the scan writes its per-scene CSVs into (app-derived,
    *  under app-local-data, keyed by project + character). The runtime names each CSV

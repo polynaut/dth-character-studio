@@ -186,6 +186,16 @@ export const studioSettingsSchema = z.object({
    * but reports every asset as unmatched).
    */
   dimManifestsFolder: str,
+  /**
+   * ADDITIONAL DIM `ManifestFiles` folders — users organize their installs
+   * across several DIM libraries (each with its own manifests folder), and the
+   * product scan reads them ALL: {@link dimManifestsPathSpec} joins these with
+   * the primary into the one `dimManifestPath` the generated scan scripts
+   * bake (runtime v104 splits it again). User-owned even while an activated
+   * Daz installation DERIVES the primary — the derivation knows only its own
+   * install's folder, and which other libraries exist stays the user's.
+   */
+  extraDimManifestsFolders: stringArray,
   // Per-project behaviour defaults (dazSubdir / houdiniSubdir / createHoudiniSubdir)
   // live in each project's .dcsp manifest (see DcspManifest), not in app-global
   // settings — they describe a project, not the machine.
@@ -306,6 +316,46 @@ export function exporterSourceFolders(settings: StudioSettings): Array<string> {
     out.push(folder)
   }
   return out
+}
+
+/**
+ * Every DIM manifests folder the product scan should read — the primary
+ * (possibly derived from the activated Daz installation) plus the user's
+ * {@link extraDimManifestsFolders} — deduped, trimmed, order kept.
+ *
+ * Pure, and the single statement of "what is the product database": the scan
+ * arming checks (non-empty spec = the scan can name products), the generated
+ * scripts' baked `dimManifestPath` and the Refresh-assets staleness compare
+ * all read the SAME list, so adding or removing a folder re-flags every
+ * character's scripts exactly like moving the single folder always has.
+ */
+export function dimManifestsFolderList(
+  settings: Pick<StudioSettings, 'dimManifestsFolder' | 'extraDimManifestsFolders'>,
+): Array<string> {
+  const out: Array<string> = []
+  const seen = new Set<string>()
+  for (const raw of [settings.dimManifestsFolder, ...settings.extraDimManifestsFolders]) {
+    const folder = raw.trim()
+    if (!folder || seen.has(folder.toLowerCase())) continue
+    seen.add(folder.toLowerCase())
+    out.push(folder)
+  }
+  return out
+}
+
+/**
+ * {@link dimManifestsFolderList} as the ONE wire string the generated scan
+ * scripts bake (`dimManifestPath`): '|'-joined, because '|' is illegal in
+ * Windows paths (collision-free) AND needs no JSON escaping — the baked
+ * config and `readScriptRuntimeInfo`'s regex read-back both survive it, which
+ * a newline join would not (it reads back as a literal `\n` escape and the
+ * staleness compare then never matches). '' = no folder configured. Runtime
+ * v104's `getInstalledProducts` splits it again.
+ */
+export function dimManifestsPathSpec(
+  settings: Pick<StudioSettings, 'dimManifestsFolder' | 'extraDimManifestsFolders'>,
+): string {
+  return dimManifestsFolderList(settings).join('|')
 }
 
 /**
