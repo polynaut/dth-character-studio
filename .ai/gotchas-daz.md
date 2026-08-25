@@ -68,6 +68,43 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   Daz; the DazToHue Exporter dialog accepts NO synthetic input (mouse_event at
   verified hit-test coords, PostMessage with correct client coords, SendKeys —
   all inert; only a human click actuates it).
+- **DTH's G9 base ROM `.duf`s zero ~700 value channels the ROM never walks —
+  including every stock G9 breast pose control.** Measured 2026-08-25 by
+  parsing DTH 2.5's preset `.duf`s directly (every G9 base-ROM variant: DQS +
+  Linear, FAC and non-FAC): 13 breast channels (`body_ctrl_BreastsUp-Down`,
+  l/r halves, Side-Side, In-Out, HangForward, Flatten + `body_bs_` siblings)
+  each keyed to **0** with CONSTANT keys at frames 0/2/3/105, inside a ~698-
+  channel all-zero list that is plainly an accidental capture of the preset
+  author's scene (it names HIS third-party content — Victoria 9 Emotions, JS
+  Katey, Van Helsing 9, Toon G9). The G8/G8.1 base ROMs and the G9 Physics
+  Example carry NONE of these channels. Consequences: a G9 character's dialed
+  breast shape reads 0% across the whole generated ROM (no hold-across-load
+  survives an explicit key inside the loaded preset — the retirement premise
+  of the v35/v83 preserve-morphs removal was a G8-only truth), and a hand-fix
+  at ROM frame 0 dies at the frame-2 zero key. The fix is runtime v101's
+  `restoreZeroedDials` (automatic, shape-of-the-accident: RAW baseline
+  non-zero + keyed all-zero → flatten keys back to the raw baseline — raw
+  restores raw, so an ERC share cannot double-apply and a purely driven half,
+  raw 0, is never a candidate). Related measured fact (live DS4 probe,
+  2026-08-25): **G9 pose controls (`body_ctrl_*`) are NODE-OWNED properties
+  under `/Pose Controls`, not DzMorph modifiers on the figure's object** —
+  `findModifier` returns null for them, `oNode.findProperty` finds them, and
+  a pass iterating object modifiers alone silently misses every dial the
+  zero-list stomps (three diagnostic ROM builds measured exactly that). Any
+  future pass over "all dials" must walk BOTH routes
+  (`forEachZeroableDial` in DthUtils.dsa), and any pass that resolves a
+  `keyData.propName` must go through **`resolveKeyDataProp`** — the one chain
+  (modifier → modifier loop → `findProperty` → `findPropertyByLabel`) shared
+  by applyKeyData, checkDialedWalkedMorphs and resetFrameDatasAtFrame since
+  v101. It was three hand-copied chains before, and the two that only READ the
+  scene had been truncated at the modifier steps: a node-owned dial could be
+  WALKED by the writer while the dialed-walked gate and the frame-0 sawtooth
+  anchor both resolved nothing and said nothing. Invisible only because the
+  zero-list held those dials at 0 anyway — the restore below removes that
+  cover. A preset resave upstream
+  won't happen (Remo's call, 2026-08-25 — same read as the declined HDA
+  feature pitches), so the runtime pass is the PERMANENT fix, not a stopgap —
+  don't re-pitch the report; any mention of these presets stays private.
 - **The DAZ Install Manager already knows every Daz path, and stores them at a
   FIXED location — never search the disk for DIM.** Measured on DIM 1.4.1.96
   (2026-08-07), three plain INI files under `%APPDATA%/DAZ 3D`

@@ -114,14 +114,26 @@ function ApplyDTHWorkflow(options){
 	// Memorize node transforms before any ROM loading overwrites them
 	memorizeNodeTransforms(oNodeRoot, options.preserveNodeTransforms);
 
+	// BOTH pre-ROM snapshots are taken HERE, at the one point where "before
+	// any preset block keys anything" is still true — keeping them adjacent is
+	// the whole reason memorizeBaseMorphs sits outside the JCM branch it used
+	// to open (v101). Two snapshots because they answer different questions
+	// and are NOT interchangeable (passing one where the other belongs cost a
+	// live run on 2026-08-25):
+	//
+	//   baseMorphValues — EVALUATED (getValue), object modifiers only. Sole
+	//     consumer: the base-ROM tail close-out below, telling a
+	//     character-owned shape morph (non-zero dial, e.g. ProportionHeight)
+	//     from a pure ROM pose (base ~0). Read only on the JCM path.
+	//   baseRawDials   — RAW (getRawValue), modifiers AND the node's own
+	//     /Pose Controls floats. Sole consumer: restoreZeroedDials below. Raw
+	//     keeps ERC contributions out, so a restore can never double-apply one.
+	var baseMorphValues = memorizeBaseMorphs([oNodeRoot]);
+	var baseRawDials = memorizeRawDials([oNodeRoot]);
+
 	/**       *****************************************************/
 	if(options.bIncludeJCM)
 	{
-		// Snapshot the figure's morph baseline BEFORE the ROM keys anything, so the
-		// tail close-out below can tell a character-owned shape morph (non-zero
-		// dial, e.g. ProportionHeight) from a pure ROM pose (base ~0).
-		var baseMorphValues = memorizeBaseMorphs([oNodeRoot]);
-
 		print("Applying default ROMs...");
 		if(!ApplyDefaultROMs(options, oNodeRoot, oNodeMouth))
 			return false;
@@ -184,6 +196,20 @@ function ApplyDTHWorkflow(options){
 
 	// Restore node transforms that were overwritten by ROM loading (JCM, DK, GP, Physics)
 	restoreNodeTransforms(oNodeRoot, options.preserveNodeTransforms);
+
+	// Restore dials a preset zeroed FLAT (v101): the G9 base ROM .dufs key
+	// every stock breast pose control (and ~700 other value channels) to 0,
+	// stomping character shape dials — measured, see restoreZeroedDials
+	// (DthUtils). Runs after ALL preset blocks so a later block cannot re-zero
+	// a restored dial, and BEFORE the custom frames, which is what puts a
+	// restored dial in front of the two passes that police a walk: the
+	// dialed-walked gate fails a dialed+walked combination loudly, and
+	// resetFrameDatasAtFrame anchors a walked one back to the frame-0 floor.
+	// Both reach node-owned pose controls only because they share
+	// resolveKeyDataProp with applyKeyData (v101) — before that they stopped
+	// at object modifiers and this restore would have silently un-anchored
+	// exactly the G9 dials it exists to bring back.
+	restoreZeroedDials([oNodeRoot], baseRawDials);
 
 	if(dthStopHere("before the custom frames")) return false;
 

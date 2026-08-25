@@ -1303,3 +1303,61 @@ v100 — the ".dthprev" finish step actually runs: it lists through a FRESH
       field still leaves its backups behind, which is why the studio's
       export-landed guard treats leftover ".dthprev" as a WARNING and lets the
       `.dth` decide whether the export landed.
+v101 — restoreZeroedDials: dials a ROM preset zeroed FLAT are restored to
+      their pre-ROM values. Measured 2026-08-25 (DTH 2.5, every G9 base-ROM
+      variant — DQS + Linear, FAC and non-FAC): the G9 JCM base .dufs carry
+      ~698 all-zero value channels, among them all 13 stock G9 breast pose
+      controls (body_ctrl_BreastsUp-Down and friends), each keyed to 0 with
+      CONSTANT keys at frames 0/2/3/105 — an accidental capture of the preset
+      author's zeroed scene (the list even includes his third-party content:
+      Victoria 9 Emotions, JS Katey, Van Helsing 9). Loading the preset
+      stomped a character's dialed shape (a 100% Breasts Up-Down read 0%
+      across the whole ROM), and no hold-across-load can survive an explicit
+      key inside the loaded preset — which is why the schema-v35/runtime-v83
+      preserve-morphs retirement premise ("DTH holds morph values across the
+      ROM load") was true on G8/8.1 (whose base ROMs carry NONE of these
+      channels) and false on G9. A hand-fix in the saved ROM dies at frame 2.
+      The pass runs after ALL preset blocks (a later block cannot re-zero) and
+      before the custom frames, which is what puts a restored dial in front of
+      the two passes that police a walk — but only because v101 ALSO gave them
+      the reach: checkDialedWalkedMorphs (the gate) and resetFrameDatasAtFrame
+      (the frame-0 sawtooth anchor) each carried their own copy of
+      applyKeyData's property-resolution chain, truncated at the object's
+      modifiers. The writer had the findProperty/findPropertyByLabel tail, they
+      did not, so a NODE-OWNED dial (every G9 body_ctrl_*) was walkable while
+      invisible to both. Harmless only while the zero-list pinned those dials
+      at 0 — restoring them would have left frame 0 off the sawtooth floor and
+      drifted the fbx/abc pair with nothing in the log. All three now share ONE
+      resolveKeyDataProp (DthUtils); three copies of one chain had drifted
+      twice. Restore condition: pre-ROM RAW
+      baseline non-zero (memorizeRawDials — getRawValue keeps any ERC
+      contribution out of the stored number, so a restore can never
+      double-apply a controller's share and a purely driven half, raw 0, is
+      never a candidate; a build without getRawValue stores the evaluated
+      value, marks the snapshot `raw: false`, and the pass then skips
+      ERC-driven channels loudly — the conservative fallback) AND the channel
+      now has keys AND every key ~0 (zeroed flat — a walked channel has a
+      non-zero key somewhere and is never touched). Both passes walk
+      forEachZeroableDial: the object's DzMorph modifier channels AND the
+      figure node's own DzFloatProperty entries under /Pose Controls —
+      measured (live DS4 probe): G9 pose controls (body_ctrl_*) are
+      NODE-OWNED, findModifier returns null for them, and the modifier route
+      alone missed the reported dial through three diagnostic builds. The
+      /Pose Controls path gate keeps transforms and mesh-resolution floats
+      out. Restore = flatten every
+      key to the baseline via setValue(t, v) — a flat channel varies from the
+      base mesh on no frame, so the DTH Exporter's FBX pass keeps the morph
+      and fbx/abc stay aligned. The write is preceded by the guarded
+      setIsClamped(false) dance applyKeyData and applyFrameZeroMorphs already
+      do — the restored value is one the USER dialed and can sit outside the
+      dial's limits, and DS6's "keep limits?" modal would hang an unattended
+      Runner build. Root-figure scope only. memorizeBaseMorphs is hoisted out
+      of the JCM branch alongside — NOT because restoreZeroedDials reads it (it
+      reads baseRawDials; the close-out is still its only consumer and still
+      JCM-only) but so both pre-ROM snapshots are taken at the one point where
+      "before any preset block keys anything" holds, and cannot drift apart.
+      The summary line prints seen/dialed/keyed/
+      skipped counts so a "Restored 0" is diagnosable from the log alone —
+      the first live run (Ita, 2026-08-25) restored 0 with no way to say why.
+      Automatic replacement for the retired manual preserve list — no schema
+      change.
