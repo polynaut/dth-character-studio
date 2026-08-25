@@ -819,10 +819,16 @@ Part of the domain reference — `.ai/domain.md` is the index.
   DESTINATION. `sceneExportName` (dsa.ts) is the studio-side mirror of the
   run-time name rule; the export watch builds its expected paths from it.
 - **ROM-scene auto-save** (runtime v40): after a CLEAN ROM build — before any
-  export — every ROM-building script (ROM_, .Bulk_ROM_Export) saves the scene
-  as `<stem>_ROM.duf` into `<sceneDir>/rom-animations/`, so the built ROM
-  animation reopens without a rebuild. Bounded: fixed name, overwritten per
-  run. `romAnimationPath` (**rom-animation.ts**, re-exported by dsa.ts) is THE
+  export — the DTH-Export carriers (`.Bulk_ROM_Export`, `.Build_ROM_Animation`)
+  save the scene as `<stem>_ROM.duf` into `<sceneDir>/rom-animations/`, so the
+  built ROM animation reopens without a rebuild. Bounded: fixed name,
+  overwritten per run. The VISIBLE `ROM_` script does **not** save (runtime
+  v103): a manual run is an inspection — its save silently overwrote the
+  flow-built ROM on disk and repointed the open scene's filename to the
+  `_ROM.duf` (reported 2026-08-25); it builds the ROM on the timeline and
+  stops. The `saveRomScene` axis on `buildRomScriptDsa` carries this — the
+  export split's `bulk` flag cannot (`.Build_ROM_Animation` is bulk=false and
+  MUST save; the reopenable copy is its entire purpose). `romAnimationPath` (**rom-animation.ts**, re-exported by dsa.ts) is THE
   rule, shared by generation and the
   host, and both read `ROM_ANIMATIONS_FOLDER` — the folder name is ONE constant
   now, because a drift between the emitted `.dsa` and the host's path means the

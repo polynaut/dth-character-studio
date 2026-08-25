@@ -7,7 +7,7 @@
 // per-character scripts are the three separate ones (ROM_ / Export_ /
 // Export_Hair_); this carrier is the only one that does everything at once.
 // Dot-prefixed: hidden from the Content Library.
-// DTH-Runtime: v102
+// DTH-Runtime: v103
 // Self-contained: this single ApplyDTHCharacter() call carries the full
 // character config AND all ROM morph definitions inline. It needs the DTH
 // runtime (the hidden .DthWorkflow.dsa + .DthUtils.dsa + .DthOptions.dsa), which
@@ -18,7 +18,7 @@ var dthCharacterConfig = {
   "genesis": "G9",
   "gender": "female",
   "characterName": "Electra G9",
-  "runtimeVersion": 102,
+  "runtimeVersion": 103,
   "studioVersion": "",
   "bIncludeJCM": true,
   "bIncludeFAC": true,

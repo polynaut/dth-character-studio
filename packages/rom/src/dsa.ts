@@ -1467,6 +1467,9 @@ export function toCharacterScriptDsa(
     progressLogPath,
     false,
     runtimeRootAbs,
+    // The manual script builds the ROM to LOOK at — it must not overwrite the
+    // flow-built rom-animations save nor repoint the scene filename (v103).
+    false,
   )
 }
 
@@ -1636,6 +1639,8 @@ export function toBulkRomExportScriptDsa(
     progressLogPath,
     true,
     runtimeRootAbs,
+    // The flow's carrier: the rom-animations save IS part of its contract.
+    true,
   )
 }
 
@@ -1684,6 +1689,8 @@ export function toBuildRomAnimationScriptDsa(
     // unattended, and a modal in it hangs the row forever.
     true,
     runtimeRootAbs,
+    // Saving the rom-animations copy is this carrier's entire purpose (v103).
+    true,
   )
   // Hidden (dot-prefixed) → no Content Library tile, no icon artwork.
   return { fileName: BUILD_ROM_ANIMATION_SCRIPT, content: file.content, target: 'daz' }
@@ -1811,6 +1818,17 @@ function buildRomScriptDsa(
    *  fallback for the one measured way getScriptFileName() lies; see
    *  {@link runtimeDirSnippet}. '' = no fallback (pure/web contexts). */
   runtimeRootAbs = '',
+  /**
+   * Whether the built ROM is saved as `rom-animations/<stem>_ROM.duf` (runtime
+   * v103). The DTH-Export carriers (`.Bulk_ROM_Export`, `.Build_ROM_Animation`)
+   * save — producing that file is their contract with the scene-open menu and
+   * the export flow. The VISIBLE `ROM_…` script does NOT: a manual run is an
+   * inspection ("build it so I can look at it"), and its save silently
+   * overwrote the flow-built ROM on disk AND repointed the open scene's
+   * filename to the `_ROM.duf` — both side effects nobody running a script by
+   * hand asked for (reported 2026-08-25).
+   */
+  saveRomScene = true,
 ): GeneratedFile {
   const config = buildCharacterConfig(character, romPaths, frames, metaDirAbs)
 
@@ -2097,7 +2115,7 @@ ${indentLines(indentLines(indexSyncSnippet(indexSync)))}        // Start marker:
         // G9: retarget the tear shader's UV set to UE5 after the ROM (before any
         // export). No-op unless the character opted in.
         if (dthCharacterConfig.bApplyUE5TearUV) { dthApplyUE5TearUV(); }
-        // Keep the built ROM reopenable: save the scene as <stem>_ROM.duf into
+${saveRomScene ? `        // Keep the built ROM reopenable: save the scene as <stem>_ROM.duf into
         // the ${ROM_ANIMATIONS_FOLDER} subfolder BESIDE the source scene, BEFORE
         // any export — the user can open the generated ROM animation any time
         // later without the (slow) rebuild. Save-as repoints the open scene's
@@ -2159,8 +2177,12 @@ ${indentLines(indentLines(indexSyncSnippet(indexSync)))}        // Start marker:
             } catch (dthSaveErr) {
                 print("ROM-scene save failed: " + dthSaveErr);
             }
-        }
-        // The ROM step is complete (build + reopenable save): 40% on the
+        }` : `        // No ROM-scene save (runtime v103): this VISIBLE script builds the ROM
+        // on the timeline and stops. The reopenable rom-animations/<stem>_ROM.duf
+        // copy is written by the DTH-Export carriers only - a manual run must not
+        // overwrite the flow-built ROM on disk, nor repoint the open scene's
+        // filename to the _ROM.duf as a side effect.`}
+        // The ROM step is complete (build${saveRomScene ? ' + reopenable save' : ''}): 40% on the
         // 5-step export scale, 100% when this carrier's whole job IS the ROM.
         if (dthRomOk === true) {
             dthProgressLog(${exportBlock ? 40 : 100}, "ROM generated");
