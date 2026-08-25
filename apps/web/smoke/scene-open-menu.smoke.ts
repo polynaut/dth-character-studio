@@ -13,16 +13,23 @@ import { romAnimationPath } from '../../../packages/rom/src/rom-animation.ts'
 
 import type { Page } from '@playwright/test'
 
-// A scene card's open menu, and the one thing it used to refuse: opening a
-// saved ROM animation that had gone STALE.
+// A scene card's open menu, and the TWO things a freshness verdict used to take
+// away from it. Both rows are unconditional on that verdict now, and each test
+// below pins one of the two directions it used to swing.
 //
-// The freshness test dates the generated ROM script, which EVERY character save
-// rewrites — so editing anything at all makes every saved animation of that
-// character stale. The menu swapped the open entry for "Open and Generate" at
-// that moment, which is how a primary scene whose ROM had been built and
-// exported ended up offering only to build it again (a Daz run of many minutes)
-// with no way to open the file sitting right there. Stale is not wrong; it is
-// "not from the current definition", which is the user's call.
+// - Read STALE, it hid the OPEN row (swapped for "Open and Generate"). Staleness
+//   is cheap to earn: the test dates the generated ROM script, which every
+//   character save rewrites, so editing anything at all stales every saved
+//   animation of that character — and a primary scene whose ROM had been built
+//   and exported ended up offering only to build it again, a Daz run of many
+//   minutes, with no way to open the file sitting right there.
+// - Read CURRENT, it hid the REBUILD row, behind a Ctrl-held escape hatch nobody
+//   finds. That reading has no ground truth outside our own writes: a Perforce
+//   sync that writes `rom-animations/` after the scenes marks every animation
+//   current, and the rebuild vanished from every scene in the tree.
+//
+// Stale is not wrong; it is "not from the current definition", which is the
+// user's call. It picks the open row's TOOLTIP and gates nothing.
 
 const DS4 = 'C:/Program Files/DAZ 3D/DAZStudio4'
 /** Where the primary scene's saved ROM animation lives. */
@@ -89,12 +96,9 @@ test('a CURRENT one is offered unmarked — with the rebuild still under it', as
   await expect
     .poll(async () => `${await open.getAttribute('title')}${await open.getAttribute('data-tooltip')}`)
     .not.toMatch(/earlier run/)
-  // The rebuild is UNCONDITIONAL now. It used to hide here ("nothing to
-  // refresh") behind a Ctrl-held escape hatch, which meant a freshness verdict
-  // decided whether the user could ask for a rebuild at all — and on any tree
-  // where mtimes are not edit times (a Perforce sync writing `rom-animations/`
-  // after the scene) every animation reads current and the row vanished for
-  // good. Freshness marks the open row's tooltip; it gates nothing.
+  // THE REGRESSION THIS FILE EXISTS FOR: the rebuild used to hide right here,
+  // on "nothing to refresh", and this is the reading a synced tree gives every
+  // animation it holds (see the header). It is unconditional now.
   await expect(page.getByRole('button', { name: /Generate new ROM/ })).toBeVisible()
 })
 
