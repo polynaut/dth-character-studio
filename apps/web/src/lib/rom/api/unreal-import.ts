@@ -502,7 +502,10 @@ export async function fetchUnrealImportProgress({
   }
   if (!livenessDue(uprojectPath)) return state
   // A failed PROBE is not a dead editor — stay on "running" rather than
-  // fail a live import on a read hiccup; the next poll asks again.
+  // fail a live import on a read hiccup. The failed ask still spent this
+  // window's ration (`livenessDue` stamps before the probe runs), so the
+  // retry is the next DUE ask, up to 10 s away — a hiccup delays a crash
+  // report, never invents one.
   const probe = await fetchUnrealOpenEditors().catch(() => null)
   if (probe === null || !unrealImportAbandoned(probe, uprojectPath)) return state
   // The verdict is about a moment BEFORE the probe: the result was read first,
