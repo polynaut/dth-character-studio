@@ -114,14 +114,16 @@ function ApplyDTHWorkflow(options){
 	// Memorize node transforms before any ROM loading overwrites them
 	memorizeNodeTransforms(oNodeRoot, options.preserveNodeTransforms);
 
+	// Snapshot the figure's morph baseline BEFORE any preset block keys
+	// anything. Two consumers: the base-ROM tail close-out (telling a
+	// character-owned shape morph — non-zero dial, e.g. ProportionHeight —
+	// from a pure ROM pose, base ~0) and restoreZeroedDials below (v101),
+	// which needs the snapshot even on a JCM-less build.
+	var baseMorphValues = memorizeBaseMorphs([oNodeRoot]);
+
 	/**       *****************************************************/
 	if(options.bIncludeJCM)
 	{
-		// Snapshot the figure's morph baseline BEFORE the ROM keys anything, so the
-		// tail close-out below can tell a character-owned shape morph (non-zero
-		// dial, e.g. ProportionHeight) from a pure ROM pose (base ~0).
-		var baseMorphValues = memorizeBaseMorphs([oNodeRoot]);
-
 		print("Applying default ROMs...");
 		if(!ApplyDefaultROMs(options, oNodeRoot, oNodeMouth))
 			return false;
@@ -184,6 +186,15 @@ function ApplyDTHWorkflow(options){
 
 	// Restore node transforms that were overwritten by ROM loading (JCM, DK, GP, Physics)
 	restoreNodeTransforms(oNodeRoot, options.preserveNodeTransforms);
+
+	// Restore dials a preset zeroed FLAT (v101): the G9 base ROM .dufs key
+	// every stock breast pose control (and ~700 other value channels) to 0,
+	// stomping character shape dials — measured, see restoreZeroedDials
+	// (DthUtils). Runs after ALL preset blocks so a later block cannot re-zero
+	// a restored dial, and BEFORE the custom frames: a restored dial that a
+	// custom section also walks must be visible to the dialed-walked gate,
+	// which fails that combination loudly instead of letting it drift.
+	restoreZeroedDials([oNodeRoot], baseMorphValues);
 
 	if(dthStopHere("before the custom frames")) return false;
 

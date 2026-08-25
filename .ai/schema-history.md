@@ -1303,3 +1303,29 @@ v100 — the ".dthprev" finish step actually runs: it lists through a FRESH
       field still leaves its backups behind, which is why the studio's
       export-landed guard treats leftover ".dthprev" as a WARNING and lets the
       `.dth` decide whether the export landed.
+v101 — restoreZeroedDials: dials a ROM preset zeroed FLAT are restored to
+      their pre-ROM values. Measured 2026-08-25 (DTH 2.5, every G9 base-ROM
+      variant — DQS + Linear, FAC and non-FAC): the G9 JCM base .dufs carry
+      ~698 all-zero value channels, among them all 13 stock G9 breast pose
+      controls (body_ctrl_BreastsUp-Down and friends), each keyed to 0 with
+      CONSTANT keys at frames 0/2/3/105 — an accidental capture of the preset
+      author's zeroed scene (the list even includes his third-party content:
+      Victoria 9 Emotions, JS Katey, Van Helsing 9). Loading the preset
+      stomped a character's dialed shape (a 100% Breasts Up-Down read 0%
+      across the whole ROM), and no hold-across-load can survive an explicit
+      key inside the loaded preset — which is why the schema-v35/runtime-v83
+      preserve-morphs retirement premise ("DTH holds morph values across the
+      ROM load") was true on G8/8.1 (whose base ROMs carry NONE of these
+      channels) and false on G9. A hand-fix in the saved ROM dies at frame 2.
+      The pass runs after ALL preset blocks (a later block cannot re-zero) and
+      before the custom frames (a restored dial that a custom section walks is
+      caught loudly by the dialed-walked gate). Restore condition: pre-ROM
+      baseline non-zero (memorizeBaseMorphs, hoisted out of the JCM branch so
+      a JCM-less build has it too) AND the channel now has keys AND every key
+      ~0 (zeroed flat — a walked channel has a non-zero key somewhere and is
+      never touched) AND not ERC-driven (a driven half double-applies once its
+      master is restored; the master restores the halves). Restore = flatten
+      every key to the baseline via setValue(t, v) — a flat channel varies
+      from the base mesh on no frame, so the DTH Exporter's FBX pass keeps the
+      morph and fbx/abc stay aligned. Root-figure scope only. Automatic
+      replacement for the retired manual preserve list — no schema change.

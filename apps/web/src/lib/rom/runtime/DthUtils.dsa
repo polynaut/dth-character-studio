@@ -1602,6 +1602,75 @@ function closeDanglingMorphKeys(oNodes, iBoundaryFrame, baselineValues){
 	print("Closed", iClosed, "dangling morph key(s) at frame", iBoundaryFrame);
 }
 
+/**
+ * Restore dials a ROM preset zeroed FLAT (runtime v101).
+ *
+ * MEASURED 2026-08-25 (DTH 2.5, all G9 base-ROM variants): the G9 JCM base
+ * ROM .dufs carry ~698 all-zero value channels — among them every stock G9
+ * breast pose control (body_ctrl_BreastsUp-Down and friends), each keyed to 0
+ * with CONSTANT keys at frames 0/2/3/105. Loading the preset stomps a
+ * character's dialed shape (a 100% Breasts Up-Down reads 0% across the whole
+ * ROM). The G8/G8.1 base ROMs carry none of these channels, which is why the
+ * problem is G9-only. The zero list is an accidental capture of the preset
+ * author's scene, so its exact contents are not ours to predict — this pass
+ * targets the SHAPE of the accident instead of any name list.
+ *
+ * A channel is restored iff ALL of:
+ *   - its pre-ROM baseline (memorizeBaseMorphs, taken before any preset
+ *     loads) is non-zero — the dial is part of the character's shape;
+ *   - it now HAS keys — a preset actually touched it;
+ *   - every key is ~0 — it was zeroed flat, not walked. A genuinely walked
+ *     channel has a non-zero key somewhere and is never touched, so no ROM
+ *     information can be lost;
+ *   - it is not ERC-driven (getNumControllers > 0): a driven half (Breasts
+ *     Up-Down Left/Right) reads non-zero only through its master — restoring
+ *     it raw would double-apply once the master is restored. Restoring the
+ *     master restores the halves.
+ *
+ * Restore = flatten every key back to the baseline value (the verified
+ * setValue(t, v) route — same mechanism as restoreNodeTransforms' fallback);
+ * a flat channel varies from the base mesh on no frame, so the DTH Exporter's
+ * FBX pass keeps the morph and the alembic bakes the same shape — no fbx/abc
+ * drift. Root-figure scope only: DK/GP/mouth close-outs treat those nodes'
+ * morphs as self-contained ROM assets with no character-driven base.
+ */
+function restoreZeroedDials(oNodes, baselineValues){
+	if(!baselineValues) return 0;
+	var iRestored = 0;
+	for(var x = 0; x < oNodes.length; x++){
+		var oNode = oNodes[x];
+		if(!oNode) continue;
+		var oObj = oNode.getObject();
+		if(!oObj) continue;
+		for(var i = 0; i < oObj.getNumModifiers(); i++){
+			var oMod = oObj.getModifier(i);
+			if(!oMod || !oMod.inherits("DzMorph")) continue;
+			var oProp = oMod.getValueControl();
+			if(!oProp) continue;
+			var iKeys = oProp.getNumKeys();
+			if(iKeys < 1) continue;
+			var fBase = baselineValues[oMod.getName()];
+			if(fBase === undefined || approx_eq(fBase, 0)) continue;
+			var bAllZero = true;
+			for(var k = 0; k < iKeys; k++){
+				if(!approx_eq(oProp.getKeyValue(k), 0)){ bAllZero = false; break; }
+			}
+			if(!bAllZero) continue;
+			if(typeof oProp.getNumControllers == "function" && oProp.getNumControllers() > 0){
+				verbose("Zeroed dial", oProp.getLabel(), "is ERC-driven - its master restores it, skipping the raw channel");
+				continue;
+			}
+			for(var k = 0; k < iKeys; k++){
+				oProp.setValue(oProp.getKeyTime(k), fBase);
+			}
+			print("Restored zeroed dial:", oProp.getLabel(), "back to", fBase, "(a ROM preset keyed it flat to 0 over", iKeys, "key(s))");
+			iRestored++;
+		}
+	}
+	print("Restored", iRestored, "dial(s) a ROM preset had zeroed flat");
+	return iRestored;
+}
+
 /** **************************************************************************/
 function createMorphFrameByKey( oProperty, iFrame, fValue, iKey){
 	if(iKey < 1){

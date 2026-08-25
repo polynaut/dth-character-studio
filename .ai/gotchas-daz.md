@@ -68,7 +68,23 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   Daz; the DazToHue Exporter dialog accepts NO synthetic input (mouse_event at
   verified hit-test coords, PostMessage with correct client coords, SendKeys —
   all inert; only a human click actuates it).
-- **The DAZ Install Manager already knows every Daz path, and stores them at a
+- **DTH's G9 base ROM `.duf`s zero ~700 value channels the ROM never walks —
+  including every stock G9 breast pose control.** Measured 2026-08-25 by
+  parsing DTH 2.5's preset `.duf`s directly (every G9 base-ROM variant: DQS +
+  Linear, FAC and non-FAC): 13 breast channels (`body_ctrl_BreastsUp-Down`,
+  l/r halves, Side-Side, In-Out, HangForward, Flatten + `body_bs_` siblings)
+  each keyed to **0** with CONSTANT keys at frames 0/2/3/105, inside a ~698-
+  channel all-zero list that is plainly an accidental capture of the preset
+  author's scene (it names HIS third-party content — Victoria 9 Emotions, JS
+  Katey, Van Helsing 9, Toon G9). The G8/G8.1 base ROMs and the G9 Physics
+  Example carry NONE of these channels. Consequences: a G9 character's dialed
+  breast shape reads 0% across the whole generated ROM (no hold-across-load
+  survives an explicit key inside the loaded preset — the retirement premise
+  of the v35/v83 preserve-morphs removal was a G8-only truth), and a hand-fix
+  at ROM frame 0 dies at the frame-2 zero key. The fix is runtime v101's
+  `restoreZeroedDials` (automatic, shape-of-the-accident: baseline non-zero +
+  keyed all-zero + not ERC-driven → flatten keys back to the baseline). The
+  zero list is upstream-reportable — privately to mrpdean, never in repo docs.
   FIXED location — never search the disk for DIM.** Measured on DIM 1.4.1.96
   (2026-08-07), three plain INI files under `%APPDATA%/DAZ 3D`
   (`configDir()` in Tauri; `BaseDirectory.Config = 3`), independent of where DIM
