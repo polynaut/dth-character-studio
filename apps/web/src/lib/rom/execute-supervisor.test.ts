@@ -65,7 +65,7 @@ describe('sessionPerRow on the wire', () => {
 })
 
 describe('superviseFreshSession', () => {
-  const IDLE = { pendingQuietMs: 0, runningQuietMs: 0 }
+  const IDLE = { pendingQuietMs: 0, runningQuietMs: 0, msSinceLaunch: Number.POSITIVE_INFINITY }
 
   it('does nothing when no supervisable file exists', () => {
     expect(
@@ -104,6 +104,7 @@ describe('superviseFreshSession', () => {
         dazRunning: true,
         pendingQuietMs: SESSION_EXIT_TIMEOUT_MS - 1,
         runningQuietMs: 0,
+        msSinceLaunch: Number.POSITIVE_INFINITY,
       }),
     ).toEqual({ act: 'none' })
     expect(
@@ -113,8 +114,22 @@ describe('superviseFreshSession', () => {
         dazRunning: true,
         pendingQuietMs: SESSION_EXIT_TIMEOUT_MS + 1,
         runningQuietMs: 0,
+        msSinceLaunch: Number.POSITIVE_INFINITY,
       }).act,
     ).toBe('kill')
+    // The measured kill-loop regression: the pending file's mtime does not
+    // change when a fresh session is LAUNCHED for it, so an old file plus a
+    // young process must read as "starting", never "stuck exiting".
+    expect(
+      superviseFreshSession({
+        pending: parked,
+        running: 'absent',
+        dazRunning: true,
+        pendingQuietMs: SESSION_EXIT_TIMEOUT_MS + 1,
+        runningQuietMs: 0,
+        msSinceLaunch: 30_000,
+      }),
+    ).toEqual({ act: 'none' })
   })
 
   it('leaves an untouched pending handoff to the handoff flows, backstopping only a dead one', () => {
@@ -131,6 +146,7 @@ describe('superviseFreshSession', () => {
         dazRunning: false,
         pendingQuietMs: SESSION_PICKUP_GRACE_MS - 1,
         runningQuietMs: 0,
+        msSinceLaunch: Number.POSITIVE_INFINITY,
       }),
     ).toEqual({ act: 'none' })
     expect(
@@ -140,6 +156,7 @@ describe('superviseFreshSession', () => {
         dazRunning: false,
         pendingQuietMs: SESSION_PICKUP_GRACE_MS + 1,
         runningQuietMs: 0,
+        msSinceLaunch: Number.POSITIVE_INFINITY,
       }),
     ).toEqual({ act: 'launch' })
   })
@@ -164,6 +181,7 @@ describe('superviseFreshSession', () => {
         dazRunning: true,
         pendingQuietMs: 0,
         runningQuietMs: SESSION_ROW_TIMEOUT_MS - 1,
+        msSinceLaunch: Number.POSITIVE_INFINITY,
       }),
     ).toEqual({ act: 'none' })
     expect(
@@ -173,6 +191,7 @@ describe('superviseFreshSession', () => {
         dazRunning: true,
         pendingQuietMs: 0,
         runningQuietMs: SESSION_ROW_TIMEOUT_MS + 1,
+        msSinceLaunch: Number.POSITIVE_INFINITY,
       }).act,
     ).toBe('kill')
   })
@@ -186,6 +205,7 @@ describe('superviseFreshSession', () => {
         dazRunning: false,
         pendingQuietMs: 0,
         runningQuietMs: SESSION_REQUEUE_GRACE_MS - 1,
+        msSinceLaunch: Number.POSITIVE_INFINITY,
       }),
     ).toEqual({ act: 'none' })
     expect(
@@ -195,6 +215,7 @@ describe('superviseFreshSession', () => {
         dazRunning: false,
         pendingQuietMs: 0,
         runningQuietMs: SESSION_REQUEUE_GRACE_MS + 1,
+        msSinceLaunch: Number.POSITIVE_INFINITY,
       }),
     ).toEqual({ act: 'requeue', reason: 'Daz Studio exited mid-row' })
   })
@@ -207,6 +228,7 @@ describe('superviseFreshSession', () => {
         dazRunning: false,
         pendingQuietMs: 0,
         runningQuietMs: SESSION_REQUEUE_GRACE_MS + 1,
+        msSinceLaunch: Number.POSITIVE_INFINITY,
       }),
     ).toEqual({ act: 'none' })
     expect(

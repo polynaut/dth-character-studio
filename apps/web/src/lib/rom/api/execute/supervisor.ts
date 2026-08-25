@@ -81,7 +81,11 @@ export function ensureExportSupervisor(): void {
   if (!run || run.sessionPerRow !== true) return
   if (timer) return
   launches = 0
-  lastLaunchAt = 0
+  // Arming counts as "just launched": the handoff (or the wait-for-close
+  // modal) starts the first Daz itself, and after a window reload the real
+  // launch time is unknown — starting the clock here means the stuck-exit
+  // kill can never target a session younger than the supervisor's own view.
+  lastLaunchAt = Date.now()
   lastKillAt = 0
   timer = setInterval(() => {
     void supervisorTick()
@@ -144,6 +148,7 @@ async function runTick(): Promise<void> {
     dazRunning: await exportDazStudioRunning(),
     pendingQuietMs: pending === 'absent' ? 0 : await quietMsOf(paths.pending, now),
     runningQuietMs: running === 'absent' ? 0 : await quietMsOf(paths.running, now),
+    msSinceLaunch: Math.max(0, now - lastLaunchAt),
   })
   if (action.act === 'launch') {
     // An interrupted run must not burn a Daz launch per remaining row just so

@@ -1167,6 +1167,20 @@ Part of the domain reference — `.ai/domain.md` is the index.
   the outcome (failed rows + errors); a running file whose Daz exited below
   100 is a dead run (cleaned + reported). No export-folder watching anymore —
   the old delivered-CSV mtime watch is gone.
+  **Contract v4 (`sessionPerRow: true`, Runner v1.4.0)**: every EXPORTING
+  batch (rom-export/export-only/hair-only — not rom-only) asks for a fresh
+  Daz session per row, because Daz's follower re-evaluation degrades after a
+  scene re-load in one session (measured — `.ai/gotchas-daz.md`). The Runner
+  runs ONE unworked row, renames the file BACK to pending (statuses kept)
+  and quits; the studio's export supervisor (`api/execute/supervisor.ts`,
+  pure rule `superviseFreshSession` in execute-jobs.ts) relaunches, kills a
+  hung session (hard per-row timeout) and requeues a crashed one. Under v4 a
+  claimed file whose Daz died is the SUPERVISOR's requeue, not a dead run,
+  and the between-sessions pending file (partially worked) reads as RUNNING,
+  not "waiting to be claimed". Old Runners ignore the field (single-session,
+  flag dropped on rewrite = supervisor auto-disarm); the motion-summary gate
+  (`verifyDazExportsLanded` + packages/rom/src/motion-summary.ts) is the
+  detection net either way.
 - **A claimed batch's leftover file is HOUSEKEEPING, not a run control.**
   "Only an un-renamed file is abortable" is the CONTRACT's rule (the Runner
   owns the file after its rename) — it was never a rule about the user, who

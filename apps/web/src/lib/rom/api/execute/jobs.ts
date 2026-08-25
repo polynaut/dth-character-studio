@@ -25,6 +25,7 @@ import {
   EXPORT_MODES,
   HOUDINI_RUN_MODES,
   RUNNING_JOB_FILE,
+  batchPartiallyWorked,
   classifyPendingHandoff,
   executeSceneSignature,
   jobFileJson,
@@ -376,6 +377,22 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
   // LIVE batch — sub-100 with Daz still up (another window's export, or a
   // Tools genesis-index build) — must never be clobbered: one job file, one
   // batch at a time, same refusal as every other handoff writer.
+  // The pending name is no longer always "never started": a fresh-session
+  // batch (contract v4) PARKS there between Daz sessions, worked rows and
+  // all. Replacing that file (the historic last-write-wins) would silently
+  // abort a run mid-flight — refuse it like the live running_ case below. An
+  // UNTOUCHED pending file keeps the old semantics: nothing ran, the new
+  // handoff replaces it.
+  if (await exists(jobFile).catch(() => false)) {
+    const parked = await readTextFile(jobFile)
+      .then((text) => parseJobFileJson(text))
+      .catch(() => null)
+    if (parked && parked.type === 'bulk-export' && batchPartiallyWorked(parked)) {
+      throw new Error(
+        'Daz Studio is working through a batch — try again when it finishes.\nIf that batch is stuck, clear it in Settings → App Data → DTH Exporter job file.',
+      )
+    }
+  }
   const staleRunning = joinPath(scriptsRoot, RUNNING_JOB_FILE)
   if (await exists(staleRunning).catch(() => false)) {
     const finished = await readTextFile(staleRunning)

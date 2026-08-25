@@ -850,8 +850,18 @@ export function superviseFreshSession(input: {
   pendingQuietMs: number
   /** ms since the claimed file last changed (0 = unknown). */
   runningQuietMs: number
+  /**
+   * ms since the SUPERVISOR last started a Daz (or since it armed, whichever
+   * is later). The stuck-exit kill must be gated on this too: the pending
+   * file's mtime does not change when a fresh session is LAUNCHED for it —
+   * only the claim rename changes it — so without this gate the supervisor
+   * reads its own freshly started Daz as "the previous session stuck on its
+   * way out" and kills it before the Runner can claim (measured on the first
+   * live run: a kill-relaunch loop that never let row 2 start).
+   */
+  msSinceLaunch: number
 }): FreshSessionAction {
-  const { pending, running, dazRunning, pendingQuietMs, runningQuietMs } = input
+  const { pending, running, dazRunning, pendingQuietMs, runningQuietMs, msSinceLaunch } = input
   const supervised = (file: ExporterJobFile | 'absent' | null): file is ExporterJobFile =>
     file !== 'absent' &&
     file !== null &&
@@ -873,7 +883,7 @@ export function superviseFreshSession(input: {
       // must start. A process still up past the exit window is stuck on its
       // way out — no fresh session can start against a single-instance app.
       if (dazRunning) {
-        return pendingQuietMs > SESSION_EXIT_TIMEOUT_MS
+        return pendingQuietMs > SESSION_EXIT_TIMEOUT_MS && msSinceLaunch > SESSION_EXIT_TIMEOUT_MS
           ? {
               act: 'kill',
               reason: `the previous session did not exit within ${Math.round(SESSION_EXIT_TIMEOUT_MS / 60_000)} minutes`,
