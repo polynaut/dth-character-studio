@@ -9,8 +9,8 @@ afterEach(cleanup)
 describe('NumberField', () => {
   it('re-syncs its draft when the value prop changes underneath it', () => {
     // Reproduces the KeyedListEditor index-key case: the same instance is reused
-    // with a new value after a mid-list row removal. Without the re-sync effect
-    // the field would keep showing (and could commit) the old number.
+    // with a new value after a mid-list row removal. Without useDraftValue's
+    // re-sync the field would keep showing (and could commit) the old number.
     const { getByRole, rerender } = render(<NumberField value={1} onCommit={vi.fn()} />)
     const input = getByRole('textbox') as HTMLInputElement
     expect(input.value).toBe('1')

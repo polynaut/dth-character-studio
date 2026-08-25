@@ -273,7 +273,6 @@ function useRetiringTasks(tasks: Array<ExportTask>): {
       // cleared the timers, or a re-run scene starts life retired (#960).
       // oxlint-disable-next-line react/set-state-in-effect
       setRetired((prev) => without(prev, forgotten))
-      // oxlint-disable-next-line react/set-state-in-effect
       setLeaving((prev) => without(prev, forgotten))
     }
   }, [tasks])

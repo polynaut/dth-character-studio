@@ -57,10 +57,10 @@ export function RefreshAssetsTab() {
     }
   }, [])
   useEffect(() => {
-  // Load-on-mount: the flagged setState is the async load's own bookkeeping —
-  // the rule flags ANY setState reachable through the called function, even
-  // after its first await, so an async load can never satisfy it (#960).
-  // oxlint-disable-next-line react/set-state-in-effect
+    // Load-on-mount: the flagged setState is the async load's own bookkeeping —
+    // the rule flags ANY setState reachable through the called function, even
+    // after its first await, so an async load can never satisfy it (#960).
+    // oxlint-disable-next-line react/set-state-in-effect
     void reload()
   }, [reload])
 

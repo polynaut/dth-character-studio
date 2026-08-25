@@ -134,6 +134,27 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   trigger dep "extra" (and an identity-stable `useCallback([])` dep too, which
   the classic rule simultaneously REQUIRES listed) — those sites keep the dep
   plus a reasoned disable naming the trigger.
+- **A reason-disable can be DEAD and nothing tells you — `oxlint
+  --report-unused-disable-directives` is what proves one is load-bearing.**
+  This repo's whole convention is per-site reasoned disables, and a directive
+  that suppresses nothing is invisible: it reads as a documented decision while
+  the rule has already stopped firing there (a later refactor, or a rule that
+  reports once per effect and never reaches the second `setState` in the same
+  block — measured on `export-pipeline-panel`'s retiring-tasks sweep, whose
+  second directive was dead on arrival). Run the flag when adding or reviewing
+  reason-disables. It is NOT in `pnpm lint`: seven pre-existing `eslint-disable`
+  directives elsewhere in the tree are also reported unused, so turning it on
+  as a gate is its own cleanup, not a free switch.
+- **A lint run against a STALE `node_modules` lies about which rules exist**,
+  in the direction that gets trusted — silence. Measured 2026-08-25: reviewing
+  #962 with a `node_modules` predating the bump that brought oxlint 1.79 ran
+  **1.77**, where the six React-compiler rules are not in an error category. All
+  26 of the PR's reason-disables reported "unused" and a probe file with four
+  blatant violations linted clean — the conclusion "this PR is a no-op" was
+  entirely an artefact of the install. `pnpm install` first, and check
+  `npx oxlint --version` against `package.json` before believing a surprising
+  lint result. Same shape as the smoke-port lie in `.ai/testing.md`: a
+  surprising PASS is a tooling question before it is a code question.
 - **"A `.hip` always holds absolute paths" is FALSE — the real constraint is
   `$JOB`.** A Houdini project can be authored entirely relative, and the
   studio's own Generate project does exactly that (`$JOB/<houdiniSubdir>/

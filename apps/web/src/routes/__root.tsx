@@ -130,10 +130,12 @@ function RootComponent() {
   // above z-50) would float over the drawer as it slides in.
   const dismissToasts = useCallback(() => void toast.dismiss(), [])
 
-  // Dev-only: the smoke/screenshot harness fires demo toasts through the app's
-  // OWN sonner instance (a spec-side `import('sonner')` gets its own module
-  // copy, which the mounted <Toaster/> never sees). Never shipped. An effect,
-  // not a render-time global write — the harness only reads it after mount.
+  // Dev-only handle for AD-HOC harness use: it lets a spec fire demo toasts
+  // through the app's OWN sonner instance (a spec-side `import('sonner')` gets
+  // its own module copy, which the mounted <Toaster/> never sees). Nothing in
+  // the suite reads it today (`playwright.config.ts`, `.ai/testing.md`), and it
+  // is never shipped. An effect rather than a render-time global write: a
+  // render React discards must not publish a global.
   useEffect(() => {
     if (import.meta.env.DEV) {
       ;(window as unknown as { __dthToast?: typeof toast }).__dthToast = toast
