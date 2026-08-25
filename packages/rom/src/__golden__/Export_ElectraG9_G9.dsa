@@ -194,6 +194,82 @@ if (dthSceneLinkErr) {
         dthExportLogProblem(dthAlertMsg);
         MessageBox.critical(dthAlertMsg, "DTH Character Studio", "&OK");
     };
+    // The DTH Exporter's own "Alembic ROM motion summary" (exporter >= 2.1.9):
+    // for every exported node, on how many of the walked frames the sampled mesh
+    // actually CHANGED. It is the exporter's staleness watch — and the only
+    // artifact that can tell a real export from a statue, because the alembic is
+    // not bit-reproducible and its size is not a health metric.
+    //
+    // dthMotionLogMark is taken BEFORE the export and handed back afterwards. The
+    // exporter APPENDS to one per-character log, and that log is NOT part of the
+    // set the sweep moves aside (dthOwnSetFile lists the .dth/.abc/.fbx/.csv, not
+    // the .log), so every earlier run's summary is still in the file. Without the
+    // mark, a run that wrote no summary of its own — an older exporter, or one
+    // that died after the .dth landed — would be judged by an OLDER run's block,
+    // and a stale all-zero one would discard a perfectly good export.
+    var dthMotionLogMark = function (dthMlPath) {
+        try {
+            var dthMlFile = new DzFile(dthMlPath);
+            if (!dthMlFile.open(dthMlFile.ReadOnly)) return 0;
+            var dthMlLen = String(dthMlFile.read()).length;
+            dthMlFile.close();
+            return dthMlLen;
+        } catch (dthMlErr) { return 0; }
+    };
+    // Returns null when the file, a summary NEWER than dthMsFrom, or any parseable
+    // node line is absent — an older exporter (or an unreadable log) is not
+    // evidence of anything and must never trip a gate. Otherwise:
+    //   { nodes: <parsed node lines>, zero: <nodes that moved on 0 frames>,
+    //     best: <highest moved/total fraction>, bestTotal: <that node's frames>,
+    //     lines: [<node: moved on N of M frames>] }
+    var dthMotionSummaryVerdict = function (dthMsPath, dthMsFrom) {
+        var dthMsText;
+        try {
+            var dthMsFile = new DzFile(dthMsPath);
+            if (!dthMsFile.open(dthMsFile.ReadOnly)) return null;
+            dthMsText = String(dthMsFile.read());
+            dthMsFile.close();
+        } catch (dthMsErr) { return null; }
+        // A log that SHRANK was rotated or truncated, so all of it is new.
+        var dthMsStart = (typeof dthMsFrom == "number" && dthMsFrom > 0 && dthMsFrom <= dthMsText.length) ? dthMsFrom : 0;
+        var dthMsAt = dthMsText.lastIndexOf("Alembic ROM motion summary");
+        if (dthMsAt < dthMsStart) return null;
+        var dthMsLines = dthMsText.substring(dthMsAt).split("\n");
+        var dthMsV = { nodes: 0, zero: 0, best: 0, bestTotal: 0, lines: [] };
+        for (var dthMsI = 1; dthMsI < dthMsLines.length; dthMsI++) {
+            // The node name sits between the log prefix ("[ts] [INFO]   ") and the
+            // ": moved on" — excluding ':', '[' and ']' from the name class stops
+            // the capture from swallowing the timestamp prefix.
+            var dthMsM = dthMsLines[dthMsI].match(/([^:\[\]]+): moved on (\d+) of (\d+) frames/);
+            if (!dthMsM) {
+                // The block is contiguous: the first non-matching line after any
+                // node line ends it (the header line itself never matches).
+                if (dthMsV.nodes > 0) break;
+                continue;
+            }
+            var dthMsMoved = parseInt(dthMsM[2], 10);
+            var dthMsTotal = parseInt(dthMsM[3], 10);
+            if (!(dthMsTotal > 0)) continue;
+            dthMsV.nodes++;
+            if (dthMsMoved == 0) dthMsV.zero++;
+            var dthMsFrac = dthMsMoved / dthMsTotal;
+            if (dthMsFrac > dthMsV.best) { dthMsV.best = dthMsFrac; dthMsV.bestTotal = dthMsTotal; }
+            dthMsV.lines.push(dthMsM[1].replace(/^\s+|\s+$/g, "") + ": moved on " + dthMsMoved + " of " + dthMsTotal + " frames");
+        }
+        if (dthMsV.nodes < 1) return null;
+        return dthMsV;
+    };
+    // A healthy run's best node is NOT 100%: the measured healthy best was 483 of
+    // 484 frames, one short of the walk. On a long ROM that one frame is noise; on
+    // a short one it is the whole margin — a 10-frame ROM tops out at 90% and a
+    // flat 0.9 bar would condemn every healthy export of it. So the bar is 90% of
+    // what the walk can actually REACH, (total - 1) / total: ~0.898 on the
+    // measured 484-frame ROM, with the 69% stale run still far below it.
+    var dthMotionSuspect = function (dthMsVerdict) {
+        if (dthMsVerdict === null) return false;
+        var dthMsBar = dthMsVerdict.bestTotal > 1 ? 0.9 * (dthMsVerdict.bestTotal - 1) / dthMsVerdict.bestTotal : 0.9;
+        return dthMsVerdict.best < dthMsBar;
+    };
     var dthExportAction = MainWindow.getActionMgr().findAction("DazToHueExporterAction");
     if (!dthExportAction) {
         // Daz Studio 4 names it differently — find it so "installed but not
@@ -338,6 +414,11 @@ if (dthSceneLinkErr) {
                     if (dthCleared > 0) print("Moved " + dthCleared + " previous export file(s) aside in " + dthExportDir);
                 }
                 var dthRefFrames = "478";
+                // How much of the exporter's per-character log already existed — only a
+                // motion summary written PAST this mark may judge this export (the log is
+                // append-only and survives the sweep; see dthMotionLogMark).
+                var dthMotionLog = dthExportDir + "/" + dthExportName + ".log";
+                var dthMotionMark = dthMotionLogMark(dthMotionLog);
                 try {
                     dthExportAction.doExport(dthExportDir, dthExportName, dthRefFrames, false);
                 } catch (dthExpErr) {
@@ -359,9 +440,23 @@ if (dthSceneLinkErr) {
                 // good set's backups). A statue is a FAILED export: the previous set
                 // comes back, exactly as if the .dth were missing. No summary (older
                 // exporter, unreadable log) is no evidence and gates nothing.
-                var dthMotion = dthExportLanded ? dthMotionSummaryVerdict(dthExportDir + "/" + dthExportName + ".log") : null;
+                var dthMotion = dthExportLanded ? dthMotionSummaryVerdict(dthMotionLog, dthMotionMark) : null;
+                // Say what the audit concluded, ALWAYS. A gate that fails open in silence
+                // cannot be told from a gate that passed: if the log ever moves, or the
+                // exporter stops writing the summary, this line is the only thing that
+                // says the export shipped unaudited.
+                if (dthExportLanded) {
+                    if (dthMotion === null) {
+                        print("Motion audit: no new \"Alembic ROM motion summary\" in " + dthMotionLog + " - this export was NOT audited for evaluation staleness (exporter older than 2.1.9, or the log could not be read).");
+                    } else {
+                        print("Motion audit: " + dthMotion.nodes + " node(s), " + dthMotion.zero + " of them motionless, liveliest at " + Math.round(dthMotion.best * 100) + "% of its frames.");
+                    }
+                }
                 var dthMotionStatue = dthMotion !== null && dthMotion.zero == dthMotion.nodes;
-                if (dthMotionStatue) dthExportLanded = false;
+                if (dthMotionStatue) {
+                    for (var dthMsi = 0; dthMsi < dthMotion.lines.length; dthMsi++) print("  " + dthMotion.lines[dthMsi]);
+                    dthExportLanded = false;
+                }
                 dthFinishPreviousSet(dthExportDir, !dthExportLanded);
                 dthFinishPreviousSet(dthExportDir + "/Reference Skeletons", !dthExportLanded);
                 if (dthExportThrew !== null) throw dthExportThrew;
@@ -373,14 +468,16 @@ if (dthSceneLinkErr) {
                     // The soft half of the same audit: in a healthy export SOME node
                     // moves on nearly every frame (a ROM keys a distinct pose per frame
                     // — measured best-node fractions: ~99.8% healthy vs 69% on the
-                    // partially-stale run). Below 90% the set is suspect but not
+                    // partially-stale run). Below the bar (dthMotionSuspect — 90% of what
+                    // the walk can reach, so a SHORT ROM is not condemned for the one
+                    // frame a healthy long one also misses) the set is suspect but not
                     // provably dead, so it LANDS with a run-log WARNING instead of a
                     // failure — the exporter-side staleness fix owns the real cure.
-                    if (dthMotion !== null && dthMotion.best < 0.9) {
+                    if (dthMotionSuspect(dthMotion)) {
                         var dthMotionPct = Math.round(dthMotion.best * 100);
                         print("WARNING: partial evaluation staleness - even the liveliest node's mesh changed on only " + dthMotionPct + "% of the ROM's frames. Do not trust this export set:");
                         for (var dthMi = 0; dthMi < dthMotion.lines.length; dthMi++) print("  " + dthMotion.lines[dthMi]);
-                        dthExportLogProblem("Partial evaluation staleness: even the liveliest node's mesh changed on only " + dthMotionPct + "% of the ROM's frames (exporter staleness - see the motion summary in " + dthExportName + ".log). Treat this export set as suspect and re-run the export.", true);
+                        dthExportLogProblem("Partial evaluation staleness: even the liveliest node's mesh changed on only " + dthMotionPct + "% of the ROM's frames (exporter staleness - see the motion summary in " + dthMotionLog + "). Treat this export set as suspect and re-run the export.", true);
                     }
                     // Copy the generated PoseAsset CSV next to the exporter output, resolving
                     // the {{DTH_EXPORT_DIR}} + {{DTH_EXPORT_NAME}} tokens in any bone-scale

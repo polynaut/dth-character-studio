@@ -10,6 +10,8 @@ frame while the scene never re-evaluates — its own motion summary then reads
 successful export and even purge the backups of the last good set. The
 export carrier now reads that summary: an all-zero verdict is a failed
 export (the previous set is restored, the report says why), and a run whose
-liveliest node moved on under 90% of frames lands with a run-log warning
-telling you not to trust the set. Exports from older exporter builds
-(no summary) are unaffected.
+liveliest node barely moved lands with a run-log warning telling you not to
+trust the set. Only a summary written by the export that just ran can judge
+it, and every export now says in Daz's log what the audit concluded — so an
+un-audited export (older exporter, no summary) reads as un-audited rather
+than as clean. Exports from older exporter builds are otherwise unaffected.

@@ -1373,12 +1373,39 @@ v102 — the motion-summary gate: the export carrier audits what the DTH
       against a healthy 1.1 GB — and that success PURGED the .dthprev backups
       of the last good set; a deterministic partial form (best node 69%,
       identical 131/110/335 counts across three runs, one pre-dating runtime
-      v101) also exists. The gate: dthMotionSummaryVerdict (DthUtils) parses
-      the LAST summary block; the carrier treats an all-zero verdict as a
-      FAILED export (not landed — previous set restored, statue-specific
-      alert, run-log error), and a best-node fraction below 0.9 as a run-log
-      WARNING (set lands; measured separation: healthy best ~0.998 vs stale
-      best 0.69). No summary (older exporter, unreadable log) is no evidence
-      and gates nothing. dthExportLogProblem grew a warnings channel
-      (dthLogWarn arg): warnings never flip the run's ok. The exporter-side
-      staleness fix is separate work in the exporter repo.
+      v101) also exists. The gate: dthMotionSummaryVerdict parses the last
+      summary block; the carrier treats an all-zero verdict as a FAILED export
+      (not landed — previous set restored, statue-specific alert, run-log
+      error) and a suspect best-node fraction as a run-log WARNING (set lands;
+      measured separation: healthy best ~0.998 vs stale best 0.69). No summary
+      (older exporter, unreadable log) is no evidence and gates nothing.
+      dthExportLogProblem grew a warnings channel (dthLogWarn arg): warnings
+      never flip the run's ok. The exporter-side staleness fix is separate
+      work in the exporter repo.
+
+      Three review corrections, all in v102:
+      - The helper is CARRIER text (dsa.ts's MOTION_SUMMARY_HELPER), not a
+        DthUtils function. Export_<name>.dsa and .Bulk_Export_Only carry NO
+        include() at all, so a runtime call from them is a ReferenceError
+        thrown right after a successful export and BEFORE
+        dthFinishPreviousSet — leaving the previous set's .dthprev backups
+        standing, which the next run's sweep then reads as the newest finished
+        copy while deleting the good live export beside them (the v99 corpse
+        rule). Pinned by dsa-syntax.test.ts: a carrier with no include() must
+        DEFINE every dth* helper it calls.
+      - Only a summary written by THIS export may judge it. The exporter
+        appends to one per-character .log, and that log is NOT in the set the
+        sweep moves aside (dthOwnSetFile lists the .dth/.abc/.fbx/.csv), so
+        every earlier run's block survives. dthMotionLogMark records the log's
+        length before doExport and the verdict ignores anything before it —
+        otherwise a run that wrote no summary of its own (older exporter, or
+        one that died after the .dth landed) inherits an older run's, and a
+        stale all-zero block DISCARDS a good export.
+      - The soft bar scales: dthMotionSuspect compares against 90% of what the
+        walk can REACH, (total - 1) / total, because the measured healthy best
+        was 483 of 484 — one frame short. A flat 0.9 condemned every healthy
+        export of a ROM under ~10 frames. ~0.898 on the measured 484-frame
+        ROM, so the calibration is unchanged where it was measured.
+      The carrier also PRINTS what the audit concluded on every export, so a
+      gate that fails open (log moved, exporter older than 2.1.9) cannot be
+      mistaken for one that passed.

@@ -181,61 +181,6 @@ function dthReadRunLogRuns(sPath){
 }
 
 /**
- * Parse the DTH Exporter's own per-character log for the LAST "Alembic ROM
- * motion summary" block (runtime v102). Exporter >= 2.1.9 writes one per
- * Alembic export: for every exported node, on how many of the walked frames
- * the sampled mesh actually CHANGED. It is the exporter's staleness watch —
- * and the only artifact that can tell a real export from a statue, because
- * the alembic is not bit-reproducible and its size is not a health metric.
- *
- * Returns null when the file, the block or any parseable node line is absent
- * — an older exporter (or an unreadable log) is not evidence of anything and
- * must never trip a gate. Otherwise:
- *   { nodes: <parsed node lines>, zero: <nodes that moved on 0 frames>,
- *     best: <highest moved/total fraction>, lines: [<node: moved on N of M>] }
- *
- * Measured calibration (Ita/G9, 2026-08-25): healthy runs put the BEST node
- * at ~99.8% moved (a ROM keys a distinct pose on essentially every frame, so
- * SOME node always moves nearly always); the partially-stale run's best node
- * was 69%, the statue run's 0%. The caller's thresholds live on that gap.
- */
-function dthMotionSummaryVerdict(sLogPath){
-	var sText;
-	try {
-		var oFile = new DzFile(sLogPath);
-		if(!oFile.open(oFile.ReadOnly)) return null;
-		sText = String(oFile.read());
-		oFile.close();
-	} catch(e){ return null; }
-	var iAt = sText.lastIndexOf("Alembic ROM motion summary");
-	if(iAt < 0) return null;
-	var aLines = sText.substring(iAt).split("\n");
-	var oVerdict = { nodes: 0, zero: 0, best: 0, lines: [] };
-	for(var i = 1; i < aLines.length; i++){
-		// The node name sits between the log prefix ("[ts] [INFO]   ") and the
-		// ": moved on" — excluding ':', '[' and ']' from the name class stops
-		// the capture from swallowing the timestamp prefix.
-		var aMatch = aLines[i].match(/([^:\[\]]+): moved on (\d+) of (\d+) frames/);
-		if(!aMatch){
-			// The block is contiguous: the first non-matching line after any
-			// node line ends it (the header line itself never matches).
-			if(oVerdict.nodes > 0) break;
-			continue;
-		}
-		var iMoved = parseInt(aMatch[2], 10);
-		var iTotal = parseInt(aMatch[3], 10);
-		if(!(iTotal > 0)) continue;
-		oVerdict.nodes++;
-		if(iMoved == 0) oVerdict.zero++;
-		var fMoved = iMoved / iTotal;
-		if(fMoved > oVerdict.best) oVerdict.best = fMoved;
-		oVerdict.lines.push(aMatch[1].replace(/^\s+|\s+$/g, "") + ": moved on " + iMoved + " of " + iTotal + " frames");
-	}
-	if(oVerdict.nodes < 1) return null;
-	return oVerdict;
-}
-
-/**
  * Write the run log JSON to sPath. oSummary carries the run metadata
  * (character, versions, frame counts, ok) baked in by the caller.
  *
