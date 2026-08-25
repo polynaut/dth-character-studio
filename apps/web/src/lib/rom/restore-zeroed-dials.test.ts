@@ -60,6 +60,8 @@ class FakeProp {
   controllers: number
   /** [time, value] pairs, kept sorted by time. */
   keys: Array<[number, number]>
+  /** Parameter-group path — only read on the node-property route. */
+  path: string
   getRawValue?: () => number
 
   constructor(
@@ -68,7 +70,9 @@ class FakeProp {
     keys: Array<[number, number]> = [],
     controllers = 0,
     hasRawValue = true,
+    path = '/Pose Controls/Torso/Feminine',
   ) {
+    this.path = path
     this.name = name
     this.dial = dial
     this.keys = [...keys].sort((a, b) => a[0] - b[0])
@@ -81,6 +85,9 @@ class FakeProp {
   }
   getLabel() {
     return `${this.name} label`
+  }
+  getPath() {
+    return this.path
   }
   inherits(type: string) {
     return type === 'DzFloatProperty'
@@ -110,9 +117,11 @@ class FakeProp {
   }
 }
 
-/** A node whose object enumerates DzMorph modifiers — the iteration path
- *  memorizeRawDials and restoreZeroedDials share. */
-function morphNode(name: string, props: Array<FakeProp>) {
+/** A node whose object enumerates DzMorph modifiers AND that owns node
+ *  properties — the two routes forEachZeroableDial visits. G9 pose controls
+ *  are node-owned (measured 2026-08-25), so `nodeProps` is the route the
+ *  reported dial actually takes. */
+function morphNode(name: string, props: Array<FakeProp>, nodeProps: Array<FakeProp> = []) {
   const mods = props.map((p) => ({
     getName: () => p.name,
     inherits: (t: string) => t === 'DzMorph',
@@ -125,6 +134,8 @@ function morphNode(name: string, props: Array<FakeProp>) {
       getNumModifiers: () => mods.length,
       getModifier: (i: number) => mods[i] ?? null,
     }),
+    getNumProperties: () => nodeProps.length,
+    getProperty: (i: number) => nodeProps[i] ?? null,
   }
 }
 
@@ -168,7 +179,7 @@ describe('restoreZeroedDials', () => {
     const breasts = new FakeProp('body_ctrl_BreastsUp-Down', 0, stompKeys())
     const root = morphNode('Genesis9', [breasts])
 
-    const restored = utils.restoreZeroedDials([root], raw({ 'body_ctrl_BreastsUp-Down': 1 }))
+    const restored = utils.restoreZeroedDials([root], raw({ 'mod|body_ctrl_BreastsUp-Down': 1 }))
 
     expect(restored).toBe(1)
     expect(breasts.keys.map(([, v]) => v)).toEqual([1, 1, 1, 1])
@@ -186,7 +197,7 @@ describe('restoreZeroedDials', () => {
     ])
     const root = morphNode('Genesis9', [walked])
 
-    const restored = utils.restoreZeroedDials([root], raw({ FBMHeavy: 0.5 }))
+    const restored = utils.restoreZeroedDials([root], raw({ 'mod|FBMHeavy': 0.5 }))
 
     expect(restored).toBe(0)
     expect(walked.keys.map(([, v]) => v)).toEqual([0, 1, 0])
@@ -202,8 +213,8 @@ describe('restoreZeroedDials', () => {
 
     const restored = utils.restoreZeroedDials([root], {
       raw: true,
-      values: { 'body_ctrl_BreastsUp-Down': 0 },
-      evals: { 'body_ctrl_BreastsUp-Down': 1 },
+      values: { 'mod|body_ctrl_BreastsUp-Down': 0 },
+      evals: { 'mod|body_ctrl_BreastsUp-Down': 1 },
     } as never)
 
     expect(restored).toBe(0)
@@ -221,9 +232,9 @@ describe('restoreZeroedDials', () => {
     const restored = utils.restoreZeroedDials(
       [root],
       raw({
-        'body_ctrl_BreastsSide-Side': 0,
-        FBMPearFigure: 0.4,
-        'body_ctrl_BreastsIn-Out': 0.00005,
+        'mod|body_ctrl_BreastsSide-Side': 0,
+        'mod|FBMPearFigure': 0.4,
+        'mod|body_ctrl_BreastsIn-Out': 0.00005,
       }),
     )
 
@@ -246,8 +257,8 @@ describe('restoreZeroedDials', () => {
     const restored = utils.restoreZeroedDials(
       [root],
       raw({
-        'body_ctrl_BreastsUp-Down': 1, // raw — dialed by the user
-        'body_ctrl_lBreastUp-Down': 0, // raw — its 100% was all ERC
+        'mod|body_ctrl_BreastsUp-Down': 1, // raw — dialed by the user
+        'mod|body_ctrl_lBreastUp-Down': 0, // raw — its 100% was all ERC
       }),
     )
 
@@ -264,7 +275,7 @@ describe('restoreZeroedDials', () => {
 
     const restored = utils.restoreZeroedDials(
       [root],
-      raw({ 'body_ctrl_BreastsUp-Down': 1, 'body_ctrl_BreastsFlatten': 0.6 }, false),
+      raw({ 'mod|body_ctrl_BreastsUp-Down': 1, 'mod|body_ctrl_BreastsFlatten': 0.6 }, false),
     )
 
     expect(restored).toBe(1)
@@ -287,6 +298,33 @@ describe('restoreZeroedDials', () => {
     expect(workflow).not.toMatch(/restoreZeroedDials\(\[oNodeRoot\], baseMorphValues\)/)
   })
 
+  // THE live case (measured 2026-08-25, DS4 probe): G9 pose controls are
+  // node-owned properties under /Pose Controls — findModifier returns null
+  // for them, so the modifier route alone missed the reported dial through
+  // three diagnostic runs. The node route must see them; the /Pose Controls
+  // path gate must keep transforms and other node floats out.
+  it('restores a NODE-OWNED pose control, and the path gate excludes non-pose node floats', () => {
+    const { utils, printed } = loadUtils()
+    const poseCtrl = new FakeProp('body_ctrl_BreastsUp-Down', 0, stompKeys())
+    const transform = new FakeProp('YTranslate', 0, stompKeys(), 0, true, '/General/Transforms')
+    const root = morphNode('Genesis9', [], [poseCtrl, transform])
+
+    const baseline = utils.memorizeRawDials([root])
+    expect(baseline.values).toEqual({ 'prop|body_ctrl_BreastsUp-Down': 0 })
+
+    const restored = utils.restoreZeroedDials(
+      [root],
+      raw({ 'prop|body_ctrl_BreastsUp-Down': 1, 'prop|YTranslate': 5 }),
+    )
+
+    expect(restored).toBe(1)
+    expect(poseCtrl.keys.map(([, v]) => v)).toEqual([1, 1, 1, 1])
+    // Even with a (hypothetical) dialed baseline, the transform is never
+    // visited — the path gate keeps the pass out of /General.
+    expect(transform.keys.map(([, v]) => v)).toEqual([0, 0, 0, 0])
+    expect(printed()).toContain('Restored zeroed dial: body_ctrl_BreastsUp-Down label back to 1')
+  })
+
   it('round-trips with memorizeRawDials: snapshot, preset stomp, restore', () => {
     const { utils } = loadUtils()
     const breasts = new FakeProp('body_ctrl_BreastsUp-Down', 1)
@@ -296,8 +334,8 @@ describe('restoreZeroedDials', () => {
     const baseline = utils.memorizeRawDials([root])
     expect(baseline.raw).toBe(true)
     expect(baseline.values).toEqual({
-      'body_ctrl_BreastsUp-Down': 1,
-      'body_ctrl_BreastsFlatten': 0,
+      'mod|body_ctrl_BreastsUp-Down': 1,
+      'mod|body_ctrl_BreastsFlatten': 0,
     })
 
     // The preset load: explicit zero keys land, the evaluated dial reads 0.

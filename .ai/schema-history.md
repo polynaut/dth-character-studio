@@ -1327,7 +1327,14 @@ v101 — restoreZeroedDials: dials a ROM preset zeroed FLAT are restored to
       value, marks the snapshot `raw: false`, and the pass then skips
       ERC-driven channels loudly — the conservative fallback) AND the channel
       now has keys AND every key ~0 (zeroed flat — a walked channel has a
-      non-zero key somewhere and is never touched). Restore = flatten every
+      non-zero key somewhere and is never touched). Both passes walk
+      forEachZeroableDial: the object's DzMorph modifier channels AND the
+      figure node's own DzFloatProperty entries under /Pose Controls —
+      measured (live DS4 probe): G9 pose controls (body_ctrl_*) are
+      NODE-OWNED, findModifier returns null for them, and the modifier route
+      alone missed the reported dial through three diagnostic builds. The
+      /Pose Controls path gate keeps transforms and mesh-resolution floats
+      out. Restore = flatten every
       key to the baseline via setValue(t, v) — a flat channel varies from the
       base mesh on no frame, so the DTH Exporter's FBX pass keeps the morph
       and fbx/abc stay aligned. Root-figure scope only (memorizeBaseMorphs is

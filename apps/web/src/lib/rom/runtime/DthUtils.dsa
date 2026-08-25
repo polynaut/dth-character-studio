@@ -1646,6 +1646,49 @@ function closeDanglingMorphKeys(oNodes, iBoundaryFrame, baselineValues){
  * Taken before any preset loads; these dials carry no keys yet, so the
  * no-arg read is time-independent.
  */
+/**
+ * The two places a zeroable dial lives, visited with one filter (v101):
+ *
+ *   - `mod|<name>`: a DzMorph modifier's value channel on the node's OBJECT —
+ *     the blend shapes (body_bs_*, FBMs, character morphs).
+ *   - `prop|<name>`: a DzFloatProperty owned by the NODE itself, under the
+ *     `/Pose Controls` parameter group. MEASURED 2026-08-25 (live probe, DS4
+ *     4.24, G9): the stock pose CONTROLS — body_ctrl_BreastsUp-Down and every
+ *     other dial the G9 base-ROM zero-list stomps — are node-owned properties
+ *     (`findModifier`: null; `findProperty`: found, path
+ *     `/Pose Controls/Torso/Feminine`). A pass iterating modifiers alone
+ *     never sees them, which is exactly where the reported dial lived
+ *     through three diagnostic runs. The `/Pose Controls` path gate keeps
+ *     transforms (`/General/Transforms`), display and mesh-resolution
+ *     properties out — restoring one of those could never be right.
+ *
+ * The key prefixes keep the two namespaces from colliding in the snapshot.
+ * Both memorizeRawDials and restoreZeroedDials MUST walk through here, or
+ * their maps drift apart.
+ */
+function forEachZeroableDial(oNode, fnVisit){
+	var oObj = oNode.getObject();
+	if(oObj){
+		for(var i = 0; i < oObj.getNumModifiers(); i++){
+			var oMod = oObj.getModifier(i);
+			if(!oMod || !oMod.inherits("DzMorph")) continue;
+			var oProp = oMod.getValueControl();
+			if(!oProp) continue;
+			fnVisit("mod|" + oMod.getName(), oProp);
+		}
+	}
+	if(typeof oNode.getNumProperties == "function"){
+		var iProps = oNode.getNumProperties();
+		for(var j = 0; j < iProps; j++){
+			var oNodeProp = oNode.getProperty(j);
+			if(!oNodeProp || !oNodeProp.inherits("DzFloatProperty")) continue;
+			var sPath = (typeof oNodeProp.getPath == "function") ? String(oNodeProp.getPath()) : "";
+			if(sPath.indexOf("/Pose Controls") != 0) continue;
+			fnVisit("prop|" + oNodeProp.getName(), oNodeProp);
+		}
+	}
+}
+
 function memorizeRawDials(oNodes){
 	// `evals` (getValue — WITH any ERC share) rides along purely so the
 	// restore pass can NAME a dial that is visible-but-not-raw instead of
@@ -1656,14 +1699,8 @@ function memorizeRawDials(oNodes){
 	for(var x = 0; x < oNodes.length; x++){
 		var oNode = oNodes[x];
 		if(!oNode) continue;
-		var oObj = oNode.getObject();
-		if(!oObj) continue;
-		for(var i = 0; i < oObj.getNumModifiers(); i++){
-			var oMod = oObj.getModifier(i);
-			if(!oMod || !oMod.inherits("DzMorph")) continue;
-			var oProp = oMod.getValueControl();
-			if(!oProp) continue;
-			oSnapshot.evals[oMod.getName()] = oProp.getValue(0);
+		forEachZeroableDial(oNode, function(sKey, oProp){
+			oSnapshot.evals[sKey] = oProp.getValue(0);
 			// getRawValue's no-arg return is not measured on every Daz build:
 			// accept it only when it is actually a number, retry with an
 			// explicit time, and otherwise fall back to the evaluated value
@@ -1679,8 +1716,8 @@ function memorizeRawDials(oNodes){
 				oSnapshot.raw = false;
 				fRaw = oProp.getValue(0);
 			}
-			oSnapshot.values[oMod.getName()] = fRaw;
-		}
+			oSnapshot.values[sKey] = fRaw;
+		});
 	}
 	return oSnapshot;
 }
@@ -1697,16 +1734,10 @@ function restoreZeroedDials(oNodes, oBaseline){
 	for(var x = 0; x < oNodes.length; x++){
 		var oNode = oNodes[x];
 		if(!oNode) continue;
-		var oObj = oNode.getObject();
-		if(!oObj) continue;
-		for(var i = 0; i < oObj.getNumModifiers(); i++){
-			var oMod = oObj.getModifier(i);
-			if(!oMod || !oMod.inherits("DzMorph")) continue;
-			var oProp = oMod.getValueControl();
-			if(!oProp) continue;
+		forEachZeroableDial(oNode, function(sKey, oProp){
 			iSeen++;
-			var fBase = oBaseline.values[oMod.getName()];
-			var fEval = oBaseline.evals ? oBaseline.evals[oMod.getName()] : undefined;
+			var fBase = oBaseline.values[sKey];
+			var fEval = oBaseline.evals ? oBaseline.evals[sKey] : undefined;
 			if(fBase === undefined || approx_eq(fBase, 0)){
 				// Not raw-dialed — but if it was VISIBLE (evaluated non-zero)
 				// and a preset keyed it, name it: this is the ERC-driven face
@@ -1718,11 +1749,11 @@ function restoreZeroedDials(oNodes, oBaseline){
 						"but raw", (fBase === undefined ? "unknown" : fBase),
 						"- a controller shows it; restoring its controlling dial covers it.");
 				}
-				continue;
+				return;
 			}
 			iDialed++;
 			var iKeys = oProp.getNumKeys();
-			if(iKeys < 1) continue;
+			if(iKeys < 1) return;
 			iDialedKeyed++;
 			var bAllZero = true;
 			var iBadKey = -1;
@@ -1732,11 +1763,15 @@ function restoreZeroedDials(oNodes, oBaseline){
 			if(!bAllZero){
 				// A dialed candidate rejected for holding a real key is the
 				// one branch that must name its evidence — "0 restored" with
-				// six of these was undiagnosable until they printed.
-				print("Zeroed-dial candidate left alone:", oProp.getLabel(), "dialed at", fBase,
-					"but key", iBadKey, "of", iKeys, "holds", oProp.getKeyValue(iBadKey),
-					"at t", oProp.getKeyTime(iBadKey), "- keyed non-zero, so it is walked/driven, not zeroed flat.");
-				continue;
+				// six of these was undiagnosable until they printed. A single
+				// key HOLDING the dialed value is Daz's implicit frame-0 key
+				// (harmless — the shape survives); say nothing for that one.
+				if(!(iKeys == 1 && approx_eq(oProp.getKeyValue(0), fBase))){
+					print("Zeroed-dial candidate left alone:", oProp.getLabel(), "dialed at", fBase,
+						"but key", iBadKey, "of", iKeys, "holds", oProp.getKeyValue(iBadKey),
+						"- keyed non-zero, so it is walked/driven, not zeroed flat.");
+				}
+				return;
 			}
 			// Only the no-getRawValue fallback needs the driven skip: an
 			// EVALUATED baseline on a driven channel would double-apply the
@@ -1744,14 +1779,14 @@ function restoreZeroedDials(oNodes, oBaseline){
 			if(!oBaseline.raw && typeof oProp.getNumControllers == "function" && oProp.getNumControllers() > 0){
 				print("Zeroed dial", oProp.getLabel(), "is ERC-driven and this Daz build has no getRawValue - skipped (its controlling dial restores it).");
 				iSkippedDriven++;
-				continue;
+				return;
 			}
 			for(var k = 0; k < iKeys; k++){
 				oProp.setValue(oProp.getKeyTime(k), fBase);
 			}
 			print("Restored zeroed dial:", oProp.getLabel(), "back to", fBase, "(a ROM preset keyed it flat to 0 over", iKeys, "key(s))");
 			iRestored++;
-		}
+		});
 	}
 	// The counts make a 0 diagnosable from the log alone: dialed=0 means the
 	// snapshot never saw the dial (enumeration gap), dialed>0 with keyed=0

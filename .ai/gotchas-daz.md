@@ -85,7 +85,14 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   `restoreZeroedDials` (automatic, shape-of-the-accident: RAW baseline
   non-zero + keyed all-zero → flatten keys back to the raw baseline — raw
   restores raw, so an ERC share cannot double-apply and a purely driven half,
-  raw 0, is never a candidate). A preset resave upstream
+  raw 0, is never a candidate). Related measured fact (live DS4 probe,
+  2026-08-25): **G9 pose controls (`body_ctrl_*`) are NODE-OWNED properties
+  under `/Pose Controls`, not DzMorph modifiers on the figure's object** —
+  `findModifier` returns null for them, `oNode.findProperty` finds them, and
+  a pass iterating object modifiers alone silently misses every dial the
+  zero-list stomps (three diagnostic ROM builds measured exactly that). Any
+  future pass over "all dials" must walk BOTH routes
+  (`forEachZeroableDial` in DthUtils.dsa). A preset resave upstream
   won't happen (Remo's call, 2026-08-25 — same read as the declined HDA
   feature pitches), so the runtime pass is the PERMANENT fix, not a stopgap —
   don't re-pitch the report; any mention of these presets stays private.
