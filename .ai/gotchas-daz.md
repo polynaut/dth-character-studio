@@ -105,6 +105,21 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   won't happen (Remo's call, 2026-08-25 — same read as the declined HDA
   feature pitches), so the runtime pass is the PERMANENT fix, not a stopgap —
   don't re-pitch the report; any mention of these presets stays private.
+- **The DTH Exporter can walk every ROM frame while the scene never
+  re-evaluates — the export "succeeds" as a statue.** Measured 2026-08-25
+  (Ita/G9, DS4 4.24, exporter DLL 2.1.9): a 2m48s "successful" export whose
+  own motion summary read "moved on **0 of 484** frames" for every node —
+  23 MB alembic vs a healthy 1.1 GB — plus a DETERMINISTIC partial form
+  (best node 69%; identical 131/110/335 counts across three runs, one
+  pre-dating runtime v101, so it is not a studio regression). The exporter's
+  "Alembic ROM motion summary" (2.1.9+, in the per-character export `.log`)
+  is the ONLY health signal — alembics are not bit-reproducible and size
+  proves nothing. Runtime v102's carrier gate reads it: all-zero = failed
+  export (previous set restored), best `< 0.9` = run-log warning. Healthy
+  calibration: best node ~99.8%, worst ~60%. The root cause (evaluation not
+  pumped after the 2.1.x per-frame-forcing removal) is exporter-side work in
+  D:/DazToHue-Daz-Plugins — a too-fast export or tiny `.abc` means "read the
+  motion summary first", not "debug the studio".
 - **The DAZ Install Manager already knows every Daz path, and stores them at a
   FIXED location — never search the disk for DIM.** Measured on DIM 1.4.1.96
   (2026-08-07), three plain INI files under `%APPDATA%/DAZ 3D`

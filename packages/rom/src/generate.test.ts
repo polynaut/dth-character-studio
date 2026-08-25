@@ -1828,7 +1828,7 @@ describe('exporter integration', () => {
       FRAMES,
       'C:/meta',
     ).content
-    expect(content).toContain('dthLogRun.errors.push(String(dthLogMsg));')
+    expect(content).toContain('dthLogRun[dthLogChan].push(String(dthLogMsg));')
     expect(content).toContain('dthLogRun.ok = false;')
     expect(content).toContain('dthLogRec.ok = false;')
   })
@@ -2339,7 +2339,7 @@ describe('exporter integration', () => {
     // switches back, and an existing ROM result is preserved rather than
     // overwritten (the log keeps its ok flag, frames and failed morphs).
     expect(content).toContain('dthExportLogProblem(dthAlertMsg)')
-    expect(content).toContain('dthLogRec.errors.push(String(dthLogMsg))')
+    expect(content).toContain('dthLogRec[dthLogChanV1].push(String(dthLogMsg))')
     // Daz 4 registers the exporter under another name, so a class-only lookup
     // reported "not installed" for a plugin that was right there.
     expect(content).toContain('dthCandidateName == "DazToHue_Action"')

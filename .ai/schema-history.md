@@ -1361,3 +1361,24 @@ v101 — restoreZeroedDials: dials a ROM preset zeroed FLAT are restored to
       the first live run (Ita, 2026-08-25) restored 0 with no way to say why.
       Automatic replacement for the retired manual preserve list — no schema
       change.
+v102 — the motion-summary gate: the export carrier audits what the DTH
+      Exporter actually sampled. Exporter >= 2.1.9 writes an "Alembic ROM
+      motion summary" into its per-character .log (per node, on how many
+      walked frames the sampled mesh CHANGED) — the staleness watch added
+      when the crash-prone per-frame forcing was removed, and the ONLY
+      artifact that tells a real export from a statue (alembics are not
+      bit-reproducible; size is not a health metric). Measured 2026-08-25
+      (Ita/G9, DS4 4.24, DLL 2.1.9): a "successful" 2m48s export whose
+      summary read "moved on 0 of 484 frames" on EVERY node — a 23 MB statue
+      against a healthy 1.1 GB — and that success PURGED the .dthprev backups
+      of the last good set; a deterministic partial form (best node 69%,
+      identical 131/110/335 counts across three runs, one pre-dating runtime
+      v101) also exists. The gate: dthMotionSummaryVerdict (DthUtils) parses
+      the LAST summary block; the carrier treats an all-zero verdict as a
+      FAILED export (not landed — previous set restored, statue-specific
+      alert, run-log error), and a best-node fraction below 0.9 as a run-log
+      WARNING (set lands; measured separation: healthy best ~0.998 vs stale
+      best 0.69). No summary (older exporter, unreadable log) is no evidence
+      and gates nothing. dthExportLogProblem grew a warnings channel
+      (dthLogWarn arg): warnings never flip the run's ok. The exporter-side
+      staleness fix is separate work in the exporter repo.
