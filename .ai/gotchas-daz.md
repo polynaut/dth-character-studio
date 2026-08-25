@@ -130,6 +130,24 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   pumped after the 2.1.x per-frame-forcing removal) is exporter-side work in
   D:/DazToHue-Daz-Plugins — a too-fast export or tiny `.abc` means "read the
   motion summary first", not "debug the studio".
+  **The wear is SESSION-scoped and deterministic** (measured 2026-08-24/25,
+  5/5 sessions, two scenes, console + RDP): a fresh Daz process's first
+  export of a freshly loaded scene is healthy; every scripted export after a
+  scene RE-load in the same session freezes the FOLLOWERS at identical
+  counts (eyes 110, boots 45 of 484) while the figure still moves 464.
+  PREVENTION is therefore orchestration, not evaluation calls: job-file
+  contract v4 (`sessionPerRow` — docs/exporter-plugin-job-file.md) gives
+  every exporting row a fresh Daz session (Runner v1.4.0 runs one row and
+  quits; the studio's export supervisor, `api/execute/supervisor.ts`,
+  relaunches/kills/requeues). On top sits the STUDIO-side relative motion
+  gate (`packages/rom/src/motion-summary.ts`, wired into
+  `verifyDazExportsLanded` with a `sinceMs` log-mtime scope): the carrier's
+  v102 gate can only judge absolutes, while the measured degradation is
+  RELATIVE — followers at 9–35% of a moving figure. Calibration is pinned by
+  tests against all 12 measured Ita.log blocks: worst healthy follower 60%
+  of the reference (G9 Tear 290/484), degraded runs put 9+ nodes under the
+  0.5 bar, and the reference is the LIVELIEST node, not "the figure" (one
+  measured degraded shape has the figure at 131 behind a 335 mouth).
 - **The `Export_` carriers and `.Bulk_Export_Only` include NO runtime — a
   helper they call must be defined IN them.** `Export_<name>.dsa` and
   `.Bulk_Export_Only.dsa` carry zero `include()` calls by design: they run

@@ -162,6 +162,7 @@ pub fn run() {
             github::app_release_tags,
             daz::daz_studio_running,
             daz::daz_studio_instance_count,
+            daz::kill_daz_studio,
             daz::run_daz_script,
             daz::launch_daz_studio,
             foreground::focus_app_window,

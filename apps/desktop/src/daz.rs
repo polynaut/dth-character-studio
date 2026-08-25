@@ -72,6 +72,49 @@ pub fn daz_studio_instance_count() -> u32 {
     }
 }
 
+/// Terminate every running Daz Studio started from `install_folder` (empty =
+/// every running Daz). Returns how many processes were terminated.
+///
+/// The export supervisor's LAST resort, behind the fresh-session-per-row
+/// orchestration: the Runner quits Daz itself after every row, and this fires
+/// only when a row exceeds its hard timeout (the measured failure is an export
+/// teardown that hung indefinitely with the UI alive) or a quitting session
+/// never dies. A hung Daz processes no window messages, so a polite WM_CLOSE
+/// has nobody listening — TerminateProcess is the honest tool here, and the
+/// scene it kills is throwaway ROM keyframes by construction (the Runner never
+/// saves).
+///
+/// The kill leans the OPPOSITE way from the probes: a process whose path
+/// cannot be read is skipped, never terminated — over-reporting a probe costs
+/// a redundant launch, over-killing would take down a Daz that was never ours
+/// (an elevated instance, a different install). The caller treats "still
+/// running after the kill" as its own loud failure.
+// `(async)`: enumerates processes — off the main thread, like every probe here.
+#[tauri::command(async)]
+pub fn kill_daz_studio(install_folder: String) -> u32 {
+    #[cfg(windows)]
+    {
+        let mut killed = 0u32;
+        for (pid, exe) in crate::procs::running_procs(DAZ_EXE) {
+            let matches = match exe.as_deref() {
+                Some(path) => {
+                    install_folder.trim().is_empty() || exe_started_from(path, &install_folder)
+                }
+                None => false, // unknown path — never kill what can't be identified
+            };
+            if matches && crate::procs::terminate_pid(pid) {
+                killed += 1;
+            }
+        }
+        killed
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = install_folder;
+        0
+    }
+}
+
 /// Whether the executable at `exe` was started from `folder` — the test that
 /// tells a running DS4 from a running DS6 when both are `DAZStudio.exe`.
 ///

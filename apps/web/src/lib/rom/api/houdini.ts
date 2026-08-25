@@ -36,7 +36,7 @@ import {
 } from '../houdini-jobs'
 import { normalizeSceneKey } from '../execute-jobs'
 import type { HoudiniResult, HoudiniRunState } from '../houdini-jobs'
-import { cancelFlagPath } from '@dth/rom'
+import { cancelFlagPath, motionGateVerdict, parseLastMotionSummary } from '@dth/rom'
 import type { Character } from '@dth/rom'
 // Houdini's half of the handoff, bundled as source and written into app-data
 // before each launch (see startHoudiniExport).
@@ -1178,6 +1178,11 @@ const verifyExportsInput = charScopeInput.extend({
    *  A hair-only run rewrites grooms beside an older set — its `.dth` proves
    *  nothing, so only the leftover-backup check applies there. */
   requireDth: z.boolean().default(true),
+  /** When the batch was handed off (`Date.now()` ms). Arms the motion-summary
+   *  gate: only an exporter log WRITTEN SINCE then may judge a scene — the log
+   *  accretes across runs and survives the sweep, so an old run's summary must
+   *  neither fail nor clear this one. 0 (the default) disarms the gate. */
+  sinceMs: z.number().default(0),
 })
 
 /** One scene whose export set did NOT land — see {@link verifyDazExportsLanded}. */
@@ -1215,7 +1220,7 @@ export async function verifyDazExportsLanded({
 }: {
   data: unknown
 }): Promise<Array<DeadExportScene>> {
-  const { projectId, id, scenes, requireDth } = verifyExportsInput.parse(data)
+  const { projectId, id, scenes, requireDth, sinceMs } = verifyExportsInput.parse(data)
   if (!isTauri()) return []
   try {
     const project = await resolveProject(projectId)
@@ -1252,6 +1257,29 @@ export async function verifyDazExportsLanded({
         )
         reason = verdict.dead
         warning = verdict.warning
+        // The motion-summary gate (exporter >= 2.1.9): a set can LAND —
+        // full-size `.dth`, no leftover backups — and still be a statue or a
+        // follower-frozen walk (the measured session-wear degradation). The
+        // exporter's own per-set log is the only artifact that can tell, and
+        // only a log written by THIS run is evidence (`sinceMs`; the log
+        // accretes and survives the sweep). No new log = no verdict — an
+        // older exporter gates nothing. Skipped for hair-only batches
+        // (`requireDth` false): the hair pass writes no character walk.
+        if (requireDth && !reason && sinceMs > 0) {
+          const logPath = `${dth.slice(0, -'.dth'.length)}.log`
+          const logMtime = await stat(logPath).then(
+            (info) => info.mtime?.getTime() ?? 0,
+            () => 0,
+          )
+          if (logMtime >= sinceMs) {
+            const motion = motionGateVerdict(
+              parseLastMotionSummary(await readTextFile(logPath).catch(() => '')),
+            )
+            if (motion.degraded) {
+              reason = `the exported meshes barely moved (${motion.reasons.join('; ')})`
+            }
+          }
+        }
       } catch {
         // The folder itself is unreadable/missing. Missing after a batch that
         // claims this scene exported IS a dead set — nothing was written.

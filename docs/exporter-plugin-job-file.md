@@ -467,6 +467,61 @@ rather than best-effort executed.
 batch at a time, so the studio refuses an open-scene request while an export
 batch is pending or running rather than overwriting it.
 
+## `sessionPerRow: true` — a fresh Daz session per row (contract v4)
+
+**The problem this solves is measured, deterministic Daz behaviour** (DS4
+4.24, exporter 2.1.9/2.1.10, 2026-08-24/25): Daz's re-evaluation of fitted
+FOLLOWERS (G9 eyes/mouth/tear, grafts, shells, clothing) silently stops after
+a scene RE-load inside one Daz session. A session's first export of a freshly
+loaded scene is healthy (figure 483/484 moved frames, every follower close
+behind); every scripted export after a re-load in the same session freezes the
+followers at identical counts (eyes 110, boots 45 of 484) while the figure
+keeps moving — reproduced 5/5 sessions, two scenes, console and RDP. The
+exporter cannot fix it from inside (every public evaluation API measured
+ineffective; `forceCacheUpdate` crashes); it can only DETECT it (the motion
+summary in its per-set `.log`, which the studio's motion gate reads).
+PREVENTION is session hygiene, and that is this field.
+
+The studio writes `"sessionPerRow": true` on every exporting batch
+(`rom-export`, `export-only`, `hair-only`; ROM-only builds sample no meshes
+and stay single-session). Semantics, all normative:
+
+- **One row per session.** A Runner that understands the field claims the
+  file as usual, runs the FIRST unworked row only (skipping rows already
+  `done`/`failed` — a resumed batch carries them), marks it, and then:
+  - unworked rows remain → rewrite the file (statuses kept, field kept) and
+    **rename it back to the pending name**, then **quit Daz**. The next
+    session's Runner claims it again and resumes at the next unworked row.
+  - nothing left → write `progress: 100`, leave the `running_` file (the
+    normal finish), quit Daz.
+- **A worn session refuses without claiming.** Worn = this session already ran
+  a batch row, or a scene is loaded (the user's Daz). The Runner leaves the
+  file pending, gives the open scene the same Save Changes guard the batch's
+  first row would have (Cancel deletes the pending file — the existing
+  cancellation shape), resets to an empty scene and quits. The studio's
+  wait-for-close flow then starts a fresh Daz, which claims the file.
+- **The studio's export supervisor drives the restarts** (`api/execute/
+  supervisor.ts`; the pure rule is `superviseFreshSession` in
+  execute-jobs.ts): it launches a fresh Daz for a mid-batch pending file once
+  the previous process is gone, kills a session that exceeds the hard per-row
+  timeout (the measured failure: an export teardown hung indefinitely) or that
+  never exits, marks a crashed session's in-flight row `failed` and hands the
+  file back, and fails the remaining rows loudly when Daz keeps dying. The
+  supervisor lives in the window that owns the run; with that window closed
+  the batch parks between sessions and resumes when it is back.
+- **Old plugins ignore the field** (unknown fields rule) and run the whole
+  batch in one session; their rewrite drops the field, which auto-disarms the
+  studio's supervisor. The studio-side motion-summary gate then catches what
+  the fresh sessions would have prevented.
+- **Between sessions the pending file is a partially-worked batch** — rows
+  `done`/`failed`, `progress` > 0. The studio's watch reports it as RUNNING
+  (not "waiting to be claimed"), and the reclaim rule is unaffected: reclaim
+  still touches only untouched batches. Abort during the between-sessions
+  window works like any pending abort (the file is deleted; worked rows stay
+  worked on disk).
+
+Cost: one Daz start (~40 s) per row against a 6–15 min export — accepted.
+
 ## Open points / future versions
 
 - **Modal dialogs during unattended runs:** the generated scripts report hard

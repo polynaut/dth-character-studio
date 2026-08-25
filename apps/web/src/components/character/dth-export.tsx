@@ -8,6 +8,7 @@ import {
   adoptHoudiniRun,
   adoptUnrealImports,
   awaitBatchPickup,
+  ensureExportSupervisor,
   exporterJobsPending,
   fetchExportRunProgress,
   dismissUnrealImport,
@@ -1241,6 +1242,17 @@ export function DthExportAction({
       if (!pipelineRef.current && !houdiniRef.current) clearPipeline()
       return
     }
+    // A fresh-session run needs its supervisor in the OWNER window — re-armed
+    // here so a reloaded window (sidecar-restored watch) keeps the batch
+    // moving between Daz sessions. No-op for single-session runs (the
+    // function checks the armed run's own flag) and for display adoptions
+    // (characterId '' is not ours to drive).
+    if (
+      run.characterId === character.id &&
+      (run.state === 'pending' || run.state === 'running')
+    ) {
+      ensureExportSupervisor()
+    }
     if (run.state === 'finished') {
       // The studio deleted the finished job file — the batch is done. Whether
       // that IS the end decides who reports: with a Houdini export
@@ -1295,6 +1307,9 @@ export function DthExportAction({
                 id: character.id,
                 scenes: run.scenes.filter((scene) => !alreadyCounted(scene)),
                 requireDth: run.mode !== 'hair-only',
+                // Arms the motion-summary gate: only an exporter log written
+                // since this handoff may judge the run's sets.
+                sinceMs: run.startedAtMs ?? 0,
               },
             }).catch(() => [])
           : []

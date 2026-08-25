@@ -79,6 +79,7 @@ import {
   runOwner,
   writeExportRunSidecar,
 } from './run-state.ts'
+import { ensureExportSupervisor } from './supervisor.ts'
 
 export interface ExecuteSceneStatus {
   scenePath: string
@@ -420,7 +421,16 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
   // while the new run is still working. The finish report is unaffected —
   // `scriptRunFailures` only counts entries written since this handoff.
   await clearSceneRunLogs(metaDir, scenesRetiredByRun(mode, scenes))
-  await storage.writeTextFileAtomic(jobFile, jobFileJson(jobs, 'bulk-export', progressLogPath))
+  // Contract v4: every EXPORTING row gets a fresh Daz session — Daz's
+  // follower re-evaluation silently degrades after a scene re-load in one
+  // session (measured 2026-08-24/25; see ExporterJobFile.sessionPerRow), and
+  // only session hygiene prevents it. A ROM-only run samples no meshes, so it
+  // keeps the cheap single-session batch.
+  const sessionPerRow = mode !== 'rom-only'
+  await storage.writeTextFileAtomic(
+    jobFile,
+    jobFileJson(jobs, 'bulk-export', progressLogPath, sessionPerRow),
+  )
 
   // Arm the watch: the run's identity only — all live state (progress,
   // per-job statuses) is Runner-owned inside the renamed job file. The
@@ -436,8 +446,12 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
     unrealSets,
     mode,
     cancelPath,
+    sessionPerRow,
   }
   await writeExportRunSidecar(runOwner.current)
+  // The fresh-session orchestration needs a driver OUTSIDE Daz: the Runner
+  // quits after every row and this window starts the next session.
+  ensureExportSupervisor()
 
   // Stamp the handoff (merge — untouched scenes keep their stamps), but ONLY
   // for the full run: a stamp claims "this definition, as it stands, has been
