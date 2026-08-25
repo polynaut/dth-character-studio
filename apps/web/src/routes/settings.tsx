@@ -116,6 +116,60 @@ function normalizeProjectSettings(s: ProjectSettings): ProjectSettings {
   }
 }
 
+/**
+ * The ADDITIONAL DIM manifests folders (settings.extraDimManifestsFolders) —
+ * rendered under the primary field in BOTH places it appears (the Project tab
+ * and the Home window's fallback section). User-owned even while an activated
+ * Daz installation derives the primary: the derivation knows only its own
+ * install's folder; which OTHER DIM libraries exist stays the user's, so the
+ * list shows (and adds) in the derived case too.
+ */
+function ExtraDimManifestsFolders({
+  folders,
+  browseFrom,
+  onChange,
+}: {
+  folders: Array<string>
+  /** Where an empty row's Browse opens — the primary folder's parent. */
+  browseFrom: string
+  onChange: (folders: Array<string>) => void
+}) {
+  return (
+    <>
+      {folders.map((folder, i) => (
+        <div key={i} className="mt-2 flex items-end gap-2">
+          <div className="grow">
+            <FolderField
+              label={`Additional manifests folder ${i + 1}`}
+              value={folder}
+              placeholder="D:\DAZ 3D\Install Manager 2\ManifestFiles"
+              browseFrom={browseFrom}
+              onChange={(value) => onChange(folders.map((f, fi) => (fi === i ? value : f)))}
+              help={null}
+            />
+          </div>
+          <Button
+            variant="ghost"
+            className="text-muted-foreground"
+            onClick={() => onChange(folders.filter((_, fi) => fi !== i))}
+          >
+            Remove
+          </Button>
+        </div>
+      ))}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="mt-2 border-dashed text-muted-foreground"
+        onClick={() => onChange([...folders, ''])}
+      >
+        <Plus /> Add another manifests folder
+      </Button>
+    </>
+  )
+}
+
 function SettingsPage() {
   const { settings: initial, project } = Route.useLoaderData()
   const { from, tab } = Route.useSearch()
@@ -447,7 +501,9 @@ function SettingsPage() {
       JSON.stringify(normalizeProjectSettings(projectBaseline)) ||
       // Edited on the Project tab (under the Daz Products toggle) but stored in
       // the machine settings — saved by onSaveProjectSettings alongside the manifest.
-      settings.dimManifestsFolder !== initial.dimManifestsFolder)
+      settings.dimManifestsFolder !== initial.dimManifestsFolder ||
+      JSON.stringify(settings.extraDimManifestsFolders) !==
+        JSON.stringify(initial.extraDimManifestsFolders))
 
   async function onSaveProjectSettings(machineSettingsSaved = false) {
     if (!project) return
@@ -471,7 +527,12 @@ function SettingsPage() {
       // UNLESS the header's Save-all just ran onSave: that already wrote the full
       // settings object, and a second write here would ride the stale `initial`
       // baseline.
-      if (!machineSettingsSaved && settings.dimManifestsFolder !== initial.dimManifestsFolder) {
+      if (
+        !machineSettingsSaved &&
+        (settings.dimManifestsFolder !== initial.dimManifestsFolder ||
+          JSON.stringify(settings.extraDimManifestsFolders) !==
+            JSON.stringify(initial.extraDimManifestsFolders))
+      ) {
         await saveSettings({ data: { settings, baseline: initial } })
       }
       await saveProjectSettings({
@@ -631,9 +692,15 @@ function SettingsPage() {
     // `exporterSourceFolders` keeps re-adding a folder the user removed.
     settings.dthExporterFolder !== initial.dthExporterFolder ||
     settings.dazInstallFolder !== initial.dazInstallFolder ||
-    // `dimManifestsFolder` is deliberately NOT here: the Project tab owns its
-    // manual edit (and `projectDirty` tracks that), while activating an
-    // installation writes it straight to disk — neither route leaves it pending.
+    // `dimManifestsFolder` (+ its extra folders) is here only for a HOME
+    // window: in a project window the Project tab owns the manual edit (and
+    // `projectDirty` tracks it), while activating an installation writes the
+    // primary straight to disk — neither route leaves it pending there. A Home
+    // window has no Project tab, so its edit must arm THIS save.
+    (!project && settings.dimManifestsFolder !== initial.dimManifestsFolder) ||
+    (!project &&
+      JSON.stringify(settings.extraDimManifestsFolders) !==
+        JSON.stringify(initial.extraDimManifestsFolders)) ||
     settings.dazInstallKey !== initial.dazInstallKey ||
     settings.houdiniDocsFolder !== initial.houdiniDocsFolder ||
     settings.houdiniInstallFolder !== initial.houdiniInstallFolder ||
@@ -914,28 +981,46 @@ function SettingsPage() {
               its manual field normally lives on the Project tab (next to the
               Daz Products toggle it arms). A Home window has no Project tab, so
               the machine couldn't be configured before any project was open —
-              offer the field here in that case. Hidden when an activated Daz
-              install derives it (the card above already lists it) and in a
-              project window (one editable copy at a time). */}
-          {!project && !dazDerived && (
+              offer the section here in that case (a project window keeps one
+              editable copy, on its tab). When an activated Daz install derives
+              the primary, the field collapses to a note — but the EXTRA folders
+              stay editable: the derivation knows only its own install's folder,
+              and which other DIM libraries exist is the user's alone. */}
+          {!project && (
             <section className="space-y-2 rounded-lg border bg-card p-5">
               <h2 className="font-semibold">Daz product scanning</h2>
-              <FolderField
-                label="DAZ Install Manager manifests folder (optional)"
-                value={settings.dimManifestsFolder}
-                placeholder="E:\DAZ 3D\Install Manager\ManifestFiles"
-                onChange={(value) => setSettings((s) => ({ ...s, dimManifestsFolder: value }))}
-                help="Arms the per-export Daz product scan; whether a project SHOWS the results is its own setting (Settings → Project)."
+              {dazDerived ? (
+                <DerivedFieldNote
+                  label="DAZ Install Manager manifests folder"
+                  value={settings.dimManifestsFolder}
+                />
+              ) : (
+                <>
+                  <FolderField
+                    label="DAZ Install Manager manifests folder (optional)"
+                    value={settings.dimManifestsFolder}
+                    placeholder="E:\DAZ 3D\Install Manager\ManifestFiles"
+                    onChange={(value) => setSettings((s) => ({ ...s, dimManifestsFolder: value }))}
+                    help="Arms the per-export Daz product scan; whether a project SHOWS the results is its own setting (Settings → Project)."
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void onDetectDimFolder()}
+                    disabled={detectingDim}
+                  >
+                    {detectingDim ? 'Detecting…' : 'Detect installed location'}
+                  </Button>
+                </>
+              )}
+              <ExtraDimManifestsFolders
+                folders={settings.extraDimManifestsFolders}
+                browseFrom={parentDir(settings.dimManifestsFolder)}
+                onChange={(folders) =>
+                  setSettings((s) => ({ ...s, extraDimManifestsFolders: folders }))
+                }
               />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => void onDetectDimFolder()}
-                disabled={detectingDim}
-              >
-                {detectingDim ? 'Detecting…' : 'Detect installed location'}
-              </Button>
             </section>
           )}
 
@@ -1532,6 +1617,15 @@ function SettingsPage() {
                     </Button>
                   </>
                 )}
+                {/* In the derived case too: the card derives only ITS install's
+                    folder — the user's other DIM libraries still scan. */}
+                <ExtraDimManifestsFolders
+                  folders={settings.extraDimManifestsFolders}
+                  browseFrom={parentDir(settings.dimManifestsFolder)}
+                  onChange={(folders) =>
+                    setSettings((s) => ({ ...s, extraDimManifestsFolders: folders }))
+                  }
+                />
               </div>
               {/* Last, behind its own rule: the only setting on this tab that
                   changes what GENERATION writes, rather than where the studio

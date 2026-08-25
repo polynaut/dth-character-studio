@@ -147,7 +147,7 @@ Two scopes now:
 - **Per-project** (the `.dcsp` manifest: the subdirs + `charactersSubdir`, the
   `assetsEnabled`/`dazProductsEnabled` opt-ins (`dazProductsEnabled` only shows the
   character page's Products TAB — the Daz-product scan itself is armed by
-  `settings.dimManifestsFolder`, and its results live in the character's
+  `settings.dimManifestsFolder` (+ `extraDimManifestsFolders`), and its results live in the character's
   `.dcsmeta` folder), `houdiniPathStyle`,
   `unrealProjects`) → the `DcspManifest` type + `readManifest`/`writeManifest` in
   `storage/projects.ts`, saved via `api.saveProjectSettings` and edited from the **Settings → Project tab**

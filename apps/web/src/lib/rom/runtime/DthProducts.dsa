@@ -778,19 +778,33 @@ function enrichUnmatchedAssets(unmatched, contentDirs) {
 }
 
 // dimManifestPath is supplied by the studio (an app-global setting). May be '':
-// the scan then warns and reports every asset as unmatched.
+// the scan then warns and reports every asset as unmatched. Since runtime v104
+// it may carry SEVERAL folders joined with '|' (illegal in Windows paths, so
+// collision-free) — users organize DIM installs across multiple ManifestFiles
+// libraries, and the scan reads them all.
 //
 // bQuiet: the caller's `bulk` — true when the Runner drives this inside a Daz
 // nobody is watching. BOTH refusals below are reachable there (the manifests
-// folder is baked at generation time, so a moved folder or an unmounted network
-// drive lands here on every row), and a modal in an unattended run blocks the
-// whole batch on a click nobody can make. The log is the only safe channel.
+// folders are baked at generation time, so a moved folder or an unmounted
+// network drive lands here on every row), and a modal in an unattended run
+// blocks the whole batch on a click nobody can make. The log is the only safe
+// channel.
 function getInstalledProducts(dimManifestPath, bQuiet) {
   print("=== DAZ Install Manager Product Lister ===");
 
   var products = [];
 
-  if (!dimManifestPath) {
+  // Split the '|'-joined folder list, dropping empty segments.
+  var dimFolders = [];
+  if (dimManifestPath) {
+    var rawFolders = String(dimManifestPath).split("|");
+    for (var f = 0; f < rawFolders.length; f++) {
+      var folder = String(rawFolders[f]).replace(/^\s+|\s+$/g, "");
+      if (folder) dimFolders.push(folder);
+    }
+  }
+
+  if (dimFolders.length === 0) {
     print("ERROR: no DIM manifest folder configured.");
     if (!bQuiet) {
       MessageBox.information(
@@ -805,48 +819,53 @@ function getInstalledProducts(dimManifestPath, bQuiet) {
     return [];
   }
 
-  var dimDir = new DzDir(dimManifestPath);
-  if (!dimDir.exists()) {
-    print("ERROR: DIM manifest directory not found at: " + dimManifestPath);
-    if (!bQuiet) {
-      MessageBox.information(
-        "DIM manifest directory not found:\n" +
-          dimManifestPath +
-          "\n\nFix the path in DTH Character Studio: Settings > General > " +
-          "'DAZ Install Manager manifests folder', then regenerate this " +
-          "character's scripts.",
-        "Directory Not Found",
-        "&OK"
-      );
-    }
-    return [];
-  }
-
-  print("Reading manifest files from: " + dimManifestPath);
-
-  var allEntries = dimDir.entryList();
-  var files = [];
-  for (var e = 0; e < allEntries.length; e++) {
-    var entry = String(allEntries[e]);
-    if (entry.toLowerCase().indexOf(".dsx") !== -1) {
-      files.push(entry);
-    }
-  }
-  print("Found " + files.length + " .dsx manifest files");
-
   var manifestCount = 0;
 
-  for (var i = 0; i < files.length; i++) {
-    var fileName = String(files[i]);
-    var manifestPath = dimManifestPath + "/" + fileName;
-    var product = parseManifestFile(manifestPath);
+  for (var d = 0; d < dimFolders.length; d++) {
+    var dimFolder = dimFolders[d];
+    var dimDir = new DzDir(dimFolder);
+    if (!dimDir.exists()) {
+      // A missing folder skips ITS manifests only — the other folders still
+      // scan, so one unmounted network drive doesn't blank the whole result.
+      print("ERROR: DIM manifest directory not found at: " + dimFolder);
+      if (!bQuiet) {
+        MessageBox.information(
+          "DIM manifest directory not found:\n" +
+            dimFolder +
+            "\n\nFix the path in DTH Character Studio: Settings > General > " +
+            "'DAZ Install Manager manifests folder', then regenerate this " +
+            "character's scripts.\n\nThe other configured folders still scan.",
+          "Directory Not Found",
+          "&OK"
+        );
+      }
+      continue;
+    }
 
-    if (product) {
-      products.push(product);
-      manifestCount++;
+    print("Reading manifest files from: " + dimFolder);
 
-      if (manifestCount % 100 === 0) {
-        verbose("Processed " + manifestCount + " manifests...");
+    var allEntries = dimDir.entryList();
+    var files = [];
+    for (var e = 0; e < allEntries.length; e++) {
+      var entry = String(allEntries[e]);
+      if (entry.toLowerCase().indexOf(".dsx") !== -1) {
+        files.push(entry);
+      }
+    }
+    print("Found " + files.length + " .dsx manifest files");
+
+    for (var i = 0; i < files.length; i++) {
+      var fileName = String(files[i]);
+      var manifestPath = dimFolder + "/" + fileName;
+      var product = parseManifestFile(manifestPath);
+
+      if (product) {
+        products.push(product);
+        manifestCount++;
+
+        if (manifestCount % 100 === 0) {
+          verbose("Processed " + manifestCount + " manifests...");
+        }
       }
     }
   }
@@ -2442,7 +2461,8 @@ function writeUnmatchedDiagnostic(diagPath, matchResults, usedAssets) {
 
 // Called by the generated Scan_Products_<Name>.dsa. config carries:
 //   characterId, characterName, genesis (identity, embedded by the studio)
-//   dimManifestPath   — DAZ Install Manager ManifestFiles folder (may be '')
+//   dimManifestPath   — DAZ Install Manager ManifestFiles folder(s), '|'-joined
+//                       since runtime v104 (may be '')
 //   outputDir         — folder the per-scene CSV is written into
 //   dazLibraryFolder  — DAZ content library root (may be ''). Seeds the content-
 //                       directory list; Daz's own mapped directories are added.
