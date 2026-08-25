@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useInsertionEffect, useRef, useState } from 'react'
 
 /**
  * Hold an async-started subscription (a native file watch, any event source
@@ -19,8 +19,12 @@ export function useArmedWatch(
   active: boolean,
   start: () => Promise<(() => void) | null>,
 ): boolean {
+  // Latest-ref, written in an insertion effect (never during render — the
+  // insertion phase still precedes every effect of the same commit).
   const startRef = useRef(start)
-  startRef.current = start
+  useInsertionEffect(() => {
+    startRef.current = start
+  })
   const [armed, setArmed] = useState(false)
   useEffect(() => {
     if (!active) return

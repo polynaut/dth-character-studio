@@ -79,6 +79,10 @@ export function SidePanel({
 
   useEffect(() => {
     if (open) {
+      // Two-phase mount IS the animation: mount off-screen this commit, flip
+      // `shown` a paint later (the double rAF below) so the slide-in can run.
+      // A render-derived value cannot produce two sequential paints (#960).
+      // oxlint-disable-next-line react/set-state-in-effect
       setMounted(true)
       // Double rAF: a single one fires BEFORE the freshly mounted (off-screen)
       // state has painted, so React coalesces mount + shown into ONE paint and

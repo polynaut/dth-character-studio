@@ -1,4 +1,5 @@
 import { useDeferredValue, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useDraftValue } from '@dth/ui'
 
 import type { ReactNode } from 'react'
 
@@ -65,7 +66,7 @@ export function BoneNameCell({
   inputClassName?: string
   disabled?: boolean
 }) {
-  const [draft, setDraft] = useState(value)
+  const [draft, setDraft] = useDraftValue(value)
   const [open, setOpen] = useState(false)
   // The active suggestion; -1 = none (typing stays free-form, Enter commits).
   const [active, setActive] = useState(-1)
@@ -73,7 +74,6 @@ export function BoneNameCell({
   const baseId = useId()
   const listboxId = `${baseId}-listbox`
   const optionId = (i: number) => `${baseId}-option-${i}`
-  useEffect(() => setDraft(value), [value])
   // Deferred so fast typing stays responsive; suggestions + highlights read the
   // same deferred value, so they always agree.
   const q = useDeferredValue(draft.trim().toLowerCase())

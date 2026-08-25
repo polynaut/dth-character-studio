@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react'
+import { useCallback, useInsertionEffect, useRef } from 'react'
 
 /**
  * Serialize a shared async refresh: however many triggers fire — a watch
@@ -18,8 +18,11 @@ import { useCallback, useRef } from 'react'
  * caller's next trigger) and propagates to the caller of THIS call alone.
  */
 export function useCoalescedRefresh(refresh: () => Promise<void>): () => Promise<void> {
+  // Latest-ref, written in an insertion effect (never during render).
   const refreshRef = useRef(refresh)
-  refreshRef.current = refresh
+  useInsertionEffect(() => {
+    refreshRef.current = refresh
+  })
   const busyRef = useRef(false)
   const againRef = useRef(false)
   return useCallback(async () => {

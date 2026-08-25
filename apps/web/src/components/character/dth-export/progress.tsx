@@ -126,6 +126,9 @@ export function ElapsedSince({ since }: { since?: number }) {
   if (since === undefined) return null
   return (
     <span className="inline-block min-w-[5ch] text-left tabular-nums">
+      {/* A live clock renders wall time by definition; the 1s interval above
+          owns the re-render cadence, so the value is stable per paint (#960). */}
+      {/* oxlint-disable-next-line react/purity */}
       {formatClock(Date.now() - since)}
     </span>
   )

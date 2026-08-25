@@ -913,14 +913,16 @@ function GenerateProjectDialog({
   const linkedTaken =
     target !== '' &&
     character.houdiniProjects.some((p) => normalizePath(p).toLowerCase() === target.toLowerCase())
-  const [diskTaken, setDiskTaken] = useState(false)
+  // The probe result is KEYED by the target it answered for; validity is
+  // derived during render (no reset-effect), so typing a new name never shows
+  // the previous target's verdict while its own probe debounces.
+  const [diskProbe, setDiskProbe] = useState({ target: '', taken: false })
   useEffect(() => {
-    setDiskTaken(false)
     if (target === '' || linkedTaken) return
     let active = true
     const timer = setTimeout(() => {
       void fileExists({ data: { path: target } }).then((exists) => {
-        if (active) setDiskTaken(exists)
+        if (active) setDiskProbe({ target, taken: exists })
       })
     }, 250)
     return () => {
@@ -928,6 +930,7 @@ function GenerateProjectDialog({
       clearTimeout(timer)
     }
   }, [target, linkedTaken])
+  const diskTaken = diskProbe.target === target && diskProbe.taken
   const taken = linkedTaken || diskTaken
 
   async function onGenerate() {
@@ -938,7 +941,7 @@ function GenerateProjectDialog({
       // VALIDATION under the input — never as an error toast. Every other
       // failure (missing hython, no docs folder, …) stays a toast.
       if (linkedTaken || (target !== '' && (await fileExists({ data: { path: target } })))) {
-        setDiskTaken(true)
+        setDiskProbe({ target, taken: true })
         return
       }
       const result = await generateHoudiniProject({

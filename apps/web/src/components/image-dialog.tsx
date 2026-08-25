@@ -156,6 +156,9 @@ export function ImageDialog({
     return () => {
       active = false
     }
+    // `url` is the reload TRIGGER — a landed upload changes it, and the
+    // gallery must re-list to include it (#960).
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies
   }, [characterId, url])
 
   // Free a staged crop's object URL when it's replaced or the dialog unmounts.

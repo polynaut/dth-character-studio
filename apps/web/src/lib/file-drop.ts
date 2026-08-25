@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useInsertionEffect, useRef, useState } from 'react'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
 
 /**
@@ -130,7 +130,9 @@ export function useFileDrop(opts: {
   const id = useId()
   const [isOver, setIsOver] = useState(false)
   const onDropRef = useRef(opts.onDrop)
-  onDropRef.current = opts.onDrop
+  useInsertionEffect(() => {
+    onDropRef.current = opts.onDrop
+  })
   const acceptKey = (opts.accept ?? []).join(',').toLowerCase()
   const acceptFolders = opts.acceptFolders ?? false
 

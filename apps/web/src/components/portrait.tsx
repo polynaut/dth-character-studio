@@ -52,6 +52,9 @@ export function usePortraitSrc({
     return () => {
       active = false
     }
+    // `tick` is the focus-refresh TRIGGER — a bumped counter whose only job is
+    // to re-run the resolve; nothing in the body reads it (#960).
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies
   }, [image, scenePath, tick])
   return src
 }

@@ -268,6 +268,10 @@ function useRetiringTasks(tasks: Array<ExportTask>): {
       forgotten.add(id)
     }
     if (forgotten.size > 0) {
+      // Synchronizing React state with the external timer registry is this
+      // effect's whole purpose; the sweep must land in the same commit that
+      // cleared the timers, or a re-run scene starts life retired (#960).
+      // oxlint-disable-next-line react/set-state-in-effect
       setRetired((prev) => without(prev, forgotten))
       setLeaving((prev) => without(prev, forgotten))
     }
@@ -335,6 +339,9 @@ export function ExportTaskList({ tasks }: { tasks: Array<ExportTask> }) {
     // courtesy): a 2.5s poll must not yank a user reading the queue.
     if (rect.top >= boxRect.top && rect.bottom <= boxRect.bottom + 1) return
     box.scrollTop += rect.bottom - boxRect.bottom
+    // `shownKey` is the re-pin TRIGGER — the body reads only the DOM, and must
+    // re-run exactly when the visible row set changes (#960).
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies
   }, [shownKey])
   return (
     <ol

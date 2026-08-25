@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useDraftValue } from '@dth/ui'
 
 // No width here — Tailwind resolves conflicting width utilities by stylesheet
 // order, so a base w-full would silently override per-cell widths like w-20.
@@ -37,8 +37,7 @@ export function TextCell({
    *  rewritten — an invalid entry stays as typed and is flagged instead. */
   validate?: (value: string) => string
 }) {
-  const [draft, setDraft] = useState(value)
-  useEffect(() => setDraft(value), [value])
+  const [draft, setDraft] = useDraftValue(value)
   const error = validate?.(draft) ?? ''
   return (
     <input
@@ -80,8 +79,7 @@ function PercentSuffix() {
 }
 
 export function NumberCell({ value, onCommit }: { value: number; onCommit: (value: number) => void }) {
-  const [draft, setDraft] = useState(() => valueToPct(value))
-  useEffect(() => setDraft(valueToPct(value)), [value])
+  const [draft, setDraft] = useDraftValue(valueToPct(value))
   return (
     <div className="relative inline-block w-20">
       <input

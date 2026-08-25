@@ -1,4 +1,5 @@
 import { useContext, useDeferredValue, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useDraftValue } from '@dth/ui'
 
 import type { ReactNode } from 'react'
 
@@ -62,7 +63,7 @@ export function MorphNameCell({
   disabled?: boolean
 }) {
   const index = useContext(MorphIndexContext)
-  const [draft, setDraft] = useState(value)
+  const [draft, setDraft] = useDraftValue(value)
   const [open, setOpen] = useState(false)
   // The active suggestion; -1 = none (typing stays free-form, Enter commits).
   const [active, setActive] = useState(-1)
@@ -70,7 +71,6 @@ export function MorphNameCell({
   const baseId = useId()
   const listboxId = `${baseId}-listbox`
   const optionId = (i: number) => `${baseId}-option-${i}`
-  useEffect(() => setDraft(value), [value])
   // The query is deferred so fast typing keeps the input responsive: React may
   // render the keystroke first and catch the (memoized) filter up right after.
   // The suggestions + highlights are computed from the SAME deferred value, so

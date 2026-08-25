@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback } from 'react'
+
+import { useDraftValue } from '../hooks/use-draft-value.ts'
 
 import { Input } from '../primitives/input.tsx'
 
@@ -33,11 +35,11 @@ export function NumberField({
     (v: number) => (percent ? String(+(v * 100).toFixed(4)) : String(v)),
     [percent],
   )
-  const [draft, setDraft] = useState(() => format(value))
-  // Re-sync when `value` changes underneath us — e.g. removing a non-last row of
-  // a KeyedListEditor (index keys) reuses this instance with a new `value` prop;
-  // without this the field would keep showing (and could commit) the old number.
-  useEffect(() => setDraft(format(value)), [value, format])
+  // useDraftValue re-syncs when `value` changes underneath us — e.g. removing a
+  // non-last row of a KeyedListEditor (index keys) reuses this instance with a
+  // new `value` prop; without it the field would keep showing (and could commit)
+  // the old number.
+  const [draft, setDraft] = useDraftValue(format(value))
   const input = (
     <Input
       className={className}

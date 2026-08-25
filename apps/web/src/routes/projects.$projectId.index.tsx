@@ -158,7 +158,10 @@ function ProjectCharactersPage() {
   const [problemDeleteError, setProblemDeleteError] = useState('')
   // Whether any character about to be deleted has a Houdini subfolder on disk —
   // gates the bulk-delete dialog's "keep Houdini files" toggle.
-  const [keepHoudiniAvailable, setKeepHoudiniAvailable] = useState(false)
+  // Keep-Houdini probe result, KEYED by the selection it answered for —
+  // validity is derived where it's read, so no reset-effect is needed when the
+  // confirm closes or the selection changes.
+  const [keepHoudiniProbe, setKeepHoudiniProbe] = useState({ forIds: '', available: false })
 
   /** Filename without extension, e.g. "X:\…\Kira.duf" → "Kira". */
   function sceneBaseName(p: string): string {
@@ -418,21 +421,23 @@ function ProjectCharactersPage() {
   // subfolder on disk, so the dialog can offer to keep it (like the Daz folder).
   const selectedIds = selectedChars.map((c) => c.id).join(',')
   useEffect(() => {
-    if (!confirmOpen) {
-      setKeepHoudiniAvailable(false)
-      return
-    }
+    if (!confirmOpen) return
     const ids = selectedIds ? selectedIds.split(',') : []
     let cancelled = false
     void Promise.all(
       ids.map((id) =>
         characterKeepFolders({ data: { projectId, id } }).catch(() => ({ daz: false, houdini: false })),
       ),
-    ).then((flags) => !cancelled && setKeepHoudiniAvailable(flags.some((f) => f.houdini)))
+    ).then(
+      (flags) =>
+        !cancelled && setKeepHoudiniProbe({ forIds: selectedIds, available: flags.some((f) => f.houdini) }),
+    )
     return () => {
       cancelled = true
     }
   }, [confirmOpen, projectId, selectedIds])
+  const keepHoudiniAvailable =
+    confirmOpen && keepHoudiniProbe.forIds === selectedIds && keepHoudiniProbe.available
 
   // Where the project's character folders live — a scan problem sitting DIRECTLY
   // at this root has no folder of its own, so the per-problem delete (which

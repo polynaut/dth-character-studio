@@ -12,25 +12,27 @@ import { cn } from '@dth/ui'
  * Returns '' until it resolves (the caller shows the full image meanwhile).
  */
 function useVariantSrc(image: string, scenePath: string | undefined, renderPx?: number): string {
-  const [src, setSrc] = useState('')
+  // The result is KEYED by the inputs that produced it and validity is derived
+  // during render — no reset-effect: a resolve for the previous image (or for
+  // inputs that no longer apply) simply stops matching and reads as ''.
+  const wanted = renderPx && !scenePath && image ? `${image}@${renderPx}` : ''
+  const [resolved, setResolved] = useState({ key: '', src: '' })
   useEffect(() => {
-    if (!renderPx || scenePath || !image) {
-      setSrc('')
-      return
-    }
+    if (!renderPx || scenePath || !image) return
+    const key = `${image}@${renderPx}`
     let active = true
     const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
     // Same scheme allowlist as usePortraitSrc: an external branch here returns
     // the STORED reference unchanged, and `isExternalImage` admits any `data:`
     // URL — only image-loadable schemes may reach an `<img src>`.
     resolveImageSrcAtSize(image, Math.round(renderPx * dpr))
-      .then((r) => active && setSrc(safeImgSrc(r)))
-      .catch(() => active && setSrc(''))
+      .then((r) => active && setResolved({ key, src: safeImgSrc(r) }))
+      .catch(() => active && setResolved({ key, src: '' }))
     return () => {
       active = false
     }
   }, [image, scenePath, renderPx])
-  return src
+  return wanted && resolved.key === wanted ? resolved.src : ''
 }
 
 /** Resolve a stored avatar reference to a loadable URL (see lib/rom/api). */
