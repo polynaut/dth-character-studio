@@ -120,6 +120,9 @@ function ApplyDTHWorkflow(options){
 	// from a pure ROM pose, base ~0) and restoreZeroedDials below (v101),
 	// which needs the snapshot even on a JCM-less build.
 	var baseMorphValues = memorizeBaseMorphs([oNodeRoot]);
+	// The RAW twin of that snapshot, for restoreZeroedDials below: getRawValue
+	// keeps ERC contributions out, so the restore can never double-apply one.
+	var baseRawDials = memorizeRawDials([oNodeRoot]);
 
 	/**       *****************************************************/
 	if(options.bIncludeJCM)

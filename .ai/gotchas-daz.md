@@ -82,9 +82,12 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   survives an explicit key inside the loaded preset — the retirement premise
   of the v35/v83 preserve-morphs removal was a G8-only truth), and a hand-fix
   at ROM frame 0 dies at the frame-2 zero key. The fix is runtime v101's
-  `restoreZeroedDials` (automatic, shape-of-the-accident: baseline non-zero +
-  keyed all-zero + not ERC-driven → flatten keys back to the baseline). The
+  `restoreZeroedDials` (automatic, shape-of-the-accident: RAW baseline
+  non-zero + keyed all-zero → flatten keys back to the raw baseline — raw
+  restores raw, so an ERC share cannot double-apply and a purely driven half,
+  raw 0, is never a candidate). The
   zero list is upstream-reportable — privately to mrpdean, never in repo docs.
+- **The DAZ Install Manager already knows every Daz path, and stores them at a
   FIXED location — never search the disk for DIM.** Measured on DIM 1.4.1.96
   (2026-08-07), three plain INI files under `%APPDATA%/DAZ 3D`
   (`configDir()` in Tauri; `BaseDirectory.Config = 3`), independent of where DIM

@@ -17,6 +17,12 @@ import { describe, expect, it } from 'vitest'
  * G8 and failed on G9: no hold survives an explicit key inside a loaded
  * preset.
  *
+ * The baseline is a RAW snapshot (memorizeRawDials): getRawValue keeps any
+ * ERC contribution out of the stored number, so restoring writes back only
+ * what the user dialed — a driven channel's controller share rides on top
+ * again by itself. Only a Daz build WITHOUT getRawValue falls back to the
+ * evaluated value + skip-driven behaviour.
+ *
  * The shipped `DthUtils.dsa` runs for real in a sandbox (the same harness as
  * dialed-walked-gate.test.ts) over fake Daz nodes/properties. Properties
  * pinned here:
@@ -26,32 +32,48 @@ import { describe, expect, it } from 'vitest'
  *      ROM information can be lost;
  *   3. a channel whose baseline is 0, or that the preset never keyed, is
  *      untouched;
- *   4. an ERC-driven channel is skipped — its master restores it, and a raw
- *      restore would double-apply;
- *   5. end to end with memorizeBaseMorphs: snapshot → preset stomp → restore.
+ *   4. with a raw snapshot, a dialed channel is restored even when it HAS
+ *      controllers (raw restores raw — no double-apply is possible), and a
+ *      purely driven half (raw 0) is never a candidate;
+ *   5. the no-getRawValue fallback skips driven channels, loudly;
+ *   6. end to end with memorizeRawDials: snapshot → preset stomp → restore.
  */
 
 const TICKS = 160
 
-interface UtilsModule {
-  memorizeBaseMorphs: (nodes: Array<unknown>) => Record<string, number>
-  restoreZeroedDials: (nodes: Array<unknown>, baseline: Record<string, number>) => number
+interface RawSnapshot {
+  raw: boolean
+  values: Record<string, number>
 }
 
-/** A DzFloatProperty as far as the pass is concerned: a dial value, ERC
- *  controller count, and a real key list `setValue(t, v)` writes through. */
+interface UtilsModule {
+  memorizeRawDials: (nodes: Array<unknown>) => RawSnapshot
+  restoreZeroedDials: (nodes: Array<unknown>, baseline: RawSnapshot) => number
+}
+
+/** A DzFloatProperty as far as the pass is concerned: a raw dial value, an
+ *  ERC controller count, and a real key list `setValue(t, v)` writes through.
+ *  `hasRawValue: false` models an old Daz build without getRawValue. */
 class FakeProp {
   name: string
   dial: number
   controllers: number
   /** [time, value] pairs, kept sorted by time. */
   keys: Array<[number, number]>
+  getRawValue?: () => number
 
-  constructor(name: string, dial: number, keys: Array<[number, number]> = [], controllers = 0) {
+  constructor(
+    name: string,
+    dial: number,
+    keys: Array<[number, number]> = [],
+    controllers = 0,
+    hasRawValue = true,
+  ) {
     this.name = name
     this.dial = dial
     this.keys = [...keys].sort((a, b) => a[0] - b[0])
     this.controllers = controllers
+    if (hasRawValue) this.getRawValue = () => this.dial
   }
 
   getName() {
@@ -89,7 +111,7 @@ class FakeProp {
 }
 
 /** A node whose object enumerates DzMorph modifiers — the iteration path
- *  memorizeBaseMorphs and restoreZeroedDials share. */
+ *  memorizeRawDials and restoreZeroedDials share. */
 function morphNode(name: string, props: Array<FakeProp>) {
   const mods = props.map((p) => ({
     getName: () => p.name,
@@ -111,7 +133,7 @@ function loadUtils(): { utils: UtilsModule; printed: () => string } {
   const src = readFileSync(join(dir, 'DthUtils.dsa'), 'utf8')
   const lines: Array<string> = []
   const utils = runInNewContext(
-    `${src}\n;({ memorizeBaseMorphs: memorizeBaseMorphs, restoreZeroedDials: restoreZeroedDials })`,
+    `${src}\n;({ memorizeRawDials: memorizeRawDials, restoreZeroedDials: restoreZeroedDials })`,
     {
       print: (...args: Array<unknown>) => lines.push(args.map(String).join(' ')),
       Math,
@@ -128,6 +150,10 @@ function loadUtils(): { utils: UtilsModule; printed: () => string } {
   return { utils, printed: () => lines.join('\n') }
 }
 
+function raw(values: Record<string, number>, rawFlag = true): RawSnapshot {
+  return { raw: rawFlag, values }
+}
+
 /** The measured stomp: CONSTANT zero keys at frames 0/2/3/105 (in ticks). */
 const stompKeys = (): Array<[number, number]> => [
   [0, 0],
@@ -142,7 +168,7 @@ describe('restoreZeroedDials', () => {
     const breasts = new FakeProp('body_ctrl_BreastsUp-Down', 0, stompKeys())
     const root = morphNode('Genesis9', [breasts])
 
-    const restored = utils.restoreZeroedDials([root], { 'body_ctrl_BreastsUp-Down': 1 })
+    const restored = utils.restoreZeroedDials([root], raw({ 'body_ctrl_BreastsUp-Down': 1 }))
 
     expect(restored).toBe(1)
     expect(breasts.keys.map(([, v]) => v)).toEqual([1, 1, 1, 1])
@@ -160,55 +186,87 @@ describe('restoreZeroedDials', () => {
     ])
     const root = morphNode('Genesis9', [walked])
 
-    const restored = utils.restoreZeroedDials([root], { FBMHeavy: 0.5 })
+    const restored = utils.restoreZeroedDials([root], raw({ FBMHeavy: 0.5 }))
 
     expect(restored).toBe(0)
     expect(walked.keys.map(([, v]) => v)).toEqual([0, 1, 0])
   })
 
   it('skips a zero baseline, an unkeyed channel, and baseline noise below the tolerance', () => {
-    const { utils } = loadUtils()
+    const { utils, printed } = loadUtils()
     const zeroBase = new FakeProp('body_ctrl_BreastsSide-Side', 0, stompKeys())
     const untouched = new FakeProp('FBMPearFigure', 0.4)
     const noise = new FakeProp('body_ctrl_BreastsIn-Out', 0, stompKeys())
     const root = morphNode('Genesis9', [zeroBase, untouched, noise])
 
-    const restored = utils.restoreZeroedDials([root], {
-      'body_ctrl_BreastsSide-Side': 0,
-      FBMPearFigure: 0.4,
-      'body_ctrl_BreastsIn-Out': 0.00005,
-    })
+    const restored = utils.restoreZeroedDials(
+      [root],
+      raw({
+        'body_ctrl_BreastsSide-Side': 0,
+        FBMPearFigure: 0.4,
+        'body_ctrl_BreastsIn-Out': 0.00005,
+      }),
+    )
 
     expect(restored).toBe(0)
     expect(zeroBase.keys.map(([, v]) => v)).toEqual([0, 0, 0, 0])
     expect(untouched.keys).toEqual([])
     expect(noise.keys.map(([, v]) => v)).toEqual([0, 0, 0, 0])
+    // The summary counts make a 0 diagnosable from the log alone.
+    expect(printed()).toContain('1 dialed of 3 morph channel(s)')
   })
 
-  it('skips an ERC-driven channel — the master restores it', () => {
+  it('with a raw snapshot, controllers do not block a dialed channel — and a driven half (raw 0) is no candidate', () => {
     const { utils } = loadUtils()
-    const master = new FakeProp('body_ctrl_BreastsUp-Down', 0, stompKeys())
+    // The reported live case: products wire ERC into the stock master, so it
+    // HAS controllers — but the user's 100% is raw, and raw restores raw.
+    const master = new FakeProp('body_ctrl_BreastsUp-Down', 0, stompKeys(), 2)
     const drivenHalf = new FakeProp('body_ctrl_lBreastUp-Down', 0, stompKeys(), 1)
     const root = morphNode('Genesis9', [master, drivenHalf])
 
-    const restored = utils.restoreZeroedDials([root], {
-      'body_ctrl_BreastsUp-Down': 1,
-      'body_ctrl_lBreastUp-Down': 1,
-    })
+    const restored = utils.restoreZeroedDials(
+      [root],
+      raw({
+        'body_ctrl_BreastsUp-Down': 1, // raw — dialed by the user
+        'body_ctrl_lBreastUp-Down': 0, // raw — its 100% was all ERC
+      }),
+    )
 
     expect(restored).toBe(1)
     expect(master.keys.map(([, v]) => v)).toEqual([1, 1, 1, 1])
     expect(drivenHalf.keys.map(([, v]) => v)).toEqual([0, 0, 0, 0])
   })
 
-  it('round-trips with memorizeBaseMorphs: snapshot, preset stomp, restore', () => {
+  it('the no-getRawValue fallback skips a driven channel, loudly, and still restores an undriven one', () => {
+    const { utils, printed } = loadUtils()
+    const driven = new FakeProp('body_ctrl_BreastsUp-Down', 0, stompKeys(), 2, false)
+    const undriven = new FakeProp('body_ctrl_BreastsFlatten', 0, stompKeys(), 0, false)
+    const root = morphNode('Genesis9', [driven, undriven])
+
+    const restored = utils.restoreZeroedDials(
+      [root],
+      raw({ 'body_ctrl_BreastsUp-Down': 1, 'body_ctrl_BreastsFlatten': 0.6 }, false),
+    )
+
+    expect(restored).toBe(1)
+    expect(driven.keys.map(([, v]) => v)).toEqual([0, 0, 0, 0])
+    expect(undriven.keys.map(([, v]) => v)).toEqual([0.6, 0.6, 0.6, 0.6])
+    expect(printed()).toContain('no getRawValue - skipped')
+    expect(printed()).toContain('1 skipped as driven')
+  })
+
+  it('round-trips with memorizeRawDials: snapshot, preset stomp, restore', () => {
     const { utils } = loadUtils()
     const breasts = new FakeProp('body_ctrl_BreastsUp-Down', 1)
     const clean = new FakeProp('body_ctrl_BreastsFlatten', 0)
     const root = morphNode('Genesis9', [breasts, clean])
 
-    const baseline = utils.memorizeBaseMorphs([root])
-    expect(baseline).toEqual({ 'body_ctrl_BreastsUp-Down': 1, 'body_ctrl_BreastsFlatten': 0 })
+    const baseline = utils.memorizeRawDials([root])
+    expect(baseline.raw).toBe(true)
+    expect(baseline.values).toEqual({
+      'body_ctrl_BreastsUp-Down': 1,
+      'body_ctrl_BreastsFlatten': 0,
+    })
 
     // The preset load: explicit zero keys land, the evaluated dial reads 0.
     for (const p of [breasts, clean]) {

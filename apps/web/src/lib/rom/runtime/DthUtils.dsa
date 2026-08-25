@@ -1634,9 +1634,20 @@ function closeDanglingMorphKeys(oNodes, iBoundaryFrame, baselineValues){
  * drift. Root-figure scope only: DK/GP/mouth close-outs treat those nodes'
  * morphs as self-contained ROM assets with no character-driven base.
  */
-function restoreZeroedDials(oNodes, baselineValues){
-	if(!baselineValues) return 0;
-	var iRestored = 0;
+/**
+ * Pre-ROM RAW dial snapshot for restoreZeroedDials. RAW (getRawValue) keeps
+ * any ERC contribution OUT of the stored number, so restoring a dial writes
+ * back only what the user dialed — a controller's share rides on top again
+ * by itself and can never double-apply. A purely ERC-driven half (Breasts
+ * Up-Down Left/Right) has raw 0 and so never becomes a candidate; restoring
+ * its master restores it. A Daz build without getRawValue stores the
+ * EVALUATED value and says so (`raw: false`), which tells the restore pass
+ * to fall back to skipping ERC-driven channels — the conservative behaviour.
+ * Taken before any preset loads; these dials carry no keys yet, so the
+ * no-arg read is time-independent.
+ */
+function memorizeRawDials(oNodes){
+	var oSnapshot = { raw: true, values: {} };
 	for(var x = 0; x < oNodes.length; x++){
 		var oNode = oNodes[x];
 		if(!oNode) continue;
@@ -1647,17 +1658,48 @@ function restoreZeroedDials(oNodes, baselineValues){
 			if(!oMod || !oMod.inherits("DzMorph")) continue;
 			var oProp = oMod.getValueControl();
 			if(!oProp) continue;
+			if(typeof oProp.getRawValue == "function"){
+				oSnapshot.values[oMod.getName()] = oProp.getRawValue();
+			} else {
+				oSnapshot.raw = false;
+				oSnapshot.values[oMod.getName()] = oProp.getValue(0);
+			}
+		}
+	}
+	return oSnapshot;
+}
+
+function restoreZeroedDials(oNodes, oBaseline){
+	if(!oBaseline || !oBaseline.values) return 0;
+	var iRestored = 0, iSeen = 0, iDialed = 0, iDialedKeyed = 0, iSkippedDriven = 0;
+	for(var x = 0; x < oNodes.length; x++){
+		var oNode = oNodes[x];
+		if(!oNode) continue;
+		var oObj = oNode.getObject();
+		if(!oObj) continue;
+		for(var i = 0; i < oObj.getNumModifiers(); i++){
+			var oMod = oObj.getModifier(i);
+			if(!oMod || !oMod.inherits("DzMorph")) continue;
+			var oProp = oMod.getValueControl();
+			if(!oProp) continue;
+			iSeen++;
+			var fBase = oBaseline.values[oMod.getName()];
+			if(fBase === undefined || approx_eq(fBase, 0)) continue;
+			iDialed++;
 			var iKeys = oProp.getNumKeys();
 			if(iKeys < 1) continue;
-			var fBase = baselineValues[oMod.getName()];
-			if(fBase === undefined || approx_eq(fBase, 0)) continue;
+			iDialedKeyed++;
 			var bAllZero = true;
 			for(var k = 0; k < iKeys; k++){
 				if(!approx_eq(oProp.getKeyValue(k), 0)){ bAllZero = false; break; }
 			}
 			if(!bAllZero) continue;
-			if(typeof oProp.getNumControllers == "function" && oProp.getNumControllers() > 0){
-				verbose("Zeroed dial", oProp.getLabel(), "is ERC-driven - its master restores it, skipping the raw channel");
+			// Only the no-getRawValue fallback needs the driven skip: an
+			// EVALUATED baseline on a driven channel would double-apply the
+			// controller's share. A raw baseline cannot (raw restores raw).
+			if(!oBaseline.raw && typeof oProp.getNumControllers == "function" && oProp.getNumControllers() > 0){
+				print("Zeroed dial", oProp.getLabel(), "is ERC-driven and this Daz build has no getRawValue - skipped (its controlling dial restores it).");
+				iSkippedDriven++;
 				continue;
 			}
 			for(var k = 0; k < iKeys; k++){
@@ -1667,7 +1709,13 @@ function restoreZeroedDials(oNodes, baselineValues){
 			iRestored++;
 		}
 	}
-	print("Restored", iRestored, "dial(s) a ROM preset had zeroed flat");
+	// The counts make a 0 diagnosable from the log alone: dialed=0 means the
+	// snapshot never saw the dial (enumeration gap), dialed>0 with keyed=0
+	// means no preset touched it, keyed>0 with restored=0 means every
+	// candidate had a non-zero key (walked) or was skipped as driven above.
+	print("Restored", iRestored, "dial(s) a ROM preset had zeroed flat (",
+		iDialed, "dialed of", iSeen, "morph channel(s),", iDialedKeyed, "of them keyed,",
+		iSkippedDriven, "skipped as driven; raw snapshot:", oBaseline.raw, ")");
 	return iRestored;
 }
 

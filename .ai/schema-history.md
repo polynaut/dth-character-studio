@@ -1319,13 +1319,21 @@ v101 — restoreZeroedDials: dials a ROM preset zeroed FLAT are restored to
       channels) and false on G9. A hand-fix in the saved ROM dies at frame 2.
       The pass runs after ALL preset blocks (a later block cannot re-zero) and
       before the custom frames (a restored dial that a custom section walks is
-      caught loudly by the dialed-walked gate). Restore condition: pre-ROM
-      baseline non-zero (memorizeBaseMorphs, hoisted out of the JCM branch so
-      a JCM-less build has it too) AND the channel now has keys AND every key
-      ~0 (zeroed flat — a walked channel has a non-zero key somewhere and is
-      never touched) AND not ERC-driven (a driven half double-applies once its
-      master is restored; the master restores the halves). Restore = flatten
-      every key to the baseline via setValue(t, v) — a flat channel varies
-      from the base mesh on no frame, so the DTH Exporter's FBX pass keeps the
-      morph and fbx/abc stay aligned. Root-figure scope only. Automatic
-      replacement for the retired manual preserve list — no schema change.
+      caught loudly by the dialed-walked gate). Restore condition: pre-ROM RAW
+      baseline non-zero (memorizeRawDials — getRawValue keeps any ERC
+      contribution out of the stored number, so a restore can never
+      double-apply a controller's share and a purely driven half, raw 0, is
+      never a candidate; a build without getRawValue stores the evaluated
+      value, marks the snapshot `raw: false`, and the pass then skips
+      ERC-driven channels loudly — the conservative fallback) AND the channel
+      now has keys AND every key ~0 (zeroed flat — a walked channel has a
+      non-zero key somewhere and is never touched). Restore = flatten every
+      key to the baseline via setValue(t, v) — a flat channel varies from the
+      base mesh on no frame, so the DTH Exporter's FBX pass keeps the morph
+      and fbx/abc stay aligned. Root-figure scope only (memorizeBaseMorphs is
+      hoisted out of the JCM branch alongside, so a JCM-less build has its
+      close-out baseline too). The summary line prints seen/dialed/keyed/
+      skipped counts so a "Restored 0" is diagnosable from the log alone —
+      the first live run (Ita, 2026-08-25) restored 0 with no way to say why.
+      Automatic replacement for the retired manual preserve list — no schema
+      change.
