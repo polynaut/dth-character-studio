@@ -458,6 +458,11 @@ test('ONE task row per re-import — and a set the project never held is dropped
   await expect(page.locator('[data-export-status]')).toContainText(/DemoGame is importing/, {
     timeout: 15_000,
   })
+  // The header button agrees with the panel: the run's last leg is live, so
+  // it reads Working — it used to fall back to the idle "DTH Export" the
+  // moment the export legs were done, under a panel still showing the import
+  // (reported 2026-08-25). Inert on purpose: the editor owns the import.
+  await expect(page.getByRole('button', { name: /Working/ })).toBeVisible()
 
   // …and when the editor finally answers, the outcome ENDS the run: a sticky
   // toast of its own, and the panel goes with the work it was showing — it
@@ -1092,6 +1097,11 @@ test('the run is over when the EDITOR answers, not when the job file lands', asy
   })
   await expect(page.locator('[data-task^="ue:"]')).toBeVisible()
   await expect(page.getByText(/DTH Export finished/)).toHaveCount(0)
+  // The header button carries the wait too: the run's last leg is live, so it
+  // reads Working — it used to fall back to the idle "DTH Export" the moment
+  // Houdini reported, under a panel still showing the import (reported
+  // 2026-08-25).
+  await expect(page.getByRole('button', { name: /Working/ })).toBeVisible()
 
   // …and when it lands, ONE report covers the whole run: the Houdini leg and
   // the import, in the body of the same toast.
@@ -1120,6 +1130,8 @@ test('the run is over when the EDITOR answers, not when the job file lands', asy
   // The panel goes with the run — no ghost left to republish into.
   await expect(page.locator('[data-task^="ue:"]')).toHaveCount(0)
   await expect(page.locator('[data-progressbar]')).toHaveCount(0)
+  // …and only NOW does the header button return to idle.
+  await expect(page.getByRole('button', { name: 'DTH Export' })).toBeVisible()
 })
 
 test('a job that DISAPPEARS still releases the run’s report', async ({ page }) => {
