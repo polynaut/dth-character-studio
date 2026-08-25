@@ -132,10 +132,11 @@ run it yourself, handy for a single scene or when you want to watch every step.
   <sub><em>The character's ROM script in Daz's Content Library.</em></sub>
 </p>
 
-The script builds the ROM and runs the export exactly as the batch would, and
-reports what it did when it finishes — anything that couldn't be applied is named
-in a dialog at the end, and the studio lists the exact failures when you switch
-back.
+The script builds the ROM on the timeline — the build alone: the export is its
+own script (below), and the reopenable `rom-animations` scene is written by the
+DTH Export batch only, so a manual run never overwrites it. Anything that
+couldn't be applied is named in a dialog at the end, and the studio lists the
+exact failures when you switch back.
 
 > [!NOTE]
 > The scripts check the **open scene** first. Running a character's ROM, export
