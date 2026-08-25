@@ -163,6 +163,25 @@ export interface ExporterJobFile {
    *  `[<percent>] <message>` lines; the generated export script appends the
    *  interior steps to the same file. Older Runners ignore the field. */
   progressLogPath?: string
+  /**
+   * Contract v4 (Runner v1.4.0): every row gets a FRESH Daz Studio session.
+   * A Runner that understands the field runs ONE pending row per session —
+   * after marking the row it renames the claimed file BACK to the pending
+   * name (statuses kept) when unworked rows remain, then quits Daz; the
+   * studio's export supervisor launches the next session for the pending
+   * file. A worn session (a batch row already ran in it, or a scene is
+   * loaded) refuses the batch without claiming it and quits, so the wait-
+   * for-close flow starts a fresh Daz even for row one.
+   *
+   * Why: Daz's re-evaluation of fitted followers silently degrades after a
+   * scene re-load in the same session (measured 2026-08-24/25, DS4 4.24 —
+   * eyes frozen on 110 of 484 frames while the figure moved on 464; 5/5
+   * reproductions). The exporter cannot fix it from inside; a fresh process
+   * per row is the prevention. Older Runners ignore the field and run the
+   * whole batch in one session — the motion-summary gate then catches what
+   * this field exists to prevent.
+   */
+  sessionPerRow?: boolean
   jobs: Array<ExporterJobEntry>
 }
 
@@ -197,12 +216,16 @@ export function jobFileJson(
   type: ExporterJobType = 'bulk-export',
   /** Arms the Runner's verbose progress log (v1.2.0) — see {@link ExporterJobFile}. */
   progressLogPath?: string,
+  /** Asks for a fresh Daz session per row (contract v4) — see
+   *  {@link ExporterJobFile}. */
+  sessionPerRow?: boolean,
 ): string {
   const file: ExporterJobFile = {
     version: 1,
     type,
     progress: 0,
     ...(progressLogPath ? { progressLogPath } : {}),
+    ...(sessionPerRow ? { sessionPerRow: true } : {}),
     jobs: jobs.map((job) => ({ ...job, status: 'pending' as const })),
   }
   return `${JSON.stringify(file, null, 2)}\n`
@@ -749,6 +772,189 @@ export function jobFileMayBeLive(kind: JobFileKind, parsed: ExporterJobFile | nu
   return !isReclaimableBatch(parsed)
 }
 
+// --- Fresh-session-per-row supervision (contract v4) -------------------------
+
+/**
+ * Hard per-row timeout while a claimed sessionPerRow batch shows no job-file
+ * activity and Daz is up. A healthy FULL row (ROM build + export) measures
+ * 8–15 minutes; the failure this exists for is an export teardown that hung
+ * INDEFINITELY with the UI alive (measured once, 2026-08-25). 45 minutes is
+ * three times the worst healthy row — slow is never failed, hung always is.
+ */
+export const SESSION_ROW_TIMEOUT_MS = 45 * 60_000
+
+/**
+ * How long a mid-batch PENDING file may sit while a Daz process is still up —
+ * the window in which the just-finished session is quitting. A NORMAL DS4
+ * exit after an export session measured ~180 s (live, 2026-08-25), so the
+ * bar is twice that; past it the session is stuck on its way out (session 1
+ * of the same live run sat 8+ minutes) and the supervisor kills it so the
+ * next row's fresh session can start.
+ */
+export const SESSION_EXIT_TIMEOUT_MS = 6 * 60_000
+
+/** Grace before the supervisor launches for an UNTOUCHED pending file with no
+ *  Daz up — room for the handoff's own launch (and the wait-for-close modal's)
+ *  to act first; the supervisor is the safety net, not the first mover. */
+export const SESSION_PICKUP_GRACE_MS = 20_000
+
+/** Grace before a claimed file with Daz gone is requeued — a Runner renaming
+ *  the file back while quitting can straddle the two reads for a beat. */
+export const SESSION_REQUEUE_GRACE_MS = 15_000
+
+/** Rows a fresh session would still work: pending, or `running` (a crashed
+ *  session's in-flight row is re-marked by {@link requeueCrashedBatch} before
+ *  the file is handed back). */
+export function batchWorkRemains(parsed: ExporterJobFile): boolean {
+  return parsed.jobs.some((job) => job.status === 'pending' || job.status === 'running')
+}
+
+/** At least one row has been worked (done or failed) — what distinguishes the
+ *  between-sessions pending file from a fresh, still-abortable handoff. */
+export function batchPartiallyWorked(parsed: ExporterJobFile): boolean {
+  return parsed.jobs.some((job) => job.status === 'done' || job.status === 'failed')
+}
+
+/**
+ * What the export supervisor should do THIS tick — the whole fresh-session
+ * orchestration rule in one pure function, so every branch is pinned by tests.
+ *
+ * Supervised state is ONLY a `bulk-export` batch whose file carries
+ * `sessionPerRow` (contract v4): an old Runner's rewrite drops the field, and
+ * that is the correct auto-disarm — that Runner is running the whole batch in
+ * one session and needs no supervision. Everything else routes to the flows
+ * that already own it: an untouched pending handoff belongs to the handoff's
+ * own launch + the wait-for-close modal (the supervisor only backstops it once
+ * no Daz is up), a claimed-but-untouched file to the reclaim, a finished file
+ * to the export watch's sweep.
+ */
+export type FreshSessionAction =
+  /** Nothing to do this tick (also: nothing supervisable on disk). */
+  | { act: 'none' }
+  /** Start a fresh Daz for the pending file's remaining rows. */
+  | { act: 'launch' }
+  /** Terminate the Daz process — a row (or a quit) exceeded its timeout. The
+   *  next tick sees the process gone and requeues. */
+  | { act: 'kill'; reason: string }
+  /** The claimed file's session is gone below 100: mark the in-flight row
+   *  failed ({@link requeueCrashedBatch}) and hand the file back as pending
+   *  (or finish it at 100 when nothing is left to run). */
+  | { act: 'requeue'; reason: string }
+
+export function superviseFreshSession(input: {
+  /** The pending job file: parsed, `'absent'`, or null for unreadable. */
+  pending: ExporterJobFile | 'absent' | null
+  /** The claimed (`running_`) file, same encoding. */
+  running: ExporterJobFile | 'absent' | null
+  /** A Daz Studio process of the export install is up. */
+  dazRunning: boolean
+  /** ms since the pending file last changed (its mtime; 0 = unknown). */
+  pendingQuietMs: number
+  /** ms since the claimed file last changed (0 = unknown). */
+  runningQuietMs: number
+  /**
+   * ms since the SUPERVISOR last started a Daz (or since it armed, whichever
+   * is later). The stuck-exit kill must be gated on this too: the pending
+   * file's mtime does not change when a fresh session is LAUNCHED for it —
+   * only the claim rename changes it — so without this gate the supervisor
+   * reads its own freshly started Daz as "the previous session stuck on its
+   * way out" and kills it before the Runner can claim (measured on the first
+   * live run: a kill-relaunch loop that never let row 2 start).
+   */
+  msSinceLaunch: number
+}): FreshSessionAction {
+  const { pending, running, dazRunning, pendingQuietMs, runningQuietMs, msSinceLaunch } = input
+  const supervised = (file: ExporterJobFile | 'absent' | null): file is ExporterJobFile =>
+    file !== 'absent' &&
+    file !== null &&
+    file.type === 'bulk-export' &&
+    file.sessionPerRow === true
+  // The pending file outranks the claimed one: when both exist (a crash
+  // between the requeue's write and its delete), the Runner's own pickup
+  // clears the stale running_ file — treat the batch as pending.
+  if (supervised(pending)) {
+    // Every row already worked but the file is parked under the pending name
+    // (an anomaly a crash between two renames can leave): finish it via the
+    // requeue — {@link requeueCrashedBatch} yields progress 100 and the
+    // export watch reports the outcome. Left alone it would stall forever.
+    if (!batchWorkRemains(pending)) {
+      return { act: 'requeue', reason: 'every row already worked' }
+    }
+    if (batchPartiallyWorked(pending)) {
+      // Between sessions: the last one quit (or is quitting) and the next
+      // must start. A process still up past the exit window is stuck on its
+      // way out — no fresh session can start against a single-instance app.
+      if (dazRunning) {
+        return pendingQuietMs > SESSION_EXIT_TIMEOUT_MS && msSinceLaunch > SESSION_EXIT_TIMEOUT_MS
+          ? {
+              act: 'kill',
+              reason: `the previous session did not exit within ${Math.round(SESSION_EXIT_TIMEOUT_MS / 60_000)} minutes`,
+            }
+          : { act: 'none' }
+      }
+      return { act: 'launch' }
+    }
+    // Untouched: the initial handoff's own launch / wait-for-close modal own
+    // this — the supervisor only backstops a handoff nobody picked up.
+    if (!dazRunning && pendingQuietMs > SESSION_PICKUP_GRACE_MS) return { act: 'launch' }
+    return { act: 'none' }
+  }
+  if (supervised(running)) {
+    if (running.progress >= 100) return { act: 'none' } // the export watch sweeps + reports
+    if (dazRunning) {
+      return runningQuietMs > SESSION_ROW_TIMEOUT_MS
+        ? {
+            act: 'kill',
+            reason: `the row showed no progress for ${Math.round(SESSION_ROW_TIMEOUT_MS / 60_000)} minutes`,
+          }
+        : { act: 'none' }
+    }
+    // Claimed, below 100, Daz gone. Untouched = the dying-claim state the
+    // reclaim flow owns; anything else is a crashed/killed session whose
+    // batch this supervisor hands back.
+    if (isReclaimableBatch(running)) return { act: 'none' }
+    return runningQuietMs > SESSION_REQUEUE_GRACE_MS
+      ? { act: 'requeue', reason: 'Daz Studio exited mid-row' }
+      : { act: 'none' }
+  }
+  return { act: 'none' }
+}
+
+/**
+ * A crashed/killed session's batch, rewritten for the hand-back: every
+ * `running` row becomes `failed` (with `reason`), the processed counters are
+ * recomputed, and `workRemains` says which file the result belongs in — the
+ * PENDING name (a fresh session picks it up and runs the remaining rows) or
+ * the claimed one at progress 100 (nothing left to run; the export watch
+ * reports the outcome). A row the session never reached stays `pending` and
+ * simply re-runs — it did no work to redo.
+ */
+export function requeueCrashedBatch(
+  parsed: ExporterJobFile,
+  reason: string,
+): { file: ExporterJobFile; workRemains: boolean } {
+  const jobs = parsed.jobs.map((job) =>
+    job.status === 'running' ? { ...job, status: 'failed' as const, error: reason } : { ...job },
+  )
+  const processed = jobs.filter((j) => j.status === 'done' || j.status === 'failed').length
+  const workRemains = jobs.some((j) => j.status === 'pending')
+  const file: ExporterJobFile = {
+    ...parsed,
+    jobs,
+    jobsDone: processed,
+    progress: workRemains
+      ? Math.floor((processed * 100) / Math.max(1, jobs.length))
+      : 100,
+  }
+  return { file, workRemains }
+}
+
+/** Serialize a parsed job file back to its wire text (the same pretty shape
+ *  {@link jobFileJson} writes) — the requeue rewrite's output. */
+export function jobFileTextOf(file: ExporterJobFile): string {
+  return `${JSON.stringify(file, null, 2)}\n`
+}
+
 /**
  * How long ago something happened, for a human deciding whether a leftover file
  * is theirs: `"just now"`, `"12 minutes ago"`, `"3 hours ago"`, `"5 days ago"`.
@@ -1063,6 +1269,10 @@ export function parseJobFileJson(text: string): ExporterJobFile | null {
       progress,
       ...(jobsDone !== undefined ? { jobsDone } : {}),
       ...(progressLogPath !== undefined ? { progressLogPath } : {}),
+      // Contract v4 — carried like progressLogPath: part of the shape this
+      // module writes, so a reader must see it on a file that plainly has it.
+      // Only `true` survives (absent and false mean the same thing).
+      ...(raw.sessionPerRow === true ? { sessionPerRow: true } : {}),
       jobs,
     }
   } catch {

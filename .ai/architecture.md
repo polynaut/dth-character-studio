@@ -212,7 +212,7 @@ Renaming a project
 (`storage.renameManifestFile`) and calls `sync_renamed_project_window` to
 live-re-title + re-pin every open window on the old file (no close/reopen).
 
-**FFI surface: 57 commands** (count re-verified 2026-08-21 — it has drifted
+**FFI surface: 58 commands** (count re-verified 2026-08-25 — it has drifted
 twice before; count it, don't trust it) registered in
 `generate_handler!` — installs
 (`install_dth_release/plugin/daz_assets/daz_merge/houdini_presets/unreal_dth`,
@@ -227,8 +227,13 @@ scans (`list_daz_assets`, `scan_duf_files`, `pose_asset_frames`,
 `release_project_window` — the last unpins a window after its project is deleted
 so it continues as a Home window; the home window opens via the native menu's
 Rust-side `open_home_window_impl`, no command), Daz bridge
-(`daz_studio_running`/`daz_studio_instance_count`/`run_daz_script`/
+(`daz_studio_running`/`daz_studio_instance_count`/`kill_daz_studio`/`run_daz_script`/
 `launch_daz_studio`/`focus_app_window`/`minimize_app_window` —
+`kill_daz_studio` is the export supervisor's last resort behind the
+fresh-session-per-row orchestration (contract v4): terminate the export
+install's Daz when a row or a quit hangs past its timeout — and it leans the
+OPPOSITE way from the probes: a process whose path can't be read is skipped,
+never terminated;
 `daz_studio_instance_count` is the multi-install detector: each install is
 single-instance, so 2+ `DAZStudio.exe` processes = 2+ installations open side
 by side, and every handoff writer refuses that state

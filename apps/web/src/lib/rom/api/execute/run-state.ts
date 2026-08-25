@@ -16,6 +16,7 @@ import {
   EXPORT_PROGRESS_FILE,
   HOUDINI_RUN_MODES,
   RUNNING_JOB_FILE,
+  batchPartiallyWorked,
   exportProgressStateFrom,
   isReclaimableBatch,
   jobFileMayBeLive,
@@ -89,6 +90,11 @@ export interface ActiveExportRun {
    *  come back `done`, because the Runner ran a script that chose to do
    *  nothing — believing those counts would be the lie this flag prevents). */
   interrupted?: boolean
+  /** The handoff asked for a fresh Daz session per row (contract v4) — what
+   *  arms the export supervisor in this window, and what tells the watch that
+   *  a claimed file whose Daz is gone belongs to the supervisor's requeue,
+   *  not the dead-run report. */
+  sessionPerRow?: boolean
 }
 /**
  * The export run THIS window owns — the one slot the whole feature shares.
@@ -130,6 +136,7 @@ export const exportRunSidecarSchema = z.object({
   // neither, and a restored watch must still restore.
   cancelPath: z.string().default(''),
   interrupted: z.boolean().default(false),
+  sessionPerRow: z.boolean().default(false),
 })
 
 /**
@@ -281,6 +288,9 @@ export type ExportRunProgress =
       scriptFailures: Array<{ scene: string; sceneName: string; errors: Array<string> }>
       /** Handoff → finish, for the toast's "in 12m 34s". */
       elapsedMs?: number
+      /** When the handoff was written — what scopes the motion-summary gate
+       *  (only an exporter log written since then may judge this run). */
+      startedAtMs?: number
     }
   /** The run died (Daz gone mid-run / file vanished) — watch ended. */
   | { state: 'dead'; characterId: string; total: number }
@@ -516,6 +526,40 @@ export async function fetchExportRunProgress(watcher?: string): Promise<ExportRu
   }
   try {
     if (await exists(paths.pending)) {
+      // Contract v4: between fresh sessions the batch lives under the PENDING
+      // name with its worked rows kept — that is mid-run, not "waiting to be
+      // claimed", and the button must keep showing the counts instead of
+      // flickering back to a pending state after every row.
+      try {
+        const parked = parseJobFileJson(await readTextFile(paths.pending))
+        if (
+          parked &&
+          parked.type === 'bulk-export' &&
+          parked.sessionPerRow === true &&
+          batchPartiallyWorked(parked)
+        ) {
+          const done = parked.jobs.filter((j) => j.status === 'done').length
+          const failed = parked.jobs.filter((j) => j.status === 'failed').length
+          return {
+            state: 'running',
+            characterId: run.characterId,
+            total: parked.jobs.length || run.total,
+            progress: parked.progress,
+            processed: parked.jobsDone ?? done + failed,
+            done,
+            failed,
+            startedAtMs: run.startedAtMs,
+            step: await readExportProgressState(parked.jobs.map((j) => j.scenePath)),
+            rows: parked.jobs.map((j) => ({ scenePath: j.scenePath, status: j.status })),
+            houdiniProjects: run.houdiniProjects,
+            scenes: run.scenes,
+            mode: run.mode,
+            interrupted: run.interrupted === true,
+          }
+        }
+      } catch {
+        // torn read — the plain pending report below is one poll's worth of wrong
+      }
       return { state: 'pending', characterId: run.characterId, total: run.total }
     }
     if (await exists(paths.running)) {
@@ -557,6 +601,7 @@ export async function fetchExportRunProgress(watcher?: string): Promise<ExportRu
           total: parsed.jobs.length || run.total,
           interrupted: run.interrupted === true,
           elapsedMs: Date.now() - run.startedAtMs,
+          startedAtMs: run.startedAtMs,
           failed,
           failedScenes,
           scriptFailures: await scriptRunFailures(run.cancelPath, run.startedAtMs, failedScenes),
@@ -594,15 +639,26 @@ export async function fetchExportRunProgress(watcher?: string): Promise<ExportRu
         if (isReclaimableBatch(parsed)) {
           return { state: 'pending', characterId: run.characterId, total: run.total }
         }
-        try {
-          await remove(paths.running)
-        } catch {
-          // best effort
+        // Contract v4: a claimed sessionPerRow batch whose Daz is gone is the
+        // supervisor's case, not a dead run — the session quit (or crashed)
+        // and the supervisor marks the in-flight row failed, hands the file
+        // back as pending and starts the next fresh session. Deleting it here
+        // would race that recovery and lose the batch's remaining rows. (Only
+        // the file's OWN flag decides: an old Runner's rewrite drops it, and
+        // that batch really is dead when its Daz dies.)
+        if (parsed.sessionPerRow !== true) {
+          try {
+            await remove(paths.running)
+          } catch {
+            // best effort
+          }
+          if (runOwner.current === run) runOwner.current = null
+          await clearExportRunSidecar()
+          await clearCancelFlag(run.cancelPath)
+          return { state: 'dead', characterId: run.characterId, total: run.total }
         }
-        if (runOwner.current === run) runOwner.current = null
-        await clearExportRunSidecar()
-        await clearCancelFlag(run.cancelPath)
-        return { state: 'dead', characterId: run.characterId, total: run.total }
+        // fall through: report the batch as still running while the
+        // supervisor recovers it
       }
       return {
         state: 'running',

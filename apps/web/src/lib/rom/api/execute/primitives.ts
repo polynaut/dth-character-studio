@@ -26,6 +26,7 @@ import {
   EXECUTE_STAMPS_FILE,
   EXPORTER_JOB_FILE,
   RUNNING_JOB_FILE,
+  batchPartiallyWorked,
   openSceneJobFileJson,
   parseExecuteStamps,
   parseJobFileJson,
@@ -306,12 +307,21 @@ export async function exporterJobFilePaths(): Promise<{ pending: string; running
  * the header button's Abort state — the Runner RENAMES the file when it starts
  * (contract v2), so "the un-renamed file exists" IS "pending / abortable".
  * Best-effort false on any read problem.
+ *
+ * One carve-out since contract v4: a fresh-session batch PARKS under the
+ * pending name between Daz sessions, worked rows and all. That file is
+ * mid-run, not "waiting — nothing will run", and the Abort button's promise
+ * would be a lie over it (the progress button renders instead; stopping a
+ * live run is Interrupt's job). A torn read counts as pending — one poll's
+ * worth of the historic answer.
  */
 export async function exporterJobsPending(): Promise<boolean> {
   const paths = await exporterJobFilePaths()
   if (!paths) return false
   try {
-    return await exists(paths.pending)
+    if (!(await exists(paths.pending))) return false
+    const parked = parseJobFileJson(await readTextFile(paths.pending))
+    return !(parked && parked.type === 'bulk-export' && batchPartiallyWorked(parked))
   } catch {
     return false
   }
