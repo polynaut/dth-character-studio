@@ -20,11 +20,14 @@ inside). Two defenses ship together:
   the UI alive), requeues a crashed session's batch, and refuses to let a worn
   session (Daz already open with a scene) run row one. Older Runners keep
   working single-session — the gate below still catches the wear.
-- **Motion-summary gate** (studio-side, relative): after a batch, each scene's
-  export log ("Alembic ROM motion summary", exporter ≥ 2.1.9) is parsed and
-  the scene FAILS when multiple meshes sit far below the liveliest node —
-  the measured degradation signature — or when the exporter's own
-  "N of M frames left at least one mesh unchanged" warning covers the walk.
-  Thresholds are pinned by tests against all 12 measured log blocks. A
+- **Motion-summary gate** (studio-side, historical): after a batch, each
+  scene's export log ("Alembic ROM motion summary", exporter ≥ 2.1.9) is
+  parsed and the scene FAILS when multiple meshes moved on far fewer frames
+  than the SAME meshes reached in earlier summaries of the same log — the
+  measured degradation signature — or when nothing moved at all. Judging each
+  mesh against its own history is what keeps scenes whose ROM legitimately
+  leaves meshes still (a face the ROM never animates) from false-positiving;
+  a first-ever export has no history and gates nothing. Thresholds are pinned
+  by tests against verbatim blocks from both measured incident logs. A
   degraded scene drops out of the Houdini/Unreal continuation like any dead
   export set.

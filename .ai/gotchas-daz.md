@@ -139,15 +139,21 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   contract v4 (`sessionPerRow` — docs/exporter-plugin-job-file.md) gives
   every exporting row a fresh Daz session (Runner v1.4.0 runs one row and
   quits; the studio's export supervisor, `api/execute/supervisor.ts`,
-  relaunches/kills/requeues). On top sits the STUDIO-side relative motion
+  relaunches/kills/requeues). On top sits the STUDIO-side HISTORY motion
   gate (`packages/rom/src/motion-summary.ts`, wired into
   `verifyDazExportsLanded` with a `sinceMs` log-mtime scope): the carrier's
-  v102 gate can only judge absolutes, while the measured degradation is
-  RELATIVE — followers at 9–35% of a moving figure. Calibration is pinned by
-  tests against all 12 measured Ita.log blocks: worst healthy follower 60%
-  of the reference (G9 Tear 290/484), degraded runs put 9+ nodes under the
-  0.5 bar, and the reference is the LIVELIEST node, not "the figure" (one
-  measured degraded shape has the figure at 131 behind a 335 mouth).
+  v102 gate can only judge absolutes, and BOTH "obvious" absolute signals
+  were measured to lie (followers-far-below-the-figure false-positives on a
+  scene whose ROM legitimately leaves meshes still — healthy naked-G9 face
+  followers sit at 66–123 of 433; the exporter's unchanged-frames warning
+  fires at 415–423 of 432 on those same healthy exports). What separates is
+  each node against its OWN best in earlier summaries of the same log:
+  degraded runs collapse nodes to 9–35% of what the same nodes reached
+  before, the worst measured healthy follower is 61% of its best (Ita Tear
+  290/484 vs 477/484) — the 0.5 bar splits the gap, ≥2 collapsed nodes =
+  degraded, and a first-ever export has no history and gates nothing.
+  Calibration is pinned by unit tests against verbatim measured blocks from
+  both incident logs (motion-summary.test.ts).
 - **The `Export_` carriers and `.Bulk_Export_Only` include NO runtime — a
   helper they call must be defined IN them.** `Export_<name>.dsa` and
   `.Bulk_Export_Only.dsa` carry zero `include()` calls by design: they run
