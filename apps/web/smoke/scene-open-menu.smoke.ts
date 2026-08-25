@@ -13,16 +13,23 @@ import { romAnimationPath } from '../../../packages/rom/src/rom-animation.ts'
 
 import type { Page } from '@playwright/test'
 
-// A scene card's open menu, and the one thing it used to refuse: opening a
-// saved ROM animation that had gone STALE.
+// A scene card's open menu, and the TWO things a freshness verdict used to take
+// away from it. Both rows are unconditional on that verdict now, and each test
+// below pins one of the two directions it used to swing.
 //
-// The freshness test dates the generated ROM script, which EVERY character save
-// rewrites — so editing anything at all makes every saved animation of that
-// character stale. The menu swapped the open entry for "Open and Generate" at
-// that moment, which is how a primary scene whose ROM had been built and
-// exported ended up offering only to build it again (a Daz run of many minutes)
-// with no way to open the file sitting right there. Stale is not wrong; it is
-// "not from the current definition", which is the user's call.
+// - Read STALE, it hid the OPEN row (swapped for "Open and Generate"). Staleness
+//   is cheap to earn: the test dates the generated ROM script, which every
+//   character save rewrites, so editing anything at all stales every saved
+//   animation of that character — and a primary scene whose ROM had been built
+//   and exported ended up offering only to build it again, a Daz run of many
+//   minutes, with no way to open the file sitting right there.
+// - Read CURRENT, it hid the REBUILD row, behind a Ctrl-held escape hatch nobody
+//   finds. That reading has no ground truth outside our own writes: a Perforce
+//   sync that writes `rom-animations/` after the scenes marks every animation
+//   current, and the rebuild vanished from every scene in the tree.
+//
+// Stale is not wrong; it is "not from the current definition", which is the
+// user's call. It picks the open row's TOOLTIP and gates nothing.
 
 const DS4 = 'C:/Program Files/DAZ 3D/DAZStudio4'
 /** Where the primary scene's saved ROM animation lives. */
@@ -80,7 +87,7 @@ test('a STALE ROM animation is still offered — with the rebuild under it', asy
     .toEqual([{ installFolder: DS4, scenePath: ROM }])
 })
 
-test('a CURRENT one opens without offering a pointless rebuild', async ({ page }) => {
+test('a CURRENT one is offered unmarked — with the rebuild still under it', async ({ page }) => {
   await openCharacter(page, { stale: false })
 
   const open = page.getByRole('button', { name: /Open last ROM/ })
@@ -89,30 +96,10 @@ test('a CURRENT one opens without offering a pointless rebuild', async ({ page }
   await expect
     .poll(async () => `${await open.getAttribute('title')}${await open.getAttribute('data-tooltip')}`)
     .not.toMatch(/earlier run/)
-  // Nothing to refresh, so the multi-minute Daz run is not offered (Ctrl still
-  // reveals it — the test below).
-  await expect(page.getByRole('button', { name: /Generate new ROM/ })).toHaveCount(0)
-})
-
-test('Ctrl adds a rebuild of a CURRENT one — it no longer takes the open entry away', async ({
-  page,
-}) => {
-  await openCharacter(page, { stale: false })
-  await expect(page.getByRole('button', { name: /Open last ROM/ })).toBeVisible()
-
-  // Ctrl used to REPLACE the open entry (`romReady = has && !ctrlHeld`), so a
-  // forced rebuild cost the ability to open what was already built. It only
-  // ADDS now: forcing a rebuild and opening the current file are two offers,
-  // not a choice between them.
-  await page.keyboard.down('Control')
-  try {
-    await expect(page.getByRole('button', { name: /Generate new ROM/ })).toBeVisible()
-    await expect(page.getByRole('button', { name: /Open last ROM/ })).toBeVisible()
-  } finally {
-    await page.keyboard.up('Control')
-  }
-  // …and releasing it puts the menu back — the rebuild is offered only while held.
-  await expect(page.getByRole('button', { name: /Generate new ROM/ })).toHaveCount(0)
+  // THE REGRESSION THIS FILE EXISTS FOR: the rebuild used to hide right here,
+  // on "nothing to refresh", and this is the reading a synced tree gives every
+  // animation it holds (see the header). It is unconditional now.
+  await expect(page.getByRole('button', { name: /Generate new ROM/ })).toBeVisible()
 })
 
 test('no saved animation at all — only the scene and the build', async ({ page }) => {

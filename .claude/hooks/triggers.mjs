@@ -243,6 +243,22 @@ export const TRIGGERS = [
 
   /* ---- the web app -------------------------------------------------------- */
   {
+    // Fires at the two sites that could re-introduce the mistake: the menu that
+    // renders the rows, and the probe that computes the freshness verdict they
+    // were once gated on. Anchored on the HEADING, not on the rule sentence at
+    // the section's tail: that sentence is a paragraph, so the extractor walks
+    // back to the nearest `- ` and delivers the LAST BULLET plus the rule — the
+    // measured evidence (mtime is not an edit time; the Perforce sync) cut out,
+    // the note opening on the weaker half of the argument. From the heading the
+    // whole section arrives with the anchor at the front, which is also what
+    // keeps the rule inside `MAX_NOTE` (the section is trimmed to fit — leave
+    // headroom when editing it).
+    id: 'freshness-never-hides',
+    path: /apps\/web\/src\/components\/daz-scene-field\.tsx$|apps\/web\/src\/lib\/rom\/api\/execute\/scans\.ts$/,
+    doc: GOTCHAS_WEB,
+    anchor: 'An mtime freshness verdict must never HIDE an affordance',
+  },
+  {
     id: 'route-file',
     path: /apps\/web\/src\/routes\/.*\.tsx$/,
     doc: GOTCHAS_WEB,

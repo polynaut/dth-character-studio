@@ -137,6 +137,20 @@ hooks in `.claude/settings.json` move these the same way:
   the fact they fired for — green to a check that stops at "the anchor
   resolves". The general lesson for any extract-at-runtime mechanism: assert on
   what the reader RECEIVES, never on whether something was produced.
+  **MISFRAMED is the fourth, and no check catches it: the anchor resolves, is
+  unique, is not truncated, and the note still opens on the wrong words.** An
+  anchor in a PARAGRAPH that follows a bullet list is not heading-anchored — the
+  walk-back stops at the last `- ` above it, so the extraction begins mid-argument
+  on that final bullet and everything above it is gone. Measured 2026-08-25 on
+  `freshness-never-hides` (#965): anchored on the rule sentence at its section's
+  tail, it delivered the closing bullet plus the rule and dropped the measured
+  evidence the fact exists to convey, `--audit` green throughout. **Anchor a
+  section-shaped fact on its HEADING** — `fromHeading` then takes the section
+  whole with the anchor at the front — **and keep that section under `MAX_NOTE`
+  (1400 chars) so the tail survives the cut.** The audit sees truncation before
+  the anchor, never framing after it, so a heading anchor is the only shape whose
+  front is guaranteed. Read the note the hook actually prints once, by piping a
+  fake PreToolUse payload into it; the audit is not a substitute.
   **And a doc CORRECTION breaks anchors exactly like a rewrite does** — the
   `ffi-surface` anchor was the verbatim `**FFI surface: 52 commands**`, so
   re-verifying that count to 54 (which the sentence itself asks for) killed the

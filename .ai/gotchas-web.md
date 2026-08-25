@@ -829,3 +829,26 @@ through, because "is the run over" and "has the last leg answered" are the same
 question. A leg that armed no watch (a refused send, no project selected) reports
 immediately — there is nothing to wait for — and the held report is superseded by
 a new run exactly like the toast it would have been.
+
+## An mtime freshness verdict must never HIDE an affordance (measured 2026-08-25)
+
+The scene card's open menu used to hide **"Generate new ROM"** whenever the saved
+`rom-animations/<stem>_ROM.duf` read *current* — `romMtime >= sceneMtime &&
+romMtime >= scriptMtime` (`api/execute/scans.ts`, `fetchRomAnimations`) — with
+**Ctrl** as the escape hatch that forced it back. Wrong twice over:
+
+- **The heuristic has no ground truth outside our own writes.** It assumes an
+  mtime is an EDIT time, which Perforce breaks flat: in
+  `D:\Perforce\playground__assets` a sync wrote the scenes at 07:29 and
+  `rom-animations/` at 07:36, so every primary scene read "current" and lost its
+  rebuild row. The tell it was a sync and not a build: the character JSON was
+  Aug 25 and its `.Build_ROM_Animation.dsa` Aug 21 — impossible through the app,
+  where every save runs save → generate (`use-character-draft.ts`).
+- **A hidden row teaches nothing.** A greyed row with a tooltip says "not now,
+  and here's why"; an absent one is indistinguishable from a broken build. The
+  Ctrl hatch only helps whoever already knows the row exists.
+
+The rule: **existence of the artifact gates the row that OPENS it; nothing gates
+the row that REBUILDS it.** Freshness survives as tooltip text on the open row
+("saved by an earlier run") — the honest use of a soft signal: inform the
+choice, never remove it.
