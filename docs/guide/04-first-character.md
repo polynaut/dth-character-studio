@@ -58,10 +58,11 @@ Three Genesis 9 dials sit under the hair items (greyed out on other generations)
 - **Daz scenes** — the primary plus any number of outfit/look variants: **drop a
   `.duf`** on the card to add one. Added scenes pass the same checks as at
   creation, plus the **same GP/DK geograft as the primary**. The primary can't be
-  unlinked; extras can. Each scene's open icon is a menu: **Open scene**, **Open
-  last ROM** once a
-  [ROM animation](./05-rom-in-daz.md#what-a-run-exports) is saved,
-  and **Generate new ROM** when there is none or the saved one is stale.
+  unlinked; extras can. Each scene's open icon is a menu: **Open scene**,
+  **Generate new ROM**, and — once a
+  [ROM animation](./05-rom-in-daz.md#what-a-run-exports) is saved —
+  **Open last ROM**, which is there whenever the file is on disk, whether or not
+  it was built from the character as it reads now.
 - **Houdini projects** — drop `.hip`/`.hiplc` files to link them, or let
   [**Generate project**](./06-into-houdini.md#generate-the-houdini-project-automatically)
   build one. Click a card to open it in Houdini, **Alt+click** to reveal its

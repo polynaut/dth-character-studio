@@ -399,10 +399,14 @@ export interface RomAnimationStatus {
    *
    * That makes it a MUCH stricter test than it reads: since every character
    * save rewrites the script, one edit of anything stales every saved animation
-   * of that character. So `current` gates whether a REBUILD is worth offering —
-   * never whether the file may be opened. Stale ⇒ the card marks the open entry
-   * and adds "Open and Generate" under it; {@link exists} alone decides that the
-   * entry is there at all.
+   * of that character — and in a tree where mtimes are not edit times (a
+   * Perforce/git sync writing `rom-animations/` after the scene) it can just as
+   * easily read "current" for an animation that is nothing of the sort.
+   *
+   * So it GATES NOTHING. It is display data: the scene card marks the open
+   * entry's tooltip with it. {@link exists} alone decides whether that entry is
+   * there, and the rebuild entry is unconditional — a heuristic this soft must
+   * never be what stops someone asking for a rebuild.
    */
   current: boolean
 }

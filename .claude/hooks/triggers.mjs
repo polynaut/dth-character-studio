@@ -243,6 +243,15 @@ export const TRIGGERS = [
 
   /* ---- the web app -------------------------------------------------------- */
   {
+    // Fires at the two sites that could re-introduce the mistake: the menu that
+    // renders the rows, and the probe that computes the freshness verdict they
+    // were once gated on.
+    id: 'freshness-never-hides',
+    path: /apps\/web\/src\/components\/daz-scene-field\.tsx$|apps\/web\/src\/lib\/rom\/api\/execute\/scans\.ts$/,
+    doc: GOTCHAS_WEB,
+    anchor: 'existence of the artifact gates the row that opens it',
+  },
+  {
     id: 'route-file',
     path: /apps\/web\/src\/routes\/.*\.tsx$/,
     doc: GOTCHAS_WEB,

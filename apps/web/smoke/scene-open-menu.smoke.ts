@@ -80,7 +80,7 @@ test('a STALE ROM animation is still offered — with the rebuild under it', asy
     .toEqual([{ installFolder: DS4, scenePath: ROM }])
 })
 
-test('a CURRENT one opens without offering a pointless rebuild', async ({ page }) => {
+test('a CURRENT one is offered unmarked — with the rebuild still under it', async ({ page }) => {
   await openCharacter(page, { stale: false })
 
   const open = page.getByRole('button', { name: /Open last ROM/ })
@@ -89,30 +89,13 @@ test('a CURRENT one opens without offering a pointless rebuild', async ({ page }
   await expect
     .poll(async () => `${await open.getAttribute('title')}${await open.getAttribute('data-tooltip')}`)
     .not.toMatch(/earlier run/)
-  // Nothing to refresh, so the multi-minute Daz run is not offered (Ctrl still
-  // reveals it — the test below).
-  await expect(page.getByRole('button', { name: /Generate new ROM/ })).toHaveCount(0)
-})
-
-test('Ctrl adds a rebuild of a CURRENT one — it no longer takes the open entry away', async ({
-  page,
-}) => {
-  await openCharacter(page, { stale: false })
-  await expect(page.getByRole('button', { name: /Open last ROM/ })).toBeVisible()
-
-  // Ctrl used to REPLACE the open entry (`romReady = has && !ctrlHeld`), so a
-  // forced rebuild cost the ability to open what was already built. It only
-  // ADDS now: forcing a rebuild and opening the current file are two offers,
-  // not a choice between them.
-  await page.keyboard.down('Control')
-  try {
-    await expect(page.getByRole('button', { name: /Generate new ROM/ })).toBeVisible()
-    await expect(page.getByRole('button', { name: /Open last ROM/ })).toBeVisible()
-  } finally {
-    await page.keyboard.up('Control')
-  }
-  // …and releasing it puts the menu back — the rebuild is offered only while held.
-  await expect(page.getByRole('button', { name: /Generate new ROM/ })).toHaveCount(0)
+  // The rebuild is UNCONDITIONAL now. It used to hide here ("nothing to
+  // refresh") behind a Ctrl-held escape hatch, which meant a freshness verdict
+  // decided whether the user could ask for a rebuild at all — and on any tree
+  // where mtimes are not edit times (a Perforce sync writing `rom-animations/`
+  // after the scene) every animation reads current and the row vanished for
+  // good. Freshness marks the open row's tooltip; it gates nothing.
+  await expect(page.getByRole('button', { name: /Generate new ROM/ })).toBeVisible()
 })
 
 test('no saved animation at all — only the scene and the build', async ({ page }) => {
