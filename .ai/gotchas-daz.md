@@ -85,8 +85,10 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   `restoreZeroedDials` (automatic, shape-of-the-accident: RAW baseline
   non-zero + keyed all-zero → flatten keys back to the raw baseline — raw
   restores raw, so an ERC share cannot double-apply and a purely driven half,
-  raw 0, is never a candidate). The
-  zero list is upstream-reportable — privately to mrpdean, never in repo docs.
+  raw 0, is never a candidate). A preset resave upstream
+  won't happen (Remo's call, 2026-08-25 — same read as the declined HDA
+  feature pitches), so the runtime pass is the PERMANENT fix, not a stopgap —
+  don't re-pitch the report; any mention of these presets stays private.
 - **The DAZ Install Manager already knows every Daz path, and stores them at a
   FIXED location — never search the disk for DIM.** Measured on DIM 1.4.1.96
   (2026-08-07), three plain INI files under `%APPDATA%/DAZ 3D`
