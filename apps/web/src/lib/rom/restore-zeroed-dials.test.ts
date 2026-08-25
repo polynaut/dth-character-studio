@@ -36,7 +36,14 @@ import { describe, expect, it } from 'vitest'
  *      controllers (raw restores raw — no double-apply is possible), and a
  *      purely driven half (raw 0) is never a candidate;
  *   5. the no-getRawValue fallback skips driven channels, loudly;
- *   6. end to end with memorizeRawDials: snapshot → preset stomp → restore.
+ *   6. the write is preceded by the guarded `setIsClamped(false)` dance — the
+ *      restored value is one the USER dialed, so it can sit outside the dial's
+ *      limits, and DS6's "keep limits?" modal would hang an unattended build;
+ *   7. the workflow hands the pass the RAW snapshot (pinned textually — the
+ *      sandbox does not execute DthWorkflow.dsa);
+ *   8. a NODE-OWNED pose control is seen by both passes, and the
+ *      `/Pose Controls` path gate keeps other node floats out;
+ *   9. end to end with memorizeRawDials: snapshot → preset stomp → restore.
  */
 
 const TICKS = 160
@@ -44,6 +51,9 @@ const TICKS = 160
 interface RawSnapshot {
   raw: boolean
   values: Record<string, number>
+  /** Evaluated (WITH any ERC share) twin of `values` — diagnostic only, but
+   *  part of the shape, so it is typed rather than cast past. */
+  evals?: Record<string, number>
 }
 
 interface UtilsModule {
@@ -62,6 +72,8 @@ class FakeProp {
   keys: Array<[number, number]>
   /** Parameter-group path — only read on the node-property route. */
   path: string
+  /** `false` once the pass disarms the DS6 "keep limits?" modal. */
+  clamped = true
   getRawValue?: () => number
 
   constructor(
@@ -106,6 +118,9 @@ class FakeProp {
   }
   getKeyValue(i: number) {
     return this.keys[i][1]
+  }
+  setIsClamped(on: boolean) {
+    this.clamped = on
   }
   setValue(time: number, value: number) {
     const existing = this.keys.find((k) => k[0] === time)
@@ -186,6 +201,11 @@ describe('restoreZeroedDials', () => {
     // The keys the preset wrote are rewritten in place — none added, none lost.
     expect(breasts.keys.map(([t]) => t)).toEqual([0, 2 * TICKS, 3 * TICKS, 105 * TICKS])
     expect(printed()).toContain('Restored zeroed dial: body_ctrl_BreastsUp-Down label back to 1')
+    // DS6 pops a modal "keep limits?" when a value leaves the dial's min/max,
+    // and a modal hangs an unattended Runner build. The value written here is
+    // whatever the USER dialed, so the same guarded clamp dance applyKeyData
+    // and applyFrameZeroMorphs do has to happen BEFORE the write.
+    expect(breasts.clamped).toBe(false)
   })
 
   it('never touches a walked channel — one non-zero key disqualifies it, and says so', () => {
@@ -201,6 +221,8 @@ describe('restoreZeroedDials', () => {
 
     expect(restored).toBe(0)
     expect(walked.keys.map(([, v]) => v)).toEqual([0, 1, 0])
+    // Nothing was written, so nothing was unclamped either.
+    expect(walked.clamped).toBe(true)
     // The rejection names its evidence — six silent ones made a live run
     // undiagnosable (2026-08-25).
     expect(printed()).toContain('Zeroed-dial candidate left alone: FBMHeavy label dialed at 0.5')
@@ -215,7 +237,7 @@ describe('restoreZeroedDials', () => {
       raw: true,
       values: { 'mod|body_ctrl_BreastsUp-Down': 0 },
       evals: { 'mod|body_ctrl_BreastsUp-Down': 1 },
-    } as never)
+    })
 
     expect(restored).toBe(0)
     expect(driven.keys.map(([, v]) => v)).toEqual([0, 0, 0, 0])

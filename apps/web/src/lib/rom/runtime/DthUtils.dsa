@@ -981,6 +981,79 @@ function getMorphPropFromNode(oNode, sMorphName){
 	}
 }
 
+/**
+ * Resolve the property a `keyData.propName` names on `oNode` — the ONE walk
+ * every pass that touches a walked morph must use (v101).
+ *
+ * The four steps, in the order applyKeyData has always had them:
+ *   1. `findModifier` on the object (the hot path for real blend shapes);
+ *   2. a modifier loop matching by label OR internal name;
+ *   3. `oNode.findProperty` — the NODE's own properties;
+ *   4. `oNode.findPropertyByLabel`.
+ *
+ * Steps 3-4 are not optional decoration. MEASURED 2026-08-25 (live DS4 probe,
+ * G9): the stock pose CONTROLS (`body_ctrl_*`) are node-owned DzFloatProperties
+ * under `/Pose Controls` — `findModifier` returns null for every one of them.
+ * Until v101 only applyKeyData (which WRITES the walk) carried steps 3-4, while
+ * the two passes that POLICE the walk — checkDialedWalkedMorphs (the
+ * dialed-walked gate) and resetFrameDatasAtFrame (the frame-0 sawtooth anchor)
+ * — stopped at step 2 and silently resolved nothing. A node-owned dial could
+ * therefore be walked while neither the gate nor the anchor could see it. That
+ * cost nothing while the G9 base ROM's zero-list held such a dial at 0 anyway;
+ * runtime v101's restoreZeroedDials removes that accident, so frame 0 would
+ * have kept the restored value and the FBX base and the alembic would drift
+ * with nothing in the log. Three copies of one chain drifted twice — there is
+ * one copy now.
+ *
+ * `bLog` prints which step answered (applyKeyData's long-standing per-morph
+ * diagnostic); the silent passes leave it off.
+ */
+function resolveKeyDataProp(oNode, sPropName, bLog){
+	if(!oNode || !sPropName) return null;
+
+	// FIRST: modifier lookup (most reliable for morphs)
+	var oProp = getMorphPropFromNode(oNode, sPropName);
+	if(oProp){
+		if(bLog) print("  Found via getMorphPropFromNode");
+		return oProp;
+	}
+
+	// SECOND: loop through all modifiers and check by label/name
+	var oObj = oNode.getObject();
+	if(oObj){
+		for(var m = 0; m < oObj.getNumModifiers(); m++){
+			var mod = oObj.getModifier(m);
+			if(!mod) continue;
+			if(mod.getLabel() === sPropName || mod.getName() === sPropName){
+				if(mod.getValueChannel) oProp = mod.getValueChannel();
+				if(!oProp && mod.getValueControl) oProp = mod.getValueControl();
+				if(!oProp && mod.getChannel) oProp = mod.getChannel(0);
+				if(oProp){
+					if(bLog) print("  Found via modifier loop by label/name:", sPropName);
+					return oProp;
+				}
+			}
+		}
+	}
+
+	// LAST RESORT: the node's own properties (G9 pose controls, poses)
+	if(typeof oNode.findProperty == "function"){
+		oProp = oNode.findProperty(sPropName);
+		if(oProp){
+			if(bLog) print("  Found via findProperty (fallback)");
+			return oProp;
+		}
+	}
+	if(typeof oNode.findPropertyByLabel == "function"){
+		oProp = oNode.findPropertyByLabel(sPropName);
+		if(oProp){
+			if(bLog) print("  Found via findPropertyByLabel (fallback)");
+			return oProp;
+		}
+	}
+	return null;
+}
+
 function addFrameData(frameDatas, keyData){
 	var idx = keyData.frameIdx;
 	if(idx == undefined || idx == null)
@@ -1221,21 +1294,12 @@ function resetFrameDatasAtFrame(oNodeRoot, frameDatas, resetFrame){
 					oNode = oNodeRoot.findNodeChildByLabel(keyData.nodeName, true);
 
 				if(oNode){
-					// Find the property (same logic as applyKeyData)
-					var oProp = getMorphPropFromNode(oNode, keyData.propName);
-					if(!oProp){
-						var oObj = oNode.getObject();
-						if(oObj){
-							for(var m = 0; m < oObj.getNumModifiers(); m++){
-								var mod = oObj.getModifier(m);
-								if(mod.getLabel() === keyData.propName || mod.getName() === keyData.propName){
-									if(mod.getValueChannel) oProp = mod.getValueChannel();
-									if(!oProp && mod.getValueControl) oProp = mod.getValueControl();
-									if(oProp) break;
-								}
-							}
-						}
-					}
+					// The property: resolveKeyDataProp — THE one chain, shared
+					// with applyKeyData (which writes the walk) and the gate.
+					// Its node-property tail is what reaches a G9 pose control;
+					// without it this anchor silently skipped every node-owned
+					// dial and left frame 0 off the sawtooth floor (v101).
+					var oProp = resolveKeyDataProp(oNode, keyData.propName, false);
 
 					if(oProp){
 						oProp.setValue(resetFrame * timeStep, 0);
@@ -1318,8 +1382,11 @@ function checkDialedWalkedMorphs(oNodeRoot, frameDatas){
 			if(!keyData.propName) continue;
 			var sKey = keyData.nodeName + "|" + keyData.propName;
 			if(oSeen[sKey] === undefined){
-				// Resolve the property once per dial - the same node/prop walk
-				// the reset pass uses, so the two can never disagree on a name.
+				// Resolve the property once per dial through resolveKeyDataProp
+				// - literally the same function applyKeyData and the frame-0
+				// anchor use, so the writer and its two policemen can never
+				// disagree on a name (they did until v101: node-owned G9 pose
+				// controls were writable but invisible to both).
 				var oVerdict = false;
 				var oNode;
 				if(oNodeRoot.getName() == keyData.nodeName || oNodeRoot.getLabel() == keyData.nodeName)
@@ -1329,20 +1396,7 @@ function checkDialedWalkedMorphs(oNodeRoot, frameDatas){
 				if(!oNode)
 					oNode = oNodeRoot.findNodeChildByLabel(keyData.nodeName, true);
 				if(oNode){
-					var oProp = getMorphPropFromNode(oNode, keyData.propName);
-					if(!oProp){
-						var oObj = oNode.getObject();
-						if(oObj){
-							for(var m = 0; m < oObj.getNumModifiers(); m++){
-								var mod = oObj.getModifier(m);
-								if(mod.getLabel() === keyData.propName || mod.getName() === keyData.propName){
-									if(mod.getValueChannel) oProp = mod.getValueChannel();
-									if(!oProp && mod.getValueControl) oProp = mod.getValueControl();
-									if(oProp) break;
-								}
-							}
-						}
-					}
+					var oProp = resolveKeyDataProp(oNode, keyData.propName, false);
 					if(oProp){
 						oVerdict = dialedWalkedVerdict(oProp);
 					}
@@ -1418,49 +1472,12 @@ function applyKeyData(oNodeRoot, keyData, overrideFrameIdx){
 		oNode = oNodeRoot.findNodeChildByLabel(keyData.nodeName, true);
 	if(oNode){
 		print("  Node found:", oNode.getName(), "/ Label:", oNode.getLabel());
-		var oProp = null;
-
-		// FIRST: Try modifier lookup (most reliable for morphs)
-		oProp = getMorphPropFromNode(oNode, keyData.propName);
-		if(oProp){
-			print("  Found via getMorphPropFromNode");
-		}
-
-		// SECOND: Loop through all modifiers and check by label/name
-		if(!oProp){
-			var oObj = oNode.getObject();
-			if(oObj){
-				for(var m = 0; m < oObj.getNumModifiers(); m++){
-					var mod = oObj.getModifier(m);
-					if(mod.getLabel() === keyData.propName || mod.getName() === keyData.propName){
-						// Try different methods to get the value property
-						if(mod.getValueChannel){
-							oProp = mod.getValueChannel();
-						}
-						if(!oProp && mod.getValueControl){
-							oProp = mod.getValueControl();
-						}
-						if(!oProp && mod.getChannel){
-							oProp = mod.getChannel(0);
-						}
-						if(oProp){
-							print("  Found via modifier loop by label/name:", keyData.propName);
-							break;
-						}
-					}
-				}
-			}
-		}
-
-		// LAST RESORT: Try node property lookup (for non-morph properties like poses)
-		if(!oProp){
-			oProp = oNode.findProperty(keyData.propName);
-			if(oProp) print("  Found via findProperty (fallback)");
-		}
-		if(!oProp){
-			oProp = oNode.findPropertyByLabel(keyData.propName);
-			if(oProp) print("  Found via findPropertyByLabel (fallback)");
-		}
+		// The four-step chain lives in resolveKeyDataProp — shared verbatim
+		// with the gate (checkDialedWalkedMorphs) and the frame-0 anchor
+		// (resetFrameDatasAtFrame), so a dial this pass can WRITE is a dial
+		// they can both POLICE. `true` keeps the per-morph "Found via ..."
+		// diagnostic this pass has always printed.
+		var oProp = resolveKeyDataProp(oNode, keyData.propName, true);
 
 		if(oProp){
 			// DAZ Studio 6 pops a "keep limits?" dialog when a value exceeds the
@@ -1603,50 +1620,6 @@ function closeDanglingMorphKeys(oNodes, iBoundaryFrame, baselineValues){
 }
 
 /**
- * Restore dials a ROM preset zeroed FLAT (runtime v101).
- *
- * MEASURED 2026-08-25 (DTH 2.5, all G9 base-ROM variants): the G9 JCM base
- * ROM .dufs carry ~698 all-zero value channels — among them every stock G9
- * breast pose control (body_ctrl_BreastsUp-Down and friends), each keyed to 0
- * with CONSTANT keys at frames 0/2/3/105. Loading the preset stomps a
- * character's dialed shape (a 100% Breasts Up-Down reads 0% across the whole
- * ROM). The G8/G8.1 base ROMs carry none of these channels, which is why the
- * problem is G9-only. The zero list is an accidental capture of the preset
- * author's scene, so its exact contents are not ours to predict — this pass
- * targets the SHAPE of the accident instead of any name list.
- *
- * A channel is restored iff ALL of:
- *   - its pre-ROM baseline (memorizeBaseMorphs, taken before any preset
- *     loads) is non-zero — the dial is part of the character's shape;
- *   - it now HAS keys — a preset actually touched it;
- *   - every key is ~0 — it was zeroed flat, not walked. A genuinely walked
- *     channel has a non-zero key somewhere and is never touched, so no ROM
- *     information can be lost;
- *   - it is not ERC-driven (getNumControllers > 0): a driven half (Breasts
- *     Up-Down Left/Right) reads non-zero only through its master — restoring
- *     it raw would double-apply once the master is restored. Restoring the
- *     master restores the halves.
- *
- * Restore = flatten every key back to the baseline value (the verified
- * setValue(t, v) route — same mechanism as restoreNodeTransforms' fallback);
- * a flat channel varies from the base mesh on no frame, so the DTH Exporter's
- * FBX pass keeps the morph and the alembic bakes the same shape — no fbx/abc
- * drift. Root-figure scope only: DK/GP/mouth close-outs treat those nodes'
- * morphs as self-contained ROM assets with no character-driven base.
- */
-/**
- * Pre-ROM RAW dial snapshot for restoreZeroedDials. RAW (getRawValue) keeps
- * any ERC contribution OUT of the stored number, so restoring a dial writes
- * back only what the user dialed — a controller's share rides on top again
- * by itself and can never double-apply. A purely ERC-driven half (Breasts
- * Up-Down Left/Right) has raw 0 and so never becomes a candidate; restoring
- * its master restores it. A Daz build without getRawValue stores the
- * EVALUATED value and says so (`raw: false`), which tells the restore pass
- * to fall back to skipping ERC-driven channels — the conservative behaviour.
- * Taken before any preset loads; these dials carry no keys yet, so the
- * no-arg read is time-independent.
- */
-/**
  * The two places a zeroable dial lives, visited with one filter (v101):
  *
  *   - `mod|<name>`: a DzMorph modifier's value channel on the node's OBJECT —
@@ -1689,6 +1662,21 @@ function forEachZeroableDial(oNode, fnVisit){
 	}
 }
 
+/**
+ * Pre-ROM RAW dial snapshot for restoreZeroedDials. RAW (getRawValue) keeps
+ * any ERC contribution OUT of the stored number, so restoring a dial writes
+ * back only what the user dialed — a controller's share rides on top again
+ * by itself and can never double-apply. A purely ERC-driven half (Breasts
+ * Up-Down Left/Right) has raw 0 and so never becomes a candidate; restoring
+ * its master restores it. A Daz build without getRawValue stores the
+ * EVALUATED value and says so (`raw: false`), which tells the restore pass
+ * to fall back to skipping ERC-driven channels — the conservative behaviour.
+ * Taken before any preset loads. A dial can still carry ONE key here - the
+ * frame-0 morph pass runs first by design (v74) and setValue(0, v) keys what
+ * it sets - and a single key evaluates the same at every time, so the no-arg
+ * read stays time-independent. Anything that ever puts a SECOND key on a dial
+ * ahead of this snapshot must give both reads an explicit time.
+ */
 function memorizeRawDials(oNodes){
 	// `evals` (getValue — WITH any ERC share) rides along purely so the
 	// restore pass can NAME a dial that is visible-but-not-raw instead of
@@ -1722,6 +1710,39 @@ function memorizeRawDials(oNodes){
 	return oSnapshot;
 }
 
+/**
+ * Restore dials a ROM preset zeroed FLAT (runtime v101).
+ *
+ * MEASURED 2026-08-25 (DTH 2.5, all G9 base-ROM variants): the G9 JCM base
+ * ROM .dufs carry ~698 all-zero value channels — among them every stock G9
+ * breast pose control (body_ctrl_BreastsUp-Down and friends), each keyed to 0
+ * with CONSTANT keys at frames 0/2/3/105. Loading the preset stomps a
+ * character's dialed shape (a 100% Breasts Up-Down reads 0% across the whole
+ * ROM). The G8/G8.1 base ROMs carry none of these channels, which is why the
+ * problem is G9-only. The zero list is an accidental capture of the preset
+ * author's scene, so its exact contents are not ours to predict — this pass
+ * targets the SHAPE of the accident instead of any name list.
+ *
+ * A channel is restored iff ALL of:
+ *   - its pre-ROM RAW baseline (memorizeRawDials, taken before any preset
+ *     loads - NOT memorizeBaseMorphs, whose evaluated map feeds the close-out
+ *     and once got passed here by mistake) is non-zero — the dial is part of the character's shape;
+ *   - it now HAS keys — a preset actually touched it;
+ *   - every key is ~0 — it was zeroed flat, not walked. A genuinely walked
+ *     channel has a non-zero key somewhere and is never touched, so no ROM
+ *     information can be lost;
+ *   - it is not ERC-driven (getNumControllers > 0): a driven half (Breasts
+ *     Up-Down Left/Right) reads non-zero only through its master — restoring
+ *     it raw would double-apply once the master is restored. Restoring the
+ *     master restores the halves.
+ *
+ * Restore = flatten every key back to the baseline value (the verified
+ * setValue(t, v) route — same mechanism as restoreNodeTransforms' fallback);
+ * a flat channel varies from the base mesh on no frame, so the DTH Exporter's
+ * FBX pass keeps the morph and the alembic bakes the same shape — no fbx/abc
+ * drift. Root-figure scope only: DK/GP/mouth close-outs treat those nodes'
+ * morphs as self-contained ROM assets with no character-driven base.
+ */
 function restoreZeroedDials(oNodes, oBaseline){
 	// A missing/mis-shaped snapshot must say so: the silent form of this
 	// return cost a live run on 2026-08-25, when the call site still passed
@@ -1781,6 +1802,12 @@ function restoreZeroedDials(oNodes, oBaseline){
 				iSkippedDriven++;
 				return;
 			}
+			// DAZ Studio 6 pops a "keep limits?" dialog when a value exceeds
+			// the property's min/max, and a MODAL in an unattended Runner build
+			// hangs the run. The baseline written here is a value the USER
+			// dialed, which on a limits-off dial can sit outside them - so the
+			// same guarded clamp dance applyKeyData and applyFrameZeroMorphs do.
+			if(typeof oProp.setIsClamped === "function") oProp.setIsClamped(false);
 			for(var k = 0; k < iKeys; k++){
 				oProp.setValue(oProp.getKeyTime(k), fBase);
 			}

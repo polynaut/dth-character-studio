@@ -1318,8 +1318,18 @@ v101 — restoreZeroedDials: dials a ROM preset zeroed FLAT are restored to
       ROM load") was true on G8/8.1 (whose base ROMs carry NONE of these
       channels) and false on G9. A hand-fix in the saved ROM dies at frame 2.
       The pass runs after ALL preset blocks (a later block cannot re-zero) and
-      before the custom frames (a restored dial that a custom section walks is
-      caught loudly by the dialed-walked gate). Restore condition: pre-ROM RAW
+      before the custom frames, which is what puts a restored dial in front of
+      the two passes that police a walk — but only because v101 ALSO gave them
+      the reach: checkDialedWalkedMorphs (the gate) and resetFrameDatasAtFrame
+      (the frame-0 sawtooth anchor) each carried their own copy of
+      applyKeyData's property-resolution chain, truncated at the object's
+      modifiers. The writer had the findProperty/findPropertyByLabel tail, they
+      did not, so a NODE-OWNED dial (every G9 body_ctrl_*) was walkable while
+      invisible to both. Harmless only while the zero-list pinned those dials
+      at 0 — restoring them would have left frame 0 off the sawtooth floor and
+      drifted the fbx/abc pair with nothing in the log. All three now share ONE
+      resolveKeyDataProp (DthUtils); three copies of one chain had drifted
+      twice. Restore condition: pre-ROM RAW
       baseline non-zero (memorizeRawDials — getRawValue keeps any ERC
       contribution out of the stored number, so a restore can never
       double-apply a controller's share and a purely driven half, raw 0, is
@@ -1337,9 +1347,16 @@ v101 — restoreZeroedDials: dials a ROM preset zeroed FLAT are restored to
       out. Restore = flatten every
       key to the baseline via setValue(t, v) — a flat channel varies from the
       base mesh on no frame, so the DTH Exporter's FBX pass keeps the morph
-      and fbx/abc stay aligned. Root-figure scope only (memorizeBaseMorphs is
-      hoisted out of the JCM branch alongside, so a JCM-less build has its
-      close-out baseline too). The summary line prints seen/dialed/keyed/
+      and fbx/abc stay aligned. The write is preceded by the guarded
+      setIsClamped(false) dance applyKeyData and applyFrameZeroMorphs already
+      do — the restored value is one the USER dialed and can sit outside the
+      dial's limits, and DS6's "keep limits?" modal would hang an unattended
+      Runner build. Root-figure scope only. memorizeBaseMorphs is hoisted out
+      of the JCM branch alongside — NOT because restoreZeroedDials reads it (it
+      reads baseRawDials; the close-out is still its only consumer and still
+      JCM-only) but so both pre-ROM snapshots are taken at the one point where
+      "before any preset block keys anything" holds, and cannot drift apart.
+      The summary line prints seen/dialed/keyed/
       skipped counts so a "Restored 0" is diagnosable from the log alone —
       the first live run (Ita, 2026-08-25) restored 0 with no way to say why.
       Automatic replacement for the retired manual preserve list — no schema

@@ -24,7 +24,13 @@ import { DIALED_WALKED_KIND } from './run-log.ts'
  *   2. a clean scene fails nothing, and dial noise below the tolerance passes;
  *   3. an ERC-driven dial says so, pointing the user at the CONTROLLING dial;
  *   4. an unresolvable prop is NOT the gate's failure (applyKeyData owns it);
- *   5. the art-direction leg: GP/DK art morphs never enter frameDatas, so
+ *   5. a NODE-OWNED dial (a G9 `body_ctrl_*` pose control — measured
+ *      2026-08-25: `findModifier` returns null for them, `findProperty` finds
+ *      them) is policed by BOTH passes, because all three now share
+ *      `resolveKeyDataProp` with applyKeyData. Until v101 the writer had the
+ *      node-property tail and its two policemen did not, so such a dial was
+ *      walkable while invisible to the gate and to the frame-0 anchor;
+ *   6. the art-direction leg: GP/DK art morphs never enter frameDatas, so
  *      applyArtDirectionData runs the same check per dial — reading the dial
  *      BEFORE keying the channel (keying destroys the evidence), reporting on
  *      the frame's ABSOLUTE frame number, and still applying the morph (the
@@ -49,6 +55,7 @@ interface RunLog {
 
 interface UtilsModule {
   checkDialedWalkedMorphs: (root: unknown, frameDatas: Array<unknown>) => number
+  resetFrameDatasAtFrame: (root: unknown, frameDatas: Array<unknown>, frame: number) => void
   applyArtDirectionData: (json: unknown, root: unknown, startFrame: number) => boolean
   resetRunLog: () => void
   runLogProblemCount: () => number
@@ -99,14 +106,22 @@ interface FakeNode {
   getObject: () => unknown
   findNodeChild: (n: string) => FakeNode | null
   findNodeChildByLabel: (n: string) => FakeNode | null
-  findProperty: () => null
-  findPropertyByLabel: () => null
+  findProperty: (n: string) => FakeProp | null
+  findPropertyByLabel: (n: string) => FakeProp | null
 }
 
 /** A node whose object resolves `props` by modifier name — the primary lookup
- *  path (`getMorphPropFromNode`) both gate legs use. */
-function fakeNode(name: string, props: Array<FakeProp>, children: Array<FakeNode> = []): FakeNode {
+ *  path (`getMorphPropFromNode`) both gate legs use — and whose `nodeProps`
+ *  resolve ONLY through `findProperty`, the way a G9 pose control does
+ *  (measured 2026-08-25: `findModifier` returns null for `body_ctrl_*`). */
+function fakeNode(
+  name: string,
+  props: Array<FakeProp>,
+  children: Array<FakeNode> = [],
+  nodeProps: Array<FakeProp> = [],
+): FakeNode {
   const byName = new Map(props.map((p) => [p.name, p]))
+  const nodeByName = new Map(nodeProps.map((p) => [p.name, p]))
   return {
     getName: () => name,
     getLabel: () => name,
@@ -120,8 +135,8 @@ function fakeNode(name: string, props: Array<FakeProp>, children: Array<FakeNode
     }),
     findNodeChild: (n: string) => children.find((c) => c.getName() === n) ?? null,
     findNodeChildByLabel: (n: string) => children.find((c) => c.getName() === n) ?? null,
-    findProperty: () => null,
-    findPropertyByLabel: () => null,
+    findProperty: (n: string) => nodeByName.get(n) ?? null,
+    findPropertyByLabel: (n: string) => nodeProps.find((p) => p.getLabel() === n) ?? null,
   }
 }
 
@@ -143,6 +158,7 @@ function loadUtils(): { utils: UtilsModule; printed: () => string } {
   const lines: Array<string> = []
   const utils = runInNewContext(
     `${src}\n;({ checkDialedWalkedMorphs: checkDialedWalkedMorphs,` +
+      ` resetFrameDatasAtFrame: resetFrameDatasAtFrame,` +
       ` applyArtDirectionData: applyArtDirectionData, resetRunLog: resetRunLog,` +
       ` runLogProblemCount: runLogProblemCount, getRunLog: function(){ return DTH_RUN_LOG; } })`,
     {
@@ -249,6 +265,57 @@ describe('checkDialedWalkedMorphs — the frameDatas leg', () => {
     expect(failed).toBe(0)
     expect(problems).toBe(0)
     expect(printed).toContain('all walked morphs are at 0')
+  })
+})
+
+/**
+ * The shared resolver (`resolveKeyDataProp`, v101) — the writer and its two
+ * policemen resolve one name the same way.
+ *
+ * MEASURED 2026-08-25 (live DS4 probe, G9): the stock pose controls
+ * (`body_ctrl_*`) are node-owned DzFloatProperties, `findModifier` returns
+ * null for every one. applyKeyData has always carried the
+ * findProperty/findPropertyByLabel tail, so it can WRITE a walk onto such a
+ * dial — while checkDialedWalkedMorphs and resetFrameDatasAtFrame stopped at
+ * the object's modifiers and silently resolved nothing. That was invisible
+ * while the G9 base-ROM zero-list pinned those dials at 0 anyway; runtime
+ * v101's restoreZeroedDials removes that accident, so an unpoliced node-owned
+ * dial would keep its restored value on frame 0 and drift the fbx/abc pair
+ * with nothing in the log. One chain now, for all three.
+ */
+describe('resolveKeyDataProp — the node-property tail reaches both policemen', () => {
+  it('fails a dialed NODE-OWNED pose control the same as a modifier morph', () => {
+    const poseCtrl = new FakeProp('body_ctrl_BreastsUp-Down', 1)
+    const root = fakeNode('Genesis9', [], [], [poseCtrl])
+    const { failed, log, problems } = gate(root, [
+      walkFrame(330, 'Genesis9', 'body_ctrl_BreastsUp-Down'),
+    ])
+
+    expect(failed).toBe(1)
+    expect(problems).toBe(1)
+    expect(log.failedMorphs[0].prop).toBe('body_ctrl_BreastsUp-Down')
+    expect(log.failedMorphs[0].reason).toContain('dialed at 1')
+  })
+
+  it('anchors a walked NODE-OWNED pose control back to the frame-0 floor', () => {
+    const poseCtrl = new FakeProp('body_ctrl_BreastsUp-Down', 1)
+    const modMorph = new FakeProp('FBMHeavy', 0)
+    const root = fakeNode('Genesis9', [modMorph], [], [poseCtrl])
+    const { utils } = loadUtils()
+    const frameDatas: Array<unknown> = []
+    for (const s of [
+      walkFrame(330, 'Genesis9', 'body_ctrl_BreastsUp-Down'),
+      walkFrame(345, 'Genesis9', 'FBMHeavy'),
+    ]) {
+      frameDatas[s.frame] = s.entry
+    }
+
+    utils.resetFrameDatasAtFrame(root, frameDatas, 0)
+
+    // Both routes reach the floor. Before v101 the node-owned one got no
+    // write at all — the sawtooth floor silently sat at the dialed value.
+    expect(poseCtrl.writes).toEqual([[0, 0]])
+    expect(modMorph.writes).toEqual([[0, 0]])
   })
 })
 

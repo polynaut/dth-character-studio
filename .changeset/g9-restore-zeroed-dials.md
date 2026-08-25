@@ -17,5 +17,14 @@ loaded and whose keys are ALL zero afterwards (zeroed flat — never walked)
 is flattened back to its pre-ROM value. Genuinely walked channels have a
 non-zero key somewhere and are never touched; ERC-driven halves are left to
 their master. A flat channel matches the base mesh on every frame, so the
-FBX and Alembic artifacts stay aligned. Run Tools → Refresh assets to
-regenerate installed scripts onto the new runtime.
+FBX and Alembic artifacts stay aligned.
+
+The same pass fixed a blind spot it would otherwise have exposed: the
+dialed-walked gate and the frame-0 morph anchor each resolved a morph name
+through their own truncated copy of the walk the ROM writer uses, so a
+node-owned G9 pose control could be walked while neither of them could see
+it. All three now share one resolver, and a walked pose control is reported
+and anchored like any other morph.
+
+Run Tools → Refresh assets to regenerate installed scripts onto the new
+runtime.
