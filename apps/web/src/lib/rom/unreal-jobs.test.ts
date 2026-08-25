@@ -12,6 +12,7 @@ import {
   unidentifiedEditorTargets,
   unrealContentPath,
   unrealDestinationFor,
+  unrealImportAbandoned,
   unrealImportStateFrom,
   unrealJobJson,
   unrealJobPaths,
@@ -437,5 +438,38 @@ describe('unidentifiedEditorTargets', () => {
         [UPROJECT, OTHER],
       ),
     ).toEqual([OTHER])
+  })
+})
+
+describe('unrealImportAbandoned', () => {
+  // Only ever asked about a CLAIMED job — the liveness verdict that ended the
+  // forever-Working state the first real editor crash left behind
+  // (2026-08-25): a claimed import no editor could be running is dead.
+  const target = 'D:/Unreal Projects/DemoGame/DemoGame.uproject'
+
+  it('no editor process at all: dead — a crashed editor has no process', () => {
+    expect(unrealImportAbandoned({ editors: 0, projects: [], unknown: 0 }, target)).toBe(true)
+  })
+
+  it('an unidentified editor might be the target: not dead', () => {
+    expect(unrealImportAbandoned({ editors: 1, projects: [], unknown: 1 }, target)).toBe(false)
+  })
+
+  it('every editor identified and none holds the project: dead', () => {
+    expect(
+      unrealImportAbandoned(
+        { editors: 1, projects: ['D:/Unreal Projects/Other/Other.uproject'], unknown: 0 },
+        target,
+      ),
+    ).toBe(true)
+  })
+
+  it('the target is open (any path spelling): alive', () => {
+    expect(
+      unrealImportAbandoned(
+        { editors: 1, projects: ['D:\\Unreal Projects\\DemoGame\\DEMOGAME.UPROJECT'], unknown: 0 },
+        target,
+      ),
+    ).toBe(false)
   })
 })

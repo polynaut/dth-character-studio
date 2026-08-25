@@ -447,14 +447,17 @@ test('ONE task row per re-import — and a set the project never held is dropped
 
   // The bridge claims the job and says `running` before the (blocking) work —
   // the panel must move off "waiting" then, not sit on it until the outcome.
-  await page.evaluate((dir: string) => {
+  await page.evaluate(([dir, uproject]: [string, string]) => {
     const mock = (window as any).__tauriMock
+    // A claimed import implies a live editor — without one, the poll's
+    // liveness verdict (unrealImportAbandoned) rightly reads it as dead.
+    mock.unrealOpenProjects = { editors: 1, projects: [uproject], unknown: 0 }
     mock.files.delete(`${dir}/Saved/DTHStudio/job.json`)
     mock.files.set(
       `${dir}/Saved/DTHStudio/result.json`,
       JSON.stringify({ version: 4, state: 'running', error: '', imports: [] }),
     )
-  }, UPROJECT_DIR)
+  }, [UPROJECT_DIR, UPROJECT] as [string, string])
   await expect(page.locator('[data-export-status]')).toContainText(/DemoGame is importing/, {
     timeout: 15_000,
   })
@@ -1084,14 +1087,17 @@ test('the run is over when the EDITOR answers, not when the job file lands', asy
   // The editor claims the job and reports `running`: the panel says so — into
   // the SAME panel, still carrying the run's rows. A bar with no rows under it
   // is the ghost, and it cannot happen while the panel was never torn down.
-  await page.evaluate((dir: string) => {
+  await page.evaluate(([dir, uproject]: [string, string]) => {
     const mock = (window as any).__tauriMock
+    // A claimed import implies a live editor — without one, the poll's
+    // liveness verdict (unrealImportAbandoned) rightly reads it as dead.
+    mock.unrealOpenProjects = { editors: 1, projects: [uproject], unknown: 0 }
     mock.files.delete(`${dir}/Saved/DTHStudio/job.json`)
     mock.files.set(
       `${dir}/Saved/DTHStudio/result.json`,
       JSON.stringify({ version: 4, state: 'running', error: '', imports: [] }),
     )
-  }, UPROJECT_DIR)
+  }, [UPROJECT_DIR, UPROJECT] as [string, string])
   await expect(page.locator('[data-export-status]')).toContainText(/DemoGame is importing/, {
     timeout: 15_000,
   })
@@ -1239,4 +1245,69 @@ test('a job that DISAPPEARS still releases the run’s report', async ({ page })
   // …and the panel goes with it, rather than spinning behind a dead poll.
   await expect(page.locator('[data-task^="ue:"]')).toHaveCount(0)
   await expect(page.locator('[data-progressbar]')).toHaveCount(0)
+})
+
+test('a claimed import whose editor DIES fails the run instead of Working forever', async ({
+  page,
+}) => {
+  // The first real editor crash mid-import (2026-08-25, the day the Working
+  // face shipped) left running_job.json + a result.json frozen at `running`
+  // on disk — and the poll re-derived "Working" from those files forever,
+  // across app restarts, behind a deliberately inert button. The poll now
+  // measures liveness: a CLAIMED import with no editor that could be running
+  // it is a dead import, reported as the failure it is — through the normal
+  // outcome path, which also cleans the files.
+  const seed = buildSeed({
+    activeProjectFile: P.dcsp,
+    demo: true,
+    houdiniProject: true,
+    unrealProjects: [UPROJECT],
+  })
+  seed.files[`${EXPORT_ROOT}/KiraDefault/DTH_KiraDefault.dth`] = '{}'
+  seed.files[IMPORTED] = 'uasset-fixture'
+  seed.files[`${UPROJECT_DIR}/Plugins/DTHCharacterStudioRunner/DTHCharacterStudioRunner.uplugin`] =
+    JSON.stringify({ Version: UNREAL_BRIDGE_VERSION })
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+  await page.getByRole('button', { name: 'DTH Export' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.waitFor()
+  await dialog.locator('#daz-mode').click()
+  await page.getByRole('option', { name: /Skip Daz/ }).click()
+  await dialog.locator('#houdini-mode').click()
+  await page.getByRole('option', { name: /Skip Houdini/ }).click()
+  await dialog.getByRole('checkbox', { name: 'Send to DemoGame' }).check()
+  await dialog.getByRole('button', { name: 'Start' }).click()
+  await expect(page.locator('[data-task^="ue:"]')).toHaveCount(1, { timeout: 15_000 })
+
+  // The bridge claims the job with its editor alive — the import runs.
+  await page.evaluate(([dir, uproject]: [string, string]) => {
+    const mock = (window as any).__tauriMock
+    mock.unrealOpenProjects = { editors: 1, projects: [uproject], unknown: 0 }
+    mock.files.delete(`${dir}/Saved/DTHStudio/job.json`)
+    mock.files.set(
+      `${dir}/Saved/DTHStudio/result.json`,
+      JSON.stringify({ version: 4, state: 'running', error: '', imports: [] }),
+    )
+  }, [UPROJECT_DIR, UPROJECT] as [string, string])
+  await expect(page.locator('[data-export-status]')).toContainText(/DemoGame is importing/, {
+    timeout: 15_000,
+  })
+  await expect(page.getByRole('button', { name: /Working/ })).toBeVisible()
+
+  // The editor crashes: its process is gone, the result file stays frozen at
+  // `running`. The next poll's liveness verdict ends the run as a failure.
+  await page.evaluate(() => {
+    const mock = (window as any).__tauriMock
+    mock.unrealOpenProjects = { editors: 0, projects: [], unknown: 0 }
+  })
+  await expect(page.getByText(/Unreal: import failed.*editor is gone/)).toBeVisible({
+    timeout: 15_000,
+  })
+  // The run ends the normal way: rows and bar go with it, the button idles.
+  await expect(page.locator('[data-task^="ue:"]')).toHaveCount(0)
+  await expect(page.locator('[data-progressbar]')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'DTH Export' })).toBeVisible()
 })

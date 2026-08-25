@@ -14,6 +14,7 @@ import {
   unrealContentPath,
   unrealDestinationFor,
   unrealFolderFor,
+  unrealImportAbandoned,
   unrealImportStateFrom,
   unrealJobJson,
   unrealJobPaths,
@@ -453,10 +454,17 @@ export async function fetchUnrealSendPlan({ data }: { data: unknown }): Promise<
 /**
  * Poll one Unreal project's import.
  *
- * Reads only files, so it costs nothing when nothing is happening — and unlike
- * the other two legs it has no liveness probe: "is THAT project open in an
- * editor" is not answerable from a process list, so a closed editor leaves the
- * run reported as running rather than guessed dead.
+ * Reads only files when nothing is running — and once a job is CLAIMED, it
+ * also asks the editor probe whether any editor could still be running it
+ * (`unrealImportAbandoned`). This poll used to have no liveness check at all,
+ * on the reasoning that "is THAT project open" was not answerable from a
+ * process list — but the command-line probe answers most of it, and the first
+ * real editor crash mid-import (2026-08-25) showed the cost of not asking:
+ * `running_job.json` + a `result.json` frozen at `running` re-derived a
+ * "Working" state from disk forever, across app restarts, behind a
+ * deliberately inert button. A dead claimed import now comes back as a FAILED
+ * finish, which ends the run through the normal outcome path (failure toast,
+ * failed task row, dismiss cleaning the files).
  */
 export async function fetchUnrealImportProgress({
   data,
@@ -481,7 +489,24 @@ export async function fetchUnrealImportProgress({
     const claimed = await exists(paths.claimedFile).catch(() => false)
     if (!claimed) return null
   }
-  return unrealImportStateFrom(jobStillPending, result)
+  const state = unrealImportStateFrom(jobStillPending, result)
+  if (state.state === 'running') {
+    // A failed PROBE is not a dead editor — stay on "running" rather than
+    // fail a live import on a read hiccup; the next poll asks again.
+    const probe = await fetchUnrealOpenEditors().catch(() => null)
+    if (probe !== null && unrealImportAbandoned(probe, uprojectPath)) {
+      return {
+        state: 'finished',
+        assets: 0,
+        sets: 0,
+        reimported: false,
+        destination: '',
+        error:
+          'The Unreal editor is gone - it closed or crashed while the import was running. Open the project and run the import again.',
+      }
+    }
+  }
+  return state
 }
 
 /** What the running Unreal editors have open — the `unreal_open_projects`

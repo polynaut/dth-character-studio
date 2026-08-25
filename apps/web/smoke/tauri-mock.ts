@@ -226,6 +226,12 @@ export interface TauriMockState {
   houdiniRunning: boolean
   /** Mutable: the answer `houdini_job_exit_code` gives from now on. */
   houdiniExitCode: number | null
+  /** Mutable: the answer `unreal_open_projects` gives from now on. A spec
+   *  driving a CLAIMED import must set an editor holding the project first —
+   *  the poll's liveness verdict (`unrealImportAbandoned`) reads a claimed
+   *  job with no editor as a dead import, which is also the case flipping
+   *  this back to zero editors mid-run exercises. */
+  unrealOpenProjects: { editors: number; projects: Array<string>; unknown: number }
 }
 
 export function installTauriMock(seed: TauriMockSeed): void {
@@ -272,6 +278,7 @@ export function installTauriMock(seed: TauriMockSeed): void {
     unhandled,
     houdiniRunning: seed.houdiniRunning ?? false,
     houdiniExitCode: seed.houdiniExitCode ?? null,
+    unrealOpenProjects: seed.unrealOpenProjects ?? { editors: 0, projects: [], unknown: 0 },
     releaseHeld: () => {
       holdPaths.clear()
       for (const resolve of held.splice(0)) resolve()
@@ -1116,7 +1123,7 @@ export function installTauriMock(seed: TauriMockSeed): void {
       // auto-open path reachable in a spec at all (and nothing unknown, so no
       // start-of-run warning either).
       case 'unreal_open_projects':
-        return seed.unrealOpenProjects ?? { editors: 0, projects: [], unknown: 0 }
+        return state.unrealOpenProjects
       case 'install_unreal_dth': {
         // The real command copies the release's Unreal content; the fake marks
         // the destination folder so presence probes flip, and answers with a

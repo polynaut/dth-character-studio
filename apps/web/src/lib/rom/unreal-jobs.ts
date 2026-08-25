@@ -408,6 +408,33 @@ export function editorHoldsProject(probe: UnrealEditorProbe, uprojectPath: strin
 }
 
 /**
+ * A CLAIMED import whose editor is gone can never finish — and until this
+ * verdict existed, it didn't fail either: the first real editor crash
+ * mid-import (2026-08-25, the day #964 shipped) left `running_job.json` and a
+ * `result.json` frozen at `running` on disk, so every poll — across app
+ * restarts, forever — re-derived "Working" from files no process would ever
+ * update again, behind a deliberately inert button.
+ *
+ * The verdict is a liveness MEASUREMENT, not a timeout: the import runs
+ * inside an editor process, so "no editor could be running this import" is
+ * decisive. Two decisive shapes, same caution as {@link unrealLaunchVerdict}:
+ *
+ * - NO editor process at all — a crashed editor has no process; a frozen or
+ *   just-launching one still does, so this cannot misfire on a slow import.
+ * - every running editor identified, and none holds THIS project — editors
+ *   of other projects can't be running our import.
+ *
+ * Any UNIDENTIFIED editor might be the target: not abandoned. Only ever asked
+ * about a CLAIMED job — an unclaimed one waiting with no editor open is the
+ * normal queue-then-open flow, not a death.
+ */
+export function unrealImportAbandoned(probe: UnrealEditorProbe, uprojectPath: string): boolean {
+  if (probe.editors === 0) return true
+  if (probe.unknown > 0) return false
+  return !editorHoldsProject(probe, uprojectPath)
+}
+
+/**
  * Whether the studio may open a queued job's `.uproject` itself, given what
  * the editor probe saw. The reasons are the caller's status line — each case
  * reads differently to the person watching a job that "does nothing".
