@@ -65,7 +65,13 @@ export interface TauriMockSeed {
    *  editors have open, per their command lines. Omit for "no editor running",
    *  which is what keeps the auto-open path reachable; a spec seeding editors
    *  drives the beside-launch and the can't-identify warning. */
-  unrealOpenProjects?: { editors: number; projects: Array<string>; unknown: number }
+  unrealOpenProjects?: {
+    editors: number
+    projects: Array<string>
+    unknown: number
+    /** Defaults to true — the fake stands in for the Windows native layer. */
+    probed?: boolean
+  }
   /** The `.dcsp` this "window" was opened with — '' for a Home window. */
   activeProjectFile: string
   /** What `getVersion()` reports. */
@@ -230,8 +236,18 @@ export interface TauriMockState {
    *  driving a CLAIMED import must set an editor holding the project first —
    *  the poll's liveness verdict (`unrealImportAbandoned`) reads a claimed
    *  job with no editor as a dead import, which is also the case flipping
-   *  this back to zero editors mid-run exercises. */
-  unrealOpenProjects: { editors: number; projects: Array<string>; unknown: number }
+   *  this back to zero editors mid-run exercises.
+   *
+   *  `probed` defaults to true when a spec leaves it out: this fake stands in
+   *  for the WINDOWS native layer, where the probe can look. A spec that wants
+   *  the non-Windows stub — which answers zero editors WITHOUT having looked —
+   *  sets it false explicitly. */
+  unrealOpenProjects: {
+    editors: number
+    projects: Array<string>
+    unknown: number
+    probed?: boolean
+  }
 }
 
 export function installTauriMock(seed: TauriMockSeed): void {
@@ -1123,7 +1139,12 @@ export function installTauriMock(seed: TauriMockSeed): void {
       // auto-open path reachable in a spec at all (and nothing unknown, so no
       // start-of-run warning either).
       case 'unreal_open_projects':
-        return state.unrealOpenProjects
+        return {
+          ...state.unrealOpenProjects,
+          // A spread of an explicit `probed: undefined` would defeat a default
+          // written the other way round — and the schema REQUIRES the field.
+          probed: state.unrealOpenProjects.probed ?? true,
+        }
       case 'install_unreal_dth': {
         // The real command copies the release's Unreal content; the fake marks
         // the destination folder so presence probes flip, and answers with a

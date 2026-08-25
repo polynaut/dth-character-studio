@@ -182,6 +182,10 @@ export const unrealOpenProjectsSchema = z.object({
   projects: z.array(z.string()),
   /** Editors whose command line named no absolute `.uproject`. */
   unknown: z.number(),
+  /** Whether this platform can enumerate editors at all — false off Windows,
+   *  where the probe is a stub. A stub's `editors: 0` means "nobody looked",
+   *  so any reading of ZERO editors as a measurement must check this first. */
+  probed: z.boolean(),
 })
 
 export const poseAssetFramesSchema = z.object({

@@ -601,6 +601,75 @@ test('nothing claims the job and no editor is running — the studio opens the p
     .toEqual([{ path: UPROJECT }])
 })
 
+test('a stale `running` result beside a PENDING job is not a death — the leg still opens', async ({
+  page,
+}) => {
+  // The liveness verdict is only ever about a CLAIMED import. Queueing deletes
+  // any previous result first, but that delete is best-effort by design ("the
+  // state rule tolerates a stale read until it is rewritten"), so a locked
+  // result file leaves a `running` result sitting beside a job nothing has
+  // claimed — and `unrealImportStateFrom` reads that pair as running.
+  //
+  // Measuring liveness there would kill the queue-then-open flow before it
+  // ever opened the editor: no editor is SUPPOSED to be up for a job still
+  // waiting to be claimed. The poll asks only when the job file is gone.
+  const seed = buildSeed({
+    activeProjectFile: P.dcsp,
+    demo: true,
+    houdiniProject: true,
+    unrealProjects: [UPROJECT],
+  })
+  seed.files[`${EXPORT_ROOT}/KiraDefault/DTH_KiraDefault.dth`] = '{}'
+  seed.files[IMPORTED] = 'uasset-fixture'
+  seed.files[`${UPROJECT_DIR}/Plugins/DTHCharacterStudioRunner/DTHCharacterStudioRunner.uplugin`] =
+    JSON.stringify({ Version: UNREAL_BRIDGE_VERSION })
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+  await page.getByRole('button', { name: 'DTH Export' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.waitFor()
+  await dialog.locator('#daz-mode').click()
+  await page.getByRole('option', { name: /Skip Daz/ }).click()
+  await dialog.locator('#houdini-mode').click()
+  await page.getByRole('option', { name: /Skip Houdini/ }).click()
+  await dialog.getByRole('checkbox', { name: 'Send to DemoGame' }).check()
+  await dialog.getByRole('button', { name: 'Start' }).click()
+
+  // The job has to be ON DISK before the stale result can be put beside it —
+  // the rows arm ahead of the send, so a visible row is not a written file.
+  const JOB = `${UPROJECT_DIR}/Saved/DTHStudio/job.json`
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          (job) => ((window as any).__tauriMock.files as Map<string, string>).has(job),
+          JOB,
+        ),
+      { timeout: 15_000 },
+    )
+    .toBe(true)
+  // The job STAYS — this is the locked-result shape, not a claim.
+  await page.evaluate((dir: string) => {
+    const mock = (window as any).__tauriMock
+    mock.unrealOpenProjects = { editors: 0, projects: [], unknown: 0 }
+    mock.files.set(
+      `${dir}/Saved/DTHStudio/result.json`,
+      JSON.stringify({ version: 4, state: 'running', error: '', imports: [] }),
+    )
+  }, UPROJECT_DIR)
+
+  // The leg does what it always did: no editor is up, so the studio opens the
+  // project. Several polls pass on the way here — a verdict asked about this
+  // job would have fired on the first of them.
+  await expect
+    .poll(() => callsNamed(page, 'shell_open_file'), { timeout: 20_000 })
+    .toEqual([{ path: UPROJECT }])
+  await expect(page.getByText(/editor is gone/)).toHaveCount(0)
+  await expect(page.locator('[data-task^="ue:"]')).toHaveCount(1)
+})
+
 test('a DIFFERENT project is open — the studio opens the target beside it', async ({ page }) => {
   // The reported bug (2026-08-20): an editor holding some other project meant
   // the old any-editor-running rule never launched anything, and the job sat
@@ -1298,13 +1367,17 @@ test('a claimed import whose editor DIES fails the run instead of Working foreve
   await expect(page.getByRole('button', { name: /Working/ })).toBeVisible()
 
   // The editor crashes: its process is gone, the result file stays frozen at
-  // `running`. The next poll's liveness verdict ends the run as a failure.
+  // `running`. The next poll's liveness verdict ends the run as a failure —
+  // "next" being up to LIVENESS_INTERVAL_MS (10 s) away, not the next 2.5 s
+  // tick: the probe is a PowerShell child and the poll throttles it. Hence a
+  // timeout with room for the throttle plus a tick, rather than the 15 s the
+  // file-driven assertions above use.
   await page.evaluate(() => {
     const mock = (window as any).__tauriMock
     mock.unrealOpenProjects = { editors: 0, projects: [], unknown: 0 }
   })
   await expect(page.getByText(/Unreal: import failed.*editor is gone/)).toBeVisible({
-    timeout: 15_000,
+    timeout: 30_000,
   })
   // The run ends the normal way: rows and bar go with it, the button idles.
   await expect(page.locator('[data-task^="ue:"]')).toHaveCount(0)

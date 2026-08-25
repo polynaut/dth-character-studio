@@ -365,6 +365,9 @@ describe('unrealLaunchVerdict', () => {
     editors,
     projects,
     unknown,
+    // Every launch case is about what a WINDOWS probe saw — the unprobed
+    // platform is `unrealImportAbandoned`'s problem, not this verdict's.
+    probed: true,
   })
 
   it('launches when nothing is running at all', () => {
@@ -416,16 +419,16 @@ describe('unidentifiedEditorTargets', () => {
     // Identified editors are the launch verdict's business — either the
     // target is open (claims the job) or it gets opened beside them.
     expect(
-      unidentifiedEditorTargets({ editors: 1, projects: [OTHER], unknown: 0 }, [UPROJECT]),
+      unidentifiedEditorTargets({ editors: 1, projects: [OTHER], unknown: 0, probed: true }, [UPROJECT]),
     ).toEqual([])
-    expect(unidentifiedEditorTargets({ editors: 0, projects: [], unknown: 0 }, [UPROJECT])).toEqual(
+    expect(unidentifiedEditorTargets({ editors: 0, projects: [], unknown: 0, probed: true }, [UPROJECT])).toEqual(
       [],
     )
   })
 
   it('names the targets an unidentified editor might be holding', () => {
     expect(
-      unidentifiedEditorTargets({ editors: 1, projects: [], unknown: 1 }, [UPROJECT, OTHER]),
+      unidentifiedEditorTargets({ editors: 1, projects: [], unknown: 1, probed: true }, [UPROJECT, OTHER]),
     ).toEqual([UPROJECT, OTHER])
   })
 
@@ -434,7 +437,7 @@ describe('unidentifiedEditorTargets', () => {
     // irrelevant to this target.
     expect(
       unidentifiedEditorTargets(
-        { editors: 2, projects: ['d:\\unreal projects\\demogame\\demogame.uproject'], unknown: 1 },
+        { editors: 2, projects: ['d:\\unreal projects\\demogame\\demogame.uproject'], unknown: 1, probed: true },
         [UPROJECT, OTHER],
       ),
     ).toEqual([OTHER])
@@ -448,26 +451,35 @@ describe('unrealImportAbandoned', () => {
   const target = 'D:/Unreal Projects/DemoGame/DemoGame.uproject'
 
   it('no editor process at all: dead — a crashed editor has no process', () => {
-    expect(unrealImportAbandoned({ editors: 0, projects: [], unknown: 0 }, target)).toBe(true)
+    expect(unrealImportAbandoned({ editors: 0, projects: [], unknown: 0, probed: true }, target)).toBe(true)
   })
 
   it('an unidentified editor might be the target: not dead', () => {
-    expect(unrealImportAbandoned({ editors: 1, projects: [], unknown: 1 }, target)).toBe(false)
+    expect(unrealImportAbandoned({ editors: 1, projects: [], unknown: 1, probed: true }, target)).toBe(false)
   })
 
   it('every editor identified and none holds the project: dead', () => {
     expect(
       unrealImportAbandoned(
-        { editors: 1, projects: ['D:/Unreal Projects/Other/Other.uproject'], unknown: 0 },
+        { editors: 1, projects: ['D:/Unreal Projects/Other/Other.uproject'], unknown: 0, probed: true },
         target,
       ),
     ).toBe(true)
   })
 
+  it('a platform that cannot look: NOT dead, however empty the answer', () => {
+    // Off Windows the Rust probe is a stub — `editors: 0` there is "nobody
+    // looked". Believing it would fail every macOS import the moment its
+    // bridge claimed the job, and nothing gates the Unreal leg to Windows.
+    expect(unrealImportAbandoned({ editors: 0, projects: [], unknown: 0, probed: false }, target)).toBe(
+      false,
+    )
+  })
+
   it('the target is open (any path spelling): alive', () => {
     expect(
       unrealImportAbandoned(
-        { editors: 1, projects: ['D:\\Unreal Projects\\DemoGame\\DEMOGAME.UPROJECT'], unknown: 0 },
+        { editors: 1, projects: ['D:\\Unreal Projects\\DemoGame\\DEMOGAME.UPROJECT'], unknown: 0, probed: true },
         target,
       ),
     ).toBe(false)

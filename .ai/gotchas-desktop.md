@@ -816,3 +816,23 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   `renameCharacterPath` (`storage/characters.ts`). The rename is the FIRST write
   in `saveCharacter`, so a failure aborts the save cleanly — never half-renamed.
 
+- **A `#[cfg(not(windows))]` probe stub returns a SHAPE, not a measurement — and
+  its zeroes are indistinguishable from a real answer at the FFI boundary.**
+  `unreal_open_projects` answers `{ editors: 0, projects: [], unknown: 0 }` off
+  Windows (`unreal_install.rs`), which every existing caller happened to read
+  harmlessly — until an import-liveness verdict read "zero editors" as "the
+  editor died" (caught in review of #968). Nothing gates the Unreal leg to
+  Windows: no platform check exists anywhere in `apps/web/src` (there is no
+  `plugin-os` dependency at all), an Unreal-only run bypasses the Daz and
+  Houdini gates entirely, and the guide's Windows-only list
+  (`docs/guide/01-installation.md`) names Daz, the exporter plugin and hython —
+  not Unreal. So the stub would have failed every macOS import the moment its
+  bridge claimed the job, on a machine where the import was running fine.
+  The fix is the general rule: **a stub must say that it is one.** The probe
+  carries `probed: bool` (false only off Windows — a FAILED WMI query still
+  degrades to `tasklist`, which did look, so that path stays `true`), and any
+  verdict reading an emptiness as evidence checks it first. Same family as the
+  `unknown`/`None` rules in `procs.rs`: what the studio could not see must stay
+  unseen, never be counted as absent. When adding a `cfg`-stubbed probe, ask
+  what its empty answer will MEAN to a future caller — the zero costs nothing
+  until someone treats it as a fact.

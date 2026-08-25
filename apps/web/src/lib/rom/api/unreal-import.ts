@@ -20,7 +20,7 @@ import {
   unrealJobPaths,
   unrealLaunchVerdict,
 } from '../unreal-jobs'
-import type { UnrealEditorProbe, UnrealImportState } from '../unreal-jobs'
+import type { UnrealEditorProbe, UnrealImportResult, UnrealImportState } from '../unreal-jobs'
 import { unrealOpenProjectsSchema } from './native-types'
 import { charScopeInput, joinPath, locateCharacter, charsRoot, resolveProject } from './core'
 // The `.uproject` opens through the same OS-association path as a `.hip` or a
@@ -456,8 +456,8 @@ export async function fetchUnrealSendPlan({ data }: { data: unknown }): Promise<
  *
  * Reads only files when nothing is running — and once a job is CLAIMED, it
  * also asks the editor probe whether any editor could still be running it
- * (`unrealImportAbandoned`). This poll used to have no liveness check at all,
- * on the reasoning that "is THAT project open" was not answerable from a
+ * ({@link unrealImportAbandoned}). This poll used to have no liveness check at
+ * all, on the reasoning that "is THAT project open" was not answerable from a
  * process list — but the command-line probe answers most of it, and the first
  * real editor crash mid-import (2026-08-25) showed the cost of not asking:
  * `running_job.json` + a `result.json` frozen at `running` re-derived a
@@ -465,6 +465,12 @@ export async function fetchUnrealSendPlan({ data }: { data: unknown }): Promise<
  * deliberately inert button. A dead claimed import now comes back as a FAILED
  * finish, which ends the run through the normal outcome path (failure toast,
  * failed task row, dismiss cleaning the files).
+ *
+ * The probe is NOT free — a PowerShell + WMI child, which `procs.rs` bars from
+ * per-tick polls — and this poll ticks every 2.5 s for the minutes an import
+ * blocks the editor, so the ask is throttled to {@link LIVENESS_INTERVAL_MS}
+ * per project. The file reads stay on every tick; only the process
+ * measurement is rationed.
  */
 export async function fetchUnrealImportProgress({
   data,
@@ -475,14 +481,7 @@ export async function fetchUnrealImportProgress({
   if (!isTauri()) return null
   const paths = unrealJobPaths(uprojectPath)
   const jobStillPending = await exists(paths.jobFile).catch(() => false)
-  let result = null
-  try {
-    if (await exists(paths.resultFile)) {
-      result = parseUnrealResult(await readTextFile(paths.resultFile))
-    }
-  } catch {
-    result = null
-  }
+  const result = await readUnrealResult(paths.resultFile)
   if (!jobStillPending && result === null) {
     // Neither file: nothing was ever started for this project (or the caller
     // already dismissed it). Nothing to report rather than a made-up state.
@@ -490,30 +489,89 @@ export async function fetchUnrealImportProgress({
     if (!claimed) return null
   }
   const state = unrealImportStateFrom(jobStillPending, result)
-  if (state.state === 'running') {
-    // A failed PROBE is not a dead editor — stay on "running" rather than
-    // fail a live import on a read hiccup; the next poll asks again.
-    const probe = await fetchUnrealOpenEditors().catch(() => null)
-    if (probe !== null && unrealImportAbandoned(probe, uprojectPath)) {
-      return {
-        state: 'finished',
-        assets: 0,
-        sets: 0,
-        reimported: false,
-        destination: '',
-        error:
-          'The Unreal editor is gone - it closed or crashed while the import was running. Open the project and run the import again.',
-      }
-    }
+  // Only a CLAIMED import is asked about. `unrealImportStateFrom` also calls a
+  // `running` RESULT running while the job file is still pending — the shape a
+  // stale result left behind when queueing could not delete it (the remove is
+  // best-effort by design: "locked — the state rule tolerates a stale read").
+  // That job has not been claimed by anything, so no editor is expected to be
+  // up for it yet, and the liveness verdict would kill the queue-then-open
+  // flow before it ever opened the editor.
+  if (state.state !== 'running' || jobStillPending) {
+    livenessAskedAt.delete(uprojectPath)
+    return state
   }
-  return state
+  if (!livenessDue(uprojectPath)) return state
+  // A failed PROBE is not a dead editor — stay on "running" rather than
+  // fail a live import on a read hiccup; the next poll asks again.
+  const probe = await fetchUnrealOpenEditors().catch(() => null)
+  if (probe === null || !unrealImportAbandoned(probe, uprojectPath)) return state
+  // The verdict is about a moment BEFORE the probe: the result was read first,
+  // and the ~200 ms the probe costs is enough for the editor to have written
+  // its final result and exited inside it. Believing the verdict without
+  // looking again would report a SUCCESSFUL import as a failure — and then
+  // dismiss it, deleting the result that proved otherwise. Re-read: the files
+  // are the authority, the process measurement only says nobody will write
+  // them again.
+  const settled = await readUnrealResult(paths.resultFile)
+  if (settled !== null && settled.state !== 'running') {
+    return unrealImportStateFrom(false, settled)
+  }
+  return {
+    state: 'finished',
+    assets: 0,
+    sets: 0,
+    reimported: false,
+    destination: '',
+    error:
+      'The Unreal editor is gone — it closed or crashed while the import was running. Open the project and run the import again.',
+  }
+}
+
+/** When each project's import was last measured for liveness — see
+ *  {@link livenessDue}. Keyed by `.uproject` path; the poll drops an entry the
+ *  moment its import stops reading `running`, so the next claim is measured
+ *  straight away rather than inheriting a stale clock. */
+const livenessAskedAt = new Map<string, number>()
+
+/** How often a running import may be measured. The probe behind it is a
+ *  PowerShell + WMI child (~200 ms measured), and `procs.rs` forbids per-tick
+ *  process spawns from UI polls for exactly that reason — the DTH Export panel
+ *  polls this leg every 2.5 s, for the MINUTES an import blocks the editor.
+ *  Ten seconds is four times cheaper than the tick and still instant next to
+ *  an import that takes minutes: nobody experiences a crash reported 10 s
+ *  late. */
+const LIVENESS_INTERVAL_MS = 10_000
+
+/** Whether this project's import may be measured now, remembering that it was.
+ *  A first ask is always due, so a window opening onto an already-wedged
+ *  import fails it on the first poll rather than ten seconds in. */
+function livenessDue(uprojectPath: string): boolean {
+  const now = Date.now()
+  const last = livenessAskedAt.get(uprojectPath)
+  if (last !== undefined && now - last < LIVENESS_INTERVAL_MS) return false
+  livenessAskedAt.set(uprojectPath, now)
+  return true
+}
+
+/** The bridge's `result.json`, parsed — `null` when it is absent, unreadable
+ *  or not a result the studio understands. Read in two places inside one poll
+ *  (see {@link fetchUnrealImportProgress}), so it is a function rather than a
+ *  copied try/catch. */
+async function readUnrealResult(resultFile: string): Promise<UnrealImportResult | null> {
+  try {
+    if (!(await exists(resultFile))) return null
+    return parseUnrealResult(await readTextFile(resultFile))
+  } catch {
+    return null
+  }
 }
 
 /** What the running Unreal editors have open — the `unreal_open_projects`
- *  probe, parsed. Browser answer: no editors, nothing unknown (nothing to
- *  decide about either). */
+ *  probe, parsed. Browser answer: nothing seen and `probed: false` — a browser
+ *  cannot look at processes at all, which is not the same claim as "no editor
+ *  is running" (see {@link unrealImportAbandoned}). */
 export async function fetchUnrealOpenEditors(): Promise<UnrealEditorProbe> {
-  if (!isTauri()) return { editors: 0, projects: [], unknown: 0 }
+  if (!isTauri()) return { editors: 0, projects: [], unknown: 0, probed: false }
   return unrealOpenProjectsSchema.parse(await invoke('unreal_open_projects'))
 }
 

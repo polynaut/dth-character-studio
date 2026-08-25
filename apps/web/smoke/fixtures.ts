@@ -283,7 +283,13 @@ export interface SeedOptions {
   }>
   /** What `unreal_open_projects` reports — the running editors and what their
    *  command lines say they have open (see tauri-mock). Omit for "no editor". */
-  unrealOpenProjects?: { editors: number; projects: Array<string>; unknown: number }
+  unrealOpenProjects?: {
+    editors: number
+    projects: Array<string>
+    unknown: number
+    /** Defaults to true — the fake stands in for the Windows native layer. */
+    probed?: boolean
+  }
   /** settings.json: the DIM manifests folder (Settings → Project product config). */
   dimManifestsFolder?: string
   /** settings.json: the Daz Studio install folder. The DTH Export panel's
