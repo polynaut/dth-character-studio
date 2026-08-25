@@ -38,7 +38,11 @@ import { ScriptsSection } from '#/components/character/scripts-section.tsx'
 import { NotesEditor } from '#/components/notes-editor.tsx'
 import { DazSceneField } from '#/components/daz-scene-field.tsx'
 import { HoudiniProjectsField } from '#/components/houdini-projects-field.tsx'
-import { characterFolderDisplay, characterScriptsDisplay } from '#/lib/character-paths.ts'
+import {
+  characterFinalExportDisplay,
+  characterFolderDisplay,
+  characterScriptsDisplay,
+} from '#/lib/character-paths.ts'
 import { displayPath, parentDir } from '#/lib/path.ts'
 import { failedMorphKeysForScene, matchLinkedScene } from '#/lib/rom/run-log.ts'
 import { repointCharacterPaths } from '#/lib/rom/storage.ts'
@@ -431,6 +435,13 @@ function CharacterPage({ onImportRemount }: { onImportRemount: () => void }) {
     character.projectName,
     character.name,
   )
+  // The pipeline's FINAL export folder (Houdini networks -> Unreal), shown as
+  // the scripts pane's third read-only row. Null without a character folder —
+  // the pane's no-folder message covers that case already.
+  const finalExportDir =
+    location && project && character.exportPath.trim() !== ''
+      ? characterFinalExportDisplay(location, project.exportSubdir)
+      : null
 
   // A folder move can repoint the linked scene (it travels with the folder when
   // it lives inside it). Sync just the scene path into the draft + baseline so
@@ -735,7 +746,7 @@ function CharacterPage({ onImportRemount }: { onImportRemount: () => void }) {
         </div>
       </section>
 
-      <ScriptsSection character={character} scriptsPath={scriptsPath} />
+      <ScriptsSection character={character} scriptsPath={scriptsPath} finalExportDir={finalExportDir} />
       </SceneLock>
 
       {/* NOT inside the lock: Delete must stay reachable for an abandoned

@@ -23,19 +23,25 @@ const EXPORT_GUIDE_URL =
  * exports the grooms) and all of them generate whenever they apply, so the pane
  * that used to carry the two export-shape switches now just says where they land.
  *
- * The "Export directory" sub-section lives at the bottom: read-only since
- * schema v29, the directory is DERIVED (`<character>/<houdini subfolder>/
- * daz-export`, created at character creation and re-resolved on every save),
- * so there is nothing to pick — it only shows where the export scripts
- * deliver.
+ * Two read-only directory sub-sections live at the bottom, one per pipeline
+ * stage: the **Daz export directory** (derived since schema v29 —
+ * `<character>/<houdini subfolder>/daz-export`, where the export scripts
+ * deliver and the `.hip`s read), and the **Export directory** (the project's
+ * `exportSubdir` inside the character folder — where the Houdini DTH networks
+ * write the files that are then imported into Unreal Engine). Nothing to pick
+ * in either; they only say where things land.
  */
 export function ScriptsSection({
   character,
   scriptsPath,
+  finalExportDir,
 }: {
   character: Character
   /** From lib/character-paths.ts; null until "My DAZ 3D Library" is set. */
   scriptsPath: RootedDir | null
+  /** The FINAL export folder (`characterFinalExportDisplay`); null for a
+   *  character without a folder of its own. */
+  finalExportDir: string | null
 }) {
   const exportSet = character.exportPath.trim() !== ''
 
@@ -70,9 +76,9 @@ export function ScriptsSection({
       )}
       <div className="mt-5 border-t pt-4">
         <h3 className="mb-3 flex w-fit items-center gap-1 text-xl font-semibold">
-          Export directory
-          <InfoPopup label="Export directory — more information">
-            How the export directory works —{' '}
+          Daz export directory
+          <InfoPopup label="Daz export directory — more information">
+            How the Daz export directory works —{' '}
             <GuideLink href={EXPORT_GUIDE_URL}>open the guide</GuideLink>
           </InfoPopup>
         </h3>
@@ -80,11 +86,9 @@ export function ScriptsSection({
           <>
             <PathCode path={displayPath(character.exportPath)} className={tallPathChipClass} />
             <p className="mt-3 text-xs text-muted-foreground">
-              Fixed, beside the character&apos;s Houdini projects — these files exist to be
-              imported by Houdini, so they sit next to the <code>.hip</code> that reads them.
-              Each scene exports into its own subfolder here, named after the scene&apos;s folder
-              (e.g. <code>primary</code>). A generated Houdini project reaches them by a
-              relative path (<code>$HIP/…</code>), so everything stays moveable.
+              Where the Daz export scripts deliver, beside the Houdini projects that read it —
+              one subfolder per scene (e.g. <code>primary</code>), reached from the{' '}
+              <code>.hip</code>s by relative path.
             </p>
           </>
         ) : (
@@ -94,6 +98,23 @@ export function ScriptsSection({
           </p>
         )}
       </div>
+      {exportSet && finalExportDir ? (
+        <div className="mt-5 border-t pt-4">
+          <h3 className="mb-3 flex w-fit items-center gap-1 text-xl font-semibold">
+            Export directory
+            <InfoPopup label="Export directory — more information">
+              The pipeline&apos;s final stop: the DazToHue networks in the character&apos;s
+              Houdini projects export here, and these files are what gets imported into Unreal
+              Engine.
+            </InfoPopup>
+          </h3>
+          <PathCode path={finalExportDir} className={tallPathChipClass} />
+          <p className="mt-3 text-xs text-muted-foreground">
+            The final export — what the Houdini DTH networks write, imported from here into
+            Unreal Engine.
+          </p>
+        </div>
+      ) : null}
     </section>
   )
 }

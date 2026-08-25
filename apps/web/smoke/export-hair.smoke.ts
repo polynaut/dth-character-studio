@@ -21,13 +21,19 @@ test('a Save writes the three separate scripts, one job each', async ({ page }) 
   await page.getByRole('link', { name: /Kira/ }).click()
   await page.getByText(/custom ROM frames/).waitFor()
 
-  // The panel and the Export directory sub-section share one box (the
-  // standalone Export directory box folded in here once the directory became
-  // derived and read-only) — a split back into two panels fails here.
+  // The panel and its directory sub-sections share one box (the standalone
+  // Export directory box folded in here once the directory became derived and
+  // read-only) — a split back into separate panels fails here. Both stages
+  // show: the Daz export directory (scripts deliver, .hips read) and the
+  // final Export directory (Houdini networks write, Unreal imports).
   const scripts = page
     .locator('section')
     .filter({ has: page.getByRole('heading', { name: 'Daz scripts generated' }) })
-  await expect(scripts.getByRole('heading', { name: 'Export directory' })).toBeVisible()
+  // Anchored regexes: the headings' accessible names carry their info-popup
+  // labels, so exact matching can't be used — and bare substrings would let
+  // 'Export directory' match the Daz row too.
+  await expect(scripts.getByRole('heading', { name: /^Daz export directory/ })).toBeVisible()
+  await expect(scripts.getByRole('heading', { name: /^Export directory/ })).toBeVisible()
   await expect(scripts).toContainText(/exports/i)
   // Nothing left to toggle in here.
   await expect(scripts.getByRole('switch')).toHaveCount(0)

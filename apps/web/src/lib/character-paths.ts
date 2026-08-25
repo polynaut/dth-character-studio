@@ -1,4 +1,5 @@
 import { displayPath } from '#/lib/path.ts'
+import { normalizeRelFolder } from '#/lib/rom/library.ts'
 import { studioCharScriptsDir } from '#/lib/rom/storage.ts'
 
 import type { CharacterLocation } from '#/lib/rom/api.ts'
@@ -26,6 +27,21 @@ export function characterScriptsDisplay(
     dir: displayPath(studioCharScriptsDir(dazLibraryFolder, projectName, characterName)),
     root: displayPath(dazLibraryFolder),
   }
+}
+
+/**
+ * The character's FINAL export folder (`<char folder>/<exportSubdir>`) — where
+ * the Houdini DTH networks write the files that are then imported into Unreal
+ * Engine. The same rule every consumer of that folder resolves
+ * (`joinPath(location.folderAbs, normalizeRelFolder(project.exportSubdir))` in
+ * api/houdini.ts and friends), display-formatted for the scripts pane.
+ */
+export function characterFinalExportDisplay(
+  location: CharacterLocation,
+  exportSubdir: string,
+): string {
+  const sub = normalizeRelFolder(exportSubdir)
+  return displayPath(sub ? `${location.folderAbs}/${sub}` : location.folderAbs)
 }
 
 /**
