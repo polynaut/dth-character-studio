@@ -981,28 +981,39 @@ function SettingsPage() {
               its manual field normally lives on the Project tab (next to the
               Daz Products toggle it arms). A Home window has no Project tab, so
               the machine couldn't be configured before any project was open —
-              offer the field here in that case. Hidden when an activated Daz
-              install derives it (the card above already lists it) and in a
-              project window (one editable copy at a time). */}
-          {!project && !dazDerived && (
+              offer the section here in that case (a project window keeps one
+              editable copy, on its tab). When an activated Daz install derives
+              the primary, the field collapses to a note — but the EXTRA folders
+              stay editable: the derivation knows only its own install's folder,
+              and which other DIM libraries exist is the user's alone. */}
+          {!project && (
             <section className="space-y-2 rounded-lg border bg-card p-5">
               <h2 className="font-semibold">Daz product scanning</h2>
-              <FolderField
-                label="DAZ Install Manager manifests folder (optional)"
-                value={settings.dimManifestsFolder}
-                placeholder="E:\DAZ 3D\Install Manager\ManifestFiles"
-                onChange={(value) => setSettings((s) => ({ ...s, dimManifestsFolder: value }))}
-                help="Arms the per-export Daz product scan; whether a project SHOWS the results is its own setting (Settings → Project)."
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => void onDetectDimFolder()}
-                disabled={detectingDim}
-              >
-                {detectingDim ? 'Detecting…' : 'Detect installed location'}
-              </Button>
+              {dazDerived ? (
+                <DerivedFieldNote
+                  label="DAZ Install Manager manifests folder"
+                  value={settings.dimManifestsFolder}
+                />
+              ) : (
+                <>
+                  <FolderField
+                    label="DAZ Install Manager manifests folder (optional)"
+                    value={settings.dimManifestsFolder}
+                    placeholder="E:\DAZ 3D\Install Manager\ManifestFiles"
+                    onChange={(value) => setSettings((s) => ({ ...s, dimManifestsFolder: value }))}
+                    help="Arms the per-export Daz product scan; whether a project SHOWS the results is its own setting (Settings → Project)."
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void onDetectDimFolder()}
+                    disabled={detectingDim}
+                  >
+                    {detectingDim ? 'Detecting…' : 'Detect installed location'}
+                  </Button>
+                </>
+              )}
               <ExtraDimManifestsFolders
                 folders={settings.extraDimManifestsFolders}
                 browseFrom={parentDir(settings.dimManifestsFolder)}

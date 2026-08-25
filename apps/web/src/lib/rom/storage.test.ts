@@ -1117,6 +1117,19 @@ describe('dimManifestsPathSpec (the product-scan folder spec)', () => {
     ).toEqual(['E:/DIM/ManifestFiles', 'D:/DIM 2/ManifestFiles'])
   })
 
+  it('dedupes across separators and a trailing slash (samePath norm)', () => {
+    // The derived primary arrives backslashed from the install scan; a user
+    // re-adding the same folder forward-slashed (or with a trailing slash)
+    // must not bake it twice — the runtime would scan it twice and double
+    // every product it names.
+    expect(
+      storage.dimManifestsFolderList({
+        dimManifestsFolder: 'D:\\DIM\\ManifestFiles',
+        extraDimManifestsFolders: ['D:/DIM/ManifestFiles', 'd:/dim/manifestfiles/', 'E:/DIM 2/MF'],
+      }),
+    ).toEqual(['D:\\DIM\\ManifestFiles', 'E:/DIM 2/MF'])
+  })
+
   it('extras alone still arm the scan; nothing configured reads empty', () => {
     expect(
       storage.dimManifestsPathSpec({ ...base, extraDimManifestsFolders: ['D:/DIM 2/MF'] }),

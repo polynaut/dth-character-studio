@@ -994,7 +994,7 @@ describe('kill animation (DthKillAnimation.dsa)', () => {
  * carriers can reach — a carrier is a thin call into this runtime.
  */
 interface ProductsModule {
-  getInstalledProducts: (dimManifestPath: string, quiet?: boolean) => Array<unknown>
+  getInstalledProducts: (dimManifestPath: string, quiet?: boolean) => Array<{ name: string; sku: string }>
   writeProductsCsv: (
     outputCsvPath: string,
     matchResults: { matches: Array<unknown>; unmatched: Array<unknown> },
@@ -1007,12 +1007,16 @@ interface ProductsModule {
 const PRODUCTS_EXPORTS = 'getInstalledProducts, writeProductsCsv'
 
 /**
- * Load DthProducts.dsa with every filesystem call failing — the state both
- * refusals are reached from — and a MessageBox that records instead of blocking.
- * `verbose` is injected so the top-level `include(DthUtils)` is skipped (the
- * same typeof guard the real runtime uses when the wrapper included it first).
+ * Load DthProducts.dsa with the filesystem reduced to the in-memory `fs` map
+ * (folder path → { manifest filename → content }; omitted = EVERYTHING missing,
+ * the state both refusals are reached from) and a MessageBox that records
+ * instead of blocking. `verbose` is injected so the top-level
+ * `include(DthUtils)` is skipped (the same typeof guard the real runtime uses
+ * when the wrapper included it first).
  */
-function loadProducts(): { products: ProductsModule; dialogs: Array<string> } {
+function loadProducts(
+  fs?: Record<string, Record<string, string>>,
+): { products: ProductsModule; dialogs: Array<string> } {
   const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
   const src = readFileSync(join(dir, 'DthProducts.dsa'), 'utf8')
   const dialogs: Array<string> = []
@@ -1021,10 +1025,17 @@ function loadProducts(): { products: ProductsModule; dialogs: Array<string> } {
   const box = (_message: unknown, title: unknown) => {
     dialogs.push(String(title))
   }
+  // `fs` flattened to full file paths, for DzFile reads.
+  const fileContents: Record<string, string> = {}
+  for (const [folder, files] of Object.entries(fs ?? {})) {
+    for (const [name, content] of Object.entries(files)) fileContents[`${folder}/${name}`] = content
+  }
   class DzDir {
     constructor(public path: string) {}
     exists() {
-      return false // the moved folder / unmounted drive this test is about
+      // Only folders in `fs` exist — a missing one is the moved folder /
+      // unmounted drive several tests are about.
+      return fs ? Object.hasOwn(fs, this.path) : false
     }
     filePath(name: string) {
       return `${this.path}/${name}`
@@ -1033,7 +1044,8 @@ function loadProducts(): { products: ProductsModule; dialogs: Array<string> } {
       return false
     }
     entryList() {
-      return []
+      const files = fs?.[this.path]
+      return files ? Object.keys(files) : []
     }
   }
   class DzFileInfo {
@@ -1043,11 +1055,16 @@ function loadProducts(): { products: ProductsModule; dialogs: Array<string> } {
     }
   }
   class DzFile {
+    static ReadOnly = 1
     WriteOnly = 2
     Truncate = 4
     constructor(public path: string) {}
     open() {
-      return false // an unwritable output dir
+      // Readable only when seeded; anything else (an output CSV) is unwritable.
+      return Object.hasOwn(fileContents, this.path)
+    }
+    read() {
+      return fileContents[this.path] ?? ''
     }
     write() {}
     close() {}
@@ -1101,6 +1118,27 @@ describe('product scan under the Runner (DthProducts.dsa)', () => {
       products.getInstalledProducts('D:/DIM/ManifestFiles|E:/DIM 2/ManifestFiles'),
     ).toEqual([])
     expect(dialogs).toEqual(['Directory Not Found', 'Directory Not Found'])
+  })
+
+  it('a missing folder skips only ITS manifests — a later folder still lands its products (v104)', () => {
+    // The headline of the multi-folder feature: one unmounted network drive
+    // must not blank the whole result. Folder one is gone, folder two holds a
+    // real DIM manifest — its product must come back anyway.
+    const { products, dialogs } = loadProducts({
+      'E:/DIM 2/ManifestFiles': {
+        'IM00012345-01_AdventurerClothes.dsx':
+          '<DAZInstallManifest VERSION="0.1">\n' +
+          ' <ProductName VALUE="Adventurer Clothes"/>\n' +
+          ' <ProductStoreIDX VALUE="12345-0"/>\n' +
+          '</DAZInstallManifest>\n',
+      },
+    })
+    const result = products.getInstalledProducts(
+      'D:/DIM/ManifestFiles|E:/DIM 2/ManifestFiles',
+      true,
+    )
+    expect(result.map((p) => [p.name, p.sku])).toEqual([['Adventurer Clothes', '12345-0']])
+    expect(dialogs).toEqual([]) // bulk: the missing folder logs, no modal
   })
 
   it('a spec of only separators/blanks reads as unconfigured (v104)', () => {

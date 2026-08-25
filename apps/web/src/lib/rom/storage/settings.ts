@@ -336,8 +336,13 @@ export function dimManifestsFolderList(
   const seen = new Set<string>()
   for (const raw of [settings.dimManifestsFolder, ...settings.extraDimManifestsFolders]) {
     const folder = raw.trim()
-    if (!folder || seen.has(folder.toLowerCase())) continue
-    seen.add(folder.toLowerCase())
+    // The dedupe key normalizes like `samePath` (the staleness compare): the
+    // derived primary arrives with backslashes while a typed extra may not, and
+    // the same folder surviving twice would be baked twice — the runtime then
+    // scans it twice and every product it names shows up doubled.
+    const key = folder.toLowerCase().replace(/\\/g, '/').replace(/\/+$/, '')
+    if (!key || seen.has(key)) continue
+    seen.add(key)
     out.push(folder)
   }
   return out
