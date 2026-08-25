@@ -1,7 +1,8 @@
 /**
  * The DTH Export button's progress faces — the brand mark, the finish toasts,
- * the elapsed-time readout and the three button states (idle, working,
- * interruptible) that the Daz and Houdini legs share.
+ * the elapsed-time readout and the button states (idle, working,
+ * interruptible) the three legs render: Daz and Houdini interruptible,
+ * Unreal working-only (the editor owns the import).
  *
  * Split out of `dth-export.tsx`; nothing here changed in the move.
  */
@@ -14,6 +15,7 @@ import { Button } from '@dth/ui'
 import dazLogo from '#/assets/daz-logo.png'
 import dthLogo from '#/assets/dth-logo.webp'
 import houdiniLogo from '#/assets/houdini-logo.svg'
+import unrealLogo from '#/assets/unreal-logo.svg'
 import { formatClock } from '#/lib/rom/execute-jobs.ts'
 import type { ExportRunProgress } from '#/lib/rom/api.ts'
 import type { HoudiniRunState } from '#/lib/rom/houdini-jobs.ts'
@@ -135,11 +137,14 @@ export function ElapsedSince({ since }: { since?: number }) {
 }
 
 /**
- * The live **Working** button — the run's one control, on both legs. At rest
- * it shows the leg's spinner, the mark of the app doing the work and the
- * elapsed clock; HOVERING it swaps the spinner for a stop mark and the tooltip
- * leads with what a click now does: **interrupt** the run at its next safe
- * point.
+ * The live **Working** button — the run's one control, on the two legs the
+ * studio can stop. At rest it shows the leg's spinner, the mark of the app
+ * doing the work and the elapsed clock; HOVERING it swaps the spinner for a
+ * stop mark and the tooltip leads with what a click now does: **interrupt**
+ * the run at its next safe point. The Unreal leg passes no `onInterrupt` —
+ * there is nothing the studio could stop (the editor owns the import) — and
+ * the button then promises nothing: no stop mark, no click, the status alone
+ * as its tooltip.
  *
  * What a click promises is exactly what the runtimes can deliver, so the
  * tooltip says it in full: the flag is dropped, and the generated Daz scripts
@@ -184,8 +189,10 @@ export function WorkingButton({
   status: string
   /** The interrupt has been requested — the run is draining to its next stop
    *  point (either this window asked, or the restored watch says it did). */
-  interrupting: boolean
-  onInterrupt: () => void
+  interrupting?: boolean
+  /** Absent = this leg cannot be stopped from here (the Unreal import runs
+   *  inside the editor) — the button is inert and says only its status. */
+  onInterrupt?: () => void
   since?: number
 }) {
   return (
@@ -202,19 +209,21 @@ export function WorkingButton({
       // nothing more to click".
       onClick={interrupting ? undefined : onInterrupt}
       title={
-        interrupting
-          ? 'Stopping at the next safe point — whatever is running right now (a scene load, one export call, one Houdini node) has to finish first.'
-          : `${status}\n\nClick to interrupt: stop this export at the next point where stopping is safe. The ROM build stops between blocks, the export that would have followed is skipped, and every scene and Houdini project still queued is dropped. Everything already written stays.`
+        !onInterrupt
+          ? status
+          : interrupting
+            ? 'Stopping at the next safe point — whatever is running right now (a scene load, one export call, one Houdini node) has to finish first.'
+            : `${status}\n\nClick to interrupt: stop this export at the next point where stopping is safe. The ROM build stops between blocks, the export that would have followed is skipped, and every scene and Houdini project still queued is dropped. Everything already written stays.`
       }
     >
       {/* Just "Working" — the counts and percents live in the pipeline panel
           above (and this button's tooltip); a constant label plus the
           reserved-width clock keeps the button from resizing every tick. The
           app mark names who is busy — the run happens outside the studio, and
-          the two legs are told apart by their marks. The spinner is the hover
+          the legs are told apart by their marks. The spinner is the hover
           swap's other half: pointer on = the stop mark, because the button's
-          click IS the interrupt. */}
-      {interrupting ? (
+          click IS the interrupt — so an interrupt-less leg never swaps. */}
+      {interrupting || !onInterrupt ? (
         <Loader2 className="animate-spin" />
       ) : (
         <>
@@ -295,6 +304,39 @@ export function HoudiniProgressButton({
           ? houdini.startedAtMs
           : undefined
       }
+    />
+  )
+}
+
+/** The Unreal leg's {@link WorkingButton}: the export legs are done and the
+ *  job is in the editor's hands — the run's last leg, so the header button
+ *  must say Working until the editor answers (it used to drop back to the
+ *  idle "DTH Export" the moment Houdini reported, while the panel above it
+ *  showed the import; reported 2026-08-25). Inert by design — no
+ *  `onInterrupt`, because the import runs inside Unreal and nothing here
+ *  could stop it; clearing a job nothing claimed is housekeeping
+ *  (Settings → App Data). The cyan mini bar mirrors the panel's Unreal
+ *  fraction: an import is claimed (50) or it is not (0) — the bridge reports
+ *  no finer progress. */
+export function UnrealProgressButton({
+  importing,
+  status,
+  since,
+}: {
+  /** The editor has claimed the job (`running`) — false while the job file
+   *  still waits for an editor to pick it up. */
+  importing: boolean
+  status: string
+  since?: number
+}) {
+  return (
+    <WorkingButton
+      percent={importing ? 50 : 0}
+      barColor="var(--color-unreal-blue)"
+      appLogo={unrealLogo}
+      appName="Unreal Editor"
+      status={status}
+      since={since}
     />
   )
 }

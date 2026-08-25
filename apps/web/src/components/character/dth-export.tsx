@@ -59,6 +59,7 @@ import {
   HOUDINI_TOAST_ID,
   HoudiniProgressButton,
   NO_UNREAL_PROJECTS,
+  UnrealProgressButton,
   capitalizeStatus,
   dismissFinishToasts,
   exportWarningToast,
@@ -1147,12 +1148,13 @@ export function DthExportAction({
     // The claim is news, and the panel must SAY it: the bridge writes a
     // `running` result before the work, but nothing here re-published, so the
     // line sat on "waiting for the editor to pick the job up" through the
-    // whole import and then jumped to the outcome (measured 2026-08-19). The
-    // freeze is named because it is real: the import blocks Unreal's game
-    // thread for minutes, and an unresponsive editor over a "waiting" line
-    // reads as a hang.
+    // whole import and then jumped to the outcome (measured 2026-08-19).
+    // Deliberately short — it used to append "the editor freezes while the
+    // DazToHue pipeline runs" (the import does block Unreal's game thread for
+    // minutes), but the line overflowed the status bar and was cut on request
+    // (2026-08-25). Don't grow it back.
     if (state?.state === 'running') {
-      const running = `Unreal; ${stemOf(uprojectPath)} is importing — the editor freezes while the DazToHue pipeline runs`
+      const running = `Unreal; ${stemOf(uprojectPath)} is importing`
       if (unrealStatusRef.current !== running) {
         unrealStatusRef.current = running
         // Only into a panel that still exists. `publishPipeline` renders a
@@ -1744,7 +1746,7 @@ export function DthExportAction({
         unrealStatusRef.current =
           adopted[0].state === 'waiting'
             ? `Unreal; queued for ${name} — waiting for the editor to pick the job up`
-            : `Unreal; ${name} is importing — the editor freezes while the DazToHue pipeline runs`
+            : `Unreal; ${name} is importing`
         pipelineRef.current = {
           daz: [],
           houdini: [],
@@ -1889,6 +1891,26 @@ export function DthExportAction({
         // window shows "Working" again, which is the truth it can see.
         interrupting={interrupting || interruptedRef.current}
         onInterrupt={() => void onInterrupt()}
+      />
+    )
+  }
+
+  // The Unreal leg: the export legs are done, the job is in the editor's
+  // hands, and the run is NOT over — the report waits for the editor (#953).
+  // The header button has to say so too: it used to fall through to the idle
+  // "DTH Export" here the moment Houdini reported, right under a panel still
+  // showing the import (reported 2026-08-25 — invisible before #953 only
+  // because the run had already declared itself finished at the file write).
+  // A `finished` state is the run over and the panel gone — idle is correct.
+  if (unrealRun && unrealRun.state !== 'finished') {
+    return (
+      <UnrealProgressButton
+        importing={unrealRun.state === 'running'}
+        // The panel's status line IS this leg's newest word (the queue line,
+        // the editor-launch outcome, the import) — the button's tooltip says
+        // the same thing rather than a second wording of it.
+        status={pipeline?.status || 'Unreal; waiting for the editor to pick the job up'}
+        since={unrealStartedAtRef.current > 0 ? unrealStartedAtRef.current : undefined}
       />
     )
   }
