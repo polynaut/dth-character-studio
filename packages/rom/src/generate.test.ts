@@ -19,6 +19,7 @@ import {
   orphanedRomAnimations,
   ROM_ANIMATIONS_FOLDER,
   toBulkExportOnlyScriptDsa,
+  toBuildRomAnimationScriptDsa,
   toBulkRomExportScriptDsa,
   toCharacterScriptDsa,
   toExportScriptDsa,
@@ -2309,7 +2310,9 @@ describe('exporter integration', () => {
 
   it('verifies the ROM save by the file TIMESTAMP moving, not the return value (v49/v50)', () => {
     const character = withReferencePose({ name: 'Ita', exportPath: 'X:\\exports\\ita' })
-    const content = toCharacterScriptDsa(character, {}, FRAMES).content
+    // The ROM-only CARRIER: since v103 the visible ROM_ script no longer saves
+    // at all, so the save-verification machinery lives in the carriers alone.
+    const content = toBuildRomAnimationScriptDsa(character, {}, FRAMES).content
     // Every Daz build disagrees about saveScene's return: bool, DzError (0 =
     // success), and void in DS4 — which logged a good save as a failure.
     expect(content).not.toContain('dthRomSaveRc')
@@ -2400,12 +2403,20 @@ describe('exporter integration', () => {
     expect(content.indexOf('Scene.saveScene(dthRomSavePath)')).toBeLessThan(
       content.indexOf('doExport('),
     )
-    // Every ROM-building carrier saves: without an export dir too ("or not"),
-    // and the hidden bulk script alike.
+    // Every ROM-building CARRIER saves: the rom-only one (no export dir
+    // needed) and the hidden bulk script alike.
     expect(
-      toCharacterScriptDsa(withReferencePose({ name: 'Kira' }), {}, FRAMES).content,
+      toBuildRomAnimationScriptDsa(withReferencePose({ name: 'Kira' }), {}, FRAMES).content,
     ).toContain('"/rom-animations"')
     expect(toBulkRomExportScriptDsa(character, {}, FRAMES).content).toContain('"/rom-animations"')
+    // The VISIBLE ROM_ script does NOT (runtime v103): a manual run is an
+    // inspection — its save silently overwrote the flow-built ROM on disk and
+    // repointed the open scene's filename to the _ROM.duf (reported
+    // 2026-08-25). It builds the ROM on the timeline and stops.
+    const visible = toCharacterScriptDsa(withReferencePose({ name: 'Kira' }), {}, FRAMES).content
+    expect(visible).not.toContain('completeBaseName() + "_ROM.duf"')
+    expect(visible).not.toContain('saveScene(dthRomSavePath)')
+    expect(visible).toContain('No ROM-scene save (runtime v103)')
     // The ROM-less carrier never SAVES one — Export_ rebuilds nothing. (It does
     // name the rom-animations paths: every script embeds the map that resolves
     // an open ROM animation back to its source scene.)

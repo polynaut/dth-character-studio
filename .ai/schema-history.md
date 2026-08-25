@@ -1409,3 +1409,17 @@ v102 — the motion-summary gate: the export carrier audits what the DTH
       The carrier also PRINTS what the audit concluded on every export, so a
       gate that fails open (log moved, exporter older than 2.1.9) cannot be
       mistaken for one that passed.
+v103 — the VISIBLE `ROM_<name>` script no longer saves the ROM scene: it
+      builds the ROM on the timeline and STOPS. Reported 2026-08-25 (manual
+      run of ROM_Ita_G9 from the Content Library): the shared one-script
+      build saved `rom-animations/<stem>_ROM.duf` on every path, so a manual
+      inspection run silently overwrote the flow-built ROM on disk AND
+      repointed the open scene's filename to the `_ROM.duf` — side effects
+      that belong to the DTH-Export flow, not to a double-clicked tile. New
+      `saveRomScene` axis on `buildRomScriptDsa` (the export split's `bulk`
+      flag cannot carry this: `.Build_ROM_Animation` is bulk=false and MUST
+      save — the reopenable copy is its entire purpose). Carriers
+      (`.Bulk_ROM_Export`, `.Build_ROM_Animation`) keep saving — their
+      contract with the scene-open menu and the export flow is unchanged;
+      only the visible script's save is gone, replaced by a comment saying
+      so. (v102 is the motion-summary gate, #967.)
