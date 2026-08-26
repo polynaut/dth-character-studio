@@ -19,9 +19,14 @@ whatever length felt natural rather than the length the feature deserved.
 
 ## 1. Establish the window
 
-What shipped since the guide last moved:
+What shipped since the guide last moved. **`git fetch origin` first** — a stale
+`origin/main` hides freshly merged PRs from the window entirely. *Earned by:* the
+2026-08-26 pass, whose stale ref hid #972, built the candidate list without it,
+and (working on what looked like an open feature branch) pushed to a branch whose
+PR was already squash-merged — the stale-branch-resurrection trap.
 
 ```sh
+git fetch origin
 git log -1 --format=%cd -- docs/guide            # guide's last touch
 git log --oneline <that-date-or-tag>..origin/main -- apps packages
 gh release view --json tagName -q .tagName       # or use the last release as the edge
