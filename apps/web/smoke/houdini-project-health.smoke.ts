@@ -436,6 +436,51 @@ test('the drawer names the missing textures in full, and does not gate the repai
   await expect(drawer.getByRole('button', { name: 'Make paths portable' })).toBeEnabled()
 })
 
+test('a project whose only work is a REHOMED library arms the button and says so', async ({
+  page,
+}) => {
+  // The moved-library project this feature exists for: nothing to collapse,
+  // no broken import — just a texture stored under a foreign library root that
+  // the scan found under THIS machine's `$DAZ3D_LIB`. Before `rehomable` was a
+  // kind of work, `planRepath` counted zero here and greyed the button out
+  // under a badge telling the user to press it.
+  //
+  // The two numbers are deliberately NOT summed anywhere on the way through:
+  // `collapsible` counts parms and `rehomable` counts unique files, so the row
+  // reads "1 to repoint" rather than folding it into an "absolute" total.
+  await openWithStore(
+    page,
+    scan({
+      refs: {
+        collapsible: 0,
+        foreign: 0,
+        broken: [],
+        hipRelative: [],
+        missingTextures: [GONE],
+        rehomable: [GONE],
+      },
+    }),
+  )
+
+  await page.getByRole('button', { name: /^Utils/ }).first().click()
+  const drawer = page.getByRole('dialog')
+  await expect(drawer.getByText('1 to repoint')).toBeVisible()
+  // The Baker-textures row must drop the reinstall advice for a file the user
+  // demonstrably has — that wording sent them after a product they own.
+  await expect(drawer.getByText(/It exists in your Daz library/)).toBeVisible()
+
+  const button = drawer.getByRole('button', { name: 'Make paths portable' })
+  await expect(button).toBeEnabled()
+  await button.click()
+
+  // The confirm sentence carries only the clauses with work in them: with
+  // nothing to collapse, a fixed leading clause opened this dialog on
+  // "Rewrite 0 references".
+  const confirm = page.getByRole('dialog', { name: 'Make stored paths portable?' })
+  await expect(confirm.getByText(/^Repoint 1 file from another library root/)).toBeVisible()
+  await expect(confirm.getByText(/Rewrite/)).toHaveCount(0)
+})
+
 test('a badge from a STALE store clears itself once the sweep re-reads the project', async ({
   page,
 }) => {

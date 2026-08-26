@@ -248,12 +248,21 @@ export function RefRows({
       <CheckRow
         label="Reference paths"
         warn={refs.collapsible > 0 || refs.rehomable.length > 0}
+        // The two numbers are NOT summed: `collapsible` counts PARMS and
+        // `rehomable` counts unique FILES (de-duplicated so the Baker-textures
+        // row can intersect it with `missingTextures`). Adding them would
+        // print one label over two units — and the tab's whole contract is
+        // that a number it shows is a number the run delivers.
         verdict={
-          refs.collapsible > 0 || refs.rehomable.length > 0
-            ? `${refs.collapsible + refs.rehomable.length} absolute`
-            : refs.foreign > 0
-              ? 'nothing more to make portable'
-              : 'all relative'
+          refs.collapsible > 0 && refs.rehomable.length > 0
+            ? `${refs.collapsible} absolute, ${refs.rehomable.length} to repoint`
+            : refs.collapsible > 0
+              ? `${refs.collapsible} absolute`
+              : refs.rehomable.length > 0
+                ? `${refs.rehomable.length} to repoint`
+                : refs.foreign > 0
+                  ? 'nothing more to make portable'
+                  : 'all relative'
         }
       >
         {refs.collapsible > 0 && (
@@ -547,8 +556,12 @@ export function RepathReport({
                   {entry.repaired.length > 0
                     ? ` · ${entry.repaired.length} broken import${entry.repaired.length === 1 ? '' : 's'} repaired`
                     : ''}
+                  {/* `reference(s)`, not a bare count: the confirm dialog
+                      promised de-duplicated FILES and the run reports the
+                      PARMS it rewrote, which is the larger number whenever one
+                      moved product is named by several layers. */}
                   {entry.rehomed.length > 0
-                    ? ` · ${entry.rehomed.length} rehomed onto $DAZ3D_LIB`
+                    ? ` · ${entry.rehomed.length} reference${entry.rehomed.length === 1 ? '' : 's'} rehomed onto $DAZ3D_LIB`
                     : ''}
                 </p>
                 {entry.repaired.map((fix) => (

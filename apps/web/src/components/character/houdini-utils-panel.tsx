@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
 import {
   AlertTriangle,
   Blocks,
@@ -111,6 +112,41 @@ import {
   RepathReport,
   TransferReport,
 } from './houdini-utils/parts.tsx'
+
+/** One repair the repath dialog offers, as a verb plus what it acts on. */
+interface RepathClause {
+  key: string
+  /** Lower case — `joinClauses` capitalizes whichever clause leads. */
+  verb: string
+  rest: ReactNode
+}
+
+/**
+ * `[a, b, c]` → `A, b, and c`, dropping the clauses that have no work in them
+ * and sentence-casing whichever survives first.
+ *
+ * The repath dialog lists three independent repairs and any SUBSET of them can
+ * be the whole run — a moved library arms the button on `rehomable` alone, an
+ * export folder that moved arms it on `broken` alone. A fixed sentence
+ * therefore opened with "Rewrite 0 references" on the first of those; an `and`
+ * pinned to a fixed clause lost the conjunction whenever that clause was the
+ * absent one; and a leading clause that is only ever written lower case starts
+ * the sentence mid-word. All three are decided from the surviving list here,
+ * which is the only spelling that stays right as a fourth repair arrives.
+ */
+function joinClauses(clauses: Array<RepathClause | false>): ReactNode[] {
+  const kept = clauses.filter((clause): clause is RepathClause => clause !== false)
+  return kept.flatMap(({ key, verb, rest }, i) => {
+    const clause = (
+      <Fragment key={key}>
+        {i === 0 ? verb.charAt(0).toUpperCase() + verb.slice(1) : verb} {rest}
+      </Fragment>
+    )
+    return i === 0
+      ? [clause]
+      : [i === kept.length - 1 ? (kept.length === 2 ? ' and ' : ', and ') : ', ', clause]
+  })
+}
 
 /**
  * The Houdini card's "Utils" drawer — per-project tools that need Houdini itself
@@ -1026,7 +1062,16 @@ export function HoudiniUtilsPanel({
           utilsToast.success(
             `${collapsed} reference${collapsed === 1 ? '' : 's'} made portable` +
               (repaired > 0 ? `, ${repaired} broken one${repaired === 1 ? '' : 's'} repaired` : '') +
-              (rehomed > 0 ? `, ${rehomed} rehomed onto $DAZ3D_LIB` : '') +
+              // `reference(s)` spelled out: the confirm dialog promised a
+              // count of FILES (`rehomable` is de-duplicated paths, so the
+              // General tab can intersect it with `missingTextures`) while the
+              // run reports the PARMS it rewrote — one moved product is named
+              // by many layers, so this number is legitimately the larger one.
+              // Naming the unit is what keeps the pair from reading as a
+              // contradiction.
+              (rehomed > 0
+                ? `, ${rehomed} reference${rehomed === 1 ? '' : 's'} rehomed onto $DAZ3D_LIB`
+                : '') +
               '.',
           )
           setRepathOpen(false)
@@ -2033,23 +2078,48 @@ export function HoudiniUtilsPanel({
           title="Make stored paths portable?"
         >
           <div className="space-y-2 text-sm">
+            {/* Only the clauses with work in them — `joinClauses` picks the
+                lead, the casing and the `and`. All three matter now that a
+                project can arm this button on `rehomable` ALONE (a moved
+                library, nothing to collapse): the old fixed sentence opened
+                with "Rewrite 0 references" there, and its `and` was hard-coded
+                onto the rehome clause, so the far commoner broken-only run
+                lost the conjunction. */}
             <p>
-              Rewrite <strong>{repath.collapsible}</strong> reference
-              {repath.collapsible === 1 ? '' : 's'} to sit under <code>$HIP</code>,{' '}
-              <code>$JOB</code> or <code>$DAZ3D_LIB</code>
-              {repath.broken > 0 && (
-                <>
-                  , rebuild <strong>{repath.broken}</strong> broken DazToHue import
-                  reference{repath.broken === 1 ? '' : 's'}
-                </>
-              )}
-              {repath.rehomable > 0 && (
-                <>
-                  , and repoint <strong>{repath.rehomable}</strong> file
-                  {repath.rehomable === 1 ? '' : 's'} from another library root at your Daz
-                  library (<code>$DAZ3D_LIB</code>)
-                </>
-              )}{' '}
+              {joinClauses([
+                repath.collapsible > 0 && {
+                  key: 'collapse',
+                  verb: 'rewrite',
+                  rest: (
+                    <>
+                      <strong>{repath.collapsible}</strong> reference
+                      {repath.collapsible === 1 ? '' : 's'} to sit under <code>$HIP</code>,{' '}
+                      <code>$JOB</code> or <code>$DAZ3D_LIB</code>
+                    </>
+                  ),
+                },
+                repath.broken > 0 && {
+                  key: 'broken',
+                  verb: 'rebuild',
+                  rest: (
+                    <>
+                      <strong>{repath.broken}</strong> broken DazToHue import reference
+                      {repath.broken === 1 ? '' : 's'}
+                    </>
+                  ),
+                },
+                repath.rehomable > 0 && {
+                  key: 'rehome',
+                  verb: 'repoint',
+                  rest: (
+                    <>
+                      <strong>{repath.rehomable}</strong> file
+                      {repath.rehomable === 1 ? '' : 's'} from another library root at your
+                      Daz library (<code>$DAZ3D_LIB</code>)
+                    </>
+                  ),
+                },
+              ])}{' '}
               across <strong>{repath.targets.length}</strong> project
               {repath.targets.length === 1 ? '' : 's'}.
             </p>

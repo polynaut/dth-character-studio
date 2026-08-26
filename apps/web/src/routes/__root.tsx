@@ -232,7 +232,7 @@ function RootComponent() {
                 '!absolute !top-1/2 !right-2 !left-auto !size-7 !-translate-y-1/2 !transform-none !rounded-md !border-0 !bg-transparent !text-muted-foreground hover:!bg-accent hover:!text-foreground [&>svg]:!size-4',
             },
           }}
-          />
+        />
       </div>
       {/* App-styled auto-update confirm (replaces the native OS dialog). */}
       <UpdatePromptHost />

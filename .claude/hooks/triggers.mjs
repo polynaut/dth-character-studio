@@ -283,6 +283,12 @@ export const TRIGGERS = [
     anchor: "Radix's modal `Dialog` sets `pointer-events: none`",
   },
   {
+    id: 'overlay-dismiss-exempt',
+    path: /packages\/ui\/src\/(primitives\/(modal|side-panel)|overlay-exempt|refocus-click)|apps\/web\/src\/routes\/__root\.tsx$/,
+    doc: GOTCHAS_WEB,
+    anchor: "A click inside the host's toast layer must never backdrop-dismiss",
+  },
+  {
     id: 'overlay-sweep',
     path: /packages\/ui\/src\/primitives\/|apps\/web\/src\/components\/update-prompt\.tsx$/,
     doc: GOTCHAS_WEB,

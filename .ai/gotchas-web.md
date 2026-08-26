@@ -334,6 +334,24 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   regression traded for a transient cosmetic one. There is nothing to cancel
   there anyway: only a DELAYED open can outlive a sweep, and focus opens
   synchronously. Caught by a fail-then-pass test, not by review.
+- **A click inside the host's toast layer must never backdrop-dismiss an
+  overlay either — `onPointerDownOutside` owes BOTH
+  `isRefocusPointerDown` and `isOverlayExemptPointerDown`.** A separate hole
+  from the refocus click above, with a separate guard. sonner (2.0.8) renders
+  **in place, no portal** (`createPortal` appears nowhere in its dist), so
+  `__root.tsx` mounts the `<Toaster/>` outside the Radix layer a
+  `Modal`/`SidePanel` opens — and Radix reads a click on a toast's own ✕ as an
+  outside pointerdown. Measured 2026-08-26: dismissing Rescan's success toast
+  closed the Houdini utils drawer that raised it; `Modal` had the same hole.
+  The counter is an ATTRIBUTE contract, not a sonner dependency —
+  `packages/ui/src/overlay-exempt.ts` exports `OVERLAY_DISMISS_EXEMPT_ATTR`
+  (`data-overlay-dismiss-exempt`) and the host wraps its toast layer in a div
+  carrying it, so any new host-level layer that outlives the overlay under it
+  (a future notification rail) owes the attribute. The check runs at
+  *pointerdown* time, so a toast that removes itself on click is still attached
+  when Radix asks. Note this is the OPPOSITE direction from the `dismissToasts`
+  sweep above: that clears STALE toasts when a drawer opens, this protects a
+  LIVE toast the open drawer's own action raised.
 - **floating-ui's `useFocus` must stay enabled while an InfoPopup is pinned**
   (its escape-key handler arms the block-focus guard that stops the
   return-focus from re-peeking the popup) — but that also leaves its reference
