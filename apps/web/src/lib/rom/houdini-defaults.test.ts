@@ -270,10 +270,10 @@ describe('planRepath', () => {
   const BROKEN_DTU = '/obj/DazToHue/DazToHueImport import_character_dtu_file'
   const HIP_REL_DTU = '/obj/DazToHue/DazToHueImport import_character_dtu_file'
   /** Measured with the pre-v0.64 $JOB still in place. */
-  const STALE_REFS = { collapsible: 0, foreign: 2, broken: [BROKEN_DTU], hipRelative: [] }
+  const STALE_REFS = { collapsible: 0, foreign: 2, broken: [BROKEN_DTU], hipRelative: [], rehomable: [] }
   /** The same file, measured again after the $JOB repair. */
-  const REPAIRED_REFS = { collapsible: 2, foreign: 0, broken: [BROKEN_DTU], hipRelative: [] }
-  const CLEAN_REFS = { collapsible: 0, foreign: 0, broken: [], hipRelative: [] }
+  const REPAIRED_REFS = { collapsible: 2, foreign: 0, broken: [BROKEN_DTU], hipRelative: [], rehomable: [] }
+  const CLEAN_REFS = { collapsible: 0, foreign: 0, broken: [], hipRelative: [], rehomable: [] }
 
   it('refuses to run while $JOB is still stale, and says why', () => {
     const plan = planRepath([{ hipPath: HIP, ok: true, job: ITA_STALE_JOB, refs: STALE_REFS }], ITA)
@@ -328,7 +328,7 @@ describe('planRepath', () => {
           hipPath: 'a.hiplc',
           ok: true,
           job: ITA,
-          refs: { collapsible: 0, foreign: 0, broken: [BROKEN_DTU], hipRelative: [] },
+          refs: { collapsible: 0, foreign: 0, broken: [BROKEN_DTU], hipRelative: [], rehomable: [] },
         },
       ],
       ITA,
@@ -349,13 +349,41 @@ describe('planRepath', () => {
           hipPath: 'a.hiplc',
           ok: true,
           job: ITA,
-          refs: { collapsible: 0, foreign: 0, broken: [], hipRelative: [HIP_REL_DTU] },
+          refs: { collapsible: 0, foreign: 0, broken: [], hipRelative: [HIP_REL_DTU], rehomable: [] },
         },
       ],
       ITA,
     )
     expect(plan.targets).toEqual(['a.hiplc'])
     expect(plan.collapsible).toBe(1)
+    expect(plan.reason).toBe('')
+  })
+
+  it('counts a project with only REHOMABLE refs as work too', () => {
+    // The moved-library case: nothing to collapse, nothing broken on the DTH
+    // import parms — but paths under a foreign library root exist under the
+    // current one, and rewriting them is exactly what the button offers. Same
+    // trap as broken-only and $HIP-relative-only before it: count less than
+    // the run does and the button greys out under its own badge.
+    const plan = planRepath(
+      [
+        {
+          hipPath: 'a.hiplc',
+          ok: true,
+          job: ITA,
+          refs: {
+            collapsible: 0,
+            foreign: 0,
+            broken: [],
+            hipRelative: [],
+            rehomable: ['e:/old daz/runtime/textures/x/y.jpg'],
+          },
+        },
+      ],
+      ITA,
+    )
+    expect(plan.targets).toEqual(['a.hiplc'])
+    expect(plan.rehomable).toBe(1)
     expect(plan.reason).toBe('')
   })
 
@@ -366,7 +394,7 @@ describe('planRepath', () => {
           hipPath: 'gone.hiplc',
           ok: false,
           job: '',
-          refs: { collapsible: 9, foreign: 9, broken: [], hipRelative: [] },
+          refs: { collapsible: 9, foreign: 9, broken: [], hipRelative: [], rehomable: [] },
         },
       ],
       ITA,
@@ -385,7 +413,7 @@ describe('planRepath', () => {
           hipPath: 'a.hiplc',
           ok: true,
           job: ITA,
-          refs: { collapsible: 3, foreign: 5, broken: [], hipRelative: [] },
+          refs: { collapsible: 3, foreign: 5, broken: [], hipRelative: [], rehomable: [] },
         },
       ],
       ITA,

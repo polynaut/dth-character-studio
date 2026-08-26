@@ -18,6 +18,7 @@ import type {
   ProjectPrefillInfo,
 } from '#/lib/rom/api.ts'
 import { DTH_FPS, defaultsRowsFor, formatFps, formatFrameRange } from '#/lib/rom/houdini-defaults.ts'
+import { countRehomable } from '#/lib/rom/houdini-validate.ts'
 import { mergeTouchCount, surfaceLabel } from '#/lib/rom/houdini-material-merge.ts'
 import type { SurfaceMergePlan } from '#/lib/rom/houdini-material-merge.ts'
 import { displayPath } from '#/lib/path.ts'
@@ -219,11 +220,12 @@ export function PathLine({ label, value }: { label?: string; value: string }) {
  * already written down, and fixing them is what turns "capable of being
  * movable" into movable.
  *
- * The third is the exception, and the only row in this drawer with nothing to
- * press: a missing texture is fixed outside the studio. It is shown anyway
- * because nothing else in the pipeline reports it (DazToHue bakes without it
- * and still says success), and it deliberately does NOT feed `clean` — gating
- * a repair on a problem that repair cannot touch would strand the button.
+ * The third is the near-exception: a missing texture whose library-relative
+ * tail exists under the CURRENT library (`rehomable`) is fixed by Make paths
+ * portable; the rest are fixed outside the studio. Shown either way because
+ * nothing else in the pipeline reports it (DazToHue bakes without it and still
+ * says success). Only the UNFIXABLE remainder stays out of `clean` — gating a
+ * repair on a problem that repair cannot touch would strand the button.
  */
 export function RefRows({
   refs,
@@ -234,27 +236,47 @@ export function RefRows({
     foreign: number
     broken: ReadonlyArray<string>
     missingTextures: ReadonlyArray<string>
+    rehomable: ReadonlyArray<string>
   }
   reason: string
 }) {
-  const clean = refs.collapsible === 0 && refs.broken.length === 0
+  const clean =
+    refs.collapsible === 0 && refs.broken.length === 0 && refs.rehomable.length === 0
+  const fixableTextures = countRehomable(refs.missingTextures, refs.rehomable)
   return (
     <>
       <CheckRow
         label="Reference paths"
-        warn={refs.collapsible > 0}
+        warn={refs.collapsible > 0 || refs.rehomable.length > 0}
+        // The two numbers are NOT summed: `collapsible` counts PARMS and
+        // `rehomable` counts unique FILES (de-duplicated so the Baker-textures
+        // row can intersect it with `missingTextures`). Adding them would
+        // print one label over two units — and the tab's whole contract is
+        // that a number it shows is a number the run delivers.
         verdict={
-          refs.collapsible > 0
-            ? `${refs.collapsible} absolute`
-            : refs.foreign > 0
-              ? 'nothing more to make portable'
-              : 'all relative'
+          refs.collapsible > 0 && refs.rehomable.length > 0
+            ? `${refs.collapsible} absolute, ${refs.rehomable.length} to repoint`
+            : refs.collapsible > 0
+              ? `${refs.collapsible} absolute`
+              : refs.rehomable.length > 0
+                ? `${refs.rehomable.length} to repoint`
+                : refs.foreign > 0
+                  ? 'nothing more to make portable'
+                  : 'all relative'
         }
       >
         {refs.collapsible > 0 && (
           <p>
             {refs.collapsible} path{refs.collapsible === 1 ? '' : 's'} can be stored relative to{' '}
             <code>$HIP</code>, <code>$JOB</code> or <code>$DAZ3D_LIB</code>.
+          </p>
+        )}
+        {refs.rehomable.length > 0 && (
+          <p>
+            {refs.rehomable.length} file{refs.rehomable.length === 1 ? '' : 's'} under another
+            library root exist{refs.rehomable.length === 1 ? 's' : ''} in your Daz library —
+            Make paths portable points {refs.rehomable.length === 1 ? 'it' : 'them'} at{' '}
+            <code>$DAZ3D_LIB</code>.
           </p>
         )}
         {refs.foreign > 0 && (
@@ -276,8 +298,7 @@ export function RefRows({
         )}
       </CheckRow>
       {/* Full paths here, basenames on the card badge: this is the view where
-          "which product is gone" is answerable. No repair button, deliberately —
-          the fix is a reinstall, outside the studio. */}
+          "which product is gone" is answerable. */}
       <CheckRow
         label="Baker textures"
         warn={refs.missingTextures.length > 0}
@@ -297,7 +318,12 @@ export function RefRows({
             </p>
             <p>
               DazToHue bakes without them and still reports success, so nothing else in the
-              pipeline will tell you. Reinstall the product or restore the library.
+              pipeline will tell you.{' '}
+              {fixableTextures > 0
+                ? fixableTextures === refs.missingTextures.length
+                  ? `${fixableTextures === 1 ? 'It exists' : 'All of them exist'} in your Daz library — Make paths portable repoints ${fixableTextures === 1 ? 'it' : 'them'}.`
+                  : `${fixableTextures} of them exist in your Daz library — Make paths portable repoints those; for the rest, reinstall the product or restore the library.`
+                : 'Reinstall the product or restore the library.'}
             </p>
           </>
         )}
@@ -530,10 +556,25 @@ export function RepathReport({
                   {entry.repaired.length > 0
                     ? ` · ${entry.repaired.length} broken import${entry.repaired.length === 1 ? '' : 's'} repaired`
                     : ''}
+                  {/* `reference(s)`, not a bare count: the confirm dialog
+                      promised de-duplicated FILES and the run reports the
+                      PARMS it rewrote, which is the larger number whenever one
+                      moved product is named by several layers. */}
+                  {entry.rehomed.length > 0
+                    ? ` · ${entry.rehomed.length} reference${entry.rehomed.length === 1 ? '' : 's'} rehomed onto $DAZ3D_LIB`
+                    : ''}
                 </p>
                 {entry.repaired.map((fix) => (
                   <p key={fix.label} className="truncate text-muted-foreground" title={fix.from}>
                     {fix.label}: <code>{fix.to}</code>
+                  </p>
+                ))}
+                {/* Old AND new for a rehome — this rewrite changes which FILE
+                    the scene reads, so the report shows the pair, not just
+                    the destination. */}
+                {entry.rehomed.map((fix) => (
+                  <p key={fix.label} className="truncate text-muted-foreground" title={fix.from}>
+                    {fix.label}: <code>{fix.from}</code> → <code>{fix.to}</code>
                   </p>
                 ))}
                 {entry.foreign.length > 0 && (

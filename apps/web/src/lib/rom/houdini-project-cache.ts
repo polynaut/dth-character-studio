@@ -175,8 +175,13 @@ export function scanCacheKey(
  *     that starts answering CORRECTLY, not only for one that starts answering
  *     at all — and doubly so here, where the old answer is a legitimate value
  *     ('this project writes one set') that would otherwise be served forever.
+ * 10 — + `refs.rehomable` (paths under a foreign library root whose tail exists
+ *     under `$DAZ3D_LIB`). An older entry answers `[]`, which reads as "nothing
+ *     to rehome" — so the General tab would keep calling those paths
+ *     unfixable, and Make paths portable would stay disabled over the very
+ *     projects the feature exists for.
  */
-export const SCAN_ANSWER_VERSION = 9
+export const SCAN_ANSWER_VERSION = 10
 
 /**
  * Fold the installed operator libraries into one comparable string — name, mtime

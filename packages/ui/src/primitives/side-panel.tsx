@@ -7,6 +7,7 @@ import { Button } from './button.tsx'
 import { closeFloatingLayers } from './overlay-sweep.ts'
 import { cn } from '../cn.ts'
 import { useUiConfig } from '../config.tsx'
+import { isOverlayExemptPointerDown } from '../overlay-exempt.ts'
 import { isRefocusPointerDown } from '../refocus-click.ts'
 
 /** How long the slide / fade runs — keep in sync with the `duration-300` classes. */
@@ -154,9 +155,13 @@ export function SidePanel({
           asChild
           // The click that re-focuses the app window (or follows a file drop
           // from a still-focused Explorer) is just bringing the window to the
-          // front — never a dismiss (see refocus-click.ts).
+          // front — never a dismiss (see refocus-click.ts). Neither is a click
+          // inside the host's toast layer — dismissing a toast must not take
+          // the drawer under it along (see overlay-exempt.ts).
           onPointerDownOutside={(e) => {
-            if (isRefocusPointerDown(e.detail.originalEvent)) e.preventDefault()
+            const original = e.detail.originalEvent
+            if (isRefocusPointerDown(original) || isOverlayExemptPointerDown(original))
+              e.preventDefault()
           }}
           // Focus leaving must not dismiss (mirrors Radix Dialog's modal
           // content) — the trap above snaps focus back anyway.

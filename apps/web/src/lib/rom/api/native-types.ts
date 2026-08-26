@@ -381,10 +381,18 @@ export const projectRefInfoSchema = z.object({
    *  Worth a badge because NOTHING else in the pipeline reports it. Measured on
    *  DazToHue 2.5 / Houdini 22.0: baking with a layer texture pointed at a file
    *  that does not exist prints `export finished in 0:00:02` and raises nothing.
-   *  Unlike every other problem the card reports, this one has no repair in the
-   *  Utils drawer — the fix is outside the studio (reinstall the product, or
-   *  restore the library), so the badge is deliberately diagnostic only. */
+   *  When a missing texture's library-relative tail exists under the CURRENT
+   *  library it also appears in `rehomable` below and Make paths portable fixes
+   *  it; otherwise the fix stays outside the studio (reinstall the product, or
+   *  restore the library) and the badge is diagnostic only. */
   missingTextures: z.array(z.string()).default([]),
+  /** Absolute paths under a FOREIGN library root whose library-relative tail
+   *  exists under `$DAZ3D_LIB` — the moved-library case. Unique normalized
+   *  paths like `missingTextures` (the UI intersects the two), and a path
+   *  lands here INSTEAD of counting as `foreign`: the repath's `_lib_rehome`
+   *  rewrites it, so it is fixable, not stuck. Defaulted for pre-v10 stored
+   *  scans (SCAN_ANSWER_VERSION forces the rescan that fills it). */
+  rehomable: z.array(z.string()).default([]),
 })
 
 /** One import reference a repath rebuilt. */
@@ -404,6 +412,11 @@ export const repathResultSchema = z.object({
   collapsed: z.number(),
   /** Broken DazToHue import references rebuilt from a sibling that resolved. */
   repaired: z.array(repairedRefSchema),
+  /** References under a FOREIGN library root repointed at `$DAZ3D_LIB` because
+   *  their library-relative tail exists there. Per PARM with old and new, not
+   *  folded into `collapsed`: this rewrite changes WHICH file the scene reads,
+   *  so the report names each one. */
+  rehomed: z.array(repairedRefSchema).default([]),
   /** Absolute references left alone because they sit under no known root. */
   foreign: z.array(z.string()),
   /** Pre-repath backup (empty for a dry run, and when nothing changed). */
