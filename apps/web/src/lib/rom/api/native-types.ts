@@ -283,6 +283,21 @@ export const remapResultSchema = z.object({
   detail: z.string(),
 })
 
+// --- DIM manifest owner lookup (dim.rs `DimOwner`) ---------------------------
+
+/** The product a DIM install manifest claims a file for (mirrors Rust
+ *  `DimOwner`) — how a missing baker texture no rehome can cover gets an
+ *  actionable product name instead of the generic reinstall advice. A file no
+ *  manifest lists simply has no entry in the result. */
+export const dimOwnerSchema = z.object({
+  /** The searched file name, exactly as it was passed in. */
+  fileName: z.string(),
+  productName: z.string(),
+  /** Store SKU (`ProductStoreIDX`, falling back to `ProductID`); '' when the
+   *  manifest names neither. */
+  sku: z.string(),
+})
+
 // --- DazToHue material utilities (houdini_material.rs) -----------------------
 
 /** One material slot on a node, with the bakers that name it — the unit the
@@ -735,6 +750,7 @@ export type DedupReport = z.infer<typeof dedupReportSchema>
 export type HousekeepingResult = z.infer<typeof housekeepingResultSchema>
 export type ExportZipReport = z.infer<typeof exportZipReportSchema>
 export type RemapResult = z.infer<typeof remapResultSchema>
+export type DimOwner = z.infer<typeof dimOwnerSchema>
 export type PoseAssetFramesResult = z.infer<typeof poseAssetFramesSchema>
 export type SceneWearable = z.infer<typeof sceneWearableSchema>
 export type SceneWearables = z.infer<typeof sceneWearablesSchema>

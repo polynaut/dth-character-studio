@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { HEALTHY, validateHoudiniProject } from './houdini-validate.ts'
+import {
+  HEALTHY,
+  groupTextureOwners,
+  unrehomedTextures,
+  validateHoudiniProject,
+} from './houdini-validate.ts'
 import {
   emptyScanStore,
   freshScan,
@@ -596,5 +601,76 @@ describe('renameScanEntry — a renamed project keeps its scan', () => {
   it('leaves a store that never knew the project alone', () => {
     const untouched = renameScanEntry(store(), `${CHAR}/houdini/Someone.hiplc`, TO)
     expect(Object.keys(untouched.projects)).toEqual([FROM.toLowerCase()])
+  })
+})
+
+
+describe('texture owner grouping — the DIM manifest lookup (issue #976)', () => {
+  const NAILS = 'e:/daz 3d/content/runtime/textures/daz/g9feminine01_nails_d_1005.jpg'
+  const FACE = 'e:/daz 3d/content/runtime/textures/daz/g9feminine01_face_d_1001.jpg'
+  const TORSO = 'd:/other/runtime/textures/raiya/rypi5_torso1.jpg'
+  const essentials = { productName: 'Genesis 9 Starter Essentials', sku: '86268-1' }
+
+  it('unrehomedTextures is the complement of the rehomable intersection', () => {
+    // Same normalization as countRehomable: separators and case must not
+    // decide whether a file counts as covered.
+    expect(
+      unrehomedTextures(
+        [NAILS, TORSO],
+        ['E:\\DAZ 3D\\Content\\Runtime\\Textures\\DAZ\\G9Feminine01_Nails_D_1005.jpg'],
+      ),
+    ).toEqual([TORSO])
+    expect(unrehomedTextures([NAILS], [])).toEqual([NAILS])
+    expect(unrehomedTextures([], [NAILS])).toEqual([])
+  })
+
+  it('groups the claimed files per product and keeps the unknown ones generic', () => {
+    const { named, unnamed } = groupTextureOwners(
+      [NAILS, FACE, TORSO],
+      [
+        { fileName: 'G9Feminine01_Nails_D_1005.jpg', ...essentials },
+        { fileName: 'G9Feminine01_Face_D_1001.jpg', ...essentials },
+      ],
+    )
+    // ONE line for the product, not one per file — the action is one install.
+    expect(named).toEqual([
+      {
+        ...essentials,
+        files: ['g9feminine01_nails_d_1005.jpg', 'g9feminine01_face_d_1001.jpg'],
+      },
+    ])
+    // The file no manifest knows keeps the generic reinstall wording.
+    expect(unnamed).toEqual([TORSO])
+  })
+
+  it('matches owners by basename, case-insensitively', () => {
+    // The scan stores lowercased paths while the manifest lists the vendor's
+    // own casing — the pairing must not depend on which side got lowercased.
+    const { named, unnamed } = groupTextureOwners(
+      ['D:/lib/Runtime/Textures/Raiya/RyPi5_Torso1.JPG'],
+      [{ fileName: 'rypi5_torso1.jpg', productName: 'RY Pi 5', sku: '' }],
+    )
+    expect(named).toEqual([{ productName: 'RY Pi 5', sku: '', files: ['RyPi5_Torso1.JPG'] }])
+    expect(unnamed).toEqual([])
+  })
+
+  it('an empty lookup answer leaves everything generic', () => {
+    const { named, unnamed } = groupTextureOwners([NAILS, TORSO], [])
+    expect(named).toEqual([])
+    expect(unnamed).toEqual([NAILS, TORSO])
+  })
+
+  it('two products yield two lines, in first-file order', () => {
+    const { named } = groupTextureOwners(
+      [NAILS, TORSO],
+      [
+        { fileName: 'rypi5_torso1.jpg', productName: 'RY Pi 5', sku: '11111' },
+        { fileName: 'g9feminine01_nails_d_1005.jpg', ...essentials },
+      ],
+    )
+    expect(named.map((g) => g.productName)).toEqual([
+      'Genesis 9 Starter Essentials',
+      'RY Pi 5',
+    ])
   })
 })

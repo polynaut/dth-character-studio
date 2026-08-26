@@ -137,6 +137,7 @@ export {
   clearProductScan,
   detectDimManifestsFolder,
   fetchProductScan,
+  findDimTextureOwners,
   ingestProjectProductScans,
 } from './api/products'
 // --- detected files: new scenes/.hips found in the character folder ---------
@@ -288,6 +289,7 @@ export type {
 } from './api/houdini-material'
 export type {
   HoudiniDefaultsResult,
+  DimOwner,
   HoudiniRefreshResult,
   MaterialNodeInfo,
   MaterialSectionResult,

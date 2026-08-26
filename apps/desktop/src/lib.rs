@@ -7,6 +7,7 @@ mod content;
 mod contract_tests;
 mod daz;
 mod dedup;
+mod dim;
 mod drives;
 mod elevate;
 mod elevation;
@@ -157,6 +158,7 @@ pub fn run() {
             avatar::upscale_avatar_file,
             avatar::downscale_avatar_png,
             dedup::dedup_daz_assets,
+            dim::find_dim_owners,
             uninstall::default_daz_uninstall_folders,
             uninstall::uninstall_daz,
             github::app_release_tags,

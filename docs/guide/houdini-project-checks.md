@@ -24,7 +24,7 @@ sit in the footer, in the order they have to be run.
 | **Timeline (range)** | The playbar next to what the project's own Alembic says it should be. A scene left on Houdini's default 1–240 over a longer ROM puts part of it outside the timeline. | Repair project settings |
 | **PoseAsset CSV path** | A read-out: *filled in*, *not filled in*, or *your DazToHue has no such parameter*. | Fill network |
 | **Reference paths** / **Import references** | What is already written down, and whether it resolves. | Make paths portable |
-| **Baker textures** | Material baker layer textures whose file is no longer on disk. When the same file exists in your Daz library (a moved library, a path from another machine), **Make paths portable** repoints it; otherwise putting the file back is a reinstall. | Make paths portable |
+| **Baker textures** | Material baker layer textures whose file is no longer on disk. When the same file exists in your Daz library (a moved library, a path from another machine), **Make paths portable** repoints it; otherwise putting the file back is a reinstall — and when your DIM manifests list the file, the row names the product (and SKU) to reinstall. | Make paths portable |
 
 > **Why baker textures are worth a row at all.** This is the one failure in the
 > pipeline that reports itself as success: baking with a missing texture prints

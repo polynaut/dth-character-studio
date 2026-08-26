@@ -6,7 +6,7 @@
 // on its own merits.
 /* oxlint-disable no-await-in-loop */
 import { exists, mkdir, readDir, readTextFile, remove, stat } from '@tauri-apps/plugin-fs'
-import { isTauri } from '@tauri-apps/api/core'
+import { invoke, isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
 import {
@@ -26,7 +26,9 @@ import {
   withoutUnlinkedScenes,
 } from '../character-products.ts'
 import { charScopeInput, charsRoot, joinPath, locateCharacter, resolveProject } from './core'
+import { dimOwnerSchema } from './native-types'
 
+import type { DimOwner } from './native-types'
 import type { MergedProductScan, ProductScan } from '@dth/rom'
 import type { CharacterProductsFile } from '../character-products.ts'
 import type { ProjectInfo } from './core'
@@ -63,6 +65,31 @@ export async function detectDimManifestsFolder(): Promise<string> {
     }
   }
   return ''
+}
+
+/**
+ * Which installed products the DIM manifests claim these file names for — the
+ * name behind a missing baker texture the repath cannot rehome (issue #976).
+ * Reads every configured ManifestFiles folder (`dimManifestsFolderList`, the
+ * same set the product scan bakes). Best-effort decoration: any failure — and a
+ * file no manifest lists — just leaves the Utils drawer's generic reinstall
+ * wording standing, so nothing here throws.
+ */
+export async function findDimTextureOwners(
+  fileNames: ReadonlyArray<string>,
+): Promise<Array<DimOwner>> {
+  if (!isTauri() || fileNames.length === 0) return []
+  try {
+    const folders = storage.dimManifestsFolderList(await storage.getSettings())
+    if (folders.length === 0) return []
+    return z.array(dimOwnerSchema).parse(
+      await invoke('find_dim_owners', {
+        request: { manifestsFolders: folders, fileNames: [...fileNames] },
+      }),
+    )
+  } catch {
+    return []
+  }
 }
 
 /** Every element of an unknown value that parses, the rest dropped. For reading

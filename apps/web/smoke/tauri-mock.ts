@@ -134,6 +134,11 @@ export interface TauriMockSeed {
    *  A path with no entry scans as a readable project with NO nodes, which is
    *  exactly what a scene that never got a DTH network looks like. */
   materialScan?: Record<string, Array<Record<string, unknown>>>
+  /** What `find_dim_owners` answers — the product a DIM install manifest
+   *  claims a file for, keyed by LOWERCASE file name. A file with no entry is
+   *  simply absent from the result, exactly like a file no manifest lists; the
+   *  Baker-textures row then keeps its generic reinstall wording. */
+  dimOwners?: Record<string, { productName: string; sku: string }>
   /** Hold a `scan` op open for this many ms before answering.
    *
    *  The fake answers instantly, which is right for every spec about what a
@@ -646,6 +651,14 @@ export function installTauriMock(seed: TauriMockSeed): void {
               .some((dir) => skip.includes(dir))
           })
           .sort()
+      }
+      case 'find_dim_owners': {
+        const { fileNames } = (args as { request: { fileNames: Array<string> } }).request
+        const known = seed.dimOwners ?? {}
+        return fileNames.flatMap((name) => {
+          const owner = known[name.toLowerCase()]
+          return owner ? [{ fileName: name, ...owner }] : []
+        })
       }
       case 'pose_asset_frames':
         return (args.paths as Array<string>).map((path) => {
