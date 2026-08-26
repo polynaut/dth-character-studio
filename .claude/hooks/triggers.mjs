@@ -191,6 +191,12 @@ export const TRIGGERS = [
     anchor: 'A version bump makes a refresh RUN; it does not make a migration HAPPEN',
   },
   {
+    id: 'dim-manifest-match',
+    path: /apps\/desktop\/src\/dim\.rs$/,
+    doc: GOTCHAS_DAZ,
+    anchor: "**A DIM install manifest is matched on the file's PARENT FOLDER",
+  },
+  {
     id: 'runtime-dsa',
     path: /apps\/web\/src\/lib\/rom\/runtime\//,
     doc: GOTCHAS_DAZ,

@@ -68,23 +68,25 @@ export async function detectDimManifestsFolder(): Promise<string> {
 }
 
 /**
- * Which installed products the DIM manifests claim these file names for — the
- * name behind a missing baker texture the repath cannot rehome (issue #976).
- * Reads every configured ManifestFiles folder (`dimManifestsFolderList`, the
- * same set the product scan bakes). Best-effort decoration: any failure — and a
- * file no manifest lists — just leaves the Utils drawer's generic reinstall
- * wording standing, so nothing here throws.
+ * Which installed products the DIM manifests claim these paths for — the name
+ * behind a missing baker texture the repath cannot rehome (issue #976). Reads
+ * every configured ManifestFiles folder (`dimManifestsFolderList`, the same set
+ * the product scan bakes). Full paths go over, not base names: the match is on
+ * the file's parent folder + name, so a name a dozen products ship cannot
+ * mis-attribute one. Best-effort decoration: any failure — and a file no
+ * manifest lists — just leaves the Utils drawer's generic reinstall wording
+ * standing, so nothing here throws.
  */
 export async function findDimTextureOwners(
-  fileNames: ReadonlyArray<string>,
+  paths: ReadonlyArray<string>,
 ): Promise<Array<DimOwner>> {
-  if (!isTauri() || fileNames.length === 0) return []
+  if (!isTauri() || paths.length === 0) return []
   try {
     const folders = storage.dimManifestsFolderList(await storage.getSettings())
     if (folders.length === 0) return []
     return z.array(dimOwnerSchema).parse(
       await invoke('find_dim_owners', {
-        request: { manifestsFolders: folders, fileNames: [...fileNames] },
+        request: { manifestsFolders: folders, paths: [...paths] },
       }),
     )
   } catch {

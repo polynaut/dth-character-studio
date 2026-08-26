@@ -56,7 +56,7 @@ import {
   projectsNeedingRepair,
   sameFolder,
 } from '#/lib/rom/houdini-defaults.ts'
-import { fileBaseName, unrehomedTextures } from '#/lib/rom/houdini-validate.ts'
+import { unrehomedTextures } from '#/lib/rom/houdini-validate.ts'
 import type {
   CharacterWithProject,
   DimOwner,
@@ -790,15 +790,16 @@ export function HoudiniUtilsPanel({
     [targetScan, charFolder],
   )
 
-  /** Basenames of the missing baker textures the repath cannot rehome — what
-   *  the DIM manifest lookup below tries to name a product for (issue #976). */
+  /** The missing baker textures the repath cannot rehome — what the DIM
+   *  manifest lookup below tries to name a product for (issue #976). FULL
+   *  paths: the lookup matches on the parent folder as well as the file name,
+   *  because a base name alone is shared by a dozen unrelated products. */
   const unfindableTextures = useMemo(
     () => [
       ...new Set(
         targetScan.projects
           .filter((p) => p.ok)
-          .flatMap((p) => unrehomedTextures(p.refs.missingTextures, p.refs.rehomable))
-          .map(fileBaseName),
+          .flatMap((p) => unrehomedTextures(p.refs.missingTextures, p.refs.rehomable)),
       ),
     ],
     [targetScan],

@@ -261,35 +261,39 @@ export interface TextureOwnerGroup {
   productName: string
   /** '' when the manifest named none — the line then shows no SKU. */
   sku: string
-  /** Basenames of the missing files this product claims, in row order. */
+  /** Basenames of the missing files this product claims, in row order and
+   *  de-duplicated: two products' files can share a base name, and printing it
+   *  twice on one line reads as a mistake. */
   files: Array<string>
 }
 
 /**
  * The unfixable missing textures sorted into owner lines: grouped by the
  * product the DIM manifests claim them for, plus the files no manifest knows —
- * those keep the generic reinstall wording (issue #976). Matched by basename,
- * case-insensitively; pure, so the row and its tests share the one grouping.
+ * those keep the generic reinstall wording (issue #976). Paired on the PATH the
+ * lookup echoed back, not on the base name (which collides across products);
+ * pure, so the row and its tests share the one grouping.
  */
 export function groupTextureOwners(
   /** Full paths — {@link unrehomedTextures}. */
   unfixable: ReadonlyArray<string>,
-  owners: ReadonlyArray<{ fileName: string; productName: string; sku: string }>,
+  owners: ReadonlyArray<{ path: string; productName: string; sku: string }>,
 ): { named: Array<TextureOwnerGroup>; unnamed: Array<string> } {
-  const byFile = new Map(owners.map((o) => [o.fileName.toLowerCase(), o]))
+  const byPath = new Map(owners.map((o) => [normalizeScanPath(o.path), o]))
   const groups = new Map<string, TextureOwnerGroup>()
   const unnamed: Array<string> = []
   for (const path of unfixable) {
-    const file = fileBaseName(path)
-    const owner = byFile.get(file.toLowerCase())
+    const owner = byPath.get(normalizeScanPath(path))
     if (!owner) {
       unnamed.push(path)
       continue
     }
     const key = `${owner.productName}|${owner.sku}`
+    const file = fileBaseName(path)
     const group = groups.get(key)
-    if (group) group.files.push(file)
-    else groups.set(key, { productName: owner.productName, sku: owner.sku, files: [file] })
+    if (group) {
+      if (!group.files.includes(file)) group.files.push(file)
+    } else groups.set(key, { productName: owner.productName, sku: owner.sku, files: [file] })
   }
   return { named: [...groups.values()], unnamed }
 }

@@ -471,7 +471,7 @@ test('an unfindable texture is named to its owning product from the DIM manifest
     }),
     {
       dimManifestsFolder: 'C:/Users/Public/Documents/DAZ 3D/InstallManager/ManifestFiles',
-      dimOwners: { 'rypi5_torso1.jpg': { productName: 'RY Pi 5 for Genesis 8', sku: '55555' } },
+      dimOwners: { [GONE]: { productName: 'RY Pi 5 for Genesis 8', sku: '55555' } },
     },
   )
 
@@ -485,6 +485,40 @@ test('an unfindable texture is named to its owning product from the DIM manifest
   // Every unfixable file has a name here, so the generic dead-end wording —
   // which is only for the files no manifest knows — must be gone.
   await expect(drawer.getByText(/einstall the product or restore the library/)).toHaveCount(0)
+})
+
+test('a texture no manifest claims keeps its own line beside the named product', async ({
+  page,
+}) => {
+  // The mixed case: naming one product must not leave the OTHER file wordless,
+  // and the generic sentence has to read against the lines above it rather
+  // than promising a "rest" the reader has not met yet.
+  const ORPHAN = 'd:/daz 3d/my daz 3d library/runtime/textures/nobody/unknown_d.jpg'
+  await openWithStore(
+    page,
+    scan({
+      refs: {
+        collapsible: 0,
+        foreign: 0,
+        broken: [],
+        hipRelative: [],
+        missingTextures: [GONE, ORPHAN],
+      },
+    }),
+    {
+      dimManifestsFolder: 'C:/Users/Public/Documents/DAZ 3D/InstallManager/ManifestFiles',
+      dimOwners: { [GONE]: { productName: 'RY Pi 5 for Genesis 8', sku: '55555' } },
+    },
+  )
+
+  await page.getByRole('button', { name: /^Utils/ }).first().click()
+  const drawer = page.getByRole('dialog')
+  await expect(drawer.getByText('RY Pi 5 for Genesis 8')).toBeVisible()
+  await expect(
+    drawer.getByText(/No DIM manifest lists the other one — reinstall the product/),
+  ).toBeVisible()
+  // "For the rest" would be the wrong opener: nothing was said before it.
+  await expect(drawer.getByText(/For the rest/)).toHaveCount(0)
 })
 
 test('a project whose only work is a REHOMED library arms the button and says so', async ({

@@ -290,8 +290,11 @@ export const remapResultSchema = z.object({
  *  actionable product name instead of the generic reinstall advice. A file no
  *  manifest lists simply has no entry in the result. */
 export const dimOwnerSchema = z.object({
-  /** The searched file name, exactly as it was passed in. */
-  fileName: z.string(),
+  /** The searched path, echoed back exactly as it was passed in — the caller
+   *  pairs its own rows on it. The lookup itself matches on the file's parent
+   *  folder + name, never the base name alone (which collides across
+   *  products); see `dim.rs`. */
+  path: z.string(),
   productName: z.string(),
   /** Store SKU (`ProductStoreIDX`, falling back to `ProductID`); '' when the
    *  manifest names neither. */

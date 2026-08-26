@@ -288,8 +288,8 @@ export type {
   SkeletonSection,
 } from './api/houdini-material'
 export type {
-  HoudiniDefaultsResult,
   DimOwner,
+  HoudiniDefaultsResult,
   HoudiniRefreshResult,
   MaterialNodeInfo,
   MaterialSectionResult,

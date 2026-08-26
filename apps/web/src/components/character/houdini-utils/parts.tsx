@@ -343,12 +343,6 @@ export function RefRows({
                 (fixableTextures === refs.missingTextures.length
                   ? `${fixableTextures === 1 ? 'It exists' : 'All of them exist'} in your Daz library — Make paths portable repoints ${fixableTextures === 1 ? 'it' : 'them'}.`
                   : `${fixableTextures} of them exist in your Daz library — Make paths portable repoints those.`)}
-              {/* Generic advice covers only the files no manifest claims — a
-                  named product below replaces it for the ones one does. */}
-              {unnamed.length > 0 &&
-                (fixableTextures > 0 || named.length > 0
-                  ? ' For the rest, reinstall the product or restore the library.'
-                  : 'Reinstall the product or restore the library.')}
             </p>
             {/* The owner lines — the dead end turned into a product name. One
                 line per product, not per file: a whole uninstalled product is
@@ -360,6 +354,18 @@ export function RefRows({
                 {group.sku ? ` (SKU ${group.sku})` : ''} — install it via DAZ Install Manager.
               </p>
             ))}
+            {/* Generic advice covers only the files no manifest claims, and is
+                worded against what came BEFORE it — so it sits after the named
+                lines rather than promising a "rest" the reader hasn't met. */}
+            {unnamed.length > 0 && (
+              <p>
+                {named.length > 0
+                  ? `No DIM manifest lists the ${unnamed.length === 1 ? 'other one' : `other ${unnamed.length}`} — reinstall the product or restore the library.`
+                  : fixableTextures > 0
+                    ? 'For the rest, reinstall the product or restore the library.'
+                    : 'Reinstall the product or restore the library.'}
+              </p>
+            )}
           </>
         )}
       </CheckRow>
