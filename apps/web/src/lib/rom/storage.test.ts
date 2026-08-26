@@ -149,6 +149,8 @@ describe('settings (settings.json)', () => {
     unrealPluginFolders: [],
     dimManifestsFolder: '',
     extraDimManifestsFolders: [],
+    // A MISSING list means the default set (an emptied one stays empty).
+    prepareTransferMorphs: storage.DEFAULT_TRANSFER_MORPHS,
     dazAssetsFolders: [],
     dazMorphsSource: '',
     dazMorphsDest: '',
@@ -202,6 +204,9 @@ describe('settings (settings.json)', () => {
       unrealPluginFolders: ['X:/unreal/DazToUnrealBridge', 'X:/unreal/MyPlugin_5.7'],
       dimManifestsFolder: 'C:/Users/Public/Documents/DAZ 3D/InstallManager/ManifestFiles',
       extraDimManifestsFolders: ['D:/DIM Library 2/ManifestFiles'],
+      // A pruned custom list — the round trip must NOT refill the defaults over
+      // a deliberately shortened one (only a MISSING field means defaults).
+      prepareTransferMorphs: ['Nipple', 'Voluptuous'],
       dazAssetsFolders: ['X:/assets/a', 'X:/assets/b'],
       dazMorphsSource: 'X:/morphs',
       dazMorphsDest: 'X:/My Library/data/Daz 3D',
@@ -943,6 +948,26 @@ describe('copyRuntimeFiles', () => {
     }
     // The visible twin gets it too — one source of truth for the content root.
     expect(files.get(`${root}/Build_Genesis_Index.dsa`)).toContain(`scriptDir: "${root}"`)
+  })
+
+  it('bakes the Prepare-for-transfer morph list, and an EDITED list re-installs', async () => {
+    // Defaults baked as a real array literal — a leftover token would make the
+    // script's `aBakedEntries` a ReferenceError in Daz.
+    await storage.copyRuntimeFiles(root)
+    const installed = files.get(`${root}/Prepare_For_Transfer.dsa`) as string
+    expect(installed).toContain(JSON.stringify(storage.DEFAULT_TRANSFER_MORPHS))
+    expect(installed).not.toContain('__DTH_TRANSFER_MORPHS__')
+
+    // Saving an edited list changes the stamp, so the routine (non-force) path
+    // re-bakes — without that, Settings edits only ever reached fresh installs.
+    await storage.saveSettings({
+      ...(await storage.getSettings()),
+      prepareTransferMorphs: ['Nipple', 'My Custom Morph'],
+    })
+    await storage.copyRuntimeFiles(root)
+    const rebaked = files.get(`${root}/Prepare_For_Transfer.dsa`) as string
+    expect(rebaked).toContain('["Nipple","My Custom Morph"]')
+    expect(rebaked).not.toContain('Voluptuous')
   })
 
   it('reinstalls when the install MOVED, even though the marker travelled with it', async () => {
