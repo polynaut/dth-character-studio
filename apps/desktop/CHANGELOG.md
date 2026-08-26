@@ -1,5 +1,19 @@
 # @dth/desktop
 
+## 0.91.0
+
+### Minor Changes
+
+- [#977](https://github.com/polynaut/dth-character-studio/pull/977) [`1ff0915`](https://github.com/polynaut/dth-character-studio/commit/1ff0915e4b39f85ed575ecda87eab0bffe0c3728) Thanks [@polynaut](https://github.com/polynaut)! - Make paths portable now FIXES paths under a foreign Daz library root — the
+  missing baker textures and "cannot be made portable" references a moved
+  library (or a `.hip` from another machine) leaves behind. When a path's
+  library-relative tail exists under your configured library, the repath
+  repoints it there as `$DAZ3D_LIB/…` (portable straight away); the General tab
+  counts these as fixable instead of stuck, the card badge says which missing
+  textures the button repairs, and the report names each old → new pair. Only a
+  path whose target file actually exists is ever rewritten — everything else
+  stays reported, exactly as before.
+
 ## 0.90.0
 
 ## 0.89.0
