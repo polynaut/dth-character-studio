@@ -95,8 +95,9 @@ it (Utils drawer) and the run sends only what it makes.
 
 Press **Start**: the panel closes and the batch is handed to Daz Studio, where the
 bundled [**Runner plugin**](./02-setup.md#daz-studio-plugins) works through it
-unattended. A closed Daz is **opened where you can see it** — this is a run you are
-watching. A running Daz picks the batch up by itself and is left as you had it.
+unattended — **each scene in its own fresh Daz session**, opened where you can see
+it. Daz quitting and reopening between scenes is the run working, not crashing.
+A Daz already open with a scene loaded is closed before the first scene runs.
 
 The panel refuses to start while the Runner plugin is missing or older than the one
 bundled with the app; the notice links straight to Settings. A skip-Daz run doesn't
@@ -140,8 +141,7 @@ Hover the **Working** button while a run is live and its spinner becomes a stop
 mark — *Click to interrupt* — through both legs:
 
 - The **ROM build stops** where it happens to be, and the **export that would have
-  followed is skipped**, along with every scene still queued. A queued scene still
-  opens in Daz (the Runner owns the batch), it just does no work.
+  followed is skipped**, along with every scene still queued.
 - The **Houdini leg stops between export nodes** and closes its background
   Houdini; projects still queued never start.
 - The report says **DTH Export interrupted**, never *"n scenes exported"* — after

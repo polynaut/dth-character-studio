@@ -11,7 +11,9 @@ against the character. It runs on its own and never affects ROM generation.
 [Settings → General](./02-setup.md#daz-installation--pick-it-once) fills this from
 DIM's own settings. Otherwise set the **DAZ Install Manager manifests folder** in
 **Settings** — the `ManifestFiles` folder DIM writes (see DIM → Advanced Settings →
-"Download/Install"); **Detect installed location** auto-finds it.
+"Download/Install"); **Detect installed location** auto-finds it. More than one
+DIM library? Add the others with **Add another manifests folder**, right under the
+primary field — the scan reads them all.
 
 That folder **is** the product database, so it also arms the scanning: with it set,
 every export run scans the scene it just built. With it empty, nothing is scanned.
