@@ -1,5 +1,19 @@
 # @dth/web
 
+## 0.91.0
+
+
+### Patch Changes
+
+- [#977](https://github.com/polynaut/dth-character-studio/pull/977) [`1ff0915`](https://github.com/polynaut/dth-character-studio/commit/1ff0915e4b39f85ed575ecda87eab0bffe0c3728) Thanks [@polynaut](https://github.com/polynaut)! - Dismissing a toast no longer closes the drawer or dialog under it. The toast
+  layer mounts outside the overlay's own DOM, so its close ✕ read as an
+  "outside click" — the drawer treated it as a backdrop dismiss. Clicks inside
+  the toast layer are now exempt from outside-click dismissal for both the side
+  panels and the dialogs.
+- Updated dependencies [[`1ff0915`](https://github.com/polynaut/dth-character-studio/commit/1ff0915e4b39f85ed575ecda87eab0bffe0c3728)]:
+  - @dth/ui@0.91.0
+  - @dth/rom@0.91.0
+
 ## 0.90.0
 
 ### Minor Changes
