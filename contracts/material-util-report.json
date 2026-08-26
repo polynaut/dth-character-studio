@@ -35,7 +35,11 @@
           "/obj/DazToHue/DazToHueImport import_character_fbx_file"
         ],
         "missingTextures": [
-          "d:/daz 3d/my daz 3d library/runtime/textures/raiya/perfectly_imperfect_5_g9/rypi5_torso1_d_1002.jpg"
+          "d:/daz 3d/my daz 3d library/runtime/textures/raiya/perfectly_imperfect_5_g9/rypi5_torso1_d_1002.jpg",
+          "e:/daz 3d/content/runtime/textures/daz/characters/genesis9/g9feminine01_nails_d_1005.jpg"
+        ],
+        "rehomable": [
+          "e:/daz 3d/content/runtime/textures/daz/characters/genesis9/g9feminine01_nails_d_1005.jpg"
         ]
       },
       "prefill": {
@@ -146,7 +150,8 @@
         "foreign": 0,
         "broken": [],
         "hipRelative": [],
-        "missingTextures": []
+        "missingTextures": [],
+        "rehomable": []
       },
       "prefill": {
         "fillable": [],
@@ -285,6 +290,13 @@
           "label": "/obj/DazToHue/DazToHueImport import_character_dtu_file",
           "from": "$HIP/houdini-project/dth-exports/primary/Ita.dth",
           "to": "$JOB/houdini/daz-export/primary/Ita.dth"
+        }
+      ],
+      "rehomed": [
+        {
+          "label": "/obj/DazToHue/DazToHueMaterial material_texture_baker_layer_texture2_1",
+          "from": "E:/DAZ 3D/Content/Runtime/Textures/DAZ/Characters/Genesis9/G9Feminine01_Nails_D_1005.jpg",
+          "to": "$DAZ3D_LIB/Runtime/Textures/DAZ/Characters/Genesis9/G9Feminine01_Nails_D_1005.jpg"
         }
       ],
       "foreign": [

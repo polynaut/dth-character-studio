@@ -1022,9 +1022,11 @@ export function HoudiniUtilsPanel({
         } else {
           const collapsed = result.repath.reduce((n, r) => n + r.collapsed, 0)
           const repaired = result.repath.reduce((n, r) => n + r.repaired.length, 0)
+          const rehomed = result.repath.reduce((n, r) => n + r.rehomed.length, 0)
           utilsToast.success(
             `${collapsed} reference${collapsed === 1 ? '' : 's'} made portable` +
               (repaired > 0 ? `, ${repaired} broken one${repaired === 1 ? '' : 's'} repaired` : '') +
+              (rehomed > 0 ? `, ${rehomed} rehomed onto $DAZ3D_LIB` : '') +
               '.',
           )
           setRepathOpen(false)
@@ -2037,8 +2039,15 @@ export function HoudiniUtilsPanel({
               <code>$JOB</code> or <code>$DAZ3D_LIB</code>
               {repath.broken > 0 && (
                 <>
-                  , and rebuild <strong>{repath.broken}</strong> broken DazToHue import
+                  , rebuild <strong>{repath.broken}</strong> broken DazToHue import
                   reference{repath.broken === 1 ? '' : 's'}
+                </>
+              )}
+              {repath.rehomable > 0 && (
+                <>
+                  , and repoint <strong>{repath.rehomable}</strong> file
+                  {repath.rehomable === 1 ? '' : 's'} from another library root at your Daz
+                  library (<code>$DAZ3D_LIB</code>)
                 </>
               )}{' '}
               across <strong>{repath.targets.length}</strong> project

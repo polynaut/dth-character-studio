@@ -1374,6 +1374,51 @@ def _collapse_ref(value, roots):
     return None
 
 
+def _lib_rehome(value, roots):
+    """`E:/old lib/Runtime/Textures/X/Y.jpg` → `$DAZ3D_LIB/Runtime/Textures/X/Y.jpg`
+    when that file EXISTS under the configured library — or None to leave it.
+
+    The case `_collapse_ref` cannot touch: a path under a FOREIGN library root
+    (a previous machine, a moved library, a dead drive) shares no prefix with
+    any known root, so it stays absolute — and when the drive is gone it is
+    also a missing baker texture nothing else in the pipeline reports. But the
+    library-relative TAIL of such a path is machine-agnostic: if the same tail
+    resolves under `$DAZ3D_LIB`, that file is the texture the scene means, on
+    this machine.
+
+    Longest existing suffix wins, and at least TWO segments (folder + file)
+    must match: a bare basename directly under the library root says nothing
+    about being the same texture. Same standard as every other repair here —
+    never write a path that was not verified on disk, and prefer
+    under-reporting to a guess. Note the verification is EXISTENCE, not
+    content: a file present under both roots is assumed to be the same texture,
+    which is the accepted trade of this repair.
+
+    Returns the PORTABLE spelling straight away (`$DAZ3D_LIB/…`) — a rehomed
+    path must not come out of the portability op still absolute. With
+    `$DAZ3D_LIB` unwired (no houdini.env entry), `roots` has no library entry
+    and this returns None for everything: the variable would not expand, so
+    writing it would break a path that at least still NAMED the right file.
+    """
+    if not value or value.startswith("$") or not _looks_absolute(value):
+        return None
+    lib_root = ""
+    for var, root in roots:
+        if var == LIB_VAR:
+            lib_root = root
+            break
+    if not lib_root:
+        return None
+    segments = [s for s in _norm_path(value).split("/") if s]
+    # Longest suffix first; segments[0] is the drive/server, and the loop stops
+    # before single-segment (basename-only) candidates.
+    for start in range(1, len(segments) - 1):
+        tail = "/".join(segments[start:])
+        if os.path.exists(lib_root + "/" + tail):
+            return LIB_VAR + "/" + tail
+    return None
+
+
 def _rehome_hip_ref(value, roots):
     """`$HIP/../daz3d/x.fbx` → `$JOB/daz3d/x.fbx`, or None to leave it alone.
 
@@ -2270,8 +2315,16 @@ def _project_ref_info(export_dir=""):
     donor can make and the studio disables the button on the strength of it.
     """
     roots = _ref_roots()
-    info = {"collapsible": 0, "foreign": 0, "broken": [], "hipRelative": [], "missingTextures": []}
+    info = {
+        "collapsible": 0,
+        "foreign": 0,
+        "broken": [],
+        "hipRelative": [],
+        "missingTextures": [],
+        "rehomable": [],
+    }
     missing_textures = set()
+    rehomable = set()
     for node in hou.node("/").allSubChildren():
         for label, _old, _new in _repair_import_refs(node, roots, True, export_dir):
             info["broken"].append(label)
@@ -2286,21 +2339,29 @@ def _project_ref_info(export_dir=""):
                 info["hipRelative"].append(node.path() + " " + parm.name())
             elif _collapse_ref(raw, roots) is not None:
                 info["collapsible"] += 1
+            elif _lib_rehome(raw, roots) is not None:
+                # Unique normalized PATHS, not per-parm labels — same shape as
+                # `missingTextures`, and for the same reason: one moved product
+                # names the same file from many layers, and the UI intersects
+                # the two lists to say which missing textures the repath fixes.
+                rehomable.add(_norm_path(raw))
             elif raw and not raw.startswith("$") and _looks_absolute(raw):
                 info["foreign"] += 1
     # Sorted so the badge's wording is stable between two scans of an unchanged
     # project — `allSubChildren()` order is not a promise.
     info["missingTextures"] = sorted(missing_textures)
+    info["rehomable"] = sorted(rehomable)
     return info
 
 
 def op_repath(request):
     """Make a project's stored references portable, and repair broken ones.
 
-    Two fixes in one pass because they touch the same parms and want the same
-    single backup: rebuild any DazToHueImport path whose file isn't there, then
+    Three fixes in one pass because they touch the same parms and want the same
+    single backup: rebuild any DazToHueImport path whose file isn't there,
     express every absolute reference relative to `$HIP` / `$JOB` /
-    `$DAZ3D_LIB`.
+    `$DAZ3D_LIB`, and rehome a path under a FOREIGN library root onto
+    `$DAZ3D_LIB` when its library-relative tail exists there (`_lib_rehome`).
 
     `$JOB` must already be correct — the caller passes the folder it expects and
     a mismatch is REFUSED rather than repathed, because collapsing against a
@@ -2317,6 +2378,7 @@ def op_repath(request):
             "error": "",
             "collapsed": 0,
             "repaired": [],
+            "rehomed": [],
             "foreign": [],
             "backupPath": "",
         }
@@ -2349,9 +2411,28 @@ def op_repath(request):
                     if collapsed is None:
                         collapsed = _collapse_ref(raw, roots)
                     if collapsed is None:
-                        # Absolute and under none of the known roots: it cannot
-                        # be made portable, so it is REPORTED rather than
-                        # silently left looking handled.
+                        # Absolute and under none of the known roots. Before
+                        # giving up, ask whether the library-relative tail
+                        # resolves under `$DAZ3D_LIB` — the moved-library case,
+                        # and the only repair a missing baker texture has.
+                        # Reported per PARM with old and new (`rehomed`), not
+                        # folded into `collapsed`: this rewrite changes WHICH
+                        # file the scene reads, so the report must name it.
+                        rehomed = _lib_rehome(raw, roots)
+                        if rehomed is not None:
+                            if not dry_run:
+                                parm.set(rehomed)
+                            result["rehomed"].append(
+                                {
+                                    "label": node.path() + " " + parm.name(),
+                                    "from": raw,
+                                    "to": rehomed,
+                                }
+                            )
+                            changed += 1
+                            continue
+                        # It cannot be made portable, so it is REPORTED rather
+                        # than silently left looking handled.
                         if raw and not raw.startswith("$") and _looks_absolute(raw):
                             foreign.add(_norm_path(raw))
                         continue
@@ -2368,6 +2449,7 @@ def op_repath(request):
             result["error"] = str(exc).strip() or exc.__class__.__name__
             result["collapsed"] = 0
             result["repaired"] = []
+            result["rehomed"] = []
         results.append(result)
     return {"op": "repath", "projects": [], "targets": [], "repath": results, "dryRun": dry_run}
 

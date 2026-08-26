@@ -288,6 +288,13 @@ pub struct ProjectRefInfo {
     /// nothing.
     #[serde(default)]
     pub missing_textures: Vec<String>,
+    /// Absolute paths under a FOREIGN library root whose library-relative tail
+    /// exists under `$DAZ3D_LIB` — the moved-library case. Unique normalized
+    /// paths like `missing_textures` (the UI intersects the two lists), and a
+    /// path lands here INSTEAD of counting as `foreign`: the repath's
+    /// `_lib_rehome` will rewrite it, so it is fixable, not stuck.
+    #[serde(default)]
+    pub rehomable: Vec<String>,
 }
 
 /// One import reference a repath rebuilt.
@@ -313,6 +320,12 @@ pub struct RepathResult {
     pub collapsed: u32,
     /// Broken DazToHue import references rebuilt from a sibling that resolved.
     pub repaired: Vec<RepairedRef>,
+    /// References under a FOREIGN library root repointed at `$DAZ3D_LIB`
+    /// because their library-relative tail exists there. Per PARM with old and
+    /// new, not folded into `collapsed`: this rewrite changes WHICH file the
+    /// scene reads, so the report names each one.
+    #[serde(default)]
+    pub rehomed: Vec<RepairedRef>,
     /// Absolute references left alone because they sit under no known root.
     pub foreign: Vec<String>,
     /// Where the pre-repath state was backed up (empty for a dry run, and when

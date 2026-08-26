@@ -26,7 +26,7 @@ function scanned(over: Partial<MaterialScanProject> = {}): MaterialScanProject {
     imports: [],
     exportSets: [],
     poseAssets: [],
-    refs: { collapsible: 0, foreign: 0, broken: [], hipRelative: [], missingTextures: [] },
+    refs: { collapsible: 0, foreign: 0, broken: [], hipRelative: [], missingTextures: [], rehomable: [] },
     prefill: { fillable: [], missing: [] },
     // The schema's own default — what an entry stored before the field existed
     // parses to: both sides unknown.
@@ -236,6 +236,7 @@ describe('validateHoudiniProject', () => {
           broken: ['/obj/import import_character_dtu_file'],
           hipRelative: [],
           missingTextures: [],
+          rehomable: [],
         },
         prefill: { fillable: ['export_directory'], missing: ['pose_asset_csv_file_path'] },
       }),
@@ -261,6 +262,7 @@ describe('validateHoudiniProject', () => {
           broken: [],
           hipRelative: ['/obj/dth import_character_dtu_file', '/obj/dth import_character_fbx_file'],
           missingTextures: [],
+          rehomable: [],
         },
       }),
       CHAR,
@@ -278,7 +280,7 @@ describe('validateHoudiniProject', () => {
     expect(
       validateHoudiniProject(
         scanned({
-          refs: { collapsible: 3, foreign: 5, broken: [], hipRelative: [], missingTextures: [] },
+          refs: { collapsible: 3, foreign: 5, broken: [], hipRelative: [], missingTextures: [], rehomable: [] },
         }),
         CHAR,
       ).ok,
@@ -299,6 +301,7 @@ describe('validateHoudiniProject', () => {
           broken: [],
           hipRelative: [],
           missingTextures: ['d:/daz 3d/my daz 3d library/runtime/textures/raiya/rypi5_torso1.jpg'],
+          rehomable: [],
         },
       }),
       CHAR,
@@ -313,10 +316,54 @@ describe('validateHoudiniProject', () => {
     expect(health.summary).toContain('reports success')
   })
 
+  it('points a missing texture at Make paths portable when it exists in the library', () => {
+    // The moved-library case: the scan found the file's library-relative tail
+    // under $DAZ3D_LIB (`rehomable`), so this one HAS a button — the wording
+    // must say so instead of sending the user off to reinstall a product they
+    // have. The path spellings differ in case and separators on purpose: both
+    // lists come from the scan normalized, but stored entries predate that
+    // guarantee, so the intersection re-normalizes.
+    const gone = 'E:/Old Daz/Runtime/Textures/Raiya/rypi5_torso1.jpg'
+    const health = validateHoudiniProject(
+      scanned({
+        refs: {
+          collapsible: 0,
+          foreign: 0,
+          broken: [],
+          hipRelative: [],
+          missingTextures: [gone, 'd:/lib/really_gone.jpg'],
+          rehomable: ['e:/old daz/runtime/textures/raiya/rypi5_torso1.jpg'],
+        },
+      }),
+      CHAR,
+    )
+    expect(health.ok).toBe(false)
+    expect(health.summary).toContain('reports success')
+    expect(health.summary).toContain('1 of them exist in your Daz library')
+    expect(health.summary).toContain('Make paths portable')
+  })
+
+  it('keeps the reinstall wording when nothing rehomes', () => {
+    const health = validateHoudiniProject(
+      scanned({
+        refs: {
+          collapsible: 0,
+          foreign: 0,
+          broken: [],
+          hipRelative: [],
+          missingTextures: ['d:/lib/gone.jpg'],
+          rehomable: [],
+        },
+      }),
+      CHAR,
+    )
+    expect(health.summary).not.toContain('Make paths portable')
+  })
+
   it('caps the texture list so one uninstalled product cannot flood the tooltip', () => {
     const many = Array.from({ length: 12 }, (_, i) => `d:/lib/textures/skin_${i}.jpg`)
     const health = validateHoudiniProject(scanned({ refs: {
-      collapsible: 0, foreign: 0, broken: [], hipRelative: [], missingTextures: many,
+      collapsible: 0, foreign: 0, broken: [], hipRelative: [], missingTextures: many, rehomable: [],
     } }), CHAR)
     expect(health.summary).toContain('12 baker textures are missing')
     expect(health.summary).toContain('skin_0.jpg, skin_1.jpg, skin_2.jpg +9 more')
@@ -335,6 +382,7 @@ describe('validateHoudiniProject', () => {
           broken: [],
           hipRelative: [],
           missingTextures: ['d:/lib/gone.jpg'],
+          rehomable: [],
         },
       }),
       CHAR,

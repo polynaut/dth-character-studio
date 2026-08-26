@@ -197,17 +197,23 @@ export function validateHoudiniProject(
   }
 
   if (project.refs.missingTextures.length > 0) {
-    // Last, and the only problem here with no button to point at: the fix is
-    // outside the studio. It is still worth the badge — this is the one failure
-    // in the list that the rest of the pipeline reports as SUCCESS, so without
-    // it the first sign is a wrong-looking character in Unreal.
+    // Last. Worth the badge either way — this is the one failure in the list
+    // that the rest of the pipeline reports as SUCCESS, so without it the
+    // first sign is a wrong-looking character in Unreal. When the missing
+    // file's library-relative tail exists under the CURRENT library
+    // (`rehomable`), Make paths portable repoints it; otherwise the fix stays
+    // outside the studio.
     const n = project.refs.missingTextures.length
+    const fixable = countRehomable(project.refs.missingTextures, project.refs.rehomable)
     problems.push({
       code: 'missing-textures',
       label:
         `${n} baker texture${n === 1 ? '' : 's'} ${n === 1 ? 'is' : 'are'} missing ` +
         `(${nameList(project.refs.missingTextures)}) — DazToHue bakes without ` +
-        `${n === 1 ? 'it' : 'them'} and still reports success.`,
+        `${n === 1 ? 'it' : 'them'} and still reports success.` +
+        (fixable > 0
+          ? ` ${fixable === n ? (n === 1 ? 'It exists' : 'All of them exist') : `${fixable} of them exist`} in your Daz library — Utils → Make paths portable repoints ${fixable === 1 ? 'it' : 'them'}.`
+          : ''),
     })
   }
 
@@ -218,6 +224,17 @@ export function validateHoudiniProject(
  *  re-applied defensively: stored entries predate any TS-side guarantees. */
 function normalizeScanPath(path: string): string {
   return path.trim().replace(/\\/g, '/').toLowerCase()
+}
+
+/** How many of `missing` the repath can rehome — the `missingTextures` ∩
+ *  `rehomable` intersection, shared by the badge label and the drawer row. */
+export function countRehomable(
+  missing: ReadonlyArray<string>,
+  rehomable: ReadonlyArray<string>,
+): number {
+  if (rehomable.length === 0 || missing.length === 0) return 0
+  const fixable = new Set(rehomable.map(normalizeScanPath))
+  return missing.filter((path) => fixable.has(normalizeScanPath(path))).length
 }
 
 /** Both paths' file names for the "(got instead of want)" contrast — with the

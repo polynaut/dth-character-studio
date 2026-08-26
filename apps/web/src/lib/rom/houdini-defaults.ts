@@ -286,6 +286,11 @@ export interface ScannedRefs {
    *  (`_project_ref_info` puts a path in one bucket or the other), and folded
    *  back into the plan's `collapsible` because the run treats them the same. */
   hipRelative: ReadonlyArray<string>
+  /** Paths under a FOREIGN library root whose library-relative tail exists
+   *  under `$DAZ3D_LIB` — unique paths, not per-parm counts, so the number
+   *  reads "N files", the same unit `missingTextures` uses. The run rewrites
+   *  them (`_lib_rehome`); a path here is fixable, not `foreign`. */
+  rehomable: ReadonlyArray<string>
 }
 
 /** A project as the General tab sees it. */
@@ -330,6 +335,10 @@ export function planRepath(
    *  button refuse the very projects the card's `hip-relative` badge sends here. */
   collapsible: number
   broken: number
+  /** Unique files under a foreign library root the run will repoint at
+   *  `$DAZ3D_LIB`. Its own number, not folded into `collapsible`: the dialog
+   *  must say which rewrites change WHICH file the scene reads. */
+  rehomable: number
   foreign: number
   /** Projects held back because their `$JOB` still differs. */
   blockedByJob: Array<string>
@@ -342,13 +351,14 @@ export function planRepath(
   const eligible = readable.filter(
     (project) => project.job.trim() !== '' && sameFolder(project.job, charFolder),
   )
-  // Three kinds of work, and ALL THREE have to be here: a project can need only
-  // the `$HIP/../…` re-anchor (its paths resolve and none is absolute), and one
+  // Four kinds of work, and ALL FOUR have to be here: a project can need only
+  // the `$HIP/../…` re-anchor (its paths resolve and none is absolute), one
   // whose export folder moved has nothing else either — every import broke, and
-  // `refs.broken` is the only trace of it. Miss one and the button greys out
-  // while the card's own badge tells the user to press it.
+  // `refs.broken` is the only trace of it — and one whose LIBRARY moved has
+  // only `rehomable` paths. Miss one and the button greys out while the card's
+  // own badge tells the user to press it.
   const work = (refs: ScannedRefs) =>
-    refs.collapsible + refs.hipRelative.length + refs.broken.length
+    refs.collapsible + refs.hipRelative.length + refs.broken.length + refs.rehomable.length
   const targets = eligible.filter((project) => work(project.refs) > 0).map((project) => project.hipPath)
   const sum = (pick: (refs: ScannedRefs) => number) =>
     eligible.reduce((total, project) => total + pick(project.refs), 0)
@@ -357,6 +367,7 @@ export function planRepath(
     targets,
     collapsible: sum((refs) => refs.collapsible + refs.hipRelative.length),
     broken: sum((refs) => refs.broken.length),
+    rehomable: sum((refs) => refs.rehomable.length),
     foreign: sum((refs) => refs.foreign),
     blockedByJob,
     reason:
