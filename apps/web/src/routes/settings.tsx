@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { AlertTriangle, Box, Download, Folder, Plus } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -12,6 +12,7 @@ import {
   detectHoudiniInstalls,
   fetchActiveProject,
   fetchAppDataFolder,
+  fetchMorphIndex,
   fetchPoseAssets,
   fetchSettings,
   installDthRelease,
@@ -30,6 +31,9 @@ import { houdiniVersionFromInstall, matchingHoudiniDocsFolder } from '#/lib/houd
 import { GuideLink } from '#/components/guide-link.tsx'
 import { PathCode } from '#/components/path-code.tsx'
 import { FolderField, InstallReportList } from '#/components/install-controls.tsx'
+import { MorphIndexProvider } from '#/components/rom/morph-index-provider.tsx'
+import { MorphNameCell, morphFieldClass } from '#/components/rom/morph-name-cell.tsx'
+import { matchingTransferDials } from '#/lib/rom/transfer-morphs.ts'
 import { DazInstallSection } from '#/components/settings/daz-install-section.tsx'
 import { defaultDazApp, deriveDazPaths } from '#/lib/daz-install.ts'
 import { HoudiniInstallSection } from '#/components/settings/houdini-install-section.tsx'
@@ -43,7 +47,7 @@ import { UnrealPluginsSection } from '#/components/settings/unreal-plugins-secti
 import { toast } from 'sonner'
 
 import type { ReleasesState } from '#/components/settings/release-pickers.tsx'
-import type { InstallReport } from '#/lib/rom/api.ts'
+import type { InstallReport, MorphIndexEntry } from '#/lib/rom/api.ts'
 import type { DazInstallScan } from '#/lib/daz-install.ts'
 import type { HoudiniInstallScan } from '#/lib/houdini-install.ts'
 
@@ -174,29 +178,74 @@ function ExtraDimManifestsFolders({
 }
 
 /**
+ * What one transfer-morph entry would actually DO — the dials of the merged
+ * G8/G8.1 morph index it contains-matches (`matchingTransferDials`, the TS
+ * mirror of the baked script's rule), rendered as the same small info line the
+ * character editor's Advanced-options morph fields carry. With no index built
+ * yet there is nothing honest to say per row (the section says so once); an
+ * entry that matches nothing is called out rather than left looking covered.
+ */
+function TransferMatchInfo({
+  entry,
+  index,
+}: {
+  entry: string
+  index: ReadonlyArray<MorphIndexEntry>
+}) {
+  const matches = useMemo(() => matchingTransferDials(entry, index), [entry, index])
+  if (index.length === 0 || entry.trim() === '') return null
+  if (matches.length === 0) {
+    return (
+      <p className="mt-1 pl-1 text-xs text-muted-foreground/70 italic">
+        Matches no dial in the scanned G8/8.1 index.
+      </p>
+    )
+  }
+  const shown = matches.slice(0, 3).map((m) => m.label)
+  return (
+    <p className="mt-1 pl-1 text-xs text-muted-foreground">
+      Zeroes {matches.length} dial{matches.length === 1 ? '' : 's'}: {shown.join(', ')}
+      {matches.length > 3 ? ` +${matches.length - 3} more` : ''}
+    </p>
+  )
+}
+
+/**
  * The editable Prepare-for-transfer morph list (settings.prepareTransferMorphs)
- * — what the installed `Prepare_For_Transfer.dsa` zeroes. Plain text entries,
- * not paths; the baked script matches each dial's name/label by CONTAINS
- * (case-blind, spaces/dashes/underscores ignored), which the section's help
- * text spells out so an entry like "Nipple" reads as the family it is.
+ * — what the installed `Prepare_For_Transfer.dsa` zeroes. Each row is the same
+ * morph autocomplete the character editor's Advanced options use
+ * ({@link MorphNameCell}, fed the merged G8+G8.1 index via the provider in the
+ * tab), with the match preview underneath. Free text still commits as typed —
+ * the entries are contains-patterns, not necessarily exact dial names.
  */
 function TransferMorphList({
   entries,
+  index,
   onChange,
 }: {
   entries: Array<string>
+  /** The merged G8 + G8.1 morph index — the match preview's ground truth. */
+  index: ReadonlyArray<MorphIndexEntry>
   onChange: (entries: Array<string>) => void
 }) {
   return (
     <>
       {entries.map((entry, i) => (
-        <div key={i} className="flex items-center gap-2">
-          <Input
-            value={entry}
-            placeholder="Breasts Size"
-            aria-label={`Morph entry ${i + 1}`}
-            onChange={(e) => onChange(entries.map((m, mi) => (mi === i ? e.target.value : m)))}
-          />
+        <div key={i} className="flex items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <MorphNameCell
+              value={entry}
+              placeholder="Breasts Size"
+              ariaLabel={`Morph entry ${i + 1}`}
+              inputClassName={morphFieldClass}
+              onCommit={(name) => onChange(entries.map((m, mi) => (mi === i ? name : m)))}
+              // A pick inserts the INTERNAL name — the most precise pattern the
+              // contains-match can carry (the suggestion's node is meaningless
+              // here: the script walks whatever figure is selected in Daz).
+              onPick={(picked) => onChange(entries.map((m, mi) => (mi === i ? picked.name : m)))}
+            />
+            <TransferMatchInfo entry={entry} index={index} />
+          </div>
           <Button
             variant="ghost"
             className="text-muted-foreground"
@@ -739,6 +788,38 @@ function SettingsPage() {
     })
   }, [releases])
 
+  // The merged G8 + G8.1 morph index behind the Daz-scripts tab's autocomplete
+  // and match preview. Both generations, because the transfer script targets
+  // "a G8/8.1 figure" — not one character's generation like the editor's
+  // per-character index (the merge note there doesn't apply: these entries are
+  // contains-patterns, not dials the figure must drive). Loaded once the tab is
+  // first opened; the fetch itself is stat-cached, so this stays cheap.
+  const [transferIndex, setTransferIndex] = useState<Array<MorphIndexEntry>>([])
+  const [transferIndexLoaded, setTransferIndexLoaded] = useState(false)
+  const scriptsTabOpen = tab === 'scripts'
+  useEffect(() => {
+    if (!scriptsTabOpen || transferIndexLoaded) return
+    let stale = false
+    void Promise.all([fetchMorphIndex('G8'), fetchMorphIndex('G8.1')]).then(([g8, g81]) => {
+      if (stale) return
+      // The same dial can land in both files (Daz auto-loads G8 morphs onto a
+      // scanned 8.1 figure) — one suggestion per node|name is enough.
+      const seen = new Set<string>()
+      setTransferIndex(
+        [...g8, ...g81].filter((e) => {
+          const key = `${e.node}|${e.name}`.toLowerCase()
+          if (seen.has(key)) return false
+          seen.add(key)
+          return true
+        }),
+      )
+      setTransferIndexLoaded(true)
+    })
+    return () => {
+      stale = true
+    }
+  }, [scriptsTabOpen, transferIndexLoaded])
+
   // Scoped to the machine-setting fields the General tab edits. Save still writes the
   // full settings object, but the Tools-page fields are untouched here so they never
   // flip this dirty — the button reflects only this page's changes.
@@ -1028,12 +1109,29 @@ function SettingsPage() {
               Nipples Tip Adjust, and <code>Breasts Size</code> also matches the internal{' '}
               <code>PBMBreastsSize</code>.
             </p>
-            <TransferMorphList
-              entries={settings.prepareTransferMorphs}
-              onChange={(entries) =>
-                setSettings((s) => ({ ...s, prepareTransferMorphs: entries }))
-              }
-            />
+            {transferIndexLoaded && transferIndex.length === 0 && (
+              <p className="text-xs text-muted-foreground">
+                Suggestions and the per-entry match preview appear once the Genesis index is
+                built — run <strong>Build Genesis Index</strong> from Tools (one run scans
+                every generation, G8 and G8.1 included).{' '}
+                <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/tools.html#tab-1--scan-amp-index">
+                  How
+                </GuideLink>{' '}
+                Entries still work without it.
+              </p>
+            )}
+            {/* The same autocomplete the character editor's Advanced options
+                use — no scenePath, so scene-scanned dials (clothing, grafts)
+                stay out: the transfer prep is about the FIGURE's morphs. */}
+            <MorphIndexProvider morphIndex={transferIndex}>
+              <TransferMorphList
+                entries={settings.prepareTransferMorphs}
+                index={transferIndex}
+                onChange={(entries) =>
+                  setSettings((s) => ({ ...s, prepareTransferMorphs: entries }))
+                }
+              />
+            </MorphIndexProvider>
             <p className="text-xs text-muted-foreground">
               {settings.dazLibraryFolder ? (
                 <>
