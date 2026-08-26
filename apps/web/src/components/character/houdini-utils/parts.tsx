@@ -11,6 +11,7 @@ import { AlertTriangle, Loader2, RefreshCw, Undo2 } from 'lucide-react'
 
 import { Button, InfoPopup, Label } from '@dth/ui'
 import type {
+  DimOwner,
   MaterialNodeInfo,
   MaterialScanProject,
   MaterialUtilReport,
@@ -18,7 +19,11 @@ import type {
   ProjectPrefillInfo,
 } from '#/lib/rom/api.ts'
 import { DTH_FPS, defaultsRowsFor, formatFps, formatFrameRange } from '#/lib/rom/houdini-defaults.ts'
-import { countRehomable } from '#/lib/rom/houdini-validate.ts'
+import {
+  countRehomable,
+  groupTextureOwners,
+  unrehomedTextures,
+} from '#/lib/rom/houdini-validate.ts'
 import { mergeTouchCount, surfaceLabel } from '#/lib/rom/houdini-material-merge.ts'
 import type { SurfaceMergePlan } from '#/lib/rom/houdini-material-merge.ts'
 import { displayPath } from '#/lib/path.ts'
@@ -34,6 +39,7 @@ export function GeneralTab({
   repathReason,
   restore,
   onRescan,
+  textureOwners,
 }: {
   scan: ScanState
   charFolder: string
@@ -43,6 +49,9 @@ export function GeneralTab({
   repathReason: string
   restore: RestoreProps
   onRescan: () => void
+  /** What the DIM manifests claim the unfindable missing textures for — the
+   *  panel's async lookup; empty until (and unless) it answers. */
+  textureOwners: ReadonlyArray<DimOwner>
 }) {
   return (
     <div className="space-y-4">
@@ -145,7 +154,7 @@ export function GeneralTab({
                       )}
                     </CheckRow>
                   ))}
-                  <RefRows refs={project.refs} reason={repathReason} />
+                  <RefRows refs={project.refs} reason={repathReason} owners={textureOwners} />
                   <PrefillRow prefill={project.prefill} />
                 </ul>
               )}
@@ -222,14 +231,17 @@ export function PathLine({ label, value }: { label?: string; value: string }) {
  *
  * The third is the near-exception: a missing texture whose library-relative
  * tail exists under the CURRENT library (`rehomable`) is fixed by Make paths
- * portable; the rest are fixed outside the studio. Shown either way because
- * nothing else in the pipeline reports it (DazToHue bakes without it and still
- * says success). Only the UNFIXABLE remainder stays out of `clean` — gating a
- * repair on a problem that repair cannot touch would strand the button.
+ * portable; the rest are fixed outside the studio — and for those, the DIM
+ * manifests can at least NAME the product to reinstall (`owners`, issue #976).
+ * Shown either way because nothing else in the pipeline reports it (DazToHue
+ * bakes without it and still says success). Only the UNFIXABLE remainder stays
+ * out of `clean` — gating a repair on a problem that repair cannot touch would
+ * strand the button.
  */
 export function RefRows({
   refs,
   reason,
+  owners,
 }: {
   refs: {
     collapsible: number
@@ -239,10 +251,18 @@ export function RefRows({
     rehomable: ReadonlyArray<string>
   }
   reason: string
+  /** The DIM manifest lookup's answer for the unfixable missing textures —
+   *  empty while it runs, when nothing is configured, or when nothing matched
+   *  (the row then keeps its generic reinstall wording). */
+  owners: ReadonlyArray<DimOwner>
 }) {
   const clean =
     refs.collapsible === 0 && refs.broken.length === 0 && refs.rehomable.length === 0
   const fixableTextures = countRehomable(refs.missingTextures, refs.rehomable)
+  const { named, unnamed } = groupTextureOwners(
+    unrehomedTextures(refs.missingTextures, refs.rehomable),
+    owners,
+  )
   return (
     <>
       <CheckRow
@@ -319,12 +339,33 @@ export function RefRows({
             <p>
               DazToHue bakes without them and still reports success, so nothing else in the
               pipeline will tell you.{' '}
-              {fixableTextures > 0
-                ? fixableTextures === refs.missingTextures.length
+              {fixableTextures > 0 &&
+                (fixableTextures === refs.missingTextures.length
                   ? `${fixableTextures === 1 ? 'It exists' : 'All of them exist'} in your Daz library — Make paths portable repoints ${fixableTextures === 1 ? 'it' : 'them'}.`
-                  : `${fixableTextures} of them exist in your Daz library — Make paths portable repoints those; for the rest, reinstall the product or restore the library.`
-                : 'Reinstall the product or restore the library.'}
+                  : `${fixableTextures} of them exist in your Daz library — Make paths portable repoints those.`)}
             </p>
+            {/* The owner lines — the dead end turned into a product name. One
+                line per product, not per file: a whole uninstalled product is
+                routinely a dozen textures, and the action is one install. */}
+            {named.map((group) => (
+              <p key={`${group.productName}|${group.sku}`}>
+                <code>{group.files.join(', ')}</code> belong{group.files.length === 1 ? 's' : ''}{' '}
+                to <strong>{group.productName}</strong>
+                {group.sku ? ` (SKU ${group.sku})` : ''} — install it via DAZ Install Manager.
+              </p>
+            ))}
+            {/* Generic advice covers only the files no manifest claims, and is
+                worded against what came BEFORE it — so it sits after the named
+                lines rather than promising a "rest" the reader hasn't met. */}
+            {unnamed.length > 0 && (
+              <p>
+                {named.length > 0
+                  ? `No DIM manifest lists the ${unnamed.length === 1 ? 'other one' : `other ${unnamed.length}`} — reinstall the product or restore the library.`
+                  : fixableTextures > 0
+                    ? 'For the rest, reinstall the product or restore the library.'
+                    : 'Reinstall the product or restore the library.'}
+              </p>
+            )}
           </>
         )}
       </CheckRow>

@@ -192,6 +192,22 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   blob never escapes. Parsing lives in `apps/web/src/lib/daz-install.ts` (pure,
   unit-tested), the file-finding in `lib/rom/api/daz-install.ts`. DIM keeps
   listing an app it has uninstalled, so every card is checked against the disk.
+- **A DIM install manifest is matched on the file's PARENT FOLDER, never on the
+  base name alone.** Each `.dsx` in a ManifestFiles folder lists every file its
+  package installed (`<File … VALUE="Content/Runtime/Textures/…"/>`) beside
+  `ProductName` and the SKU — `ProductStoreIDX`, falling back to `ProductID`,
+  the same pair the Daz-side scan reads in `DthProducts.dsa`. Base names
+  collide hard across the store (`Torso_D.jpg`, `01_Bump.jpg` ship in dozens of
+  products), so a name-only search names the WRONG product — worse than the
+  generic "reinstall the product" it replaces, because the reader acts on it. A
+  package installs to the same relative layout the scene then records, so the
+  last two segments (`raiya/rypi5_torso1.jpg`) pair the two sides. Two more
+  traps, both in `dim.rs`: the search runs over the RAW bytes (ASCII-case- and
+  separator-blind) because a lowercased COPY of every manifest is the entire
+  cost of this lookup on a folder holding thousands of files; and byte offsets
+  taken from such a copy do not line up with the original (`İ` is 2 bytes, its
+  lowercase 3), so reading a value back through them hands over a slice that is
+  wrong rather than absent. Added with the Utils drawer's owner lookup, 2026-08-26.
 - **SideFX registers every Houdini install — read the registry, don't probe
   Program Files.** Measured 2026-08-07 on a machine with two installs:
   `HKLM\SOFTWARE\Side Effects Software\Houdini` holds one REG_SZ per version,

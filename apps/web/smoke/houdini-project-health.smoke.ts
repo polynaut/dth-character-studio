@@ -34,8 +34,23 @@ function scan(over: Record<string, unknown> = {}) {
   }
 }
 
-async function openWithStore(page: Page, project: Record<string, unknown>) {
-  const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true, houdiniProject: true })
+async function openWithStore(
+  page: Page,
+  project: Record<string, unknown>,
+  extra: {
+    /** settings.json's DIM manifests folder — what arms the owner lookup. */
+    dimManifestsFolder?: string
+    /** What `find_dim_owners` answers, keyed by lowercase file name. */
+    dimOwners?: Record<string, { productName: string; sku: string }>
+  } = {},
+) {
+  const seed = buildSeed({
+    activeProjectFile: P.dcsp,
+    demo: true,
+    houdiniProject: true,
+    ...(extra.dimManifestsFolder ? { dimManifestsFolder: extra.dimManifestsFolder } : {}),
+  })
+  if (extra.dimOwners) seed.dimOwners = extra.dimOwners
   seed.files[STORE] = JSON.stringify({
     version: 1,
     projects: {
@@ -434,6 +449,76 @@ test('the drawer names the missing textures in full, and does not gate the repai
   await expect(drawer.getByText(GONE)).toBeVisible()
   await expect(drawer.getByText(/still reports success/)).toBeVisible()
   await expect(drawer.getByRole('button', { name: 'Make paths portable' })).toBeEnabled()
+})
+
+test('an unfindable texture is named to its owning product from the DIM manifests', async ({
+  page,
+}) => {
+  // The follow-up to the rehome (#976): a missing texture whose tail is NOT in
+  // the current library dead-ended in "reinstall the product" without saying
+  // WHICH product. The DIM install manifests list every installed product's
+  // files, so the row can name it — and the SKU — instead.
+  await openWithStore(
+    page,
+    scan({
+      refs: {
+        collapsible: 0,
+        foreign: 0,
+        broken: [],
+        hipRelative: [],
+        missingTextures: [GONE],
+      },
+    }),
+    {
+      dimManifestsFolder: 'C:/Users/Public/Documents/DAZ 3D/InstallManager/ManifestFiles',
+      dimOwners: { [GONE]: { productName: 'RY Pi 5 for Genesis 8', sku: '55555' } },
+    },
+  )
+
+  await page.getByRole('button', { name: /^Utils/ }).first().click()
+  const drawer = page.getByRole('dialog')
+  await expect(drawer.getByText('Baker textures')).toBeVisible()
+  await expect(drawer.getByText(/belongs to/)).toBeVisible()
+  await expect(drawer.getByText('RY Pi 5 for Genesis 8')).toBeVisible()
+  await expect(drawer.getByText(/\(SKU 55555\)/)).toBeVisible()
+  await expect(drawer.getByText(/install it via DAZ Install Manager/)).toBeVisible()
+  // Every unfixable file has a name here, so the generic dead-end wording —
+  // which is only for the files no manifest knows — must be gone.
+  await expect(drawer.getByText(/einstall the product or restore the library/)).toHaveCount(0)
+})
+
+test('a texture no manifest claims keeps its own line beside the named product', async ({
+  page,
+}) => {
+  // The mixed case: naming one product must not leave the OTHER file wordless,
+  // and the generic sentence has to read against the lines above it rather
+  // than promising a "rest" the reader has not met yet.
+  const ORPHAN = 'd:/daz 3d/my daz 3d library/runtime/textures/nobody/unknown_d.jpg'
+  await openWithStore(
+    page,
+    scan({
+      refs: {
+        collapsible: 0,
+        foreign: 0,
+        broken: [],
+        hipRelative: [],
+        missingTextures: [GONE, ORPHAN],
+      },
+    }),
+    {
+      dimManifestsFolder: 'C:/Users/Public/Documents/DAZ 3D/InstallManager/ManifestFiles',
+      dimOwners: { [GONE]: { productName: 'RY Pi 5 for Genesis 8', sku: '55555' } },
+    },
+  )
+
+  await page.getByRole('button', { name: /^Utils/ }).first().click()
+  const drawer = page.getByRole('dialog')
+  await expect(drawer.getByText('RY Pi 5 for Genesis 8')).toBeVisible()
+  await expect(
+    drawer.getByText(/No DIM manifest lists the other one — reinstall the product/),
+  ).toBeVisible()
+  // "For the rest" would be the wrong opener: nothing was said before it.
+  await expect(drawer.getByText(/For the rest/)).toHaveCount(0)
 })
 
 test('a project whose only work is a REHOMED library arms the button and says so', async ({

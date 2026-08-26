@@ -237,6 +237,67 @@ export function countRehomable(
   return missing.filter((path) => fixable.has(normalizeScanPath(path))).length
 }
 
+/** The `missingTextures` the repath CANNOT rehome — the complement of
+ *  {@link countRehomable}, full paths. This is the set the DIM owner lookup
+ *  names products for (issue #976): everything else has a repair in the app. */
+export function unrehomedTextures(
+  missing: ReadonlyArray<string>,
+  rehomable: ReadonlyArray<string>,
+): Array<string> {
+  if (missing.length === 0 || rehomable.length === 0) return [...missing]
+  const fixable = new Set(rehomable.map(normalizeScanPath))
+  return missing.filter((path) => !fixable.has(normalizeScanPath(path)))
+}
+
+/** A path's file name with its stored casing kept — `baseName` lowercases for
+ *  comparison, which a displayed name must not inherit. */
+export function fileBaseName(path: string): string {
+  return path.slice(Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\')) + 1)
+}
+
+/** One owner line for the Baker-textures row: a product and the missing files
+ *  the DIM manifests claim for it. */
+export interface TextureOwnerGroup {
+  productName: string
+  /** '' when the manifest named none — the line then shows no SKU. */
+  sku: string
+  /** Basenames of the missing files this product claims, in row order and
+   *  de-duplicated: two products' files can share a base name, and printing it
+   *  twice on one line reads as a mistake. */
+  files: Array<string>
+}
+
+/**
+ * The unfixable missing textures sorted into owner lines: grouped by the
+ * product the DIM manifests claim them for, plus the files no manifest knows —
+ * those keep the generic reinstall wording (issue #976). Paired on the PATH the
+ * lookup echoed back, not on the base name (which collides across products);
+ * pure, so the row and its tests share the one grouping.
+ */
+export function groupTextureOwners(
+  /** Full paths — {@link unrehomedTextures}. */
+  unfixable: ReadonlyArray<string>,
+  owners: ReadonlyArray<{ path: string; productName: string; sku: string }>,
+): { named: Array<TextureOwnerGroup>; unnamed: Array<string> } {
+  const byPath = new Map(owners.map((o) => [normalizeScanPath(o.path), o]))
+  const groups = new Map<string, TextureOwnerGroup>()
+  const unnamed: Array<string> = []
+  for (const path of unfixable) {
+    const owner = byPath.get(normalizeScanPath(path))
+    if (!owner) {
+      unnamed.push(path)
+      continue
+    }
+    const key = `${owner.productName}|${owner.sku}`
+    const file = fileBaseName(path)
+    const group = groups.get(key)
+    if (group) {
+      if (!group.files.includes(file)) group.files.push(file)
+    } else groups.set(key, { productName: owner.productName, sku: owner.sku, files: [file] })
+  }
+  return { named: [...groups.values()], unnamed }
+}
+
 /** Both paths' file names for the "(got instead of want)" contrast — with the
  *  parent folder prepended when the file names alone are identical: two sets
  *  delivering the same base name, or a project moved from an old export root,

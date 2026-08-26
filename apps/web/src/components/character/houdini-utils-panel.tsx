@@ -42,6 +42,7 @@ import {
   discardHoudiniBackups,
   restoreHoudiniBackup,
   fetchCachedHoudiniScans,
+  findDimTextureOwners,
   fetchHoudiniSourceRecents,
   forgetHoudiniSource,
   rememberHoudiniSource,
@@ -55,8 +56,10 @@ import {
   projectsNeedingRepair,
   sameFolder,
 } from '#/lib/rom/houdini-defaults.ts'
+import { unrehomedTextures } from '#/lib/rom/houdini-validate.ts'
 import type {
   CharacterWithProject,
+  DimOwner,
   MaterialNodeInfo,
   MaterialScanProject,
   MaterialSection,
@@ -787,6 +790,39 @@ export function HoudiniUtilsPanel({
     [targetScan, charFolder],
   )
 
+  /** The missing baker textures the repath cannot rehome — what the DIM
+   *  manifest lookup below tries to name a product for (issue #976). FULL
+   *  paths: the lookup matches on the parent folder as well as the file name,
+   *  because a base name alone is shared by a dozen unrelated products. */
+  const unfindableTextures = useMemo(
+    () => [
+      ...new Set(
+        targetScan.projects
+          .filter((p) => p.ok)
+          .flatMap((p) => unrehomedTextures(p.refs.missingTextures, p.refs.rehomable)),
+      ),
+    ],
+    [targetScan],
+  )
+
+  /** What the DIM manifests claim those files for. Async and best-effort — the
+   *  Baker-textures row shows its generic reinstall wording until (and unless)
+   *  this answers with a product name. */
+  const [textureOwners, setTextureOwners] = useState<ReadonlyArray<DimOwner>>([])
+  useEffect(() => {
+    if (unfindableTextures.length === 0) {
+      setTextureOwners([])
+      return
+    }
+    let stale = false
+    void findDimTextureOwners(unfindableTextures).then((owners) => {
+      if (!stale) setTextureOwners(owners)
+    })
+    return () => {
+      stale = true
+    }
+  }, [unfindableTextures])
+
   /** Projects with at least one blank parm the studio can fill. A parm this
    *  DazToHue version lacks is NOT work — it is reported in the row instead.
    *
@@ -1195,6 +1231,7 @@ export function HoudiniUtilsPanel({
               result={actionReport}
               repathReason={repath.reason}
               restore={restore}
+              textureOwners={textureOwners}
               onRescan={() => void scanTargets(true)}
             />
           </TabsContent>

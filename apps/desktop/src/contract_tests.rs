@@ -108,6 +108,11 @@ fn export_zip_report_matches_the_shared_fixture() {
 }
 
 #[test]
+fn dim_owners_match_the_shared_fixture() {
+    round_trip::<Vec<crate::dim::DimOwner>>(include_str!("../../../contracts/dim-owners.json"));
+}
+
+#[test]
 fn remap_results_match_the_shared_fixture() {
     round_trip::<Vec<crate::drives::RemapResult>>(include_str!(
         "../../../contracts/remap-results.json"

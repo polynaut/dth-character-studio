@@ -212,8 +212,9 @@ Renaming a project
 (`storage.renameManifestFile`) and calls `sync_renamed_project_window` to
 live-re-title + re-pin every open window on the old file (no close/reopen).
 
-**FFI surface: 58 commands** (count re-verified 2026-08-25 — it has drifted
-twice before; count it, don't trust it) registered in
+**FFI surface: 59 commands** (count re-verified 2026-08-26 by counting the
+`generate_handler!` entries — it has drifted twice before; count it, don't
+trust it) registered in
 `generate_handler!` — installs
 (`install_dth_release/plugin/daz_assets/daz_merge/houdini_presets/unreal_dth`,
 plus `install_unreal_plugin` and `install_dth_plugins_elevated` — the same plugin
@@ -222,7 +223,9 @@ Epic-launcher registry, `scan_unreal_plugins` — the configured plugin-source
 folders, `unreal_project_state` — a `.uproject`'s engine association + what it
 already carries; see unreal_install.rs),
 scans (`list_daz_assets`, `scan_duf_files`, `pose_asset_frames`,
-`scene_wearables`), dedup/uninstall, windows
+`scene_wearables`, `find_dim_owners` — which installed product a DIM install
+manifest claims a PATH for, the Utils drawer's missing-texture product lookup;
+dim.rs), dedup/uninstall, windows
 (`open_project_window`/`active_project_file`/`sync_renamed_project_window`/
 `release_project_window` — the last unpins a window after its project is deleted
 so it continues as a Home window; the home window opens via the native menu's

@@ -5,6 +5,7 @@ import { z } from 'zod'
 
 import {
   dedupReportSchema,
+  dimOwnerSchema,
   exportZipReportSchema,
   houdiniInstallSchema,
   housekeepingResultSchema,
@@ -37,6 +38,7 @@ const CASES = [
   ['install-report.json', installReportSchema],
   ['dedup-report.json', dedupReportSchema],
   ['remap-results.json', z.array(remapResultSchema)],
+  ['dim-owners.json', z.array(dimOwnerSchema)],
   ['material-util-report.json', materialUtilReportSchema],
   ['houdini-installs.json', z.array(houdiniInstallSchema)],
   ['unreal-installs.json', z.array(unrealEngineInstallSchema)],

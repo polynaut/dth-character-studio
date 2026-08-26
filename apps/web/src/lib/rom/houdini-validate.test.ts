@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { HEALTHY, validateHoudiniProject } from './houdini-validate.ts'
+import {
+  HEALTHY,
+  groupTextureOwners,
+  unrehomedTextures,
+  validateHoudiniProject,
+} from './houdini-validate.ts'
 import {
   emptyScanStore,
   freshScan,
@@ -596,5 +601,106 @@ describe('renameScanEntry — a renamed project keeps its scan', () => {
   it('leaves a store that never knew the project alone', () => {
     const untouched = renameScanEntry(store(), `${CHAR}/houdini/Someone.hiplc`, TO)
     expect(Object.keys(untouched.projects)).toEqual([FROM.toLowerCase()])
+  })
+})
+
+describe('texture owner grouping — the DIM manifest lookup (issue #976)', () => {
+  const NAILS = 'e:/daz 3d/content/runtime/textures/daz/g9feminine01_nails_d_1005.jpg'
+  const FACE = 'e:/daz 3d/content/runtime/textures/daz/g9feminine01_face_d_1001.jpg'
+  const TORSO = 'd:/other/runtime/textures/raiya/rypi5_torso1.jpg'
+  const essentials = { productName: 'Genesis 9 Starter Essentials', sku: '86268-1' }
+
+  it('unrehomedTextures is the complement of the rehomable intersection', () => {
+    // Same normalization as countRehomable: separators and case must not
+    // decide whether a file counts as covered.
+    expect(
+      unrehomedTextures(
+        [NAILS, TORSO],
+        ['E:\\DAZ 3D\\Content\\Runtime\\Textures\\DAZ\\G9Feminine01_Nails_D_1005.jpg'],
+      ),
+    ).toEqual([TORSO])
+    expect(unrehomedTextures([NAILS], [])).toEqual([NAILS])
+    expect(unrehomedTextures([], [NAILS])).toEqual([])
+  })
+
+  it('groups the claimed files per product and keeps the unknown ones generic', () => {
+    const { named, unnamed } = groupTextureOwners(
+      [NAILS, FACE, TORSO],
+      [
+        { path: NAILS, ...essentials },
+        { path: FACE, ...essentials },
+      ],
+    )
+    // ONE line for the product, not one per file — the action is one install.
+    expect(named).toEqual([
+      {
+        ...essentials,
+        files: ['g9feminine01_nails_d_1005.jpg', 'g9feminine01_face_d_1001.jpg'],
+      },
+    ])
+    // The file no manifest knows keeps the generic reinstall wording.
+    expect(unnamed).toEqual([TORSO])
+  })
+
+  it('pairs on the echoed PATH, separator- and case-blind', () => {
+    // The lookup echoes back what it was given; nothing downstream re-derives
+    // the key, so a `\` or a capital cannot orphan an answer.
+    const { named, unnamed } = groupTextureOwners(
+      ['D:/lib/Runtime/Textures/Raiya/RyPi5_Torso1.JPG'],
+      [{ path: 'd:\\lib\\runtime\\textures\\raiya\\rypi5_torso1.jpg', productName: 'RY Pi 5', sku: '' }],
+    )
+    expect(named).toEqual([{ productName: 'RY Pi 5', sku: '', files: ['RyPi5_Torso1.JPG'] }])
+    expect(unnamed).toEqual([])
+  })
+
+  it('two products sharing a base name stay on their own lines', () => {
+    // The base name alone is not the key — `torso.jpg` ships in dozens of
+    // products, and the line has to name the one the PATH belongs to.
+    const MINE = 'd:/lib/runtime/textures/raiya/torso.jpg'
+    const THEIRS = 'd:/lib/runtime/textures/other/torso.jpg'
+    const { named } = groupTextureOwners(
+      [MINE, THEIRS],
+      [
+        { path: MINE, productName: 'RY Pi 5', sku: '1' },
+        { path: THEIRS, productName: 'Other Vendor Skin', sku: '2' },
+      ],
+    )
+    expect(named).toEqual([
+      { productName: 'RY Pi 5', sku: '1', files: ['torso.jpg'] },
+      { productName: 'Other Vendor Skin', sku: '2', files: ['torso.jpg'] },
+    ])
+  })
+
+  it('one product claiming two files of the same name prints that name once', () => {
+    const A = 'd:/lib/runtime/textures/p/a/bump.jpg'
+    const B = 'd:/lib/runtime/textures/p/b/bump.jpg'
+    const { named } = groupTextureOwners(
+      [A, B],
+      [
+        { path: A, productName: 'One Product', sku: '3' },
+        { path: B, productName: 'One Product', sku: '3' },
+      ],
+    )
+    expect(named).toEqual([{ productName: 'One Product', sku: '3', files: ['bump.jpg'] }])
+  })
+
+  it('an empty lookup answer leaves everything generic', () => {
+    const { named, unnamed } = groupTextureOwners([NAILS, TORSO], [])
+    expect(named).toEqual([])
+    expect(unnamed).toEqual([NAILS, TORSO])
+  })
+
+  it('two products yield two lines, in first-file order', () => {
+    const { named } = groupTextureOwners(
+      [NAILS, TORSO],
+      [
+        { path: TORSO, productName: 'RY Pi 5', sku: '11111' },
+        { path: NAILS, ...essentials },
+      ],
+    )
+    expect(named.map((g) => g.productName)).toEqual([
+      'Genesis 9 Starter Essentials',
+      'RY Pi 5',
+    ])
   })
 })
