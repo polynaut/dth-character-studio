@@ -18,7 +18,13 @@ import { onMenu, openExternal } from '#/lib/desktop.ts'
 import { ConfirmProvider } from '#/lib/use-confirm.tsx'
 import { UpdatePromptHost } from '#/components/update-prompt.tsx'
 import { ProjectDetectedFilesBanner } from '#/components/project-detected-files-banner.tsx'
-import { Button, TooltipHost, UiConfigProvider, installAltMenuGuard } from '@dth/ui'
+import {
+  Button,
+  OVERLAY_DISMISS_EXEMPT_ATTR,
+  TooltipHost,
+  UiConfigProvider,
+  installAltMenuGuard,
+} from '@dth/ui'
 
 import type { ErrorComponentProps } from '@tanstack/react-router'
 
@@ -157,70 +163,77 @@ function RootComponent() {
           left edge (with a soft glow of the same hue, via --glow), a solid
           round severity icon, bold title over a muted description, and the
           close X pinned to the RIGHT (sonner defaults it to the top-left).
-          Plain toast() (no severity) keeps a neutral edge. */}
-      <Toaster
-        theme="dark"
-        position="top-center"
-        closeButton
-        // WIDER than sonner's 356px default. This app's toasts are mostly
-        // messages from the layers below it — an os error 32 with the locking
-        // process named, a hython stderr line, a path that failed to write —
-        // and at the default width those wrap into a seven-line paragraph the
-        // eye has to read rather than scan. Clamped to the viewport so a narrow
-        // window still gets a toast that fits inside it.
-        style={
-          {
-            '--border-radius': 'var(--radius)',
-            '--width': 'min(34rem, calc(100vw - 2rem))',
-          } as CSSProperties
-        }
-        icons={{
-          success: (
-            <span className="flex size-7 items-center justify-center rounded-full bg-emerald-500 text-white">
-              <Check className="size-4" strokeWidth={3.5} />
-            </span>
-          ),
-          warning: (
-            <span className="flex size-7 items-center justify-center rounded-full bg-amber-400 text-lg font-black text-amber-950">
-              !
-            </span>
-          ),
-          error: (
-            <span className="flex size-7 items-center justify-center rounded-full bg-red-500 text-white">
-              <X className="size-4" strokeWidth={3.5} />
-            </span>
-          ),
-          info: (
-            <span className="flex size-7 items-center justify-center rounded-full bg-sky-500 text-white">
-              <Info className="size-4" strokeWidth={3} />
-            </span>
-          ),
-        }}
-        toastOptions={{
-          classNames: {
-            toast:
-              '!items-center !gap-3 !rounded-lg !border !border-border !border-l-4 !bg-card !pr-10 !text-foreground !shadow-[0_10px_30px_rgb(0_0_0/0.45),-4px_0_14px_-6px_var(--glow,transparent)]',
-            title: '!text-[0.95rem] !font-semibold',
-            // `whitespace-pre-line` because descriptions are BUILT as lines —
-            // the export finish report is one per leg. Sonner renders the
-            // description as plain text, so without it every newline collapsed
-            // and a six-line report arrived as one run-on paragraph: the Daz
-            // line, the warnings and the Unreal line welded together
-            // mid-sentence.
-            description: '!text-[0.85rem] !text-muted-foreground whitespace-pre-line',
-            // No `default` key: sonner applies it to EVERY toast, so it would
-            // fight the per-type accent/glow below. Plain toast() stays neutral.
-            success: '!border-l-emerald-500 [--glow:#10b981]',
-            warning: '!border-l-amber-400 [--glow:#fbbf24]',
-            error: '!border-l-red-500 [--glow:#ef4444]',
-            info: '!border-l-sky-500 [--glow:#0ea5e9]',
-            actionButton: '!bg-primary !text-primary-foreground',
-            cancelButton: '!bg-secondary !text-secondary-foreground',
-            closeButton:
-              '!absolute !top-1/2 !right-2 !left-auto !size-7 !-translate-y-1/2 !transform-none !rounded-md !border-0 !bg-transparent !text-muted-foreground hover:!bg-accent hover:!text-foreground [&>svg]:!size-4',
-          },
-        }}
-      />
+          Plain toast() (no severity) keeps a neutral edge.
+
+          The wrapper marks the toast layer dismiss-exempt: sonner renders
+          in place (no portal), outside the Radix overlay layers, so without
+          it clicking a toast's ✕ read as an OUTSIDE pointerdown and closed
+          the open drawer/dialog under it (the kit's overlay-exempt.ts). */}
+      <div {...{ [OVERLAY_DISMISS_EXEMPT_ATTR]: '' }}>
+        <Toaster
+          theme="dark"
+          position="top-center"
+          closeButton
+          // WIDER than sonner's 356px default. This app's toasts are mostly
+          // messages from the layers below it — an os error 32 with the locking
+          // process named, a hython stderr line, a path that failed to write —
+          // and at the default width those wrap into a seven-line paragraph the
+          // eye has to read rather than scan. Clamped to the viewport so a narrow
+          // window still gets a toast that fits inside it.
+          style={
+            {
+              '--border-radius': 'var(--radius)',
+              '--width': 'min(34rem, calc(100vw - 2rem))',
+            } as CSSProperties
+          }
+          icons={{
+            success: (
+              <span className="flex size-7 items-center justify-center rounded-full bg-emerald-500 text-white">
+                <Check className="size-4" strokeWidth={3.5} />
+              </span>
+            ),
+            warning: (
+              <span className="flex size-7 items-center justify-center rounded-full bg-amber-400 text-lg font-black text-amber-950">
+                !
+              </span>
+            ),
+            error: (
+              <span className="flex size-7 items-center justify-center rounded-full bg-red-500 text-white">
+                <X className="size-4" strokeWidth={3.5} />
+              </span>
+            ),
+            info: (
+              <span className="flex size-7 items-center justify-center rounded-full bg-sky-500 text-white">
+                <Info className="size-4" strokeWidth={3} />
+              </span>
+            ),
+          }}
+          toastOptions={{
+            classNames: {
+              toast:
+                '!items-center !gap-3 !rounded-lg !border !border-border !border-l-4 !bg-card !pr-10 !text-foreground !shadow-[0_10px_30px_rgb(0_0_0/0.45),-4px_0_14px_-6px_var(--glow,transparent)]',
+              title: '!text-[0.95rem] !font-semibold',
+              // `whitespace-pre-line` because descriptions are BUILT as lines —
+              // the export finish report is one per leg. Sonner renders the
+              // description as plain text, so without it every newline collapsed
+              // and a six-line report arrived as one run-on paragraph: the Daz
+              // line, the warnings and the Unreal line welded together
+              // mid-sentence.
+              description: '!text-[0.85rem] !text-muted-foreground whitespace-pre-line',
+              // No `default` key: sonner applies it to EVERY toast, so it would
+              // fight the per-type accent/glow below. Plain toast() stays neutral.
+              success: '!border-l-emerald-500 [--glow:#10b981]',
+              warning: '!border-l-amber-400 [--glow:#fbbf24]',
+              error: '!border-l-red-500 [--glow:#ef4444]',
+              info: '!border-l-sky-500 [--glow:#0ea5e9]',
+              actionButton: '!bg-primary !text-primary-foreground',
+              cancelButton: '!bg-secondary !text-secondary-foreground',
+              closeButton:
+                '!absolute !top-1/2 !right-2 !left-auto !size-7 !-translate-y-1/2 !transform-none !rounded-md !border-0 !bg-transparent !text-muted-foreground hover:!bg-accent hover:!text-foreground [&>svg]:!size-4',
+            },
+          }}
+          />
+      </div>
       {/* App-styled auto-update confirm (replaces the native OS dialog). */}
       <UpdatePromptHost />
       {/* Floating-UI tooltips for every title= attribute, app-wide. */}

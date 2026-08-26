@@ -89,6 +89,30 @@ describe('SidePanel', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
+  it('a click inside a dismiss-exempt region (the host toasts) never dismisses', async () => {
+    // The host's toaster mounts OUTSIDE the Radix layer, so dismissing a toast
+    // — its own ✕ — used to read as an outside pointerdown and closed the
+    // drawer under it (measured 2026-08-26: Rescan's success toast vs the
+    // Houdini utils drawer).
+    const toastLayer = document.createElement('div')
+    toastLayer.setAttribute('data-overlay-dismiss-exempt', '')
+    const toastClose = document.createElement('button')
+    toastLayer.appendChild(toastClose)
+    document.body.appendChild(toastLayer)
+    try {
+      const { onClose } = renderPanel()
+      // Radix arms its outside-pointerdown listener a tick after mount.
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      fireEvent.pointerDown(toastClose)
+      expect(onClose).not.toHaveBeenCalled()
+      // …and a real outside click still dismisses.
+      fireEvent.pointerDown(document.body)
+      expect(onClose).toHaveBeenCalledTimes(1)
+    } finally {
+      toastLayer.remove()
+    }
+  })
+
   it('an outside click well after an Alt-Tab refocus still dismisses', async () => {
     vi.useFakeTimers()
     try {

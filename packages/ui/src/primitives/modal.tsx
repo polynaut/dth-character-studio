@@ -6,6 +6,7 @@ import type { ReactNode } from 'react'
 import { Button } from './button.tsx'
 import { closeFloatingLayers } from './overlay-sweep.ts'
 import { cn } from '../cn.ts'
+import { isOverlayExemptPointerDown } from '../overlay-exempt.ts'
 import { isRefocusPointerDown } from '../refocus-click.ts'
 
 /**
@@ -72,8 +73,13 @@ export function Modal({
           aria-describedby={undefined}
           // The click that re-focuses the app window is just bringing it to
           // the front — never a backdrop dismiss (see refocus-click.ts).
+          // Neither is a click inside the host's toast layer — dismissing the
+          // toast an action raised must not close the dialog that raised it
+          // (see overlay-exempt.ts).
           onPointerDownOutside={(e) => {
-            if (isRefocusPointerDown(e.detail.originalEvent)) e.preventDefault()
+            const original = e.detail.originalEvent
+            if (isRefocusPointerDown(original) || isOverlayExemptPointerDown(original))
+              e.preventDefault()
           }}
           className={cn(
             // max-w-xl (not -md): the dialogs regularly carry full file paths,
