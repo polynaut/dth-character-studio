@@ -85,23 +85,25 @@ Three Genesis 9 dials sit under the hair items (greyed out on other generations)
 
 ## Script install location & export directory
 
-The **Daz scripts generated** box shows where the generated `ROM_…` (and, with
-split export, `Export_…`) scripts install on Save:
-`<My DAZ 3D Library>/Scripts/DTH-Character-Studio/<project>/<character>/`. It also
-holds the two **export switches**, detailed in
+The **Daz scripts generated** box shows where the generated `ROM_…`, `Export_…`
+and `Export_Hair_…` scripts install on Save:
+`<My DAZ 3D Library>/Scripts/DTH-Character-Studio/<project>/<character>/` — each
+detailed in
 [Working with the scripts alone](./05-rom-in-daz.md#working-with-the-scripts-alone).
 
 <p align="center">
-  <img width="900" alt="the Daz scripts generated box — install location, the export switches and the Export directory" src="screenshots/character-scripts-section.png" />
+  <img width="900" alt="the Daz scripts generated box — install location and the two export directories" src="screenshots/character-scripts-section.png" />
   <br>
-  <sub><em>The Daz scripts generated box: the install location, the two export switches and the Export directory.</em></sub>
+  <sub><em>The Daz scripts generated box: the install location and the two export directories.</em></sub>
 </p>
 
-**Export directory**, at the bottom of the same box, shows where
+**Daz export directory**, further down the same box, shows where
 [the export](./05-rom-in-daz.md#what-a-run-exports) lands.
 It's fixed and read-only: `daz-export` inside the character's Houdini folder, next
 to the `.hip` that reads it — see
 [where the Houdini project fits](./05-rom-in-daz.md#where-the-houdini-project-fits).
+Below it, **Export directory** is the pipeline's final stop: the folder the
+character's Houdini networks export into, and what Unreal imports.
 
 <details>
 <summary><strong>Advanced options</strong></summary>
@@ -201,8 +203,8 @@ Press **Save**. Every save regenerates the character's files:
   [Into Houdini](./06-into-houdini.md#what-the-studio-gives-you) to grab it by
   hand.
 
-Two more appear **when they apply**: **`Export_<Name>_G9.dsa`** (whenever an
-Export directory is set) and **`Export_Hair_<Name>_G9.dsa`** (when the character
+Two more appear **when they apply**: **`Export_<Name>_G9.dsa`** (whenever a
+Daz export directory is set) and **`Export_Hair_<Name>_G9.dsa`** (when the character
 lists [hair items](./advanced.md#hair-items--per-scene-kept-out-of-the-export)).
 Every script does one job — the ROM script builds, the Export script exports, the
 Hair script grooms — and each gets its own **Content Library icon**, so you can

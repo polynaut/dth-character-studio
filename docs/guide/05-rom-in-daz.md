@@ -31,12 +31,12 @@ The export is driven by the **DTH Exporter Plugin** (v1.8.1+, installed in
 [step 2](./02-setup.md#daz-studio-plugins)).
 
 <p align="center">
-  <img width="900" alt="character page, Daz scripts generated box with the Export directory sub-section" src="screenshots/character-scripts-section.png" />
+  <img width="900" alt="character page, Daz scripts generated box with the Daz export directory sub-section" src="screenshots/character-scripts-section.png" />
   <br>
-  <sub><em>The Export directory, at the bottom of the Daz scripts generated box.</em></sub>
+  <sub><em>The Daz export directory in the Daz scripts generated box.</em></sub>
 </p>
 
-There is nothing to set up: every character has an **Export directory**, fixed at
+There is nothing to set up: every character has a **Daz export directory**, fixed at
 `daz-export` inside its Houdini folder. Each scene's run writes **`<Name>.abc`**,
 **`<Name>.dth`** and the **PoseAsset CSV** — plus a **reference-skeleton FBX** for
 each **Bone scale** frame, under a `Reference Skeletons` subfolder the CSV already
@@ -151,7 +151,7 @@ exact failures when you switch back.
 > [What Save generates](./advanced.md#what-save-generates).
 
 Each generated script does **one job**, so you run only the part you need (and a
-re-export never costs you another ROM build). With an Export directory set you
+re-export never costs you another ROM build). With a Daz export directory set you
 get, in the order you run them:
 
 - **`ROM_<Name>_G9.dsa`** — builds the ROM on the timeline. That's all it does.
