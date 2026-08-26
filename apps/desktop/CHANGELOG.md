@@ -1,5 +1,18 @@
 # @dth/desktop
 
+## 0.92.0
+
+### Minor Changes
+
+- [#979](https://github.com/polynaut/dth-character-studio/pull/979) [`cf83b20`](https://github.com/polynaut/dth-character-studio/commit/cf83b20a8d6db812c33136065640b1c5c59280f1) Thanks [@polynaut](https://github.com/polynaut)! - A missing baker texture the repath cannot rehome now names the product to
+  reinstall. The Utils drawer's Baker-textures row searches your DIM manifests
+  folders (the same set the product scan reads) for each unfindable file and, when
+  an install manifest lists it, replaces the dead-end "reinstall the product"
+  with the product's name and SKU — one line per product, ready for DAZ Install
+  Manager. The match is on the file's folder as well as its name, so a texture
+  name a dozen products share cannot point you at the wrong one; a file no
+  manifest knows keeps today's generic wording.
+
 ## 0.91.0
 
 ### Minor Changes

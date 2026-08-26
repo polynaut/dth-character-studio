@@ -1,7 +1,15 @@
 # @dth/web
 
-## 0.91.0
+## 0.92.0
 
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @dth/rom@0.92.0
+  - @dth/ui@0.92.0
+
+## 0.91.0
 
 ### Patch Changes
 
