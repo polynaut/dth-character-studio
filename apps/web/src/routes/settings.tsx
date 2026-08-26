@@ -21,7 +21,7 @@ import {
   saveSettings,
 } from '#/lib/rom/api.ts'
 import { navOrigin } from '#/lib/nav-origin.ts'
-import { PROJECT_BEHAVIOR_DEFAULTS } from '#/lib/rom/storage.ts'
+import { DEFAULT_TRANSFER_MORPHS, PROJECT_BEHAVIOR_DEFAULTS } from '#/lib/rom/storage.ts'
 import { useUnsavedChangesGuard } from '#/lib/use-unsaved-guard.ts'
 import { useSettingsActions } from '#/lib/use-settings-actions.ts'
 import { useConfirm } from '#/lib/use-confirm.tsx'
@@ -55,7 +55,10 @@ export const Route = createFileRoute('/settings')({
   validateSearch: (search: Record<string, unknown>): { from?: string; tab?: SettingsTab } => ({
     from: typeof search.from === 'string' ? search.from : undefined,
     tab:
-      search.tab === 'general' || search.tab === 'appdata' || search.tab === 'project'
+      search.tab === 'general' ||
+      search.tab === 'appdata' ||
+      search.tab === 'project' ||
+      search.tab === 'scripts'
         ? search.tab
         : undefined,
   }),
@@ -65,7 +68,7 @@ export const Route = createFileRoute('/settings')({
   component: SettingsPage,
 })
 
-type SettingsTab = 'general' | 'appdata' | 'project'
+type SettingsTab = 'general' | 'appdata' | 'project' | 'scripts'
 
 /**
  * The editable per-project `.dcsp` manifest fields, held on the Project tab as one
@@ -166,6 +169,63 @@ function ExtraDimManifestsFolders({
       >
         <Plus /> Add another manifests folder
       </Button>
+    </>
+  )
+}
+
+/**
+ * The editable Prepare-for-transfer morph list (settings.prepareTransferMorphs)
+ * — what the installed `Prepare_For_Transfer.dsa` zeroes. Plain text entries,
+ * not paths; the baked script matches each dial's name/label by CONTAINS
+ * (case-blind, spaces/dashes/underscores ignored), which the section's help
+ * text spells out so an entry like "Nipple" reads as the family it is.
+ */
+function TransferMorphList({
+  entries,
+  onChange,
+}: {
+  entries: Array<string>
+  onChange: (entries: Array<string>) => void
+}) {
+  return (
+    <>
+      {entries.map((entry, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <Input
+            value={entry}
+            placeholder="Breasts Size"
+            aria-label={`Morph entry ${i + 1}`}
+            onChange={(e) => onChange(entries.map((m, mi) => (mi === i ? e.target.value : m)))}
+          />
+          <Button
+            variant="ghost"
+            className="text-muted-foreground"
+            onClick={() => onChange(entries.filter((_, mi) => mi !== i))}
+          >
+            Remove
+          </Button>
+        </div>
+      ))}
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="border-dashed text-muted-foreground"
+          onClick={() => onChange([...entries, ''])}
+        >
+          <Plus /> Add a morph
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="text-muted-foreground"
+          onClick={() => onChange([...DEFAULT_TRANSFER_MORPHS])}
+        >
+          Reset to defaults
+        </Button>
+      </div>
     </>
   )
 }
@@ -706,7 +766,11 @@ function SettingsPage() {
     settings.houdiniInstallFolder !== initial.houdiniInstallFolder ||
     JSON.stringify(settings.extraHoudiniDocsFolders) !==
       JSON.stringify(initial.extraHoudiniDocsFolders) ||
-    JSON.stringify(settings.unrealPluginFolders) !== JSON.stringify(initial.unrealPluginFolders)
+    JSON.stringify(settings.unrealPluginFolders) !== JSON.stringify(initial.unrealPluginFolders) ||
+    // The Daz-scripts tab's morph list — without this line an edit there never
+    // arms Save and never reaches disk (the schema alone doesn't gate the button).
+    JSON.stringify(settings.prepareTransferMorphs) !==
+      JSON.stringify(initial.prepareTransferMorphs)
   // Leaving with unsaved settings asks first — covers BOTH the machine settings
   // and the Project-tab manifest edits (install flows save before acting; they
   // gate on `dirty` for the machine half specifically).
@@ -942,8 +1006,49 @@ function SettingsPage() {
         <TabsList>
           {project && <TabsTrigger value="project">Project</TabsTrigger>}
           <TabsTrigger value="general">General</TabsTrigger>
+          <TabsTrigger value="scripts">Daz scripts</TabsTrigger>
           <TabsTrigger value="appdata">App Data</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="scripts" className="space-y-5">
+          {/* Knobs for the utility scripts the studio installs into the Daz
+              library's Scripts/DTH-Character-Studio folder — machine-wide, like
+              everything else in settings.json. One script has one so far. */}
+          <section className="space-y-3 rounded-lg border bg-card p-5">
+            <h2 className="font-semibold">Prepare for transfer (G8 → G9)</h2>
+            <p className="text-sm text-muted-foreground">
+              The installed <code>Prepare_For_Transfer.dsa</code> zeroes the G8/G8.1 morphs that
+              also exist on G9, so a transferred character doesn&apos;t apply them twice — run it
+              on the figure in Daz before the transfer. Saving here rewrites the installed
+              script with this list.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              A dial is zeroed when its name or label <strong>contains</strong> an entry
+              (ignoring case, spaces and dashes) — <code>Nipple</code> covers Nipples Apply and
+              Nipples Tip Adjust, and <code>Breasts Size</code> also matches the internal{' '}
+              <code>PBMBreastsSize</code>.
+            </p>
+            <TransferMorphList
+              entries={settings.prepareTransferMorphs}
+              onChange={(entries) =>
+                setSettings((s) => ({ ...s, prepareTransferMorphs: entries }))
+              }
+            />
+            <p className="text-xs text-muted-foreground">
+              {settings.dazLibraryFolder ? (
+                <>
+                  Installed at{' '}
+                  <PathCode
+                    path={`${settings.dazLibraryFolder}\\Scripts\\DTH-Character-Studio\\Prepare_For_Transfer.dsa`}
+                  />{' '}
+                  — find it in Daz&apos;s Content Library under Scripts.
+                </>
+              ) : (
+                <>Installed once “My DAZ 3D Library” is set on the General tab.</>
+              )}
+            </p>
+          </section>
+        </TabsContent>
 
         <TabsContent value="general" className="space-y-5">
           {/* First, because everything below it depends on which Daz is meant —
