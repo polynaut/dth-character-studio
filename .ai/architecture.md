@@ -212,7 +212,7 @@ Renaming a project
 (`storage.renameManifestFile`) and calls `sync_renamed_project_window` to
 live-re-title + re-pin every open window on the old file (no close/reopen).
 
-**FFI surface: 59 commands** (count re-verified 2026-08-26 by counting the
+**FFI surface: 61 commands** (count re-verified 2026-09-01 by counting the
 `generate_handler!` entries — it has drifted twice before; count it, don't
 trust it) registered in
 `generate_handler!` — installs
@@ -256,7 +256,9 @@ drives
 (`unc_for_path`/`ensure_network_drives`), avatars
 (`upscale_avatar_file`/`downscale_avatar_png`), `shell_open_file`,
 `housekeeping_sweep`,
-`app_release_tags`, `unreal_dth_present`, `probe_locked_files`, and the Houdini
+`app_release_tags`, `submit_product_share` (the opt-in community product-DB
+POST — webview CSP allows IPC only, so like the GitHub calls it runs on
+reqwest in Rust; share.rs), `unreal_dth_present`, `probe_locked_files`, and the Houdini
 side (`create_houdini_project`, `remove_junction` — the best-effort sweep of
 leftover `dth-exports` junctions from the retired feature —
 `launch_houdini_job`/`houdini_running`/`houdini_job_exit_code` for
