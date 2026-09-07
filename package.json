@@ -29,10 +29,10 @@
     "version-packages": "changeset version && node scripts/dedupe-changelogs.mjs && pnpm install --lockfile-only"
   },
   "devDependencies": {
-    "@changesets/changelog-github": "^1.0.0",
-    "@changesets/cli": "^3.0.1",
-    "marked": "^18.0.10",
-    "oxlint": "^1.79.0",
+    "@changesets/changelog-github": "^1.0.1",
+    "@changesets/cli": "^3.0.2",
+    "marked": "^18.0.11",
+    "oxlint": "^1.81.0",
     "oxlint-tsgolint": "^7.0.2001"
   },
   "pnpm": {
