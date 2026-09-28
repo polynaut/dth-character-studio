@@ -31,9 +31,9 @@
   "devDependencies": {
     "@changesets/changelog-github": "^1.0.1",
     "@changesets/cli": "^3.0.3",
-    "marked": "^18.0.13",
-    "oxlint": "^1.83.0",
-    "oxlint-tsgolint": "^7.0.2002"
+    "marked": "^18.0.14",
+    "oxlint": "^1.85.0",
+    "oxlint-tsgolint": "^7.0.2003"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
