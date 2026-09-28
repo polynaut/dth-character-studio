@@ -1,5 +1,11 @@
 # @dth/desktop
 
+## 0.92.1
+
+### Patch Changes
+
+- [#994](https://github.com/polynaut/dth-character-studio/pull/994) [`c7a532f`](https://github.com/polynaut/dth-character-studio/commit/c7a532fd0921207249c43088c2320815993ac168) Thanks [@polynaut](https://github.com/polynaut)! - Dependency refresh: React 19.3, zod 4.6, TanStack Router and the Tauri plugins (updater 2.11, dialog, fs, shell, single-instance) in the app, plus reqwest, rustls and flate2 in the desktop shell.
+
 ## 0.92.0
 
 ### Minor Changes
