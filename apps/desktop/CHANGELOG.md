@@ -1,5 +1,11 @@
 # @dth/desktop
 
+## 0.92.2
+
+### Patch Changes
+
+- [#999](https://github.com/polynaut/dth-character-studio/pull/999) [`c385e56`](https://github.com/polynaut/dth-character-studio/commit/c385e56a7932535378139576f14a45a40779feaf) Thanks [@polynaut](https://github.com/polynaut)! - Dependency refresh: Tauri 2.11.6 with the updater plugin 2.12 and single-instance 2.4.5, plus TanStack Router, lucide-react and rustls updates.
+
 ## 0.92.1
 
 ### Patch Changes
