@@ -23,6 +23,19 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   the current head keeps red "cancelled" required checks. Only ever approve or
   re-run the NEWEST run; for a cancelled current head,
   `gh run rerun <run-id> --failed` re-runs just the killed jobs.
+- **`sign-mac` failing with notarytool `HTTP status code: 403. A required
+  agreement is missing or has expired` is an Apple ACCOUNT problem, not a
+  code or secrets one** (measured 2026-10-01, the v0.92.2 train). Apple
+  periodically issues updated terms, and the notary service refuses every
+  submission until the Account Holder accepts them. There can be TWO to
+  accept — one at developer.apple.com/account and one at
+  appstoreconnect.apple.com/business (Agreements) — and a retry after
+  accepting only the first fails with the SAME 403; v0.92.2 shipped once
+  both were accepted, with no propagation wait. Nothing half-ships meanwhile:
+  `publish` needs both platforms, so the release simply doesn't exist yet.
+  Recovery is `gh run rerun <run-id> --failed` (re-runs `sign-mac` + `publish`,
+  keeps the finished builds and `sign-win`) plus one more `release-signing`
+  approval — no rebuild, no new version.
 - **A CI cache saved from a PR run is invisible to every OTHER PR** — GitHub
   scopes it to that PR's merge ref; only default-branch caches are visible to
   all PR runs. So a PR-job `actions/cache` save is a guaranteed lose twice
