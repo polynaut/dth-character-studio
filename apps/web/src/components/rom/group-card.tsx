@@ -2,7 +2,7 @@ import { memo, useContext, useEffect, useState } from 'react'
 
 import { useDroppable } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
-import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
+import { flexRender, useTable } from '@tanstack/react-table'
 import { Copy, Plus, Trash2 } from 'lucide-react'
 
 import { Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@dth/ui'
@@ -29,7 +29,7 @@ import type {
 
 import { headerSelectClass } from './cells.tsx'
 import { FigureNodeContext } from './contexts.ts'
-import { SortablePoseRow, poseColumns } from './pose-table.tsx'
+import { SortablePoseRow, poseColumns, poseFeatures } from './pose-table.tsx'
 
 import type { PoseTableMeta } from './pose-table.tsx'
 
@@ -131,8 +131,14 @@ export const GroupCard = memo(function GroupCard({
     )
     if (el) {
       el.focus()
+      // Clearing the one-shot focus latch once the DOM focus landed IS this
+      // effect's job — there is nothing to derive during render (#960).
+      // oxlint-disable-next-line react/set-state-in-effect
       setFocusPoseId(null)
     }
+    // `group.poses` is the retry TRIGGER — the inserted row's input exists only
+    // a render later; the body reads the DOM, not the poses (#960).
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies
   }, [focusPoseId, group.poses])
 
   // RomSections passes the already-MERGED display groups in scene-override mode
@@ -241,13 +247,10 @@ export const GroupCard = memo(function GroupCard({
       : undefined,
   }
 
-  // TanStack Table's documented API: useReactTable returns unmemoizable
-  // functions, so the React compiler skips this component — accepted (#960).
-  // oxlint-disable-next-line react/incompatible-library
-  const table = useReactTable({
+  const table = useTable({
+    features: poseFeatures,
     data: displayPoses,
     columns: poseColumns,
-    getCoreRowModel: getCoreRowModel(),
     meta,
     state: { columnVisibility: { boneScaleRef: showBoneScale } },
   })
