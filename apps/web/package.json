@@ -34,7 +34,7 @@
     "@tanstack/react-devtools": "^0.10.13",
     "@tanstack/react-router": "^1.170.39",
     "@tanstack/react-router-devtools": "^1.167.2",
-    "@tanstack/react-table": "^8.21.3",
+    "@tanstack/react-table": "^9.2.6",
     "@tanstack/router-plugin": "^1.168.40",
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-dialog": "^2.7.3",

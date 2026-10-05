@@ -139,7 +139,16 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   pointer-events-none element takes its ancestor's cursor). Any future
   pointer-listener control inside the read-only fieldset needs the same
   treatment (`rom-sections.tsx`).
-- **`useReactTable`'s `data` must be referentially stable.** A derived rows array
+- **TanStack Table v9 (`useTable`, #773) exposes only REGISTERED features.** The
+  pose grid's `poseFeatures` (`pose-table.tsx`) lists `columnVisibilityFeature`;
+  drop it and `row.getVisibleCells` is a type error, but `state.columnVisibility`
+  still compiles and is silently ignored (measured). A new table API → register
+  its feature there. Also: v8's `useReactTable` tripped
+  `react/incompatible-library`, which made the compiler lint SKIP `GroupCard`;
+  `useTable` doesn't, so the whole component is linted now (its old
+  focus-new-row effect became `autoFocus` via the table meta — no disables).
+- **The table's `data` must be referentially stable** (written against v8's
+  `useReactTable`; the memo stays under v9's `useTable`). A derived rows array
   built inline in render (the override grid's merged `displayPoses`) fed the
   table a new identity every render and — once a row's content actually differed —
   tipped React into an **endless synchronous re-render loop** that hard-froze the

@@ -278,9 +278,15 @@ export const TRIGGERS = [
   },
   {
     id: 'react-table-stable',
-    path: /apps\/web\/src\/components\/character\/(group-card|rom-sections)\.tsx$/,
+    path: /apps\/web\/src\/components\/(rom\/group-card|rom-sections)\.tsx$/,
     doc: GOTCHAS_WEB,
-    anchor: "`useReactTable`'s `data` must be referentially stable",
+    anchor: "The table's `data` must be referentially stable",
+  },
+  {
+    id: 'react-table-features',
+    path: /apps\/web\/src\/components\/rom\/(group-card|pose-table)\.tsx$/,
+    doc: GOTCHAS_WEB,
+    anchor: 'exposes only REGISTERED features',
   },
   {
     id: 'overlay-primitives',

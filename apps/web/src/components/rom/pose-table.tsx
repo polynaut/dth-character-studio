@@ -2,7 +2,13 @@ import { useState } from 'react'
 
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { createColumnHelper, flexRender } from '@tanstack/react-table'
+import {
+  columnVisibilityFeature,
+  createColumnHelper,
+  flexRender,
+  metaHelper,
+  tableFeatures,
+} from '@tanstack/react-table'
 import { ChevronDown, ChevronRight, GripVertical, Plus, RotateCcw, Trash2 } from 'lucide-react'
 
 import type { Row } from '@tanstack/react-table'
@@ -75,6 +81,10 @@ export interface PoseTableMeta {
   remove: (rowIndex: number) => void
   /** Insert an empty pose at this index (frames renumber — they're never stored). */
   insertAt: (index: number) => void
+  /** The freshly inserted pose whose name field focuses itself on mount, until
+   *  the user leaves that field ({@link clearAutoFocus}). */
+  autoFocusPoseId: string | null
+  clearAutoFocus: () => void
   /** Default scene node for new entries — the generation's unrenamed base figure. */
   figureNode: string
   /** Set = the grid is in scene-override mode (see {@link PoseOverrideMeta}). */
@@ -133,9 +143,21 @@ function InsertFrameMenu({ onBefore, onAfter }: { onBefore: () => void; onAfter:
   )
 }
 
-const columnHelper = createColumnHelper<RomPose>()
+/**
+ * The grid's TanStack Table v9 feature set. v9 only exposes the APIs of the
+ * features registered here: column visibility hides the Bone scale column
+ * (`state.columnVisibility`); the core row model is built in. `tableMeta` is
+ * type-only — it types `options.meta` as {@link PoseTableMeta}.
+ */
+export const poseFeatures = tableFeatures({
+  columnVisibilityFeature,
+  tableMeta: metaHelper<PoseTableMeta>(),
+})
+type PoseFeatures = typeof poseFeatures
 
-export const poseColumns: Array<ColumnDef<RomPose, any>> = [
+const columnHelper = createColumnHelper<PoseFeatures, RomPose>()
+
+export const poseColumns: Array<ColumnDef<PoseFeatures, RomPose, any>> = columnHelper.columns([
   columnHelper.display({
     id: 'frame',
     header: 'Frame',
@@ -174,6 +196,10 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
           value={getValue()}
           placeholder="e.g. BodyTone"
           dataId={row.original.id}
+          autoFocus={meta.autoFocusPoseId === row.original.id}
+          onLeave={
+            meta.autoFocusPoseId === row.original.id ? meta.clearAutoFocus : undefined
+          }
           // Houdini only accepts [A-Za-z0-9_] — flag anything else instead of
           // silently rewriting what the user typed (same rule the generator's
           // sanitizePoseName enforces on the CSV).
@@ -395,14 +421,14 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
       )
     },
   }),
-]
+])
 
 export function SortablePoseRow({
   row,
   expanded,
   meta,
 }: {
-  row: Row<RomPose>
+  row: Row<PoseFeatures, RomPose>
   expanded: boolean
   meta: PoseTableMeta
 }) {

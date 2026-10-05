@@ -1,8 +1,8 @@
-import { memo, useContext, useEffect, useState } from 'react'
+import { memo, useContext, useState } from 'react'
 
 import { useDroppable } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
-import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
+import { flexRender, useTable } from '@tanstack/react-table'
 import { Copy, Plus, Trash2 } from 'lucide-react'
 
 import { Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@dth/ui'
@@ -29,7 +29,7 @@ import type {
 
 import { headerSelectClass } from './cells.tsx'
 import { FigureNodeContext } from './contexts.ts'
-import { SortablePoseRow, poseColumns } from './pose-table.tsx'
+import { SortablePoseRow, poseColumns, poseFeatures } from './pose-table.tsx'
 
 import type { PoseTableMeta } from './pose-table.tsx'
 
@@ -119,21 +119,11 @@ export const GroupCard = memo(function GroupCard({
   // (PoseGroupsEditor), enabling drags between groups, not just within one.
   const { setNodeRef: setDropRef } = useDroppable({ id: group.id })
 
-  // A freshly inserted pose's name field gets focused once its row renders (the
-  // insert flows through the parent's onChange, so the row exists a render later).
-  // Quote/backslash-escape is all a quoted attribute selector needs (CSS.escape
-  // is unavailable in jsdom, and the bare name is shadowed by @dnd-kit's CSS).
+  // A freshly inserted pose's name field focuses itself when its row MOUNTS
+  // (React's autoFocus via the table meta) — the insert flows through the
+  // parent's onChange, so the row only exists a render later. The request is
+  // dropped once the user leaves that field.
   const [focusPoseId, setFocusPoseId] = useState<string | null>(null)
-  useEffect(() => {
-    if (!focusPoseId) return
-    const el = document.querySelector<HTMLInputElement>(
-      `input[data-pose-input="${focusPoseId.replace(/["\\]/g, '\\$&')}"]`,
-    )
-    if (el) {
-      el.focus()
-      setFocusPoseId(null)
-    }
-  }, [focusPoseId, group.poses])
 
   // RomSections passes the already-MERGED display groups in scene-override mode
   // (base rows carrying their per-scene value edits + the override's appended rows),
@@ -179,6 +169,8 @@ export const GroupCard = memo(function GroupCard({
     expandedIds,
     toggleExpanded: onToggleExpanded,
     figureNode,
+    autoFocusPoseId: focusPoseId,
+    clearAutoFocus: () => setFocusPoseId(null),
     update: patchPose,
     updateMorphAt: (rowIndex, morphIndex, patch) => {
       const pose = displayPoses[rowIndex]
@@ -229,7 +221,7 @@ export const GroupCard = memo(function GroupCard({
         boneScaleRef: false,
       })
       change({ ...group, poses })
-      // Focus the new row's name field as soon as it renders.
+      // Focus the new row's name field as soon as it mounts.
       setFocusPoseId(id)
     },
     override: override
@@ -241,13 +233,10 @@ export const GroupCard = memo(function GroupCard({
       : undefined,
   }
 
-  // TanStack Table's documented API: useReactTable returns unmemoizable
-  // functions, so the React compiler skips this component — accepted (#960).
-  // oxlint-disable-next-line react/incompatible-library
-  const table = useReactTable({
+  const table = useTable({
+    features: poseFeatures,
     data: displayPoses,
     columns: poseColumns,
-    getCoreRowModel: getCoreRowModel(),
     meta,
     state: { columnVisibility: { boneScaleRef: showBoneScale } },
   })
