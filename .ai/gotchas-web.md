@@ -145,7 +145,8 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   still compiles and is silently ignored (measured). A new table API → register
   its feature there. Also: v8's `useReactTable` tripped
   `react/incompatible-library`, which made the compiler lint SKIP `GroupCard`;
-  `useTable` doesn't, so the whole component is linted now.
+  `useTable` doesn't, so the whole component is linted now (its old
+  focus-new-row effect became `autoFocus` via the table meta — no disables).
 - **The table's `data` must be referentially stable** (written against v8's
   `useReactTable`; the memo stays under v9's `useTable`). A derived rows array
   built inline in render (the override grid's merged `displayPoses`) fed the
