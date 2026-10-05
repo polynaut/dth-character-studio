@@ -81,6 +81,10 @@ export interface PoseTableMeta {
   remove: (rowIndex: number) => void
   /** Insert an empty pose at this index (frames renumber — they're never stored). */
   insertAt: (index: number) => void
+  /** The freshly inserted pose whose name field focuses itself on mount, until
+   *  the user leaves that field ({@link clearAutoFocus}). */
+  autoFocusPoseId: string | null
+  clearAutoFocus: () => void
   /** Default scene node for new entries — the generation's unrenamed base figure. */
   figureNode: string
   /** Set = the grid is in scene-override mode (see {@link PoseOverrideMeta}). */
@@ -192,6 +196,10 @@ export const poseColumns: Array<ColumnDef<PoseFeatures, RomPose, any>> = columnH
           value={getValue()}
           placeholder="e.g. BodyTone"
           dataId={row.original.id}
+          autoFocus={meta.autoFocusPoseId === row.original.id}
+          onLeave={
+            meta.autoFocusPoseId === row.original.id ? meta.clearAutoFocus : undefined
+          }
           // Houdini only accepts [A-Za-z0-9_] — flag anything else instead of
           // silently rewriting what the user typed (same rule the generator's
           // sanitizePoseName enforces on the CSV).

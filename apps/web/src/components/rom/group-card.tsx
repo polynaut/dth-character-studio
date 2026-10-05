@@ -1,4 +1,4 @@
-import { memo, useContext, useEffect, useState } from 'react'
+import { memo, useContext, useState } from 'react'
 
 import { useDroppable } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
@@ -119,27 +119,11 @@ export const GroupCard = memo(function GroupCard({
   // (PoseGroupsEditor), enabling drags between groups, not just within one.
   const { setNodeRef: setDropRef } = useDroppable({ id: group.id })
 
-  // A freshly inserted pose's name field gets focused once its row renders (the
-  // insert flows through the parent's onChange, so the row exists a render later).
-  // Quote/backslash-escape is all a quoted attribute selector needs (CSS.escape
-  // is unavailable in jsdom, and the bare name is shadowed by @dnd-kit's CSS).
+  // A freshly inserted pose's name field focuses itself when its row MOUNTS
+  // (React's autoFocus via the table meta) — the insert flows through the
+  // parent's onChange, so the row only exists a render later. The request is
+  // dropped once the user leaves that field.
   const [focusPoseId, setFocusPoseId] = useState<string | null>(null)
-  useEffect(() => {
-    if (!focusPoseId) return
-    const el = document.querySelector<HTMLInputElement>(
-      `input[data-pose-input="${focusPoseId.replace(/["\\]/g, '\\$&')}"]`,
-    )
-    if (el) {
-      el.focus()
-      // Clearing the one-shot focus latch once the DOM focus landed IS this
-      // effect's job — there is nothing to derive during render (#960).
-      // oxlint-disable-next-line react/set-state-in-effect
-      setFocusPoseId(null)
-    }
-    // `group.poses` is the retry TRIGGER — the inserted row's input exists only
-    // a render later; the body reads the DOM, not the poses (#960).
-    // oxlint-disable-next-line react/exhaustive-effect-dependencies
-  }, [focusPoseId, group.poses])
 
   // RomSections passes the already-MERGED display groups in scene-override mode
   // (base rows carrying their per-scene value edits + the override's appended rows),
@@ -185,6 +169,8 @@ export const GroupCard = memo(function GroupCard({
     expandedIds,
     toggleExpanded: onToggleExpanded,
     figureNode,
+    autoFocusPoseId: focusPoseId,
+    clearAutoFocus: () => setFocusPoseId(null),
     update: patchPose,
     updateMorphAt: (rowIndex, morphIndex, patch) => {
       const pose = displayPoses[rowIndex]
@@ -235,7 +221,7 @@ export const GroupCard = memo(function GroupCard({
         boneScaleRef: false,
       })
       change({ ...group, poses })
-      // Focus the new row's name field as soon as it renders.
+      // Focus the new row's name field as soon as it mounts.
       setFocusPoseId(id)
     },
     override: override

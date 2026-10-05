@@ -28,7 +28,7 @@ async function openCharacter(page: Page) {
 
 const poseRows = (page: Page) => page.locator('tbody tr[data-pose-id]')
 const nameInput = (page: Page, i: number) =>
-  poseRows(page).nth(i).locator('input[data-pose-input]')
+  poseRows(page).nth(i).getByPlaceholder('e.g. BodyTone')
 const frameOf = (page: Page, i: number) => poseRows(page).nth(i).locator('td').nth(1)
 
 /** The FBM poses as they sit on disk after a save, in order. */
@@ -94,6 +94,9 @@ test('insert-after renumbers the frames and edits land on the pose they were mad
   await prop.fill('body_bs_Inserted')
   await prop.press('Enter')
   await nameInput(page, 3).fill('ArmsMuscularRenamed')
+  // The inserted row's focus request is spent: the commits above re-rendered
+  // the grid, and focus stays where the user went.
+  await expect(nameInput(page, 3)).toBeFocused()
   await nameInput(page, 3).press('Enter')
 
   await save(page)

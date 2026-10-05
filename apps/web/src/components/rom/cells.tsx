@@ -26,13 +26,20 @@ export function TextCell({
   onCommit,
   placeholder,
   dataId,
+  autoFocus,
+  onLeave,
   validate,
 }: {
   value: string
   onCommit: (value: string) => void
   placeholder?: string
-  /** Optional `data-pose-input` marker so a freshly inserted row can be focused. */
+  /** Optional `data-pose-input` marker naming the pose this field edits. */
   dataId?: string
+  /** Focus the input when it MOUNTS (React's own autoFocus — a freshly inserted
+   *  row's name field). Later renders never steal focus back. */
+  autoFocus?: boolean
+  /** Called whenever the field loses focus, committed or not. */
+  onLeave?: () => void
   /** Live validation: return an error message ('' = valid). The value is NEVER
    *  rewritten — an invalid entry stays as typed and is flagged instead. */
   validate?: (value: string) => string
@@ -49,12 +56,16 @@ export function TextCell({
       value={draft}
       placeholder={placeholder}
       data-pose-input={dataId}
+      autoFocus={autoFocus}
       aria-invalid={error ? true : undefined}
       title={error || undefined}
       // Route the validation message through the alert-styled tooltip (red).
       data-tooltip-variant={error ? 'error' : undefined}
       onChange={(e) => setDraft(e.target.value)}
-      onBlur={() => draft !== value && onCommit(draft)}
+      onBlur={() => {
+        if (draft !== value) onCommit(draft)
+        onLeave?.()
+      }}
       onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
     />
   )
