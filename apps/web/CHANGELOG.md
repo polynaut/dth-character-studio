@@ -1,5 +1,14 @@
 # @dth/web
 
+## 0.92.3
+
+### Patch Changes
+
+- [#1002](https://github.com/polynaut/dth-character-studio/pull/1002) [`1513431`](https://github.com/polynaut/dth-character-studio/commit/15134312b2c0e7d9b831d0be158a038a0a0aa350) Thanks [@polynaut](https://github.com/polynaut)! - The ROM pose grid now runs on TanStack Table 9. Nothing should look or behave differently — same columns, editing, frame numbers and drag reorder.
+- Updated dependencies []:
+  - @dth/rom@0.92.3
+  - @dth/ui@0.92.3
+
 ## 0.92.2
 
 ### Patch Changes
