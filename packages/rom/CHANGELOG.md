@@ -1,5 +1,9 @@
 # @dth/rom
 
+## 0.92.4
+
+No changes in this release.
+
 ## 0.92.3
 
 No changes in this release.
