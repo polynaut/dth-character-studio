@@ -196,6 +196,14 @@ export const studioSettingsSchema = z.object({
    * install's folder, and which other libraries exist stays the user's.
    */
   extraDimManifestsFolders: stringArray,
+  /**
+   * Opt-in: submit product-scan results (product names/SKUs/artists and
+   * content-relative provenance — never scenes, paths or anything about the
+   * user) to the community product database after each scan ingest. Default
+   * OFF, and the whole feature is dormant while the build carries no endpoint
+   * (`PRODUCT_SHARE_ENDPOINT` in lib/rom/product-share.ts).
+   */
+  shareProductScans: z.boolean().catch(false),
   // Per-project behaviour defaults (dazSubdir / houdiniSubdir / createHoudiniSubdir)
   // live in each project's .dcsp manifest (see DcspManifest), not in app-global
   // settings — they describe a project, not the machine.

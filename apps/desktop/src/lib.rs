@@ -15,6 +15,7 @@ mod exports;
 mod foreground;
 mod fsutil;
 mod github;
+mod share;
 mod houdini;
 mod houdini_install;
 mod houdini_material;
@@ -162,6 +163,7 @@ pub fn run() {
             uninstall::default_daz_uninstall_folders,
             uninstall::uninstall_daz,
             github::app_release_tags,
+            share::submit_product_share,
             daz::daz_studio_running,
             daz::daz_studio_instance_count,
             daz::kill_daz_studio,
