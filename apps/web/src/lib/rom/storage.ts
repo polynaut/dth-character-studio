@@ -36,6 +36,7 @@ export { scriptIconNames, writeScriptIcons } from './storage/script-icons'
 // --- App-global settings (settings.json) ------------------------------------
 export {
   consumeSettingsFileCorrupt,
+  DEFAULT_TRANSFER_MORPHS,
   dimManifestsFolderList,
   dimManifestsPathSpec,
   exportInstallFolder,

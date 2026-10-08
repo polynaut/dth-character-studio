@@ -30,6 +30,7 @@ import scanSceneBulkScript from '../runtime/Scan_Scene_Bulk.dsa?raw'
 import scanFramesScript from '../runtime/Scan_Frames.dsa?raw'
 import fixGraftShellSurfacesScript from '../runtime/Fix_Graft_Shell_Surfaces.dsa?raw'
 import killAnimationScript from '../runtime/Kill_Animation.dsa?raw'
+import prepareForTransferScript from '../runtime/Prepare_For_Transfer.dsa?raw'
 // Content Library artwork for the visible scripts (Daz's own convention:
 // `<name>.png` at 91×91 is the thumbnail, `<name>.tip.png` at 256×256 the hover
 // preview — verified against the stock Genesis 9 assets). `?inline` bundles them
@@ -43,9 +44,12 @@ import fixGraftShellSurfacesIcon from '../runtime/Fix_Graft_Shell_Surfaces.png?i
 import fixGraftShellSurfacesTip from '../runtime/Fix_Graft_Shell_Surfaces.tip.png?inline'
 import killAnimationIcon from '../runtime/Kill_Animation.png?inline'
 import killAnimationTip from '../runtime/Kill_Animation.tip.png?inline'
+import prepareForTransferIcon from '../runtime/Prepare_For_Transfer.png?inline'
+import prepareForTransferTip from '../runtime/Prepare_For_Transfer.tip.png?inline'
 
 import { dataUrlBytes, join } from './fs'
 import { dataDir } from './app-data'
+import { getSettings } from './settings'
 
 /**
  * The DTH runtime files the generated character script `include()`s. Copied from
@@ -118,6 +122,12 @@ const VISIBLE_SCAN_SCRIPTS: Record<string, string> = {
   // scene (the studio requires an empty timeline). Asks first, saves nothing,
   // bakes in no path.
   'Kill_Animation.dsa': killAnimationScript,
+  // G8→G9 transfer prep: zeroes the G8/G8.1 morph dials that also exist on G9
+  // (the DazToHue transfer guide's list). The list is EDITABLE — Settings →
+  // Daz scripts — and baked in below (`__DTH_TRANSFER_MORPHS__`), which is why
+  // the morph list is part of the install stamp: saving an edited list has to
+  // re-bake this file.
+  'Prepare_For_Transfer.dsa': prepareForTransferScript,
 }
 
 /** Root-level scripts installed like the visible ones (as-is + app-data path
@@ -152,6 +162,8 @@ const VISIBLE_SCRIPT_ICONS: Record<string, string> = {
   'Fix_Graft_Shell_Surfaces.tip.png': fixGraftShellSurfacesTip,
   'Kill_Animation.png': killAnimationIcon,
   'Kill_Animation.tip.png': killAnimationTip,
+  'Prepare_For_Transfer.png': prepareForTransferIcon,
+  'Prepare_For_Transfer.tip.png': prepareForTransferTip,
 }
 
 
@@ -257,7 +269,13 @@ export async function copyRuntimeFiles(
   // location — and absolute paths, unlike the `../../` form they replaced, do
   // not survive the move. Including it here re-bakes instead.
   const destPosix = destDir.replace(/\\/g, '/')
-  const stamp = `v${RUNTIME_VERSION}|${appData}|${destPosix}`
+  // The Prepare-for-transfer morph list (Settings → Daz scripts) is baked into
+  // its installed script, so it joins the stamp: an edited list must re-install,
+  // exactly like a moved app-data folder. JSON both bakes it (a valid DzScript
+  // array literal — JSON strings escape everything a .dsa literal needs) and
+  // stamps it (any content change changes the string).
+  const transferMorphs = JSON.stringify((await getSettings()).prepareTransferMorphs)
+  const stamp = `v${RUNTIME_VERSION}|${appData}|${destPosix}|${transferMorphs}`
   if (!options?.force) {
     try {
       if ((await readTextFile(markerPath)) === stamp) {
@@ -312,6 +330,10 @@ export async function copyRuntimeFiles(
       .join(appData)
       .split('__DTH_RUNTIME_DIR__')
       .join(destPosix)
+      // The Prepare-for-transfer morph list, as a DzScript array literal (see
+      // the stamp above for why an edit re-installs).
+      .split('__DTH_TRANSFER_MORPHS__')
+      .join(transferMorphs)
     for (const dep of Object.keys(RUNTIME_FILES)) {
       content = content.split(`".${dep}"`).join(`"${destPosix}/.${dep}"`)
     }

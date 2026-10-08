@@ -1,0 +1,166 @@
+// DTH Character Studio - Prepare_For_Transfer.dsa
+// Zero the G8/G8.1 morph dials that also exist on G9, so a character can be
+// transferred to G9 without those shapes applying twice (the DazToHue G8->G9
+// preparation list).
+//
+// Usage: select the G8/G8.1 figure (any bone of it is fine), then double-click
+// this script in the Content Library. With nothing selected it looks for a
+// single Genesis 8/8.1 figure in the scene.
+//
+// "Remove" means the dial is set to 0 - the morph asset itself is not touched.
+// A dial whose value comes from a CONTROLLER (a character's master dial
+// driving e.g. Nipples via ERC) cannot be removed by zeroing itself; the
+// script names those at the end so the controlling dial can be zeroed instead.
+//
+// Removing cloth, eyebrows, eyelashes and other sub-nodes stays manual - this
+// script only handles the morph list.
+//
+// The list below is EDITABLE in DTH Character Studio under Settings > Daz
+// scripts; saving there rewrites this installed script. A dial is zeroed when
+// its internal name or its label CONTAINS an entry, compared case-blind with
+// spaces/dashes/underscores ignored - so the entry "Breasts Size" also matches
+// the internal "PBMBreastsSize".
+
+(function(){
+
+// Baked by the studio at install time (Settings > Daz scripts).
+var aBakedEntries = __DTH_TRANSFER_MORPHS__;
+
+function normalize(s){
+	return String(s || "").toLowerCase().replace(/[\s_\-]/g, "");
+}
+
+var aEntries = [];
+for(var e = 0; e < aBakedEntries.length; e++){
+	var sEntry = normalize(aBakedEntries[e]);
+	if(sEntry) aEntries.push(sEntry);
+}
+
+// Does this dial belong on the list? Checked against the LABEL (what the
+// Parameters pane shows) and the internal NAME, both normalized.
+function shouldZero(oProp, oMod){
+	var aCandidates = [normalize(oProp.getLabel()), normalize(oProp.getName())];
+	if(oMod) aCandidates.push(normalize(oMod.getName()));
+	for(var i = 0; i < aCandidates.length; i++){
+		var s = aCandidates[i];
+		if(!s) continue;
+		for(var j = 0; j < aEntries.length; j++){
+			if(s.indexOf(aEntries[j]) != -1) return true;
+		}
+	}
+	return false;
+}
+
+// The figure to work on: the selection (a bone selects its skeleton), else a
+// scene with exactly ONE Genesis 8 figure.
+function resolveFigure(){
+	var oNode = Scene.getPrimarySelection();
+	if(oNode && oNode.inherits("DzBone")) oNode = oNode.getSkeleton();
+	if(oNode && oNode.inherits("DzSkeleton")) return oNode;
+	var aFigures = [];
+	var aAll = Scene.getNodeList();
+	for(var i = 0; i < aAll.length; i++){
+		var o = aAll[i];
+		if(!o.inherits("DzSkeleton")) continue;
+		if(String(o.getName()).indexOf("Genesis8") == 0) aFigures.push(o);
+	}
+	if(aFigures.length == 1) return aFigures[0];
+	return null;
+}
+
+// The two places a dial lives, same walk the DTH runtime uses (measured live,
+// runtime v101): DzMorph modifiers on the node's OBJECT (the blend shapes),
+// and DzFloatProperties owned by the NODE itself (stock pose-control and
+// shaping dials - a modifiers-only pass never sees those). The path gate
+// keeps transforms, display and mesh-resolution properties out.
+function forEachDial(oNode, fnVisit){
+	var oObj = oNode.getObject();
+	if(oObj){
+		for(var i = 0; i < oObj.getNumModifiers(); i++){
+			var oMod = oObj.getModifier(i);
+			if(!oMod || !oMod.inherits("DzMorph")) continue;
+			var oProp = oMod.getValueControl();
+			if(!oProp) continue;
+			fnVisit(oProp, oMod);
+		}
+	}
+	if(typeof oNode.getNumProperties == "function"){
+		var iProps = oNode.getNumProperties();
+		for(var j = 0; j < iProps; j++){
+			var oNodeProp = oNode.getProperty(j);
+			if(!oNodeProp || !oNodeProp.inherits("DzFloatProperty")) continue;
+			var sPath = (typeof oNodeProp.getPath == "function") ? String(oNodeProp.getPath()) : "";
+			if(sPath.indexOf("/Pose Controls") != 0 && sPath.indexOf("/Actor") != 0 && sPath.indexOf("/Shapes") != 0) continue;
+			fnVisit(oNodeProp, null);
+		}
+	}
+}
+
+var oFigure = resolveFigure();
+if(!oFigure){
+	MessageBox.information(
+		"Select the Genesis 8/8.1 figure first (any bone of it is fine), then run this script again.\n\n" +
+		"Nothing was changed.",
+		"Prepare for transfer", "&OK");
+	return;
+}
+if(aEntries.length == 0){
+	MessageBox.information(
+		"The morph list is empty - edit it in DTH Character Studio under Settings > Daz scripts.\n\n" +
+		"Nothing was changed.",
+		"Prepare for transfer", "&OK");
+	return;
+}
+
+var sName = String(oFigure.getName());
+if(sName.indexOf("Genesis8") != 0){
+	// Not refused - a renamed figure is common - but said out loud, because
+	// running this on a G9 would zero dials the transfer needs.
+	print("Prepare_For_Transfer: note - the selected figure's internal name is '" + sName + "', not Genesis8*. Proceeding anyway.");
+}
+
+print("=== Prepare for transfer: zeroing G9-overlapping morphs on '" + oFigure.getLabel() + "' ===");
+
+var iZeroed = 0, iAlreadyZero = 0;
+var aDriven = [];   // still show a value after zeroing - ERC-driven
+var aLocked = [];   // were locked; unlocked, zeroed, re-locked
+
+forEachDial(oFigure, function(oProp, oMod){
+	if(!shouldZero(oProp, oMod)) return;
+	var fValue = oProp.getValue();
+	if(typeof fValue != "number" || Math.abs(fValue) < 1e-6){
+		iAlreadyZero++;
+		return;
+	}
+	var bWasLocked = (typeof oProp.isLocked == "function") && oProp.isLocked();
+	if(bWasLocked && typeof oProp.lock == "function"){
+		oProp.lock(false);
+		aLocked.push(oProp.getLabel());
+	}
+	oProp.setValue(0);
+	var fAfter = oProp.getValue();
+	if(bWasLocked && typeof oProp.lock == "function") oProp.lock(true);
+	if(typeof fAfter == "number" && Math.abs(fAfter) > 1e-6){
+		// The raw value is 0 now, but a controller still shows a share - the
+		// dial cannot be removed HERE. Name it, with what still shows.
+		aDriven.push(oProp.getLabel() + " (still shows " + fAfter.toFixed(3) + ")");
+		print("Driven, not removable here: " + oProp.getLabel() + " - raw set to 0 but a controller still shows " + fAfter.toFixed(3));
+	} else {
+		print("Zeroed: " + oProp.getLabel() + " (was " + fValue.toFixed(3) + ")");
+	}
+	iZeroed++;
+});
+
+print("=== Done: " + iZeroed + " dial(s) zeroed, " + iAlreadyZero + " matched but already 0. ===");
+if(aLocked.length) print("Unlocked to zero, re-locked after: " + aLocked.join(", "));
+
+var sSummary = iZeroed + " morph dial(s) zeroed on '" + oFigure.getLabel() + "'.\n" +
+	iAlreadyZero + " matched dial(s) were already 0.";
+if(aDriven.length){
+	sSummary += "\n\nStill showing a value (driven by a controller - zero the character's " +
+		"controlling dial for these):\n  - " + aDriven.join("\n  - ");
+}
+sSummary += "\n\nThe full list is in Help > Troubleshooting > View Log File.";
+MessageBox.information(sSummary, "Prepare for transfer", "&OK");
+
+})();
