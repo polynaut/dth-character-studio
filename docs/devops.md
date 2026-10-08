@@ -81,10 +81,10 @@ gh api -X POST repos/polynaut/dth-character-studio/rulesets \
 tests / web build / `pnpm build:guide`), **smoke** (the Playwright browser smoke
 suite), **changeset** (every feature PR needs one; waived for
 `changeset-release/main` and Dependabot), and **rust** (a guard that fails if
-the brotli `alloc-*` pins were reverted + `cargo clippy --locked --all-targets
+`Cargo.lock` holds two versions of a brotli `alloc-*` crate + `cargo clippy --locked --all-targets
 -- -D warnings` + `cargo test --locked`). All four are **required status
-checks** on `main`, so a red PR — including a broken Rust build or a reverted
-pin — can't merge and trigger a signed release.
+checks** on `main`, so a red PR — including a broken Rust build or a duplicate
+alloc crate — can't merge and trigger a signed release.
 
 ## Cutting a release
 
@@ -239,14 +239,15 @@ error is NOT a PIN problem — check the container/keepalive state on the NAS.
   (would require signing during the Windows build, i.e. a cross-machine
   `signCommand` — revisit if Defender flags the installed binary).
 
-## Known temporary pin
+## Brotli alloc crates (retired pin)
 
-`Cargo.lock` pins `alloc-stdlib = 0.2.2` + `alloc-no-stdlib = 2.0.4`. `alloc-no-stdlib`
-3.0.0 (published 2026-06-14) creates a duplicate version that breaks `brotli 8.0.3`
-(Tauri's default asset `compression`) — see tauri-apps/tauri#15540/#15541,
-dropbox/rust-brotli#256. Re-pin if a `cargo update` reverts it:
-`cargo update -p alloc-stdlib --precise 0.2.2 -p alloc-no-stdlib --precise 2.0.4`.
-Remove once upstream ships a fix.
+`alloc-no-stdlib` 3.0.0 (published 2026-06-14) next to 2.x made a duplicate that
+broke `brotli 8.0.3` (Tauri's default asset `compression`) — see
+tauri-apps/tauri#15540/#15541, dropbox/rust-brotli#256. `Cargo.lock` pinned
+`alloc-stdlib = 0.2.2` + `alloc-no-stdlib = 2.0.4` until **Tauri 2.12** moved to
+**brotli 9**, which requires alloc 3 (the old pin is unsatisfiable) and leaves a
+single version of each crate. The CI `rust` job now fails if `Cargo.lock` ever
+holds two versions of either crate again.
 
 ## Security posture (fs capability scope + the recursive-delete rails)
 

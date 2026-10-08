@@ -19,13 +19,10 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
-# NOTE: Cargo.lock pins alloc-stdlib = 0.2.2 and alloc-no-stdlib = 2.0.4.
-# alloc-no-stdlib 3.0.0 (published 2026-06-14) creates a duplicate version in the
-# tree that breaks brotli 8.0.3 (used by tauri's default `compression` feature)
-# with E0277 Allocator-coherence errors — see tauri-apps/tauri#15540/#15541 and
-# dropbox/rust-brotli#256. The pins resolve it (`cargo update -p alloc-stdlib
-# --precise 0.2.2 -p alloc-no-stdlib --precise 2.0.4`). Don't `cargo update` those
-# back to latest until brotli/alloc-stdlib ship a compatible release.
+# NOTE: Cargo.lock must hold ONE version of each brotli alloc crate (alloc-stdlib,
+# alloc-no-stdlib) — a 2.x/3.x duplicate broke brotli 8 (tauri-apps/tauri#15540).
+# The old 2.0.4/0.2.2 pin retired with Tauri 2.12 → brotli 9; CI guards the
+# duplicate (docs/devops.md).
 [dependencies]
 # `devtools`: keep the WebView2 inspector (right-click → Inspect, F12) available in
 # release/installed builds too, not just dev — this is a self-hosted tool and the

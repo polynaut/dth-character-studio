@@ -186,8 +186,6 @@ Two scopes now:
   enforced by `.claude/hooks/check-branch-upstream.mjs` (a `git push` from an untracked branch
   fails the turn). Branch config only — `origin` stays SSH, never reconfigure the remote.
   Exact commands + the ad-hoc-token-push variant: `.ai/conventions.md` → Repo mechanics.
-- **Cargo.lock pins** `alloc-stdlib = 0.2.2` + `alloc-no-stdlib = 2.0.4` (newer breaks brotli 8 via
-  Tauri's asset compression). Don't `cargo update` them back; re-pin if reverted (see `docs/devops.md`).
 - **Don't rewrite users' downloaded Daz assets.** The dedup/install features may only *move* redundant
   copies (quarantine) or choose which version installs — never edit the contents of a downloaded asset.
 
