@@ -1,5 +1,11 @@
 # @dth/desktop
 
+## 0.92.4
+
+### Patch Changes
+
+- [#1006](https://github.com/polynaut/dth-character-studio/pull/1006) [`0e7e7c3`](https://github.com/polynaut/dth-character-studio/commit/0e7e7c38b032f9d8baf9d56b2cd0de164fe4b8ac) Thanks [@polynaut](https://github.com/polynaut)! - Dependency refresh: Tauri 2.12 with its dialog, fs, shell, os, updater, process and single-instance plugins (desktop shell and web side together), plus TanStack Router and lucide-react updates.
+
 ## 0.92.3
 
 No changes in this release.
@@ -474,7 +480,7 @@ No changes in this release.
   **Timeline (FPS)** row in the Utils drawer's General tab. **Repair $JOB** is now
   **Repair project settings** and fixes both, each judged on its own — a project
   whose `$JOB`is fine and whose timeline is 24 gets only the timeline written, and
-the report says which of the two moved. What Houdini's`setFps` does to keys in an
+  the report says which of the two moved. What Houdini's`setFps` does to keys in an
   already-animated scene is Houdini's behaviour and is not something this studio has
   measured; the run's usual rolling backup is stated alongside it. A value the scan
   could not read stays _unknown_ and is never repaired.
