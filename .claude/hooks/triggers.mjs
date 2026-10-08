@@ -162,9 +162,8 @@ export const TRIGGERS = [
     id: 'cargo-pins',
     command: /cargo\s+update/,
     doc: GOTCHAS_DESKTOP,
-    // NOT the pinned version — the pin exists to be re-pinned (CLAUDE.md says so
-    // outright), so the number is the one part of this line expected to change.
-    anchor: '`Cargo.lock` pins `alloc-stdlib',
+    // The rule, not a version number — versions are exactly what changes here.
+    anchor: 'must hold ONE version of each brotli `alloc-*` crate',
   },
 
   /* ---- the pure core ------------------------------------------------------ */

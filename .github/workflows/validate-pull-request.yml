@@ -304,16 +304,17 @@ jobs:
           # the main-push run saves is the same one PR runs restore — otherwise
           # the keys differ and PRs never hit it.
           shared-key: dth-desktop
-      - name: Verify the brotli alloc pins are intact
+      - name: Verify one version of each brotli alloc crate
         shell: bash
         working-directory: apps/desktop
         run: |
-          # These exact versions keep brotli 8 working with Tauri (see Cargo.toml).
-          # A stray `cargo update` or new dep can silently revert them.
-          grep -A1 'name = "alloc-no-stdlib"' Cargo.lock | grep -q 'version = "2.0.4"' \
-            || { echo "::error::alloc-no-stdlib is not pinned to 2.0.4 (breaks brotli 8) — re-pin per docs/devops.md"; exit 1; }
-          grep -A1 'name = "alloc-stdlib"' Cargo.lock | grep -q 'version = "0.2.2"' \
-            || { echo "::error::alloc-stdlib is not pinned to 0.2.2 — re-pin per docs/devops.md"; exit 1; }
+          # Two alloc-no-stdlib/alloc-stdlib versions side by side is what broke
+          # brotli (E0277 Allocator coherence, tauri-apps/tauri#15540) — guard the
+          # mechanism, not a version number (see docs/devops.md).
+          for crate in alloc-no-stdlib alloc-stdlib; do
+            n=$(grep -c "^name = \"$crate\"" Cargo.lock || true)
+            [ "$n" -le 1 ] || { echo "::error::Cargo.lock holds $n versions of $crate — duplicate alloc crates break brotli (docs/devops.md)"; exit 1; }
+          done
       - name: cargo clippy (locked, deny warnings)
         working-directory: apps/desktop
         run: cargo clippy --locked --all-targets -- -D warnings

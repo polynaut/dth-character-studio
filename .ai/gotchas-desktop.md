@@ -562,10 +562,13 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   The product version lives in `apps/desktop/package.json`
   (`tauri.conf.json` has `"version": "package.json"`); Changesets bumps only the
   npm side. `cargo test` printing `v0.1.0` is expected.
-- **`Cargo.lock` pins `alloc-stdlib = 0.2.2` + `alloc-no-stdlib = 2.0.4`** — newer
-  versions break brotli 8 via Tauri's asset compression. CI greps the lockfile to
-  enforce the pins; don't `cargo update` them (see `docs/devops.md` for the
-  re-pin command).
+- **`Cargo.lock` must hold ONE version of each brotli `alloc-*` crate.** Two
+  side by side (`alloc-no-stdlib` 2.x + 3.x) broke brotli 8 with E0277
+  Allocator-coherence errors (tauri-apps/tauri#15540). It was held off by
+  pinning 2.0.4/0.2.2 until Tauri 2.12 moved to brotli 9, which REQUIRES
+  alloc 3 — the pin is retired (measured 2026-10-08: `cargo update --precise
+  2.0.4` is unsatisfiable under `brotli = "^9"`). CI now fails on a duplicate
+  instead of on a version number.
 - **Tauri fs plugin scope quirks:** on Unix the `**` glob doesn't match hidden
   dot-folders unless `plugins.fs.requireLiteralLeadingDot: false` is set in
   `tauri.conf.json` (it is — creating `.dcsmeta/images` failed on macOS without it).
