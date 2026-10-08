@@ -36,6 +36,10 @@
     "oxlint-tsgolint": "^7.0.2003"
   },
   "pnpm": {
+    "overrides": {
+      "solid-js": "^1.9.17",
+      "@tailwindcss/typography>postcss-selector-parser": "^7.1.6"
+    },
     "onlyBuiltDependencies": [
       "esbuild"
     ]
