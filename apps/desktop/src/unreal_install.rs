@@ -463,7 +463,10 @@ fn zipped_plugin(zip_path: &Path) -> Option<ZippedPlugin> {
         if entry.is_dir() {
             continue;
         }
-        let name = entry.name().replace('\\', "/");
+        let Ok(name) = entry.name() else {
+            continue;
+        };
+        let name = name.replace('\\', "/");
         if !name.to_lowercase().ends_with(".uplugin") {
             continue;
         }
@@ -514,7 +517,10 @@ fn zip_entry_index(archive: &mut zip::ZipArchive<std::fs::File>, wanted: &str) -
         let Ok(entry) = archive.by_index_raw(idx) else {
             continue;
         };
-        if entry.name().replace('\\', "/").to_lowercase() == wanted {
+        let Ok(name) = entry.name() else {
+            continue;
+        };
+        if name.replace('\\', "/").to_lowercase() == wanted {
             return Some(idx);
         }
     }
@@ -856,7 +862,8 @@ fn install_plugin_from_zip(
             let entry = archive
                 .by_index_raw(idx)
                 .map_err(|e| format!("Could not read a zip entry: {e}"))?;
-            (entry.name().replace('\\', "/"), entry.is_dir())
+            let name = entry.name().map_err(|e| format!("Could not read a zip entry name: {e}"))?;
+            (name.replace('\\', "/"), entry.is_dir())
         };
         if is_dir {
             continue;
