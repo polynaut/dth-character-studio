@@ -1,5 +1,11 @@
 # @dth/desktop
 
+## 0.92.5
+
+### Patch Changes
+
+- [#1018](https://github.com/polynaut/dth-character-studio/pull/1018) [`0569232`](https://github.com/polynaut/dth-character-studio/commit/0569232d46552e5fd494d7912e99319e7733210c) Thanks [@polynaut](https://github.com/polynaut)! - Dependency refresh: Tauri 2.12 point releases with its dialog, fs, shell, updater and single-instance plugins (desktop shell and web side together), the zip 9 archive reader behind the Daz-asset, character-zip and Unreal-plugin installs, plus React 19.3.1, Radix UI, zod, TanStack Router, marked and lucide-react updates.
+
 ## 0.92.4
 
 ### Patch Changes
