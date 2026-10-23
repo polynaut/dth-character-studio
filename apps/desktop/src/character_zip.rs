@@ -278,7 +278,7 @@ pub fn list_character_zip_entries(zip_path: String) -> Result<Vec<String>, Strin
     let mut names = Vec::with_capacity(archive.len());
     for i in 0..archive.len() {
         let entry = archive.by_index(i).map_err(|e| format!("read zip entry {i}: {e}"))?;
-        names.push(entry.name().to_string());
+        names.push(entry.name().map_err(|e| format!("read zip entry {i} name: {e}"))?.into_owned());
     }
     Ok(names)
 }
@@ -354,7 +354,7 @@ pub fn extract_character_zip(request: ExtractCharacterZipRequest) -> Result<u64,
                 None => {
                     return Err(format!(
                         "refusing to import: the zip contains an unsafe entry path ({})",
-                        entry.name()
+                        entry.name().unwrap_or_default()
                     ));
                 }
             }
@@ -385,7 +385,7 @@ mod tests {
     fn zip_entry_names(path: &Path) -> Vec<String> {
         let mut archive = zip::ZipArchive::new(fs::File::open(path).unwrap()).unwrap();
         let mut names: Vec<String> = (0..archive.len())
-            .map(|i| archive.by_index(i).unwrap().name().to_string())
+            .map(|i| archive.by_index(i).unwrap().name().unwrap().into_owned())
             .collect();
         names.sort();
         names
