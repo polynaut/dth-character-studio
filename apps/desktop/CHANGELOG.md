@@ -1,5 +1,9 @@
 # @dth/desktop
 
+## 0.92.6
+
+No changes in this release.
+
 ## 0.92.5
 
 ### Patch Changes
