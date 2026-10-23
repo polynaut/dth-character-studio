@@ -1434,3 +1434,15 @@ v104 — `dimManifestPath` may carry SEVERAL DIM ManifestFiles folders, joined
       manifest libraries (Discord request, 2026-08-25); the studio side is
       `settings.extraDimManifestsFolders` + `dimManifestsPathSpec`. Additive —
       a single folder bakes the same string as v103.
+
+v105 — new VISIBLE root script `Prepare_For_Transfer.dsa`: zeroes the G8/G8.1
+      morph dials that also exist on G9 (the DazToHue G8→G9 transfer guide's
+      list) on the selected figure. Self-contained (no runtime includes); the
+      morph list is EDITABLE (Settings → Daz scripts,
+      `settings.prepareTransferMorphs`) and baked at install time via the
+      `__DTH_TRANSFER_MORPHS__` token — the JSON-encoded list joins the
+      `.dth-runtime-installed` stamp, so saving an edited list re-installs
+      without a version bump. No generated character script changed; the bump
+      exists because the runtime-hash guard ties any runtime-file change to
+      one (and it is what installs the new file on libraries whose marker
+      predates the stamp-format change).

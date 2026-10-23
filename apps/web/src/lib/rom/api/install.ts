@@ -103,6 +103,18 @@ export async function saveSettings({ data }: { data: unknown }): Promise<StudioS
   } catch {
     // never fail a settings save over the env wiring
   }
+  // Keep the installed utility scripts in step with the saved settings — the
+  // Prepare-for-transfer morph list is baked into its script, and the install
+  // stamp includes it, so this is a no-op unless something actually changed.
+  // Best-effort for the same reason as the env wiring above (generation and
+  // Refresh assets re-ensure the install anyway).
+  try {
+    if (saved.dazLibraryFolder) {
+      await storage.copyRuntimeFiles(storage.studioScriptsDir(saved.dazLibraryFolder))
+    }
+  } catch {
+    // never fail a settings save over the script install
+  }
   return saved
 }
 
