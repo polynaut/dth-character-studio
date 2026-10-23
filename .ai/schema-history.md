@@ -1434,3 +1434,22 @@ v104 — `dimManifestPath` may carry SEVERAL DIM ManifestFiles folders, joined
       manifest libraries (Discord request, 2026-08-25); the studio side is
       `settings.extraDimManifestsFolders` + `dimManifestsPathSpec`. Additive —
       a single folder bakes the same string as v103.
+v105 — the mouth and the GP/DK geograft close-outs hold the character's
+      frame-0 shape. Measured 2026-10-16 (Vi, CJ Violetta 9 + GP9, DTH 2.5.1):
+      `closeDanglingMorphKeys` on those figures ran WITHOUT a baseline and
+      closed every keyed morph to `getValue(0)` - an EVALUATED value written as
+      a RAW key. The mouth's character shape rides on ERC from the body
+      (CJ_Violetta9_Head_bs_Head and head_bs_MouthRealism_HD3 value 1 / raw 0),
+      so the base-ROM close-out keyed it to 1 at frame 328: the shape twice,
+      ramping in from frame 0. Every FAC/JCM/GEN shape Houdini derived carried
+      ~1 mm of teeth movement, and stacked shapes in UE stretched the upper
+      incisors 2-3x. GP_Vagina_Open1/2 Stretch/Squeeze ADD (raw -1 / value 0)
+      were closed to 0 at the GP block end, walking the GP shaping from -1 to 0
+      across every GEN frame. New `memorizeRawMorphsAtFrame0` snapshots those
+      figures' RAW values at an explicit time 0 before any preset loads; the
+      three close-outs close raw-to-raw against it (an ERC share then rides on
+      top by itself). Root close-out unchanged. Regenerated scripts only - no
+      migration. The DK close-out takes the same snapshot by ANALOGY - Vi
+      carries GP9, not DK9, so the DK half is unmeasured. The raw close
+      unclamps a morph only when its raw base sits outside the property's
+      limits (the flag holds on every frame, not just the closing key).

@@ -55,7 +55,7 @@ const RUNTIME_ASSETS = [
 // Bump this together with RUNTIME_VERSION whenever a runtime file legitimately
 // changes (this run prints the new value in the failure message).
 const EXPECTED_RUNTIME_HASH =
-  '24ee6b3376551e39225b13e0c763541c0018b91235f16bd112721dcca6809ea9'
+  '00f94011d1e2ea5b049034c9220e1137f4cc9a75aa6c34293a3393809f317e30'
 
 function runtimeHash(): string {
   const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
@@ -95,6 +95,53 @@ describe('bundled DTH runtime (.dsa)', () => {
     for (const key of ['base', 'gp', 'dk', 'phys']) {
       expect(workflow).toContain(`getPresetFrameCount(options, "${key}")`)
     }
+  })
+
+  // Every figure the build closes out carries a character-driven frame-0 base,
+  // the mouth and the GP/DK geografts included (runtime v105). Measured on Vi,
+  // 2026-10-16: the mouth's Violetta shape rides on ERC (value 1 / raw 0) and
+  // GP Open ADD shaping sits at raw -1 / value 0. A close-out without a baseline
+  // keys the EVALUATED getValue(0) as a raw key - the mouth shape twice on every
+  // ROM frame (teeth deformed in every exported shape) and the GP shaping walked
+  // to 0 across the GP block. So no close-out may run without one, and the
+  // follower/geograft ones must use the RAW frame-0 snapshot.
+  it('closes out every figure against a frame-0 baseline — raw for the mouth and geografts', () => {
+    const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
+    const workflow = readFileSync(join(dir, 'DthWorkflow.dsa'), 'utf8')
+    const calls = [...workflow.matchAll(/closeDanglingMorphKeys\(([^;]*)\);/g)].map((m) => m[1])
+    expect(calls.length).toBe(4)
+    for (const args of calls) {
+      // (nodes, boundary, evaluatedBaseline, rawBaseline) — never the 2-arg form.
+      expect(args.split(',').length, `close-out without a baseline: closeDanglingMorphKeys(${args})`).toBeGreaterThanOrEqual(3)
+    }
+    expect(workflow).toContain('closeDanglingMorphKeys([oNodeMouth], iAfterBase, null, mouthRawBase)')
+    expect(workflow).toContain('closeDanglingMorphKeys([oNodeGP], startFrame + gpFrameCount, null, oRawBase)')
+    expect(workflow).toContain('closeDanglingMorphKeys([oNodeDk9], startFrame + dk9FrameCount, null, oRawBase)')
+    // The snapshots are taken before the first preset block loads anything.
+    const firstPreset = workflow.indexOf('ApplyDefaultROMs(options, oNodeRoot, oNodeMouth)')
+    for (const snap of [
+      'memorizeRawMorphsAtFrame0([oNodeMouth])',
+      'memorizeRawMorphsAtFrame0([oNodeGP])',
+      'memorizeRawMorphsAtFrame0([oNodeDk9])',
+    ]) {
+      const at = workflow.indexOf(snap)
+      expect(at, `${snap} missing`).toBeGreaterThan(-1)
+      expect(at, `${snap} must run before any preset loads`).toBeLessThan(firstPreset)
+    }
+    // Raw at an EXPLICIT time 0: a geograft can hold several keys before the ROM.
+    const utils = readFileSync(join(dir, 'DthUtils.dsa'), 'utf8')
+    const snapshotFn = utils.slice(
+      utils.indexOf('function memorizeRawMorphsAtFrame0('),
+      utils.indexOf('function closeDanglingMorphKeys('),
+    )
+    // The snapshot itself must READ raw - the evaluated value is only the
+    // flagged fallback (raw:false), never the first choice.
+    expect(snapshotFn).toContain('var fRaw = (typeof oProp.getRawValue == "function") ? oProp.getRawValue(0) : undefined;')
+    expect(snapshotFn).toContain('oSnapshot.raw = false;')
+    // The raw close unclamps only a base outside the limits: the clamp flag
+    // holds on every frame, so an unconditional unclamp would let ROM + ERC
+    // overshoot on frames the close-out never touched.
+    expect(utils).toMatch(/if\(bOutsideLimits && typeof oProp\.setIsClamped === "function"\)/)
   })
 
   // Daz cannot carry non-ASCII out of a script (measured 2026-08-14, DS4 4.24:

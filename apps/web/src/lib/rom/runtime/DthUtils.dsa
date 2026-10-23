@@ -1577,13 +1577,60 @@ function memorizeBaseMorphs(oNodes){
 	return map;
 }
 
+/**
+ * Pre-ROM RAW frame-0 values of every morph on the given figures, for the
+ * follower/geograft close-outs (mouth, GP, DK - runtime v105). Read at an
+ * EXPLICIT time 0, not memorizeRawDials' no-arg read: a geograft can already
+ * carry several keys before any preset loads (measured 2026-10-16: Vi's
+ * GoldenPalace_G9 Open ADD morphs hold 3 keys in the base scene), and a no-arg
+ * read of a multi-key channel answers for the CURRENT time.
+ *
+ * Why raw: these figures' character shape rides on ERC. Measured on Vi
+ * (2026-10-16): the mouth's CJ_Violetta9_Head_bs_Head reads value 1 / raw 0 at
+ * frame 0 (the body's character control drives it), and GP_Vagina_Open1/2
+ * Stretch/Squeeze ADD read value 0 / raw -1 (an ERC +1 cancels the dialed -1).
+ * A close-out writes RAW keys, so the only frame-0 value it can safely close to
+ * is the raw one - the evaluated getValue(0) keyed the mouth's character shape
+ * a second time (teeth +1 mm on every ROM frame) and walked the GP shaping
+ * from -1 to 0 across the whole GP block.
+ *
+ * `raw` flips false when a Daz build cannot answer getRawValue(0); the
+ * close-out then leaves ERC-driven morphs alone instead of risking the same
+ * double-apply with an evaluated number.
+ */
+function memorizeRawMorphsAtFrame0(oNodes){
+	var oSnapshot = { raw: true, values: {} };
+	for(var x = 0; x < oNodes.length; x++){
+		var oNode = oNodes[x];
+		if(!oNode) continue;
+		var oObj = oNode.getObject();
+		if(!oObj) continue;
+		for(var i = 0; i < oObj.getNumModifiers(); i++){
+			var oMod = oObj.getModifier(i);
+			if(!oMod || !oMod.inherits("DzMorph")) continue;
+			var oProp = oMod.getValueControl();
+			if(!oProp) continue;
+			var fRaw = (typeof oProp.getRawValue == "function") ? oProp.getRawValue(0) : undefined;
+			if(typeof fRaw != "number"){
+				oSnapshot.raw = false;
+				fRaw = oProp.getValue(0);
+			}
+			oSnapshot.values[oMod.getName()] = fRaw;
+		}
+	}
+	return oSnapshot;
+}
+
 // `baselineValues` (optional): the pre-ROM morph snapshot from memorizeBaseMorphs.
 // When passed (the base-ROM root close-out), a morph the character dialed to a
-// non-zero base is left untouched — only ROM poses (base ~0) get their tail
-// closed. Without it (the DK/GP geograft + mouth close-outs, whose morphs are
-// self-contained ROM assets with no character-driven base) the old getValue(0)
-// behaviour is unchanged.
-function closeDanglingMorphKeys(oNodes, iBoundaryFrame, baselineValues){
+// non-zero base is left untouched - only ROM poses (base ~0) get their tail
+// closed.
+// `rawBaseline` (optional): the memorizeRawMorphsAtFrame0 snapshot (the mouth,
+// GP and DK close-outs). A morph it holds closes back to its RAW frame-0 value -
+// exact for a ROM pose (raw 0), a character shape driven over ERC (raw 0, left
+// as it is) and dialed geograft shaping (raw -1, held). Neither passed: the old
+// getValue(0) behaviour, unchanged.
+function closeDanglingMorphKeys(oNodes, iBoundaryFrame, baselineValues, rawBaseline){
 	var timeStep = Scene.getTimeStep();
 	var tBoundary = iBoundaryFrame * timeStep;
 	var iClosed = 0;
@@ -1600,10 +1647,32 @@ function closeDanglingMorphKeys(oNodes, iBoundaryFrame, baselineValues){
 			var iLastKey = oProp.getNumKeys() - 1;
 			// A key at/past the boundary means the block manages its own tail.
 			if(oProp.getKeyTime(iLastKey) >= tBoundary) continue;
-			// Close BACK to the pre-ROM baseline when we have one — never to a
+			var sKey = oMod.getName();
+			// Raw frame-0 baseline (mouth/GP/DK): raw closes to raw, so an ERC
+			// share rides on top by itself and is never keyed a second time.
+			if(rawBaseline && rawBaseline.values && rawBaseline.values[sKey] !== undefined){
+				// Evaluated fallback (no getRawValue): writing it onto a driven
+				// morph WOULD double-apply - leave those to their controller.
+				if(!rawBaseline.raw && typeof oProp.getNumControllers == "function" && oProp.getNumControllers() > 0) continue;
+				var fRawBase = rawBaseline.values[sKey];
+				if(approx_eq(oProp.getKeyValue(iLastKey), fRawBase)) continue;
+				// DS6 pops a modal "keep limits?" when a value sits outside the
+				// property's limits - fatal in an unattended Runner build. Unclamp
+				// ONLY then: the flag holds on every frame, not just this key, so
+				// unclamping a morph whose base sits inside its limits would let a
+				// ROM key + ERC share overshoot them on frames it never touched.
+				// No getMin/getMax on this build: unclamp, as the old path did.
+				var bOutsideLimits = (typeof oProp.getMin == "function" && typeof oProp.getMax == "function")
+					? (fRawBase < oProp.getMin() || fRawBase > oProp.getMax()) : true;
+				if(bOutsideLimits && typeof oProp.setIsClamped === "function") oProp.setIsClamped(false);
+				oProp.setValue(tBoundary, fRawBase);
+				verbose("Closed dangling key:", oProp.getLabel(), "back to raw", fRawBase, "at frame", iBoundaryFrame);
+				iClosed++;
+				continue;
+			}
+			// Close BACK to the pre-ROM baseline when we have one - never to a
 			// post-ROM getValue(0), which for a preset-driven controller already
 			// carries the ROM's contribution and so double-applies it.
-			var sKey = oMod.getName();
 			var bHasBaseline = baselineValues && (baselineValues[sKey] !== undefined);
 			var fBaseValue = bHasBaseline ? baselineValues[sKey] : oProp.getValue(0);
 			// A morph the character dialed to a non-zero base is its OWN shape — the
@@ -1751,8 +1820,9 @@ function memorizeRawDials(oNodes){
  * setValue(t, v) route — same mechanism as restoreNodeTransforms' fallback);
  * a flat channel varies from the base mesh on no frame, so the DTH Exporter's
  * FBX pass keeps the morph and the alembic bakes the same shape — no fbx/abc
- * drift. Root-figure scope only: DK/GP/mouth close-outs treat those nodes'
- * morphs as self-contained ROM assets with no character-driven base.
+ * drift. Root-figure scope only. The DK/GP/mouth figures DO carry a
+ * character-driven base (runtime v105); their close-outs hold it through the
+ * raw frame-0 snapshot (memorizeRawMorphsAtFrame0) instead.
  */
 function restoreZeroedDials(oNodes, oBaseline){
 	// A missing/mis-shaped snapshot must say so: the silent form of this

@@ -130,6 +130,14 @@ function ApplyDTHWorkflow(options){
 	//     keeps ERC contributions out, so a restore can never double-apply one.
 	var baseMorphValues = memorizeBaseMorphs([oNodeRoot]);
 	var baseRawDials = memorizeRawDials([oNodeRoot]);
+	// The mouth and the GP/DK geografts carry a character-driven frame-0 base
+	// too (v105, measured on Vi 2026-10-16: the mouth's Violetta shape over
+	// ERC, GP Open ADD shaping at raw -1). Their close-outs hold it through a
+	// RAW frame-0 snapshot taken here, before any preset keys them - see
+	// memorizeRawMorphsAtFrame0 for why the evaluated value cannot be used.
+	var mouthRawBase = oNodeMouth ? memorizeRawMorphsAtFrame0([oNodeMouth]) : null;
+	var gpRawBase = oNodeGP ? memorizeRawMorphsAtFrame0([oNodeGP]) : null;
+	var dk9RawBase = oNodeDk9 ? memorizeRawMorphsAtFrame0([oNodeDk9]) : null;
 
 	/**       *****************************************************/
 	if(options.bIncludeJCM)
@@ -153,13 +161,17 @@ function ApplyDTHWorkflow(options){
 		// root figure carries the character's OWN shape/controller morphs, and a
 		// whole-figure re-key double-applied any the preset drives (a -10% dialed
 		// height read as -20% by frame 327). With the baseline, character-owned
-		// morphs are left alone and only ROM poses close. The MOUTH node carries
-		// only FAC mouth morphs (no character shape) — like a geograft, it closes
-		// the plain way (its FAC keys are morph modifiers a root-only pass would
-		// otherwise never touch; see setLinearInterp).
+		// morphs are left alone and only ROM poses close. The MOUTH node closes
+		// separately (its FAC keys are morph modifiers a root-only pass would
+		// otherwise never touch; see setLinearInterp) and against its RAW
+		// frame-0 snapshot: it is NOT shape-free. A character's mouth shape
+		// rides on ERC from the body (Vi: CJ_Violetta9_Head_bs_Head value 1 /
+		// raw 0), and the old plain close-out keyed that evaluated 1 as a raw
+		// key - the shape twice on every frame from here on, ramping in from
+		// frame 0 (teeth deformed in every exported shape, runtime v105).
 		var iAfterBase = Scene.getAnimRange().end / Scene.getTimeStep();
 		closeDanglingMorphKeys([oNodeRoot], iAfterBase, baseMorphValues);
-		if(oNodeMouth) closeDanglingMorphKeys([oNodeMouth], iAfterBase);
+		if(oNodeMouth) closeDanglingMorphKeys([oNodeMouth], iAfterBase, null, mouthRawBase);
 	}
 
 	if(dthStopHere("before the DK block")) return false;
@@ -169,7 +181,7 @@ function ApplyDTHWorkflow(options){
 	{
 		print("Applying DK9 ROMs...");
 		var startFrame = Scene.getAnimRange().end / Scene.getTimeStep();
-		ApplyDK9(options, oNodeRoot, oNodeDk9, startFrame);
+		ApplyDK9(options, oNodeRoot, oNodeDk9, startFrame, dk9RawBase);
 	}
 
 	if(dthStopHere("before the GP block")) return false;
@@ -179,7 +191,7 @@ function ApplyDTHWorkflow(options){
 	{
 		print("Applying GP9 ROMs...");
 		var startFrame = Scene.getAnimRange().end / Scene.getTimeStep();
-		if(!ApplyGP9(options, oNodeRoot, oNodeGP, startFrame))
+		if(!ApplyGP9(options, oNodeRoot, oNodeGP, startFrame, gpRawBase))
 			return false;
 	}
 
@@ -364,7 +376,10 @@ function ApplyDefaultROMs(options, oNodeRoot, oNodeMouth){
 }
 
 
-function ApplyDK9(options, oNodeRoot, oNodeDk9, startFrame){
+// `oRawBase`: the DK figure's raw frame-0 morph snapshot (memorizeRawMorphsAtFrame0),
+// taken before any preset loaded - the block's close-out holds the character's
+// DK shaping to it.
+function ApplyDK9(options, oNodeRoot, oNodeDk9, startFrame, oRawBase){
 	// ---------------------------------------------------------------------------
 	// FUNCTIONAL, NOT YET HARDENED: the DicktatorG9 path has been run end-to-end and
 	// the morphs come through in Unreal, but it hasn't had the byte-level validation
@@ -407,7 +422,9 @@ function ApplyDK9(options, oNodeRoot, oNodeDk9, startFrame){
 	// through GP/Physics/custom. Close it at the next block boundary — a leaking
 	// tail is never wanted. Art-direction morphs need no closing: their sawtooth
 	// (createMorphFrame) already keys the ramp-down itself.
-	closeDanglingMorphKeys([oNodeDk9], startFrame + dk9FrameCount);
+	// Against the raw frame-0 snapshot (v105), like the GP close-out: the plain
+	// getValue(0) close keyed ERC-evaluated shaping as raw (see ApplyGP9).
+	closeDanglingMorphKeys([oNodeDk9], startFrame + dk9FrameCount, null, oRawBase);
 
 	// Apply DK9 art direction morphs (per-character, inline from the single-file
 	// character script). No file fallback — file-based configs are tombstoned.
@@ -444,7 +461,10 @@ function ApplyPhysics(options, oNodeRoot, startFrame){
 }
 
 
-function ApplyGP9(options, oNodeRoot, oNodeGP, startFrame){
+// `oRawBase`: the GP figure's raw frame-0 morph snapshot (memorizeRawMorphsAtFrame0),
+// taken before any preset loaded - the block's close-out holds the character's
+// GP shaping to it.
+function ApplyGP9(options, oNodeRoot, oNodeGP, startFrame, oRawBase){
 	// The GP block's measured length reserves the whole block so the NEXT section
 	// starts at the frame after the last GP pose (ClitorisErect) — matching DK (its
 	// full measured length). This is the 0-based Daz convention: timeline frame 0 is
@@ -481,7 +501,12 @@ function ApplyGP9(options, oNodeRoot, oNodeGP, startFrame){
 	// The GP block's own tail (mirror of the DK close-out): the last GP pose
 	// (ClitorisErect on the stock ROM) has no ramp-down key past the block end
 	// and would hold through Physics/custom.
-	closeDanglingMorphKeys([oNodeGP], startFrame + gpFrameCount);
+	// Closed against the RAW frame-0 snapshot (v105). Measured on Vi
+	// 2026-10-16: GP_Vagina_Open1/2 Stretch/Squeeze ADD sit at raw -1 / value 0
+	// at frame 0 (an ERC +1 cancels the dialed -1). The plain close keyed the
+	// evaluated 0 as a RAW key at the block end, so the shaping walked from -1
+	// to 0 across every GEN frame (92% of the way by VaginaOpen).
+	closeDanglingMorphKeys([oNodeGP], startFrame + gpFrameCount, null, oRawBase);
 
 	// No per-block setLinearInterp (v78) — see the note in ApplyDK9.
 	return true;
