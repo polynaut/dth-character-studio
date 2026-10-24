@@ -187,7 +187,8 @@ the container before the session invalidates** — so the token is always armed
 and signing is zero-touch, indefinitely. No VNC, no phone, no interaction.
 
 Sanity checks (both manual, from the Actions tab) if you ever doubt the state:
-- **Runner self-check** — socket present + token listed.
+- **Runner self-check** — socket present + the SimplySign cert visible
+  through it (red = the session lapsed).
 - **Signing smoke test** — downloads a previous installer, signs and
   verifies it on the runner. Publishes nothing. Green = releases will sign.
 
