@@ -3,12 +3,11 @@ name: 🩺 Runner self-check
 # Manual-only readiness probe for the self-hosted Certum signer runner.
 # Confirms the runner picks up jobs and has the signing toolchain + a reachable
 # p11-kit socket — WITHOUT signing anything. Touches no secrets, can't release.
-# Until the Certum cert is issued and SimplySign is logged in, the token listing
-# is expected to be empty/unavailable — that's the one thing this can't verify
-# yet. Run it from the Actions tab once the runner is up.
 #
-# Every step is a best-effort probe: it reports findings and always exits 0, so
-# one missing/odd tool never hides the rest (notably the socket check).
+# The toolchain/module steps are best-effort probes (report, always exit 0, so
+# one odd tool never hides the rest). The LAST step is the real gate: it goes
+# red unless the SimplySign code-signing CERT is visible through the socket —
+# i.e. unless a release would sign right now.
 
 on:
   workflow_dispatch:
@@ -72,28 +71,39 @@ jobs:
           [ -n "$found" ] || echo "p11-kit-client.so NOT found in the usual paths"
           true
 
-      - name: SimplySign socket + token (cert presence)
+      - name: SimplySign socket + cert (the gate)
         if: ${{ always() }}
         shell: bash
         env:
           SOCK: ${{ inputs.socket || vars.CERTUM_P11_SOCKET || '/run/p11-kit/p11kit.sock' }}
         run: |
-          set +e
           echo "socket: $SOCK"
-          if [ -S "$SOCK" ]; then
-            echo "socket EXISTS ✓"
-            export P11_KIT_SERVER_ADDRESS="unix:path=$SOCK"
-            echo "--- tokens visible via the socket (empty until cert + login) ---"
-            if command -v p11tool >/dev/null 2>&1; then
-              p11tool --list-tokens 2>&1 | head -n 40
-            else
-              echo "p11tool not installed — skipping token listing"
-            fi
-          else
-            echo "socket MISSING ✗ — certum-container not running, or its p11-kit"
-            echo "socket isn't shared into this runner. Fix the volume/path before the"
-            echo "first signed release. (Override the path via the workflow input.)"
+          if [ ! -S "$SOCK" ]; then
+            echo "::error::p11-kit socket missing at $SOCK — certum-container not running, or its socket isn't shared into this runner (override the path via the workflow input)"
+            exit 1
           fi
-          echo "Note: an empty/unavailable token here is EXPECTED before the Certum"
-          echo "cert is issued and SimplySign is logged in. This probe does not sign."
-          true
+          echo "socket EXISTS ✓"
+          # Plain `p11tool --list-tokens` is BLIND here: it only loads the
+          # modules registered with p11-kit (trust + opensc in this image), and
+          # P11_KIT_SERVER_ADDRESS is read only by p11-kit-client.so — so it
+          # lists "System Trust" whether the session is live or dead (measured
+          # 2026-10-23). Load the client module explicitly, exactly like
+          # sign-installer.sh, and gate on the CERT, not the token: token +
+          # keys without the cert is a real failure mode ("object not found").
+          export P11_KIT_SERVER_ADDRESS="unix:path=$SOCK"
+          mod=
+          for p in \
+            /usr/lib/x86_64-linux-gnu/pkcs11/p11-kit-client.so \
+            /usr/lib64/pkcs11/p11-kit-client.so \
+            /usr/lib/pkcs11/p11-kit-client.so; do
+            [ -e "$p" ] && { mod=$p; break; }
+          done
+          [ -n "$mod" ] || { echo "::error::p11-kit-client.so not found — cannot reach the socket"; exit 1; }
+          out=$(p11tool --provider "$mod" --list-all-certs 'pkcs11:model=SimplySign%20C' 2>&1) || true
+          echo "$out" | head -n 40
+          if echo "$out" | grep -q 'type=cert'; then
+            echo "SimplySign code-signing cert visible ✓ — a release would sign now"
+          else
+            echo "::error::SimplySign cert NOT visible through the socket — the session has lapsed; check the NAS keepalive (see docs/devops.md → Code signing)"
+            exit 1
+          fi

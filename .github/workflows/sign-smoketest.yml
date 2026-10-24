@@ -13,9 +13,9 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Existing release whose installer is used as the test binary"
+        description: "Existing release whose installer is used as the test binary (empty = the latest release)"
         required: false
-        default: "v0.26.1"
+        default: ""
       socket:
         description: "p11-kit socket path override (defaults to the CERTUM_P11_SOCKET repo variable)"
         required: false
@@ -36,10 +36,15 @@ jobs:
       - name: Fetch a test binary (previous release's installer)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.release_tag }}
         shell: bash
         run: |
           rm -rf smoke && mkdir smoke
-          gh release download "${{ inputs.release_tag }}" \
+          # No tag = the latest release (a hardcoded old tag rots: v0.26.1 had
+          # no assets left by 2026-10-23).
+          tag=()
+          [ -n "$TAG" ] && tag=("$TAG")
+          gh release download "${tag[@]}" \
             --repo "$GITHUB_REPOSITORY" --pattern '*-setup.exe' --output smoke/test.exe
           ls -l smoke/test.exe
 
@@ -50,11 +55,15 @@ jobs:
             echo "::error::p11-kit socket missing at $SOCK — is certum-container running with its keepalive robot?"
             exit 1
           }
+          # Fail fast on a lapsed session: same explicit-module cert probe as
+          # the Runner self-check (plain `p11tool --list-tokens` can't see the
+          # socket — the client module isn't registered in this image).
           export P11_KIT_SERVER_ADDRESS="unix:path=$SOCK"
-          # Informational: p11tool may not show the remote token from inside a
-          # job (client module registration); the signer script loads the module
-          # explicitly, so an empty listing here is not an error.
-          p11tool --list-tokens || true
+          p11tool --provider /usr/lib/x86_64-linux-gnu/pkcs11/p11-kit-client.so \
+            --list-all-certs 'pkcs11:model=SimplySign%20C' | grep -q 'type=cert' || {
+            echo "::error::SimplySign cert not visible through $SOCK — the session has lapsed; check the NAS keepalive"
+            exit 1
+          }
 
       - name: Sign (same signer script as release.yml)
         shell: bash
