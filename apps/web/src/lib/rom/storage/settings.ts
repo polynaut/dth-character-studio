@@ -18,6 +18,38 @@ const stringArray = z.preprocess(
 )
 
 /**
+ * The G8/G8.1 morphs the installed `Prepare_For_Transfer.dsa` zeroes — the
+ * DazToHue G8→G9 transfer guide's "morphs also available on G9" list. A dial
+ * matches an entry by CONTAINS on its normalized name/label (case-blind,
+ * spaces/dashes/underscores ignored), so "Areola" covers "Areolae Diameter"
+ * and "Nipple" covers Nipples Apply / Nipples Tip Adjust — that is why the
+ * three family entries are singular. Exported for the Settings tab's
+ * "Reset to defaults".
+ */
+export const DEFAULT_TRANSFER_MORPHS = [
+  'Areola',
+  'Nipple',
+  'Navel',
+  'Breasts Cleavage',
+  'Breasts Size',
+  'Breasts Up-Down',
+  'Voluptuous',
+  'Pelvic Length',
+  'Legs Length',
+  'Torso Length',
+]
+
+/** {@link stringArray}, except a MISSING field means the default list — only an
+ *  actually-saved list (an emptied one included) overrides it. */
+const transferMorphsArray = z.preprocess(
+  (value) =>
+    Array.isArray(value)
+      ? value.filter((item) => typeof item === 'string')
+      : DEFAULT_TRANSFER_MORPHS,
+  z.array(z.string()),
+)
+
+/**
  * THE single definition of the app-global settings: the field list, the
  * defaults (every field's `catch` value — `parse({})` IS a fresh install) and
  * the tolerant read used on both the settings.json parse and the save input,
@@ -196,6 +228,14 @@ export const studioSettingsSchema = z.object({
    * install's folder, and which other libraries exist stays the user's.
    */
   extraDimManifestsFolders: stringArray,
+  // --- "Daz scripts" tab: knobs for the installed utility scripts -------------
+  /**
+   * The morph entries `Prepare_For_Transfer.dsa` zeroes on a G8/G8.1 figure
+   * (see {@link DEFAULT_TRANSFER_MORPHS} for the matching rule and the default
+   * list). Saving re-bakes the installed script — the list is part of the
+   * runtime-install stamp, so an edit re-installs on the next save/generate.
+   */
+  prepareTransferMorphs: transferMorphsArray,
   // Per-project behaviour defaults (dazSubdir / houdiniSubdir / createHoudiniSubdir)
   // live in each project's .dcsp manifest (see DcspManifest), not in app-global
   // settings — they describe a project, not the machine.
