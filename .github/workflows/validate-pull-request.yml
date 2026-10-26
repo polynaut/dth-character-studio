@@ -297,7 +297,7 @@ jobs:
           components: clippy
       # Cache the crate + registry so clippy/test don't rebuild from scratch every
       # PR (this job was ~5.5 min uncached). Keyed on Cargo.lock automatically.
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           workspaces: apps/desktop
           # A fixed shared-key (instead of the default per-job key) so the cache
