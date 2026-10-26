@@ -32,8 +32,8 @@
     "@changesets/changelog-github": "^1.0.1",
     "@changesets/cli": "^3.0.3",
     "marked": "^18.1.1",
-    "oxlint": "^1.88.0",
-    "oxlint-tsgolint": "^7.0.2004"
+    "oxlint": "^1.89.0",
+    "oxlint-tsgolint": "^7.0.2005"
   },
   "pnpm": {
     "overrides": {
