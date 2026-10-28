@@ -1,5 +1,9 @@
 # @dth/ui
 
+## 0.92.7
+
+No changes in this release.
+
 ## 0.92.6
 
 No changes in this release.
