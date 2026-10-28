@@ -1,5 +1,11 @@
 # @dth/desktop
 
+## 0.92.7
+
+### Patch Changes
+
+- [#1027](https://github.com/polynaut/dth-character-studio/pull/1027) [`d18921c`](https://github.com/polynaut/dth-character-studio/commit/d18921ce82451015fb5fcf20b42f658c9f9fae64) Thanks [@polynaut](https://github.com/polynaut)! - Dependency refresh: the zip archive reader 9.0.5 (desktop), TanStack Router and lucide-react updates, plus build-tooling bumps (Tauri CLI 2.12.4, Vite 8.3.5, oxlint).
+
 ## 0.92.6
 
 No changes in this release.
