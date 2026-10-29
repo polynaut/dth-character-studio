@@ -1453,3 +1453,13 @@ v105 — the mouth and the GP/DK geograft close-outs hold the character's
       carries GP9, not DK9, so the DK half is unmeasured. The raw close
       unclamps a morph only when its raw base sits outside the property's
       limits (the flag holds on every frame, not just the closing key).
+v106 — Kill_Animation restores RAW values (issue #1020). DthKillAnimation
+      kept `getValue(0)` - EVALUATED, ERC share included - and wrote it back
+      with `setValue`, which sets RAW: on a keyed, ERC-driven channel whose
+      raw value moved when its keys were deleted, the restore applied the
+      controller's share twice. It now keeps and compares `getRawValue(0)`;
+      a build without it falls back to the evaluated value and skips driven
+      channels (getNumControllers > 0), as `memorizeRawMorphsAtFrame0` does.
+      Inferred from the code + the #1014 measurement, NOT reproduced in Daz;
+      runtime.test.ts drives the real function against a fake ERC property.
+      Regenerated scripts only - no migration.

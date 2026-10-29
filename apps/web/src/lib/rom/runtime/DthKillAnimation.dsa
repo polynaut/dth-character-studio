@@ -180,6 +180,24 @@ function dthKillAnimClearKeys(oProp){
 }
 
 /**
+ * A property's RAW value at time `t`, or null when this build/property cannot
+ * answer it as a number. Always time-indexed: that is the form DthScanFrames
+ * uses live; the no-arg form is unmeasured on some builds (see DthUtils.dsa).
+ *
+ * Raw, not evaluated: `getValue` includes the share an ERC controller adds,
+ * while `setValue` writes the raw value - restoring an evaluated value would
+ * add that share a second time (issue #1020, the same trap #1014 fixed in
+ * DthUtils.dsa's close-outs).
+ */
+function dthKillAnimRaw(oProp, t){
+	return dthKillAnimSafe(function(){
+		if (typeof oProp.getRawValue != "function") return null;
+		var v = oProp.getRawValue(t);
+		return typeof v == "number" ? v : null;
+	}, null);
+}
+
+/**
  * Strip the animation off the open scene and reset the timeline.
  *
  * `options.frames` is the timeline to leave behind (default 30, a fresh Daz
@@ -227,8 +245,13 @@ function DthKillAnimation(options){
 
 			// The value to keep. Read at time 0 explicitly rather than trusting
 			// the scene time above, and guarded: a property type without a
-			// time-indexed getValue simply opts out of the restore.
-			var vKeep = dthKillAnimSafe(function(){ return oProp.getValue(0); }, null);
+			// time-indexed getValue simply opts out of the restore. RAW when
+			// the property can answer it (see dthKillAnimRaw); otherwise the
+			// evaluated value, which is only safe on an UNDRIVEN property -
+			// a driven one is left to its controller below.
+			var vKeepRaw = dthKillAnimRaw(oProp, 0);
+			var bRaw = vKeepRaw !== null;
+			var vKeep = bRaw ? vKeepRaw : dthKillAnimSafe(function(){ return oProp.getValue(0); }, null);
 			if (!dthKillAnimClearKeys(oProp)) {
 				var sName = dthKillAnimSafe(function(){ return String(oProp.getPath()); }, "")
 					|| dthKillAnimSafe(function(){ return String(oProp.getLabel()); }, "(unnamed)");
@@ -243,7 +266,12 @@ function DthKillAnimation(options){
 				continue;
 			}
 			if (vKeep === null) continue;
-			var vNow = dthKillAnimSafe(function(){ return oProp.getValue(); }, null);
+			if (!bRaw && dthKillAnimSafe(function(){
+				return typeof oProp.getNumControllers == "function" && oProp.getNumControllers() > 0;
+			}, false)) continue;
+			// Keys are gone, so the value is constant - time 0 IS "now".
+			var vNow = bRaw ? dthKillAnimRaw(oProp, 0)
+				: dthKillAnimSafe(function(){ return oProp.getValue(); }, null);
 			if (vNow === null || vNow == vKeep) continue;
 			// The value moved when the keys went - put frame 0 back.
 			if (dthKillAnimSafe(function(){ oProp.setValue(vKeep); return true; }, false)) {
