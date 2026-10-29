@@ -55,7 +55,7 @@ const RUNTIME_ASSETS = [
 // Bump this together with RUNTIME_VERSION whenever a runtime file legitimately
 // changes (this run prints the new value in the failure message).
 const EXPECTED_RUNTIME_HASH =
-  '00f94011d1e2ea5b049034c9220e1137f4cc9a75aa6c34293a3393809f317e30'
+  '7f7e6c665bdc9e9f9259cfa061430e2b902f9998984763ccd7e217d5708ecf30'
 
 function runtimeHash(): string {
   const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
@@ -1023,6 +1023,91 @@ describe('kill animation (DthKillAnimation.dsa)', () => {
     expect(kill.dthKillAnimSummary({ cleared: 812, keys: 9431, frames: 617 })).toBe(
       'Removed 9431 keys from 812 properties (617 frames of animation).',
     )
+  })
+})
+
+/**
+ * Kill_Animation's restore writes RAW values (issue #1020). A fake property
+ * models ERC: `getValue` = raw + the controller's share, `setValue` writes
+ * raw — the Daz semantics #1014 measured on Vi. Restoring the evaluated value
+ * would leave the share applied twice. This drives the real DthKillAnimation
+ * against a fake Scene; what it cannot settle is that Daz's own property
+ * behaves like the fake — that needs a live run.
+ */
+describe('kill animation restores raw values (DthKillAnimation.dsa)', () => {
+  const STEP = 4800
+  const SHARE = 0.3
+
+  interface FakeProp {
+    keys: Array<{ t: number; v: number }>
+    base: number
+    driven: boolean
+    hasRaw: boolean
+  }
+
+  function fakeProp(state: FakeProp) {
+    const raw = () => (state.keys.length > 0 ? state.keys[0].v : state.base)
+    const prop: Record<string, unknown> = {
+      getNumKeys: () => state.keys.length,
+      getKeyTime: (i: number) => state.keys[i].t,
+      deleteAllKeys: () => {
+        state.keys = []
+      },
+      getValue: () => raw() + (state.driven ? SHARE : 0),
+      setValue: (v: number) => {
+        state.base = v
+      },
+      getNumControllers: () => (state.driven ? 1 : 0),
+      getPath: () => 'fake',
+    }
+    if (state.hasRaw) prop.getRawValue = () => raw()
+    return prop
+  }
+
+  function run(states: Array<FakeProp>) {
+    const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
+    const src = readFileSync(join(dir, 'DthKillAnimation.dsa'), 'utf8')
+    const node = {
+      getPropertyList: () => states.map(fakeProp),
+      getNodeChildren: () => [],
+      getObject: () => null,
+    }
+    const scene = {
+      getTimeStep: () => STEP,
+      setTime: () => {},
+      getNodeList: () => [node],
+      setAnimRange: () => {},
+      setPlayRange: () => {},
+      getAnimRange: () => ({ end: 30 * STEP }),
+    }
+    return runInNewContext(`${src}\n;DthKillAnimation({})`, {
+      print: () => {},
+      Scene: scene,
+      DzTimeRange: function DzTimeRange() {},
+    }) as { restored: number }
+  }
+
+  it('puts the RAW frame-0 value back on an ERC-driven morph, not raw + share', () => {
+    const s: FakeProp = { keys: [{ t: 0, v: 1 }], base: 0, driven: true, hasRaw: true }
+    expect(run([s]).restored).toBe(1)
+    expect(s.base).toBe(1)
+  })
+
+  it('without getRawValue, leaves a DRIVEN property to its controller', () => {
+    const s: FakeProp = { keys: [{ t: 0, v: 1 }], base: 0, driven: true, hasRaw: false }
+    expect(run([s]).restored).toBe(0)
+    expect(s.base).toBe(0)
+  })
+
+  it('without getRawValue, still restores an undriven property (evaluated == raw)', () => {
+    const s: FakeProp = { keys: [{ t: 0, v: 1 }], base: 0, driven: false, hasRaw: false }
+    expect(run([s]).restored).toBe(1)
+    expect(s.base).toBe(1)
+  })
+
+  it('writes nothing when the raw value did not move', () => {
+    const s: FakeProp = { keys: [{ t: 0, v: 0.5 }], base: 0.5, driven: true, hasRaw: true }
+    expect(run([s]).restored).toBe(0)
   })
 })
 
