@@ -19,9 +19,9 @@ import {
   noteReleaseSeen,
   parseRefreshStore,
   pruneRefreshStore,
+  recordRefreshRun,
   refreshStoreKey,
   refreshTargetPaths,
-  stampRefreshed,
 } from '../houdini-refresh-store.ts'
 
 import type { MaterialUtilReport } from './native-types.ts'
@@ -163,6 +163,13 @@ export async function linkedHoudiniProjects(): Promise<{
 
 // --- the plan ---------------------------------------------------------------
 
+/** The DTH release active now; '' when none is configured or resolvable. */
+async function resolveActiveDthVersion(): Promise<string> {
+  const catalog = await fetchPoseAssetsCurrent()
+  return catalog.error ? '' : catalog.version
+}
+
+
 /**
  * A studio backup that ALREADY sits beside a project this sweep would run.
  *
@@ -275,8 +282,7 @@ export async function planHoudiniAssetRefresh(): Promise<HoudiniRefreshPlan> {
   }
   try {
     const blocked = await houdiniUtilsReady()
-    const catalog = await fetchPoseAssetsCurrent()
-    const activeDthVersion = catalog.error ? '' : catalog.version
+    const activeDthVersion = await resolveActiveDthVersion()
     const store = await readStore()
     const { projects, complete } = await linkedHoudiniProjects()
     const candidates = classifyRefreshTargets(projects, store, activeDthVersion)
@@ -322,17 +328,21 @@ export async function noteDthReleaseSeen(plan: HoudiniRefreshPlan): Promise<void
 const runInput = z.object({
   hipPaths: z.array(z.string().min(1)).min(1),
   /** The release the run is being stamped with — the plan's active version.
-   *  Never '': an unresolvable release cannot produce an offer in the first
-   *  place, and a blank stamp would file entries that read back as `unknown`. */
-  dthVersion: z.string().min(1),
+   *  Omitted by callers without a plan (the Utils drawer): the active release
+   *  is then resolved here, and a run under an unresolvable one stamps nothing,
+   *  because a blank stamp would file entries that read back as `unknown`. */
+  dthVersion: z.string().min(1).optional(),
   /** true = load each project and run the tool, but never save (and never
    *  stamp: a dry run leaves the file on its old definitions). */
   dryRun: z.boolean(),
 })
 
 /**
- * Run DazToHue's Refresh Assets across the offered projects, then record what
- * actually happened.
+ * Run DazToHue's Refresh Assets on `hipPaths`, then record what actually
+ * happened. **Every Refresh Assets the studio runs goes through here** — the
+ * Tools sweep and a single project's Utils drawer alike — so a project the
+ * drawer refreshed is stamped exactly like a swept one, and the next sweep
+ * skips it instead of offering it again.
  *
  * What gets stamped is deliberately narrow — only projects whose entry came
  * back `ok`, and only on a real run:
@@ -362,14 +372,16 @@ const runInput = z.object({
  * destroying makes the loss coincide exactly with the replacement: a project is
  * only ever left without a copy if it was never going to lose one.
  *
- * **The release is marked seen only on a CLEAN sweep.** If any project failed,
- * `lastSeenDthVersion` is left where it was, so the next Refresh-assets run
- * still detects the change and re-offers exactly the projects that did not get
- * done (the ones that did are stamped, and skipped). A sweep that advanced it
- * on a partial result would report the release handled and strand the rest
- * until some future release change — the failure mode worth designing out,
- * because the common cause of a failure here (DazToHue not installed for this
- * Houdini version) is one the user fixes and then expects to retry.
+ * **The release is marked seen only once every linked project is on it**
+ * (`recordRefreshRun`). If any project failed — or the run only covered one
+ * project, as the drawer's does — `lastSeenDthVersion` is left where it was, so
+ * the next Refresh-assets run still detects the change and re-offers exactly
+ * the projects that did not get done (the ones that did are stamped, and
+ * skipped). Advancing it on a partial result would report the release handled
+ * and strand the rest until some future release change — the failure mode worth
+ * designing out, because the common cause of a failure here (DazToHue not
+ * installed for this Houdini version) is one the user fixes and then expects to
+ * retry.
  */
 export async function runHoudiniAssetRefresh({
   data,
@@ -381,16 +393,19 @@ export async function runHoudiniAssetRefresh({
     data: { hipPaths: input.hipPaths, dryRun: input.dryRun },
   })
   if (!input.dryRun) {
-    const refreshed = report.refresh.filter((entry) => entry.ok).map((entry) => entry.hipPath)
-    // Measured against what was ASKED FOR, never against what came back: a
-    // report that is short of the requested projects is a partial sweep, and
-    // comparing it to itself would call that clean and mark the release handled
-    // for projects the tool never reached.
-    const clean = refreshed.length === input.hipPaths.length
-    await queueStoreWrite((store) => {
-      const stamped = stampRefreshed(store, refreshed, input.dthVersion, new Date().toISOString())
-      return clean ? noteReleaseSeen(stamped, input.dthVersion) : stamped
-    })
+    try {
+      const version = input.dthVersion ?? (await resolveActiveDthVersion())
+      const refreshed = report.refresh.filter((entry) => entry.ok).map((entry) => entry.hipPath)
+      // Judged against the WHOLE linked set, never against what came back: a
+      // report short of a project leaves that project unstamped, so it stays
+      // outstanding and the release is not marked handled on its behalf.
+      const { projects } = await linkedHoudiniProjects()
+      const at = new Date().toISOString()
+      await queueStoreWrite((store) => recordRefreshRun(store, refreshed, projects, version, at))
+    } catch {
+      // The refresh itself happened and its report is the answer; a record
+      // that cannot be written costs one extra offer, never the result.
+    }
   }
   return report
 }

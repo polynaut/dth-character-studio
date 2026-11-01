@@ -8,6 +8,7 @@ import {
   noteReleaseSeen,
   parseRefreshStore,
   pruneRefreshStore,
+  recordRefreshRun,
   refreshStoreKey,
   refreshTargetPaths,
   stampRefreshed,
@@ -155,6 +156,39 @@ describe('stampRefreshed', () => {
     )
     const candidates = classifyRefreshTargets(linked(KIRA, NOVA), swept, '2.6')
     expect(dthReleaseChanged(candidates, swept, '2.6')).toBe(false)
+  })
+})
+
+describe('recordRefreshRun', () => {
+  const AT = '2026-11-01T13:00:00.000Z'
+
+  it('a one-project drawer run stamps it, and the sweep still offers the rest', () => {
+    const after = recordRefreshRun(storeWith({}, '2.5'), [KIRA], linked(KIRA, NOVA), '2.6', AT)
+    expect(after.projects[refreshStoreKey(KIRA)]?.dthVersion).toBe('2.6')
+    // The rest of the library is not handled — the release stays outstanding.
+    expect(after.lastSeenDthVersion).toBe('2.5')
+    const candidates = classifyRefreshTargets(linked(KIRA, NOVA), after, '2.6')
+    expect(dthReleaseChanged(candidates, after, '2.6')).toBe(true)
+    expect(refreshTargetPaths(candidates)).toEqual([NOVA])
+  })
+
+  it('marks the release seen once the last outstanding project is done, from any entry point', () => {
+    const drawer = recordRefreshRun(storeWith({ [NOVA]: '2.6' }, '2.5'), [KIRA], linked(KIRA, NOVA), '2.6', AT)
+    expect(drawer.lastSeenDthVersion).toBe('2.6')
+    const candidates = classifyRefreshTargets(linked(KIRA, NOVA), drawer, '2.6')
+    expect(dthReleaseChanged(candidates, drawer, '2.6')).toBe(false)
+  })
+
+  it('a clean sweep converges; a partly-failed one leaves its failures outstanding', () => {
+    const clean = recordRefreshRun(storeWith({}, '2.5'), [KIRA, NOVA], linked(KIRA, NOVA), '2.6', AT)
+    expect(clean.lastSeenDthVersion).toBe('2.6')
+    const partial = recordRefreshRun(storeWith({}, '2.5'), [KIRA], linked(KIRA, NOVA), '2.6', AT)
+    expect(partial.lastSeenDthVersion).toBe('2.5')
+  })
+
+  it('records nothing without a resolvable release', () => {
+    const store = storeWith({}, '2.5')
+    expect(recordRefreshRun(store, [KIRA], linked(KIRA), '', AT)).toBe(store)
   })
 })
 

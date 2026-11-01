@@ -36,7 +36,7 @@ import {
   OCCLUSION_SECTIONS,
   SKELETON_SECTIONS,
   prefillHoudiniNetwork,
-  refreshHoudiniAssets,
+  runHoudiniAssetRefresh,
   repairHoudiniDefaults,
   repathHoudiniReferences,
   discardHoudiniBackups,
@@ -1036,13 +1036,17 @@ export function HoudiniUtilsPanel({
    * the projects the SCENE reported as modified and says nothing about the
    * rest. A dry run loads and runs but never saves — see `refreshHoudiniAssets`
    * for why that is a weaker guarantee than the other dry runs.
+   *
+   * Through `runHoudiniAssetRefresh`, the same entry point the Tools sweep uses:
+   * a project refreshed here is recorded as refreshed on the active release, so
+   * the sweep skips it instead of offering it again.
    */
   async function runRefresh(dryRun: boolean) {
     if (refreshTargets.length === 0) return
     setRunning(dryRun ? 'dry' : 'run')
     setActionReport(null)
     try {
-      const result = await refreshHoudiniAssets({
+      const result = await runHoudiniAssetRefresh({
         data: { hipPaths: refreshTargets, dryRun },
       })
       setActionReport({ kind: 'refresh', report: result })

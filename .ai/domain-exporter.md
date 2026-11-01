@@ -452,9 +452,13 @@ Part of the domain reference — `.ai/domain.md` is the index.
     Undo also DROPS that project's entry (`forgetRefreshed` →
     `noteHoudiniRefreshUndone`) — the file is back on the old definitions, so a
     kept entry would bucket it `current` and retire it from every future offer.
-    And `clean` is measured against the paths REQUESTED, not against the report's
-    own length: a short report is a partial sweep, and comparing it to itself
-    would mark the release handled for projects the tool never reached.
+    **One record, every entry point** (`recordRefreshRun`): the Utils drawer's
+    Refresh assets runs through the same `runHoudiniAssetRefresh` as the sweep,
+    so a project refreshed there is stamped too and the sweep skips it. The
+    release is marked seen only once EVERY linked project is `current` after the
+    run — judged against the whole linked set, never the report's own length —
+    which is what lets a one-project drawer run stamp without retiring the
+    offer for the rest of the library.
   - **The rolling copy is replaced LOUDLY, not silently.** `_backup` keeps ONE
     copy per project, so a sweep overwrites whatever is there — which is exactly
     the copy somebody kept to get a project back onto an older release. So the
