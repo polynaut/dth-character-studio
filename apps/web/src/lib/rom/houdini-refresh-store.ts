@@ -236,6 +236,36 @@ export function noteReleaseSeen(store: HoudiniRefreshStore, version: string): Ho
 }
 
 /**
+ * Record one real Refresh Assets run — the ONE rule every entry point records
+ * through, whether the user started it from the Tools sweep or from a single
+ * project's Utils drawer. A refresh is a refresh; where it was pressed must not
+ * change what the studio remembers about it.
+ *
+ * `refreshed` are the projects whose entry came back `ok` (see
+ * {@link stampRefreshed}). The release is marked seen only once EVERY linked
+ * project is on it afterwards — judged against `linked`, the whole linked set,
+ * never against what this run was asked to do. That one test covers both
+ * callers: a clean sweep leaves nothing behind and converges, a partly-failed
+ * sweep leaves its failures outstanding, and a drawer run on one project leaves
+ * the rest of the library outstanding — so the Tools offer still comes for
+ * them, and still skips the project the drawer already did.
+ */
+export function recordRefreshRun(
+  store: HoudiniRefreshStore,
+  refreshed: ReadonlyArray<string>,
+  linked: ReadonlyArray<LinkedHoudiniProject>,
+  version: string,
+  atIso: string,
+): HoudiniRefreshStore {
+  if (!version) return store
+  const stamped = stampRefreshed(store, refreshed, version, atIso)
+  const outstanding = classifyRefreshTargets(linked, stamped, version).some(
+    (candidate) => candidate.bucket !== 'current',
+  )
+  return outstanding ? stamped : noteReleaseSeen(stamped, version)
+}
+
+/**
  * Drop entries for projects nothing links anymore — the store's retention
  * bound (app-generated data that nothing collects is how a disk fills).
  *

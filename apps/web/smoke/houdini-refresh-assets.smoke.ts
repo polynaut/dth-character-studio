@@ -134,3 +134,27 @@ test('a project that reported no change is not re-saved', async ({ page }) => {
   )
   expect(files).not.toContain(BACKUP)
 })
+
+test('a run here is recorded exactly like a Tools sweep, so the sweep skips the project', async ({
+  page,
+}) => {
+  // The release the demo fixtures are generated against, and the store the
+  // Tools sweep reads — the drawer must write the same record into it.
+  const ACTIVE_DTH = '2.4.3'
+  const STORE = `${P.appData}/houdini-refresh.json`
+  const seed = healthySeed()
+  seed.files[STORE] = JSON.stringify({ version: 1, lastSeenDthVersion: '2.3.0', projects: {} })
+  const { confirm } = await openRefresh(page, seed)
+  await confirm.getByRole('button', { name: 'Run', exact: true }).click()
+  await expect(page.getByText('1 project refreshed and saved.')).toBeVisible()
+
+  const readStore = () =>
+    page.evaluate((path) => {
+      const text = ((window as any).__tauriMock.files as Map<string, string>).get(path)
+      return text ? JSON.parse(text) : null
+    }, STORE)
+  // Stamped on the active release — and, because it was the only linked
+  // project, the release now counts as handled: no sweep is left to offer.
+  await expect.poll(async () => (await readStore())?.lastSeenDthVersion).toBe(ACTIVE_DTH)
+  expect((await readStore()).projects[P.houdini.toLowerCase()].dthVersion).toBe(ACTIVE_DTH)
+})
