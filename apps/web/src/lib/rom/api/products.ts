@@ -27,6 +27,7 @@ import {
 } from '../character-products.ts'
 import { charScopeInput, charsRoot, joinPath, locateCharacter, resolveProject } from './core'
 import { dimOwnerSchema } from './native-types'
+import { maybeSubmitProductShare } from './product-share'
 
 import type { DimOwner } from './native-types'
 import type { MergedProductScan, ProductScan } from '@dth/rom'
@@ -267,6 +268,9 @@ async function runIngestPass(
     )
     await mkdir(storage.characterMetaDir(project.path, relFolder, characterId), { recursive: true })
     await storage.writeTextFileAtomic(path, characterProductsJson(store))
+    // The community product-DB share rides the ingest that just landed —
+    // opt-in, fire-and-forget, and gated entirely inside (see api/product-share).
+    void maybeSubmitProductShare(store)
     // Only now — the results are safely stored, so the transport can go.
     await Promise.all(
       parsed.map(async (p) => {

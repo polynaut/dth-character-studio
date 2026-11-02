@@ -140,6 +140,7 @@ export {
   findDimTextureOwners,
   ingestProjectProductScans,
 } from './api/products'
+export { productShareConfigured } from './api/product-share'
 // --- detected files: new scenes/.hips found in the character folder ---------
 export {
   fetchDetectedFiles,

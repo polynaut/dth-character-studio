@@ -1,0 +1,10 @@
+name = "dth-products-ingest"
+main = "src/index.ts"
+compatibility_date = "2026-08-01"
+
+# Create the database once, then paste its id here:
+#   wrangler d1 create dth-products
+[[d1_databases]]
+binding = "DB"
+database_name = "dth-products"
+database_id = "REPLACE-AFTER-wrangler-d1-create"

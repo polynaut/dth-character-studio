@@ -16,6 +16,7 @@ import {
   fetchSettings,
   installDthRelease,
   listDthReleases,
+  productShareConfigured,
   rescanPoseAssets,
   saveProjectSettings,
   saveSettings,
@@ -706,7 +707,10 @@ function SettingsPage() {
     settings.houdiniInstallFolder !== initial.houdiniInstallFolder ||
     JSON.stringify(settings.extraHoudiniDocsFolders) !==
       JSON.stringify(initial.extraHoudiniDocsFolders) ||
-    JSON.stringify(settings.unrealPluginFolders) !== JSON.stringify(initial.unrealPluginFolders)
+    JSON.stringify(settings.unrealPluginFolders) !== JSON.stringify(initial.unrealPluginFolders) ||
+    // The community-share opt-in — unconditional (no !project guard): the
+    // section renders on the General tab in every window kind.
+    settings.shareProductScans !== initial.shareProductScans
   // Leaving with unsaved settings asks first — covers BOTH the machine settings
   // and the Project-tab manifest edits (install flows save before acting; they
   // gate on `dirty` for the machine half specifically).
@@ -1023,6 +1027,39 @@ function SettingsPage() {
               />
             </section>
           )}
+
+          {/* The community product-DB opt-in — machine-global (settings.json),
+              so it lives on the General tab in every window kind, unlike the
+              product-scanning section above (Project tab owns that in a
+              project window). */}
+          <section className="space-y-3 rounded-lg border bg-card p-5">
+            <h2 className="font-semibold">Community product database</h2>
+            <p className="text-sm text-muted-foreground">
+              Contribute your product-scan results to a shared catalog of Daz products —
+              especially the unofficial ones no store database covers. A submission carries
+              product facts only: names, SKUs, artists, versions and content-relative file
+              provenance. Nothing about you, your scenes or your machine is sent, and
+              submissions are aggregated by product, never by sender.
+            </p>
+            <div className="flex items-center gap-3">
+              <Switch
+                id="share-product-scans"
+                checked={settings.shareProductScans}
+                disabled={!productShareConfigured()}
+                onCheckedChange={(checked) =>
+                  setSettings((s) => ({ ...s, shareProductScans: checked }))
+                }
+              />
+              <Label htmlFor="share-product-scans">
+                Share scanned product metadata after each product scan
+              </Label>
+            </div>
+            {!productShareConfigured() && (
+              <p className="text-xs text-muted-foreground italic">
+                Not active in this build — the collection endpoint isn&apos;t configured yet.
+              </p>
+            )}
+          </section>
 
           <section className="space-y-4 rounded-lg border bg-card p-5">
             <HoudiniInstallSection
