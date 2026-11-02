@@ -14,7 +14,8 @@ optional.**
 > Everything the Daz side needs ships **with the studio** — the runtime and the
 > visible scripts (`Build_Genesis_Index`, `Scan_Frames`,
 > [`Fix_Graft_Shell_Surfaces`](./bundled-scripts.md#geografts-under-a-golden-palace--dicktator-shell),
-> [`Kill_Animation`](./bundled-scripts.md#rescuing-an-old-scene-that-is-only-a-rom-animation))
+> [`Kill_Animation`](./bundled-scripts.md#rescuing-an-old-scene-that-is-only-a-rom-animation),
+> [`Prepare_For_Transfer`](./bundled-scripts.md#preparing-a-g8-character-for-a-g9-transfer))
 > install into `Scripts/DTH-Character-Studio` automatically on Save / Refresh
 > assets. There is no separate scripts download.
 

@@ -35,6 +35,7 @@ const RUNTIME_FILES = [
   'Scan_Frames.dsa',
   'Fix_Graft_Shell_Surfaces.dsa',
   'Kill_Animation.dsa',
+  'Prepare_For_Transfer.dsa',
 ]
 
 // The visible scripts' Content Library artwork, installed beside them. Hashed as
@@ -50,12 +51,14 @@ const RUNTIME_ASSETS = [
   'Fix_Graft_Shell_Surfaces.tip.png',
   'Kill_Animation.png',
   'Kill_Animation.tip.png',
+  'Prepare_For_Transfer.png',
+  'Prepare_For_Transfer.tip.png',
 ]
 
 // Bump this together with RUNTIME_VERSION whenever a runtime file legitimately
 // changes (this run prints the new value in the failure message).
 const EXPECTED_RUNTIME_HASH =
-  '00f94011d1e2ea5b049034c9220e1137f4cc9a75aa6c34293a3393809f317e30'
+  '0ef381ffe81b8b5bc53a1fd1d043813b7bff2b4b7d9bb6502609c5e13637a163'
 
 function runtimeHash(): string {
   const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')

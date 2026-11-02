@@ -45,9 +45,15 @@ function highlightMatch(text: string, q: string): ReactNode {
  * blur still means "focus left the cell" — a mouse pick preventDefaults its
  * mousedown, so no blur ever unmounts the list before the pick lands.
  */
+/** The bordered form-field look for a MorphNameCell OUTSIDE a table — the
+ *  frame-0 morph list and the Settings transfer-morph list both pass it. */
+export const morphFieldClass =
+  'h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs outline-none transition-[color,box-shadow] focus:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50 md:text-sm dark:bg-input/30'
+
 export function MorphNameCell({
   value,
   placeholder,
+  ariaLabel,
   onCommit,
   onPick,
   inputClassName,
@@ -55,10 +61,13 @@ export function MorphNameCell({
 }: {
   value: string
   placeholder?: string
+  /** Accessible name for the input — a cell inside a labeled table row doesn't
+   *  need one; a standalone field (the Settings transfer-morph list) does. */
+  ariaLabel?: string
   onCommit: (prop: string) => void
   onPick: (entry: MorphIndexEntry) => void
   /** Override the input's look — defaults to the borderless table-cell style;
-   *  the frame-0 morph list passes a bordered form-field class. */
+   *  form-style lists pass {@link morphFieldClass}. */
   inputClassName?: string
   disabled?: boolean
 }) {
@@ -119,6 +128,7 @@ export function MorphNameCell({
         aria-controls={expanded ? listboxId : undefined}
         aria-activedescendant={expanded && activeIndex >= 0 ? optionId(activeIndex) : undefined}
         aria-autocomplete="list"
+        aria-label={ariaLabel}
         autoComplete="off"
         disabled={disabled}
         value={draft}

@@ -1,7 +1,7 @@
 import { cn, KeyedListEditor, Label, NumberField, OverrideMark, overrideLabelClass } from '@dth/ui'
 import { MorphNodeInfo } from '#/components/character/morph-node-info.tsx'
 import { MorphIndexProvider } from '#/components/rom/morph-index-provider.tsx'
-import { MorphNameCell } from '#/components/rom/morph-name-cell.tsx'
+import { MorphNameCell, morphFieldClass } from '#/components/rom/morph-name-cell.tsx'
 import { frameZeroMorphsKey, morphRowKey } from '#/lib/preserve-diff.ts'
 
 import type { Character, SceneOverride } from '@dth/rom'
@@ -9,8 +9,8 @@ import type { MorphIndexEntry } from '#/lib/rom/api.ts'
 
 // The morph-name field wears the ordinary form-input look (bordered, h-9) rather
 // than MorphNameCell's default borderless table-cell style, matching PreserveFields.
-const MORPH_FIELD_CLASS =
-  'h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs outline-none transition-[color,box-shadow] focus:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50 md:text-sm dark:bg-input/30'
+// Shared with the Settings transfer-morph list, so it lives beside the cell now.
+const MORPH_FIELD_CLASS = morphFieldClass
 
 /**
  * The "Morphs set at frame 0" list editor — the TOP of the character editor's

@@ -1,7 +1,7 @@
 # Bundled fix-it scripts
 
-Two scripts that ship with the studio and are run **by hand in Daz Studio**, from
-**Scripts › DTH-Character-Studio** in the Content Library. Neither is part of the
+Three scripts that ship with the studio and are run **by hand in Daz Studio**, from
+**Scripts › DTH-Character-Studio** in the Content Library. None is part of the
 ROM pipeline: they exist for scenes the pipeline cannot accept as they are, and each
 is a one-off repair. They install automatically with everything else the Daz side
 needs — on Save, or [Tools → Refresh assets](./tools.md#tab-3--refresh-assets).
@@ -54,6 +54,21 @@ clean run.
 > **There is no undo.** The script does not save the scene — that stays your
 > decision — but the keys are gone from the open scene the moment you confirm. If
 > the ROM in it still matters, run `Scan_Frames` first.
+
+## Preparing a G8 character for a G9 transfer
+
+Transferring a G8/G8.1 character to G9 starts with removing the morphs that also
+exist on G9 — Areolae, Nipples, Navel, the Breasts dials, Voluptuous and the
+length morphs — or they apply twice on the other side. **`Prepare_For_Transfer`**
+zeroes them in one run: select the figure (any bone is fine) and run it. Dials a
+character's master dial still drives can't be removed there, so the summary names
+them instead of pretending — zero the controlling dial it points at. Morph assets
+on disk are never touched, and removing clothing, brows, lashes and geografts
+stays manual.
+
+The morph list is editable under **Settings › Daz scripts** — an entry matches any
+dial whose name or label contains it — and saving there rewrites the installed
+script.
 
 &nbsp;
 

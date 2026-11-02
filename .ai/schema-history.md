@@ -1453,3 +1453,14 @@ v105 — the mouth and the GP/DK geograft close-outs hold the character's
       carries GP9, not DK9, so the DK half is unmeasured. The raw close
       unclamps a morph only when its raw base sits outside the property's
       limits (the flag holds on every frame, not just the closing key).
+v106 — new VISIBLE root script `Prepare_For_Transfer.dsa`: zeroes the G8/G8.1
+      morph dials that also exist on G9 (the DazToHue G8→G9 transfer guide's
+      list) on the selected figure. Self-contained (no runtime includes); the
+      morph list is EDITABLE (Settings → Daz scripts,
+      `settings.prepareTransferMorphs`) and baked at install time via the
+      `__DTH_TRANSFER_MORPHS__` token — the JSON-encoded list joins the
+      `.dth-runtime-installed` stamp, so saving an edited list re-installs
+      without a version bump. No generated character script changed; the bump
+      exists because the runtime-hash guard ties any runtime-file change to
+      one (and it is what installs the new file on libraries whose marker
+      predates the stamp-format change).
