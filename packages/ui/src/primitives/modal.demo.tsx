@@ -22,7 +22,7 @@ export function Default() {
       <Label htmlFor="m-name">Project name</Label>
       <Input id="m-name" defaultValue="Demo" />
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
-        <Button variant="ghost">Cancel</Button>
+        <Button variant="outline">Cancel</Button>
         <Button>Create</Button>
       </div>
     </Open>

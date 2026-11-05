@@ -7,12 +7,12 @@ const SECTIONS = [
 ]
 
 const BUTTONS: [string, string][] = [
-  ['default', 'The single affirmative action of a surface: Save, Create, Generate ROM. One per view.'],
-  ['secondary', 'A real alternative that is not the main path: Open in Houdini.'],
-  ['outline', 'A bordered control beside a field or inside a card: Browse, Locate, Retry.'],
-  ['ghost', 'Cancel in a modal or drawer footer, first and left of the primary, and any tertiary inline action: Show log, Open on a card.'],
-  ['outline-destructive', 'A destructive action that is not the final confirmation: Clear, Unlink.'],
-  ['destructive', 'The final confirmation of an irreversible action: Delete Kira. Never the first thing a user sees.'],
+  ['default', 'The one main action of an area: Save, Create, Generate ROM.'],
+  ['outline', 'Other actions, including Cancel, Discard and every add action: Browse, Locate, Add scene. No dashed add buttons.'],
+  ['ghost', 'Quiet inline actions such as Rescan or All/None, with an icon when one helps.'],
+  ['outline-destructive', 'Other destructive actions, such as Clear. Cancel is not one: it only backs out, so it is outline.'],
+  ['destructive', 'Only the final confirmation of a destructive action: Delete Kira.'],
+  ['secondary', 'Legacy. It stays until Project 2 moves its one use; do not add new uses.'],
 ]
 
 export function Patterns({ m }: { m: Manifest }) {

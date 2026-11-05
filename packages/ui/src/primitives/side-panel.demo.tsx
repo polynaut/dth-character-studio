@@ -29,7 +29,7 @@ export function WithFooter() {
     <Panel
       footer={
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: 12 }}>
-          <Button variant="ghost">Cancel</Button>
+          <Button variant="outline">Cancel</Button>
           <Button>Apply</Button>
         </div>
       }

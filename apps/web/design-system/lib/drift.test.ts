@@ -11,6 +11,13 @@ describe('scanDrift', () => {
     expect(hits('<button onClick={f}>')).toEqual(['raw-control'])
     expect(hits('<button')).toEqual(['raw-control'])
   })
+  it('flags arbitrary values only when they carry a colour', () => {
+    expect(hits('w-[80vw] z-[60] aspect-[3/4] grid-cols-[1fr_2fr] transition-[width]')).toEqual([])
+    expect(hits('text-[10px] border-[3px] ring-[3px] bg-[length:10px]')).toEqual([])
+    expect(hits('text-[#fe5c01]')).toEqual(['arbitrary'])
+    expect(hits('shadow-[0_4px_4px_rgba(0,0,0,0.6)]')).toEqual(['arbitrary'])
+    expect(hits('data-[state=checked]:bg-[#fe5c01]')).toEqual(['arbitrary'])
+  })
   it('ignores tokens and the kit Button', () => {
     expect(hits('className="text-warning bg-card"')).toEqual([])
     expect(hits('<Button variant="outline">')).toEqual([])

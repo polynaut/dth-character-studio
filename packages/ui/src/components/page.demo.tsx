@@ -41,7 +41,7 @@ export function HeaderWithActions() {
         <PageHeader
           title="Kira"
           description="D:/DTH Projects/Demo/Kira"
-          actions={<Button size="sm"><Plus /> Add scene</Button>}
+          actions={<Button size="sm" variant="outline"><Plus /> Add scene</Button>}
         />
       </Page>
     </div>

@@ -41,8 +41,10 @@ export function Title({ children, lead }: { children: ReactNode; lead?: ReactNod
 export function Frame({ src, title, height }: { src: string; title: string; height?: number }) {
   const ref = useRef<HTMLIFrameElement>(null)
   const [h, setH] = useState(height ?? 120)
+  const [loaded, setLoaded] = useState(false)
+  // Starts at onLoad, not mount: a lazy frame below the fold loads only when scrolled near.
   useEffect(() => {
-    if (height) return
+    if (height || !loaded) return
     let ticks = 0
     const id = setInterval(() => {
       const doc = ref.current?.contentDocument?.documentElement
@@ -50,13 +52,14 @@ export function Frame({ src, title, height }: { src: string; title: string; heig
       if (++ticks > 20) clearInterval(id)
     }, 300)
     return () => clearInterval(id)
-  }, [height])
+  }, [height, loaded])
   return (
     <iframe
       ref={ref}
       src={src}
       title={title}
       loading="lazy"
+      onLoad={() => setLoaded(true)}
       // Our own dev-only frames: they need scripts and same-origin (seed fetch, height measure).
       // oxlint-disable-next-line react/iframe-missing-sandbox
       sandbox="allow-same-origin allow-scripts allow-forms"
