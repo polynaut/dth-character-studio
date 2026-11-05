@@ -45,6 +45,11 @@ export { KeyedListEditor } from './components/keyed-list-editor.tsx'
 export { MultiSelect } from './components/multi-select.tsx'
 export { PathChip, pathChipClass, tallPathChipClass } from './components/path-chip.tsx'
 export { LinkedAssetCard } from './components/linked-asset-card.tsx'
+export { StatusIndicator } from './components/status-indicator.tsx'
+export type { Tone } from './components/status-indicator.tsx'
+export { Notice } from './components/notice.tsx'
+export { ToolCard } from './components/tool-card.tsx'
+export { Page, PageHeader, Section } from './components/page.tsx'
 
 // Hooks
 export { useModifierHeld } from './hooks/use-modifier-held.ts'
