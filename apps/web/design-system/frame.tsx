@@ -54,8 +54,11 @@ function Throws(): ReactNode {
 
 const settle = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)))
 
+// A Map, because the key comes from the URL and `constructor` must not reach Object.prototype.
+const lookup = <T,>(modules: Record<string, T>, key: string) => new Map(Object.entries(modules)).get(key)
+
 async function bootScreen(moduleKey: string, id: string) {
-  const load = screenModules[moduleKey]
+  const load = lookup(screenModules, moduleKey)
   if (!load) throw new Error(`No screens module "${moduleKey}"`)
   const screen = (await load()).default.screens.find((s) => s.id === id)
   if (!screen) throw new Error(`No screen "${id}" in ${moduleKey}`)
@@ -92,7 +95,7 @@ async function bootScreen(moduleKey: string, id: string) {
 }
 
 async function bootDemo(moduleKey: string, exportName: string) {
-  const load = demoModules[moduleKey]
+  const load = lookup(demoModules, moduleKey)
   if (!load) throw new Error(`No demo module "${moduleKey}"`)
   const Demo = ((await load()) as Record<string, React.ComponentType>)[exportName]
   if (!Demo) throw new Error(`No export "${exportName}" in ${moduleKey}`)
