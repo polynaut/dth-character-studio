@@ -1,13 +1,12 @@
 import { defineScreens } from '../../../design-system/screens.ts'
 
-// Literals mirror P.project / P.dcsp in smoke/fixtures.ts, which uses node:fs and can't load in the browser.
-const PROJECT = 'D:/DTH Projects/Demo'
+import { P } from '../../../smoke/fixture-paths.ts'
 
 export default defineScreens('Character', [
   {
     id: 'character-editor',
     title: 'Character editor',
-    route: `/projects/${encodeURIComponent(PROJECT)}/characters/char-kira`,
-    seed: { demo: true, activeProjectFile: `${PROJECT}/Demo.dcsp` },
+    route: `/projects/${encodeURIComponent(P.project)}/characters/${P.characterId}`,
+    seed: { demo: true, activeProjectFile: P.dcsp },
   },
 ])
