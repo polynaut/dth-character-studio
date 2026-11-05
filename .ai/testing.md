@@ -18,6 +18,7 @@ cannot skip. Scope by what was touched:
 | `docs/guide` / guide assets         | `pnpm build:guide`                                               |
 | a route FILE added/removed          | `pnpm generate-routes`                                           |
 | `contracts/` / `api/native-types.ts`| BOTH sides: `cargo test` + `pnpm --filter @dth/web test native-contract` |
+| `packages/ui` demos, `*.screens.tsx`, `apps/web/design-system/` | `pnpm check:design-system` (renders every demo and screen; fails on a page error or an unhandled mock call) |
 | `.ai/*.md`                          | `node .claude/hooks/inject-gotchas.mjs --audit` (trigger anchors resolve) |
 | `.claude/hooks/*`                   | `node .claude/hooks/inject-gotchas.test.mjs` + the `--audit` above       |
 

@@ -27,6 +27,8 @@ pnpm -r test             # all JS tests (vitest)
 pnpm --filter @dth/web smoke  # Playwright browser smoke — the real SPA against an in-memory fake
                               # of the native layer (apps/web/smoke; specs are *.smoke.ts)
 pnpm -r typecheck        # tsc --noEmit across packages
+pnpm design-system       # kit + screens catalog → http://localhost:4334 (dev only)
+pnpm check:design-system # every demo and screen must render without errors
 pnpm lint                # oxlint (type-aware) — the CI lint gate; `pnpm lint:fix` autofixes
 pnpm generate-routes     # regenerate apps/web/src/routeTree.gen.ts (tsr generate)
 pnpm changeset           # add a changeset (required on every feature PR; see Releases)
@@ -72,6 +74,10 @@ inline — no build step, no stale `dist`).
   `src/routes`; UI runs the pure `@dth/rom` generation in the webview and composes `@dth/ui`.
 - **`apps/desktop` (`@dth/desktop`)** — Tauri 2 shell (Rust, `src/lib.rs`). Loads `apps/web` and
   provides native file/dialog/updater access instead of a Node backend.
+
+- **`apps/web/design-system`** — dev-only catalog of the kit's demos and the app's screens, plus
+  an Audit page of remaining drift. Rules: `packages/ui/README.md`. A new UI state gets a screen
+  (`*.screens.tsx`), a new component or variant gets a demo (`*.demo.tsx`).
 
 ### The core invariant (do not break)
 
