@@ -30,6 +30,7 @@ const q = (params: Record<string, string>) => `/frame.html?${new URLSearchParams
 test('manifest is not empty', async ({ page }) => {
   const m = await manifest(page)
   expect(m.screens.length).toBeGreaterThan(0)
+  expect(m.demos.length).toBeGreaterThan(0)
 })
 
 test('negative control: a failing frame is detected', async ({ page }) => {
