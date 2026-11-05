@@ -10,6 +10,9 @@
  * card's `w-80`, `group/card`) are generated. Without this the cards render
  * unstyled/narrow. Glob form is used so the path can't silently no-op. */
 @source '../../../packages/ui/src/**/*.{ts,tsx}';
+@source not '../design-system/**';
+@source not '../../../packages/ui/src/**/*.demo.tsx';
+@source not './**/*.screens.tsx';
 
 @import 'tw-animate-css';
 

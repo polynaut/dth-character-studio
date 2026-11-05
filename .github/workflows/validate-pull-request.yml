@@ -136,6 +136,8 @@ jobs:
         run: pnpm --filter @dth/web exec playwright install chromium --with-deps
       - name: Browser smoke (Playwright)
         run: pnpm --filter @dth/web smoke
+      - name: Design system check
+        run: pnpm --filter @dth/web check:design-system
       # THE EVIDENCE. `trace: 'retain-on-failure'` (playwright.config.ts) writes
       # a full trace for every failed test — DOM snapshot per action, the
       # actionability log, console, network, screenshots — and without this step

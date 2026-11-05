@@ -93,7 +93,8 @@
           "__tauriMock",
           "__dthHideDevtools",
           "__dthToast",
-          "__sawHome"
+          "__sawHome",
+          "__dsManifest"
         ]
       }
     ]
