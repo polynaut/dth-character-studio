@@ -7,6 +7,8 @@ export default defineConfig({
   testMatch: /.*\.check\.ts/,
   fullyParallel: false,
   retries: 0,
+  // Separate from smoke's test-results/, which Playwright clears at run start and CI uploads as evidence.
+  outputDir: './test-results-design-system',
   reporter: process.env.CI ? [['list'], ['github']] : 'list',
   use: {
     baseURL: 'http://localhost:4334',
@@ -14,6 +16,7 @@ export default defineConfig({
     colorScheme: 'dark',
     locale: 'en-US',
     timezoneId: 'Europe/Zurich',
+    trace: 'retain-on-failure',
   },
   webServer: {
     command: 'pnpm run design-system',

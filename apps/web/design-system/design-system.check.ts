@@ -11,17 +11,18 @@ async function manifest(page: Page): Promise<Manifest> {
   return page.evaluate(() => (window as unknown as { __dsManifest: Manifest }).__dsManifest)
 }
 
+// Soft, so one run reports every broken frame instead of stopping at the first.
 async function expectRenders(page: Page, url: string) {
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(e.message))
   await page.goto(url)
   await page.waitForSelector('html[data-ready]')
-  await expect(page.locator('[data-screen-error]')).toHaveCount(0)
+  await expect.soft(page.locator('[data-screen-error]'), url).toHaveCount(0)
   const unhandled = await page.evaluate(
     () => (window as unknown as { __tauriMock?: { unhandled?: unknown[] } }).__tauriMock?.unhandled ?? [],
   )
-  expect(unhandled).toEqual([])
-  expect(errors).toEqual([])
+  expect.soft(unhandled, url).toEqual([])
+  expect.soft(errors, url).toEqual([])
 }
 
 const q = (params: Record<string, string>) => `/frame.html?${new URLSearchParams(params)}`
