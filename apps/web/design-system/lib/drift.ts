@@ -21,9 +21,13 @@ const isColorDrift = (prefix: string, value: string) =>
 const HEX = /#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?\b/g
 const RAW_CONTROL = /<(?:button|input|select|textarea)(?![\w-])/g
 
+// ROM timeline colours are data colours (one per section), not UI chrome.
+const EXEMPT = 'apps/web/src/components/rom/rom-timeline.tsx'
+
 export function scanDrift(files: Record<string, string>): Drift[] {
   const out: Drift[] = []
   for (const [file, src] of Object.entries(files)) {
+    if (file === EXEMPT) continue
     src.split('\n').forEach((text, i) => {
       const line = i + 1
       const add = (kind: Drift['kind'], re: RegExp, s: string) => {

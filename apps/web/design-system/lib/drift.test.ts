@@ -22,6 +22,9 @@ describe('scanDrift', () => {
     expect(hits('className="text-warning bg-card"')).toEqual([])
     expect(hits('<Button variant="outline">')).toEqual([])
   })
+  it('skips the ROM timeline, whose colours are data', () => {
+    expect(scanDrift({ 'apps/web/src/components/rom/rom-timeline.tsx': 'bg-slate-300' })).toEqual([])
+  })
   it('reports the line and the match', () => {
     expect(scanDrift({ 'a.tsx': 'x\ny text-red-500' })[0]).toMatchObject({
       line: 2,

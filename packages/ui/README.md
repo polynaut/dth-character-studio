@@ -8,7 +8,7 @@ The app has not been migrated to these rules yet. Existing screens still have dr
 
 - Tokens are CSS variables in `apps/web/src/styles.css`, surfaced as Tailwind colours: `bg-primary`, `text-muted-foreground`, `border-warning-border`. No palette classes (`text-red-500`) and no colour literals in new code.
 - Status colours come in sets: `success`, `warning`, `info`, `destructive`, each with `-subtle` (fill) and `-border`. Error text is `text-destructive-text`.
-- Named exceptions, not drift: the tool brand colours (`daz-green`, `houdini-orange`, `unreal-blue`) and the ROM timeline's section colours in `rom-timeline.tsx`.
+- Named exceptions, not drift: the tool brand colours (`daz-green`, `houdini-orange`, `unreal-blue`) and the ROM timeline's section colours in `apps/web/src/components/rom/rom-timeline.tsx` (the Audit page skips that file).
 - The site's Foundations pages read `:root` directly. There is no second token list to keep in step.
 
 ## Icons
