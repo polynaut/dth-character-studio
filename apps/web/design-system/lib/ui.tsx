@@ -37,6 +37,8 @@ export function Title({ children, lead }: { children: ReactNode; lead?: ReactNod
   )
 }
 
+const FRAME_BORDER = 1
+
 /** One screen or demo, same-origin so the page can read the frame's height once it is ready. */
 export function Frame({ src, title, height }: { src: string; title: string; height?: number }) {
   const ref = useRef<HTMLIFrameElement>(null)
@@ -47,8 +49,13 @@ export function Frame({ src, title, height }: { src: string; title: string; heig
     if (height || !loaded) return
     let ticks = 0
     const id = setInterval(() => {
-      const doc = ref.current?.contentDocument?.documentElement
-      if (doc?.hasAttribute('data-ready')) setH(Math.max(80, doc.scrollHeight))
+      const doc = ref.current?.contentDocument
+      // scrollHeight can't go below the frame's own viewport, and that viewport is the height set
+      // here minus the border, so feeding it back shrinks the frame on every tick. Measure content.
+      const content = doc?.getElementById('root')?.lastElementChild
+      if (content && doc?.documentElement.hasAttribute('data-ready')) {
+        setH(Math.ceil(content.getBoundingClientRect().bottom) + FRAME_BORDER * 2)
+      }
       if (++ticks > 20) clearInterval(id)
     }, 300)
     return () => clearInterval(id)
@@ -63,7 +70,7 @@ export function Frame({ src, title, height }: { src: string; title: string; heig
       // Our own dev-only frames: they need scripts and same-origin (seed fetch, height measure).
       // oxlint-disable-next-line react/iframe-missing-sandbox
       sandbox="allow-same-origin allow-scripts allow-forms"
-      style={{ width: '100%', height: height ?? h, border: '1px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--background)' }}
+      style={{ width: '100%', height: height ?? h, border: `${FRAME_BORDER}px solid var(--border)`, borderRadius: 'var(--radius)', background: 'var(--background)' }}
     />
   )
 }
