@@ -8,6 +8,8 @@ type Manifest = {
 async function manifest(page: Page): Promise<Manifest> {
   await page.goto('/')
   await page.waitForSelector('html[data-ready]')
+  const failure = await page.locator('html').getAttribute('data-manifest-error')
+  if (failure) throw new Error(`manifest failed to build: ${failure}`)
   return page.evaluate(() => (window as unknown as { __dsManifest: Manifest }).__dsManifest)
 }
 

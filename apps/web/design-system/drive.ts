@@ -33,3 +33,14 @@ export async function clickByName(root: HTMLElement, name: string | RegExp): Pro
   }
   throw new Error(`clickByName: nothing named ${String(name)} within ${TIMEOUT_MS}ms`)
 }
+
+/** Resolve once `cond` is truthy; for state that lands after a click (a scan, a panel). */
+export async function waitFor(cond: () => unknown): Promise<void> {
+  const deadline = Date.now() + TIMEOUT_MS
+  while (Date.now() < deadline) {
+    if (cond()) return
+    // oxlint-disable-next-line no-await-in-loop
+    await new Promise((r) => setTimeout(r, 50))
+  }
+  throw new Error(`waitFor: ${cond.toString()} not met within ${TIMEOUT_MS}ms`)
+}

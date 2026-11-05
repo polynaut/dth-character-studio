@@ -43,6 +43,7 @@ async function bootScreen(moduleKey: string, id: string) {
   const res = await fetch(`/__seed?opts=${encodeURIComponent(JSON.stringify(screen.seed ?? {}))}`)
   if (!res.ok) throw new Error(`/__seed failed: ${await res.text()}`)
   const seed = (await res.json()) as TauriMockSeed
+  screen.tune?.(seed)
   installTauriMock(seed)
   ;(window as unknown as { __dthHideDevtools?: boolean }).__dthHideDevtools = true
 

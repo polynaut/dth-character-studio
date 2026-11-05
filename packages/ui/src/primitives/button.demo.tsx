@@ -2,7 +2,7 @@ import { Download, FolderOpen, Trash2 } from 'lucide-react'
 
 import { Button } from '../index.ts'
 
-const row = { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12', padding: 16 } as const
+const row = { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12, padding: 16 } as const
 const col = { display: 'flex', flexDirection: 'column', gap: 12 } as const
 const label = { color: 'var(--muted-foreground)', fontSize: 12 } as const
 

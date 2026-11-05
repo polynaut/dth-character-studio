@@ -67,3 +67,14 @@ export function SideBySide() {
     </div>
   )
 }
+
+export function SideBySideFlex() {
+  return (
+    <div style={{ display: 'flex', gap: 12, padding: 16, maxWidth: 760 }}>
+      <ToolCard tone="daz" title="Kira.duf" subtitle="D:/DTH Projects/Demo/Kira/daz3d/Kira.duf" />
+      <ToolCard tone="houdini" title="Kira_ROM.hip" subtitle="Houdini 22.0.368">
+        Last exported today. Generated 8 sections, 1,240 frames, written to D:/DTH Projects/Demo/Kira/houdini/daz-export.
+      </ToolCard>
+    </div>
+  )
+}
