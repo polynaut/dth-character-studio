@@ -2,7 +2,7 @@
 
 The kit: primitives and presentational components every screen is built from. The catalog is the design system site in `apps/web/design-system` (`pnpm design-system`, http://localhost:4334).
 
-The app has not been migrated to these rules yet. Existing screens still have drift (palette colours, arbitrary colour values, raw controls), listed on the site's Audit page; that list is the worklist for the rework. Nothing in CI blocks hardcoded colours yet; a gate comes at the end of the rework. Until then these rules are followed by hand, and new code follows them.
+The app has not been migrated to these rules yet. Existing screens still have drift (palette colours, arbitrary colour values, raw controls, one-off durations), listed on the site's Audit page; that list is the worklist for the rework. Nothing in CI blocks hardcoded colours yet; a gate comes at the end of the rework. Until then these rules are followed by hand, and new code follows them.
 
 ## Tokens
 
@@ -10,6 +10,12 @@ The app has not been migrated to these rules yet. Existing screens still have dr
 - Status colours come in sets: `success`, `warning`, `info`, `destructive`, each with `-subtle` (fill) and `-border`. Error text is `text-destructive-text`.
 - Named exceptions, not drift: the tool brand colours (`daz-green`, `houdini-orange`, `unreal-blue`) and the ROM timeline's section colours in `apps/web/src/components/rom/rom-timeline.tsx` (the Audit page skips that file).
 - The site's Foundations pages read `:root` directly. There is no second token list to keep in step.
+
+## Motion
+
+- Durations are tokens: `--duration-fast` (160ms, hover and colour changes), `--duration-base` (300ms, overlays, panels, things changing place), `--duration-slow` (500ms, progress settling). In a class, `duration-(--duration-base)`, not `duration-300`. A bare `transition-colors` at Tailwind's default is fine on controls.
+- Motion says something changed. Nothing animates for decoration.
+- A new animation respects `prefers-reduced-motion`, and the state it shows still reads without the movement. Today only `task-retire`, `refresh-pulse` and `busy-bar-sweep` do; the scroll-driven header, the side panel slide and the scene pill transition are a known gap for the rework.
 
 ## Icons
 

@@ -50,7 +50,7 @@ Dev-only catalog, its own Vite root on port 4334, never in the product build.
 Pages: foundations (read `:root` in `styles.css`), components (every
 `packages/ui/src/**/*.demo.tsx`), patterns, screens, and an Audit page
 (`lib/drift.ts` scans `apps/web/src` for palette colours, arbitrary colour
-values, hex and raw controls). Screens (`apps/web/src/**/*.screens.tsx`,
+values, hex, raw controls and one-off durations). Screens (`apps/web/src/**/*.screens.tsx`,
 `defineScreens` in `screens.ts`) render the real route tree in an iframe
 (`frame.tsx`) against the smoke suite's Tauri mock; `seed`, `tune` and `drive`
 set up the state. `pnpm check:design-system` renders every demo and screen.

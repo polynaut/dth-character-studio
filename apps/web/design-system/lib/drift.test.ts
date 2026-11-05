@@ -10,6 +10,9 @@ describe('scanDrift', () => {
     expect(hits('const c = "#fe5c01"')).toEqual(['hex'])
     expect(hits('<button onClick={f}>')).toEqual(['raw-control'])
     expect(hits('<button')).toEqual(['raw-control'])
+    expect(hits('transition-opacity duration-300')).toEqual(['duration'])
+    expect(hits('duration-[420ms]')).toEqual(['duration'])
+    expect(hits('duration-(--duration-base) animate-spin')).toEqual([])
   })
   it('flags arbitrary values only when they carry a colour', () => {
     expect(hits('w-[80vw] z-[60] aspect-[3/4] grid-cols-[1fr_2fr] transition-[width]')).toEqual([])

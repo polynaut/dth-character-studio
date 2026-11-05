@@ -25,6 +25,7 @@ Judge the change against the kit rules (`packages/ui/README.md`), the patterns (
 - **Components**: built from `@dth/ui`; no new local button, field or card that duplicates one, no raw `<button>` or `<input>`. A near-duplicate is a finding.
 - **Buttons**: one primary per area; Cancel, Discard and add actions are `outline`; `destructive` only on the final confirmation; Cancel first in the footer row, left of the primary.
 - **Status**: `StatusIndicator` or `Notice`, not a coloured `<p>`. `ToolCard` `attention` is paired with one of them.
+- **Motion**: durations from `--duration-*`, no new `duration-300`; a new animation respects `prefers-reduced-motion`.
 - **States**: loading, empty, error and unavailable exist and hold the layout still.
 - **Keyboard**: tab order, visible focus, every control named, icon-only buttons have a `title`.
 - **Copy**: short, specific, buttons say what they do.

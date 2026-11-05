@@ -8,7 +8,7 @@ import { screenModules } from './screens.ts'
 import { demoFile, s, type DemoMeta, type Manifest } from './lib/ui.tsx'
 import { Audit } from './pages/audit.tsx'
 import { ComponentPage } from './pages/components.tsx'
-import { Color, Icons, Shape, Space, Type } from './pages/foundations.tsx'
+import { Color, Icons, Motion, Shape, Space, Type } from './pages/foundations.tsx'
 import { Overview } from './pages/overview.tsx'
 import { Patterns } from './pages/patterns.tsx'
 import { ScreenPage } from './pages/screens.tsx'
@@ -79,6 +79,7 @@ function Nav({ page, m }: { page: string; m: Manifest }) {
       {link('type', 'Type')}
       {link('space', 'Space')}
       {link('shape', 'Shape')}
+      {link('motion', 'Motion')}
       {link('icons', 'Icons')}
       {group('Components')}
       {files.map((f) => link(`components/${f}`, f))}
@@ -100,6 +101,7 @@ function Content({ page, m }: { page: string; m: Manifest }) {
     type: Type,
     space: Space,
     shape: Shape,
+    motion: Motion,
     icons: Icons,
     patterns: Patterns,
     audit: Audit,

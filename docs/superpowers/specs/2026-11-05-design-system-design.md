@@ -149,7 +149,7 @@ would silently test the wrong thing. It's built with the design system it docume
 Pages:
 
 - **Overview**, including gaps: components without demos and features without screens
-- **Foundations:** colour, type, space and shape, icons. Read from `styles.css`, never a second copy.
+- **Foundations:** colour, type, space and shape, motion, icons. Read from `styles.css`, never a second copy.
 - **Components:** globbed from the demos
 - **Patterns:** hand-composed from components (a settings section, a side panel, a tool-card list)
 - **Screens:** globbed from the screens files

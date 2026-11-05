@@ -4,12 +4,13 @@ import { scanDrift, type Drift } from '../lib/drift.ts'
 import { loadSources } from '../lib/sources.ts'
 import { s, Title } from '../lib/ui.tsx'
 
-const KINDS: Drift['kind'][] = ['palette', 'arbitrary', 'hex', 'raw-control']
+const KINDS: Drift['kind'][] = ['palette', 'arbitrary', 'hex', 'raw-control', 'duration']
 const LABEL: Record<Drift['kind'], string> = {
   palette: 'Palette colors',
   arbitrary: 'Arbitrary values',
   hex: 'Hex literals',
   'raw-control': 'Raw controls',
+  duration: 'One-off durations',
 }
 
 export function Audit() {

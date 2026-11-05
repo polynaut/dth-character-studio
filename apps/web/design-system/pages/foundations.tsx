@@ -3,7 +3,9 @@ import * as Lucide from 'lucide-react'
 
 import css from '#/styles.css?raw'
 
-import { contrast, parseTokens } from '../lib/tokens.ts'
+import { Button } from '@dth/ui'
+
+import { contrast, parseMotion, parseTokens } from '../lib/tokens.ts'
 import { loadSources } from '../lib/sources.ts'
 import { s, Title } from '../lib/ui.tsx'
 
@@ -161,6 +163,89 @@ export function Shape() {
         ))}
       </div>
       {use && <p style={{ ...s.p, marginTop: 16 }}>Also in product code: rounded-full {use.full ?? 0}, rounded-2xl {use['2xl'] ?? 0}, rounded-none {use.none ?? 0}.</p>}
+    </>
+  )
+}
+
+const DURATIONS = Object.entries(tokens).filter(([name]) => name.startsWith('duration-'))
+// Hand-written classes in styles.css, so they apply here without Tailwind's scan.
+const LIVE: Record<string, string> = {
+  'dth-refresh-pulse': 'refresh-pulse',
+  'dth-busy-bar-stripes': 'busy-bar-sweep',
+  'dth-task-retire': 'task-retire',
+}
+
+function DurationRow({ name, value }: { name: string; value: string }) {
+  const [on, setOn] = useState(false)
+  return (
+    <div
+      onMouseEnter={() => setOn(true)}
+      onMouseLeave={() => setOn(false)}
+      style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '8px 0', borderBottom: '1px solid var(--border)' }}
+    >
+      <span style={{ ...s.mono, width: 170 }}>--{name}</span>
+      <span style={{ ...s.mono, width: 60, color: 'var(--muted-foreground)' }}>{value}</span>
+      <div style={{ flex: 1 }}>
+        <div style={{ width: 24, height: 12, borderRadius: 2, background: 'var(--primary)', transform: `translateX(${on ? 160 : 0}px)`, transition: `transform var(--${name}) ease` }} />
+      </div>
+    </div>
+  )
+}
+
+function LivePreview({ name }: { name: string }) {
+  const [run, setRun] = useState(0)
+  const className = LIVE[name]
+  if (!className) return null
+  const box = <div key={run} className={className} style={{ width: 120, height: 16, borderRadius: 4, backgroundColor: 'var(--accent)', border: '1px solid var(--border)' }} />
+  return name === 'dth-task-retire' ? (
+    <span style={{ display: 'flex', alignItems: 'center', gap: 12, height: 32 }}>
+      <Button size="xs" variant="outline" onClick={() => setRun(run + 1)}>Replay</Button>
+      {box}
+    </span>
+  ) : box
+}
+
+export function Motion() {
+  const motion = parseMotion(css)
+  const timed = motion.filter((m) => m.timing)
+  const scroll = motion.filter((m) => !m.timing)
+  return (
+    <>
+      <Title lead="Read from styles.css. Motion here says something changed: it stays quick, and nothing animates for decoration.">Motion</Title>
+      <h2 style={s.h2}>Durations</h2>
+      <p style={s.p}>Hover a row to feel it. Use <span style={s.mono}>duration-(--duration-base)</span> in a class, or <span style={s.mono}>var(--duration-base)</span> in CSS.</p>
+      <div style={s.card}>
+        {DURATIONS.map(([name, value]) => <DurationRow key={name} name={name} value={value} />)}
+      </div>
+      <p style={{ ...s.p, marginTop: 12 }}>
+        A bare <span style={s.mono}>transition-colors</span> runs at Tailwind's default of 150ms, which is close enough to <span style={s.mono}>fast</span> that controls don't need a duration class.
+        Numbered classes like <span style={s.mono}>duration-300</span> are listed on the Audit page.
+      </p>
+      <h2 style={s.h2}>Timed animations</h2>
+      <p style={s.p}>Each has its own timing, because each is tuned to what it shows.</p>
+      <div style={s.card}>
+        {timed.map((m) => (
+          <div key={m.name} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+            <span style={{ ...s.mono, width: 170 }}>{m.name}</span>
+            <span style={{ ...s.mono, width: 190, color: 'var(--muted-foreground)' }}>{m.timing}</span>
+            <LivePreview name={m.name} />
+          </div>
+        ))}
+      </div>
+      <h2 style={s.h2}>Scroll-driven animations</h2>
+      <p style={s.p}>
+        The collapsing character header. These follow the scroll position through <span style={s.mono}>animation-timeline</span>, so they have no duration. See them by scrolling
+        the <a href="#/screens/character-editor" style={s.link}>character editor screen</a>.
+      </p>
+      <div style={{ ...s.card, ...s.mono, display: 'flex', flexWrap: 'wrap', gap: '4px 16px' }}>
+        {scroll.map((m) => <span key={m.name}>{m.name}</span>)}
+      </div>
+      <h2 style={s.h2}>Reduced motion</h2>
+      <p style={s.p}>
+        New animations must respect <span style={s.mono}>prefers-reduced-motion</span>. Stop or slow them, and make sure the state they show still reads without the movement.
+        Today only <span style={s.mono}>task-retire</span>, <span style={s.mono}>refresh-pulse</span> and <span style={s.mono}>busy-bar-sweep</span> do.
+        The scroll-driven header, the side panel slide and the scene pill transition don't yet. That is a known gap for the rework.
+      </p>
     </>
   )
 }

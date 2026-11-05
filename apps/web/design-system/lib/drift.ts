@@ -1,7 +1,7 @@
 export type Drift = {
   file: string
   line: number
-  kind: 'palette' | 'arbitrary' | 'hex' | 'raw-control'
+  kind: 'palette' | 'arbitrary' | 'hex' | 'raw-control' | 'duration'
   match: string
 }
 
@@ -20,6 +20,7 @@ const isColorDrift = (prefix: string, value: string) =>
   (COLOR_ONLY.has(prefix) && !NOT_COLOR.test(value)) || (COLOR_OR_SIZE.has(prefix) && COLOR_VALUE.test(value))
 const HEX = /#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?\b/g
 const RAW_CONTROL = /<(?:button|input|select|textarea)(?![\w-])/g
+const DURATION = /(?<![\w-])duration-(?:\d+|\[[^\]\s]+\])(?![\w-])/g
 
 // ROM timeline colours are data colours (one per section), not UI chrome.
 const EXEMPT = 'apps/web/src/components/rom/rom-timeline.tsx'
@@ -40,6 +41,7 @@ export function scanDrift(files: Record<string, string>): Drift[] {
       add('palette', PALETTE, rest)
       add('hex', HEX, rest)
       add('raw-control', RAW_CONTROL, rest)
+      add('duration', DURATION, text)
     })
   }
   return out.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line)

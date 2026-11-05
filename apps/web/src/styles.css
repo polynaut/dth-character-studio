@@ -55,6 +55,9 @@
   --info-subtle: #2d3f4b;
   --info-border: #306078;
   --chip-adornment: #333; /* solid fill of the path chip's copy hint and pencil hover */
+  --duration-fast: 160ms; /* hover and colour changes on controls */
+  --duration-base: 300ms; /* overlays, panels, things changing place */
+  --duration-slow: 500ms; /* progress settling */
   --border: #3b3e44; /* subtle separators */
   --input: #44474e; /* input field borders */
   --ring: #ee7027; /* orange focus ring */
@@ -195,9 +198,9 @@ pre code {
 button,
 a {
   transition:
-    background-color 160ms ease,
-    color 160ms ease,
-    border-color 160ms ease;
+    background-color var(--duration-fast) ease,
+    color var(--duration-fast) ease,
+    border-color var(--duration-fast) ease;
 }
 
 @layer base {
@@ -505,7 +508,7 @@ a {
   width: var(--export-progress, 0%);
   background: var(--export-progress-color, var(--color-emerald-600));
   opacity: 0;
-  transition: width 500ms;
+  transition: width var(--duration-slow);
   pointer-events: none;
 }
 @supports (animation-timeline: scroll()) {
@@ -900,7 +903,7 @@ a {
    stable `view-transition-name` + the `scene-pill` class, so the browser morphs
    each one from its old slot to its new one. Keep it a quick, subtle slide. */
 ::view-transition-group(.scene-pill) {
-  animation-duration: 300ms;
+  animation-duration: var(--duration-base);
   /* Ease-in: pills drift slowly out of their old slot, then accelerate into the new
      one (slow start, quick finish) — cubic-bezier(easeInCubic). */
   animation-timing-function: cubic-bezier(0.32, 0, 0.67, 0);

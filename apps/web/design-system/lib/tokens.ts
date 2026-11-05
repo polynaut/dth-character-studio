@@ -5,6 +5,14 @@ export function parseTokens(css: string): Record<string, string> {
   return out
 }
 
+/** Every @keyframes with its `animation:` timing. Null means scroll-driven: it has no duration of its own. */
+export function parseMotion(css: string): { name: string; timing: string | null }[] {
+  return [...css.matchAll(/@keyframes\s+([\w-]+)/g)].map(([, name]) => ({
+    name,
+    timing: new RegExp(`animation:\\s*${name}\\s+([\\d.]+m?s[^;]*);`).exec(css)?.[1].trim() ?? null,
+  }))
+}
+
 function luminance(hex: string): number {
   const n = parseInt(hex.slice(1), 16)
   const [r, g, b] = [n >> 16, (n >> 8) & 255, n & 255].map((v) => {
