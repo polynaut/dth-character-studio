@@ -1,8 +1,7 @@
 import { AlertTriangle, Loader2, RefreshCw, Pencil } from 'lucide-react'
 
-import { Button, InfoPopup, Switch } from '@dth/ui'
+import { Button, InfoPopup, PathChip, Switch } from '@dth/ui'
 import { InstallCard } from '#/components/settings/install-card.tsx'
-import { PathCode } from '#/components/path-code.tsx'
 import { displayPath } from '#/lib/path.ts'
 import { exportOnlyCandidateKeys } from '#/lib/daz-install.ts'
 import dazLogo from '#/assets/daz-logo.png'
@@ -262,7 +261,7 @@ function DerivedPath({ label, value }: { label: string; value: string }) {
       <dt className="w-44 shrink-0 text-muted-foreground">{label}</dt>
       <dd className="min-w-0 flex-1">
         {value ? (
-          <PathCode path={displayPath(value)} />
+          <PathChip path={displayPath(value)} />
         ) : (
           <span className="text-amber-500">the DAZ Install Manager has no value for this</span>
         )}

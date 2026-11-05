@@ -4,7 +4,24 @@ import { AlertTriangle, Box, Download, Folder, Plus } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
 
-import { Button, Field, InfoPopup, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, Tabs, TabsContent, TabsList, TabsTrigger } from '@dth/ui'
+import {
+  Button,
+  Field,
+  InfoPopup,
+  Input,
+  Label,
+  PathChip,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Switch,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@dth/ui'
 import { FormHeader } from '#/components/form-header.tsx'
 import {
   detectDazInstalls,
@@ -28,7 +45,6 @@ import { useConfirm } from '#/lib/use-confirm.tsx'
 import { displayPath, parentDir } from '#/lib/path.ts'
 import { houdiniVersionFromInstall, matchingHoudiniDocsFolder } from '#/lib/houdini-version.ts'
 import { GuideLink } from '#/components/guide-link.tsx'
-import { PathCode } from '#/components/path-code.tsx'
 import { FolderField, InstallReportList } from '#/components/install-controls.tsx'
 import { DazInstallSection } from '#/components/settings/daz-install-section.tsx'
 import { defaultDazApp, deriveDazPaths } from '#/lib/daz-install.ts'
@@ -1128,7 +1144,7 @@ function SettingsPage() {
                           <>
                             {' '}
                             Generated character scripts install to{' '}
-                            <PathCode
+                            <PathChip
                               path={displayPath(`${settings.dazLibraryFolder}/Scripts/DTH-Character-Studio`)}
                             />
                             .
@@ -1141,7 +1157,7 @@ function SettingsPage() {
                 {dazDerived && (
                   <DerivedTarget value={settings.dazLibraryFolder} missing="library">
                     Generated character scripts go to{' '}
-                    <PathCode
+                    <PathChip
                       path={displayPath(`${settings.dazLibraryFolder}/Scripts/DTH-Character-Studio`)}
                     />
                     .
@@ -1466,7 +1482,7 @@ function SettingsPage() {
                 </InfoPopup>
               </h2>
               {appDataFolder ? (
-                <PathCode path={displayPath(appDataFolder)} />
+                <PathChip path={displayPath(appDataFolder)} />
               ) : (
                 <p className="text-xs text-muted-foreground">Resolving…</p>
               )}
@@ -1738,7 +1754,7 @@ function DerivedTarget({
   return (
     <div className="text-sm">
       <p>
-        Installs into <PathCode path={displayPath(value)} />
+        Installs into <PathChip path={displayPath(value)} />
       </p>
       <p className="mt-1 text-muted-foreground">
         from the {source === 'daz' ? 'Daz' : 'Houdini'} installation above. {children}
@@ -1770,7 +1786,7 @@ function DerivedFieldNote({
       <Label className="mb-1 block">{label}</Label>
       {value ? (
         <p className="text-sm text-muted-foreground">
-          <PathCode path={displayPath(value)} />
+          <PathChip path={displayPath(value)} />
           {children}
         </p>
       ) : (

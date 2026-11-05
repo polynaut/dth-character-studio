@@ -2,8 +2,13 @@ import { useEffect, useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { Button, Label, Modal } from '@dth/ui'
-import { PathCode, tallPathChipClass } from '#/components/path-code.tsx'
+import {
+  Button,
+  Label,
+  Modal,
+  PathChip,
+  tallPathChipClass,
+} from '@dth/ui'
 import { SceneValidationTable } from '#/components/scene-compat.tsx'
 import { relinkScene } from '#/lib/rom/api.ts'
 import { addScenePatch, primaryLinkPatch, useSceneAddValidation } from '#/lib/scene-add.ts'
@@ -152,7 +157,7 @@ export function DetectedFilesWizard({
     >
       <div>
         <Label className="mb-1 block">{isScene ? 'Daz scene' : 'Houdini project'}</Label>
-        <PathCode path={displayPath(current.path)} className={tallPathChipClass} />
+        <PathChip path={displayPath(current.path)} className={tallPathChipClass} />
       </div>
       {isScene ? (
         <SceneValidationTable

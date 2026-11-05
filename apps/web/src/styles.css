@@ -54,6 +54,7 @@
   --info: #38bdf8;
   --info-subtle: #2d3f4b;
   --info-border: #306078;
+  --chip-adornment: #333; /* solid fill of the path chip's copy hint and pencil hover */
   --border: #3b3e44; /* subtle separators */
   --input: #44474e; /* input field borders */
   --ring: #ee7027; /* orange focus ring */

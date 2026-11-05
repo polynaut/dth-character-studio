@@ -5,7 +5,7 @@ import { studioCharScriptsDir } from '#/lib/rom/storage.ts'
 import type { CharacterLocation } from '#/lib/rom/api.ts'
 
 /** A directory plus the known root it lives under, for the two-tone path chip
- *  (`DirPathChip`): the root renders dimmed, the remainder emphasized. */
+ *  (`PathChip`): the root renders dimmed, the remainder emphasized. */
 export interface RootedDir {
   dir: string
   root: string

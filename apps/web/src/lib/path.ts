@@ -148,3 +148,10 @@ export function middleTruncatePath(
   const head = Math.min(max - 1 - tail.length, maxHead)
   return `${path.slice(0, head)}…${tail}`
 }
+
+/** The display-formatted directory of a file path (its last segment dropped). */
+export function displayDirOf(filePath: string): string {
+  const abs = displayPath(filePath)
+  const lastSep = Math.max(abs.lastIndexOf('\\'), abs.lastIndexOf('/'))
+  return lastSep >= 0 ? abs.slice(0, lastSep) : ''
+}

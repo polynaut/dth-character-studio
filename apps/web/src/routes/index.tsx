@@ -2,8 +2,14 @@ import { useEffect, useState } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { FolderOpen, FolderPlus, Trash2 } from 'lucide-react'
 
-import { Button, Input, SidePanel } from '@dth/ui'
-import { PathCode, pathChipClass, tallPathChipClass } from '#/components/path-code.tsx'
+import {
+  Button,
+  Input,
+  PathChip,
+  pathChipClass,
+  SidePanel,
+  tallPathChipClass,
+} from '@dth/ui'
 import { HeaderNav } from '#/components/header-nav.tsx'
 import { formatDate } from '#/components/overview-controls.tsx'
 import { createProject, fetchRecents, forgetRecent, isDirectory, openProject } from '#/lib/rom/api.ts'
@@ -257,7 +263,7 @@ function HomePage() {
             </Button>
             {path && (
               // Path chip (taller, to match the button height) for the picked folder.
-              <PathCode path={displayPath(path)} className={tallPathChipClass} />
+              <PathChip path={displayPath(path)} className={tallPathChipClass} />
             )}
           </div>
           {path && (

@@ -4,8 +4,7 @@ import { Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { BulkDeleteDialog } from '#/components/bulk-delete-dialog.tsx'
-import { PathCode } from '#/components/path-code.tsx'
-import { Button } from '@dth/ui'
+import { Button, PathChip } from '@dth/ui'
 import { deleteProject, LockedFilesError } from '#/lib/rom/api.ts'
 import { displayPath } from '#/lib/path.ts'
 
@@ -87,7 +86,7 @@ export function ProjectOperations({ project }: { project: ProjectInfo }) {
           message={
             <>
               This permanently removes the project folder{' '}
-              <PathCode path={displayPath(project.path)} /> with everything in it (characters,
+              <PathChip path={displayPath(project.path)} /> with everything in it (characters,
               scenes, generated files, notes), plus the project&rsquo;s generated Daz-script folder
               and its Recents entry. This cannot be undone.
             </>

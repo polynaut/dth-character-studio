@@ -4,13 +4,18 @@ import { toast } from 'sonner'
 import { ArrowLeft, CircleX, Pencil, Save, TriangleAlert, Undo2 } from 'lucide-react'
 
 import { Avatar } from '#/components/avatar.tsx'
-import { DirPathChip } from '#/components/dir-path-chip.tsx'
 import { DthExportAction } from '#/components/character/dth-export.tsx'
 import { ExportPipelinePanel } from '#/components/character/export-pipeline-panel.tsx'
 import { FolderMoveChip } from '#/components/folder-move-chip.tsx'
 import { ImageDialog } from '#/components/image-dialog.tsx'
 import { RenameExportsDialog } from '#/components/character/rename-exports-dialog.tsx'
-import { Button, EditableTitle, useModifierHeld, useStickyHeaderInset } from '@dth/ui'
+import {
+  Button,
+  EditableTitle,
+  PathChip,
+  useModifierHeld,
+  useStickyHeaderInset,
+} from '@dth/ui'
 import { applyCharacterRenameCleanup, fetchCharacterRenameImpact } from '#/lib/rom/api.ts'
 import { formatBytes } from '#/lib/rom/rename-exports.ts'
 import { useConfirm } from '#/lib/use-confirm.tsx'
@@ -440,7 +445,7 @@ export function EditorHeader({
                   onMove={folderMove.onMove}
                 />
               ) : (
-                <DirPathChip dir={folderChip.dir} roots={[folderChip.root]} />
+                <PathChip path={folderChip.dir} roots={[folderChip.root]} />
               )}
             </div>
           )}

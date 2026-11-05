@@ -30,6 +30,8 @@ export type UiConfig = {
    * provider-less default is a no-op.
    */
   dismissToasts: () => void
+  /** Show a path in the OS file manager (a file path opens its parent). The default is a no-op. */
+  onRevealPath: (path: string) => void
 }
 
 const defaultConfig: UiConfig = {
@@ -43,6 +45,7 @@ const defaultConfig: UiConfig = {
     console.error(message)
   },
   dismissToasts: () => {},
+  onRevealPath: () => {},
 }
 
 const UiConfigContext = createContext<UiConfig>(defaultConfig)
@@ -59,15 +62,16 @@ export function UiConfigProvider({
   // consumer whenever the host root re-rendered. Note this only helps when the
   // HANDLERS themselves are referentially stable (useCallback / module-level in
   // the host) — inline arrow handlers defeat the memo just the same.
-  const { onNavigate, onOpenExternal, onError, dismissToasts } = value
+  const { onNavigate, onOpenExternal, onError, dismissToasts, onRevealPath } = value
   const merged = useMemo(
     () => ({
       onNavigate: onNavigate ?? defaultConfig.onNavigate,
       onOpenExternal: onOpenExternal ?? defaultConfig.onOpenExternal,
       onError: onError ?? defaultConfig.onError,
       dismissToasts: dismissToasts ?? defaultConfig.dismissToasts,
+      onRevealPath: onRevealPath ?? defaultConfig.onRevealPath,
     }),
-    [onNavigate, onOpenExternal, onError, dismissToasts],
+    [onNavigate, onOpenExternal, onError, dismissToasts, onRevealPath],
   )
   return <UiConfigContext.Provider value={merged}>{children}</UiConfigContext.Provider>
 }

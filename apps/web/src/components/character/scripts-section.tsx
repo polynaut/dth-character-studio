@@ -1,7 +1,5 @@
-import { DirPathChip } from '#/components/dir-path-chip.tsx'
-import { PathCode, tallPathChipClass } from '#/components/path-code.tsx'
 import { GuideLink } from '#/components/guide-link.tsx'
-import { InfoPopup } from '@dth/ui'
+import { InfoPopup, PathChip, tallPathChipClass } from '@dth/ui'
 import { displayPath } from '#/lib/path.ts'
 
 import type { RootedDir } from '#/lib/character-paths.ts'
@@ -64,8 +62,8 @@ export function ScriptsSection({
       </h2>
       {scriptsPath ? (
         // h-9 chip, matching the Export directory chip at the bottom of the panel.
-        <DirPathChip
-          dir={scriptsPath.dir}
+        <PathChip
+          path={scriptsPath.dir}
           roots={[scriptsPath.root]}
           className={tallPathChipClass}
         />
@@ -84,7 +82,7 @@ export function ScriptsSection({
         </h3>
         {exportSet ? (
           <>
-            <PathCode path={displayPath(character.exportPath)} className={tallPathChipClass} />
+            <PathChip path={displayPath(character.exportPath)} className={tallPathChipClass} />
             <p className="mt-3 text-xs text-muted-foreground">
               Where the Daz export scripts deliver, beside the Houdini projects that read it —
               one subfolder per scene (e.g. <code>primary</code>), reached from the{' '}
@@ -108,7 +106,7 @@ export function ScriptsSection({
               Engine.
             </InfoPopup>
           </h3>
-          <PathCode path={finalExportDir} className={tallPathChipClass} />
+          <PathChip path={finalExportDir} className={tallPathChipClass} />
           <p className="mt-3 text-xs text-muted-foreground">
             The final export — what the Houdini DTH networks write, imported from here into
             Unreal Engine.

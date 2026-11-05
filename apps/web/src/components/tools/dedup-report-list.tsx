@@ -1,5 +1,4 @@
-import { Button, InfoPopup } from '@dth/ui'
-import { PathCode } from '#/components/path-code.tsx'
+import { Button, InfoPopup, PathChip } from '@dth/ui'
 import { ReportClose } from '#/components/install-controls.tsx'
 import { displayPath } from '#/lib/path.ts'
 
@@ -287,7 +286,7 @@ export function DedupReportList({
       {!report.dryRun && (
         <p className="text-xs text-muted-foreground">
           Quarantined {report.assetsQuarantined} asset(s) — moved to{' '}
-          <PathCode path={displayPath(report.backupDir)} />. Your downloaded files were not edited.
+          <PathChip path={displayPath(report.backupDir)} />. Your downloaded files were not edited.
           Re-scan to confirm, then delete that folder when satisfied.
         </p>
       )}
