@@ -1,4 +1,4 @@
-import { Button, ToolCard } from '../index.ts'
+import { Button, StatusIndicator, ToolCard } from '../index.ts'
 
 const col = { display: 'flex', flexDirection: 'column', gap: 12, padding: 16, maxWidth: 520 } as const
 
@@ -37,7 +37,9 @@ export function Selected() {
 export function Attention() {
   return (
     <div style={col}>
-      <ToolCard tone="houdini" state="attention" title="Kira_ROM.hip" subtitle="Houdini 22.0.368">Scene file is missing.</ToolCard>
+      <ToolCard tone="houdini" state="attention" title="Kira_ROM.hip" subtitle="Houdini 22.0.368">
+        <StatusIndicator tone="warning">Scene file is missing.</StatusIndicator>
+      </ToolCard>
     </div>
   )
 }

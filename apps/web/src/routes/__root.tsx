@@ -136,6 +136,7 @@ function RootComponent() {
   // SidePanel sweeps stale toasts on open — a leftover toast (top-center,
   // above z-50) would float over the drawer as it slides in.
   const dismissToasts = useCallback(() => void toast.dismiss(), [])
+  // The path may be gone; copying still works either way, so a failed reveal is not an error.
   const onRevealPath = useCallback((path: string) => void revealPath({ data: { path } }).catch(() => {}), [])
 
   // Dev-only handle for AD-HOC harness use: it lets a spec fire demo toasts

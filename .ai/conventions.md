@@ -473,7 +473,7 @@ The persisted `Character` shape is versioned (`CHARACTER_SCHEMA_VERSION` in
 (`packages/ui/src/config.tsx`); the app supplies it in
 `apps/web/src/routes/__root.tsx`. Tailwind reaches the kit via an `@source` line
 in `apps/web/src/styles.css` — kit-only utility classes break without it.
-Export only what the app consumes (`packages/ui/src/index.ts` is the sole entry).
+Export only what the app or its demos consume (`packages/ui/src/index.ts` is the sole entry).
 
 **Design-system ritual.** The rules are `packages/ui/README.md`; the catalog is
 the site in `apps/web/design-system/` (`pnpm design-system`). A new UI state

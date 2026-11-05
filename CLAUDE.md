@@ -75,9 +75,9 @@ inline — no build step, no stale `dist`).
 - **`apps/desktop` (`@dth/desktop`)** — Tauri 2 shell (Rust, `src/lib.rs`). Loads `apps/web` and
   provides native file/dialog/updater access instead of a Node backend.
 
-- **`apps/web/design-system`** — dev-only catalog of the kit's demos and the app's screens, plus
-  an Audit page of remaining drift. Rules: `packages/ui/README.md`. A new UI state gets a screen
-  (`*.screens.tsx`), a new component or variant gets a demo (`*.demo.tsx`).
+Not a fifth package: **`apps/web/design-system`** is a dev-only catalog inside `@dth/web` of the kit's
+demos and the app's screens, plus an Audit page of remaining drift. Rules: `packages/ui/README.md`.
+A new UI state gets a screen (`*.screens.tsx`), a new component or variant gets a demo (`*.demo.tsx`).
 
 ### The core invariant (do not break)
 

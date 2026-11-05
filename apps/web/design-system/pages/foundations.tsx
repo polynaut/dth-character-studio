@@ -113,6 +113,35 @@ export function Type() {
   )
 }
 
+const STEPS: [string, number][] = [['0.5', 2], ['1', 4], ['1.5', 6], ['2', 8], ['3', 12], ['4', 16], ['5', 20], ['6', 24], ['8', 32]]
+const RECOMMENDED = ['gap-1', 'gap-2', 'gap-3', 'p-3', 'p-5']
+const SPACE_USE = /(?<![\w-])(?:p|px|py|pt|pb|pl|pr|m|mx|my|gap|space-x|space-y)-(0\.5|1\.5|1|2|3|4|5|6|8)(?![\w.-])/g
+
+export function Space() {
+  const use = useUsage(SPACE_USE)
+  return (
+    <>
+      <Title lead="Tailwind's 4px scale; no custom spacing tokens. The counts are how often each step appears in padding, margin and gap classes in product code.">Space</Title>
+      <div style={s.card}>
+        {STEPS.map(([name, px]) => (
+          <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
+            <span style={{ ...s.mono, width: 90, color: 'var(--muted-foreground)' }}>{name} {px}px</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ width: px, height: 12, background: 'var(--primary)', borderRadius: 2 }} />
+            </div>
+            <span style={{ ...s.mono, color: 'var(--muted-foreground)' }}>{use ? (use[name] ?? 0) : '…'} uses</span>
+          </div>
+        ))}
+      </div>
+      <h2 style={s.h2}>Which steps to use</h2>
+      <p style={s.p}>
+        Most product spacing is {RECOMMENDED.map((c, i) => <span key={c}>{i > 0 && ', '}<span style={s.mono}>{c}</span></span>)}.
+        Reach for those first; use another step only when the layout needs it.
+      </p>
+    </>
+  )
+}
+
 const RADII = [...css.matchAll(/--radius-(\w+):\s*([^;]+);/g)].map((m) => [m[1], m[2]] as const)
 const ROUNDED_USE = /(?<![\w-])rounded-(none|sm|md|lg|xl|2xl|full)(?![\w-])/g
 

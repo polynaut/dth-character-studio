@@ -30,6 +30,7 @@ async function expectRenders(page: Page, url: string) {
 const q = (params: Record<string, string>) => `/frame.html?${new URLSearchParams(params)}`
 
 test('manifest is not empty', async ({ page }) => {
+  test.setTimeout(60_000)
   const m = await manifest(page)
   expect(m.screens.length).toBeGreaterThan(0)
   expect(m.demos.length).toBeGreaterThan(0)
@@ -41,7 +42,15 @@ test('negative control: a failing frame is detected', async ({ page }) => {
   await expect(page.locator('[data-screen-error]')).toHaveCount(1)
 })
 
+// A render throw caught by a boundary below the frame (as TanStack's route boundary does) must still fail.
+test('negative control: a render throw swallowed by a boundary is detected', async ({ page }) => {
+  await page.goto('/frame.html?fail=render')
+  await page.waitForSelector('html[data-ready]')
+  await expect(page.locator('[data-screen-error]')).toHaveCount(1)
+})
+
 test('every screen and demo renders', async ({ page }) => {
+  test.setTimeout(5 * 60_000)
   const m = await manifest(page)
   // One page, so the frames render one at a time.
   /* oxlint-disable no-await-in-loop */

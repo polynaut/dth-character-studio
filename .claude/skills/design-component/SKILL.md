@@ -20,7 +20,7 @@ A component one feature needs stays in that feature. A second feature needing it
 
 ## Step 2: Write it
 
-- One file in `packages/ui/src/components` (composed) or `primitives` (wraps a native element), exported from `index.ts` only if the app consumes it.
+- One file in `packages/ui/src/components` (composed) or `primitives` (wraps a native element), exported from `index.ts` only if the app or its demo consumes it.
 - Tokens only: Tailwind classes from the token colours (`bg-card`, `text-success`), no palette classes, no colour literals. Status colours come from the `success`/`warning`/`info`/`destructive` sets.
 - No Tauri, router or filesystem imports; host behaviour comes from `UiConfigProvider`.
 - Controlled: `value`/`checked` + `onChange`.

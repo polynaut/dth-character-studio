@@ -143,9 +143,6 @@ const GEN_SECTION = {
   ],
 }
 
-
-/** The virtual world's absolute paths (all '/'-separated — the fake fs is a
- *  string map; nothing here touches a real disk). */
 /**
  * A fake Windows DLL carrying a real `VS_FIXEDFILEINFO` block, so the studio's
  * own reader (`fileVersionFromBytes`, which scans for the 0xFEEF04BD signature)

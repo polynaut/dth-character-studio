@@ -45,5 +45,5 @@ A component one feature needs stays in that feature. When a second feature needs
 ## Demos and screens
 
 - Every component has a `<name>.demo.tsx` next to it; each exported function is one state or variant. `export const height` fixes the frame height for overlays and animated content.
-- A new UI state gets a screen (`*.screens.tsx` in the feature), a new component or variant gets a demo. `pnpm check:design-system` fails if any of them throws.
+- A new UI state gets a screen (`*.screens.tsx` in the feature), a new component or variant gets a demo. `pnpm check:design-system` fails if any of them throws on render, even when a route error boundary would swallow it.
 - Demos use inline styles with `var(--token)` and no Tailwind classes: they sit outside the app's Tailwind scan, so classes would silently not apply.

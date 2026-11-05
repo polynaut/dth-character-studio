@@ -13,7 +13,7 @@ const seedEndpoint = (): Plugin => ({
     server.middlewares.use('/__seed', (req, res) => {
       const opts = new URL(req.url ?? '', 'http://x').searchParams.get('opts') ?? '{}'
       server
-        .ssrLoadModule('/@fs' + here('../smoke/fixtures.ts'))
+        .ssrLoadModule(here('../smoke/fixtures.ts'))
         .then((m) => {
           res.setHeader('content-type', 'application/json')
           res.end(JSON.stringify(m.buildSeed(JSON.parse(opts))))
@@ -28,6 +28,7 @@ const seedEndpoint = (): Plugin => ({
 
 export default defineConfig({
   root: here('.'),
+  cacheDir: here('../node_modules/.vite-design-system'),
   publicDir: here('../public'),
   plugins: [tailwindcss(), viteReact(), seedEndpoint()],
   server: { port: 4334, strictPort: true, fs: { allow: [here('../../..')] } },
