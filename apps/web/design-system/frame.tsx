@@ -54,8 +54,9 @@ function Throws(): ReactNode {
 
 const settle = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)))
 
-// A Map, because the key comes from the URL and `constructor` must not reach Object.prototype.
-const lookup = <T,>(modules: Record<string, T>, key: string) => new Map(Object.entries(modules)).get(key)
+// Compared, never used as a key: the key comes from the URL, and CodeQL flags obj[key]() and Map.get(key)() alike.
+const lookup = <T,>(modules: Record<string, T>, key: string) =>
+  Object.entries(modules).find(([name]) => name === key)?.[1]
 
 async function bootScreen(moduleKey: string, id: string) {
   const load = lookup(screenModules, moduleKey)

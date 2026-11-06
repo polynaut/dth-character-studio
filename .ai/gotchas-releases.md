@@ -75,6 +75,15 @@ Part of the gotchas set — `.ai/gotchas.md` is the index. Learned by measuremen
   that one became a `while (s.endsWith('_'))` loop.
   A *global, unanchored* replace (`/_+/g`, `/[^A-Za-z0-9_]+/g`) is fine — every
   match consumes, so there is nothing to backtrack.
+- **`js/unvalidated-dynamic-method-call` follows a URL value through `Map.get`**
+  — the rule's own help text recommends a `Map`, but `Map.get(key)()` without its
+  `has`/`typeof` guards is still flagged, because the query models it as "maybe
+  not a function". Measured on #1033 (`design-system/frame.tsx`): swapping
+  `modules[key]()` for `new Map(...).get(key)()` left both HIGH alerts open.
+  The fix there compares instead of indexing,
+  `Object.entries(modules).find(([k]) => k === key)?.[1]`, so no data flows from
+  the URL to the callee. Read the query before fixing an alert blind; the local
+  gate can't check it.
 - **A dismissed CodeQL alert comes back as a NEW open alert when the flagged
   line changes** — the fingerprint hashes the sink line's content, so touching
   it (even adding an inline `style` prop) re-files the same finding under a
