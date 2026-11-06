@@ -20,7 +20,10 @@ import {
 // confusing failure a long way from its cause.
 import { SCAN_ANSWER_VERSION } from '../src/lib/rom/houdini-project-cache.ts'
 
+import { DTH_VERSION, P } from './fixture-paths.ts'
 import { installTauriMock } from './tauri-mock.ts'
+
+export { P }
 
 import type { TauriMockSeed } from './tauri-mock.ts'
 import type { Page } from '@playwright/test'
@@ -140,12 +143,6 @@ const GEN_SECTION = {
   ],
 }
 
-/** DTH release version the fixture ships — settings, provenance and the release
- *  folder name below must all agree on it (era-matching keeps staleness quiet). */
-const DTH_VERSION = '2.4.3'
-
-/** The virtual world's absolute paths (all '/'-separated — the fake fs is a
- *  string map; nothing here touches a real disk). */
 /**
  * A fake Windows DLL carrying a real `VS_FIXEDFILEINFO` block, so the studio's
  * own reader (`fileVersionFromBytes`, which scans for the 0xFEEF04BD signature)
@@ -185,36 +182,6 @@ export function scanStoreEntryKey(hipPath: string, exportRoot: string): string {
   return `${hipPath.toLowerCase()}|__MTIME__|${exportRoot.toLowerCase()}||${SCAN_ANSWER_VERSION}`
 }
 
-export const P = {
-  appData: 'C:/Users/You/AppData/Local/com.polynaut.dthcharacterstudio',
-  dazLib: 'D:/DAZ 3D/My DAZ 3D Library',
-  release: `X:/DazToHue/Releases/DazToHue-${DTH_VERSION}`,
-  posesRoot: `X:/DazToHue/Releases/DazToHue-${DTH_VERSION}/Daz Studio Content/DazToHue/Poses`,
-  project: 'D:/DTH Projects/Demo',
-  dcsp: 'D:/DTH Projects/Demo/Demo.dcsp',
-  charFolder: 'D:/DTH Projects/Demo/Kira',
-  /** The character's app-internal folder in the project's `.dcsmeta`: the
-   *  generated PoseAsset CSV, the run log, the Execute stamps, the
-   *  export-folder record. Nothing the user ever opens. */
-  charMeta: 'D:/DTH Projects/Demo/.dcsmeta/characters/Kira',
-  /** Where Save installs the character's Daz scripts (project/character names). */
-  scriptsDir: 'D:/DAZ 3D/My DAZ 3D Library/Scripts/DTH-Character-Studio/Demo/Kira',
-  /** The character's primary Daz scene — mandatory in the real create flow, so
-   *  the demo character carries one (the docs shot must show a linked scene). */
-  scene: 'D:/DTH Projects/Demo/Kira/daz3d/KiraDefault_G9_GP.duf',
-  /** An extra (outfit) scene for the multi-scene docs/smoke states — linked via
-   *  `extraScenes` when SeedOptions.extraScene is on. */
-  scene2: 'D:/DTH Projects/Demo/Kira/daz3d/KiraSummertide_G9_GP.duf',
-  /** A linked Houdini project (inside the char folder → the card chip reads %CHAR%\houdini). */
-  houdini: 'D:/DTH Projects/Demo/Kira/houdini/Kira.hip',
-  /** The demo character's Houdini folder — where its `.hiplc` files live,
-   *  beside the shared `houdini-project` folder. */
-  houdiniDir: 'D:/DTH Projects/Demo/Kira/houdini',
-  /** The demo character's export directory: FIXED at `<char>/<houdini>/daz-export`
-   *  since schema v29, and moved into the Houdini folder by the export-root move
-   *  — derived, never picked (the panel is read-only). */
-  exportDir: 'D:/DTH Projects/Demo/Kira/houdini/daz-export',
-}
 
 /** The hair item the demo character lists on its primary scene (Hair-items
  *  feature). Seeded as a scene wearable too, so it resolves instead of flagging. */
@@ -324,7 +291,7 @@ export interface SeedOptions {
 export function buildSeed(opts: SeedOptions = {}): TauriMockSeed {
   const character = characterSchema.parse({
     schemaVersion: CHARACTER_SCHEMA_VERSION,
-    id: 'char-kira',
+    id: P.characterId,
     name: 'Kira',
     genesis: 'G9',
     gender: 'female',

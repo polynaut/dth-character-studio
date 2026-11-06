@@ -879,3 +879,26 @@ The rule: **existence of the artifact gates the row that OPENS it; nothing gates
 the row that REBUILDS it.** Freshness survives as tooltip text on the open row
 ("saved by an earlier run") — the honest use of a soft signal: inform the
 choice, never remove it.
+
+## The design system site is its own Vite root, and that breaks three assumptions (measured 2026-11-05)
+
+- **Tailwind's source detection is rooted at the Vite root**, not at the file
+  that imports the CSS. With the root at `apps/web/design-system`, importing
+  `src/styles.css` rendered the real routes with no app utilities at all (no
+  padding, no centring). `design-system/frame.css` imports `../src/styles.css`
+  and adds an explicit `@source "../src"`; the frame imports that, never
+  `#/styles.css`. `packages/ui` still reaches Tailwind through the `@source` in
+  `styles.css`.
+- **Demos and the site use inline styles with `var(--token)`, not classes.**
+  `*.demo.tsx` and the site pages are outside what Tailwind scans for the app,
+  so a class there silently does nothing and the demo looks plausible but wrong.
+  Tokens still work because `:root` is global.
+- **`clickByName` (`design-system/drive.ts`) dispatches the full pointer
+  sequence** (`pointerdown`, `mousedown`, `pointerup`, `mouseup`, `click`).
+  `el.click()` alone did not activate a Radix tab (`aria-selected` stayed
+  false). It also matches only interactive elements, so a regex can't land on a
+  dialog or tablist ancestor whose text contains the name.
+- **Playwright clears `outputDir` at run start.** Smoke's `test-results/` is
+  also what CI uploads as evidence, so `playwright.design-system.config.ts`
+  writes to `test-results-design-system/`. Sharing the directory wipes smoke
+  traces whenever the check runs after it.

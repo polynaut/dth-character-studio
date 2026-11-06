@@ -3,9 +3,7 @@ import { Link, useRouter } from '@tanstack/react-router'
 import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { PathCode } from '#/components/path-code.tsx'
-import { DirPathChip } from '#/components/dir-path-chip.tsx'
-import { Button, InfoPopup } from '@dth/ui'
+import { Button, InfoPopup, PathChip } from '@dth/ui'
 import { clearProductScan, fetchProductScan } from '#/lib/rom/api.ts'
 import { openExternal } from '#/lib/desktop.ts'
 import { displayPath } from '#/lib/path.ts'
@@ -141,7 +139,7 @@ function CharacterProductsTabImpl({
           of one scene replaces only that scene's entry. You can also run{' '}
           <code>Scan_Products_{characterSlug(character)}.dsa</code> by hand from here:
         </p>
-        {scriptsPath && <DirPathChip dir={scriptsPath.dir} roots={[scriptsPath.root]} />}
+        {scriptsPath && <PathChip path={scriptsPath.dir} roots={[scriptsPath.root]} />}
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => void router.invalidate()}>
@@ -171,7 +169,7 @@ function CharacterProductsTabImpl({
             <p className="mb-2 text-xs text-muted-foreground">
               The Products panel below is these merged. <strong>Clear</strong> discards the lot.
             </p>
-            {productScan?.path && <PathCode path={productScan.path} />}
+            {productScan?.path && <PathChip path={productScan.path} />}
             <div className="mt-3 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>

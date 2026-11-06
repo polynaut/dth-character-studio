@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { AlertTriangle, Plus, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { DirPathChip, displayDirOf } from '#/components/dir-path-chip.tsx'
 import { HoudiniUtilsPanel } from '#/components/character/houdini-utils-panel.tsx'
 import { Portrait } from '#/components/portrait.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
@@ -10,11 +9,12 @@ import { SceneCopyDialog } from '#/components/scene-copy-dialog.tsx'
 import { CardReorderContext, SortableCard } from '#/components/sortable-cards.tsx'
 import {
   Button,
-  Input,
   InfoPopup,
+  Input,
   Label,
   LinkedAssetCard,
   Modal,
+  PathChip,
   RemoveAssetDialog,
   Select,
   SelectContent,
@@ -41,7 +41,7 @@ import { DTH_FPS, formatFps, formatFrameRange, sameFps } from '#/lib/rom/houdini
 import { isHoudiniProjectScanning } from '#/lib/rom/houdini-scan-progress.ts'
 import { useHoudiniScanning } from '#/lib/use-houdini-scanning.ts'
 import { pickHipPath } from '#/lib/desktop.ts'
-import { browseStart, displayPath, normalizePath, parentDir } from '#/lib/path.ts'
+import { browseStart, displayDirOf, displayPath, normalizePath, parentDir } from '#/lib/path.ts'
 import { characterHoudiniDir } from '#/lib/scene-subfolder.ts'
 
 /**
@@ -356,8 +356,8 @@ export function HoudiniProjectsField({
   const emptyStateDir = houdiniSubdir ? displayPath(`${charFolder}/${houdiniSubdir}`) : ''
   const chipDir = hasProjects ? displayDirOf(projects[0] ?? '') : emptyStateDir
   const projectDirChip = chipDir ? (
-    <DirPathChip
-      dir={chipDir}
+    <PathChip
+      path={chipDir}
       roots={[displayPath(charFolder), displayPath(location.libraryFolder)]}
     />
   ) : null

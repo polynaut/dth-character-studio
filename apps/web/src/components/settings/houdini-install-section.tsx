@@ -1,8 +1,7 @@
 import { AlertTriangle, Loader2, Pencil, RefreshCw } from 'lucide-react'
 
-import { Button, InfoPopup } from '@dth/ui'
+import { Button, InfoPopup, PathChip } from '@dth/ui'
 import { InstallCard } from '#/components/settings/install-card.tsx'
-import { PathCode } from '#/components/path-code.tsx'
 import { displayPath } from '#/lib/path.ts'
 import houdiniLogo from '#/assets/houdini-logo.svg'
 
@@ -165,7 +164,7 @@ function DerivedPath({ label, value }: { label: string; value: string }) {
       <dt className="w-44 shrink-0 text-muted-foreground">{label}</dt>
       <dd className="min-w-0 flex-1">
         {value ? (
-          <PathCode path={displayPath(value)} />
+          <PathChip path={displayPath(value)} />
         ) : (
           <span className="text-amber-500">
             not found — set it below, or start this Houdini once to create it

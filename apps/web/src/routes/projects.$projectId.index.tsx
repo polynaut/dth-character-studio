@@ -2,7 +2,27 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, createFileRoute, notFound, useRouter } from '@tanstack/react-router'
 import { FolderOpen, PaintBucket, UserPlus, X } from 'lucide-react'
 
-import { Button, EditableTitle, Field, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SidePanel, Switch, Tabs, TabsContent, TabsList, TabsTrigger, Tag, cn } from '@dth/ui'
+import {
+  Button,
+  cn,
+  EditableTitle,
+  Field,
+  Input,
+  PathChip,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  SidePanel,
+  Switch,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+  Tag,
+  tallPathChipClass,
+} from '@dth/ui'
 import { LANDSCAPE_LIFT, Portrait } from '#/components/portrait.tsx'
 import { ScenePreview } from '#/components/scene-preview.tsx'
 import { BulkDeleteDialog } from '#/components/bulk-delete-dialog.tsx'
@@ -45,7 +65,6 @@ import { pickDufPath } from '#/lib/desktop.ts'
 import { useFileDrop } from '#/lib/file-drop.ts'
 import { PRIMARY_SCENE_SUBFOLDER } from '#/lib/scene-subfolder.ts'
 import { browseStart, dirOf, displayPath, normalizePathLower, stripTrailingSeparators } from '#/lib/path.ts'
-import { PathCode, tallPathChipClass } from '#/components/path-code.tsx'
 import { HeaderNav } from '#/components/header-nav.tsx'
 import { SceneValidationTable } from '#/components/scene-compat.tsx'
 import { UnrealProjectsBar } from '#/components/unreal-projects-field.tsx'
@@ -519,7 +538,7 @@ function ProjectCharactersPage() {
           />
           <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
             <Tag>Project</Tag>
-            <PathCode path={displayPath(project.path)} />
+            <PathChip path={displayPath(project.path)} />
           </div>
         </div>
         <HeaderNav />
@@ -560,7 +579,7 @@ function ProjectCharactersPage() {
           </Button>
           {scenePath.trim() && (
             // Path chip (taller, to match the button height) for the picked scene.
-            <PathCode path={displayPath(scenePath)} className={tallPathChipClass} />
+            <PathChip path={displayPath(scenePath)} className={tallPathChipClass} />
           )}
         </div>
 
@@ -833,7 +852,7 @@ function ProjectCharactersPage() {
                   return (
                     <li key={p.path} className="flex flex-wrap items-center gap-x-2">
                       <span>
-                        <PathCode path={displayPath(p.path)} /> — {p.reason}
+                        <PathChip path={displayPath(p.path)} /> — {p.reason}
                       </span>
                       {deletable && (
                         <button
@@ -1052,7 +1071,7 @@ function ProjectCharactersPage() {
           names={[problemDeleteFolder.split(/[\\/]/).pop() ?? problemDeleteFolder]}
           message={
             <>
-              Permanently deletes <PathCode path={displayPath(problemDeleteFolder)} /> with
+              Permanently deletes <PathChip path={displayPath(problemDeleteFolder)} /> with
               everything inside it — the unreadable definition plus any scenes and files in the
               folder — and the app data stored for it. This cannot be undone.
             </>

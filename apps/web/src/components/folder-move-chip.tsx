@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
-import { Button, Input } from '@dth/ui'
-import { DirPathChip } from '#/components/dir-path-chip.tsx'
+import { Button, Input, PathChip } from '@dth/ui'
 import { menuSurfaceClass } from '#/components/rom/cells.tsx'
 
 /**
- * A {@link DirPathChip} with an edit-to-move affordance — the shared UX behind
+ * A {@link PathChip} with an edit-to-move affordance — the shared UX behind
  * "move this folder/scene" everywhere it appears (the character header's folder
  * chip, the project overview's project-folder chip, the Daz scenes chips). The
  * pencil opens a FLOATING one-line panel right under the chip — dropdown-menu
@@ -30,11 +29,11 @@ export function FolderMoveChip({
   onMove,
   disabled,
 }: {
-  /** Display-formatted directory shown in the chip (see DirPathChip). */
+  /** Display-formatted directory shown in the chip (see PathChip). */
   dir: string
   /** Display-formatted candidate roots, most specific first (dimmed prefix). */
   roots: Array<string>
-  /** What a click copies when it differs from the displayed `dir` (see DirPathChip). */
+  /** What a click copies when it differs from the displayed `dir` (see PathChip). */
   copyPath?: string
   /** Seed for the edit input (what "moving" changes — a subfolder or a path). */
   editValue: string
@@ -92,10 +91,10 @@ export function FolderMoveChip({
 
   return (
     <span ref={rootRef} className="relative inline-flex max-w-full">
-      <DirPathChip
-        dir={dir}
+      <PathChip
+        path={copyPath ?? dir}
+        display={dir}
         roots={roots}
-        copyPath={copyPath}
         // The pencil toggles the panel, like a dropdown trigger.
         onEdit={disabled ? undefined : () => setDraft(draft === null ? editValue : null)}
       />

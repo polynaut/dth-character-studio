@@ -2,9 +2,16 @@ import { useState } from 'react'
 import { FolderOpen } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { Button, Field, Input, Switch, Textarea } from '@dth/ui'
+import {
+  Button,
+  Field,
+  Input,
+  PathChip,
+  Switch,
+  tallPathChipClass,
+  Textarea,
+} from '@dth/ui'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
-import { PathCode, tallPathChipClass } from '#/components/path-code.tsx'
 import { ScenePreview } from '#/components/scene-preview.tsx'
 import houdiniLogo from '#/assets/houdini-logo.svg'
 import { createAsset } from '#/lib/rom/api.ts'
@@ -157,7 +164,7 @@ export function AssetForm({
                 ? 'Choose Houdini project…'
                 : 'Choose Daz scene…'}
           </Button>
-          {activePath && <PathCode path={displayPath(activePath)} className={tallPathChipClass} />}
+          {activePath && <PathChip path={displayPath(activePath)} className={tallPathChipClass} />}
         </div>
       </FileDropZone>
       {activePath && (

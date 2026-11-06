@@ -65,7 +65,7 @@ export function TooltipHost() {
     // cancel-listener pair — enough children and the tooltip never appears.
     let pending: HTMLElement | null = null
     // The anchor whose tooltip a click just dismissed — if the click flips its
-    // title (PathCode's "Copied!"), the observer below brings the tooltip back.
+    // title (PathChip's "Copied!"), the observer below brings the tooltip back.
     let clicked: HTMLElement | null = null
     let timer = 0
     // Was the user's last input the KEYBOARD? It decides whether a `focusin` is
@@ -183,7 +183,7 @@ export function TooltipHost() {
 
     // React re-renders write a fresh `title` (it diffs against its own vdom, not
     // the stolen attribute). Re-steal live so a tooltip that's on screen tracks
-    // the change — this is what lets click feedback like PathCode's "Copied!"
+    // the change — this is what lets click feedback like PathChip's "Copied!"
     // reach the styled tooltip at all.
     const observer = new MutationObserver((mutations) => {
       // An anchor REMOVED from the DOM emits no mouseleave and no blur — a

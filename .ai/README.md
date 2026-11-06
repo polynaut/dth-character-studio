@@ -16,6 +16,7 @@ documentation, not archaeology.
 | [schema-history.md](schema-history.md) | you need to know what a specific `schemaVersion` / `RUNTIME_VERSION` number *means* — the per-version lookup table the migration code is written against. Bumping either constant means adding its entry here. |
 | [testing.md](testing.md) | you write or run tests: the four layers, what pins what, the screenshot suite. |
 | [docs-site.md](docs-site.md) | you touch "the docs page": the public Pages site — `site/`, `docs/guide/`, the guide build/deploy, previews, guide search. |
+| [design system](../packages/ui/README.md) | you build or review UI: the kit rules (tokens, which button, which status display) and the site in `apps/web/design-system/`. Skills: `/design-component`, `/design-screen`, `/design-review`. |
 | [release.md](release.md) | you ship: the release train, the signing gate, publish troubleshooting. |
 | [gotchas.md](gotchas.md) | before debugging anything weird — it routes to the `gotchas-*.md` area files (core, daz, desktop, web, releases): measured facts that code alone won't tell you. |
 

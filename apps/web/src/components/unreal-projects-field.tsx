@@ -4,7 +4,13 @@ import { AlertTriangle, ChevronLeft, ChevronRight, ExternalLink, FolderOpen, Plu
 import { toast } from 'sonner'
 
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
-import { Button, RemoveAssetDialog, cn, useModifierHeld } from '@dth/ui'
+import {
+  Button,
+  cn,
+  PathChip,
+  RemoveAssetDialog,
+  useModifierHeld,
+} from '@dth/ui'
 import unrealLogo from '#/assets/unreal-logo.svg'
 import { UnrealUtilsPanel, uprojectDisplayName } from '#/components/unreal-utils-panel.tsx'
 import {
@@ -16,7 +22,6 @@ import {
 } from '#/lib/rom/api.ts'
 import { bridgeOutdated } from '#/lib/rom/unreal-jobs.ts'
 import { pickUprojectPath } from '#/lib/desktop.ts'
-import { PathCode } from '#/components/path-code.tsx'
 import { browseStart, displayPath, middleTruncatePath, normalizePath, parentDir } from '#/lib/path.ts'
 
 import type { ProjectInfo } from '#/lib/rom/api.ts'
@@ -85,13 +90,13 @@ function UnrealCard({
           {/* A real path chip: click copies the full path, Alt+click reveals it
               in Explorer. Middle-ellipsized to a character budget so the drive
               AND the .uproject name always read. */}
-          <PathCode
+          <PathChip
             path={shownPath}
             variant="secondary"
             className="text-[11px] leading-4 whitespace-nowrap"
           >
             {chipText}
-          </PathCode>
+          </PathChip>
         </span>
         {/* What this project still needs, in ONE amber mark — the Utils button
             beside it is neutral (it is a drawer, not an action), so without

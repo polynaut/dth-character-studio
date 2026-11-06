@@ -2,9 +2,8 @@ import { useEffect, useState } from 'react'
 
 import { ChevronDown, ChevronRight, FileText, FolderOpen, Loader2 } from 'lucide-react'
 
-import { Button, Modal } from '@dth/ui'
+import { Button, Modal, PathChip } from '@dth/ui'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
-import { PathCode } from '#/components/path-code.tsx'
 import {
   MultipleDazInstancesError,
   abortSceneScan,
@@ -339,7 +338,7 @@ export function ScanCsvPickerDialog({
                 <div className="border-t px-3 py-2 text-xs">
                   {/* Click copies the FULL path, Alt+click reveals it — the chip
                       only displays a start…end truncation. */}
-                  <PathCode path={scan.path}>{truncatePath(scan.path)}</PathCode>
+                  <PathChip path={scan.path}>{truncatePath(scan.path)}</PathChip>
                 </div>
               )}
             </li>

@@ -21,7 +21,9 @@
     "smoke": "playwright test",
     "screenshots": "playwright test --config playwright.screenshots.config.ts",
     "typecheck": "tsc --noEmit",
-    "clips": "playwright test --config playwright.clips.config.ts"
+    "clips": "playwright test --config playwright.clips.config.ts",
+    "design-system": "vite --config design-system/vite.config.ts --strictPort",
+    "check:design-system": "playwright test --config playwright.design-system.config.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

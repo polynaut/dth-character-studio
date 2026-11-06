@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
 
-import { Button, InfoPopup, useRefetchOnFocus } from '@dth/ui'
-import { PathCode } from '#/components/path-code.tsx'
+import { Button, InfoPopup, PathChip, useRefetchOnFocus } from '@dth/ui'
 import { detectUnrealEngines } from '#/lib/rom/api.ts'
 import { displayPath } from '#/lib/path.ts'
 import unrealLogo from '#/assets/unreal-logo.svg'
@@ -101,7 +100,7 @@ export function UnrealInstallSection() {
               <img src={unrealLogo} alt="" aria-hidden className="size-8 shrink-0 object-contain" />
               <div className="min-w-0 flex-1">
                 <div className="font-medium">{install.name}</div>
-                <PathCode path={displayPath(install.path)} />
+                <PathChip path={displayPath(install.path)} />
                 {!install.exists && (
                   <p className="mt-1 flex items-center gap-1 text-xs text-amber-500">
                     <AlertTriangle className="size-3 shrink-0" /> folder not found — the launcher

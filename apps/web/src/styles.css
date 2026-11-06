@@ -10,6 +10,9 @@
  * card's `w-80`, `group/card`) are generated. Without this the cards render
  * unstyled/narrow. Glob form is used so the path can't silently no-op. */
 @source '../../../packages/ui/src/**/*.{ts,tsx}';
+@source not '../design-system/**';
+@source not '../../../packages/ui/src/**/*.demo.tsx';
+@source not './**/*.screens.tsx';
 
 @import 'tw-animate-css';
 
@@ -39,6 +42,22 @@
   --accent-foreground: #ededed;
   --destructive: #e5605e; /* errors — a red readable on dark */
   --destructive-foreground: #fbe9e9;
+  --destructive-text: #f59a98;
+  --destructive-subtle: #443b3f;
+  --destructive-border: #725456;
+  --warning: #f59e0b;
+  --warning-subtle: #443b2e;
+  --warning-border: #725525;
+  --success: #34d399;
+  --success-subtle: #2d423f;
+  --success-border: #2f6857;
+  --info: #38bdf8;
+  --info-subtle: #2d3f4b;
+  --info-border: #306078;
+  --chip-adornment: #333; /* solid fill of the path chip's copy hint and pencil hover */
+  --duration-fast: 160ms; /* hover and colour changes on controls */
+  --duration-base: 300ms; /* overlays, panels, things changing place */
+  --duration-slow: 500ms; /* progress settling */
   --border: #3b3e44; /* subtle separators */
   --input: #44474e; /* input field borders */
   --ring: #ee7027; /* orange focus ring */
@@ -79,6 +98,18 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-text: var(--destructive-text);
+  --color-destructive-subtle: var(--destructive-subtle);
+  --color-destructive-border: var(--destructive-border);
+  --color-warning: var(--warning);
+  --color-warning-subtle: var(--warning-subtle);
+  --color-warning-border: var(--warning-border);
+  --color-success: var(--success);
+  --color-success-subtle: var(--success-subtle);
+  --color-success-border: var(--success-border);
+  --color-info: var(--info);
+  --color-info-subtle: var(--info-subtle);
+  --color-info-border: var(--info-border);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -167,9 +198,9 @@ pre code {
 button,
 a {
   transition:
-    background-color 160ms ease,
-    color 160ms ease,
-    border-color 160ms ease;
+    background-color var(--duration-fast) ease,
+    color var(--duration-fast) ease,
+    border-color var(--duration-fast) ease;
 }
 
 @layer base {
@@ -477,7 +508,7 @@ a {
   width: var(--export-progress, 0%);
   background: var(--export-progress-color, var(--color-emerald-600));
   opacity: 0;
-  transition: width 500ms;
+  transition: width var(--duration-slow);
   pointer-events: none;
 }
 @supports (animation-timeline: scroll()) {
@@ -872,7 +903,7 @@ a {
    stable `view-transition-name` + the `scene-pill` class, so the browser morphs
    each one from its old slot to its new one. Keep it a quick, subtle slide. */
 ::view-transition-group(.scene-pill) {
-  animation-duration: 300ms;
+  animation-duration: var(--duration-base);
   /* Ease-in: pills drift slowly out of their old slot, then accelerate into the new
      one (slow start, quick finish) — cubic-bezier(easeInCubic). */
   animation-timing-function: cubic-bezier(0.32, 0, 0.67, 0);

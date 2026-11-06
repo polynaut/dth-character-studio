@@ -2,21 +2,13 @@ import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { Check, Copy, FolderOpen, Pencil } from 'lucide-react'
 
-import { cn, useModifierHeld } from '@dth/ui'
-import { revealPath } from '#/lib/rom/api.ts'
+import { cn } from '../cn.ts'
+import { useUiConfig } from '../config.tsx'
+import { useModifierHeld } from '../hooks/use-modifier-held.ts'
 
 /**
- * Renders a filesystem path as an inline code chip (the app's "backtick" style).
- * Clicking the chip copies its full text to the clipboard, and a copy icon
- * overlaps the top-right corner on hover.
- *
- * `path` is both shown and copied. For a two-tone display (e.g. a dimmed
- * library root + an emphasized tail) pass custom `children` — `path` is still
- * what gets copied.
- */
-/**
- * Surface classes for a path chip, shared by `PathCode` and non-interactive
- * chips (e.g. inside a button, where `PathCode`'s click can't be nested).
+ * Surface classes for a path chip, shared by `PathChip` and non-interactive
+ * chips (e.g. inside a button, where `PathChip`'s click can't be nested).
  * `secondary` reads on a light / coloured background — it overrides the global
  * (unlayered) `code` rule's muted fill with `!`.
  */
@@ -33,20 +25,33 @@ export function pathChipClass(variant: 'default' | 'secondary' = 'default'): str
  *  `padding: 2px 6px` and beats layered utilities. */
 export const tallPathChipClass = 'flex min-h-9 items-center px-2.5! py-1.5!'
 
-export function PathCode({
+/**
+ * A filesystem path as an inline code chip. Click copies `path`; Alt+click
+ * reveals it in the OS file manager (via `UiConfig.onRevealPath`).
+ */
+export function PathChip({
   path,
+  display,
+  roots,
   children,
   className,
   variant = 'default',
   onEdit,
 }: {
+  /** What a click copies. */
   path: string
+  /** Shown text; defaults to `path`. */
+  display?: string
+  /** Two-tone display: the first of these that prefixes `display` (case-insensitive) is dimmed. Most specific first. */
+  roots?: string[]
+  /** Custom display; wins over `display` and `roots`. */
   children?: ReactNode
   className?: string
   variant?: 'default' | 'secondary'
   /** When set, a small edit (pencil) button renders in front of the chip. */
   onEdit?: () => void
 }) {
+  const { onRevealPath } = useUiConfig()
   const [copied, setCopied] = useState(false)
   // Alt held → the hover overlay previews the alternate action (open folder).
   const altHeld = useModifierHeld('Alt')
@@ -63,11 +68,7 @@ export function PathCode({
   }
 
   function reveal() {
-    // Alt+click: jump to the path in the OS file manager instead of copying
-    // (a file path opens its parent folder) — the app-wide "show in Explorer"
-    // hotkey, same as on the Unreal cards. Errors surface as a toast-less
-    // no-op — the path may be gone; copying still works either way.
-    void revealPath({ data: { path } }).catch(() => {})
+    onRevealPath(path)
   }
 
   return (
@@ -75,8 +76,7 @@ export function PathCode({
       role="button"
       tabIndex={0}
       data-alt-reveal=""
-      // No tooltip by design — the chip behaviors (click = copy, Alt+click =
-      // Explorer) are documented in the guide; the check overlay confirms a copy.
+      // No tooltip by design: the guide documents click and Alt+click; the check overlay confirms a copy.
       aria-label={copied ? 'Copied' : 'Copy path'}
       onClick={(e) => (e.altKey ? reveal() : void copy())}
       onKeyDown={(e) => {
@@ -89,20 +89,12 @@ export function PathCode({
       className="group/path relative inline-flex max-w-full cursor-pointer align-middle"
     >
       {onEdit && (
-        // No title tooltip (the pencil speaks for itself). A GHOST at rest —
-        // just the muted glyph — that grows a copy-hint-style box on hover
-        // (border + fill + shadow; the transparent border reserves the box so
-        // nothing shifts). FIXED size-5 (not padding-driven): the chip's code
-        // box is ~20px, and a taller button would stretch every editable chip
-        // 2px past the pencil-less ones.
+        // Fixed size-5, not padding-driven: a taller button would stretch every editable chip 2px past the pencil-less ones.
         <button
           type="button"
           aria-label="Edit path"
-          // The hover box = EXACTLY the copy hint's (solid #333 + white/20
-          // edge, see below): one adornment family, unaffected by whatever
-          // surface the chip sits on (dark page or tinted card).
-          className="mr-1 inline-flex size-5 shrink-0 items-center justify-center self-center rounded border border-transparent text-muted-foreground transition-colors hover:border-white/20 hover:bg-[#333] hover:text-foreground hover:shadow-sm"
-          // The chip's own click copies — editing must not also copy.
+          className="mr-1 inline-flex size-5 shrink-0 items-center justify-center self-center rounded border border-transparent text-muted-foreground transition-colors hover:border-white/20 hover:bg-(--chip-adornment) hover:text-foreground hover:shadow-sm"
+          // The chip's own click copies; editing must not also copy.
           onClick={(e) => {
             e.stopPropagation()
             onEdit()
@@ -120,14 +112,11 @@ export function PathCode({
           className,
         )}
       >
-        {children ?? path}
+        {children ?? (roots ? <TwoTone text={display ?? path} roots={roots} /> : (display ?? path))}
       </code>
       <span
         aria-hidden
-        // Solid #333 + white/20 edge at a FIXED size-5 — the shared adornment
-        // recipe, byte-identical to the edit pencil's box (20×20), independent
-        // of the surface below.
-        className="pointer-events-none absolute -top-2 -right-2 hidden size-5 items-center justify-center rounded border border-white/20 bg-[#333] shadow-sm group-hover/path:flex"
+        className="pointer-events-none absolute -top-2 -right-2 hidden size-5 items-center justify-center rounded border border-white/20 bg-(--chip-adornment) shadow-sm group-hover/path:flex"
       >
         {copied ? (
           <Check className="size-3 text-primary" />
@@ -139,5 +128,19 @@ export function PathCode({
         )}
       </span>
     </span>
+  )
+}
+
+function TwoTone({ text, roots }: { text: string; roots: string[] }) {
+  const lower = text.toLowerCase()
+  const rootLen =
+    roots
+      .map((root) => (root && lower.startsWith(root.toLowerCase()) ? root.length : 0))
+      .find((len) => len > 0) ?? 0
+  return (
+    <>
+      {rootLen > 0 && <span className="text-muted-foreground/60">{text.slice(0, rootLen)}</span>}
+      <span className="text-foreground/80">{text.slice(rootLen)}</span>
+    </>
   )
 }

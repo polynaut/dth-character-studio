@@ -3,12 +3,22 @@ import type { MutableRefObject, ReactNode, Ref } from 'react'
 import { FolderInput, Link2, Plus, Waves } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { DirPathChip, displayDirOf } from '#/components/dir-path-chip.tsx'
 import { FolderMoveChip } from '#/components/folder-move-chip.tsx'
 import { MultipleDazModal } from '#/components/multiple-daz-modal.tsx'
-import { PathCode, tallPathChipClass } from '#/components/path-code.tsx'
 import { Portrait } from '#/components/portrait.tsx'
-import { Button, InfoPopup, Input, Label, LinkedAssetCard, Modal, RemoveAssetDialog, useModifierHeld, useRefetchOnFocus } from '@dth/ui'
+import {
+  Button,
+  InfoPopup,
+  Input,
+  Label,
+  LinkedAssetCard,
+  Modal,
+  PathChip,
+  RemoveAssetDialog,
+  tallPathChipClass,
+  useModifierHeld,
+  useRefetchOnFocus,
+} from '@dth/ui'
 import { GuideLink } from '#/components/guide-link.tsx'
 import { PrimaryBadge } from '#/components/primary-badge.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
@@ -54,7 +64,7 @@ import {
   sceneSubfolderConflict,
   suggestSceneSubfolder,
 } from '#/lib/scene-subfolder.ts'
-import { browseStart, displayPath, extrasWithoutPrimary, normalizePath, parentDir } from '#/lib/path.ts'
+import { browseStart, displayDirOf, displayPath, extrasWithoutPrimary, normalizePath, parentDir } from '#/lib/path.ts'
 import { addScenePatch, primaryLinkPatch } from '#/lib/scene-add.ts'
 import { seedSceneHair } from '#/lib/groom-detect.ts'
 
@@ -1240,7 +1250,7 @@ export function DazSceneField({
       disabled={busy}
     />
   ) : (
-    <DirPathChip dir={sceneDir} roots={[displayPath(charFolder), displayPath(location.libraryFolder)]} />
+    <PathChip path={sceneDir} roots={[displayPath(charFolder), displayPath(location.libraryFolder)]} />
   )
 
   /** Where a scene lives — EVERY card shows its chip: relative to the
@@ -1262,7 +1272,7 @@ export function DazSceneField({
     const cut = Math.max(shown.lastIndexOf('\\'), shown.lastIndexOf('/'))
     const scenesRootShown = sceneDirRel ? displayPath(`./${sceneDirRel}`) : ''
     const roots = [scenesRootShown, cut > 0 ? shown.slice(0, cut) : ''].filter(Boolean)
-    if (!inside) return <DirPathChip dir={shown} roots={roots} copyPath={displayPath(dir)} />
+    if (!inside) return <PathChip path={displayPath(dir)} display={shown} roots={roots} />
     // The scenes-root prefix stays fixed (the root itself moves via the
     // section chip above the cards). An EMPTY input is refused: every scene
     // lives in its own subfolder now (the export nests under its name), so a
@@ -1574,8 +1584,8 @@ export function DazSceneField({
             No Daz scene yet. Save your scene (.duf) from Daz Studio into this character&apos;s
             scenes folder, then link it here — or drop the file anywhere on this panel:
           </p>
-          <DirPathChip
-            dir={displayPath(
+          <PathChip
+            path={displayPath(
               `${charFolder}/${cleanSub(defaultSubdir)}/${PRIMARY_SCENE_SUBFOLDER}`,
             )}
             roots={[displayPath(charFolder), displayPath(location.libraryFolder)]}
@@ -1648,7 +1658,7 @@ export function DazSceneField({
           >
             <div>
               <Label className="mb-1 block">Selected file</Label>
-              <PathCode path={displayPath(pendingAdd)} className={tallPathChipClass} />
+              <PathChip path={displayPath(pendingAdd)} className={tallPathChipClass} />
             </div>
             {addValidation}
             {replaceOldBlock}

@@ -1,0 +1,3 @@
+@import '../src/styles.css';
+/* Tailwind's auto-detection is rooted at the Vite root (this folder), so the app's own sources need an explicit @source. */
+@source '../src/**/*.{ts,tsx}';

@@ -11,9 +11,14 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { Button, InfoPopup, Input, useRefetchOnFocus } from '@dth/ui'
+import {
+  Button,
+  InfoPopup,
+  Input,
+  PathChip,
+  useRefetchOnFocus,
+} from '@dth/ui'
 import { InstallReportList } from '#/components/install-controls.tsx'
-import { PathCode } from '#/components/path-code.tsx'
 import { PostInstallElevationNotice } from '#/components/settings/post-install-elevation-notice.tsx'
 import {
   fetchDazPluginState,
@@ -407,7 +412,7 @@ export function DazPluginsSection({
                   <tr key={target.path} className="border-t align-top">
                     <td className="py-1.5 pr-3">
                       <div className="font-medium">{target.name}</div>
-                      <PathCode path={displayPath(target.path)} />
+                      <PathChip path={displayPath(target.path)} />
                     </td>
                     <td className="py-1.5 pr-3">
                       <StateCell state={exporterLine(target)} />

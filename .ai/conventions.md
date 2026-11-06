@@ -473,7 +473,18 @@ The persisted `Character` shape is versioned (`CHARACTER_SCHEMA_VERSION` in
 (`packages/ui/src/config.tsx`); the app supplies it in
 `apps/web/src/routes/__root.tsx`. Tailwind reaches the kit via an `@source` line
 in `apps/web/src/styles.css` — kit-only utility classes break without it.
-Export only what the app consumes (`packages/ui/src/index.ts` is the sole entry).
+Export only what the app or its demos consume (`packages/ui/src/index.ts` is the sole entry).
+
+**Design-system ritual.** The rules are `packages/ui/README.md`; the catalog is
+the site in `apps/web/design-system/` (`pnpm design-system`). A new UI state
+gets a screen (`<feature>.screens.tsx`), a new kit component or variant gets a
+demo (`<name>.demo.tsx`), and `pnpm check:design-system` must pass. The
+`/design-component`, `/design-screen` and `/design-review` skills walk it.
+Ladder: reuse a kit component, then add a prop, then compose; a component one
+feature needs stays in the feature until a second one needs it. The app is not
+migrated yet: the site's Audit page lists the remaining drift (palette colours,
+arbitrary colour values, raw controls) and is the rework's worklist. No CI gate
+on hardcoded colours exists yet.
 
 A safety net is not a status line. Backups, quarantine copies and other
 "we kept the old one" mechanics are taken silently and surfaced ONLY where they
@@ -532,10 +543,12 @@ all. It is the counterpart to "a safety net is not a status line" above, not a
 contradiction of it: a mechanism the user cannot act on stays quiet, a choice
 made FOR them does not.
 
-Modal footers: the Cancel button is always `variant="ghost"`, first child of
+Modal footers: the Cancel button is `variant="outline"`, first child of
 the right-aligned `flex justify-end gap-2` footer row — immediately left of the
-affirmative/primary action (e.g. `bulk-delete-dialog.tsx`,
-`character/dth-export.tsx`). Inline (non-modal) cancels — path chips, the Tools
+affirmative/primary action. Existing screens (e.g. `bulk-delete-dialog.tsx`,
+`character/dth-export.tsx`) still use `ghost` until the design-system rework
+moves them; new code uses `outline`. The full button rules are in
+`packages/ui/README.md`. Inline (non-modal) cancels — path chips, the Tools
 danger-zone confirm strip — keep their own styling.
 
 **In a `SidePanel`, that same row goes in the `footer` PROP, never at the end of

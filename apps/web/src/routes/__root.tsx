@@ -11,6 +11,7 @@ import {
   ensureNetworkDrives,
   fetchPoseAssets,
   fetchSettings,
+  revealPath,
 } from '#/lib/rom/api.ts'
 import { checkForUpdates } from '#/lib/updater.ts'
 import { trackNavOrigin } from '#/lib/nav-origin.ts'
@@ -135,6 +136,8 @@ function RootComponent() {
   // SidePanel sweeps stale toasts on open — a leftover toast (top-center,
   // above z-50) would float over the drawer as it slides in.
   const dismissToasts = useCallback(() => void toast.dismiss(), [])
+  // The path may be gone; copying still works either way, so a failed reveal is not an error.
+  const onRevealPath = useCallback((path: string) => void revealPath({ data: { path } }).catch(() => {}), [])
 
   // Dev-only handle for AD-HOC harness use: it lets a spec fire demo toasts
   // through the app's OWN sonner instance (a spec-side `import('sonner')` gets
@@ -149,7 +152,7 @@ function RootComponent() {
   }, [])
 
   return (
-    <UiConfigProvider value={{ onNavigate, onOpenExternal, onError, dismissToasts }}>
+    <UiConfigProvider value={{ onNavigate, onOpenExternal, onError, dismissToasts, onRevealPath }}>
       <ConfirmProvider>
         {/* Above the page, not on one: a file saved into a character's folder
             should be noticed wherever the user comes back to — the character
